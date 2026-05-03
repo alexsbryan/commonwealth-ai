@@ -1,0 +1,238 @@
+# Routing-only test bank — framework cells coverage.
+#
+# Purpose: validate that the situated router classifies messages from
+# each populated cell of the 5×6 framework grid (Searle's illocutionary
+# act × Jakobson's function) correctly. The heuristic pre-checks should
+# catch the surface-clear cases; the situated Pass 1 prompt should
+# catch the Gricean cases (surface ≠ intent); the tail-case refiner
+# (when wired) catches the residual ambiguity.
+#
+# All examples are out-of-bank for prior cells per
+# `feedback_no_teaching_to_test.md` — the heuristic phrases were
+# designed against generic shapes, not these specific test inputs.
+#
+# Categories used:
+#   - conation       (Intent::ConationQuery)
+#   - commissive     (Intent::CommissiveQuery)
+#   - expressive     (Intent::ExpressiveQuery)
+#   - metalingual    (Intent::MetalingualQuery, regression)
+#   - comparative    (Intent::ComparisonQuery, regression)
+#   - factual_recall (Intent::KnowledgeQuery, regression)
+#   - multi_article_synthesis (Intent::DeepQuery, regression)
+
+[bank]
+name = "routing-cells-v1"
+corpus = "wikipedia"
+description = """
+Cell-coverage bank for the framework's 5×6 routing grid. Each new cell
+gets 5 fixtures spanning surface-clear and Gricean cases; regression
+cells get 3 fixtures each to ensure the new heuristics don't steal
+traffic from already-shipped routes.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 30000
+max_per_question_ms = 60000
+
+# ─── Conation: short imperatives at the assistant ──────────────────
+
+[[questions]]
+id = "conation_stop"
+category = "conation"
+question = "Stop."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "conation_try_again"
+category = "conation"
+question = "try again"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "conation_shorter"
+category = "conation"
+question = "shorter please"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "conation_more_detail"
+category = "conation"
+question = "more detail"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "conation_step_by_step"
+category = "conation"
+question = "walk me through it"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Commissive: first-person future commitments ──────────────────
+
+[[questions]]
+id = "commissive_fix_tomorrow"
+category = "commissive"
+question = "I'll fix the migration tomorrow."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "commissive_refactor_later"
+category = "commissive"
+question = "I'm going to refactor the auth middleware later."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "commissive_remind_me_friday"
+category = "commissive"
+question = "Remind me to review this on Friday."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "commissive_plan_to_write"
+category = "commissive"
+question = "I plan to write the integration test before merging."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "commissive_remind_about_audit"
+category = "commissive"
+question = "Remind me about the audit when we get back to it."
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Expressive: feeling-statements with implicit help-request ────
+
+[[questions]]
+id = "expressive_stuck"
+category = "expressive"
+question = "I'm stuck on this bug."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "expressive_no_idea"
+category = "expressive"
+question = "I have no idea where to start."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "expressive_frustrated"
+category = "expressive"
+question = "Ugh, this is frustrating."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "expressive_exhausted"
+category = "expressive"
+question = "I'm exhausted, this is broken again."
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "expressive_give_up"
+category = "expressive"
+question = "I give up on this approach."
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Regression: metalingual ──────────────────────────────────────
+
+[[questions]]
+id = "regression_meta_codebase"
+category = "metalingual"
+question = "What does 'session_id' mean in this codebase?"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "regression_meta_named_source"
+category = "metalingual"
+question = "According to SEP, what does eudaimonia refer to?"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "regression_meta_conversation"
+category = "metalingual"
+question = "What did you mention earlier about retrieval?"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Regression: comparative ──────────────────────────────────────
+
+[[questions]]
+id = "regression_compare_world"
+category = "comparative"
+question = "How do TCP and UDP differ in their delivery guarantees?"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "regression_compare_diff_between"
+category = "comparative"
+question = "What is the difference between a list and a tuple in Python?"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "regression_compare_named"
+category = "comparative"
+question = "Compare the leadership styles of Lincoln and FDR."
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Regression: factual_recall (KnowledgeQuery) ──────────────────
+
+[[questions]]
+id = "regression_factual_year"
+category = "factual_recall"
+question = "What year did the Berlin Wall fall?"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "regression_factual_who"
+category = "factual_recall"
+question = "Who wrote 'The Selfish Gene'?"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "regression_factual_count"
+category = "factual_recall"
+question = "How many planets are in our solar system?"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Regression: multi_article_synthesis (DeepQuery) ──────────────
+
+[[questions]]
+id = "regression_synth_causes"
+category = "multi_article_synthesis"
+question = "What were the main causes of the 2008 financial crisis?"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "regression_synth_relations"
+category = "multi_article_synthesis"
+question = "How did Roman trade networks shape early Christian spread?"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "regression_synth_evolution"
+category = "multi_article_synthesis"
+question = "How does plate tectonics account for the distribution of mountain ranges?"
+expected_facts = ["stub"]
+expected_sources = []

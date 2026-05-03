@@ -1,0 +1,32 @@
+# Iteration bank — just `causal_roman_empire_fall`. Used to chase the
+# 129s wall-time regression in tight loops.
+
+[bank]
+name = "single-causal-roman"
+corpus = "wikipedia"
+description = "One question, fast iteration."
+
+[bank.latency_budget]
+default_p95_ms = 30000
+max_per_question_ms = 60000
+
+[[questions]]
+id = "causal_roman_empire_fall"
+category = "causal_reasoning"
+question = "What caused the fall of the Western Roman Empire?"
+expected_facts = [
+    "barbarian",
+    "invasions",
+    "476",
+    "economic",
+    "Christianity",
+    "military",
+    "political",
+    "Migration Period",
+]
+expected_sources = [
+    "Fall of the Western Roman Empire",
+    "Roman Empire",
+    "Migration Period",
+]
+notes = "Ancient-history causal reasoning; tests retrieval breadth beyond modern conflicts."

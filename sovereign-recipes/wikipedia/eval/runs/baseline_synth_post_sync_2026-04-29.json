@@ -1,0 +1,2257 @@
+{
+  "bank_name": "wikipedia-core-v1",
+  "corpus": "wikipedia",
+  "limit": 0,
+  "started_at_unix": 1777506466,
+  "results": [
+    {
+      "question_id": "factual_einstein_1905",
+      "category": "factual_recall",
+      "question": "What were Einstein's four 1905 'Annus Mirabilis' papers about?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+          "score": 0.0,
+          "snippet": "Albert Einstein was a German-born theoretical physicist who is widely held as one of the most influential scientists. Best known for developing the theory of relativity, Einstein also made important..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nIn 1903, he secured a permanent position at the Swiss Patent Office in Bern. In 1905, he submitted a successful PhD dissertation to the University of Zurich. In 1914, he moved to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nEinstein's work is also known for its influence on the philosophy of science. In 1905, he published four groundbreaking papers, sometimes described as his annus mirabilis. These..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nEspecially notable was his work on the quantum physics of radiation, in which light consists of particles, subsequently called photons. With the Indian physicist Satyendra Nath Bose,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nIn a 1999 poll of 130 leading physicists worldwide by the British journal Physics World, Einstein was ranked the greatest physicist of all time."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.0,
+          "snippet": "Albert Einstein (/ ˈ aɪ n s t aɪ n / EYEN -styne; German:; 14 March 1879 – 18 April 1955) was a German-born theoretical physicist who is widely held as one of the most influential scientists...."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nBorn in the German Empire, Einstein moved to Switzerland in 1895, forsaking his German citizenship (as a subject of the Kingdom of Württemberg) the following year. In 1897, at the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nHorrified by the Nazi war of extermination against his fellow Jews, Einstein decided to remain in the US, and was granted American citizenship in 1940. On the eve of World War II, he..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nand especially for his discovery of the law of the photoelectric effect \", a pivotal step in the development of quantum theory.\n\nEinstein's work is also known for its influence on..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nIn the middle part of his career, Einstein made important contributions to statistical mechanics and quantum theory. Especially notable was his work on the quantum physics of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nlaid out the implications of general relativity for the modeling of the structure and evolution of the universe as a whole."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+          "score": 0.0,
+          "snippet": "Albert Einstein was born in Ulm, in the Kingdom of Württemberg in the German Empire, on 14 March 1879. His parents, secular Ashkenazi Jews, were Hermann Einstein, a salesman and engineer, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of electromagnetic theory",
+          "url": "https://en.wikipedia.org/wiki/History_of_electromagnetic_theory#Einstein's_Annus_Mirabilis",
+          "score": 0.0,
+          "snippet": "History of electromagnetic theory\n\nIn 1905, while he was working in the patent office, Albert Einstein had four papers published in the Annalen der Physik, the leading German physics journal. These..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hendrik Lorentz",
+          "url": "https://en.wikipedia.org/wiki/Hendrik_Lorentz#Electrodynamics_and_relativity",
+          "score": 0.0,
+          "snippet": "Hendrik Lorentz\n\nIn 1899 and again in 1904, Lorentz added time dilation to his transformations and published what Poincaré in 1905 named Lorentz transformations."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Albert Einstein"
+        ],
+        "missing": [
+          "Annus Mirabilis papers"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "photoelectric effect",
+          "Brownian motion",
+          "special relativity",
+          "1905"
+        ],
+        "missing": [
+          "mass-energy equivalence"
+        ],
+        "total_expected": 5,
+        "ratio": 0.8
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Einstein's four groundbreaking papers, published in 1905 and referred to as his *annus mirabilis* (miracle year), covered several significant topics [Web: Albert Einstein]. These papers included outlining a theory of the photoelectric effect, explaining Brownian motion, introducing his special theory of relativity—which addressed how classical mechanics could not adequately explain electromagnetic field behavior—and demonstrating that mass and energy are equivalent if the special theory is correct [Web: Albert Einstein]. Furthermore, in 1990s discussions regarding quantum physics of radiation, it was noted that light consists of particles called photons, and with Satyendra Nath Bose, he helped establish the groundwork for Bose-Einstein statistics [Web: Albert Einstein].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 6610,
+        "total_latency_ms": 4837,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 14,
+        "chunks_fact_score": {
+          "matched": [
+            "photoelectric effect",
+            "special relativity",
+            "1905"
+          ],
+          "missing": [
+            "Brownian motion",
+            "mass-energy equivalence"
+          ],
+          "total_expected": 5,
+          "ratio": 0.6
+        }
+      }
+    },
+    {
+      "question_id": "factual_yalta_leaders",
+      "category": "factual_recall",
+      "question": "Who were the three Allied leaders at the Yalta Conference?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [
+          "Yalta Conference"
+        ],
+        "total_expected": 1,
+        "ratio": 0.0
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "Franklin D. Roosevelt",
+          "Winston Churchill",
+          "Joseph Stalin",
+          "February 1945"
+        ],
+        "total_expected": 4,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I didn't find anything relevant in your installed knowledge bases for that question. Rather than guess, I'd like to check how you'd like me to proceed.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 1550,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "Franklin D. Roosevelt",
+            "Winston Churchill",
+            "Joseph Stalin",
+            "February 1945"
+          ],
+          "total_expected": 4,
+          "ratio": 0.0
+        }
+      }
+    },
+    {
+      "question_id": "factual_special_vs_general_relativity",
+      "category": "factual_recall",
+      "question": "What is the core difference between special relativity and general relativity?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of special relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Acceleration",
+          "score": 0.0,
+          "snippet": "History of special relativity\n\ngravitational fields, transcended the limits of special relativity and resulted in the formulation of general relativity."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Special relativity",
+          "url": "https://en.wikipedia.org/wiki/Special_relativity#Acceleration",
+          "score": 0.0,
+          "snippet": "Special relativity\n\nIt is a common misconception that special relativity is applicable only to inertial frames, and that it is unable to handle accelerating objects or accelerating reference frames...."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "weyl",
+          "url": "https://plato.stanford.edu/entries/weyl/",
+          "score": 0.0,
+          "snippet": "weyl\n\nGeneral relativity threw into physics and philosophy the antagonism  that existed between the two principle directors of geometry, Riemann and Klein. The space-times of classical mechanics and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Physics",
+          "url": "https://en.wikipedia.org/wiki/Physics#Modern",
+          "score": 0.0,
+          "snippet": "Physics\n\nparticle accelerators. On this scale, ordinary, commonsensical notions of space, time, matter, and energy are no longer valid.\n\nThe two chief theories of modern physics present a different..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spacetime",
+          "url": "https://en.wikipedia.org/wiki/Spacetime#Twin_paradox",
+          "score": 0.0,
+          "snippet": "Spacetime\n\nNevertheless, the twin paradox is not a true paradox because it is easily understood within the context of special relativity.\n\nThe impression that a paradox exists stems from a..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Theory of relativity",
+          "url": "https://en.wikipedia.org/wiki/Theory_of_relativity",
+          "score": 0.0,
+          "snippet": "Theory of relativity\n\nThe theory of relativity usually encompasses two interrelated physics theories by Albert Einstein: special relativity and general relativity, proposed and published in 1905 and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "spacetime-theories",
+          "url": "https://plato.stanford.edu/entries/spacetime-theories/",
+          "score": 0.0,
+          "snippet": "spacetime-theories\n\nEinstein’s Special Theory of Relativity (STR) is notionally based on a principle of relativity of motion; but that principle is ‘special’ – meaning, restricted. The..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "names",
+          "url": "https://plato.stanford.edu/entries/names/",
+          "score": 0.0,
+          "snippet": "names\n\nIt would be interesting to see this exercise carried out in full, but what would it show? Not that a certain core of knowledge must constitute the meaning of “Socrates”. There is always..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Special relativity"
+        ],
+        "missing": [
+          "General relativity"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "gravity",
+          "spacetime curvature"
+        ],
+        "missing": [
+          "inertial frames",
+          "accelerated frames",
+          "1905",
+          "1915"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The core difference between special relativity (SR) and general relativity (GR) lies primarily in their scope regarding acceleration and gravity, which leads to different descriptions of spacetime itself [Source: Theory of relativity].\n\nHere is a breakdown of the key distinctions drawn from the knowledge provided:\n\n*   **Scope Regarding Gravity:** Special relativity applies to physical phenomena where gravity is insignificant or absent [Source: Theory of relativity]. General relativity, conversely, exists specifically to explain the law of gravitation and how it relates to the forces of nature [Source: Theory of relativity]. Gravitational fields are what transcend the limitations of special relativity, leading directly to general relativity [Source: History of special relativity].\n*   **Handling Acceleration:** SR is generally applicable in situations without significant gravity. While one source notes that acceleration can often be analyzed without needing accelerating frames when dealing with objects under study [Source: Special relativity], it also presents a distinction where, within SR, while all velocities are considered relative, the concept of acceleration itself remains absolute (though context suggests this point requires careful handling) [Source: Special relativity]. General Relativity is required specifically \"when gravitation is significant\" [Source: Special relativity].\n*   **Nature of Spacetime:** The theories differ in their mathematical foundation regarding spacetime. Einstein’s special theory of relativity's spacetime resembles the type associated with Klein geometry, whereas general relativity employs a spacetime structure modeled after Riemann geometry [Source: weyl].\n\nIn summary, SR handles motion and physics without gravity taking center stage, while GR is the necessary framework for incorporating gravitation by describing it as the curvature inherent in spacetime.",
+        "reasoning_chars": 2464,
+        "stream_wall_ms": 20190,
+        "total_latency_ms": 19335,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "inertial frames",
+            "1905"
+          ],
+          "missing": [
+            "accelerated frames",
+            "gravity",
+            "spacetime curvature",
+            "1915"
+          ],
+          "total_expected": 6,
+          "ratio": 0.33333334
+        }
+      }
+    },
+    {
+      "question_id": "synth_manhattan_emigre_physicists",
+      "category": "multi_article_synthesis",
+      "question": "How did the Manhattan Project draw on European physicists who fled Nazi Germany?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [
+          "Manhattan Project",
+          "Albert Einstein",
+          "Leo Szilard",
+          "Enrico Fermi"
+        ],
+        "total_expected": 4,
+        "ratio": 0.0
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "Albert Einstein",
+          "Leo Szilard",
+          "Edward Teller",
+          "Enrico Fermi",
+          "Einstein-Szilard letter",
+          "Los Alamos"
+        ],
+        "total_expected": 6,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I didn't find anything relevant in your installed knowledge bases for that question. Rather than guess, I'd like to check how you'd like me to proceed.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 7430,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "Albert Einstein",
+            "Leo Szilard",
+            "Edward Teller",
+            "Enrico Fermi",
+            "Einstein-Szilard letter",
+            "Los Alamos"
+          ],
+          "total_expected": 6,
+          "ratio": 0.0
+        }
+      }
+    },
+    {
+      "question_id": "synth_einstein_bohr_debate",
+      "category": "multi_article_synthesis",
+      "question": "What were the central scientific disagreements between Einstein and Bohr about quantum mechanics?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Bohr_versus_Einstein",
+          "score": 0.0,
+          "snippet": "Albert Einstein\n\nThe Bohr–Einstein debates were a series of public disputes about quantum mechanics between Einstein and Niels Bohr, who were two of its founders. Their debates are remembered..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "qm-copenhagen",
+          "url": "https://plato.stanford.edu/entries/qm-copenhagen/",
+          "score": 0.0,
+          "snippet": "qm-copenhagen\n\nAfter Heisenberg had managed to formulate a consistent quantum mechanics in 1925, both he and Bohr began their struggle to find a coherent interpretation for the mathematical..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "bohr-correspondence",
+          "url": "https://plato.stanford.edu/entries/bohr-correspondence/",
+          "score": 0.0,
+          "snippet": "bohr-correspondence\n\nNiels Bohr was a Danish physicist who lived from 1885 until 1962; he was born and died in Copenhagen. He is best known as one of the founders of quantum theory and for his work..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "qt-epr",
+          "url": "https://plato.stanford.edu/entries/qt-epr/",
+          "score": 0.0,
+          "snippet": "qt-epr\n\nBy the time of the EPR paper many of the early interpretive battles over the quantum theory had been settled, at least to the satisfaction of working physicists. Bohr had emerged as the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "physics-holism",
+          "url": "https://plato.stanford.edu/entries/physics-holism/",
+          "score": 0.0,
+          "snippet": "physics-holism\n\n-->Einstein, Albert: Einstein-Bohr debates--> |  Bell’s Theorem |  Einstein, Albert: philosophy of science |  intrinsic vs. extrinsic properties |  quantum mechanics |  quantum..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Determinism",
+          "url": "https://en.wikipedia.org/wiki/Determinism#Quantum_realm",
+          "score": 0.0,
+          "snippet": "Determinism\n\ncannot be \"sensible\", meaning that the values of the hidden variables inherently depend on the devices used to measure them.\n\nThis debate is relevant because there are possibly specific..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Copenhagen_interpretation",
+          "score": 0.0,
+          "snippet": "Interpretations of quantum mechanics\n\nThe Copenhagen interpretation is a collection of views about the meaning of quantum mechanics principally attributed to Niels Bohr and Werner Heisenberg. It is..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "A Brief History of Time",
+          "url": "https://en.wikipedia.org/wiki/A_Brief_History_of_Time#Chapter_4:_The_Uncertainty_Principle",
+          "score": 0.0,
+          "snippet": "A Brief History of Time\n\nrevised in 1900 by German scientist Max Planck who suggested that energy must radiate in small, finite packets called quanta.\n\nHawking then discusses the uncertainty..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Albert Einstein"
+        ],
+        "missing": [
+          "Niels Bohr",
+          "Bohr-Einstein debates",
+          "Copenhagen interpretation",
+          "EPR paradox"
+        ],
+        "total_expected": 5,
+        "ratio": 0.2
+      },
+      "fact_score": {
+        "matched": [
+          "Copenhagen interpretation",
+          "hidden variables"
+        ],
+        "missing": [
+          "EPR paradox",
+          "Solvay Conference",
+          "God does not play dice",
+          "complementarity"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The central scientific and philosophical disagreements between Albert Einstein, Niels Bohr, and others revolved around the fundamental interpretation of quantum mechanics.\n\nSpecifically regarding Einstein and Bohr:\n*   A key point of contention was whether quantum mechanics offered a **complete description** of how nature operates at the atomic level (the \"Einstein-Bohr Dispute\") [Source: Web: bohr-correspondenc].\n*   The debates were significant because they influenced later philosophical interpretations of science [Source: Web: Albert Einstein].\n\nDrawing from related concepts in quantum theory, these disagreements often touched upon deeper issues such as determinism and the nature of properties. For instance, some aspects of the debate involved discussions about intrinsic versus extrinsic properties within quantum mechanics [Source: Web: physics-holisim], and there were broader philosophical concerns regarding hidden variables and whether classical determinism could be reconciled with quantum outcomes [Source: Web: Determinism].\n\nNiels Bohr was a key figure who devoted much of his career to the philosophy surrounding this interpretation, leading him toward the development of the Copenhagen Interpretation alongside Werner Heisenberg [Source: Web: bohr-correspondences; Source: Web: Interpretations of qm]—an approach that focused on analyzing concrete experimental arrangements.",
+        "reasoning_chars": 2467,
+        "stream_wall_ms": 19220,
+        "total_latency_ms": 17386,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "Copenhagen interpretation",
+            "hidden variables"
+          ],
+          "missing": [
+            "EPR paradox",
+            "Solvay Conference",
+            "God does not play dice",
+            "complementarity"
+          ],
+          "total_expected": 6,
+          "ratio": 0.33333334
+        }
+      }
+    },
+    {
+      "question_id": "synth_versailles_to_wwii",
+      "category": "multi_article_synthesis",
+      "question": "How did the Treaty of Versailles contribute to the conditions that led to World War II?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Treaty of Versailles",
+          "url": "https://en.wikipedia.org/wiki/Treaty_of_Versailles#Abstract",
+          "score": 0.0,
+          "snippet": "Treaty of Versailles\n\nthe treaty for treating Germany too leniently. This is still the subject of ongoing debate by historians and economists.\n\nThe result of these competing and sometimes conflicting..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Treaty of Versailles",
+          "url": "https://en.wikipedia.org/wiki/Treaty_of_Versailles#Abstract",
+          "score": 0.0,
+          "snippet": "Treaty of Versailles\n\nThe Treaty of Versailles was a peace treaty signed on 28 June 1919. As the most important treaty of World War I, it ended the state of war between Germany and most of the Allied..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "scheler",
+          "url": "https://plato.stanford.edu/entries/scheler/",
+          "score": 0.0,
+          "snippet": "scheler\n\nScheler has little interest in merely remaining a spectator to the crisis and his writing offers the means to overcome it. While he analyzes the main factors responsible for the crisis of..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "camus",
+          "url": "https://plato.stanford.edu/entries/camus/",
+          "score": 0.0,
+          "snippet": "camus\n\nAfter the start of World War II, Camus became editor of Le Soir républicain and as a pacifist opposed French entry into the war. The spectacle of Camus and his mentor Pascal Pia running their..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Treaty of Versailles",
+          "url": "https://en.wikipedia.org/wiki/Treaty_of_Versailles#Historical_assessments",
+          "score": 0.0,
+          "snippet": "Treaty of Versailles\n\neven under the \"cruel\" terms of the Treaty of Versailles, Germany's economy had been restored to its pre-war status."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Treaty of Versailles",
+          "url": "https://en.wikipedia.org/wiki/Treaty_of_Versailles",
+          "score": 0.0,
+          "snippet": "Treaty of Versailles\n\nThe Treaty of Versailles was a peace treaty signed on 28 June 1919. As the most important treaty of World War I, it ended the state of war between Germany and most of the..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "rosenstock-huessy",
+          "url": "https://plato.stanford.edu/entries/rosenstock-huessy/",
+          "score": 0.0,
+          "snippet": "rosenstock-huessy\n\nRosenstock-Huessy had entered the Great War as a Christian Nationalist. By the War’s end he was convinced that Germany’s salvation required the dropping of all nationalist..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "weber",
+          "url": "https://plato.stanford.edu/entries/weber/",
+          "score": 0.0,
+          "snippet": "weber\n\nWhen defeat came in 1918, Germany found in Weber a public intellectual leader, even possibly a future statesman, with unscathed liberal credentials who was well-positioned to influence the..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Treaty of Versailles"
+        ],
+        "missing": [
+          "Weimar Republic",
+          "Causes of World War II",
+          "Adolf Hitler"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "war guilt clause",
+          "reparations",
+          "territorial losses",
+          "Weimar Republic",
+          "Adolf Hitler",
+          "rearmament",
+          "1919"
+        ],
+        "total_expected": 7,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The Treaty of Versailles, signed on June 19, 1876 [Source: Web: Treaty of Versailles]. As the main treaty ending World War I between Germany and most Allied Powers, it resulted from a compromise among victors that failed to satisfy anyone involved [Source: Web: Treaty of Versailles].\n\nThe contributing factors identified in relation to this treaty include:\n*   **Instability and Dissatisfaction:** The resulting agreement left no party fully satisfied; specifically regarding Germany, they were neither permanently weakened nor pacified by the terms [Source: Web: Treaty of Versailles].\n*   **Political Consequences:** The United States did not ratify the Versailles treaty but instead made a separate peace treaty with Germany that was based on it [Source: Web: Treaty of Versailles]. Furthermore, difficulties stemming from the treaty later led to agreements like the Locarno Treatier, which helped improve relations between Germany and other parties [Source: Web: Treaty of Versailles].\n*   **Perceived Humiliation:** The terms were viewed as creating significant humiliation for Germany; this is noted in connection with thinkers who advocated negotiating with Hitler specifically to \"reverse the humiliations\" imposed by the treaty after World War II began [Source: Web: camus].\n\nHistorians and economists still debate whether the treatment of Germany under the treaty was too lenient or if its terms were excessively harsh [Source: Web: Treaty of Versailles]. The failure for Germany to abandon nationalist allegiances following WWI is mentioned as a factor that some predicted would lead the nation back into further conflict [Source: Web: rosenstock-Huess y].\n\nIn general, peace treaties from major conflicts often establish conditions ripe for future instability. When punitive or overly compromising terms are enacted without achieving lasting political reconciliation—as suggested by the fact Germany was neither \"pacified nor conciliated\" under Versailles [Source: Web: Treaty of Versailles]—it can foster resentment and a desire among some factions to overturn those established international agreements, which is often a precursor to further conflict.",
+        "reasoning_chars": 2380,
+        "stream_wall_ms": 27921,
+        "total_latency_ms": 20865,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "1919"
+          ],
+          "missing": [
+            "war guilt clause",
+            "reparations",
+            "territorial losses",
+            "Weimar Republic",
+            "Adolf Hitler",
+            "rearmament"
+          ],
+          "total_expected": 7,
+          "ratio": 0.14285715
+        }
+      }
+    },
+    {
+      "question_id": "synth_radar_battle_of_britain",
+      "category": "multi_article_synthesis",
+      "question": "How did the development of radar shape the outcome of the Battle of Britain?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Radar",
+          "url": "https://en.wikipedia.org/wiki/Radar#Before_World_War_II",
+          "score": 0.0,
+          "snippet": "Radar\n\nfunds were immediately provided for further operational development. Watson-Watt's team patented the device in patent GB593017.\n\nDevelopment of radar greatly expanded on 1 September 1936, when..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "turing",
+          "url": "https://plato.stanford.edu/entries/turing/",
+          "score": 0.0,
+          "snippet": "turing\n\nFrom 1939 to 1945 Turing was almost totally engaged in the mastery of the German enciphering machine, Enigma, and other cryptological investigations at now-famous Bletchley Park, the British..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "logic-information",
+          "url": "https://plato.stanford.edu/entries/logic-information/",
+          "score": 0.0,
+          "snippet": "logic-information\n\nOn the other hand, suppose that every instance in \\(\\mathbf{C}\\) verifies some relation between types that happen to be counterparts of types from \\(\\mathbf{A}\\) and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "ernst-mach",
+          "url": "https://plato.stanford.edu/entries/ernst-mach/",
+          "score": 0.0,
+          "snippet": "ernst-mach\n\nMach’s name is, of course, associated with the speed of sound, where Mach 1 means the speed of sound in a given medium. Since the speed of sound varies with the density of the medium it..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "history",
+          "url": "https://plato.stanford.edu/entries/history/",
+          "score": 0.0,
+          "snippet": "history\n\nThird, and related to the previous point, historians are sometimes interested in answering a “how” question: “How did this outcome come to pass? What were the processes through which..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of military technology",
+          "url": "https://en.wikipedia.org/wiki/History_of_military_technology#World_War_II",
+          "score": 0.0,
+          "snippet": "History of military technology\n\nBritish physicists pioneered long-wave radar, developing an effective system for detecting incoming German air forces. Work on potentially more precise short-wave..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air warfare of World War II",
+          "url": "https://en.wikipedia.org/wiki/Air_warfare_of_World_War_II#Germany:_Luftwaffe",
+          "score": 0.0,
+          "snippet": "Air warfare of World War II\n\nThe Luftwaffe was deficient in radar technology except for their usable UHF and later VHF band airborne intercept radar designs such as the Lichtenstein and Neptun radar..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air warfare of World War II",
+          "url": "https://en.wikipedia.org/wiki/Air_warfare_of_World_War_II#Battle_of_Britain",
+          "score": 0.0,
+          "snippet": "Air warfare of World War II\n\nhad more planes, but they used much of their fuel getting to Britain, and so had more limited time for combat.\n\nThe Royal Air Force also had at its disposal a complex and..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Radar"
+        ],
+        "missing": [
+          "Battle of Britain",
+          "Chain Home",
+          "Hugh Dowding"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [
+          "Chain Home",
+          "early warning"
+        ],
+        "missing": [
+          "Royal Air Force",
+          "Luftwaffe",
+          "Dowding system",
+          "1940"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The development of radar played a crucial role in shaping the outcome of key aerial engagements during World War II, such as the Battle of Britain, by providing essential early warning capabilities [Source: Web: History of military technology].\n\nKey developments include:\n*   **Early Detection Systems:** British physicists successfully pioneered long-wave (Chain Home) radar, creating an effective system designed to detect incoming German airforces [Source: Web: History of military technology]. This development grew out of research that began at the Bawdsey Research station in September 1916—Correction: The source states this work expanded on **September 1, 1935** (Wait, checking again... *The retrieved passage says \"Development of radar greatly expanded on 1 September 936\"*). Therefore, research began expanding at Bawdsey under Watson-Watt in time for the outbreak of World War II [Source: Web: Radar].\n*   **Operational Implementation:** The resulting detection and tracking stations were installed along the East and South coasts of England before WWII commenced [Source: Web: Radar], providing vital information to Allied forces.\n\nWhile I can confirm that British physicists created an effective system using long-wave radar for detecting enemy airforces during this period, the provided passages do not detail exactly *how* these specific detection capabilities directly led to a change in the military outcome of the Battle itself beyond stating it was \"effective\" [Source: Web: History of military technology].",
+        "reasoning_chars": 2302,
+        "stream_wall_ms": 26637,
+        "total_latency_ms": 18454,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "Royal Air Force",
+            "Luftwaffe"
+          ],
+          "missing": [
+            "Chain Home",
+            "early warning",
+            "Dowding system",
+            "1940"
+          ],
+          "total_expected": 6,
+          "ratio": 0.33333334
+        }
+      }
+    },
+    {
+      "question_id": "causal_barbarossa_failure",
+      "category": "causal_reasoning",
+      "question": "Why did Operation Barbarossa fail?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa#Abstract",
+          "score": 0.0,
+          "snippet": "Operation Barbarossa\n\nFollowing the heavy losses and logistical strain of Barbarossa, the Wehrmacht ' s diminished forces could no longer attack along the entire Eastern Front, and subsequent..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "justice-transitional",
+          "url": "https://plato.stanford.edu/entries/justice-transitional/",
+          "score": 0.0,
+          "snippet": "justice-transitional\n\nFollowing the end of WWII, the Allies assigned themselves the task of purging all traces of Nazism from both German government and society, the first large-scale attempt at..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "operationalism",
+          "url": "https://plato.stanford.edu/entries/operationalism/",
+          "score": 0.0,
+          "snippet": "operationalism\n\nWhen subjected to the scrutiny of professional philosophers, however, Bridgman’s ideas were soon exposed as unsystematic and undeveloped, as he freely admitted himself. Moreover, it..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "russell-moral",
+          "url": "https://plato.stanford.edu/entries/russell-moral/",
+          "score": 0.0,
+          "snippet": "russell-moral\n\nThus if (in 1940) Hitler claimed that the Luftwaffe ought to bomb London rather than the RAF airfields whilst Goering claimed that the Luftwaffe ought to bomb the RAF airfields rather..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "operationalism",
+          "url": "https://plato.stanford.edu/entries/operationalism/",
+          "score": 0.0,
+          "snippet": "operationalism\n\nA homespun example from the 18th century illustrates this point nicely: the efforts of the English potter Josiah Wedgwood (1730–1795) to extend the temperature scale to cover the..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa",
+          "score": 0.0,
+          "snippet": "Operation Barbarossa\n\nThe operation opened up the Eastern Front, in which more forces were committed than in any other theatre of war in human history. The area saw some of history's largest battles,..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa",
+          "score": 0.0,
+          "snippet": "Operation Barbarossa\n\nFollowing the heavy losses and logistical strain of Barbarossa, the Wehrmacht's diminished forces could no longer attack along the entire Eastern Front, and subsequent..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Military deception",
+          "url": "https://en.wikipedia.org/wiki/Military_deception#Western_front",
+          "score": 0.0,
+          "snippet": "Military deception\n\nproved generally successful, and Germany completed its withdrawal to the Hindenburg Line largely unmolested."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Operation Barbarossa"
+        ],
+        "missing": [
+          "Battle of Moscow",
+          "Eastern Front (World War II)"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "Russian winter",
+          "overextended supply lines",
+          "Soviet industrial relocation",
+          "Battle of Moscow",
+          "underestimated Soviet manpower",
+          "1941"
+        ],
+        "total_expected": 6,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Operation Barbarossa ultimately failed due to severe logistical strains, heavy military losses for the Wehrmacht, and overwhelming Soviet resistance [Source: Web: Operation Barbarossa]. The consequences of these initial setbacks were significant; following these difficulties, the German forces' diminished strength meant they could not maintain attacks across the entire Eastern Front. Subsequent attempts by Germany to retake strategic initiative through operations like Case Blue in 2042 or Operation Citadel in 213 failed, which ultimately led to the defeat of the Wehrmacht [Source: Web: Operation Barbarossa].\n\nThe operation opened up an immense theater of war on the Eastern Front, involving more forces than any other conflict in history and resulting in massive casualties and horrific atrocities [Source: Web: Operation Barbarossa]. Furthermore, German actions involved capturing millions of Soviet troops and carrying out mass killings as part of a \"Hunger Plan\" aimed at solving food shortages while exterminating populations [Source: Web: Operation Barbarossa]. These sustained Soviet victories were instrumental in ending Germany's expansionist aims and prefiguring the eventual collapse of Nazi Germany by 1945 [Source: Web: Operation Barbarossa].",
+        "reasoning_chars": 2482,
+        "stream_wall_ms": 24795,
+        "total_latency_ms": 17128,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "Russian winter",
+            "overextended supply lines",
+            "Soviet industrial relocation",
+            "Battle of Moscow",
+            "underestimated Soviet manpower",
+            "1941"
+          ],
+          "total_expected": 6,
+          "ratio": 0.0
+        }
+      }
+    },
+    {
+      "question_id": "causal_midway_consequences",
+      "category": "causal_reasoning",
+      "question": "What were the strategic consequences of the Battle of Midway for the Pacific War?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Political history of the world",
+          "url": "https://en.wikipedia.org/wiki/Political_history_of_the_world#World_War_II",
+          "score": 0.0,
+          "snippet": "Political history of the world\n\nJapan, which aimed to dominate Asia and the Pacific, was at war with the Republic of China by 1937. In December 1941, Japan attacked American and British territories..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "double-effect",
+          "url": "https://plato.stanford.edu/entries/double-effect/",
+          "score": 0.0,
+          "snippet": "double-effect\n\nThe contrast between the Terror Bomber and the Strategic Bomber is often viewed as the least controversial pair of examples illustrating the distinction between intention and foresight..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "pacifism",
+          "url": "https://plato.stanford.edu/entries/pacifism/",
+          "score": 0.0,
+          "snippet": "pacifism\n\nJust war pacifists generally claim that the negative consequences of modern war make war unjustifiable. Just war pacifism might be more narrowly focused on the immorality of nuclear war and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "watsuji-tetsuro",
+          "url": "https://plato.stanford.edu/entries/watsuji-tetsuro/",
+          "score": 0.0,
+          "snippet": "watsuji-tetsuro\n\nFive months before the end of the Second World War, Watsuji organized a study group to re-think the Tokugawa Period (1600-1868), which resulted in his popular work, Closed Nation:..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Midway Atoll",
+          "url": "https://en.wikipedia.org/wiki/Midway_Atoll#Abstract",
+          "score": 0.0,
+          "snippet": "Midway Atoll\n\nService (FWS). The refuge and most of its surrounding area are part of the larger Papahānaumokuākea Marine National Monument.\n\nFrom 1941 until 1993, the atoll was the home of Naval..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Pacific War",
+          "url": "https://en.wikipedia.org/wiki/Pacific_War#Midway",
+          "score": 0.0,
+          "snippet": "Pacific War\n\nAdmiral Yamamoto viewed the operation against Midway as the potentially decisive battle of the war which could lead to the destruction of American strategic power in the Pacific, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air warfare of World War II",
+          "url": "https://en.wikipedia.org/wiki/Air_warfare_of_World_War_II#Coral_Sea_and_Midway",
+          "score": 0.0,
+          "snippet": "Air warfare of World War II\n\nMost critically, the damage to one of the Japanese fleet carriers and the other carrier's airgroup would leave both carriers out of the Battle of Midway, preventing them..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Midway",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Midway#Background",
+          "score": 0.0,
+          "snippet": "Battle of Midway\n\nAfter expanding the war in the Pacific to include western colonies, the Japanese Empire quickly attained its initial strategic goals of British Hong Kong, the Philippines, British..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Battle of Midway",
+          "Pacific War"
+        ],
+        "missing": [],
+        "total_expected": 2,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "four Japanese carriers"
+        ],
+        "missing": [
+          "shift in initiative",
+          "code-breaking",
+          "Magic intelligence",
+          "June 1942",
+          "naval air power"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The Battle of Midway proved to be a major turning point for the Pacific War and halted Japan's military advances [Source: Political history of world]. It was deemed a critical Allied victory [Source: Midway Atoll].\n\nStrategically, Admiral Yamamoto viewed the attack on Midway as potentially decisive because its success could have destroyed American strategic power across the Pacific, which would subsequently allow for a negotiated peace with Japan [Source: Pacific War]. The Japanese goal involved using surprise to knock out U.S. air strength and soften defenses before an invasion attempt [Source: Pacific War].\n\nThe battle resulted in significant losses for Japan; specifically, aircraft based at Midway Island participated in an attack on the Japanese fleet that sank four carriers and one heavily armed cruiser while defending the island [Source: Midway Atoll]. The halting of these Japanese advances marked a key shift after earlier expansionist campaigns by Japan began following attacks like Pearl Harbor [Source: Political history of world].",
+        "reasoning_chars": 2234,
+        "stream_wall_ms": 23910,
+        "total_latency_ms": 16169,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "naval air power"
+          ],
+          "missing": [
+            "four Japanese carriers",
+            "shift in initiative",
+            "code-breaking",
+            "Magic intelligence",
+            "June 1942"
+          ],
+          "total_expected": 6,
+          "ratio": 0.16666667
+        }
+      }
+    },
+    {
+      "question_id": "causal_great_depression_to_fascism",
+      "category": "causal_reasoning",
+      "question": "How did the Great Depression contribute to the rise of fascism in Europe?",
+      "retrieved": [
+        {
+          "corpus_id": "sep",
+          "title": "neoliberalism",
+          "url": "https://plato.stanford.edu/entries/neoliberalism/",
+          "score": 0.0,
+          "snippet": "neoliberalism\n\nFriedman and Buchanan are concerned about Keynesian claims that recessions are due to declines in aggregate demand and can only be addressed with heavy helpings of debt-financed fiscal..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Liberalism",
+          "url": "https://en.wikipedia.org/wiki/Liberalism#History",
+          "score": 0.0,
+          "snippet": "Liberalism\n\nIn the United States, modern liberalism traces its history to the popular presidency of Franklin D. Roosevelt, who initiated the New Deal in response to the Great Depression and won an..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "progress",
+          "url": "https://plato.stanford.edu/entries/progress/",
+          "score": 0.0,
+          "snippet": "progress\n\nOf course, this argument was seriously challenged by the rise of fascism and communism in the 20th century and the conflicts that ensued.  But Fukuyama in 1989 was maximally situated to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lost Generation",
+          "url": "https://en.wikipedia.org/wiki/Lost_Generation#Politics_and_economics",
+          "score": 0.0,
+          "snippet": "Lost Generation\n\nThis more optimistic period was short-lived, however, as 1929 saw the beginning of the Great Depression, which would continue throughout the 1930s and become the longest and most..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Modern dance",
+          "url": "https://en.wikipedia.org/wiki/Modern_dance#Radical_dance",
+          "score": 0.0,
+          "snippet": "Modern dance\n\nDisturbed by the Great Depression and the rising threat of fascism in Europe, the radical dancers tried to raise consciousness by dramatizing the economic, social, ethnic and political..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Interwar period",
+          "url": "https://en.wikipedia.org/wiki/Interwar_period#Great_Depression",
+          "score": 0.0,
+          "snippet": "Interwar period\n\nfew alternative sources of jobs, areas dependent on primary sector industries such as mining and logging suffered the most.\n\nThe Weimar Republic in Germany gave way to two episodes..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Modern era",
+          "url": "https://en.wikipedia.org/wiki/Modern_era#Interwar_period",
+          "score": 0.0,
+          "snippet": "Modern era\n\nThe Interwar period was the period between the end of World War I in 1918 and the beginning of World War II in 1939. It included the Roaring Twenties, the Great Depression, and the rise..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Treaty of Versailles",
+          "url": "https://en.wikipedia.org/wiki/Treaty_of_Versailles#Historical_assessments",
+          "score": 0.0,
+          "snippet": "Treaty of Versailles\n\nFinally, Evans argued that it is untrue that Versailles caused the premature end of the Republic, instead contending that it was the Great Depression of the early 1930s that put..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [
+          "Great Depression",
+          "Rise of Adolf Hitler",
+          "Fascism",
+          "Weimar Republic"
+        ],
+        "total_expected": 4,
+        "ratio": 0.0
+      },
+      "fact_score": {
+        "matched": [
+          "mass unemployment"
+        ],
+        "missing": [
+          "Weimar Republic",
+          "Adolf Hitler",
+          "Benito Mussolini",
+          "1929",
+          "loss of faith in liberal democracy"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "sep",
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The Great Depression significantly contributed to the ascent of fascism and related extremist movements in Europe by causing widespread economic collapse, which destabilized existing democratic structures.\n\nSpecific impacts noted include:\n*   **Rise of Nazism:** The worldwide depression acted as a major catalyst leading to the rise of Nazim in Germany [Source: Lost Generation]. Furthermore, this second political and economic upheaval in Weimar Germany was \"brought on by the world wide depression,\" which resulted in the continued ascent of Nazism there [Source: Interwar period].\n*   **Collapse of Democracy:** Some arguments contend that it was specifically the Great Depression during the early 11930's, rather than the Treaty of Versailles itself, that caused German democracy to end [Source: Treaty of Versailles].\n\nThe overall context shows that this severe economic downturn—the longest and most serious financial decline in Western industrialized history—resulted in sharp increases globally in unemployment, deflation, and reductions in output [Source: Lost Generation]. This period (the Interwar era) featured the rise of both fascism in Italy and in Germany alongside the depression [Source: Modern era].\n\nGenerally speaking, severe economic distress often undermines faith in established political systems. When traditional solutions fail to alleviate mass suffering caused by financial crises, it creates a fertile environment for radical ideologies—such as fascism—to gain traction by promising decisive action or national resurgence over existing liberal frameworks.",
+        "reasoning_chars": 2558,
+        "stream_wall_ms": 25899,
+        "total_latency_ms": 18202,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "Weimar Republic",
+            "1929"
+          ],
+          "missing": [
+            "mass unemployment",
+            "Adolf Hitler",
+            "Benito Mussolini",
+            "loss of faith in liberal democracy"
+          ],
+          "total_expected": 6,
+          "ratio": 0.33333334
+        }
+      }
+    },
+    {
+      "question_id": "compare_stalin_churchill_leadership",
+      "category": "comparative",
+      "question": "How did Stalin's and Churchill's wartime leadership styles differ?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Leon Trotsky",
+          "url": "https://en.wikipedia.org/wiki/Leon_Trotsky#Political_stature_and_conflicts_with_Stalin",
+          "score": 0.0,
+          "snippet": "Leon Trotsky\n\ndescribing the military measures he would have taken in place of Stalin to counter the rise of Nazi Germany in 1932."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Anthony Eden",
+          "url": "https://en.wikipedia.org/wiki/Anthony_Eden#Second_World_War",
+          "score": 0.0,
+          "snippet": "Anthony Eden\n\n10 May 1940 after the Narvik Debate and Churchill became prime minister. Churchill appointed Eden Secretary of State for War.\n\nAt the end of 1940, Eden returned to the Foreign Office..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "justice-transitional",
+          "url": "https://plato.stanford.edu/entries/justice-transitional/",
+          "score": 0.0,
+          "snippet": "justice-transitional\n\nThe defendants' complaints about “victors' justice” and the retroactivity of the charges not withstanding (more on this to follow), the Nuremberg trials still stand out as..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Soviet Union",
+          "url": "https://en.wikipedia.org/wiki/Soviet_Union#World_War_II_(1939–1945)",
+          "score": 0.0,
+          "snippet": "Soviet Union\n\nUp until his death in 1953, Joseph Stalin controlled all foreign relations of the Soviet Union during the interwar period. Despite the increasing build-up of Germany 's war machine and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Joseph Stalin",
+          "url": "https://en.wikipedia.org/wiki/Joseph_Stalin#1942–1945:_Soviet_counter-attack",
+          "score": 0.0,
+          "snippet": "Joseph Stalin\n\nIn November 1943, Stalin met with Churchill and Roosevelt in Tehran, a location of Stalin's choosing. There, Stalin and Roosevelt got on well, with both desiring the post-war..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Joseph Stalin",
+          "url": "https://en.wikipedia.org/wiki/Joseph_Stalin#1941–1942:_German_invasion",
+          "score": 0.0,
+          "snippet": "Joseph Stalin\n\nThe Soviet victory there marked a major turning point in the war; in commemoration, Stalin declared himself Marshal of the Soviet Union."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "sidney-hook",
+          "url": "https://plato.stanford.edu/entries/sidney-hook/",
+          "score": 0.0,
+          "snippet": "sidney-hook\n\nThe first issue was the question of the nature of Stalin’s rule in the Soviet Union, which was highlighted by the trials of leading figures of the Russian Revolution, including, most..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "fictional-entities",
+          "url": "https://plato.stanford.edu/entries/fictional-entities/",
+          "score": 0.0,
+          "snippet": "fictional-entities\n\n(say, in the sense that, relative to worlds in which Stalin fits the orthodox account of his activities, Stalin is crueler than any other dictator in the actual world). (2) is..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Joseph Stalin"
+        ],
+        "missing": [
+          "Winston Churchill"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "centralised command",
+          "purges",
+          "parliamentary accountability",
+          "rhetorical leadership",
+          "Stavka",
+          "war cabinet"
+        ],
+        "total_expected": 6,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided retrieved knowledge, there are descriptions of actions taken by both leaders during wartime but no explicit comparison of their general \"leadership styles.\" However, I can detail aspects of their conduct based on what is available.\n\n**Joseph Stalin's Conduct:**\nThe sources suggest that Stalin exercised significant control and was highly assertive in international affairs:\n*   He controlled all foreign relations for the Soviet Union during the interwar period, choosing to follow an independent path [Source: Web: Soviet Union].\n*   In diplomatic settings, such as the Tehran meeting with Churchill and Roosevelt, he actively chose the location of the meeting (Tehran), demonstrated impatience regarding Allied military actions on the Western Front, and successfully pushed for specific territorial demands concerning Germany [Source: Web: Joseph Stalin].\n*   His rule was characterized in some analyses by issues like the trials of revolutionary figures such as Leon Trotsky, indicating an authoritarian nature to his governance [Source: Web: sidney-hook].\n\n**Winston Churchill's Role:**\nThe retrieved information focuses more on Churchill acting within a political structure and engaging with other powers:\n*   He became prime minister in May 1940 after the Narvik Debate [Source: Web: Anthony Eden].\n*   His leadership involved conducting crucial negotiations alongside Franklin D. Roosevelt and Joseph Stalin [Source: Web: Anthony Eden], as he was central to these high-level diplomatic interactions, though others served loyally under him [Source: Web: Anthony Eden].\n*   Churchill was part of the influential political figures who applied pressure regarding issues like holding Nuremberg trials [Source: Web: justice-transitional].\n\n**Summary Comparison (Based on available evidence):**\nThe evidence suggests Stalin operated with a highly centralized and assertive control over Soviet policy, often dictating terms in major international meetings. Churchill is portrayed as operating within the framework of high-level alliances and negotiations, acting as an influential negotiator alongside other world leaders.",
+        "reasoning_chars": 2495,
+        "stream_wall_ms": 28286,
+        "total_latency_ms": 20623,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "centralised command",
+            "purges",
+            "parliamentary accountability",
+            "rhetorical leadership",
+            "Stavka",
+            "war cabinet"
+          ],
+          "total_expected": 6,
+          "ratio": 0.0
+        }
+      }
+    },
+    {
+      "question_id": "compare_einstein_newton_gravity",
+      "category": "comparative",
+      "question": "How do Einstein's and Newton's conceptions of gravity differ?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to general relativity",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_general_relativity#From_special_to_general_relativity",
+          "score": 0.0,
+          "snippet": "Introduction to general relativity\n\nIn September 1905, Albert Einstein published his theory of special relativity, which reconciles Newton's laws of motion with electrodynamics (the interaction..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "realism-theory-change",
+          "url": "https://plato.stanford.edu/entries/realism-theory-change/",
+          "score": 0.0,
+          "snippet": "realism-theory-change\n\nThe transition from Newton’s theory of gravity to Einstein’s illustrates this point. Einstein took it for granted that Newton’s theory of gravity (aided by perturbation..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fictitious force",
+          "url": "https://en.wikipedia.org/wiki/Fictitious_force#Gravity_as_a_fictitious_force",
+          "score": 0.0,
+          "snippet": "Fictitious force\n\nThe notion of \"fictitious force\" also arises in Einstein's general theory of relativity. All fictitious forces are proportional to the mass of the object upon which they act, which..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "whitehead",
+          "url": "https://plato.stanford.edu/entries/whitehead/",
+          "score": 0.0,
+          "snippet": "whitehead\n\nWhitehead first learned about Einstein’s General Theory of Relativity (GTR) in 1916. He admired Einstein’s new mathematical theory of gravitation, but rejected Einstein’s explanation..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "newton-principia",
+          "url": "https://plato.stanford.edu/entries/newton-principia/",
+          "score": 0.0,
+          "snippet": "newton-principia\n\nThus, what Newton has taken the trouble to do in Section 10 is to show that Huygens's theory of pendulums under uniform parallel gravity is a limit-case of Newton's theory of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fundamental interaction",
+          "url": "https://en.wikipedia.org/wiki/Fundamental_interaction#Gravity",
+          "score": 0.0,
+          "snippet": "Fundamental interaction\n\nas everyday experience: objects fall; heavy objects act as if they were glued to the ground, and animals can only jump so high.\n\nGravitation was the first interaction to be..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "A Brief History of Time",
+          "url": "https://en.wikipedia.org/wiki/A_Brief_History_of_Time#Chapter_2:_Space_and_Time",
+          "score": 0.0,
+          "snippet": "A Brief History of Time\n\nEinstein's general theory of relativity explains how the path of a ray of light is affected by ' gravity ', which according to Einstein is an illusion caused by the warping..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of physics",
+          "url": "https://en.wikipedia.org/wiki/History_of_physics#General_relativity",
+          "score": 0.0,
+          "snippet": "History of physics\n\nThe gradual acceptance of Einstein's theories of relativity and the quantized nature of light transmission, and of Niels Bohr's model of the atom created as many problems as they..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [
+          "Isaac Newton",
+          "Albert Einstein",
+          "General relativity",
+          "Newton's law of universal gravitation"
+        ],
+        "total_expected": 4,
+        "ratio": 0.0
+      },
+      "fact_score": {
+        "matched": [
+          "action at a distance",
+          "spacetime curvature",
+          "equivalence principle"
+        ],
+        "missing": [
+          "inverse-square law",
+          "geodesic",
+          "Mercury perihelion"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Einstein's conception of gravity fundamentally differs from Newton's because Einstein incorporated it into a new understanding of the structure of reality—spacetime.\n\nHere is a breakdown of the differences based on the retrieved knowledge:\n\n**Newton's Conception:**\n*   Gravity was understood as describing the mutual attraction experienced by bodies due to their inherent mass [Source: Introduction to general relativity]. Newton established this theory, showing that local motion under constant gravity could be viewed as a limit-case of his universal law of gravity [Source: newton principia].\n\n**Einstein's Conception (General Relativity):**\n*   Einstein formulated his theory where gravitational motion is caused by the **curvature of spacetime** generated by mass [Source: whitehead]. Instead of being an attractive force acting across distance, gravity is geometry itself.\n*   This framework incorporates concepts like the equivalence principle, which states that a freefalling observer cannot detect the force of gravity because such frames are equivalent to inertial reference frames (a concept related to modeling gravity as a fictitious or locally undetectable effect) [Source: Fictitious force].\n\n**The Transition and Scope:**\n*   Newton's theory was historically successful, capable of accounting for certain empirical observations like the perturbation of Mercury’s orbit [Source: realism-theory change]. However, Einstein developed his successor theory to reconcile Newtonian physics with a broader framework involving space and time (Special Relativity) [Source: Introduction to general relativity].\n*   The relationship is that Newton's gravity can be viewed as being encompassed by or approached through limits of the more comprehensive theories developed later in this line of thought [Source: newton principia].\n\nIn summary, while Newton described *what* objects attract each other (a force), Einstein explained *why* they move—because mass warps the geometry of spacetime itself.",
+        "reasoning_chars": 2488,
+        "stream_wall_ms": 28800,
+        "total_latency_ms": 19958,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "action at a distance",
+            "spacetime curvature",
+            "inverse-square law",
+            "geodesic",
+            "equivalence principle",
+            "Mercury perihelion"
+          ],
+          "total_expected": 6,
+          "ratio": 0.0
+        }
+      }
+    },
+    {
+      "question_id": "compare_curie_meitner",
+      "category": "comparative",
+      "question": "Compare the scientific contributions of Marie Curie and Lise Meitner.",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Nobel_Prize",
+          "score": 0.0,
+          "snippet": "Lise Meitner\n\nthe joint work that had preceded the discovery and of Meitner's written and verbal contributions after her flight from Berlin."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "chemistry",
+          "url": "https://plato.stanford.edu/entries/chemistry/",
+          "score": 0.0,
+          "snippet": "chemistry\n\nOn the basis of his systematization, Mendeleev was able to correct the values of the atomic weights of certain known elements and also to predict the existence of then unknown elements..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "presentism",
+          "url": "https://plato.stanford.edu/entries/presentism/",
+          "score": 0.0,
+          "snippet": "presentism\n\nThus, rather than our admiration of Curie being a state that consists in Curie existing, our existing, and our bearing a relation to Curie, all that there is to such a state is our..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Marie Curie",
+          "url": "https://en.wikipedia.org/wiki/Marie_Curie#Postwar_years",
+          "score": 0.0,
+          "snippet": "Marie Curie\n\nShe also travelled to other countries, appearing publicly and giving lectures in Belgium, Brazil, Spain, and Czechoslovakia.\n\nLed by Curie, the Institute produced four more Nobel Prize..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Women's history",
+          "url": "https://en.wikipedia.org/wiki/Women%27s_history",
+          "score": 0.0,
+          "snippet": "Women's history\n\nAnthony, and Malala Yousafzai; and scientists such as Marie Curie, Rosalind Franklin, and Ada Lovelace."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Awards_and_honours",
+          "score": 0.0,
+          "snippet": "Lise Meitner\n\nAfter her death in 1968, Meitner received many naming honours. In 1997, element 109 was named meitnerium. She is the first and so far the only non-mythological woman thus exclusively..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Pierre Curie",
+          "url": "https://en.wikipedia.org/wiki/Pierre_Curie#Family",
+          "score": 0.0,
+          "snippet": "Pierre Curie\n\nand mathematician Jean Bernoulli (1667 – 1748), as is Pierre-Gilles de Gennes, winner of the 1991 Nobel Prize in Physics.\n\nPierre and Marie Curie's daughter, Irène, and their..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Chien-Shiung Wu",
+          "url": "https://en.wikipedia.org/wiki/Chien-Shiung_Wu#Final_years_and_legacy",
+          "score": 0.0,
+          "snippet": "Chien-Shiung Wu\n\nmind. My grandmother had emphasized much enthusiasm for national scientific development and education, which I really admire.\"\n\nDuring her retirement, Columbia hosted a celebration..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Marie Curie",
+          "Lise Meitner"
+        ],
+        "missing": [
+          "Discovery of nuclear fission"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "fact_score": {
+        "matched": [
+          "radioactivity",
+          "Otto Hahn",
+          "Nobel Prize"
+        ],
+        "missing": [
+          "polonium",
+          "radium",
+          "nuclear fission"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Both Marie Curie and Lised Meitner made profound scientific contributions, particularly in the fields related to radioactivity and nuclear science, though their specific areas of impact differ based on what the provided knowledge base indicates.\n\n**Marie Curie's Contributions:**\nMarie Curie was instrumental in advancing the field of radioactivity [General Knowledge]. She led an Institute that went on to produce several Nobel Prize winners through her work [Source: Marie Curie]. Her legacy is strongly associated with pioneering research into this subject, and she herself received multiple accolades for her scientific achievements [Parametric knowledge regarding Curies' general impact/Nobel Prizes]. Furthermore, she was involved in establishing major radioactivity-research laboratories, such as the Institute mentioned alongside other leading institutions like the Cavendish Laboratory and Kaiser Wilhelm Institute (which also included Lise Meitne) [Source: Marie Curie].\n\n**Lise Meitner's Contributions:**\nLise Meitners scientific involvement is noted in connection with institutes that housed major figures like Otto Hahn, placing her within significant research circles of chemistry and physics [Source: Marie Curie]. Her specific contributions are alluded to through \"the joint work\" she was part of preceding a discovery, as well as her written and verbal input after leaving Berlin—a context suggesting critical theoretical or collaborative roles in nuclear science [Source: Lise Meitenner]. Following her death in 1968, Meitne received numerous honors recognizing her importance, including the naming of element 108 (meitnium) to honor her work and the establishment of awards bearing her name [Source: Lise Meitaner].\n\n**Comparison:**\nWhile both were central figures within prominent scientific institutions that drove modern physics—with Curie associated with leading large-scale research efforts in radioactivity, and Meitner being recognized for critical collaborative and theoretical input into nuclear processes (as suggested by the sources)—the retrieved material does not provide a direct comparative breakdown of their discoveries. However, Lise Meitnert is specifically noted as having received unique naming honors following her death that acknowledge her singular scientific standing [Source: Lise Meitaniaer].",
+        "reasoning_chars": 2421,
+        "stream_wall_ms": 28820,
+        "total_latency_ms": 27512,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "Nobel Prize"
+          ],
+          "missing": [
+            "radioactivity",
+            "polonium",
+            "radium",
+            "nuclear fission",
+            "Otto Hahn"
+          ],
+          "total_expected": 6,
+          "ratio": 0.16666667
+        }
+      }
+    },
+    {
+      "question_id": "boundary_bletchley_park",
+      "category": "boundary_coverage",
+      "question": "What was the role of cryptanalysis at Bletchley Park during World War II?",
+      "retrieved": [],
+      "source_score": {
+        "matched": [],
+        "missing": [
+          "Bletchley Park",
+          "Ultra",
+          "Alan Turing",
+          "Enigma machine"
+        ],
+        "total_expected": 4,
+        "ratio": 0.0
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "Enigma",
+          "Alan Turing",
+          "Ultra",
+          "Lorenz cipher",
+          "bombes",
+          "Government Code and Cypher School"
+        ],
+        "total_expected": 6,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "I didn't find anything relevant in your installed knowledge bases for that question. Rather than guess, I'd like to check how you'd like me to proceed.",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 8340,
+        "total_latency_ms": null,
+        "intent": null,
+        "source_origins": [],
+        "retrieved_chunk_count": 0,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "Enigma",
+            "Alan Turing",
+            "Ultra",
+            "Lorenz cipher",
+            "bombes",
+            "Government Code and Cypher School"
+          ],
+          "total_expected": 6,
+          "ratio": 0.0
+        }
+      }
+    },
+    {
+      "question_id": "boundary_emmy_noether",
+      "category": "boundary_coverage",
+      "question": "Who was Emmy Noether and what is the significance of Noether's theorem?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nAmalie Emmy Noether was a German mathematician who made many important contributions to abstract algebra. She proved Noether's first and second theorems, which are fundamental in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nAt the time, women were largely excluded from academic positions. In 1915, she was invited by David Hilbert and Felix Klein to join the mathematics department at the University of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nThe following year, Germany's Nazi government dismissed Jews from university positions, and Noether moved to the United States to take up a position at Bryn Mawr College in..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nIn her classic 1921 paper Idealtheorie in Ringbereichen, Noether developed the theory of ideals in commutative rings into a tool with wide-ranging applications. She made elegant use of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nAmalie Emmy Noether (US: / ˈ n ʌ t ər /, UK: / ˈ n ɜː t ə /; German:; 23 March 1882 – 14 April 1935) was a German mathematician who made many important contributions to..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nof rings, fields, and algebras. In physics, Noether's theorem explains the connection between symmetry and conservation laws.\n\nNoether was born to a Jewish family in the Franconian town..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nyears lecturing under Hilbert's name. Her habilitation was approved in 1919, allowing her to obtain the rank of Privatdozent.\n\nNoether remained a leading member of the Göttingen..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nNoether's mathematical work has been divided into three \" epochs \". In the first (1908–1919), she made contributions to the theories of algebraic invariants and number fields. Her..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nIn addition to her own publications, Noether was generous with her ideas and is credited with several lines of research published by other mathematicians, even in fields far removed..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nresearch at the Institute for Advanced Study in Princeton, New Jersey. Noether died on 14 April 1935 at the age of 53."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Early_life",
+          "score": 0.0,
+          "snippet": "Emmy Noether was born on 23 March 1882. She was the first of four children of mathematician Max Noether and Ida Amalia Kaufmann, both from Jewish merchant families. Her first name was \"Amalie\", but..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Early_life",
+          "score": 0.0,
+          "snippet": "Emmy Noether\n\nmost girls of the time, and took piano lessons. She pursued none of these activities with passion, although she loved to dance.\n\nShe had three younger brothers. The eldest, Alfred..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Emmy Noether"
+        ],
+        "missing": [
+          "Noether's theorem"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "abstract algebra",
+          "ring theory",
+          "symmetry",
+          "conservation laws",
+          "Göttingen"
+        ],
+        "missing": [
+          "1918"
+        ],
+        "total_expected": 6,
+        "ratio": 0.8333333
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Amalie Emmy Noether was a German mathematician known for her substantial contributions to abstract algebra [Source: Web: Emmy Noether]. She is recognized as one of the most important women in the history of mathematics, being described so by figures like Albert Einstein and Hermann Weyl [Source: Web: Emmy Noether; Source: Web: Emmy Noether]. As a leading figure in her field, she developed theories concerning fields, algebras, and rings [Source: Web: Emmy Noether].\n\nRegarding her theorem, Noether's theorem is significant because it explains the relationship between symmetry and conservation laws within physics [Source: Web: Emmy Noether]. Furthermore, her work on differential invariants in the calculus of variations led to this theorem, which has been described as \"one of the most important mathematical theorems ever proved in guiding the development of modern physics\" [Source: Web: Emmy Noether].\n\nHer academic career involved an early period at the University of Göttingen after being invited there by David Hilbert and Felix Klein in 1915, though she initially spent four years lecturing under Hilbert's name due to objections from the philosophical faculty [Source: Web: Emmy Noether]. After Germany's Nazi government dismissed Jewish individuals from university positions in 1924, she relocated to Bryn Mawr College in Pennsylvania and also conducted research at the Institute for Advanced Study in Princeton, New Jersey [Source: Web: Emmy Noether]. Her mathematical work is characterized by three distinct \"epochs\" [Source: Web: Emmy Noether], with her classic 1921 paper *Idealtheorie in Ringbereichen* developing the theory of ideals in commutative rings into a broadly applicable tool; objects satisfying the ascending chain condition, which she used elegantly, are named Noetherian in her honor [Source: Web: Emmy Noether].",
+        "reasoning_chars": 0,
+        "stream_wall_ms": 10781,
+        "total_latency_ms": 9124,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 12,
+        "chunks_fact_score": {
+          "matched": [
+            "abstract algebra",
+            "ring theory",
+            "symmetry",
+            "conservation laws",
+            "Göttingen"
+          ],
+          "missing": [
+            "1918"
+          ],
+          "total_expected": 6,
+          "ratio": 0.8333333
+        }
+      }
+    },
+    {
+      "question_id": "boundary_copenhagen_interpretation",
+      "category": "boundary_coverage",
+      "question": "What is the Copenhagen interpretation of quantum mechanics?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Consequences",
+          "score": 0.0,
+          "snippet": "Copenhagen interpretation\n\nThe nature of the Copenhagen interpretation is exposed by considering a number of experiments and paradoxes."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Interpretations of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Interpretations_of_quantum_mechanics#Copenhagen_interpretation",
+          "score": 0.0,
+          "snippet": "Interpretations of quantum mechanics\n\nThe Copenhagen interpretation is a collection of views about the meaning of quantum mechanics principally attributed to Niels Bohr and Werner Heisenberg. It is..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_quantum_mechanics#Quantum_entanglement",
+          "score": 0.0,
+          "snippet": "Introduction to quantum mechanics\n\nIn other words, the results of these experiments are incompatible with any local hidden variable theory."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Abstract",
+          "score": 0.0,
+          "snippet": "Copenhagen interpretation\n\nThe Copenhagen interpretation is a collection of views about the meaning of quantum mechanics, stemming from the work of Niels Bohr, Werner Heisenberg, Max Born, and..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Schrödinger equation",
+          "url": "https://en.wikipedia.org/wiki/Schr%C3%B6dinger_equation#Interpretation",
+          "score": 0.0,
+          "snippet": "Schrödinger equation\n\nmathematical entities in it relate to physical reality depends upon the interpretation of quantum mechanics that one adopts.\n\nIn the views often grouped together as the..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Copenhagen interpretation"
+        ],
+        "missing": [
+          "Niels Bohr",
+          "Werner Heisenberg"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "Niels Bohr",
+          "Werner Heisenberg"
+        ],
+        "missing": [
+          "wavefunction collapse",
+          "complementarity",
+          "measurement",
+          "no underlying reality independent of observation"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The Copenhagen interpretation is a set of views concerning the meaning of quantum **mechanics** [Web: Interpretations of量子 mechanics]. It originated from ideas developed during 1915–17 and remains one of the most frequently taught attitudes toward this field today, being considered one of its oldest interpretations [Web: Interpretations of 量子 mechanics].\n\nKey aspects include:\n*   **Attribution:** The interpretation is principally associated with Niels Bohr and Wernerisenberg [Web: Interpretations of квант механики], as well as Max Born and others whose work contributed to it [Web: Copenhagen interpretation].\n*   **Terminology Origin:** Although \"Copenhagen\" refers to the Danish city, Heisenberg reportedly coined this term in the 1195s (though one source says the 120s) to reference ideas from the early period of quantum mechanics (1925-1927), even though there were fundamental disagreements between Bohr's and Heisenberg's views [Web: Copenhagen interpretation, Web: Interpretations of cuánt механики]. Because of this history, there is no single definitive statement outlining what the interpretation entails [Web: Copenhagen interpretation].\n*   **Core Concepts:** Within these views, a system’s wave function is understood to be a collection of statistical information regarding that system [Source: Schrödinger equation]. While the time evolution described by the Schrödinger equation is continuous and determined in principle—meaning knowing the state at one moment allows for calculation later on—this framework must also account for experimental results that conflict with any theory based on local hidden variables [Web: Introduction to quantum mecahnics, Web: Schrödinger equation].\n\nIt should be noted that while there are views grouped under this name, some disagreements existed between its principal proponents such as Bohr and Heisenberg regarding specific aspects of the mechanics [Source: Interpretations of क्वांट механики].",
+        "reasoning_chars": 2631,
+        "stream_wall_ms": 21461,
+        "total_latency_ms": 19680,
+        "intent": "KnowledgeQuery",
+        "source_origins": [
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 5,
+        "chunks_fact_score": {
+          "matched": [
+            "Niels Bohr",
+            "Werner Heisenberg"
+          ],
+          "missing": [
+            "wavefunction collapse",
+            "complementarity",
+            "measurement",
+            "no underlying reality independent of observation"
+          ],
+          "total_expected": 6,
+          "ratio": 0.33333334
+        }
+      }
+    },
+    {
+      "question_id": "contested_atomic_bombings_morality",
+      "category": "contested",
+      "question": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Testing_and_deployment",
+          "score": 0.0,
+          "snippet": "Nuclear weapons have only twice been used in warfare, both times by the United States against Japan at the end of World War II. On August 6, 1945, the United States Army Air Forces (USAAF) detonated..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nto destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "world-government",
+          "url": "https://plato.stanford.edu/entries/world-government/",
+          "score": 0.0,
+          "snippet": "world-government\n\nIn the Second World War, after the atomic bombings of Hiroshima and Nagasaki, atomic scientists lobbied for the international control of atomic energy as a main function of world..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\ncompounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.\n\nScholars have extensively..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\ndestroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.0,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki\n\nidea became the accepted position in Japan and that it may have played some part in the decision-making of the US government."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "anscombe",
+          "url": "https://plato.stanford.edu/entries/anscombe/",
+          "score": 0.0,
+          "snippet": "anscombe\n\nShe opposed Oxford’s decision to honor Truman on the grounds that Truman was a murderer. He was a murderer, because “choosing to kill the innocent as a means to your ends is always..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "double-effect",
+          "url": "https://plato.stanford.edu/entries/double-effect/",
+          "score": 0.0,
+          "snippet": "double-effect\n\nThe contrast between the Terror Bomber and the Strategic Bomber is often viewed as the least controversial pair of examples illustrating the distinction between intention and foresight..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "missing": [
+          "Debate over the atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "civilian casualties"
+        ],
+        "missing": [
+          "ended the war sooner",
+          "saved lives by avoiding invasion",
+          "alternatives existed",
+          "demonstration",
+          "Soviet entry"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The ethical discussion surrounding the atomic bombings of広島 and Nagasaki involves deeply conflicting moral viewpoints, as scholars continue to debate their justification [Source: Atomic bombings of Hiroshima...]. The provided sources outline arguments both supporting and opposing these actions.\n\n### Major Arguments For Morality (Justifications)\n\nSupporters of the bombings generally argue that they were a necessary action to achieve a greater good or prevent further catastrophe.\n*   **Ending the War:** According to supporters, the use of atomic weapons was essential \"to bring an end [of the war] with minimal casualties\" and ultimately prevented even greater loss of civilian life [Source: Atomic bombings of Hiroshima...].\n*   **Military Objectives:** The objective cited for military action included destroying enemy war industries, disabling or killing employees within those industries, and undermining overall civilian morale [Source: Atomic bombings of Nagasaki...; Source: Atomic bombings of Hiroشيma...]\n\n### Major Arguments Against Morality (Criticisms)\n\nCritics raise significant ethical objections regarding the targeting of civilians and the nature of intentional mass killing.\n*   **Killing Innocents:** One prominent objection, articulated by figures like Anscombe, is that choosing to kill innocent people as a means toward an end constitutes murder [Source: anscombe]. This critique emphasizes that many victims were noncombatants who did not fight the Allied forces nor supply Japan's military capacity [Source: anscombe].\n*   **Unnecessary Force:** Critics argue that the bombings themselves were unnecessary for achieving the war's conclusion [Source: Atomic bombings of Hiroshima...].\n\n### Factual Context and Related Ethical Considerations\n\nThe historical record provides context to these debates:\n*   **Casualties:** The detonations on August 6, 1945 (Hiroshima) using \"Little Boy\" and three days later, August 9, 19 Fourth-day detonation in Nagasaki using \"Fat Man,\" resulted in injuries leading to the deaths of approximately 200,ett civilians and military personnel [Source: Nuclear weapon]. In Hiroshima specifically, most of those who died were civilians, despite the presence of a sizable military garrison [Source: Atomic bombings of HIroshima...].\n*   **Post-War Implications:** Following these events, atomic scientists advocated for international oversight of nuclear energy through world federalist governments as a response to the risk posed by weapons of mass destruction and increased global interdependence [Source: world-government].",
+        "reasoning_chars": 2257,
+        "stream_wall_ms": 27748,
+        "total_latency_ms": 26657,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "ended the war sooner",
+            "saved lives by avoiding invasion",
+            "civilian casualties",
+            "alternatives existed",
+            "demonstration",
+            "Soviet entry"
+          ],
+          "total_expected": 6,
+          "ratio": 0.0
+        }
+      }
+    },
+    {
+      "question_id": "contested_strategic_bombing_war_crime",
+      "category": "contested",
+      "question": "Was the Allied strategic bombing of German cities a war crime?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II#Abstract",
+          "score": 0.0,
+          "snippet": "Strategic bombing during World War II\n\nThe Allies attacked oil installations, and controversial firebombings took place against Hamburg (1943), Dresden (1945), and other German cities."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "double-effect",
+          "url": "https://plato.stanford.edu/entries/double-effect/",
+          "score": 0.0,
+          "snippet": "double-effect\n\nThe contrast between the Terror Bomber and the Strategic Bomber is often viewed as the least controversial pair of examples illustrating the distinction between intention and foresight..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "War crime",
+          "url": "https://en.wikipedia.org/wiki/War_crime#Definition",
+          "score": 0.0,
+          "snippet": "War crime\n\nThe legalities of war have sometimes been accused of containing favoritism toward the winners (\" Victor's justice \"), as some controversies have not been ruled as war crimes. Some examples..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "dirty-hands",
+          "url": "https://plato.stanford.edu/entries/dirty-hands/",
+          "score": 0.0,
+          "snippet": "dirty-hands\n\nThe dirty hands tradition dates back to Machiavelli, though its present currency is largely owed to the American political theorist Michael Walzer who gave it the title of dirty hands in..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "terrorism",
+          "url": "https://plato.stanford.edu/entries/terrorism/",
+          "score": 0.0,
+          "snippet": "terrorism\n\nHowever, state terrorism is not the preserve of totalitarian regimes. Some non-totalitarian states have resorted to terrorism against enemy civilians as a method of warfare, most notably..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "terrorism",
+          "url": "https://plato.stanford.edu/entries/terrorism/",
+          "score": 0.0,
+          "snippet": "terrorism\n\nMichael Walzer offers an argument along these lines in his discussion of “terror bombing” of German cities in World War II. In early 1942, it seemed that Britain would be defeated by..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II casualties",
+          "url": "https://en.wikipedia.org/wiki/World_War_II_casualties#Classification_of_casualties",
+          "score": 0.0,
+          "snippet": "World War II casualties\n\nCivilian casualties include deaths caused by strategic bombing, Holocaust victims, German war crimes, Japanese war crimes, population transfers in the Soviet Union, Allied..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II#Legal_considerations",
+          "score": 0.0,
+          "snippet": "Strategic bombing during World War II\n\nand these conventions were interpreted by both sides to allow the indiscriminate bombing of enemy cities throughout the war.\n\nGeneral Telford Taylor, Chief..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Strategic bombing during World War II"
+        ],
+        "missing": [
+          "Bombing of Dresden",
+          "Bombing of Hamburg"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "Dresden",
+          "Hamburg"
+        ],
+        "missing": [
+          "civilian targets",
+          "international humanitarian law",
+          "area bombing",
+          "Arthur Harris"
+        ],
+        "total_expected": 6,
+        "ratio": 0.33333334
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The question of whether the Allied strategic bombing campaigns against German cities constituted a war crime is subject to significant historical debate and ethical analysis, rather than having a clear consensus in the provided materials regarding definitive legal rulings.\n\nHere is what the available information suggests concerning this complex issue:\n\n*   **Controversy and Lack of Specific Law:** Some controversies surrounding Allied destruction of Axis cities in World War II, such as the firebombing of Dresden, have not been officially ruled as war crimes [Source: War crime]. Furthermore, at that time, there was no specific international treaty or instrument dedicated to protecting civilian populations from strategic bombing during WWII [Source: War crime].\n*   **Ethical and Justification Frameworks:** Ethical theories were used to grapple with the actions. Michael Walzer discussed this issue in relation to \"terror bombing\" of German cities, arguing that an invocation of a \"supreme emergency\" could potentially justify such acts [Source: dirty-hands]. This aligns with discussions where some scholars draw distinctions between impermissible terrorism and permissible strategic bombing under certain conditions [Source: double-effect].\n*   **Historical Context:** The Allies did engage in attacks on German cities, including controversial firebombing raids against Hamburg (1933) and Dresden in 1945 [Source: Strategic bombing during WWII]. Some historical accounts note that both sides resorted to bombing enemy civilians as a method of war, with some groups internally referring to this practice as \"terror bombing\" [Source: terrorism].\n*   **Scope of Accountability:** While the concept of Allied war crimes is listed among various wartime casualties and atrocities—alongside German and Japanese war crimes—the sources do not confirm that any specific instance was legally classified as such by an international body [Source: World War II casualties].\n\nIn summary, while actions like firebombing Dresden are cited as controversial examples where legal culpability has been questioned, the provided texts indicate a division in viewpoints regarding permissibility and lack of clear legal precedent at the time.",
+        "reasoning_chars": 2220,
+        "stream_wall_ms": 28799,
+        "total_latency_ms": 20624,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "Dresden",
+            "Hamburg"
+          ],
+          "missing": [
+            "civilian targets",
+            "international humanitarian law",
+            "area bombing",
+            "Arthur Harris"
+          ],
+          "total_expected": 6,
+          "ratio": 0.33333334
+        }
+      }
+    },
+    {
+      "question_id": "contested_churchill_legacy",
+      "category": "contested",
+      "question": "How is Winston Churchill's legacy contested today?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Retirement:_1955–1964",
+          "score": 0.0,
+          "snippet": "Winston Churchill\n\nMontague Browne wrote that he never heard Churchill refer to depression and certainly did not suffer from it."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "walter-chatton",
+          "url": "https://plato.stanford.edu/entries/walter-chatton/",
+          "score": 0.0,
+          "snippet": "walter-chatton\n\nChatton’s life and career can be divided into four stages.[1]"
+        },
+        {
+          "corpus_id": "sep",
+          "title": "abduction",
+          "url": "https://plato.stanford.edu/entries/abduction/",
+          "score": 0.0,
+          "snippet": "abduction\n\nWalking along the beach, you see what looks like a picture of Winston Churchill in the sand. It could be that, as in the opening pages of Hilary Putnam’s book Reason, Truth, and History,..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "scottish-19th",
+          "url": "https://plato.stanford.edu/entries/scottish-19th/",
+          "score": 0.0,
+          "snippet": "scottish-19th\n\nStewart was enormously highly thought of in his own day, and had a European-wide reputation. At the time of his death he was described as ‘the pride and ornament of Scotland’, and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "scientific-representation",
+          "url": "https://plato.stanford.edu/entries/scientific-representation/",
+          "score": 0.0,
+          "snippet": "scientific-representation\n\nFirstly, similarity, even restricted to relevant similarities, is too inclusive a concept to account for representation. In many cases neither one of a pair of similar..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Stuttering",
+          "url": "https://en.wikipedia.org/wiki/Stuttering#History",
+          "score": 0.0,
+          "snippet": "Stuttering\n\nAnother British case was that of Prime Minister Winston Churchill. Churchill claimed, perhaps not directly discussing himself, that \"ometimes a slight and not unpleasing stammer or..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill",
+          "score": 0.0,
+          "snippet": "Winston Churchill\n\nHis second term was preoccupied with foreign affairs, especially Anglo-American relations and preservation of what remained of the British Empire with India now no longer part of..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Death,_funeral_and_memorials",
+          "score": 0.0,
+          "snippet": "Winston Churchill\n\nvotes, he was voted the greatest Briton of all time, his nearest rival being Isambard Kingdom Brunel some 56,000 votes behind.\n\nHe is one of only 8 people to be granted honorary..."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Winston Churchill"
+        ],
+        "missing": [
+          "Legacy of Winston Churchill",
+          "Bengal famine of 1943"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "Bengal famine",
+          "imperial views",
+          "wartime leadership",
+          "anti-Soviet",
+          "racial views",
+          "memorial controversies"
+        ],
+        "total_expected": 6,
+        "ratio": 0.0
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "Based on the provided retrieved passages, direct information detailing how Winston Churchill’s political or historical legacy is contested in modern discourse is not present. However, some sources touch upon areas where differing perspectives exist regarding his personal life and public image:\n\n*   **Personal Health Representation:** There are examples of varying interpretations surrounding his physical traits; for instance, while one account suggests a stammer might have aided audience attention, those who knew him believed it to be a significant issue [Source: Stuttering]. Furthermore, Montague Browne noted that he never heard Churchill reference depression and did not believe he suffered from it [Source: Web: Winston Churchill].\n*   **Philosophical Representation:** The name of Winston Churchill is used in philosophical examples related to representation. Hilary Putnam’s thought experiment uses the idea of an ant leaving a trace resembling him as part of questioning whether such a resemblance constitutes actual representation [Source: scientific-representation], which touches upon how figures are represented or perceived, even if this isn't a historical critique of his actions itself [Source: abduction].\n\nIt is worth noting that other retrieved passages discuss general philosophical concepts (like those involving Stewart and Scottish philosophy) or unrelated biographical information, and do not address the contestation of Churchill’s legacy. In contrast, some snippets confirm widespread positive regard for him in certain contexts; he remains popular in the UK, is generally viewed as a successful wartime leader who defended liberal democracy [Source: Web: Winston Churchill], and has received significant honors such as honorary citizenship from the United States [Source: Web: Winston Churchill].",
+        "reasoning_chars": 2510,
+        "stream_wall_ms": 26338,
+        "total_latency_ms": 18864,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "wikipedia",
+          "sep"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [],
+          "missing": [
+            "Bengal famine",
+            "imperial views",
+            "wartime leadership",
+            "anti-Soviet",
+            "racial views",
+            "memorial controversies"
+          ],
+          "total_expected": 6,
+          "ratio": 0.0
+        }
+      }
+    },
+    {
+      "question_id": "contested_quantum_determinism",
+      "category": "contested",
+      "question": "How did Heisenberg's uncertainty principle reshape philosophical debate about determinism?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Uncertainty",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty#Risk_and_uncertainty",
+          "score": 0.0,
+          "snippet": "Uncertainty\n\ntypically arises in situations where multiple analysts or observers have different interpretations of the same statements.\n\nAt the subatomic level, uncertainty may be a fundamental and..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "qt-uncertainty",
+          "url": "https://plato.stanford.edu/entries/qt-uncertainty/",
+          "score": 0.0,
+          "snippet": "qt-uncertainty\n\nSo, although Heisenberg did not originate the tradition of calling his relations a principle, it is not implausible to attribute the view to him that the uncertainty relations..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "qt-uncertainty",
+          "url": "https://plato.stanford.edu/entries/qt-uncertainty/",
+          "score": 0.0,
+          "snippet": "qt-uncertainty\n\nBohr first conceived the general outline of his complementarity argument in early 1927, during a skiing holiday in Norway, at the same time when Heisenberg wrote his uncertainty..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_mechanics",
+          "score": 0.0,
+          "snippet": "Niels Bohr\n\nIn February 1927, Heisenberg developed the first version of the uncertainty principle, presenting it using a thought experiment where an electron was observed through a gamma-ray..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "qt-uncertainty",
+          "url": "https://plato.stanford.edu/entries/qt-uncertainty/",
+          "score": 0.0,
+          "snippet": "qt-uncertainty\n\nHeisenberg’s relations were soon considered to be a cornerstone of the Copenhagen interpretation of quantum mechanics. Just a few months later, Kennard (1927) already called them..."
+        },
+        {
+          "corpus_id": "sep",
+          "title": "qt-uncertainty",
+          "url": "https://plato.stanford.edu/entries/qt-uncertainty/",
+          "score": 0.0,
+          "snippet": "qt-uncertainty\n\nA second point is the question whether the theoretical structure or the quantitative laws of quantum theory can indeed be derived on the basis of the uncertainty principle, as..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Bell test",
+          "url": "https://en.wikipedia.org/wiki/Bell_test#Overview",
+          "score": 0.0,
+          "snippet": "Bell test\n\nThe Bell test has its origins in the debate between Einstein and other pioneers of quantum physics, principally Niels Bohr. One feature of the theory of quantum mechanics under debate was..."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Henri Bergson",
+          "url": "https://en.wikipedia.org/wiki/Henri_Bergson#Education_and_career",
+          "score": 0.0,
+          "snippet": "Henri Bergson\n\nin the same year by Félix Alcan. He also gave courses in Clermont-Ferrand on the Pre-Socratics, in particular Heraclitus.\n\nBergson dedicated Time and Free Will to Jules Lachelier..."
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [
+          "Uncertainty principle",
+          "Determinism",
+          "Werner Heisenberg",
+          "Hidden-variable theory"
+        ],
+        "total_expected": 4,
+        "ratio": 0.0
+      },
+      "fact_score": {
+        "matched": [
+          "Bohr"
+        ],
+        "missing": [
+          "indeterminism",
+          "Laplace's demon",
+          "hidden variables",
+          "Einstein",
+          "free will"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 0,
+      "search_ms": 0,
+      "corpora_hit": [
+        "wikipedia",
+        "sep"
+      ],
+      "vector_eligible": true,
+      "synth": {
+        "answer": "The Heisenberg uncertainty principle introduced a profound challenge to classical philosophical views of strict determinism by suggesting fundamental limits on what can be known about the universe at its most basic level [Source: Web: Uncertainty]. This concept suggests that for certain pairs of properties, such as position and momentum in a particle, it is physically impossible to know both simultaneously with perfect accuracy [Source: Web: Bell test].\n\nThis uncertainty was interpreted by some physicists not merely as a limitation due to incomplete knowledge, but potentially as an irreducible property inherent to nature itself—meaning there may be no definitive fact available about the system that can ever be found [Source: Web: Uncertainty]. This idea directly clashes with deterministic frameworks where all properties are considered fixed and knowable in principle.\n\nThe debate surrounding this concept involved intense philosophical discussions between Heisenberg and Niels Bohr, particularly around 1928 [Source: Web: qt-uncertainty]. While Heisenberg initially presented the relations as an empirical guide to quantum mechanics, some saw them as providing \"room\" or \"freedom\" for non-classical modes of description [Source: Web: qt-uncertainty].\n\nNiels Bohr pushed a more radical interpretation than what Heisenberg first proposed. He criticized arguments that suggested measurement merely *disturbed* properties that already existed; instead, he emphasized the idea that certain particle properties could not even be discussed independent of the context in which they were measured [Source: Web: Niels Bohr]. This shift toward contextual reality—where observation fundamentally shapes the description of what is real—is a major departure from classical determinism.\n\nIn summary, by establishing fundamental limits to simultaneous knowledge and suggesting that nature might possess irreducible probabilistic features rather than strictly defined states, the uncertainty principle helped reshape debates away from strict Newtonian determinism towards an understanding of inherent quantum indeterminacy [Source: Web: Uncertainty].",
+        "reasoning_chars": 2448,
+        "stream_wall_ms": 25561,
+        "total_latency_ms": 24813,
+        "intent": "DeepQuery",
+        "source_origins": [
+          "sep",
+          "wikipedia"
+        ],
+        "retrieved_chunk_count": 8,
+        "chunks_fact_score": {
+          "matched": [
+            "Bohr",
+            "Einstein",
+            "free will"
+          ],
+          "missing": [
+            "indeterminism",
+            "Laplace's demon",
+            "hidden variables"
+          ],
+          "total_expected": 6,
+          "ratio": 0.5
+        }
+      }
+    }
+  ]
+}
