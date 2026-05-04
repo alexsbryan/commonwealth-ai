@@ -1438,7 +1438,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "which",
- "zip",
+ "zip 2.4.2",
  "zstd",
 ]
 
@@ -2544,6 +2544,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "docx-lite"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a66db35e6c788cf5624ac83aefbea59f8f7ab9f26a276a73dea53645f66119f8"
+dependencies = [
+ "quick-xml 0.36.2",
+ "thiserror 1.0.69",
+ "zip 0.6.6",
+]
+
+[[package]]
 name = "dom_query"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3572,6 +3583,18 @@ dependencies = [
  "allocator-api2",
  "equivalent",
  "foldhash 0.2.0",
+]
+
+[[package]]
+name = "hashify"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd1246c0e5493286aeb2dde35b1f4eb9c4ce00e628641210a5e553fc001a1f26"
+dependencies = [
+ "indexmap 2.13.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -5352,6 +5375,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c41e0c4fef86961ac6d6f8a82609f55f31b05e4fce149ac5710e439df7619ba4"
 
 [[package]]
+name = "mail-parser"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "187a2b93c4c8c32f552ee06c2d99915e575de2fc7e04b07891c9edfee5b8edd6"
+dependencies = [
+ "encoding_rs",
+ "hashify",
+]
+
+[[package]]
 name = "markup5ever"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7074,6 +7107,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.39.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "958f21e8e7ceb5a1aa7fa87fab28e7c75976e0bfe7e23ff069e0a260f894067d"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7416,6 +7458,19 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "rbook"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "173f628aa626ba747b419abdbe5e3e04a2d16a846d5f83b0e7e1638fe1ebd30c"
+dependencies = [
+ "indexmap 2.13.0",
+ "percent-encoding",
+ "quick-xml 0.39.2",
+ "thiserror 2.0.18",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -8724,6 +8779,9 @@ dependencies = [
  "chrono",
  "commonwealth-core",
  "corpus-engine",
+ "dirs 5.0.1",
+ "docx-lite",
+ "ego-tree",
  "filetime",
  "flate2",
  "futures",
@@ -8732,13 +8790,16 @@ dependencies = [
  "image",
  "lancedb",
  "lettre",
+ "mail-parser",
  "notify",
  "parquet",
  "pdf-extract",
  "pdfium-render",
  "quick-xml 0.37.5",
+ "rbook",
  "reqwest 0.12.28",
  "rusqlite",
+ "scraper",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -8753,6 +8814,7 @@ dependencies = [
  "tracing",
  "uuid",
  "walkdir",
+ "zip 2.4.2",
 ]
 
 [[package]]
@@ -10232,6 +10294,12 @@ checksum = "fa10c302f5a53b7ad27fd42a3996e23d096ba39b5b8dd6d9e683a05b01bee749"
 dependencies = [
  "pom",
 ]
+
+[[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
 
 [[package]]
 name = "typeid"
@@ -11723,6 +11791,18 @@ dependencies = [
 
 [[package]]
 name = "zip"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "760394e246e4c28189f19d488c058bf16f564016aefac5d32bb1f3b51d5e9261"
+dependencies = [
+ "byteorder",
+ "crc32fast",
+ "crossbeam-utils",
+ "flate2",
+]
+
+[[package]]
+name = "zip"
 version = "2.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fabe6324e908f85a1c52063ce7aa26b68dcb7eb6dbc83a2d148403c9bc3eba50"
@@ -11735,6 +11815,20 @@ dependencies = [
  "indexmap 2.13.0",
  "memchr",
  "thiserror 2.0.18",
+ "zopfli",
+]
+
+[[package]]
+name = "zip"
+version = "8.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap 2.13.0",
+ "memchr",
+ "typed-path",
  "zopfli",
 ]
 

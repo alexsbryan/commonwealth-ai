@@ -12,6 +12,10 @@
         /// same-corpus-two-ways ("sep" locally + "sep" from a
         /// peer) can't be confused for a single source.
         from_peer?: string;
+        /// Folder-ingest v1 §6.3: when the corpus is a watched
+        /// folder, the user-typed display name. Rendered in
+        /// place of the opaque corpus_id slug.
+        display_name?: string;
       }[];
       total_latency_ms: number;
       tokens_used: number;
@@ -32,10 +36,19 @@
   let expanded = $state(false);
   let sourcesExpanded = $state(false);
 
+  // Prefer the user-typed folder display name when present; fall
+  // back to the corpus_id slug for non-folder corpora (SEP, etc).
+  function sourceLabel(s: {
+    origin: string;
+    display_name?: string;
+  }): string {
+    return s.display_name?.trim() || s.origin;
+  }
+
   let corporaSearched = $derived(
     (provenance?.sources ?? [])
       .filter((s) => s.count > 0)
-      .map((s) => s.origin),
+      .map((s) => sourceLabel(s)),
   );
 
   // "sep (6)" for local hits, "sep (6) via BeefyMac" when the
@@ -46,11 +59,12 @@
   let corporaDetail = $derived(
     (provenance?.sources ?? [])
       .filter((s) => s.count > 0)
-      .map((s) =>
-        s.from_peer
-          ? `${s.origin} (${s.count}) via ${s.from_peer}`
-          : `${s.origin} (${s.count})`,
-      ),
+      .map((s) => {
+        const label = sourceLabel(s);
+        return s.from_peer
+          ? `${label} (${s.count}) via ${s.from_peer}`
+          : `${label} (${s.count})`;
+      }),
   );
 
   let elapsedLabel = $derived(

@@ -2464,6 +2464,7 @@ pub async fn ask_document(
             origin: asset.title.clone(),
             count: output.citations.len(),
             from_peer: None,
+            display_name: None,
         }],
         inference_backend: if output.model_id.is_empty() {
             "local".to_string()
@@ -2475,6 +2476,7 @@ pub async fn ask_document(
         tokens_used: output.tokens_used,
         coarse_intent: None,
         self_assessment: None,
+        coverage: None,
     };
 
     let sources_content: Vec<String> = output

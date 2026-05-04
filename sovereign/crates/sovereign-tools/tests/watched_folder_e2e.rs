@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, EmbedFn};
-use sovereign_core::traits::StateStore;
+use sovereign_core::traits::{SensitiveCorpusOracle, StateStore};
 use sovereign_store::memory::InMemoryStateStore;
 use sovereign_tools::local_corpus::config::{
     LocalCorpusConfig, LocalCorpusSourceType, WatchedFolderConfig,
@@ -308,10 +308,13 @@ async fn deletion_guard_pauses_when_threshold_tripped() {
 async fn unsupported_extensions_surface_in_skipped_breakdown() {
     let fx = boot().await;
     // Indexed file (md) plus three files in unsupported formats.
+    // .docx / .epub / .html landed as v1 supported formats, so we
+    // pick formats outside that breadth (e.g. .rtf, .pages, no-ext)
+    // to exercise the skipped bucket.
     write(&fx.folder.join("a.md"), "indexed content");
-    write(&fx.folder.join("b.docx"), "[fake docx — extractor not wired yet]");
-    write(&fx.folder.join("c.docx"), "[also fake]");
-    write(&fx.folder.join("d.rtf"), "[fake rtf]");
+    write(&fx.folder.join("b.rtf"), "[fake rtf]");
+    write(&fx.folder.join("c.rtf"), "[also fake]");
+    write(&fx.folder.join("d.pages"), "[Apple Pages]");
     write(&fx.folder.join("README"), "no extension at all");
     let id = register(&fx, WatchedFolderConfig::default()).await;
     fx.manager.ingest(&id, None, None).await.expect("ingest");
@@ -319,13 +322,17 @@ async fn unsupported_extensions_surface_in_skipped_breakdown() {
 
     let state = fx.manager.watched_state(&id).await.expect("watched_state");
     assert_eq!(
-        state.skipped_by_extension.get("docx").copied().unwrap_or(0),
+        state.skipped_by_extension.get("rtf").copied().unwrap_or(0),
         2,
-        "two .docx files should appear in skipped_by_extension; got {:?}",
+        "two .rtf files should appear in skipped_by_extension; got {:?}",
         state.skipped_by_extension
     );
     assert_eq!(
-        state.skipped_by_extension.get("rtf").copied().unwrap_or(0),
+        state
+            .skipped_by_extension
+            .get("pages")
+            .copied()
+            .unwrap_or(0),
         1
     );
     assert_eq!(
@@ -336,6 +343,185 @@ async fn unsupported_extensions_surface_in_skipped_breakdown() {
             .unwrap_or(0),
         1,
         "extension-less files bucket as `(no extension)`"
+    );
+}
+
+/// Phase A end-to-end: a folder with one file per supported format
+/// (PDF deferred — pdf-extract requires a real PDF, exercised by the
+/// dedicated PDF tests) ingests cleanly, every file lands in
+/// `state.entries`, and `state.failed_files` / `state.skipped_by_extension`
+/// stay empty for the v1 format breadth.
+#[tokio::test]
+async fn v1_format_breadth_ingests_cleanly() {
+    use std::io::Write as _;
+
+    let fx = boot().await;
+
+    // .txt / .md
+    write(&fx.folder.join("note.txt"), "plain text body");
+    write(&fx.folder.join("note.md"), "# md heading\n\nbody");
+
+    // .html / .htm / .mhtml — all routed through the same body-text
+    // routine; .mhtml needs a tiny multipart MIME envelope.
+    write(
+        &fx.folder.join("page.html"),
+        "<html><body><p>html body</p></body></html>",
+    );
+    write(
+        &fx.folder.join("page.htm"),
+        "<html><body><p>htm body</p></body></html>",
+    );
+    write(
+        &fx.folder.join("archive.mhtml"),
+        "From: <browser>\r\n\
+         Subject: x\r\n\
+         MIME-Version: 1.0\r\n\
+         Content-Type: multipart/related; boundary=\"B\"\r\n\
+         \r\n\
+         --B\r\n\
+         Content-Type: text/html; charset=utf-8\r\n\
+         \r\n\
+         <html><body><p>mhtml body</p></body></html>\r\n\
+         --B--\r\n",
+    );
+
+    // .epub via rbook builder.
+    {
+        use rbook::epub::EpubChapter;
+        let epub = rbook::Epub::builder()
+            .title("Sample")
+            .language("en")
+            .chapter([EpubChapter::new("C1").xhtml_body("<p>epub body</p>")])
+            .build();
+        let f = std::fs::File::create(fx.folder.join("book.epub")).unwrap();
+        epub.write().write(f).expect("write epub");
+    }
+
+    // .docx via hand-rolled minimal zip.
+    {
+        use zip::write::FileOptions;
+        use zip::CompressionMethod;
+        let f = std::fs::File::create(fx.folder.join("doc.docx")).unwrap();
+        let mut zip = zip::ZipWriter::new(f);
+        let opts: FileOptions<()> =
+            FileOptions::default().compression_method(CompressionMethod::Deflated);
+        zip.start_file("[Content_Types].xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>"#,
+        )
+        .unwrap();
+        zip.start_file("_rels/.rels", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>"#,
+        )
+        .unwrap();
+        zip.start_file("word/document.xml", opts).unwrap();
+        zip.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body><w:p><w:r><w:t>docx body</w:t></w:r></w:p></w:body>
+</w:document>"#,
+        )
+        .unwrap();
+        zip.finish().unwrap();
+    }
+
+    let id = register(&fx, WatchedFolderConfig::default()).await;
+    fx.manager.ingest(&id, None, None).await.expect("ingest");
+    fx.worker.run_once(&id).await.expect("sweep");
+
+    let state = fx.manager.watched_state(&id).await.expect("watched_state");
+    assert_eq!(
+        state.entries.len(),
+        7,
+        "all 7 v1 format files should be entries; got {} entries: {:?}",
+        state.entries.len(),
+        state.entries.keys().collect::<Vec<_>>()
+    );
+    assert!(
+        state.failed_files.is_empty(),
+        "no failures expected on the v1 format breadth happy-path; got {:?}",
+        state.failed_files
+    );
+    assert!(
+        state.skipped_by_extension.is_empty(),
+        "no skipped extensions expected on the v1 format breadth; got {:?}",
+        state.skipped_by_extension
+    );
+}
+
+/// Folder-ingest v1 §3.4 + ARCH §7.4 (defence in depth):
+/// `LocalCorpusManager` implements `SensitiveCorpusOracle`. The
+/// runtime's ambient retrieval path (`search_corpus_indexes`)
+/// consults this oracle before fanning out, so a folder marked
+/// sensitive is structurally absent from pre-turn context
+/// assembly. Pinned here so a refactor that drops the impl OR
+/// silently inverts the flag fails before the privacy invariant
+/// reaches a user.
+#[tokio::test]
+async fn sensitive_oracle_only_returns_sensitive_corpora() {
+    let fx = boot().await;
+    let extra_root = fx._tmp.path().join("watched-sensitive");
+    std::fs::create_dir_all(&extra_root).unwrap();
+
+    // Register two corpora: one sensitive, one not.
+    let mut sensitive_cfg = WatchedFolderConfig::default();
+    sensitive_cfg.sensitive = true;
+    let sensitive_lc = LocalCorpusConfig::watched_folder(
+        extra_root.clone(),
+        "Sensitive notes".into(),
+        sensitive_cfg,
+    );
+    let sensitive_id = fx
+        .manager
+        .register(sensitive_lc)
+        .await
+        .expect("register sensitive");
+
+    let normal_id = register(&fx, WatchedFolderConfig::default()).await;
+
+    let sensitive_set: std::collections::HashSet<String> = (&*fx.manager)
+        .sensitive_corpus_ids()
+        .await
+        .into_iter()
+        .collect();
+
+    assert!(
+        sensitive_set.contains(&sensitive_id),
+        "sensitive corpus must surface in oracle: got {sensitive_set:?}"
+    );
+    assert!(
+        !sensitive_set.contains(&normal_id),
+        "non-sensitive corpus must NOT surface: got {sensitive_set:?}"
+    );
+    assert_eq!(
+        sensitive_set.len(),
+        1,
+        "only the sensitive corpus should be reported; got {sensitive_set:?}"
+    );
+}
+
+/// The default-defaults case: nothing is sensitive when the user
+/// hasn't opted in. Pinned because the structural-privacy flag
+/// must default to OFF — a refactor that flips the default to
+/// `true` would over-block ambient retrieval and degrade the
+/// product silently. ARCH §7.2.
+#[tokio::test]
+async fn sensitive_oracle_empty_when_no_sensitive_corpora() {
+    let fx = boot().await;
+    let _id = register(&fx, WatchedFolderConfig::default()).await;
+    let set = (&*fx.manager).sensitive_corpus_ids().await;
+    assert!(
+        set.is_empty(),
+        "default-defaults oracle must report no sensitive corpora; got {set:?}"
     );
 }
 

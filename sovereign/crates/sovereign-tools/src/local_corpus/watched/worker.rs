@@ -159,6 +159,15 @@ impl Worker {
         });
         self.registry.mark_started(corpus_id, now_unix).await;
 
+        // Clear the on-disk Manual sync-now flag mirror. The
+        // registry-side flag was already cleared on the dispatching
+        // tick; clearing here too means a daemon restart between the
+        // two writes can't re-dispatch the same pending request on
+        // the next tick. If the sweep below errors, the flag stays
+        // cleared — that's correct. The user can re-trigger
+        // `/sync-now` if they want another attempt.
+        state.manual_sync_pending = false;
+
         // Run the sweep body inside a helper so any error consistently
         // transitions state to Errored and emits SweepErrored.
         let outcome = match self

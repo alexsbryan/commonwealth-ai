@@ -777,6 +777,8 @@ import type {
   WatchedFolderStatusResponse,
   WatchedFolderStateResponse,
   WatchedFolderAckResponse,
+  WatchedFolderDetailsResponse,
+  WatchedFolderDocumentResponse,
   WatchedFolderIncompleteJobsResponse,
 } from "./types";
 
@@ -827,6 +829,82 @@ export async function lcWatchConfirmDeletion(
   corpusId: string,
 ): Promise<WatchedFolderAckResponse> {
   return invoke("lc_watch_confirm_deletion", { corpusId });
+}
+
+/** Folder-ingest v1 §3.5: trigger a sweep on a Manual-mode watched
+ *  folder. The daemon returns 409 (surfaced as an error here) if the
+ *  corpus is in Continuous mode — the request would otherwise
+ *  silently no-op. */
+export async function lcWatchSyncNow(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_sync_now", { corpusId });
+}
+
+/** Folder-ingest v1 §3.7: per-folder glassbox digest for the
+ *  detail panel. Heavier than `lcWatchState`; fetch once when
+ *  the user opens the panel rather than on every poll tick. */
+export async function lcWatchDetails(
+  corpusId: string,
+): Promise<WatchedFolderDetailsResponse> {
+  return invoke("lc_watch_details", { corpusId });
+}
+
+/** Folder-ingest v1 §3.7: per-document inspection digest for the
+ *  document-inspector panel. `docId` is the relative-path key
+ *  the manager stores; the Tauri command percent-encodes it. */
+export async function lcWatchDocument(
+  corpusId: string,
+  docId: string,
+): Promise<WatchedFolderDocumentResponse> {
+  return invoke("lc_watch_document", { corpusId, docId });
+}
+
+/** Folder-ingest v1 §3.1: layer an additional root onto an
+ *  existing watched corpus. */
+export async function lcWatchAddRoot(
+  corpusId: string,
+  path: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_add_root", { corpusId, path });
+}
+
+/** Folder-ingest v1 §3.1: detach an additional root by 0-based
+ *  index into `additional_roots`. */
+export async function lcWatchRemoveRoot(
+  corpusId: string,
+  idx: number,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_remove_root", { corpusId, idx });
+}
+
+/** Folder-ingest v1 §3.3: enable atlas enrichment on a watched
+ *  folder. Returns `{ corpus_id, job_id, ok }`. The build runs
+ *  in a daemon-side subprocess; subscribe to
+ *  `enrich://progress/<job_id>` for events. */
+export async function lcWatchEnrichEnable(
+  corpusId: string,
+  pipelineId: string,
+): Promise<{ corpus_id: string; job_id: string; ok: boolean }> {
+  return invoke("lc_watch_enrich_enable", {
+    corpusId,
+    pipelineId,
+  });
+}
+
+/** Folder-ingest v1 §3.3: disable atlas enrichment. Idempotent. */
+export async function lcWatchEnrichDisable(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_enrich_disable", { corpusId });
+}
+
+/** Folder-ingest v1 §3.3: rebuild the atlas with the previously-
+ *  configured pipeline. */
+export async function lcWatchEnrichRebuild(
+  corpusId: string,
+): Promise<{ corpus_id: string; job_id: string; ok: boolean }> {
+  return invoke("lc_watch_enrich_rebuild", { corpusId });
 }
 
 export async function lcWatchRemove(

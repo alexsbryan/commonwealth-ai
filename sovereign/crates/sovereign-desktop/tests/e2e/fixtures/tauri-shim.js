@@ -108,6 +108,80 @@
       operation: "ask",
       sources: [],
     }),
+    // Local-corpus defaults. `lc_list` returns the array directly
+    // (Tauri unwraps the response). `lc_incomplete_jobs` likewise
+    // returns the inner Vec, not a `{ jobs: [...] }` wrapper.
+    lc_list: () => [],
+    lc_incomplete_jobs: () => [],
+    lc_ocr_available: () => false,
+    lc_validate_path: () => ({ exists: true, is_dir: true, readable: true }),
+    // Watched-folder defaults — empty list, empty incomplete jobs,
+    // empty details. Per-test overrides via setHandler populate
+    // realistic shapes when the spec exercises this surface.
+    lc_watch_list: () => ({ corpora: [] }),
+    lc_watch_incomplete_jobs: () => ({ jobs: [] }),
+    lc_watch_status: ({ corpusId }) => ({
+      corpus_id: corpusId,
+      status: { kind: "idle", last_sweep_unix: 0, live_docs: 0, tombstones: 0 },
+    }),
+    lc_watch_state: ({ corpusId }) => ({
+      corpus_id: corpusId,
+      status: { kind: "idle", last_sweep_unix: 0, live_docs: 0, tombstones: 0 },
+      skipped_by_extension: {},
+      failed_files: [],
+      tombstones: 0,
+      live_entries: 0,
+    }),
+    lc_watch_details: ({ corpusId }) => ({
+      corpus_id: corpusId,
+      display_name: "Sample folder",
+      root_path: "/tmp/sample",
+      status: { kind: "idle", last_sweep_unix: 0, live_docs: 0, tombstones: 0 },
+      sync_mode: "continuous",
+      sensitive: false,
+      live_entries: 0,
+      formats: {},
+      skipped_by_extension: {},
+      failed_files: [],
+      tombstones: 0,
+      enrichment: { kind: "off" },
+      last_sweep_unix: 0,
+      roots: [
+        {
+          idx: 0,
+          path: "/tmp/sample",
+          added_at_unix: 0,
+          doc_count: 0,
+          primary: true,
+        },
+      ],
+    }),
+    // Folder-ingest v1 §3.3 — enrichment lifecycle stubs. Tests
+    // that exercise enable / disable / rebuild override these
+    // with realistic shapes via setHandler; the defaults just
+    // keep the page from erroring on missing handlers.
+    lc_watch_enrich_enable: ({ corpusId }) => ({
+      corpus_id: corpusId,
+      job_id: `mock-job-${Math.random().toString(36).slice(2, 10)}`,
+      ok: true,
+    }),
+    lc_watch_enrich_disable: ({ corpusId }) => ({ corpus_id: corpusId, ok: true }),
+    lc_watch_enrich_rebuild: ({ corpusId }) => ({
+      corpus_id: corpusId,
+      job_id: `mock-job-${Math.random().toString(36).slice(2, 10)}`,
+      ok: true,
+    }),
+    lc_watch_document: ({ corpusId, docId }) => ({
+      corpus_id: corpusId,
+      doc_id: docId,
+      absolute_path: `/tmp/sample/${docId}`,
+      size_bytes: 0,
+      mtime_unix: 0,
+      content_hash: "0".repeat(16),
+      chunk_count: 0,
+      first_chunk_preview: null,
+      atoms: [],
+    }),
     submit_approval: () => true,
     submit_input: () => true,
     submit_information_response: () => true,

@@ -230,6 +230,147 @@ pub async fn lc_watch_confirm_deletion(
     post_json(&url, json!({})).await
 }
 
+/// Folder-ingest v1 §3.5: trigger a Manual-mode sweep. The corpus
+/// must already be registered with `sync_mode = "manual"`; this
+/// command is a no-op (server returns 409) for Continuous corpora.
+#[tauri::command]
+pub async fn lc_watch_sync_now(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<AckResponse, String> {
+    let url = format!(
+        "{}/internal/corpus/watch/sync-now/{corpus_id}",
+        base_url(&state)
+    );
+    post_json(&url, json!({})).await
+}
+
+/// Folder-ingest v1 §3.1: layer an additional root onto an existing
+/// watched corpus. The next scheduler tick walks it.
+#[tauri::command]
+pub async fn lc_watch_add_root(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    path: String,
+) -> Result<AckResponse, String> {
+    let url = format!(
+        "{}/internal/corpus/watch/{corpus_id}/roots",
+        base_url(&state)
+    );
+    post_json(&url, json!({ "path": path })).await
+}
+
+/// Folder-ingest v1 §3.1: detach an additional root by index.
+#[tauri::command]
+pub async fn lc_watch_remove_root(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    idx: u32,
+) -> Result<AckResponse, String> {
+    let url = format!(
+        "{}/internal/corpus/watch/{corpus_id}/roots/{idx}",
+        base_url(&state)
+    );
+    delete_json(&url).await
+}
+
+/// Folder-ingest v1 §3.3: enable atlas enrichment on a watched
+/// folder. Returns immediately with a job_id; the build runs in a
+/// daemon-side subprocess. Progress events surface on the
+/// `enrich://progress/<job_id>` Tauri channel.
+#[tauri::command]
+pub async fn lc_watch_enrich_enable(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    pipeline_id: String,
+) -> Result<serde_json::Value, String> {
+    let url = format!(
+        "{}/internal/corpus/watch/{corpus_id}/enrich/enable",
+        base_url(&state)
+    );
+    post_json(&url, json!({ "pipeline_id": pipeline_id })).await
+}
+
+/// Folder-ingest v1 §3.3: disable atlas enrichment. Cancels any
+/// in-flight build, tears down the atlas dir, resets to Off.
+#[tauri::command]
+pub async fn lc_watch_enrich_disable(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<AckResponse, String> {
+    let url = format!(
+        "{}/internal/corpus/watch/{corpus_id}/enrich/disable",
+        base_url(&state)
+    );
+    post_json(&url, json!({})).await
+}
+
+/// Folder-ingest v1 §3.3: rebuild the atlas using the
+/// previously-configured pipeline.
+#[tauri::command]
+pub async fn lc_watch_enrich_rebuild(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<serde_json::Value, String> {
+    let url = format!(
+        "{}/internal/corpus/watch/{corpus_id}/enrich/rebuild",
+        base_url(&state)
+    );
+    post_json(&url, json!({})).await
+}
+
+/// Folder-ingest v1 §3.7: per-folder glassbox digest. Heavier than
+/// `lc_watch_state`; the desktop fetches this once when the user
+/// opens the detail panel, not on every poll tick. Returns the
+/// `DetailsResponse` shape from sovereign-mesh's
+/// `corpus_watch_http`: format counts, skipped-by-extension,
+/// failed-files, sync mode, sensitivity, enrichment status,
+/// tombstones.
+#[tauri::command]
+pub async fn lc_watch_details(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<serde_json::Value, String> {
+    let url = format!(
+        "{}/internal/corpus/watch/details/{corpus_id}",
+        base_url(&state)
+    );
+    get_json(&url).await
+}
+
+/// Folder-ingest v1 §3.7: per-document inspection digest. Returns
+/// the `DocumentResponse` shape: file metadata, chunk count,
+/// first chunk preview, atom contributions (empty until Phase E).
+#[tauri::command]
+pub async fn lc_watch_document(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    doc_id: String,
+) -> Result<serde_json::Value, String> {
+    // doc_id can contain slashes (relative path) and other URL-
+    // hostile characters; percent-encode every byte that isn't
+    // an unreserved path character per RFC 3986.
+    let encoded = url_encode_segment(&doc_id);
+    let url = format!(
+        "{}/internal/corpus/watch/document/{corpus_id}/{encoded}",
+        base_url(&state)
+    );
+    get_json(&url).await
+}
+
+fn url_encode_segment(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for byte in s.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char);
+            }
+            _ => out.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+    out
+}
+
 #[tauri::command]
 pub async fn lc_watch_remove(
     state: State<'_, Arc<AppState>>,

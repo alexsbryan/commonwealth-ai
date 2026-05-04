@@ -17,6 +17,7 @@
   import WatchedFolderRegisterFlow from "./WatchedFolderRegisterFlow.svelte";
   import WatchedFolderList from "./WatchedFolderList.svelte";
   import WatchedFolderBanner from "./WatchedFolderBanner.svelte";
+  import WatchedFolderDetail from "./WatchedFolderDetail.svelte";
 
   interface Props {
     /// Pipe-through from SettingsPanel → App.svelte: when a user
@@ -41,7 +42,8 @@
         resumeCorpusId?: string | null;
         resumeDisplayName?: string | null;
       }
-    | { kind: "watched-folder-register" };
+    | { kind: "watched-folder-register" }
+    | { kind: "watched-folder-detail"; corpusId: string };
 
   let corpora = $state<LocalCorpusConfig[]>([]);
   let incomplete = $state<IncompleteJob[]>([]);
@@ -223,7 +225,12 @@
           <p class="lk-label">Watched folders</p>
           <span class="plate-count lk-folio">{watchedCorpora.length}</span>
         </div>
-        <WatchedFolderList corpora={watchedCorpora} onChanged={reload} />
+        <WatchedFolderList
+          corpora={watchedCorpora}
+          onChanged={reload}
+          onOpenDetail={(corpusId) =>
+            (mode = { kind: "watched-folder-detail", corpusId })}
+        />
       </section>
     {/if}
 
@@ -251,6 +258,11 @@
     <WatchedFolderRegisterFlow
       onCancel={exitFlow}
       onRegistered={() => exitFlow()}
+    />
+  {:else if mode.kind === "watched-folder-detail"}
+    <WatchedFolderDetail
+      corpusId={mode.corpusId}
+      onClose={exitFlow}
     />
   {/if}
 </div>

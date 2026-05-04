@@ -4,6 +4,7 @@
     lcWatchResume,
     lcWatchConfirmDeletion,
     lcWatchRemove,
+    lcWatchSyncNow,
   } from "../../api";
   import type {
     WatchedFolderListEntry,
@@ -13,9 +14,13 @@
   interface Props {
     corpora: WatchedFolderListEntry[];
     onChanged: () => Promise<void> | void;
+    /** Open the §3.7 folder-detail panel for one corpus.
+     *  Optional so the standalone-list usage (banner / tests
+     *  rendering the cards in isolation) doesn't have to wire it. */
+    onOpenDetail?: (corpusId: string) => void;
   }
 
-  let { corpora, onChanged }: Props = $props();
+  let { corpora, onChanged, onOpenDetail }: Props = $props();
 
   let actionInflight: string | null = $state(null);
   let actionError: string | null = $state(null);
@@ -49,6 +54,18 @@
     actionError = null;
     try {
       await lcWatchConfirmDeletion(id);
+      await onChanged();
+    } catch (e) {
+      actionError = String(e);
+    }
+    actionInflight = null;
+  }
+
+  async function syncNow(id: string) {
+    actionInflight = id;
+    actionError = null;
+    try {
+      await lcWatchSyncNow(id);
       await onChanged();
     } catch (e) {
       actionError = String(e);
@@ -123,15 +140,42 @@
 {:else}
   <ul class="list">
     {#each corpora as entry (entry.corpus_id)}
-      <li class="card">
+      <li class="card" class:sensitive={entry.sensitive}>
         <header class="card-head">
           <div class="name-block">
             <span class="name">{entry.display_name}</span>
             <span class="path" title={entry.root_path}>{entry.root_path}</span>
           </div>
-          <span class="badge {statusClass(entry.status)}">
-            {statusLabel(entry.status)}
-          </span>
+          <div class="badges">
+            <span class="badge {statusClass(entry.status)}">
+              {statusLabel(entry.status)}
+            </span>
+            {#if entry.additional_roots_count > 0}
+              <span
+                class="badge subtle"
+                title="This corpus is anchored on the primary folder plus additional roots layered on top. Open Details to inspect or detach them."
+              >
+                +{entry.additional_roots_count}
+                {entry.additional_roots_count === 1 ? "folder" : "folders"}
+              </span>
+            {/if}
+            {#if entry.sync_mode === "manual"}
+              <span
+                class="badge subtle"
+                title="Manual sync — sweeps only on request"
+              >
+                Manual sync
+              </span>
+            {/if}
+            {#if entry.sensitive}
+              <span
+                class="badge sensitive-badge"
+                title="Excluded from ambient situated-context assembly"
+              >
+                Sensitive
+              </span>
+            {/if}
+          </div>
         </header>
         {#if entry.status.kind === "idle"}
           <p class="meta">
@@ -140,6 +184,15 @@
         {/if}
 
         <div class="actions">
+          {#if onOpenDetail}
+            <button
+              class="ghost"
+              onclick={() => onOpenDetail?.(entry.corpus_id)}
+              title="Inspect formats, failed extractions, and what's not indexed"
+            >
+              Details
+            </button>
+          {/if}
           {#if entry.status.kind === "paused_awaiting_confirmation"}
             <button
               class="primary"
@@ -147,6 +200,16 @@
               disabled={actionInflight === entry.corpus_id}
             >
               Confirm deletion
+            </button>
+          {/if}
+          {#if entry.sync_mode === "manual" && entry.status.kind !== "sweeping"}
+            <button
+              class="ghost"
+              onclick={() => syncNow(entry.corpus_id)}
+              disabled={actionInflight === entry.corpus_id}
+              title="Trigger a sweep now (Manual mode only sweeps on request)"
+            >
+              Sync now
             </button>
           {/if}
           {#if entry.status.kind === "paused_manual"}
@@ -244,6 +307,26 @@
   .badge.err    { background: var(--lk-err-wash);   color: var(--lk-err); }
   .badge.muted  { background: var(--lk-paper-deep); color: var(--lk-ink-faded); border: 1px solid var(--lk-rule); }
   .badge.active { background: var(--lk-crown-wash); color: var(--lk-crown-light); }
+  .badge.subtle {
+    background: transparent;
+    color: var(--lk-ink-faded);
+    border: 1px dashed var(--lk-rule);
+  }
+  .badge.sensitive-badge {
+    background: var(--lk-paper-deep);
+    color: var(--lk-ink-soft);
+    border: 1px solid var(--lk-ink-faded);
+    font-style: italic;
+  }
+  .badges {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+  .card.sensitive {
+    border-left: 3px solid var(--lk-ink-faded);
+  }
 
   .meta {
     margin: 8px 0 0;

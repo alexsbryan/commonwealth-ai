@@ -81,6 +81,11 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "watch-confirm-deletion" => {
             crate::corpus_watch_cmd::run_confirm_deletion(&args[1..]).await
         }
+        "watch-sync-now" => crate::corpus_watch_cmd::run_sync_now(&args[1..]).await,
+        "watch-add-root" => crate::corpus_watch_cmd::run_add_root(&args[1..]).await,
+        "watch-remove-root" => {
+            crate::corpus_watch_cmd::run_remove_root(&args[1..]).await
+        }
         "watch-remove" => crate::corpus_watch_cmd::run_remove(&args[1..]).await,
         other => {
             eprintln!("Unknown corpus subcommand: {other}");
@@ -176,6 +181,9 @@ const HELP_CORPUS: crate::util::help::Help = crate::util::help::Help {
             ("watch-pause <id>",          "Pause sweeps for a watched folder until `watch-resume`"),
             ("watch-resume <id>",         "Resume sweeps after a manual pause"),
             ("watch-confirm-deletion <id>", "Acknowledge a guard-tripped pause so the next sweep applies the pending deletes"),
+            ("watch-sync-now <id>",       "Trigger a sweep on a Manual-mode watched folder (no-op for Continuous corpora)"),
+            ("watch-add-root <id> <path>", "Layer an additional folder onto an existing watched corpus"),
+            ("watch-remove-root <id> <idx>", "Detach an additional folder by 0-based index"),
             ("watch-remove <id>",         "Unregister a watched folder and remove its index (source folder untouched)"),
         ]),
         crate::util::help::HelpSection::Notes(

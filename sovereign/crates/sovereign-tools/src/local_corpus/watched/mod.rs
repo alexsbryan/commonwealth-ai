@@ -27,6 +27,7 @@
 
 pub mod apply;
 pub mod diff;
+pub mod enrich;
 pub mod events;
 pub mod registry;
 pub mod scheduler;

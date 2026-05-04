@@ -48,16 +48,58 @@
       | {
           intent: string;
           search_method?: string;
-          sources?: { origin: string; count: number }[];
+          sources?: {
+            origin: string;
+            count: number;
+            from_peer?: string;
+            display_name?: string;
+          }[];
           inference_backend: string;
           oicp_match?: string;
           total_latency_ms: number;
           tokens_used: number;
           coarse_intent?: string;
           self_assessment?: string;
+          // Folder-ingest v1 §6.3 — per-turn coverage assessment.
+          // `kind === "thin"` means at least one folder corpus
+          // returned fewer than `thin_threshold` chunks; the chip
+          // enumerates them so the user sees the gap immediately.
+          coverage?: {
+            kind: string;
+            thin_threshold: number;
+            thin_folders: Array<{
+              corpus_id: string;
+              display_name: string;
+              chunks: number;
+              skipped_files: number;
+              failed_files: number;
+            }>;
+          };
         }
       | undefined,
   );
+
+  // Compose the chip text from the provenance coverage payload.
+  // Empty string when no coverage note is attached, which hides
+  // the chip entirely.
+  let coverageChip = $derived.by(() => {
+    const cov = provenance?.coverage;
+    if (!cov || cov.kind !== "thin" || cov.thin_folders.length === 0) {
+      return "";
+    }
+    const top = cov.thin_folders.slice(0, 2);
+    const phrases = top.map((f) => {
+      const bits: string[] = [`${f.chunks} hit${f.chunks === 1 ? "" : "s"}`];
+      if (f.skipped_files > 0) {
+        bits.push(`${f.skipped_files} unsupported`);
+      }
+      if (f.failed_files > 0) {
+        bits.push(`${f.failed_files} extraction-failed`);
+      }
+      return `your "${f.display_name}" folder (${bits.join(", ")})`;
+    });
+    return `Thin coverage: ${phrases.join("; ")}.`;
+  });
 
   let retrievedChunks = $derived(
     (metadata?.retrieved_chunks ?? []) as Array<{
@@ -230,6 +272,13 @@
 
   <RoutingMeta {provenance} {retrievedChunks} />
 
+  {#if coverageChip}
+    <div class="coverage-chip" role="note">
+      <span class="dot" aria-hidden="true">◐</span>
+      {coverageChip}
+    </div>
+  {/if}
+
   {#each thinkBlocks as block}
     <ThinkBlock content={block.text} />
   {/each}
@@ -324,6 +373,30 @@
 
   .unresolved-toast .dot {
     color: var(--warning, #c9a84c);
+  }
+
+  /* Coverage chip — quietly announces when the user's folder
+     corpora returned fewer than `thin_threshold` chunks for this
+     turn. Sits above the prose so the gap is legible before the
+     answer reads. Folder-ingest v1 §6.3. */
+  .coverage-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px;
+    margin-bottom: 8px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border: 0.5px solid var(--border-mid);
+    border-radius: 100px;
+    font-family: var(--font-sans);
+    line-height: 1.45;
+  }
+
+  .coverage-chip .dot {
+    color: var(--accent, #c9a84c);
+    font-size: 0.85em;
   }
 
   .unresolved-toast em {

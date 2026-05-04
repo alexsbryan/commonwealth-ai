@@ -59,13 +59,16 @@ impl WatchedSubsystem {
 
         // Auto-resume: every persisted WatchedFolder corpus gets
         // re-registered so the scheduler picks it up on the next
-        // tick. Idempotent.
+        // tick. Idempotent. Threading sync_mode through here is
+        // what restores Manual-mode behaviour after a daemon
+        // restart — without it, every Manual corpus would revert
+        // to Continuous on the very next tick.
         let watched = manager.list_watched().await;
         let mut count = 0_usize;
         for cfg in &watched {
             if let Some(wf) = cfg.source_type.watched_config() {
                 registry
-                    .register(cfg.id.clone(), wf.sweep_interval_secs)
+                    .register_with_mode(cfg.id.clone(), wf.sweep_interval_secs, wf.sync_mode)
                     .await;
                 count += 1;
             }

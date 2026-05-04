@@ -1900,6 +1900,14 @@ pub struct ResponseProvenance {
     /// `None` when not applicable or for old messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub self_assessment: Option<String>,
+    /// Folder-ingest v1 §6.3: per-turn coverage assessment over the
+    /// user's watched-folder corpora. `None` for turns where no
+    /// folder corpus contributed retrieval (the common "talked to a
+    /// public knowledge base" case). When `Some`, the chat surface
+    /// renders a quiet chip enumerating thin folders so the user
+    /// learns *what we don't have* without a second click.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<CoverageNote>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1912,6 +1920,45 @@ pub struct SourceSummary {
     /// `RoutingMeta.svelte`. Locally-hosted corpora leave this `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from_peer: Option<String>,
+    /// Folder-ingest v1 §6.3: when this corpus is a watched folder,
+    /// the user-typed display name (e.g. "case files") that the
+    /// chat surface renders instead of the opaque `corpus_id` slug.
+    /// `None` for non-folder corpora (SEP, Wikipedia, mesh hits) so
+    /// the UI keeps its existing label rendering for them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+}
+
+/// Per-turn coverage assessment. `kind == "thin"` means at least one
+/// folder corpus that contributed retrieval came back with fewer
+/// than `thin_threshold` chunks — likely under-served by the user's
+/// own materials. The chat surface renders a one-line chip listing
+/// the thin folders so the user can decide whether to (a) accept
+/// the result, (b) re-phrase, or (c) extend the folder's contents.
+///
+/// `kind == "ok"` is reserved for forward compatibility — today's
+/// runtime simply omits the field (`coverage: None`) when coverage
+/// is fine.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoverageNote {
+    pub kind: String,
+    pub thin_threshold: usize,
+    pub thin_folders: Vec<ThinFolder>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThinFolder {
+    pub corpus_id: String,
+    pub display_name: String,
+    pub chunks: usize,
+    /// Files in this folder whose extension isn't in the watcher's
+    /// accept list (e.g. `.pages`, `.key`). When non-zero, surfaces
+    /// in the chip as ", N files in unsupported formats" so the
+    /// user knows the gap is structural and not just retrieval-quality.
+    pub skipped_files: usize,
+    /// Files the watcher tried and failed to extract (encrypted,
+    /// corrupt, etc). Surfaced same as `skipped_files`.
+    pub failed_files: usize,
 }
 
 // ─── Action Preview (for approval) ────────────────────────────

@@ -1905,7 +1905,7 @@ fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&str>) -> &'a 
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// grouped by provenance tier (corpus vs web) and staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
-    format_scored_chunks_with_kinds(chunks, max_chars, None, None)
+    format_scored_chunks_with_kinds(chunks, max_chars, None, None, None)
 }
 
 /// Like [`format_scored_chunks`], but if a `kinds` map is supplied,
@@ -1919,13 +1919,23 @@ fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize)
 /// the synthesis prompt knows how to handle (present multiple views,
 /// don't synthesise false consensus). Populated by
 /// `prepare_knowledge_query_plan` from the Wikipedia link graph.
+///
+/// When `folder_metadata` is supplied, chunks whose `corpus_id`
+/// matches a watched-folder corpus are emitted under a separate
+/// "From your folders" section with a `[Folder: <display-name> — <title>]`
+/// label. Folder-ingest v1 §6.3: gives the synthesis model an
+/// explicit signal that a chunk came from the user's own corpus
+/// (rather than a public knowledge base) so it can attribute
+/// faithfully ("From your `case-files` folder, three documents…").
 fn format_scored_chunks_with_kinds(
     chunks: &[corpus_engine::ScoredChunk],
     max_chars: usize,
     kinds: Option<&std::collections::HashMap<String, corpus_engine::CorpusKind>>,
     contested: Option<&std::collections::HashSet<String>>,
+    folder_metadata: Option<&std::collections::HashMap<String, crate::traits::FolderMetadata>>,
 ) -> String {
     let mut corpus_parts = Vec::new();
+    let mut folder_parts = Vec::new();
     let mut web_parts = Vec::new();
     let mut catalog_parts = Vec::new();
     let mut total = 0;
@@ -1935,6 +1945,7 @@ fn format_scored_chunks_with_kinds(
             kinds.and_then(|m| m.get(&c.corpus_id)),
             Some(corpus_engine::CorpusKind::Catalog)
         );
+        let folder_meta = folder_metadata.and_then(|m| m.get(&c.corpus_id));
         let body = strip_leading_title_duplicate(&c.content, c.title.as_deref());
         let content = truncate_chunk_content(body);
         let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
@@ -1948,7 +1959,18 @@ fn format_scored_chunks_with_kinds(
             })
             .unwrap_or("");
 
-        let (label, bucket) = if is_catalog {
+        let (label, bucket) = if let Some(meta) = folder_meta {
+            // Folder corpora win precedence over Catalog/Web — a
+            // folder is by definition the user's own material and
+            // the synthesis register changes accordingly.
+            (
+                format!(
+                    "[Folder: {} — {title}{contested_suffix}]",
+                    meta.display_name
+                ),
+                &mut folder_parts,
+            )
+        } else if is_catalog {
             (format!("[Catalog: {title}{contested_suffix}]"), &mut catalog_parts)
         } else if c.url.is_some() {
             (format!("[Web: {title}{contested_suffix}]"), &mut web_parts)
@@ -1968,6 +1990,12 @@ fn format_scored_chunks_with_kinds(
     }
 
     let mut sections = Vec::new();
+    if !folder_parts.is_empty() {
+        sections.push(format!(
+            "## From your folders\n\n{}",
+            folder_parts.join("\n\n---\n\n")
+        ));
+    }
     if !corpus_parts.is_empty() {
         sections.push(format!(
             "## From knowledge base\n\n{}",
@@ -1992,6 +2020,166 @@ fn format_scored_chunks_with_kinds(
     } else {
         sections.join("\n\n")
     }
+}
+
+/// Threshold below which a folder corpus's per-turn chunk count is
+/// flagged as "thin coverage" in `ResponseProvenance.coverage`.
+/// Folder-ingest v1 §6.3: a folder corpus that contributed *some*
+/// chunks but fewer than this many likely under-served the query —
+/// the chat surface chip enumerates the folder so the user can
+/// extend it or reformulate.
+///
+/// Tuned to 3 because typical retrieval pulls 8–16 chunks total per
+/// query; a folder contributing 0–2 of them is a clearer "thin"
+/// signal than the 4–5 threshold that would over-trigger on
+/// well-served queries with mixed-source retrieval.
+const FOLDER_THIN_COVERAGE_THRESHOLD: usize = 3;
+
+/// Build the `(sources, coverage)` pair attached to
+/// `ResponseProvenance` from a per-turn `source_map` plus the
+/// snapshots of peer-attribution and folder-metadata.
+///
+/// `peer_attribution` decorates `from_peer`; `folder_meta` decorates
+/// both `display_name` (so the chat surface renders the user-typed
+/// label) and the coverage chip's enumerated thin folders. When no
+/// folder corpus contributed retrieval, `coverage` is `None` and the
+/// chat surface omits the chip entirely.
+fn build_provenance_components(
+    source_map: &std::collections::HashMap<String, usize>,
+    peer_attribution: &std::collections::HashMap<String, String>,
+    folder_meta: &std::collections::HashMap<String, crate::traits::FolderMetadata>,
+) -> (Vec<SourceSummary>, Option<crate::types::CoverageNote>) {
+    let mut sources: Vec<SourceSummary> = source_map
+        .iter()
+        .map(|(origin, &count)| {
+            let from_peer = peer_attribution.get(origin).cloned();
+            let display_name = folder_meta.get(origin).map(|m| m.display_name.clone());
+            SourceSummary {
+                origin: origin.clone(),
+                count,
+                from_peer,
+                display_name,
+            }
+        })
+        .collect();
+    // Stable order so message-metadata diffs and tests don't churn.
+    sources.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.origin.cmp(&b.origin))
+    });
+
+    let mut thin_folders: Vec<crate::types::ThinFolder> = source_map
+        .iter()
+        .filter_map(|(origin, &count)| {
+            let meta = folder_meta.get(origin)?;
+            if count >= FOLDER_THIN_COVERAGE_THRESHOLD {
+                return None;
+            }
+            Some(crate::types::ThinFolder {
+                corpus_id: origin.clone(),
+                display_name: meta.display_name.clone(),
+                chunks: count,
+                skipped_files: meta.skipped_count,
+                failed_files: meta.failed_count,
+            })
+        })
+        .collect();
+    thin_folders.sort_by(|a, b| {
+        a.chunks
+            .cmp(&b.chunks)
+            .then_with(|| a.display_name.cmp(&b.display_name))
+    });
+
+    let coverage = if thin_folders.is_empty() {
+        None
+    } else {
+        Some(crate::types::CoverageNote {
+            kind: "thin".to_string(),
+            thin_threshold: FOLDER_THIN_COVERAGE_THRESHOLD,
+            thin_folders,
+        })
+    };
+
+    (sources, coverage)
+}
+
+/// Build a "what I don't have" prompt-time note for any folder
+/// corpora that contributed retrieval AND have non-zero
+/// `failed_files` / `skipped_by_extension`. Empty string when every
+/// matched folder is fully indexed.
+///
+/// Folder-ingest v1 §6.3: the model should be honest about the
+/// user's coverage gap (encrypted PDFs, unsupported formats) the
+/// moment it might affect the answer. Putting this in the synthesis
+/// system message — capped at the top two folders by gap magnitude
+/// — keeps the prompt budget bounded while making the gap legible
+/// without the user having to dig through the folder-detail UI.
+fn build_coverage_gaps_note(
+    chunks: &[corpus_engine::ScoredChunk],
+    folder_meta: &std::collections::HashMap<String, crate::traits::FolderMetadata>,
+) -> String {
+    let mut by_id: std::collections::BTreeMap<String, &crate::traits::FolderMetadata> =
+        std::collections::BTreeMap::new();
+    for c in chunks {
+        let Some(m) = folder_meta.get(&c.corpus_id) else {
+            continue;
+        };
+        if m.failed_count == 0 && m.skipped_count == 0 {
+            continue;
+        }
+        by_id.insert(c.corpus_id.clone(), m);
+    }
+    if by_id.is_empty() {
+        return String::new();
+    }
+    let mut ranked: Vec<(String, &crate::traits::FolderMetadata)> =
+        by_id.into_iter().collect();
+    ranked.sort_by(|a, b| {
+        let total_a = a.1.skipped_count + a.1.failed_count;
+        let total_b = b.1.skipped_count + b.1.failed_count;
+        total_b
+            .cmp(&total_a)
+            .then_with(|| a.1.display_name.cmp(&b.1.display_name))
+    });
+    ranked.truncate(2);
+
+    let mut lines = Vec::new();
+    for (_id, m) in ranked {
+        let mut bits = Vec::new();
+        if m.skipped_count > 0 {
+            let ext_part = if m.top_skipped_extensions.is_empty() {
+                String::new()
+            } else {
+                let exts: Vec<String> = m
+                    .top_skipped_extensions
+                    .iter()
+                    .map(|e| format!(".{e}"))
+                    .collect();
+                format!(" ({})", exts.join(", "))
+            };
+            bits.push(format!(
+                "{} files in unsupported formats{}",
+                m.skipped_count, ext_part
+            ));
+        }
+        if m.failed_count > 0 {
+            bits.push(format!(
+                "{} files we couldn't extract",
+                m.failed_count
+            ));
+        }
+        lines.push(format!(
+            "- Their \"{}\" folder has {}.",
+            m.display_name,
+            bits.join(", ")
+        ));
+    }
+    format!(
+        "GAP NOTE — what the user has but you don't see:\n{}\n\
+         If the answer might depend on these gaps, mention them honestly.",
+        lines.join("\n"),
+    )
 }
 
 /// Shared body of [`Runtime::maybe_collaborate`]. Factored out so the
@@ -2239,6 +2427,13 @@ struct KnowledgeContext {
     sources: Vec<SourceSummary>,
     /// Summaries of retrieved chunks for frontend source linking.
     retrieved_chunks: Vec<serde_json::Value>,
+    /// Folder-ingest v1 §6.3: per-turn coverage assessment over the
+    /// user's watched-folder corpora. `None` when no folder corpus
+    /// contributed retrieval; `Some(thin)` when at least one folder
+    /// came back below the chunk-count threshold. Threaded through to
+    /// `ResponseProvenance.coverage` so the streaming and
+    /// non-streaming paths surface the same chip data.
+    coverage: Option<crate::types::CoverageNote>,
 }
 
 /// Everything `handle_knowledge_query` and the streaming KQ branch need
@@ -2265,6 +2460,14 @@ struct KnowledgeQueryPlan {
     /// `"empty"` | `"focused"` | `"synthesis"` | `"routed"` —
     /// surfaced in message metadata for the UI to label the turn.
     result_quality: &'static str,
+    /// Snapshot of the folder-metadata oracle taken when the plan
+    /// was built. Carried through to the streaming spawn so the
+    /// final assistant message's `ResponseProvenance` can include
+    /// folder display names and the coverage chip without a second
+    /// oracle round-trip. Empty map = no folder corpora known
+    /// (CLI / test harness fallback) → coverage chip suppressed,
+    /// `display_name` falls back to `corpus_id`.
+    folder_meta: std::collections::HashMap<String, crate::traits::FolderMetadata>,
 }
 
 /// Streaming handle returned by [`Runtime::handle_message_stream`].
@@ -2579,6 +2782,25 @@ pub struct Runtime {
     /// dir. `None` = atlas-grounded retrieval is off (the pre-atlas
     /// chunk-only behaviour is preserved exactly).
     pub atlas_context_provider: Option<Arc<dyn crate::atlas_context::AtlasContextProvider>>,
+    /// Reports which `corpus_id`s are flagged sensitive (e.g.
+    /// folder-ingest v1 §3.4 watched-folder sensitivity). Consulted
+    /// by [`Runtime::search_corpus_indexes`] before fanning out
+    /// retrieval — sensitive corpora are dropped from the
+    /// ambient-retrieval candidate set so they never contribute to
+    /// pre-turn situated context.
+    ///
+    /// `None` = no sensitivity gate applied (all corpora eligible),
+    /// which matches the pre-v1 behaviour exactly. The bootstrap
+    /// wires sovereign-tools' `LocalCorpusManager` here.
+    pub sensitive_corpora: Option<Arc<dyn crate::traits::SensitiveCorpusOracle>>,
+    /// Per-folder metadata oracle. Folder-ingest v1 §6.3 — when
+    /// retrieval pulls chunks from a watched-folder corpus, this
+    /// provides the user-typed display name and the "what I don't
+    /// have" gap counters so the synthesis prompt can say "your
+    /// case-files folder" and surface skipped/failed-file notes.
+    /// `None` = no folder corpora known (CLI fallback / tests),
+    /// which preserves the pre-Phase-F label rendering exactly.
+    pub folder_metadata: Option<Arc<dyn crate::traits::FolderMetadataOracle>>,
 }
 
 impl Runtime {
@@ -2610,6 +2832,8 @@ impl Runtime {
             confidence_thresholds: ConfidenceThresholds::default(),
             routing_events: Arc::new(NoOpRoutingEventSink),
             atlas_context_provider: None,
+            sensitive_corpora: None,
+            folder_metadata: None,
         }
     }
 
@@ -2816,6 +3040,19 @@ impl Runtime {
         Some(added)
     }
 
+    /// Snapshot the folder-metadata oracle. Returns an empty map
+    /// when no oracle is wired (CLI fallback / tests), which makes
+    /// every callee's `folder_metadata` lookup miss and so the
+    /// pre-Phase-F label rendering applies. Folder-ingest v1 §6.3.
+    async fn folder_metadata_snapshot(
+        &self,
+    ) -> std::collections::HashMap<String, crate::traits::FolderMetadata> {
+        match &self.folder_metadata {
+            Some(oracle) => oracle.folder_metadata().await,
+            None => std::collections::HashMap::new(),
+        }
+    }
+
     /// Build the set of chunk titles whose Wikipedia source has at
     /// least one section flagged contested (`pov_count > 0` OR
     /// `section_type = "controversy"`). Used by
@@ -2961,6 +3198,46 @@ impl Runtime {
         self
     }
 
+    /// Install a sensitive-corpus oracle (folder-ingest v1 §3.4).
+    /// When wired, [`Runtime::search_corpus_indexes`] consults the
+    /// oracle for each ambient retrieval and drops any corpus the
+    /// oracle reports as sensitive *before* fanning out the search.
+    /// Leaving this `None` preserves the pre-v1 behaviour exactly
+    /// (no corpus is treated as sensitive).
+    ///
+    /// Per ARCH §7.4 (defence in depth), this is the runtime-side
+    /// layer of enforcement — sovereign-tools' `WatchedFolderConfig`
+    /// holds the flag, the on-disk state mirrors it, and the
+    /// runtime applies the structural exclusion at the assembly
+    /// seam. A failure at any single layer doesn't compromise the
+    /// invariant because the other layers still apply.
+    pub fn with_sensitive_corpora(
+        mut self,
+        oracle: Arc<dyn crate::traits::SensitiveCorpusOracle>,
+    ) -> Self {
+        self.sensitive_corpora = Some(oracle);
+        self
+    }
+
+    /// Install the per-folder metadata oracle (Folder-ingest v1
+    /// §6.3 source attribution + coverage). The runtime uses the
+    /// snapshot to (a) replace `corpus_id`-as-label with the user's
+    /// typed display name in the prompt's `[Source: …]` headers
+    /// and (b) surface a "what I don't have" line when matched
+    /// folders carry many failed/skipped files.
+    ///
+    /// `None` (the default) preserves the pre-Phase-F behaviour
+    /// exactly, so test harnesses and the bare CLI path don't have
+    /// to wire sovereign-tools' `LocalCorpusManager` to keep
+    /// running.
+    pub fn with_folder_metadata(
+        mut self,
+        oracle: Arc<dyn crate::traits::FolderMetadataOracle>,
+    ) -> Self {
+        self.folder_metadata = Some(oracle);
+        self
+    }
+
     /// Install a mesh-knowledge client. Only called when the desktop
     /// has an `EmbeddedDaemon` actually running — tests and the
     /// bare CLI path leave this `None`, in which case
@@ -3087,6 +3364,53 @@ impl Runtime {
                 skipped = total_indexes - eligible.len(),
                 query_dims,
                 "{label}: dim-filtered index set"
+            );
+        }
+
+        // Filter 3 — drop sensitive corpora from ambient retrieval.
+        //
+        // Folder-ingest v1 §3.4: a watched-folder corpus marked
+        // sensitive is structurally absent from the agent's pre-turn
+        // ambient context. This is the runtime-side enforcement
+        // layer; sovereign-tools' `WatchedFolderConfig.sensitive`
+        // flag and its on-disk state-file mirror are the other
+        // layers (ARCH §7.4 defence in depth). When no oracle is
+        // wired (tests, pre-v1 builds), this filter is a no-op and
+        // every corpus passes through.
+        //
+        // Sensitivity composes with skill-level local_only
+        // suppression, but they're orthogonal: local_only is a
+        // categorical skill gate; sensitivity is per-corpus and
+        // applies in every register that does ambient retrieval.
+        let eligible_pre_sensitivity = eligible.len();
+        let eligible: Vec<_> = if let Some(oracle) = &self.sensitive_corpora {
+            let sensitive_ids = oracle.sensitive_corpus_ids().await;
+            if sensitive_ids.is_empty() {
+                eligible
+            } else {
+                eligible
+                    .into_iter()
+                    .filter(|info| {
+                        if sensitive_ids.contains(&info.corpus_id) {
+                            tracing::debug!(
+                                corpus = %info.corpus_id,
+                                "{label}: skipping sensitive corpus — excluded from ambient retrieval"
+                            );
+                            false
+                        } else {
+                            true
+                        }
+                    })
+                    .collect()
+            }
+        } else {
+            eligible
+        };
+        if eligible.len() < eligible_pre_sensitivity {
+            tracing::info!(
+                eligible = eligible.len(),
+                sensitive_skipped = eligible_pre_sensitivity - eligible.len(),
+                "{label}: sensitivity-filtered index set"
             );
         }
 
@@ -3971,17 +4295,12 @@ impl Runtime {
                 source_map.entry(cs.corpus_id.clone()).or_insert(0);
             }
         }
-        let sources: Vec<SourceSummary> = source_map
-            .into_iter()
-            .map(|(origin, count)| {
-                let from_peer = peer_attribution.get(&origin).cloned();
-                SourceSummary {
-                    origin,
-                    count,
-                    from_peer,
-                }
-            })
-            .collect();
+        let folder_meta_for_ctx = self.folder_metadata_snapshot().await;
+        let (sources, coverage) = build_provenance_components(
+            &source_map,
+            &peer_attribution,
+            &folder_meta_for_ctx,
+        );
 
         // 5. Build prompt with knowledge context.
         //
@@ -4012,6 +4331,7 @@ impl Runtime {
             };
         let contested_titles: std::collections::HashSet<String> =
             self.contested_titles_for_chunks(&all_chunks).await;
+        let folder_meta = self.folder_metadata_snapshot().await;
 
         let history = format_history_as_prompt(context, 10);
         let prompt = if !all_chunks.is_empty() {
@@ -4023,6 +4343,11 @@ impl Runtime {
                     None
                 } else {
                     Some(&contested_titles)
+                },
+                if folder_meta.is_empty() {
+                    None
+                } else {
+                    Some(&folder_meta)
                 },
             );
             if history.is_empty() {
@@ -4042,11 +4367,20 @@ impl Runtime {
         };
 
         // 6. System message — layered confidence when knowledge is present.
+        // Folder-ingest v1 §6.3: when a watched-folder corpus
+        // contributed retrieval AND carries non-zero
+        // failed_files/skipped_by_extension, append a one-line
+        // "what I don't have" note so the synthesis is honest
+        // about the user's coverage gap. Empty string when no
+        // gaps — adds zero prompt overhead.
+        let gap_note = build_coverage_gaps_note(&all_chunks, &folder_meta_for_ctx);
         let system = if !all_chunks.is_empty() {
-            self.build_primary_system_message(
-                &format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}"),
-                context,
-            )
+            let base = if gap_note.is_empty() {
+                format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}")
+            } else {
+                format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}")
+            };
+            self.build_primary_system_message(&base, context)
         } else {
             self.build_system_message(
                 "You are a helpful AI assistant. Respond concisely and accurately.",
@@ -4099,6 +4433,7 @@ impl Runtime {
             search_method,
             sources,
             retrieved_chunks,
+            coverage,
         }
     }
 
@@ -5352,6 +5687,7 @@ impl Runtime {
                 retrieved_chunks,
                 source_map,
                 result_quality,
+                folder_meta,
             } = plan;
             let documents_found = chunks.len();
             let top_source_label = shape.top_source_label.clone();
@@ -5448,23 +5784,22 @@ impl Runtime {
                 // Persist final assistant message with full KQ metadata
                 // so the UI citation expander and provenance header
                 // have everything they had on the non-streaming path.
+                let (sources_for_prov, coverage_for_prov) = build_provenance_components(
+                    &source_map,
+                    &std::collections::HashMap::new(),
+                    &folder_meta,
+                );
                 let provenance = ResponseProvenance {
                     intent: "KnowledgeQuery".to_string(),
                     search_method: Some("CorpusEngine".to_string()),
-                    sources: source_map
-                        .into_iter()
-                        .map(|(origin, count)| SourceSummary {
-                            origin,
-                            count,
-                            from_peer: None,
-                        })
-                        .collect(),
+                    sources: sources_for_prov,
                     inference_backend: model_id,
                     oicp_match: None,
                     total_latency_ms: started.elapsed().as_millis() as u64,
                     tokens_used: 0,
                     coarse_intent: coarse_intent_for_prov,
                     self_assessment: self_assessment_for_prov,
+                    coverage: coverage_for_prov,
                 };
                 let metadata_json = serde_json::json!({
                     "streamed": true,
@@ -5636,6 +5971,7 @@ impl Runtime {
 
         let search_method = kc.search_method;
         let sources = kc.sources;
+        let coverage = kc.coverage;
         let retrieved_chunks = kc.retrieved_chunks;
 
         // Format the corpus evidence now so the post-stream epistemic-
@@ -5727,6 +6063,7 @@ impl Runtime {
                 tokens_used: 0,
                 coarse_intent,
                 self_assessment,
+                coverage,
             };
             let metadata_json = serde_json::json!({
                 "streamed": true,
@@ -6925,6 +7262,7 @@ impl Runtime {
             tokens_used: completion.tokens_used,
             coarse_intent,
             self_assessment,
+            coverage: kc.coverage,
         };
 
         let assistant_msg = Message {
@@ -7210,6 +7548,7 @@ impl Runtime {
                 retrieved_chunks: Vec::new(),
                 source_map: HashMap::new(),
                 result_quality: "empty",
+                folder_meta: std::collections::HashMap::new(),
             };
         }
 
@@ -7304,6 +7643,7 @@ impl Runtime {
         // unchanged.
         let contested_titles: std::collections::HashSet<String> =
             self.contested_titles_for_chunks(&chunks).await;
+        let folder_meta = self.folder_metadata_snapshot().await;
         let doc_context = format_scored_chunks_with_kinds(
             &chunks,
             knowledge_char_budget,
@@ -7312,6 +7652,11 @@ impl Runtime {
                 None
             } else {
                 Some(&contested_titles)
+            },
+            if folder_meta.is_empty() {
+                None
+            } else {
+                Some(&folder_meta)
             },
         );
         let corpus_display = context.installed_corpora_display();
@@ -7322,6 +7667,12 @@ impl Runtime {
         );
 
         // 4e. Request shape varies by route.
+        // Folder-ingest v1 §6.3: a "what I don't have" note appended
+        // to the synthesis system message when matched folder
+        // corpora carry non-zero failed/skipped counts. Empty
+        // string when there's nothing to disclose, so the prompt
+        // overhead is zero in the common case.
+        let gap_note = build_coverage_gaps_note(&chunks, &folder_meta);
         let request = match route {
             SynthesisRoute::FastFocused => {
                 // Comparison-shape contrast — append the directive that
@@ -7331,6 +7682,11 @@ impl Runtime {
                     format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{COMPARISON_DIRECTIVE}")
                 } else {
                     KNOWLEDGE_SYNTHESIS_SYSTEM.to_string()
+                };
+                let base = if gap_note.is_empty() {
+                    base
+                } else {
+                    format!("{base}\n\n{gap_note}")
                 };
                 let system = self.build_system_message(&base, context);
                 CompletionRequest {
@@ -7354,10 +7710,12 @@ impl Runtime {
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
-                let system = self.build_primary_system_message(
-                    &format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}"),
-                    context,
-                );
+                let base = if gap_note.is_empty() {
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}")
+                } else {
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}")
+                };
+                let system = self.build_primary_system_message(&base, context);
                 CompletionRequest {
                     prompt,
                     system_message: Some(system),
@@ -7416,6 +7774,8 @@ impl Runtime {
 
         let _ = expansion_fired; // logged by expand_from_dominant_source already
 
+        let folder_meta = self.folder_metadata_snapshot().await;
+
         KnowledgeQueryPlan {
             request,
             chunks,
@@ -7427,6 +7787,7 @@ impl Runtime {
             retrieved_chunks,
             source_map,
             result_quality,
+            folder_meta,
         }
     }
 
@@ -8075,11 +8436,17 @@ impl Runtime {
             } else {
                 Default::default()
             };
+        let folder_meta = self.folder_metadata_snapshot().await;
         let doc_context = format_scored_chunks_with_kinds(
             &chunks,
             MAX_KNOWLEDGE_CHARS,
             Some(&kinds),
             None,
+            if folder_meta.is_empty() {
+                None
+            } else {
+                Some(&folder_meta)
+            },
         );
         let prompt = format!(
             "RETRIEVED FROM {locator_phrase}:\n\n{doc_context}\n\n\
@@ -8200,18 +8567,15 @@ impl Runtime {
             completion.text.clone()
         };
 
+        let (sources_for_prov, coverage_for_prov) = build_provenance_components(
+            &plan.source_map,
+            &std::collections::HashMap::new(),
+            &plan.folder_meta,
+        );
         let provenance = ResponseProvenance {
             intent: "KnowledgeQuery".to_string(),
             search_method: Some("CorpusEngine".to_string()),
-            sources: plan
-                .source_map
-                .iter()
-                .map(|(origin, &count)| SourceSummary {
-                    origin: origin.clone(),
-                    count,
-                    from_peer: None,
-                })
-                .collect(),
+            sources: sources_for_prov,
             inference_backend: completion.model_id.clone(),
             oicp_match: completion
                 .oicp_meta
@@ -8222,6 +8586,7 @@ impl Runtime {
             tokens_used: completion.tokens_used,
             coarse_intent,
             self_assessment,
+            coverage: coverage_for_prov,
         };
 
         // PR3 — grounded next-step offers. Look up the most recent
@@ -8496,6 +8861,7 @@ impl Runtime {
                 origin: "user_document".to_string(),
                 count: chunk_count,
                 from_peer: None,
+                display_name: None,
             }],
             inference_backend: prompt_response.model_id.clone(),
             oicp_match: None,
@@ -8503,6 +8869,7 @@ impl Runtime {
             tokens_used: 0,
             coarse_intent: None,
             self_assessment: None,
+            coverage: None,
         };
 
         let assistant_msg = Message {
@@ -8713,6 +9080,7 @@ impl Runtime {
                                     origin: origin.to_string(),
                                     count: count as usize,
                                     from_peer: None,
+                                    display_name: None,
                                 });
                             }
                         }
@@ -8736,6 +9104,7 @@ impl Runtime {
                             origin: tool_id,
                             count,
                             from_peer: None,
+                            display_name: None,
                         });
                     }
                 }
@@ -8758,6 +9127,7 @@ impl Runtime {
             tokens_used: synthesis.tokens_used,
             coarse_intent: None,
             self_assessment: None,
+            coverage: None,
         };
 
         // Epistemic-humility hook (see Runtime::maybe_collaborate).
@@ -9385,3 +9755,157 @@ mod evidence_shape_tests {
         assert!(!shape.is_off_target());
     }
 }
+
+// ─── Phase F — folder source-attribution + coverage tests ──────────────
+//
+// Pure-function tests for the helpers introduced by folder-ingest v1
+// §6.3: `build_provenance_components` (sources + coverage chip) and
+// `build_coverage_gaps_note` (the synthesis-prompt "what I don't have"
+// note). Both run without the runtime, so we don't need to stand up
+// stores, oracles, or inference providers.
+#[cfg(test)]
+mod folder_attribution_tests {
+    use super::*;
+    use crate::traits::FolderMetadata;
+    use std::collections::HashMap;
+
+    fn folder(name: &str, failed: usize, skipped: usize, top_ext: &[&str]) -> FolderMetadata {
+        FolderMetadata {
+            display_name: name.to_string(),
+            failed_count: failed,
+            skipped_count: skipped,
+            top_skipped_extensions: top_ext.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    fn chunk(corpus_id: &str, title: &str) -> corpus_engine::ScoredChunk {
+        corpus_engine::ScoredChunk {
+            content: "body".into(),
+            title: Some(title.into()),
+            url: None,
+            corpus_id: corpus_id.into(),
+            score: 0.5,
+            metadata: HashMap::new(),
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
+        }
+    }
+
+    #[test]
+    fn provenance_sources_carry_folder_display_name() {
+        let mut source_map: HashMap<String, usize> = HashMap::new();
+        source_map.insert("folder_abc".into(), 5);
+        source_map.insert("sep".into(), 3);
+        let mut folder_meta: HashMap<String, FolderMetadata> = HashMap::new();
+        folder_meta.insert("folder_abc".into(), folder("Case Files", 0, 0, &[]));
+
+        let (sources, coverage) =
+            build_provenance_components(&source_map, &HashMap::new(), &folder_meta);
+        let folder_src = sources
+            .iter()
+            .find(|s| s.origin == "folder_abc")
+            .expect("folder source present");
+        assert_eq!(folder_src.display_name.as_deref(), Some("Case Files"));
+        let sep_src = sources.iter().find(|s| s.origin == "sep").unwrap();
+        assert!(
+            sep_src.display_name.is_none(),
+            "non-folder corpora must not get a display_name"
+        );
+        // Above the threshold, no chip surfaces.
+        assert!(coverage.is_none(), "5 chunks is above thin threshold");
+    }
+
+    #[test]
+    fn thin_folder_triggers_coverage_chip() {
+        let mut source_map: HashMap<String, usize> = HashMap::new();
+        source_map.insert("folder_thin".into(), 1);
+        source_map.insert("sep".into(), 12); // non-folder, irrelevant to chip
+        let mut folder_meta: HashMap<String, FolderMetadata> = HashMap::new();
+        folder_meta.insert(
+            "folder_thin".into(),
+            folder("Research Notes", 0, 0, &[]),
+        );
+
+        let (_sources, coverage) =
+            build_provenance_components(&source_map, &HashMap::new(), &folder_meta);
+        let cov = coverage.expect("thin folder must produce a CoverageNote");
+        assert_eq!(cov.kind, "thin");
+        assert_eq!(cov.thin_folders.len(), 1);
+        assert_eq!(cov.thin_folders[0].display_name, "Research Notes");
+        assert_eq!(cov.thin_folders[0].chunks, 1);
+    }
+
+    #[test]
+    fn non_folder_corpora_never_trip_coverage() {
+        let mut source_map: HashMap<String, usize> = HashMap::new();
+        source_map.insert("sep".into(), 1);
+        source_map.insert("wikipedia".into(), 0);
+        // No folder_meta entries.
+        let (_, coverage) = build_provenance_components(
+            &source_map,
+            &HashMap::new(),
+            &HashMap::new(),
+        );
+        assert!(
+            coverage.is_none(),
+            "non-folder corpora returning thin retrieval must NOT surface a chip"
+        );
+    }
+
+    #[test]
+    fn gap_note_enumerates_skipped_and_failed() {
+        let chunks = vec![chunk("folder_gap", "doc.pdf")];
+        let mut folder_meta: HashMap<String, FolderMetadata> = HashMap::new();
+        folder_meta.insert(
+            "folder_gap".into(),
+            folder("Case Files", 2, 9, &["pages", "key"]),
+        );
+        let note = build_coverage_gaps_note(&chunks, &folder_meta);
+        assert!(note.contains("\"Case Files\""), "must name the folder: {note}");
+        assert!(
+            note.contains("9 files in unsupported formats"),
+            "must enumerate skipped count: {note}"
+        );
+        assert!(note.contains(".pages"), "must list top extensions: {note}");
+        assert!(
+            note.contains("2 files we couldn't extract"),
+            "must enumerate failed count: {note}"
+        );
+    }
+
+    #[test]
+    fn gap_note_empty_when_folders_have_no_gaps() {
+        let chunks = vec![chunk("folder_clean", "doc.pdf")];
+        let mut folder_meta: HashMap<String, FolderMetadata> = HashMap::new();
+        folder_meta.insert("folder_clean".into(), folder("Clean", 0, 0, &[]));
+        let note = build_coverage_gaps_note(&chunks, &folder_meta);
+        assert!(note.is_empty(), "no gaps means no prompt overhead");
+    }
+
+    #[test]
+    fn gap_note_caps_at_two_folders() {
+        let chunks = vec![
+            chunk("a", "x.pdf"),
+            chunk("b", "y.pdf"),
+            chunk("c", "z.pdf"),
+        ];
+        let mut folder_meta: HashMap<String, FolderMetadata> = HashMap::new();
+        folder_meta.insert("a".into(), folder("Aaa", 1, 1, &["one"]));
+        folder_meta.insert("b".into(), folder("Bbb", 1, 1, &["two"]));
+        folder_meta.insert("c".into(), folder("Ccc", 99, 99, &["three"]));
+        let note = build_coverage_gaps_note(&chunks, &folder_meta);
+        // Highest-magnitude folder must appear; one of the smaller two
+        // is dropped to keep the prompt overhead bounded.
+        assert!(note.contains("\"Ccc\""), "highest-gap folder must be present: {note}");
+        let appears = ["\"Aaa\"", "\"Bbb\""]
+            .iter()
+            .filter(|s| note.contains(*s))
+            .count();
+        assert!(
+            appears <= 1,
+            "at most one of the two smaller folders should appear; note={note}"
+        );
+    }
+}
+

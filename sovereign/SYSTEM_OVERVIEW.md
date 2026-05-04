@@ -285,6 +285,22 @@ Each stage is a trait. A **Recipe** TOML configures the whole pipeline.
 └── stackexchange-shard-0-6200000/      # shard — same schema as a full index
 ```
 
+**`(corpus_id, chunk_id)` uniqueness invariant.** That pair is the
+system's citation handle: retrieval emits it on every `ScoredChunk`,
+and the reading-surface HTTP layer (`/internal/corpus/{c}/chunks/{id}`)
+dereferences it via `open_index_for_corpus(corpus_id)` which always
+opens `<index_dir>/<corpus_id>`. Chunk IDs are LanceDB row ids and are
+scoped per physical index, so the handle is only stable when at most
+one on-disk directory advertises a given `corpus_id`. `installed_indexes()`
+defends this at runtime by deduping on `corpus_id`, preferring the
+directory whose basename equals `corpus_id`, and `warn!`-logging
+the dropped paths. `corpora_with_colliding_indexes()` is the
+operator-facing surface (mirror of `corpora_with_stranded_partitions()`)
+for the same condition. Out-of-band names (any directory name
+containing `.`, e.g. `wikipedia.legacy-backup` or
+`wikipedia-partition-node-X.retired`) are excluded from both — that's
+the supported way to retire a stale index reversibly.
+
 `IndexMeta` carries `ScopeMeta { filter_descriptions, filter_signature,
 expandable }` plus an optional `filter_override` so a corpus can be expanded
 in place (relax filters → delta-ingest the additions → rebuild IVF-PQ).
@@ -967,7 +983,7 @@ Three source types in **Settings → Local Knowledge**, all under
 |---|---|---|---|---|
 | `DocumentFolder` | "Drop or browse a folder" (PDFs + TXT) | one-shot | manual re-run | none |
 | `ObsidianVault` | "Connect Obsidian vault" (markdown) | one-shot | manual re-run | `<namespace>/*` tags + frontmatter |
-| `WatchedFolder` | `sovereign corpus watch <PATH>` (PDFs + TXT + MD) | one-shot via `manager.ingest()` | polling sweep every ~120s through `corpus_engine::update::CorpusUpdater::apply_update` | none (read-only on source) |
+| `WatchedFolder` | `sovereign corpus watch <PATH>` (PDF + TXT + MD + DOCX + EPUB + HTML/HTM/MHTML — folder-ingest v1 §3.2) | one-shot via `manager.ingest()` | polling sweep every ~120s through `corpus_engine::update::CorpusUpdater::apply_update` | none (read-only on source) |
 
 All three share the same `sovereign-tools/src/local_corpus/` machinery
 (config, pre_scanner, humanise, extract_stage, progress, excerpt,
@@ -979,9 +995,16 @@ Architectural invariants (test-pinned):
 - **Snapshot before any write** (Obsidian only). Atomic JSON snapshot under `~/.sovereign/vault-snapshots/{corpus_id}/` *before* the first file is touched. Lives outside the vault to avoid self-ingest.
 - **`<namespace>/*` is inviolable** (Obsidian only). Only `<namespace>/` tags and `<namespace>_*` frontmatter keys are added/modified/removed. Every other key/tag round-trips at value level.
 - **Rollback is idempotent** (Obsidian only). Deleted-since-snapshot files are re-created from the snapshot payload, not reported as errors.
-- **pdf-extract panics are caught** (all three). `safe_extract_pdf_text` runs `pdf_extract::extract_text` inside `catch_unwind` so a DeviceN colour-space panic gets classified as `Corrupt` instead of taking down the `spawn_blocking` task.
+- **Every extractor is panic-disciplined.** `extract_stage::extract_one` dispatches by extension to `safe_extract_pdf_text` / `safe_extract_html_text` / `safe_extract_mhtml_text` / `safe_extract_epub_text` / `safe_extract_docx_text`. Every `safe_extract_*` runs the parser inside `catch_unwind(AssertUnwindSafe(...))` and classifies failures via the shared `SafeExtractError` enum (`Encrypted | Panic | Parse | Other`). The PDF DeviceN colour-space panic is the canonical historical trigger; the same discipline now applies to every new format. Pinned by `safe_extract_*_returns_parse_error_for_garbage` + `safe_extract_pdf_catches_panic` in `extract_stage::tests`.
+- **HTML body-text extraction drops scripts/styles** (`html_body_text` in `extract_stage.rs`). DOM-walks via `scraper`, skips `<script>`, `<style>`, `<noscript>`, `<template>` subtrees, and emits newlines at block-element boundaries so word boundaries survive across tags. Reused by `.html`, `.htm`, `.mhtml`, and EPUB chapter extraction.
 - **Watched folders are read-only on source.** Nothing under the folder is ever written, moved, or renamed by Sovereign. Pinned by `local_corpus::config::tests::watched_folder_recipe_toml_pins_privacy_invariants`.
 - **Watched folders are scope=Local + mesh_sharing=false.** The `LocalCorpusConfig::watched_folder` factory hardcodes both — same structural-privacy pattern §7 of `ARCH_PRINCIPLES.md` describes for KnowledgeView.
+- **Sensitive folders are structurally excluded from ambient retrieval.** `WatchedFolderConfig.sensitive` (folder-ingest v1 §3.4) flows into the runtime via the `SensitiveCorpusOracle` trait (`sovereign-core::traits`); `LocalCorpusManager` is the canonical implementation. `Runtime::search_corpus_indexes` consults the oracle as Filter 3 (after kind + dimension filters) and drops sensitive corpora before fanning out — so a sensitive folder never contributes to pre-turn ambient context, while remaining searchable on explicit query and in Inner Work mode (§4.15). Pinned by `sensitive_oracle_only_returns_sensitive_corpora` + `sensitive_oracle_empty_when_no_sensitive_corpora` in `tests/watched_folder_e2e.rs`.
+- **Manual sync mode opts out of periodic sweeps.** `WatchedFolderConfig.sync_mode = Manual` (folder-ingest v1 §3.5) makes the scheduler skip the corpus on its periodic tick; only an explicit `POST /internal/corpus/watch/sync-now/{id}` (CLI: `sovereign corpus watch-sync-now`) flips the per-state `manual_sync_pending` flag and lets one sweep through. Defence in depth: both the `WatchedFolderRegistry` slot and the on-disk state file mirror the flag; the worker clears both post-sweep so the same request can't re-fire.
+- **Multi-root corpora layer additional folders onto a stable primary.** `WatchedFolderConfig.additional_roots: Vec<RootSpec>` (folder-ingest v1 §3.1) extends a watched corpus across several disjoint folders. The primary `LocalCorpusConfig.root_path` is the stable anchor — `corpus_id` derives from it, so adding/removing additional roots doesn't break the index. Walker iterates primary first (entries keep plain `relative/path` doc_ids — byte-identical to pre-v1 single-root layout), then each additional root with `_r{n}/` doc_id namespacing so same-relative-path-different-content across roots can coexist. `EntryRecord` carries `source_root_index` (0=primary, 1.. = `additional_roots[idx-1]`) and `aux_paths: Vec<PathBuf>` for cross-root content-hash dedup: identical-content files across roots fold onto the canonical (primary preferred via `(source_root_index, doc_id)` ordering) so `apply_update` writes one chunk set per content while both source paths survive on `aux_paths`. HTTP: `POST /watch/{id}/roots` and `DELETE /watch/{id}/roots/{idx}` (CLI: `watch-add-root`, `watch-remove-root`). Pinned by `multi_root_walks_primary_and_additional_with_namespacing`, `cross_root_content_hash_dedup_folds_into_aux_paths`, and `single_root_layout_is_byte_identical_to_pre_v1` in `watched::walker::tests`.
+- **Folder corpora carry display name + coverage signal back to the synthesis prompt and chat UI (folder-ingest v1 §6.3).** `FolderMetadataOracle` (`sovereign-core::traits`) — sister to `SensitiveCorpusOracle` — exposes `{display_name, failed_count, skipped_count, top_skipped_extensions}` per `corpus_id`; `LocalCorpusManager` is the canonical implementation, snapshotting from the in-memory `corpora` map plus per-corpus `WatchedFolderState`. Runtime threads the oracle through `Runtime::folder_metadata_snapshot` into three places: (1) `format_scored_chunks_with_kinds` emits a separate "From your folders" section with `[Folder: <display> — <title>]` labels so the synthesis model distinguishes the user's own material from public knowledge bases; (2) `build_provenance_components` enriches `SourceSummary.display_name` and computes `ResponseProvenance.coverage` (a `CoverageNote { kind, thin_threshold, thin_folders }` flagged when at least one folder corpus contributed fewer than `FOLDER_THIN_COVERAGE_THRESHOLD = 3` chunks); (3) `build_coverage_gaps_note` prepends a one-line "GAP NOTE — what the user has but you don't see" to the synthesis system message when matched folders carry non-zero `failed_files` / `skipped_by_extension`, capped at the top two folders by gap magnitude. Desktop chat surface: `RoutingMeta.svelte` renders `display_name` over the opaque corpus_id slug; `AssistantMessage.svelte` shows a quiet "Thin coverage: your '<folder>' folder (1 hit, 12 unsupported)" chip above the prose. Pinned by `provenance_sources_carry_folder_display_name`, `thin_folder_triggers_coverage_chip`, `non_folder_corpora_never_trip_coverage`, `gap_note_enumerates_skipped_and_failed`, `gap_note_empty_when_folders_have_no_gaps`, and `gap_note_caps_at_two_folders` in `runtime::folder_attribution_tests`.
+
+- **Per-folder enrichment opt-in (folder-ingest v1 §3.3).** `WatchedFolderConfig.enrichment: WatchedEnrichmentConfig { Off | On { pipeline_id, last_built_*: ... } }` (default `Off` — enabling is a deliberate user investment per spec §3.3). `WatchedFolderState.enrichment_status: EnrichmentRuntimeStatus { Off | Building | Complete | Failed }` mirrors the live runtime. `EnrichmentDriver` (`local_corpus/watched/enrich.rs`) owns a per-corpus job table + global `Semaphore(1)` (GPU-bound) and orchestrates builds via `sovereign_tools::enrich::run_enrich_build` — which spawns `sovereign-cli enrich build <corpus>` as a subprocess so cancellation, progress streaming, and stdout capture come for free. `EnrichConfigJson::synthesize` writes a CLI-compatible config to `~/.sovereign/enrichment/<corpus>/config.json` before each build (chapter_regex `^.*$`, min_section_body_words 0, defaults from the daemon's chat/embed slots). Manager methods: `enable_enrichment` (validates pipeline against the three atlas variants, persists On, kicks off driver), `disable_enrichment` (cancels in-flight, calls `corpus_engine::atlas_teardown`, resets to Off), `rebuild_enrichment` (re-runs current pipeline). HTTP: `POST /watch/{id}/enrich/{enable,disable,rebuild}`. **v1 posture: full rebuild on every enable / rebuild** — no incremental Phase 1; the detail UI surfaces "M new docs since last build" and the user opts into a rebuild. **Atlas teardown is atomic** via rename-to-`.atlas-retired-<ts>` then `remove_dir_all`, so a concurrent reader sees consistent atlas state across the disable transition. Pinned by `EnrichmentDriver` tests + `atlas_teardown` tests in `corpus-engine::enrichment::atlas`.
 
 Resume-on-relaunch: `CorpusEngine::ingest` checkpoints to
 `_source_manifest.json` on every flush; `lc_incomplete_jobs` surfaces
@@ -1066,6 +1089,26 @@ corpus configured for OCR on a daemon that can't honour it.
   pending deletion even when the diff still trips the threshold (a
   100%-deletion scenario would otherwise re-trip forever). Subsequent
   sweeps re-evaluate the guard normally.
+
+**Glassbox folder-detail surface** (folder-ingest v1 §3.7):
+
+- `GET /internal/corpus/watch/details/{id}` returns the rich
+  `DetailsResponse`: per-extension counts of indexed documents,
+  `skipped_by_extension`, failed-files (grouped by `kind` in the
+  UI for the §3.7 "What I don't have" surface), `sync_mode`,
+  `sensitive`, enrichment status (always `Off` until Phase E),
+  tombstones, and last-sweep time. Heavier than `/state` — fetched
+  once when the user opens the detail panel, not on poll ticks.
+- `GET /internal/corpus/watch/document/{id}/{doc_id}` returns the
+  per-document `DocumentResponse`: file metadata, chunk count,
+  first chunk preview (≤500 chars), atom contributions (empty
+  until Phase E). Backed by `CorpusIndex::doc_summary`
+  (`corpus-engine/src/index/read.rs`).
+- Tauri commands `lc_watch_details`, `lc_watch_document` proxy
+  through. Svelte components: `WatchedFolderDetail.svelte` is the
+  panel (full-page mode like the register flow); `DocumentInspector.svelte`
+  is the slide-in inspector. Pinned by Playwright spec
+  `tests/e2e/specs/watched-folder-detail.spec.ts`.
 
 **Desktop integration** (Phase 2 UI):
 

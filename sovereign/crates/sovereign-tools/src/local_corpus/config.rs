@@ -86,7 +86,7 @@ pub struct WatchedFolderConfig {
     /// Polling cadence between sweeps. Floored at 60 s by the scheduler
     /// regardless of the configured value — tighter intervals hammer
     /// the disk and shrink the deletion-guard window below human
-    /// reaction time.
+    /// reaction time. Ignored when `sync_mode == Manual`.
     pub sweep_interval_secs: u64,
     /// Soft-delete grace window. Removed files keep a tombstone in the
     /// per-corpus state file; restoring the file with the same content
@@ -111,6 +111,145 @@ pub struct WatchedFolderConfig {
     /// field existed deserialises as `with_ocr: false`.
     #[serde(default)]
     pub with_ocr: bool,
+    /// Sync cadence policy. `Continuous` (default) sweeps on the
+    /// scheduler tick using `sweep_interval_secs`. `Manual` opts out
+    /// of periodic sweeps; the corpus only sweeps when an explicit
+    /// `sync-now` request flips the per-state pending flag.
+    /// Folder-ingest v1 §3.5 — useful for `~/Downloads/` and inbox-
+    /// style folders the user curates in batches.
+    ///
+    /// `#[serde(default)]` keeps pre-v1 sidecars round-tripping as
+    /// `Continuous`, preserving today's behaviour.
+    #[serde(default)]
+    pub sync_mode: SyncMode,
+    /// When `true`, the corpus is excluded from the agent's ambient
+    /// situated-context assembly. The folder remains searchable on
+    /// explicit query and via Inner Work mode (§4.15), but
+    /// background "what does the user know about X?" assembly skips
+    /// it. Folder-ingest v1 §3.4. Default `false` because most
+    /// folders aren't sensitive and surfacing the flag prominently
+    /// would suggest concerns the user doesn't have.
+    ///
+    /// Per ARCH §7.4, the flag is enforced at the assembly seam
+    /// (defence-in-depth) — not just at the recipe level. The
+    /// recipe-level invariants (`scope=Local`, `mesh_sharing=false`)
+    /// already prevent off-machine egress; the sensitive flag is the
+    /// additional layer that keeps sensitive corpora out of routine
+    /// in-machine ambient context.
+    #[serde(default)]
+    pub sensitive: bool,
+    /// Folder-ingest v1 §3.1: additional roots layered on top of
+    /// the primary `LocalCorpusConfig.root_path`. Empty by default —
+    /// most corpora are single-rooted. The walker iterates the
+    /// primary first, then every additional root in order.
+    ///
+    /// Plan refinement vs. the original "Vec<RootSpec> everywhere"
+    /// shape: keeping the primary `root_path` as a stable anchor
+    /// lets `corpus_id` (which derives from a sha256 of the
+    /// canonicalised primary) survive add/remove of additional
+    /// roots without breaking the index. Existing pre-v1 watched
+    /// corpora deserialise as zero-additional-roots and behave
+    /// identically to today.
+    ///
+    /// doc_id shape: primary entries keep their original
+    /// `relative/path.md` shape (so a single-root corpus is
+    /// byte-identical to the pre-v1 layout). Entries from
+    /// additional root `n` are namespaced under `_r{n}/` so
+    /// same-relative-path-different-content across roots can
+    /// coexist without clobber. Cross-root content-hash dedup
+    /// (Phase D.2) lifts identical-content cross-root entries
+    /// onto the canonical's `aux_paths`.
+    #[serde(default)]
+    pub additional_roots: Vec<RootSpec>,
+    /// Folder-ingest v1 §3.3: per-folder atlas enrichment
+    /// configuration. `Off` (default) keeps the folder
+    /// retrieval-only — no positions, fault lines, or atom
+    /// graph; the agent draws from the folder via standard
+    /// retrieval. `On` opts the folder into the philosophy_atlas
+    /// (or referential / literary) pipeline, producing the typed
+    /// atom graph the situated-context layer can use for richer
+    /// evidence assembly.
+    ///
+    /// v1 posture (committed in the plan): Initial enrichment is
+    /// a full pipeline run. Subsequent ingest does NOT auto-re-
+    /// enrich — the detail UI surfaces "M new docs since last
+    /// build" and the user opts in to a rebuild. Disabling
+    /// removes the atlas dir cleanly via
+    /// `corpus_engine::atlas_teardown`; the chunk index is
+    /// untouched.
+    #[serde(default)]
+    pub enrichment: WatchedEnrichmentConfig,
+}
+
+/// Folder-ingest v1 §3.3 — per-folder atlas enrichment opt-in.
+/// `Off` is the default for every newly-registered watched
+/// corpus; the user enables enrichment deliberately after
+/// reading the cost framing in the detail UI.
+///
+/// Distinct from `LocalCorpusConfig.enrichment: EnrichmentConfig`
+/// (the recipe-driven, single-flag opt-in for SEP / Wikipedia
+/// builds). The watched-folder surface needs to track which
+/// pipeline the user picked + when it last built; bundling that
+/// onto the recipe-style flag would conflate two different
+/// enrichment lifecycles, so this enum lives next to it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum WatchedEnrichmentConfig {
+    /// No atlas. Folder is searchable via standard retrieval
+    /// only.
+    Off,
+    /// Atlas enrichment is enabled with `pipeline_id` chosen at
+    /// enable time (one of `"philosophy_atlas"`,
+    /// `"referential_atlas"`, `"literary_atlas"`). The
+    /// `last_built_*` fields track the most recent successful
+    /// build so the UI can render "M new docs since last build"
+    /// and the rebuild-cost estimate.
+    On {
+        pipeline_id: String,
+        #[serde(default)]
+        last_built_at_unix: u64,
+        #[serde(default)]
+        last_built_doc_count: usize,
+    },
+}
+
+impl Default for WatchedEnrichmentConfig {
+    fn default() -> Self {
+        WatchedEnrichmentConfig::Off
+    }
+}
+
+/// One additional root attached to a watched-folder corpus.
+/// Folder-ingest v1 §3.1.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RootSpec {
+    /// Canonicalised absolute path. Stored canonical so a
+    /// re-register / list operation reads back the same value the
+    /// scheduler walked.
+    pub path: PathBuf,
+    /// Unix seconds when the root was added. Surfaced in the UI
+    /// so the user can spot a recently-added folder that hasn't
+    /// finished its first sweep.
+    pub added_at_unix: u64,
+}
+
+/// Per-folder sync cadence policy. See `WatchedFolderConfig.sync_mode`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncMode {
+    /// Sweep periodically per `sweep_interval_secs`. Default for
+    /// folders the user actively maintains.
+    Continuous,
+    /// Sweep only on explicit `sync-now`. The scheduler skips this
+    /// corpus on its periodic tick. For inbox-style folders the user
+    /// curates in batches.
+    Manual,
+}
+
+impl Default for SyncMode {
+    fn default() -> Self {
+        SyncMode::Continuous
+    }
 }
 
 impl Default for WatchedFolderConfig {
@@ -122,6 +261,10 @@ impl Default for WatchedFolderConfig {
             soft_delete_grace_secs: 7 * 86_400,
             exclude_globs: Vec::new(),
             with_ocr: false,
+            sync_mode: SyncMode::Continuous,
+            sensitive: false,
+            additional_roots: Vec::new(),
+            enrichment: WatchedEnrichmentConfig::Off,
         }
     }
 }
@@ -311,11 +454,21 @@ impl LocalCorpusConfig {
             display_name,
             root_path: canon,
             source_type: LocalCorpusSourceType::WatchedFolder(watched),
-            // Markdown gets folded in alongside PDF + TXT because notes
-            // folders are the primary use case. Extractors not yet
-            // wired (`.docx`, `.rtf`, …) fall into the "skipped" bucket
-            // automatically and surface in the watched-folder status.
-            extensions: vec!["pdf".into(), "txt".into(), "md".into()],
+            // v1 format breadth: PDF + plain text + markdown +
+            // Word docs + EPUBs + saved web pages. Each extension
+            // dispatches in `extract_stage::extract_one`; everything
+            // else falls into `skipped_by_extension` and surfaces in
+            // watched-folder status.
+            extensions: vec![
+                "pdf".into(),
+                "txt".into(),
+                "md".into(),
+                "docx".into(),
+                "epub".into(),
+                "html".into(),
+                "htm".into(),
+                "mhtml".into(),
+            ],
             chunker: ChunkerKind::Paragraph {
                 max_chars: 2048,
                 overlap_chars: 256,
@@ -597,8 +750,21 @@ mod tests {
         );
         assert_eq!(cfg.scope, CorpusScope::Local);
         assert!(cfg.id.starts_with("watched-"));
-        // PDF + TXT + MD covers the common notes-folder mix.
-        assert_eq!(cfg.extensions, vec!["pdf".to_string(), "txt".into(), "md".into()]);
+        // v1 format breadth: PDF + plain text + markdown + Word
+        // docs + EPUBs + saved web pages.
+        assert_eq!(
+            cfg.extensions,
+            vec![
+                "pdf".to_string(),
+                "txt".into(),
+                "md".into(),
+                "docx".into(),
+                "epub".into(),
+                "html".into(),
+                "htm".into(),
+                "mhtml".into(),
+            ]
+        );
         assert!(matches!(cfg.source_type, LocalCorpusSourceType::WatchedFolder(_)));
         assert!(cfg.write_back.is_none()); // Read-only on source — no writeback path.
     }
@@ -637,6 +803,88 @@ mod tests {
         assert_eq!(c.soft_delete_grace_secs, 7 * 86_400);
         assert!(!c.follow_symlinks);
         assert!(c.exclude_globs.is_empty());
+        // v1 defaults — both opt-in features stay off until the user
+        // deliberately enables them.
+        assert_eq!(c.sync_mode, SyncMode::Continuous);
+        assert!(!c.sensitive);
+    }
+
+    #[test]
+    fn watched_folder_config_round_trips_pre_v1_sidecars() {
+        // A JSON sidecar written before the v1 fields existed must
+        // deserialise as the documented defaults — no manual
+        // migration step. The serde(default) attributes are
+        // load-bearing for any user with an existing watched corpus.
+        let pre_v1 = r#"{
+            "follow_symlinks": false,
+            "deletion_guard": { "absolute_threshold": 100, "fractional_threshold": 0.25, "enabled": true },
+            "sweep_interval_secs": 120,
+            "soft_delete_grace_secs": 604800,
+            "exclude_globs": []
+        }"#;
+        let c: WatchedFolderConfig =
+            serde_json::from_str(pre_v1).expect("pre-v1 sidecar must deserialise");
+        assert_eq!(c.sync_mode, SyncMode::Continuous);
+        assert!(!c.sensitive);
+        assert!(!c.with_ocr);
+    }
+
+    #[test]
+    fn watched_folder_config_serializes_manual_sync_mode_lowercase() {
+        // The on-disk representation is the snake_case string —
+        // pinned so a refactor that drops `#[serde(rename_all)]`
+        // can't silently break round-trip with existing sidecars.
+        let mut c = WatchedFolderConfig::default();
+        c.sync_mode = SyncMode::Manual;
+        c.sensitive = true;
+        let json = serde_json::to_string(&c).unwrap();
+        assert!(json.contains(r#""sync_mode":"manual""#), "got: {json}");
+        assert!(json.contains(r#""sensitive":true"#), "got: {json}");
+    }
+
+    #[test]
+    fn watched_enrichment_config_default_is_off() {
+        // Folder-ingest v1 §3.3: enrichment defaults to Off.
+        // Pinned because the spec is explicit: "off is always
+        // safe and useful. Enabling is an investment the user
+        // makes deliberately." A refactor that flips the default
+        // to a per-pipeline enabled state breaks this contract.
+        let c = WatchedFolderConfig::default();
+        assert_eq!(c.enrichment, WatchedEnrichmentConfig::Off);
+    }
+
+    #[test]
+    fn watched_enrichment_config_round_trips_on_variant() {
+        let on = WatchedEnrichmentConfig::On {
+            pipeline_id: "philosophy_atlas".into(),
+            last_built_at_unix: 1_700_000_000,
+            last_built_doc_count: 42,
+        };
+        let json = serde_json::to_string(&on).unwrap();
+        assert!(json.contains(r#""kind":"on""#), "got: {json}");
+        assert!(
+            json.contains(r#""pipeline_id":"philosophy_atlas""#),
+            "got: {json}"
+        );
+        let parsed: WatchedEnrichmentConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, on);
+    }
+
+    #[test]
+    fn watched_enrichment_config_pre_v1_sidecars_default_off() {
+        // A pre-v1 watched-folder sidecar (no `enrichment` field)
+        // must deserialize as `Off` so existing corpora upgrade
+        // cleanly. Same `#[serde(default)]` pattern as
+        // `additional_roots` and `sensitive`.
+        let pre_v1 = r#"{
+            "follow_symlinks": false,
+            "deletion_guard": { "absolute_threshold": 100, "fractional_threshold": 0.25, "enabled": true },
+            "sweep_interval_secs": 120,
+            "soft_delete_grace_secs": 604800,
+            "exclude_globs": []
+        }"#;
+        let c: WatchedFolderConfig = serde_json::from_str(pre_v1).unwrap();
+        assert_eq!(c.enrichment, WatchedEnrichmentConfig::Off);
     }
 
     #[test]

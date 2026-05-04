@@ -928,6 +928,56 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
         .await
         {
             Ok(mgr) => {
+                // Folder-ingest v1 §3.3 — install enrichment
+                // defaults so the UI's "Enable enrichment" path
+                // can synthesize an `EnrichConfig`. The chat /
+                // embed model ids come from the daemon's active
+                // config; without them, `enable_enrichment` fails
+                // fast with a "defaults not installed" error
+                // before touching the subprocess. Loopback URL
+                // mirrors what the rest of the desktop uses.
+                // Derive model ids from the configured paths.
+                // The daemon's slot manager uses path file_stem
+                // as the canonical model id elsewhere; mirror
+                // that here so the synthesized EnrichConfig
+                // points at the same slot the daemon is serving.
+                fn id_from_path(p: &std::path::Path) -> String {
+                    p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string()
+                }
+                let chat_model = config
+                    .primary_model_path
+                    .as_deref()
+                    .map(id_from_path)
+                    .unwrap_or_else(|| id_from_path(&config.model_path));
+                let embed_model = config
+                    .embed_model_path
+                    .as_deref()
+                    .map(id_from_path)
+                    .unwrap_or_default();
+                if !chat_model.is_empty() && !embed_model.is_empty() {
+                    // Loopback URL — Local mode runs the embedded
+                    // daemon on the standard `:9741` port.
+                    let base_url = "http://127.0.0.1:9741".to_string();
+                    mgr.set_enrichment_defaults(
+                        sovereign_tools::local_corpus::watched::enrich::EnrichmentDefaults {
+                            chat_model,
+                            embed_model,
+                            base_url,
+                            cli_path: None,
+                        },
+                    )
+                    .await;
+                } else {
+                    tracing::info!(
+                        "local_corpus enrichment defaults not installed — \
+                         chat_model or embedding_model not configured; \
+                         per-folder enrichment will return an error \
+                         until the user picks models in Settings"
+                    );
+                }
                 *state.local_corpus.write().await = Some(Arc::new(mgr));
                 tracing::info!("local_corpus manager initialised");
             }
@@ -1544,6 +1594,24 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     }
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
+    }
+    // Folder-ingest v1 §3.4 + §6.3: wire the watched-folder manager
+    // as both the sensitive-corpus oracle (which corpora to drop
+    // from ambient retrieval) and the folder-metadata oracle (the
+    // user-typed display names + skipped/failed counters that the
+    // synthesis prompt and chat coverage chip depend on). When the
+    // manager isn't ready (init failed earlier), the runtime falls
+    // back to no-op behaviour for both — same shape as the
+    // landscape-digest wiring above.
+    if let Some(mgr) = state.local_corpus.read().await.as_ref() {
+        runtime = runtime.with_sensitive_corpora(
+            Arc::clone(mgr)
+                as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>,
+        );
+        runtime = runtime.with_folder_metadata(
+            Arc::clone(mgr)
+                as Arc<dyn sovereign_core::traits::FolderMetadataOracle>,
+        );
     }
     // PR2 — install the Tauri routing-events sink so the runtime can
     // fire interpretation-proposed / clarification-request /

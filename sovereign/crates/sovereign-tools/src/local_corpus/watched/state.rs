@@ -57,7 +57,83 @@ pub struct WatchedFolderState {
     /// "Corrupt / failed extraction" bucket.
     #[serde(default)]
     pub failed_files: Vec<FailedFile>,
+    /// Pending manual-sync flag. Only meaningful when the
+    /// corpus's `sync_mode == Manual`. The scheduler skips Manual
+    /// corpora on its periodic tick; flipping this to `true`
+    /// (via `/internal/corpus/watch/sync-now/{id}`) lets exactly
+    /// one sweep through, and the worker clears it on completion.
+    /// Folder-ingest v1 §3.5.
+    #[serde(default)]
+    pub manual_sync_pending: bool,
+    /// Mirror of `WatchedFolderConfig.sensitive`. Persisted on the
+    /// state document so the runtime check in the assembly seam
+    /// doesn't have to round-trip through `LocalCorpusManager`'s
+    /// in-memory config map. Per ARCH §7.4 (defence in depth):
+    /// the config-side flag is the source of truth at register
+    /// time; this mirror is the structural enforcement layer.
+    /// Folder-ingest v1 §3.4.
+    #[serde(default)]
+    pub sensitive: bool,
+    /// Folder-ingest v1 §3.3: live enrichment runtime status.
+    /// Distinct from the config-side `EnrichmentConfig` (which
+    /// records the user's opt-in choice) — this tracks what the
+    /// orchestrator is actually doing right now. Transitions:
+    ///   Off → Building (user enables, driver kicked off)
+    ///   Building → Complete (build succeeded)
+    ///   Building → Failed (build errored / cancelled)
+    ///   Complete | Failed → Building (user clicks Rebuild)
+    ///   Any → Off (user disables; atlas_teardown clears state)
+    /// `#[serde(default)]` so pre-v1 state files round-trip as
+    /// `Off`.
+    #[serde(default)]
+    pub enrichment_status: EnrichmentRuntimeStatus,
     pub last_updated_unix: u64,
+}
+
+/// Folder-ingest v1 §3.3 — runtime mirror of enrichment progress.
+/// Persisted on `WatchedFolderState` so a daemon restart mid-build
+/// surfaces the right state: a `Building` we left behind on
+/// shutdown is presented as `Failed { reason: "interrupted" }` on
+/// next load by the worker (the in-flight job is gone with the
+/// process).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EnrichmentRuntimeStatus {
+    /// Default — no atlas, no in-flight build.
+    Off,
+    /// Build is in flight. `phase` is a free-form label from the
+    /// orchestrator (e.g. `"phase1:extract"`); `current` /
+    /// `total` are the orchestrator's progress counters
+    /// (chapters, steps, …). When `total == 0` the UI renders an
+    /// indeterminate spinner.
+    Building {
+        phase: String,
+        current: usize,
+        total: usize,
+        started_at_unix: u64,
+    },
+    /// Last build succeeded. `built_at_unix` is when the
+    /// orchestrator emitted `Complete`; `doc_count` snapshots the
+    /// folder's live entry count at that moment so the UI can
+    /// render "M new docs since last build".
+    Complete {
+        built_at_unix: u64,
+        doc_count: usize,
+    },
+    /// Last build failed (or was cancelled). `reason` is a short
+    /// human-readable string the UI surfaces verbatim. The user
+    /// can either re-enable (which kicks off a fresh Build) or
+    /// disable to clear state.
+    Failed {
+        failed_at_unix: u64,
+        reason: String,
+    },
+}
+
+impl Default for EnrichmentRuntimeStatus {
+    fn default() -> Self {
+        EnrichmentRuntimeStatus::Off
+    }
 }
 
 impl WatchedFolderState {
@@ -76,6 +152,9 @@ impl WatchedFolderState {
             bypass_guard_next_sweep: false,
             skipped_by_extension: Default::default(),
             failed_files: Vec::new(),
+            manual_sync_pending: false,
+            sensitive: false,
+            enrichment_status: EnrichmentRuntimeStatus::Off,
             last_updated_unix: 0,
         }
     }

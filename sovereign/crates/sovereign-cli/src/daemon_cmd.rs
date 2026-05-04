@@ -774,15 +774,56 @@ async fn run_daemon(args: &[String]) -> i32 {
         )
         .await
         {
-            Ok(manager) => Some(
-                sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
-                    Arc::clone(&daemon),
-                    Arc::clone(&engine),
-                    Arc::new(manager),
-                    config.watched_folders.max_concurrent_sweeps,
+            Ok(manager) => {
+                // Folder-ingest v1 §3.3 — install enrichment
+                // defaults so the watched-folder driver can
+                // synthesise an EnrichConfig for "Enable
+                // enrichment" requests. Pull model ids from the
+                // daemon's resolved chat / embed slots; on a
+                // fresh setup with no models picked, fall back
+                // to empty strings so the driver returns a clear
+                // "defaults not installed" error to the UI.
+                fn id_from_path(p: &std::path::Path) -> String {
+                    p.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string()
+                }
+                let chat_model = id_from_path(&config.models.primary);
+                let embed_model = id_from_path(&config.models.embed);
+                if !chat_model.is_empty() && !embed_model.is_empty() {
+                    let base_url = format!(
+                        "http://127.0.0.1:{}",
+                        config.daemon.client_port
+                    );
+                    manager
+                        .set_enrichment_defaults(
+                            sovereign_tools::local_corpus::watched::enrich::EnrichmentDefaults {
+                                chat_model,
+                                embed_model,
+                                base_url,
+                                cli_path: None,
+                            },
+                        )
+                        .await;
+                } else {
+                    tracing::info!(
+                        "watched_folder:enrichment_defaults_skipped — \
+                         chat_model or embed_model not configured; \
+                         per-folder enrichment will return an error \
+                         until models are picked"
+                    );
+                }
+                Some(
+                    sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
+                        Arc::clone(&daemon),
+                        Arc::clone(&engine),
+                        Arc::new(manager),
+                        config.watched_folders.max_concurrent_sweeps,
+                    )
+                    .await,
                 )
-                .await,
-            ),
+            }
             Err(e) => {
                 tracing::warn!(
                     error = %e,

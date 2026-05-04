@@ -81,6 +81,8 @@ mod tests {
             mtime_unix: 0,
             size_bytes: 0,
             content_hash: hash.into(),
+            source_root_index: 0,
+            aux_paths: Vec::new(),
         }
     }
 

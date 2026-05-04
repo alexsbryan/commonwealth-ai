@@ -28,6 +28,16 @@
   let busy = $state(false);
   let registerError: string = $state("");
 
+  // Folder-ingest v1 §3.1 multi-root: optional additional folders
+  // the user attaches before submitting. The primary `path` is the
+  // canonical anchor (corpus_id derives from it); additional roots
+  // layer on top and can be added/removed later from the detail
+  // panel. Each addition validates synchronously via lcValidatePath
+  // so we don't accept a missing-folder spec the daemon would
+  // reject anyway.
+  let additionalRoots: string[] = $state([]);
+  let additionalRootError: string = $state("");
+
   // Sync settings — exposed in a collapsible "advanced" panel so a
   // first-time user just hits Register; power users can override.
   let showAdvanced = $state(false);
@@ -44,6 +54,19 @@
   let guardEnabled: boolean = $state(true);
   let followSymlinks: boolean = $state(false);
   let withOcr: boolean = $state(false);
+  // Folder-ingest v1 §3.5 — sync cadence policy. "continuous"
+  // (default) sweeps every `sweepSecs`; "manual" opts out of
+  // periodic sweeps so an inbox-style folder only ingests when the
+  // user clicks Sync now.
+  let syncMode: import("../../types").SyncMode = $state("continuous");
+  // Folder-ingest v1 §3.4 — folder-level sensitivity. Surfaced in
+  // a separate disclosure (NOT the main sync-settings panel) per
+  // the spec: "available in advanced folder settings, not the
+  // primary onboarding flow … users who need it find it." Default
+  // off, because most folders aren't sensitive and surfacing the
+  // flag prominently would suggest concerns the user doesn't have.
+  let showSensitivity = $state(false);
+  let sensitive: boolean = $state(false);
   /// Whether the daemon has an OCR runtime context installed. Probed
   /// once on mount; the toggle is hidden when false so users on a
   /// build without bundled Tesseract don't see a switch they can't
@@ -89,6 +112,47 @@
     busy = false;
   }
 
+  // Folder-ingest v1 §3.1: pick and attach an additional root. The
+  // file picker is the same multiple=false dialog as the primary —
+  // multi-select isn't supported because each root validates
+  // independently and a half-failed multi-pick is worse UX than
+  // sequential picks.
+  async function browseAdditional() {
+    busy = true;
+    additionalRootError = "";
+    try {
+      const picked = await open({ multiple: false, directory: true });
+      if (typeof picked === "string") {
+        if (picked === path) {
+          additionalRootError =
+            "That folder is already the primary root.";
+        } else if (additionalRoots.includes(picked)) {
+          additionalRootError = "That folder is already attached.";
+        } else {
+          // Validate the path before adding so a typo'd path
+          // doesn't surface as a register-time error after the
+          // user has filled out everything else.
+          const v = await lcValidatePath(picked);
+          if (!v.exists) additionalRootError = "That path doesn't exist.";
+          else if (!v.is_dir)
+            additionalRootError = "Pick a folder, not a file.";
+          else if (!v.readable)
+            additionalRootError = "Sovereign can't read that folder.";
+          else {
+            additionalRoots = [...additionalRoots, picked];
+          }
+        }
+      }
+    } catch (e) {
+      additionalRootError = `Could not open picker: ${e}`;
+    }
+    busy = false;
+  }
+
+  function removeAdditionalRoot(idx: number) {
+    additionalRoots = additionalRoots.filter((_, i) => i !== idx);
+  }
+
   async function validate() {
     if (!path) {
       validationError = "";
@@ -110,6 +174,7 @@
     if (!path || validationError) return;
     busy = true;
     registerError = "";
+    const nowUnix = Math.floor(Date.now() / 1000);
     const config: WatchedFolderConfig = {
       follow_symlinks: followSymlinks,
       deletion_guard: {
@@ -124,6 +189,16 @@
       // ocr-off-by-disk reality from sneaking through to a corpus
       // configured with-ocr-on.
       with_ocr: withOcr && ocrAvailable,
+      sync_mode: syncMode,
+      sensitive,
+      additional_roots: additionalRoots.map((p) => ({
+        path: p,
+        added_at_unix: nowUnix,
+      })),
+      // Enrichment defaults to Off at register time; the user
+      // enables it deliberately from the detail panel after
+      // reading the §3.3 cost framing.
+      enrichment: { kind: "off" },
     };
     try {
       const resp = await lcWatchRegister(path, displayName || undefined, config);
@@ -177,6 +252,48 @@
     />
   </div>
 
+  <!-- Folder-ingest v1 §3.1 multi-root: optional additional roots
+       layered on top of the primary. The primary anchors the
+       corpus_id (stable across add/remove); additional roots can
+       be added now or from the detail panel later. -->
+  {#if additionalRoots.length > 0}
+    <div class="row">
+      <span class="label">Additional folders</span>
+      <ul class="root-list">
+        {#each additionalRoots as root, i (root)}
+          <li class="root">
+            <code class="root-path" title={root}>{root}</code>
+            <button
+              type="button"
+              class="ghost mini"
+              onclick={() => removeAdditionalRoot(i)}
+              disabled={busy}
+              aria-label={`Remove ${root}`}
+            >
+              Remove
+            </button>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
+  <div class="row">
+    <button
+      type="button"
+      class="ghost"
+      onclick={browseAdditional}
+      disabled={busy || !path}
+      title={path
+        ? "Layer another folder onto this corpus. Queries draw from all roots; identical files across roots are deduplicated."
+        : "Pick the primary folder first."}
+    >
+      + Add another folder
+    </button>
+    {#if additionalRootError}
+      <p class="error">{additionalRootError}</p>
+    {/if}
+  </div>
+
   <button
     type="button"
     class="advanced-toggle"
@@ -188,7 +305,43 @@
 
   {#if showAdvanced}
     <div class="advanced">
-      <div class="row">
+      <fieldset class="sync-mode">
+        <legend>Sync mode</legend>
+        <label class="radio">
+          <input
+            type="radio"
+            name="sync-mode"
+            value="continuous"
+            checked={syncMode === "continuous"}
+            onchange={() => (syncMode = "continuous")}
+          />
+          <span>
+            Continuous
+            <span class="hint inline">
+              — Sovereign sweeps the folder every few minutes. Best for
+              folders you actively maintain.
+            </span>
+          </span>
+        </label>
+        <label class="radio">
+          <input
+            type="radio"
+            name="sync-mode"
+            value="manual"
+            checked={syncMode === "manual"}
+            onchange={() => (syncMode = "manual")}
+          />
+          <span>
+            Manual
+            <span class="hint inline">
+              — Sovereign only sweeps when you click "Sync now". Good for
+              inbox-style folders you curate in batches.
+            </span>
+          </span>
+        </label>
+      </fieldset>
+
+      <div class="row" class:dim={syncMode === "manual"}>
         <label class="label" for="wf-sweep">Sweep interval (seconds)</label>
         <input
           id="wf-sweep"
@@ -196,11 +349,12 @@
           min="60"
           max="3600"
           bind:value={sweepSecs}
+          disabled={syncMode === "manual"}
         />
         <p class="hint">
           How often Sovereign checks the folder for changes. Floored at
           60s — tighter intervals just waste disk and shrink the
-          deletion-guard reaction window.
+          deletion-guard reaction window. Ignored in Manual mode.
         </p>
       </div>
 
@@ -276,6 +430,39 @@
           will land in the "couldn't read" list with a note.
         </p>
       {/if}
+    </div>
+  {/if}
+
+  <!-- Folder-ingest v1 §3.4: sensitivity flag in a separate
+       disclosure, NOT bundled with the main sync settings. The
+       spec is explicit: "available in advanced folder settings,
+       not the primary onboarding flow, because most users won't
+       need it and surfacing it prominently would suggest concerns
+       they don't have." -->
+  <button
+    type="button"
+    class="advanced-toggle"
+    onclick={() => (showSensitivity = !showSensitivity)}
+    aria-expanded={showSensitivity}
+  >
+    {showSensitivity ? "Hide" : "Show"} sensitivity settings
+  </button>
+
+  {#if showSensitivity}
+    <div class="advanced">
+      <label class="checkbox">
+        <input type="checkbox" bind:checked={sensitive} />
+        <span>
+          Mark this folder sensitive
+          <span class="hint inline">
+            — Sovereign won't draw from this folder when assembling
+            ambient context for routine conversation. The folder
+            stays searchable on explicit query and in Inner Work
+            mode. Atlas state, if you enable enrichment later, also
+            stays local-only.
+          </span>
+        </span>
+      </label>
     </div>
   {/if}
 
@@ -416,6 +603,60 @@
     font-size: var(--lk-size-meta);
     color: var(--lk-ink-soft);
   }
+  .root-list {
+    list-style: none;
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .root {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--lk-paper-deep);
+    border: 1px solid var(--lk-rule);
+    border-radius: 4px;
+  }
+  .root-path {
+    flex: 1 1 auto;
+    font-family: var(--lk-font-mono, monospace);
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ghost.mini {
+    padding: 2px 8px;
+    font-size: 11px;
+  }
+  .radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+    line-height: 1.4;
+  }
+  .radio input[type="radio"] { margin-top: 4px; }
+  .sync-mode {
+    border: 1px solid var(--lk-rule);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+  }
+  .sync-mode legend {
+    padding: 0 6px;
+    font-size: var(--lk-size-meta);
+    color: var(--lk-ink-soft);
+  }
+  .row.dim { opacity: 0.5; }
   .hint {
     margin: 0;
     font-size: var(--lk-size-meta);

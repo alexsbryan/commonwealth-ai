@@ -56,6 +56,8 @@ pub async fn run_register(args: &[String]) -> i32 {
     let mut no_guard = false;
     let mut sync_initial = false;
     let mut with_ocr = false;
+    let mut manual = false;
+    let mut sensitive = false;
 
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -74,6 +76,8 @@ pub async fn run_register(args: &[String]) -> i32 {
             "--no-deletion-guard" => no_guard = true,
             "--sync-initial" => sync_initial = true,
             "--ocr" => with_ocr = true,
+            "--manual" => manual = true,
+            "--sensitive" => sensitive = true,
             other if !other.starts_with("--") && path.is_none() => {
                 path = Some(PathBuf::from(other));
             }
@@ -130,6 +134,19 @@ pub async fn run_register(args: &[String]) -> i32 {
         // PDFs land in failed_files with a "OCR enabled but ctx not
         // installed" reason.
         config["with_ocr"] = json!(true);
+    }
+    if manual {
+        // Folder-ingest v1 §3.5: opt out of periodic sweeps. The
+        // corpus only sweeps when `sovereign corpus watch-sync-now`
+        // is called.
+        config["sync_mode"] = json!("manual");
+    }
+    if sensitive {
+        // Folder-ingest v1 §3.4: structurally exclude this folder
+        // from the agent's ambient situated-context assembly. The
+        // folder remains searchable on explicit query and via Inner
+        // Work mode.
+        config["sensitive"] = json!(true);
     }
     if abs_threshold.is_some() || frac_threshold.is_some() || no_guard {
         let mut guard = json!({});
@@ -203,6 +220,8 @@ fn print_register_help() {
     eprintln!("  --follow-symlinks        Follow symlinks while walking (default: skip them)");
     eprintln!("  --sync-initial           Wait for the initial ingest to finish before returning");
     eprintln!("  --ocr                    OCR scanned PDFs (requires the daemon's OcrCtx to be installed)");
+    eprintln!("  --manual                 Manual sync mode — only sweeps on `watch-sync-now` (default: continuous)");
+    eprintln!("  --sensitive              Mark folder sensitive — excluded from ambient situated-context assembly");
 }
 
 // ─── list / status / pause / resume / confirm / remove ──────
@@ -402,6 +421,85 @@ pub async fn run_confirm_deletion(args: &[String]) -> i32 {
         daemon_base_url()
     );
     post_ack(&url, json!({})).await
+}
+
+/// `sovereign corpus watch-sync-now <CORPUS_ID>` — request a Manual-
+/// mode sweep. Server returns 409 if the corpus is in Continuous
+/// mode, since the request would otherwise silently no-op.
+pub async fn run_sync_now(args: &[String]) -> i32 {
+    let Some(id) = require_corpus_id(args, "watch-sync-now") else {
+        return 1;
+    };
+    let url = format!("{}/internal/corpus/watch/sync-now/{id}", daemon_base_url());
+    post_ack(&url, json!({})).await
+}
+
+/// `sovereign corpus watch-add-root <CORPUS_ID> <PATH>` —
+/// folder-ingest v1 §3.1, layer an additional root onto an
+/// existing watched corpus.
+pub async fn run_add_root(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        eprintln!(
+            "sovereign corpus watch-add-root <CORPUS_ID> <PATH>\n\n\
+             Layer an additional root onto an existing watched corpus."
+        );
+        return 1;
+    }
+    let id = &args[0];
+    let path = match std::fs::canonicalize(&args[1]) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!(
+                "Could not canonicalize {}: {e}\n\
+                 The folder must exist on disk before attaching.",
+                args[1]
+            );
+            return 1;
+        }
+    };
+    if !path.is_dir() {
+        eprintln!("Not a directory: {}", path.display());
+        return 1;
+    }
+    let url = format!(
+        "{}/internal/corpus/watch/{id}/roots",
+        daemon_base_url()
+    );
+    post_ack(&url, json!({ "path": path })).await
+}
+
+/// `sovereign corpus watch-remove-root <CORPUS_ID> <IDX>` —
+/// folder-ingest v1 §3.1, detach an additional root by 0-based
+/// index. The next sweep classifies the removed root's entries
+/// as deletions; the deletion guard still applies.
+pub async fn run_remove_root(args: &[String]) -> i32 {
+    if args.len() < 2 {
+        eprintln!(
+            "sovereign corpus watch-remove-root <CORPUS_ID> <IDX>\n\n\
+             Detach an additional root by 0-based index. List the corpus's\n\
+             roots first with `corpus watch-status <id>`."
+        );
+        return 1;
+    }
+    let id = &args[0];
+    let Ok(idx): std::result::Result<u32, _> = args[1].parse() else {
+        eprintln!("idx must be a non-negative integer");
+        return 1;
+    };
+    let url = format!(
+        "{}/internal/corpus/watch/{id}/roots/{idx}",
+        daemon_base_url()
+    );
+    let resp = match build_client().delete(&url).send().await {
+        Ok(r) => r,
+        Err(e) => return contact_failed(&url, e),
+    };
+    if !resp.status().is_success() {
+        return reject_failed(resp).await;
+    }
+    println!("Detached additional root {idx} from corpus '{id}'.");
+    println!("The next sweep will reconcile the removed entries.");
+    0
 }
 
 pub async fn run_remove(args: &[String]) -> i32 {

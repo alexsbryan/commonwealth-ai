@@ -44,6 +44,112 @@ pub trait LandscapeDigestProvider: Send + Sync {
     }
 }
 
+/// Reports which `corpus_id`s are flagged as sensitive and must be
+/// excluded from the agent's *ambient* situated-context assembly.
+///
+/// Folder-ingest v1 §3.4: a watched-folder corpus marked sensitive
+/// (e.g. journal, therapy notes, legal-privileged material) stays
+/// available for explicit search and Inner Work mode but is
+/// structurally absent from the pre-turn ambient retrieval that
+/// answers "what does the user know about X?". Per ARCH §7.4, this
+/// is one layer of defence — the recipe-level invariants
+/// (`scope=Local`, `mesh_sharing=false`) are the others.
+///
+/// Defined in `sovereign-core` so [`Runtime`][crate::runtime::Runtime]
+/// can apply the filter without depending on `sovereign-tools`
+/// (which holds the canonical `WatchedFolderConfig.sensitive` flag).
+/// The `LocalCorpusManager` in `sovereign-tools` is the canonical
+/// implementation; tests get the default no-op (`is_sensitive ⇒
+/// false` for every corpus).
+#[async_trait]
+pub trait SensitiveCorpusOracle: Send + Sync {
+    /// Snapshot the set of sensitive `corpus_id`s. Read once per
+    /// query and intersected with the candidate corpus list — the
+    /// implementation must be cheap (a `HashSet` clone or an
+    /// `RwLock` read). Returning an empty set means "no corpus is
+    /// sensitive", which is the default-pre-v1 behaviour.
+    async fn sensitive_corpus_ids(&self) -> std::collections::HashSet<String>;
+}
+
+/// No-op oracle — every corpus is non-sensitive. Used by tests and
+/// any caller that hasn't wired sovereign-tools' watched-folder
+/// manager into the runtime.
+pub struct NoSensitiveCorpora;
+
+#[async_trait]
+impl SensitiveCorpusOracle for NoSensitiveCorpora {
+    async fn sensitive_corpus_ids(&self) -> std::collections::HashSet<String> {
+        std::collections::HashSet::new()
+    }
+}
+
+/// Snapshot of one watched-folder corpus's user-facing metadata.
+///
+/// Fed by [`FolderMetadataOracle`] into the prompt-assembly seam
+/// (`format_scored_chunks_with_kinds`) so the model sees "your
+/// case-files folder" instead of an opaque `corpus_id`, and so the
+/// "what I don't have" prompt-time note can enumerate gaps without
+/// the runtime depending on `sovereign-tools`.
+///
+/// Folder-ingest v1 §3.7 (glassbox) and the §6.3 attribution
+/// requirement: any folder corpus that contributes retrieval should
+/// carry its display name + a coverage signal back to the user.
+#[derive(Debug, Clone, Default)]
+pub struct FolderMetadata {
+    /// Operator-facing display name. The label the user typed in the
+    /// register-flow ("case files", "research notes"), NOT the
+    /// `corpus_id` slug.
+    pub display_name: String,
+    /// Count of files the watcher tried and failed to extract
+    /// (encrypted PDFs, malformed DOCX, etc.). Sourced from
+    /// `WatchedFolderState.failed_files.len()`.
+    pub failed_count: usize,
+    /// Count of files skipped because their extension isn't in the
+    /// extractor's accept-list. Sum of
+    /// `WatchedFolderState.skipped_by_extension` values.
+    pub skipped_count: usize,
+    /// Up to two extensions, by descending count, that drove
+    /// `skipped_count`. Surfaced verbatim in the prompt note
+    /// (e.g. ".pages, .key") so the user sees concrete formats.
+    pub top_skipped_extensions: Vec<String>,
+}
+
+/// Reports the user-facing metadata for the watched-folder corpora
+/// installed locally. Lives in `sovereign-core` so [`Runtime`] can
+/// thread folder display names into the prompt without depending
+/// on `sovereign-tools`.
+///
+/// `LocalCorpusManager` in `sovereign-tools` is the canonical
+/// implementation; tests get the default no-op
+/// ([`NoFolderMetadata`]) which returns an empty map and so leaves
+/// today's `corpus_id`-as-label behaviour untouched.
+#[async_trait]
+pub trait FolderMetadataOracle: Send + Sync {
+    /// Snapshot the watched-folder metadata keyed by `corpus_id`.
+    /// Read once per knowledge-query plan and intersected with the
+    /// corpora that actually contributed retrieval. Implementations
+    /// must be cheap (cloning a small HashMap) — this runs on every
+    /// turn that hits a knowledge route.
+    ///
+    /// `corpus_id`s NOT in the returned map are treated as
+    /// non-folder corpora (SEP, Wikipedia, mesh hits) and keep their
+    /// existing label rendering.
+    async fn folder_metadata(&self) -> std::collections::HashMap<String, FolderMetadata>;
+}
+
+/// No-op oracle — no folder corpora are known. Used by tests and
+/// any caller that hasn't wired sovereign-tools' watched-folder
+/// manager into the runtime. Falling back here preserves the
+/// pre-Phase-F label rendering exactly.
+pub struct NoFolderMetadata;
+
+#[async_trait]
+impl FolderMetadataOracle for NoFolderMetadata {
+    async fn folder_metadata(&self) -> std::collections::HashMap<String, FolderMetadata> {
+        std::collections::HashMap::new()
+    }
+}
+
 // ─── 1. Inference ──────────────────────────────────────────────
 
 #[async_trait]

@@ -23,7 +23,7 @@ use std::time::Duration;
 use tokio::sync::Semaphore;
 use tokio::task::JoinHandle;
 
-use super::registry::WatchedFolderRegistry;
+use super::registry::{DispatchDecision, WatchedFolderRegistry};
 use super::worker::Worker;
 
 /// How often the scheduler checks the registry for due corpora.
@@ -117,20 +117,17 @@ impl Scheduler {
                 let now = now_unix();
                 let corpora = registry.list().await;
                 for corpus_id in corpora {
-                    let Some((last_started, interval)) =
-                        registry.cadence_info(&corpus_id).await
-                    else {
-                        continue; // race: corpus was deregistered
+                    let decision = match registry
+                        .dispatch_decision(&corpus_id, now, SWEEP_INTERVAL_FLOOR_SECS)
+                        .await
+                    {
+                        Some(d) => d,
+                        None => continue, // race: corpus was deregistered
                     };
-                    let interval = interval.max(SWEEP_INTERVAL_FLOOR_SECS);
-
-                    // First tick (last_started == 0) → sweep
-                    // immediately. Subsequent ticks honour interval.
-                    let due = last_started == 0
-                        || now.saturating_sub(last_started) >= interval;
-                    if !due {
-                        continue;
-                    }
+                    let take_pending = match decision {
+                        DispatchDecision::Due { take_pending } => take_pending,
+                        DispatchDecision::NotDue => continue,
+                    };
 
                     // Acquire a fan-out slot. If the semaphore is at
                     // capacity, await until a slot frees — bounded
@@ -139,6 +136,15 @@ impl Scheduler {
                         Ok(p) => p,
                         Err(_) => break, // semaphore closed → exit
                     };
+
+                    // For Manual dispatches, clear the pending flag
+                    // on the registry side immediately. The worker
+                    // also clears the on-disk state mirror; both
+                    // layers together prevent the same sync-now
+                    // request from re-dispatching on the next tick.
+                    if take_pending {
+                        registry.clear_manual_pending(&corpus_id).await;
+                    }
 
                     let worker = worker.clone();
                     let id = corpus_id.clone();

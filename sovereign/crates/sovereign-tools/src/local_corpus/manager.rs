@@ -17,8 +17,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use async_trait::async_trait;
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{InferenceProvider, StateStore};
+use sovereign_core::traits::{InferenceProvider, SensitiveCorpusOracle, StateStore};
 use tokio::sync::RwLock;
 
 use corpus_engine::{CorpusEngine, CorpusSpec, ScoredChunk};
@@ -107,6 +108,23 @@ pub struct LocalCorpusManager {
     /// scanned PDFs as runtime failures rather than silently
     /// dropping them.
     ocr_ctx: RwLock<Option<OcrCtx>>,
+    /// Folder-ingest v1 §3.3 — per-folder enrichment driver.
+    /// Owns the per-corpus build queue + global concurrency cap.
+    /// Defaults are installed at daemon boot via
+    /// `set_enrichment_defaults`; before that, `enable_enrichment`
+    /// returns an error.
+    enrichment_driver: Arc<super::watched::enrich::EnrichmentDriver>,
+    /// Live enrichment progress per corpus. The driver's progress
+    /// callback writes here on every parsed `EnrichProgress` event
+    /// so the HTTP `/details` route can render the current phase
+    /// without polling the on-disk state file (which we only
+    /// rewrite on completion / cancellation / disable, to avoid
+    /// fsync churn). A `std::sync::RwLock` is the right primitive
+    /// because the writers are sync callbacks fired from the
+    /// subprocess stdout reader; tokio's `RwLock` would require a
+    /// blocking lock in those paths.
+    enrichment_progress:
+        Arc<std::sync::RwLock<HashMap<String, super::watched::state::EnrichmentRuntimeStatus>>>,
 }
 
 impl LocalCorpusManager {
@@ -138,6 +156,8 @@ impl LocalCorpusManager {
             corpora: RwLock::new(corpora),
             cluster_results: RwLock::new(HashMap::new()),
             ocr_ctx: RwLock::new(None),
+            enrichment_driver: Arc::new(super::watched::enrich::EnrichmentDriver::new()),
+            enrichment_progress: Arc::new(std::sync::RwLock::new(HashMap::new())),
         })
     }
 
@@ -146,6 +166,220 @@ impl LocalCorpusManager {
     /// pdfium paths. Subsequent calls overwrite. Idempotent.
     pub async fn set_ocr_ctx(&self, ctx: OcrCtx) {
         *self.ocr_ctx.write().await = Some(ctx);
+    }
+
+    /// Folder-ingest v1 §3.3: install the daemon-side enrichment
+    /// defaults (chat_model, embed_model, base_url, optional CLI
+    /// path). Called once at daemon boot — without this, the
+    /// `enable_enrichment` path returns an error pointing the
+    /// operator at daemon setup.
+    pub async fn set_enrichment_defaults(
+        &self,
+        defaults: super::watched::enrich::EnrichmentDefaults,
+    ) {
+        self.enrichment_driver.set_defaults(defaults).await;
+    }
+
+    /// Snapshot of the live enrichment progress for one corpus.
+    /// `None` = no live status (the build is finished, not started,
+    /// or the corpus's enrichment is disabled). The HTTP
+    /// `/details` route consults this so progress renders without
+    /// polling the on-disk state file every tick.
+    pub fn enrichment_progress(
+        &self,
+        corpus_id: &str,
+    ) -> Option<super::watched::state::EnrichmentRuntimeStatus> {
+        self.enrichment_progress
+            .read()
+            .ok()?
+            .get(corpus_id)
+            .cloned()
+    }
+
+    /// Folder-ingest v1 §3.3: enable atlas enrichment on a watched
+    /// corpus, kicking off a background subprocess build through
+    /// the existing `sovereign-cli enrich build` orchestrator.
+    /// Returns the assigned `job_id` once the build is queued.
+    ///
+    /// Errors when:
+    /// - The corpus isn't a watched-folder corpus.
+    /// - `pipeline_id` isn't one of the known atlas pipelines
+    ///   (`philosophy_atlas`, `referential_atlas`, `literary_atlas`).
+    /// - A build is already in flight for this corpus.
+    /// - Enrichment defaults haven't been installed (daemon boot
+    ///   incomplete).
+    /// - The synthesised `EnrichConfig` can't be persisted.
+    pub async fn enable_enrichment(
+        &self,
+        corpus_id: &str,
+        pipeline_id: &str,
+    ) -> Result<String> {
+        // Validate the pipeline_id matches one of the atlas
+        // pipelines the registry recognises. Reject `literary` (the
+        // legacy non-atlas variant) explicitly — `enrich build`
+        // would error at start with the same message, but we want
+        // the failure mode to land at request time so the UI can
+        // surface a clean error before the build queue is
+        // consumed.
+        const ATLAS_PIPELINES: &[&str] =
+            &["philosophy_atlas", "referential_atlas", "literary_atlas"];
+        if !ATLAS_PIPELINES.contains(&pipeline_id) {
+            return Err(Error::Execution(format!(
+                "pipeline '{pipeline_id}' is not a recognised atlas pipeline; \
+                 valid choices: philosophy_atlas, referential_atlas, literary_atlas"
+            )));
+        }
+
+        let cfg = self.require_watched(corpus_id).await?;
+        let source_path = cfg.root_path.clone();
+
+        // Mutate the in-memory + persisted config to record the
+        // user's choice. The watched-folder side stamps the
+        // pipeline_id so a subsequent `Rebuild` doesn't have to
+        // re-prompt.
+        {
+            let mut corpora = self.corpora.write().await;
+            let entry = corpora
+                .get_mut(corpus_id)
+                .ok_or_else(|| Error::Execution(format!("corpus '{corpus_id}' not registered")))?;
+            if let super::config::LocalCorpusSourceType::WatchedFolder(w) =
+                &mut entry.source_type
+            {
+                w.enrichment = super::config::WatchedEnrichmentConfig::On {
+                    pipeline_id: pipeline_id.to_string(),
+                    last_built_at_unix: 0,
+                    last_built_doc_count: 0,
+                };
+            }
+            persist_config(&config_dir(&self.data_dir), entry)?;
+        }
+
+        // Stamp Building into both the live progress map and the
+        // on-disk state mirror so the UI immediately shows the
+        // running state. The progress callback below will keep
+        // both updated as events arrive.
+        let started_at_unix = now_unix();
+        self.set_enrichment_runtime_status(
+            corpus_id,
+            super::watched::state::EnrichmentRuntimeStatus::Building {
+                phase: "starting".into(),
+                current: 0,
+                total: 0,
+                started_at_unix,
+            },
+        )?;
+
+        let progress_map = Arc::clone(&self.enrichment_progress);
+        let corpus_id_for_cb = corpus_id.to_string();
+        let progress_cb: crate::enrich::EnrichProgressFn = Arc::new(move |evt| {
+            // Project EnrichProgress onto our runtime mirror.
+            // Only Building→Building transitions go here; the
+            // terminal Complete / Aborted events flow through a
+            // separate watcher path inside the manager (added
+            // alongside the `forget` call below).
+            if let Some(status) = project_enrich_progress(&evt, started_at_unix) {
+                if let Ok(mut guard) = progress_map.write() {
+                    guard.insert(corpus_id_for_cb.clone(), status);
+                }
+            }
+        });
+
+        let job_id = self
+            .enrichment_driver
+            .start_build(corpus_id, &source_path, pipeline_id, progress_cb)
+            .await?;
+        Ok(job_id)
+    }
+
+    /// Folder-ingest v1 §3.3: disable enrichment on a watched
+    /// corpus. Cancels any in-flight build, tears down the atlas
+    /// directory cleanly via `corpus_engine::atlas_teardown`, and
+    /// resets the config + state to `Off`.
+    pub async fn disable_enrichment(&self, corpus_id: &str) -> Result<()> {
+        let _ = self.require_watched(corpus_id).await?;
+
+        // Signal cancellation if there's a running build. The
+        // subprocess will tear down on its next stdout poll.
+        self.enrichment_driver.cancel(corpus_id).await;
+        let _ = self.enrichment_driver.forget(corpus_id).await;
+
+        // Atlas teardown — atomic rename + remove of the
+        // `~/.sovereign/indexes/<corpus>/atlas/` directory. Idempotent
+        // on missing dirs, so disable-after-failed-build is safe.
+        let index_dir = self.engine_index_dir();
+        if let Err(e) = corpus_engine::atlas_teardown(&index_dir, corpus_id) {
+            tracing::warn!(
+                corpus_id = %corpus_id,
+                "disable_enrichment: atlas_teardown failed: {e}"
+            );
+        }
+
+        // Persist Off on the config side.
+        {
+            let mut corpora = self.corpora.write().await;
+            if let Some(entry) = corpora.get_mut(corpus_id) {
+                if let super::config::LocalCorpusSourceType::WatchedFolder(w) =
+                    &mut entry.source_type
+                {
+                    w.enrichment = super::config::WatchedEnrichmentConfig::Off;
+                }
+                persist_config(&config_dir(&self.data_dir), entry)?;
+            }
+        }
+
+        // Clear the live progress mirror + state file.
+        if let Ok(mut guard) = self.enrichment_progress.write() {
+            guard.remove(corpus_id);
+        }
+        self.set_enrichment_runtime_status(
+            corpus_id,
+            super::watched::state::EnrichmentRuntimeStatus::Off,
+        )?;
+        Ok(())
+    }
+
+    /// Folder-ingest v1 §3.3: rebuild the atlas using the
+    /// previously-configured pipeline. Errors when the corpus
+    /// isn't currently in `On` state — the user must enable
+    /// first to pick a pipeline.
+    pub async fn rebuild_enrichment(&self, corpus_id: &str) -> Result<String> {
+        let cfg = self.require_watched(corpus_id).await?;
+        let pipeline_id = match cfg
+            .source_type
+            .watched_config()
+            .map(|w| w.enrichment.clone())
+        {
+            Some(super::config::WatchedEnrichmentConfig::On { pipeline_id, .. }) => {
+                pipeline_id
+            }
+            _ => {
+                return Err(Error::Execution(
+                    "rebuild_enrichment: corpus has no enrichment configured; \
+                     call enable_enrichment first to pick a pipeline"
+                        .into(),
+                ));
+            }
+        };
+        // Same path as enable: the atlas dir is overwritten in
+        // place by the orchestrator's writer, so we don't tear it
+        // down first. (If the user wants a clean slate, they can
+        // disable then enable — same effect, more steps.)
+        self.enable_enrichment(corpus_id, &pipeline_id).await
+    }
+
+    fn set_enrichment_runtime_status(
+        &self,
+        corpus_id: &str,
+        status: super::watched::state::EnrichmentRuntimeStatus,
+    ) -> Result<()> {
+        use super::watched::state::WatchedFolderState;
+        let state_dir = self.engine_index_dir().join(corpus_id);
+        let mut state = WatchedFolderState::load(&state_dir)?
+            .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
+        state.enrichment_status = status;
+        state.last_updated_unix = now_unix();
+        state.save(&state_dir)?;
+        Ok(())
     }
 
     /// Whether an OCR context is installed. The desktop's
@@ -788,6 +1022,182 @@ impl LocalCorpusManager {
         Ok(())
     }
 
+    /// Folder-ingest v1 §3.1: layer an additional root onto an
+    /// existing watched-folder corpus. The path is canonicalised
+    /// before persistence; duplicates (same canonical path already
+    /// in `additional_roots` OR equal to the primary `root_path`)
+    /// are rejected. Persists the updated config; the next
+    /// scheduler tick walks the new root automatically.
+    pub async fn add_watched_root(
+        &self,
+        corpus_id: &str,
+        path: PathBuf,
+    ) -> Result<()> {
+        use super::config::{LocalCorpusSourceType, RootSpec};
+        let canonical = std::fs::canonicalize(&path).map_err(|e| {
+            Error::Execution(format!("canonicalize {}: {e}", path.display()))
+        })?;
+        if !canonical.is_dir() {
+            return Err(Error::Execution(format!(
+                "additional root '{}' is not a directory",
+                canonical.display()
+            )));
+        }
+        let mut corpora = self.corpora.write().await;
+        let cfg = corpora
+            .get_mut(corpus_id)
+            .ok_or_else(|| Error::Execution(format!("corpus '{corpus_id}' not registered")))?;
+        if cfg.root_path == canonical {
+            return Err(Error::Execution(
+                "root matches the corpus's primary root_path".into(),
+            ));
+        }
+        let watched = match &mut cfg.source_type {
+            LocalCorpusSourceType::WatchedFolder(w) => w,
+            _ => {
+                return Err(Error::Execution(format!(
+                    "corpus '{corpus_id}' is not a watched folder"
+                )));
+            }
+        };
+        if watched.additional_roots.iter().any(|r| r.path == canonical) {
+            return Err(Error::Execution(
+                "root already attached to this corpus".into(),
+            ));
+        }
+        watched.additional_roots.push(RootSpec {
+            path: canonical,
+            added_at_unix: now_unix(),
+        });
+        let cfg_clone = cfg.clone();
+        drop(corpora);
+        // Persist outside the write lock so a slow disk write
+        // doesn't block other manager operations on this corpus.
+        persist_config(&config_dir(&self.data_dir), &cfg_clone)?;
+        Ok(())
+    }
+
+    /// Folder-ingest v1 §3.1: detach an additional root by index.
+    /// `idx` is 0-based into `WatchedFolderConfig.additional_roots`
+    /// (i.e. the array position the UI displays — NOT the
+    /// `source_root_index` that is `idx + 1`). Out-of-range
+    /// indices return `Err`.
+    ///
+    /// The next sweep walks the surviving roots; entries whose
+    /// `source_root_index` matched the removed root no longer
+    /// surface in the snapshot, so the diff naturally classifies
+    /// them as deletions and the existing tombstone semantics
+    /// apply. The deletion guard still gates catastrophic removal
+    /// — if the removed root contributed many docs, the user gets
+    /// a `confirm-deletion` prompt before the chunks evaporate.
+    pub async fn remove_watched_root(
+        &self,
+        corpus_id: &str,
+        idx: usize,
+    ) -> Result<()> {
+        use super::config::LocalCorpusSourceType;
+        let mut corpora = self.corpora.write().await;
+        let cfg = corpora
+            .get_mut(corpus_id)
+            .ok_or_else(|| Error::Execution(format!("corpus '{corpus_id}' not registered")))?;
+        let watched = match &mut cfg.source_type {
+            LocalCorpusSourceType::WatchedFolder(w) => w,
+            _ => {
+                return Err(Error::Execution(format!(
+                    "corpus '{corpus_id}' is not a watched folder"
+                )));
+            }
+        };
+        if idx >= watched.additional_roots.len() {
+            return Err(Error::Execution(format!(
+                "additional_roots index {idx} out of range (len = {})",
+                watched.additional_roots.len()
+            )));
+        }
+        watched.additional_roots.remove(idx);
+        let cfg_clone = cfg.clone();
+        drop(corpora);
+        persist_config(&config_dir(&self.data_dir), &cfg_clone)?;
+        Ok(())
+    }
+
+    /// Folder-ingest v1 §3.7: per-document inspection summary used
+    /// by the desktop's document-inspector panel. Returns
+    /// `(chunk_count, first_chunk_preview)` for a `doc_id` (the
+    /// relative-path key from `WatchedFolderState.entries`). The
+    /// preview is truncated to `preview_chars` so the wire payload
+    /// stays small even on large corpora.
+    ///
+    /// `Ok((0, None))` is the right answer for files that exist
+    /// in `state.entries` but haven't been chunked yet (initial
+    /// sweep mid-flight) or for files that failed extraction.
+    pub async fn watched_doc_summary(
+        &self,
+        corpus_id: &str,
+        doc_id: &str,
+        preview_chars: usize,
+    ) -> Result<(usize, Option<String>)> {
+        let _cfg = self.require_watched(corpus_id).await?;
+        let info = self
+            .engine
+            .installed_indexes()
+            .await
+            .map_err(|e| Error::Execution(format!("installed_indexes: {e}")))?
+            .into_iter()
+            .find(|i| i.corpus_id == corpus_id)
+            .ok_or_else(|| {
+                Error::Execution(format!(
+                    "corpus '{corpus_id}' has no LanceDB index yet — \
+                     either the initial sweep hasn't run or it's mid-build"
+                ))
+            })?;
+        let idx = self
+            .engine
+            .open_index(&info.path)
+            .await
+            .map_err(|e| Error::Execution(format!("open_index: {e}")))?;
+        idx.doc_summary(doc_id, preview_chars)
+            .await
+            .map_err(|e| Error::Execution(format!("doc_summary: {e}")))
+    }
+
+    /// Mark a Manual-mode watched corpus as ready to sweep on the
+    /// next tick by flipping `state.manual_sync_pending`. Caller
+    /// (typically the HTTP `/sync-now/{id}` route) must also flip
+    /// the in-memory mirror on `WatchedFolderRegistry` so the
+    /// scheduler picks it up without waiting for state-file polling.
+    /// Defence in depth: either layer alone keeps Manual cadence
+    /// honest; flipping both prevents a daemon restart between the
+    /// two writes from re-dispatching.
+    ///
+    /// Returns `Err` if the corpus isn't a watched-folder corpus or
+    /// isn't in `SyncMode::Manual` — calling `/sync-now` on a
+    /// Continuous corpus is a 409 at the HTTP layer because the
+    /// scheduler ignores the flag in that mode and the request
+    /// would silently no-op.
+    pub async fn request_manual_sync(&self, corpus_id: &str) -> Result<()> {
+        use super::config::SyncMode;
+        use super::watched::state::WatchedFolderState;
+        let cfg = self.require_watched(corpus_id).await?;
+        let watched_cfg = match &cfg.source_type {
+            super::config::LocalCorpusSourceType::WatchedFolder(w) => w,
+            _ => unreachable!("require_watched returned a non-watched corpus"),
+        };
+        if watched_cfg.sync_mode != SyncMode::Manual {
+            return Err(Error::Execution(format!(
+                "corpus '{corpus_id}' is in Continuous sync mode; \
+                 sync-now only applies to Manual-mode corpora"
+            )));
+        }
+        let state_dir = self.engine_index_dir().join(corpus_id);
+        let mut state = WatchedFolderState::load(&state_dir)?
+            .unwrap_or_else(|| WatchedFolderState::fresh(corpus_id));
+        state.manual_sync_pending = true;
+        state.last_updated_unix = now_unix();
+        state.save(&state_dir)?;
+        Ok(())
+    }
+
     /// Acknowledge a `PausedAwaitingConfirmation` state. Per plan Q3,
     /// this clears the pause flag; the next sweep re-walks fresh and
     /// applies whatever the current diff is — which is safer than
@@ -1045,6 +1455,148 @@ fn load_persisted_configs(dir: &Path) -> Result<HashMap<String, LocalCorpusConfi
 
 fn noop_progress() -> ProgressCallback {
     Arc::new(|_| {})
+}
+
+/// Folder-ingest v1 §3.3: map an `EnrichProgress` event onto the
+/// `EnrichmentRuntimeStatus` enum the watched-folder state file
+/// stores. Returns `None` for events that don't change the
+/// runtime status (e.g. step-level fine-grained events the UI
+/// already shows via the chapter counter).
+///
+/// The mapping is deliberately coarse: the live status is what
+/// the UI's progress bar reads, and a one-line "phase X of Y"
+/// summary is enough. Operators who want every event subscribe to
+/// the SSE channel directly.
+fn project_enrich_progress(
+    evt: &corpus_engine::enrichment::pipeline::EnrichProgress,
+    started_at_unix: u64,
+) -> Option<super::watched::state::EnrichmentRuntimeStatus> {
+    use corpus_engine::enrichment::pipeline::EnrichProgress as EP;
+    use super::watched::state::EnrichmentRuntimeStatus;
+    match evt {
+        // BuildStart fires once at the very top; we already
+        // stamped Building when the build was queued, so this
+        // is informational. Re-stamp anyway for resilience.
+        EP::BuildStart { steps, .. } => Some(EnrichmentRuntimeStatus::Building {
+            phase: "starting".into(),
+            current: 0,
+            total: steps.len(),
+            started_at_unix,
+        }),
+        EP::StepStart { step, ordinal, total, .. } => {
+            Some(EnrichmentRuntimeStatus::Building {
+                phase: format!("{step:?}"),
+                current: *ordinal,
+                total: *total,
+                started_at_unix,
+            })
+        }
+        EP::ChapterProgress {
+            chapter_id,
+            index,
+            total,
+            ..
+        } => Some(EnrichmentRuntimeStatus::Building {
+            phase: format!("phase1: {chapter_id}"),
+            current: *index,
+            total: *total,
+            started_at_unix,
+        }),
+        // Terminal events are handled separately by the manager's
+        // completion watcher path so we can stamp Complete /
+        // Failed with the right `built_at_unix` and tear down the
+        // in-flight slot. They're returned as `None` here on
+        // purpose — the live-progress map only carries Building.
+        _ => None,
+    }
+}
+
+// ─── SensitiveCorpusOracle impl ─────────────────────────────────────
+//
+// Folder-ingest v1 §3.4: a watched-folder corpus marked sensitive
+// must be excluded from the agent's ambient situated-context
+// assembly. The runtime asks this oracle on every retrieval; we
+// answer from the in-memory `corpora` map (the single source of
+// truth for `WatchedFolderConfig`). Per ARCH §7.4 (defence in
+// depth), the on-disk state file also mirrors the flag so a
+// concurrent state-file inspector can verify the same answer.
+#[async_trait]
+impl SensitiveCorpusOracle for LocalCorpusManager {
+    async fn sensitive_corpus_ids(&self) -> std::collections::HashSet<String> {
+        let corpora = self.corpora.read().await;
+        corpora
+            .iter()
+            .filter_map(|(id, cfg)| {
+                let watched = cfg.source_type.watched_config()?;
+                if watched.sensitive {
+                    Some(id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+// ─── FolderMetadataOracle impl ──────────────────────────────────────
+//
+// Folder-ingest v1 §6.3: any folder corpus that contributes
+// retrieval should carry its display name + the "what I don't have"
+// gaps (failed_files / skipped_by_extension) back through the
+// runtime, so the model says "your case-files folder" and so the
+// chat surface can surface a coverage chip.
+//
+// Snapshot-style API (sync to async over an in-memory map +
+// per-corpus state-file read). The runtime calls this once per
+// knowledge-query plan; the cost is bounded by the number of
+// installed watched-folder corpora (typically <10), and each state
+// read is a small JSON.
+#[async_trait]
+impl sovereign_core::traits::FolderMetadataOracle for LocalCorpusManager {
+    async fn folder_metadata(
+        &self,
+    ) -> std::collections::HashMap<String, sovereign_core::traits::FolderMetadata> {
+        use super::watched::state::WatchedFolderState;
+        use sovereign_core::traits::FolderMetadata;
+        let mut out: std::collections::HashMap<String, FolderMetadata> = std::collections::HashMap::new();
+        let corpora = self.corpora.read().await;
+        for (id, cfg) in corpora.iter() {
+            if !cfg.source_type.is_watched() {
+                continue;
+            }
+            let state_dir = self.engine_index_dir().join(id);
+            let (failed_count, skipped_count, top_skipped) =
+                match WatchedFolderState::load(&state_dir) {
+                    Ok(Some(state)) => {
+                        let failed = state.failed_files.len();
+                        let skipped: usize = state.skipped_by_extension.values().sum();
+                        let mut by_count: Vec<(String, usize)> = state
+                            .skipped_by_extension
+                            .iter()
+                            .map(|(k, v)| (k.clone(), *v))
+                            .collect();
+                        by_count.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+                        let top: Vec<String> = by_count
+                            .into_iter()
+                            .take(2)
+                            .map(|(ext, _)| ext)
+                            .collect();
+                        (failed, skipped, top)
+                    }
+                    _ => (0, 0, Vec::new()),
+                };
+            out.insert(
+                id.clone(),
+                FolderMetadata {
+                    display_name: cfg.display_name.clone(),
+                    failed_count,
+                    skipped_count,
+                    top_skipped_extensions: top_skipped,
+                },
+            );
+        }
+        out
+    }
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────

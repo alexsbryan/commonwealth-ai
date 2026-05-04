@@ -742,12 +742,16 @@ export type LocalCorpusSourceType =
   | "DocumentFolder"
   | { WatchedFolder: WatchedFolderConfig };
 
+/** Folder-ingest v1 §3.5 sync cadence policy. Mirrors
+ *  `sovereign_tools::local_corpus::config::SyncMode`. */
+export type SyncMode = "continuous" | "manual";
+
 /** Per-corpus tunables for a `WatchedFolder` source. Mirrors
  *  `sovereign_tools::local_corpus::config::WatchedFolderConfig`. */
 export interface WatchedFolderConfig {
   follow_symlinks: boolean;
   deletion_guard: DeletionGuardConfig;
-  /** Floor: 60s. Default 120. */
+  /** Floor: 60s. Default 120. Ignored when `sync_mode === "manual"`. */
   sweep_interval_secs: number;
   /** Default 7 days. */
   soft_delete_grace_secs: number;
@@ -756,6 +760,31 @@ export interface WatchedFolderConfig {
    *  OcrCtx to be installed — `lcOcrAvailable()` reflects whether
    *  the runtime can honour the toggle. Default false. */
   with_ocr: boolean;
+  /** Folder-ingest v1 §3.5: `"continuous"` (default) sweeps on the
+   *  scheduler tick. `"manual"` opts out of periodic sweeps; the
+   *  corpus only sweeps when an explicit `lcWatchSyncNow` request
+   *  flips the per-state pending flag. */
+  sync_mode: SyncMode;
+  /** Folder-ingest v1 §3.4: when `true`, the corpus is excluded
+   *  from the agent's ambient situated-context assembly. The folder
+   *  remains searchable on explicit query and via Inner Work mode.
+   *  Default `false`. */
+  sensitive: boolean;
+  /** Folder-ingest v1 §3.1: additional roots layered on top of
+   *  the primary `LocalCorpusConfig.root_path`. Empty for single-
+   *  root corpora (the default). The walker iterates the primary
+   *  first, then each additional in declared order. */
+  additional_roots: WatchedFolderRootSpec[];
+  /** Folder-ingest v1 §3.3: per-folder atlas enrichment opt-in.
+   *  Default `Off`. */
+  enrichment: WatchedEnrichmentConfig;
+}
+
+/** One additional root attached to a watched-folder corpus. Mirrors
+ *  `sovereign_tools::local_corpus::config::RootSpec`. */
+export interface WatchedFolderRootSpec {
+  path: string;
+  added_at_unix: number;
 }
 
 export interface DeletionGuardConfig {
@@ -775,6 +804,10 @@ export const DEFAULT_WATCHED_FOLDER_CONFIG: WatchedFolderConfig = {
   soft_delete_grace_secs: 7 * 86_400,
   exclude_globs: [],
   with_ocr: false,
+  sync_mode: "continuous",
+  sensitive: false,
+  additional_roots: [],
+  enrichment: { kind: "off" },
 };
 
 export interface WriteBackConfig {
@@ -936,6 +969,18 @@ export interface WatchedFolderListEntry {
   display_name: string;
   root_path: string;
   status: WatchedFolderStatus;
+  /** Folder-ingest v1 §3.5: `"continuous"` (default) sweeps periodically;
+   *  `"manual"` opts out and waits for `lcWatchSyncNow`. */
+  sync_mode: SyncMode;
+  /** Folder-ingest v1 §3.4: when `true`, this folder is excluded from
+   *  ambient situated-context assembly. */
+  sensitive: boolean;
+  /** Folder-ingest v1 §3.1: count of additional roots layered on
+   *  top of the primary `root_path`. `0` for single-root corpora.
+   *  The list card surfaces "+N folders" when non-zero so the
+   *  user can spot multi-root setups without opening the
+   *  detail panel. */
+  additional_roots_count: number;
 }
 
 export interface WatchedFolderListResponse {
@@ -945,6 +990,121 @@ export interface WatchedFolderListResponse {
 export interface WatchedFolderStatusResponse {
   corpus_id: string;
   status: WatchedFolderStatus;
+}
+
+/** Folder-ingest v1 §3.3 — per-folder enrichment status surfaced
+ *  in the detail panel. Mirrors the `EnrichmentStatus` enum on
+ *  `sovereign-mesh::corpus_watch_http`. */
+export type EnrichmentStatus =
+  | { kind: "off" }
+  | {
+      kind: "building";
+      pipeline_id: string;
+      phase: string;
+      current: number;
+      total: number;
+      started_at_unix: number;
+    }
+  | {
+      kind: "complete";
+      pipeline_id: string;
+      built_at_unix: number;
+      doc_count: number;
+      /** Live entry count at request time. Compute "M new docs
+       *  since last build" as `current_doc_count - doc_count`. */
+      current_doc_count: number;
+    }
+  | {
+      kind: "failed";
+      pipeline_id: string;
+      failed_at_unix: number;
+      reason: string;
+    };
+
+/** Folder-ingest v1 §3.3 — per-folder atlas enrichment opt-in.
+ *  Mirrors `WatchedEnrichmentConfig` in
+ *  `sovereign_tools::local_corpus::config`. */
+export type WatchedEnrichmentConfig =
+  | { kind: "off" }
+  | {
+      kind: "on";
+      pipeline_id: string;
+      last_built_at_unix: number;
+      last_built_doc_count: number;
+    };
+
+/** Folder-ingest v1 §3.7 — glassbox folder-detail digest returned
+ *  by `lcWatchDetails`. Mirrors `DetailsResponse` in
+ *  `sovereign-mesh/src/corpus_watch_http.rs`. */
+export interface WatchedFolderDetailsResponse {
+  corpus_id: string;
+  display_name: string;
+  root_path: string;
+  status: WatchedFolderStatus;
+  sync_mode: SyncMode;
+  sensitive: boolean;
+  live_entries: number;
+  /** Per-extension count of indexed documents. Keyed by lowercase
+   *  extension (e.g. `"pdf"`, `"md"`); files without an extension
+   *  bucket as `"(no extension)"`. */
+  formats: Record<string, number>;
+  /** Per-extension count of files the walker saw but skipped
+   *  because no extractor was registered for that extension. */
+  skipped_by_extension: Record<string, number>;
+  failed_files: WatchedFailedFile[];
+  tombstones: number;
+  enrichment: EnrichmentStatus;
+  last_sweep_unix: number;
+  /** Folder-ingest v1 §3.1 multi-root: every root attached to
+   *  this corpus (primary first, then each additional in
+   *  declared order). Always at least 1 entry. */
+  roots: WatchedFolderRoot[];
+}
+
+/** One root attached to a watched-folder corpus. `idx === 0` is
+ *  the primary; `idx >= 1` map onto `additional_roots[idx - 1]`. */
+export interface WatchedFolderRoot {
+  idx: number;
+  path: string;
+  added_at_unix: number;
+  doc_count: number;
+  primary: boolean;
+}
+
+export interface WatchedFailedFile {
+  doc_id: string;
+  absolute_path: string;
+  /** Reason kind: `"corrupt"`, `"password_protected"`,
+   *  `"scanned_no_text"`, etc. The detail panel groups by this
+   *  for the §3.7 "What I don't have" surface. */
+  kind: string;
+  reason: string;
+  first_seen_unix: number;
+}
+
+/** Folder-ingest v1 §3.7 — per-document inspection digest
+ *  returned by `lcWatchDocument`. Mirrors `DocumentResponse` in
+ *  `sovereign-mesh/src/corpus_watch_http.rs`. */
+export interface WatchedFolderDocumentResponse {
+  corpus_id: string;
+  doc_id: string;
+  absolute_path: string;
+  size_bytes: number;
+  mtime_unix: number;
+  content_hash: string;
+  /** Number of chunks the engine has indexed for this document.
+   *  Zero means the file failed extraction or hasn't been swept yet. */
+  chunk_count: number;
+  /** First chunk's content, truncated to ~500 chars. `null` when
+   *  `chunk_count === 0`. */
+  first_chunk_preview: string | null;
+  atoms: WatchedFolderDocumentAtom[];
+}
+
+export interface WatchedFolderDocumentAtom {
+  atom_id: string;
+  atom_type: string;
+  label: string;
 }
 
 export interface WatchedFolderStateResponse {

@@ -80,10 +80,10 @@ pub enum PdfClass {
 pub fn classify_pdf_blocking(path: &Path) -> PdfClass {
     let size_bytes = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
     match crate::local_corpus::extract_stage::safe_extract_pdf_text(path) {
-        Err(SafePdfError::Encrypted) => PdfClass::PasswordProtected,
-        Err(SafePdfError::Panic(_)) | Err(SafePdfError::Parse(_)) => {
-            PdfClass::ScannedNoText
-        }
+        Err(SafeExtractError::Encrypted) => PdfClass::PasswordProtected,
+        Err(SafeExtractError::Panic(_))
+        | Err(SafeExtractError::Parse(_))
+        | Err(SafeExtractError::Other(_)) => PdfClass::ScannedNoText,
         Ok(text) => {
             let size_kb = size_bytes / 1024;
             // Look at first ~4KB of extracted text (rough proxy for
@@ -100,7 +100,7 @@ pub fn classify_pdf_blocking(path: &Path) -> PdfClass {
     }
 }
 
-pub use crate::local_corpus::extract_stage::SafePdfError;
+pub use crate::local_corpus::extract_stage::SafeExtractError;
 
 // ─── Pre-scan result ─────────────────────────────────────────────────
 
@@ -146,11 +146,34 @@ impl PreScanResult {
 
 pub struct PreScanner<'a> {
     config: &'a LocalCorpusConfig,
+    /// Optional override for which path to walk. When `None`, the
+    /// scanner walks `config.root_path` (today's behaviour and the
+    /// default for single-root corpora). Folder-ingest v1 §3.1
+    /// multi-root: the watched-folder walker constructs one
+    /// `PreScanner` per root, threading each root in here.
+    walk_root: Option<&'a Path>,
 }
 
 impl<'a> PreScanner<'a> {
     pub fn new(config: &'a LocalCorpusConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            walk_root: None,
+        }
+    }
+
+    /// Construct a scanner that walks an explicit root path
+    /// instead of `config.root_path`. Used by the watched-folder
+    /// walker to iterate `WatchedFolderConfig.additional_roots`.
+    pub fn with_root(config: &'a LocalCorpusConfig, root: &'a Path) -> Self {
+        Self {
+            config,
+            walk_root: Some(root),
+        }
+    }
+
+    fn root_path(&self) -> &Path {
+        self.walk_root.unwrap_or(&self.config.root_path)
     }
 
     /// Run a synchronous pre-scan. CPU-bound (opens PDFs); callers in
@@ -245,7 +268,7 @@ impl<'a> PreScanner<'a> {
         // chosen folder happens to be hidden (e.g. a macOS tempdir
         // named `.tmpXYZ`), we still want to descend into it. Skip
         // hidden-file logic when depth == 0.
-        for entry in WalkDir::new(&self.config.root_path)
+        for entry in WalkDir::new(self.root_path())
             .follow_links(false)
             .into_iter()
             .filter_entry(|e| e.depth() == 0 || !is_hidden(e.path()))
