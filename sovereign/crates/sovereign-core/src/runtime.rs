@@ -340,6 +340,48 @@ pub fn __voice_test_factual_base_prompt() -> &'static str {
 /// Date prefixes appear only when the prior memory had a
 /// `source_conversation_id` (so the model can phrase it as "you
 /// told me on..."). Without one, an undated form is used.
+/// Build the witness-grounding block the team pipeline's Drafter
+/// needs for Relational/Expressive turns. Concatenates the same
+/// memory + working-memory + temporal-tension surfaces the legacy
+/// witness path renders into its system prompt — but as a single
+/// `<grounding>` block the orchestrator can splice into the
+/// Drafter's user prompt.
+///
+/// Returns an empty string when none of the surfaces have content
+/// (corpus-only intents, or Relational turn with empty seed
+/// memories). The Drafter prompt then skips the `<grounding>` block
+/// entirely, matching the legacy "no record yet" feel.
+pub(crate) fn build_witness_grounding(
+    context: &ConversationContext,
+    register: SkillRegister,
+) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    if let Some(mem_section) =
+        crate::memory::format_memories_for_prompt(&context.memories, register)
+    {
+        parts.push(mem_section);
+    }
+
+    if let Some(wm) = &context.working_memory {
+        if let Some(goal) = &wm.current_goal {
+            parts.push(format!("Current user goal: {goal}"));
+        }
+        if !wm.facts.is_empty() {
+            parts.push(format!(
+                "Session context:\n- {}",
+                wm.facts.join("\n- ")
+            ));
+        }
+    }
+
+    if !context.temporal_tensions.is_empty() {
+        parts.push(render_temporal_tensions(&context.temporal_tensions));
+    }
+
+    parts.join("\n\n")
+}
+
 pub(crate) fn render_temporal_tensions(tensions: &[TemporalTension]) -> String {
     let mut lines = vec![
         "Notable tension across time:".to_string(),
@@ -3531,6 +3573,32 @@ impl Runtime {
         (merged, sources_expanded, chunks_added)
     }
 
+    /// Retrieve the candidate chunk set the team-pipeline Curator
+    /// will reduce — local + mesh search, atlas grounding, entity
+    /// boost, optional decomposition, dedupe, reweight, multi-source
+    /// expansion. Returns just the chunks; callers that also need
+    /// provenance (search-method label, per-corpus source counts,
+    /// peer attribution) currently re-call `prepare_knowledge_context`
+    /// for the formatted shape.
+    ///
+    /// This is the Phase 2.5 seam from the situated-team plan
+    /// (`/Users/alexsbryan/.claude/plans/there-s-a-fast-slot-delightful-peach.md`).
+    /// Implementation today is the minimal wrapper — runs the
+    /// existing `prepare_knowledge_context` pipeline and discards
+    /// the formatter output. Phase 4 wires this directly into
+    /// `run_team_pipeline` and at that point the wrapper gets
+    /// expanded into a real split so the wasted formatting work on
+    /// the team-pipeline path is paid only once.
+    pub(crate) async fn retrieve_candidates(
+        &self,
+        message: &str,
+        context: &ConversationContext,
+        intent: &Intent,
+    ) -> Vec<corpus_engine::ScoredChunk> {
+        let kc = self.prepare_knowledge_context(message, context, intent).await;
+        kc.chunks
+    }
+
     /// Search all knowledge sources, build the prompt with retrieved context,
     /// and assemble provenance metadata. Shared between the streaming and
     /// non-streaming response paths so they cannot diverge.
@@ -5040,6 +5108,71 @@ impl Runtime {
             // Fall through to Commit path — streaming begins below.
         }
 
+        // ── Team-pipeline gate (Phase 4 of the situated-team plan) ──
+        //
+        // When `SOVEREIGN_TEAM_PIPELINE` is on AND the intent is one
+        // the orchestrator handles end-to-end, route this turn through
+        // `pipeline::run_team_pipeline` instead of the legacy
+        // intent-specific dispatch below. Read the env var per-turn
+        // (not at boot) so flipping it on a running daemon takes
+        // effect immediately. Default-off until T2 bench validates
+        // a default-on flip — see `pipeline::runner` for the
+        // rationale and the constant to flip.
+        //
+        // Conation / Commissive / Expressive / ComplexTask /
+        // MetalingualQuery keep the legacy path even when the
+        // gate is on; their handlers depend on situated-skill
+        // wiring that v1 of the orchestrator doesn't replicate.
+        // Tool-calls and OICP/mesh peer routing reach `Runtime`
+        // through different entry points and never hit this
+        // branch (per plan §4.3).
+        if crate::pipeline::is_team_pipeline_enabled()
+            && matches!(
+                intent,
+                Intent::SimpleQuery
+                    | Intent::DeepQuery
+                    | Intent::KnowledgeQuery
+                    | Intent::ComparisonQuery
+                    | Intent::ExpressiveQuery
+            )
+        {
+            tracing::info!(
+                intent = ?intent,
+                "team-pipeline: kill-switch enabled — routing turn through orchestrator"
+            );
+            let candidates = self
+                .retrieve_candidates(message, &context, &intent)
+                .await;
+            let register = self.skills.primary_skill_register();
+            let witness_grounding = build_witness_grounding(&context, register);
+            let inputs = crate::pipeline::TeamPipelineInputs {
+                provider: Arc::clone(&self.inference),
+                message,
+                classification: &classification,
+                register,
+                candidates,
+                max_tokens: crate::pipeline::DEFAULT_TEAM_PIPELINE_MAX_TOKENS,
+                judge_enabled: true,
+                witness_grounding,
+            };
+            let sink: Arc<dyn crate::pipeline::NarrationSink> =
+                Arc::new(crate::pipeline::RoutingEventNarrationSink {
+                    inner: Arc::clone(&self.routing_events),
+                });
+            let output = crate::pipeline::run_team_pipeline(
+                inputs,
+                sink,
+                _session_id.clone(),
+                conversation_id.to_string(),
+            )
+            .await?;
+            let message_id = uuid::Uuid::new_v4().to_string();
+            return Ok(StreamHandle {
+                message_id,
+                stream: output.stream,
+            });
+        }
+
         // Document attached or ComplexTask → fall back to non-streaming.
         // (KnowledgeQuery used to live here too, but that triggered a desktop
         // fallback that re-ran build_context + compress_working_memory +
@@ -5171,7 +5304,10 @@ impl Runtime {
                 };
                 if let Some(event) = self.sessions.try_emit_narration(
                     &_session_id,
-                    NarrationPhase::RetrievalComplete,
+                    NarrationPhase::RetrievalComplete {
+                        chunks_in: plan.chunks.len(),
+                        corpora: plan.source_map.keys().cloned().collect(),
+                    },
                     txt,
                 ) {
                     self.routing_events
@@ -5453,7 +5589,10 @@ impl Runtime {
             );
             if let Some(event) = self.sessions.try_emit_narration(
                 &_session_id,
-                NarrationPhase::RetrievalComplete,
+                NarrationPhase::RetrievalComplete {
+                    chunks_in: kc.chunks.len(),
+                    corpora: kc.sources.iter().map(|s| s.origin.clone()).collect(),
+                },
                 txt,
             ) {
                 self.routing_events
@@ -5979,6 +6118,108 @@ impl Runtime {
                 );
                 return result;
             }
+        }
+
+        // ── Team-pipeline gate (Phase 4 of the situated-team plan) ──
+        //
+        // Symmetric to the streaming-path gate at ~line 5087. When
+        // `SOVEREIGN_TEAM_PIPELINE` is on AND the intent is one the
+        // orchestrator handles, route through `run_team_pipeline`,
+        // drain the Presenter stream into a single string, and
+        // synthesize a `Response`. This is the entry point that
+        // `voice_eval` exercises (it calls `handle_message` →
+        // `handle_turn`, not the streaming path), so without this
+        // branch flipping the kill-switch has no effect on the
+        // bench harness.
+        if crate::pipeline::is_team_pipeline_enabled()
+            && matches!(
+                intent,
+                Intent::SimpleQuery
+                    | Intent::DeepQuery
+                    | Intent::KnowledgeQuery
+                    | Intent::ComparisonQuery
+                    | Intent::ExpressiveQuery
+            )
+        {
+            tracing::info!(
+                intent = ?intent,
+                "team-pipeline: kill-switch enabled — routing turn through orchestrator (non-streaming path)"
+            );
+            let candidates = self
+                .retrieve_candidates(message, &context, &intent)
+                .await;
+            let register = self.skills.primary_skill_register();
+            let witness_grounding = build_witness_grounding(&context, register);
+            let inputs = crate::pipeline::TeamPipelineInputs {
+                provider: Arc::clone(&self.inference),
+                message,
+                classification: &classification,
+                register,
+                candidates,
+                max_tokens: crate::pipeline::DEFAULT_TEAM_PIPELINE_MAX_TOKENS,
+                judge_enabled: true,
+                witness_grounding,
+            };
+            let sink: Arc<dyn crate::pipeline::NarrationSink> =
+                Arc::new(crate::pipeline::RoutingEventNarrationSink {
+                    inner: Arc::clone(&self.routing_events),
+                });
+            let mut output = crate::pipeline::run_team_pipeline(
+                inputs,
+                sink,
+                _session_id.clone(),
+                conversation_id.to_string(),
+            )
+            .await?;
+
+            // Drain the Presenter token stream into a single string.
+            // Errors mid-stream produce a partial response — log and
+            // continue rather than failing the whole turn, since the
+            // user (or bench) still gets whatever was produced.
+            let mut raw_text = String::new();
+            while let Some(chunk) = output.stream.next().await {
+                match chunk {
+                    Ok(token) => raw_text.push_str(&token),
+                    Err(e) => {
+                        tracing::warn!(error = %e, "team-pipeline (non-stream): mid-stream error");
+                        break;
+                    }
+                }
+            }
+            // iter4: strip mechanical artifacts from the Presenter
+            // output here, in code, instead of asking the LLM to do
+            // it (which iter1–iter3 showed caused the small Fast
+            // slot to narrate the cleanup task instead of executing
+            // it). The desktop streaming path applies the same
+            // helper post-stream so users see clean text too — see
+            // `pipeline::presenter::strip_presenter_artifacts`.
+            let full_text = crate::pipeline::presenter::strip_presenter_artifacts(&raw_text);
+
+            let total_turn_ms = turn_start.elapsed().as_millis() as u64;
+            let assistant_msg = Message {
+                id: uuid::Uuid::new_v4().to_string(),
+                conversation_id: conversation_id.to_string(),
+                role: Role::Assistant,
+                content: full_text,
+                created_at: now(),
+                metadata: None,
+                version: now(),
+            };
+            self.store.save_message(&assistant_msg).await?;
+
+            let mut metrics = upstream_metrics.clone();
+            metrics.total_turn_ms = Some(total_turn_ms);
+
+            tracing::info!(
+                dispatch = "team_pipeline",
+                total_latency_ms = total_turn_ms,
+                "runtime: turn end (team-pipeline non-stream)"
+            );
+            return Ok(Response {
+                message: assistant_msg,
+                task: None,
+                metrics: Some(metrics),
+            });
         }
 
         // 3. Dispatch based on intent.

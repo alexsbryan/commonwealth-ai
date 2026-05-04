@@ -47,6 +47,26 @@ export interface ChunkRecord {
   /// or no spans landed for this chunk.
   atom_spans?: AtomSpan[];
   metadata: Record<string, unknown>;
+  /// Populated by the backend when `corpus_id == "conversation-history"`.
+  /// `null` for every other corpus. The frontend uses presence of this
+  /// field to pick the conversation-shaped renderer over the default
+  /// book renderer.
+  conversation?: ConversationChunkMeta | null;
+}
+
+export interface ConversationChunkMeta {
+  conversation_id: string;
+  title: string | null;
+  updated_at: number | null;
+  segments: ConversationSegment[];
+}
+
+export interface ConversationSegment {
+  /// "user" | "assistant" | "system" — preserved verbatim from the
+  /// messages table; the renderer maps unknown roles to a neutral
+  /// pill style.
+  role: string;
+  content: string;
 }
 
 export interface NeighborWindow {
@@ -138,6 +158,13 @@ let _focusedPassage = $state<FocusedPassage | null>(null);
 let _loading = $state(false);
 let _error = $state<string | null>(null);
 let _atomPanel = $state<AtomPanelState | null>(null);
+
+// Callback installed by App.svelte at mount: dispatches a request
+// to switch the chat sidebar's selectedConversationId. Lets the
+// reading surface's "View conversation" button hand control back
+// to the chat without the store importing the chat layer (and
+// without prop-drilling through ReadingSurface → ConversationChunkRenderer).
+let _onOpenConversation: ((conversationId: string) => void) | null = null;
 
 // ─── Tauri bridge ─────────────────────────────────────────────────
 
@@ -341,6 +368,31 @@ export const readingSession = {
   },
 
   clearFocus(): void {
+    _focusedPassage = null;
+  },
+
+  /// Wire the "View conversation" callback. Called once from
+  /// App.svelte's onMount; the reading surface invokes
+  /// `openConversation(id)` to bounce back to the chat. Calling
+  /// twice replaces the previous callback (the latest mount wins —
+  /// in practice App is a singleton so this never matters).
+  setConversationOpener(
+    fn: ((conversationId: string) => void) | null,
+  ): void {
+    _onOpenConversation = fn;
+  },
+
+  /// Invoke the registered conversation opener (if any) and close
+  /// the reading surface. Closes because the user is choosing to
+  /// jump to the live conversation — staying on the reading column
+  /// would obscure the chat they just opened.
+  openConversation(conversationId: string): void {
+    if (_onOpenConversation) {
+      _onOpenConversation(conversationId);
+    }
+    _currentReading = null;
+    _trail = [];
+    _atomPanel = null;
     _focusedPassage = null;
   },
 };

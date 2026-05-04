@@ -16,10 +16,21 @@
   import { readingSession } from "../../stores/readingSession.svelte";
   import Breadcrumb from "./Breadcrumb.svelte";
   import ChunkRenderer from "./ChunkRenderer.svelte";
+  import ConversationChunkRenderer from "./ConversationChunkRenderer.svelte";
 
   let reading = $derived(readingSession.currentReading);
   let loading = $derived(readingSession.loading);
   let error = $derived(readingSession.error);
+
+  // Pick the renderer based on whether the backend tagged this
+  // chunk as a conversation. The presence of a `conversation`
+  // payload is the discriminator — `corpus_id == "conversation-history"`
+  // would also work but is duplicative with the backend's own check
+  // and would diverge if the corpus id ever changes (e.g. multiple
+  // conversational corpora per skill).
+  let isConversation = $derived(
+    reading?.center.conversation != null,
+  );
 
   // Detect reduced-motion preference at mount; transitions zero
   // their duration when the user has asked for less motion.
@@ -69,17 +80,29 @@
         {error}
       </div>
     {:else if reading}
-      <ChunkRenderer
-        prev={reading.prev}
-        center={reading.center}
-        next={reading.next}
-      />
-      {#if reading.outbound_url}
-        <footer class="outbound">
-          <a href={reading.outbound_url} target="_blank" rel="noopener noreferrer">
-            Read the full source ↗
-          </a>
-        </footer>
+      {#if isConversation}
+        <ConversationChunkRenderer
+          prev={reading.prev}
+          center={reading.center}
+          next={reading.next}
+        />
+      {:else}
+        <ChunkRenderer
+          prev={reading.prev}
+          center={reading.center}
+          next={reading.next}
+        />
+        {#if reading.outbound_url}
+          <footer class="outbound">
+            <a
+              href={reading.outbound_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Read the full source ↗
+            </a>
+          </footer>
+        {/if}
       {/if}
     {/if}
   </div>

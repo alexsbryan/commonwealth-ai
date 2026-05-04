@@ -279,6 +279,8 @@ fn main() -> ExitCode {
             commands::set_ingest_budget,
             commands::get_mesh_quiesced,
             commands::set_mesh_quiesced,
+            commands::get_storage_budget,
+            commands::set_storage_budget,
             commands::build_corpus_index,
             commands::diagnose_corpus,
             commands::ingest_document,

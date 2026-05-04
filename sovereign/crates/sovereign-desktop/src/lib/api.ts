@@ -306,6 +306,30 @@ export async function setMeshQuiesced(quiesced: boolean): Promise<MeshQuiesceSta
   return invoke("set_mesh_quiesced", { quiesced });
 }
 
+/// Storage budget — ceiling on disk usage for corpus storage.
+/// `budget_bytes = null` means no budget configured (gossip reports
+/// raw free disk; nothing clamped). The daemon does the actual
+/// enforcement by clamping the gossiped `free_storage_gb` to budget
+/// remaining; the desktop's job is the UI surface.
+export interface StorageBudgetState {
+  budget_bytes: number | null;
+  used_bytes: number;
+  free_disk_bytes: number;
+  recommended_bytes: number;
+}
+
+export async function getStorageBudget(): Promise<StorageBudgetState> {
+  return invoke("get_storage_budget");
+}
+
+/// Pass `null` to clear the budget. The daemon rejects positive
+/// values below 1 GiB.
+export async function setStorageBudget(
+  budgetBytes: number | null,
+): Promise<StorageBudgetState> {
+  return invoke("set_storage_budget", { budgetBytes });
+}
+
 export async function buildCorpusIndex(corpusId: string): Promise<void> {
   return invoke("build_corpus_index", { corpusId });
 }

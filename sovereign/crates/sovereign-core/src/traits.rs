@@ -78,6 +78,68 @@ pub trait InferenceProvider: Send + Sync {
         Ok((stream, self.model_id_for(request.preferred_speed)))
     }
 
+    /// Streaming variant that yields typed [`StreamFrame`]s and ends
+    /// with a terminal [`StreamFrame::Finish`] carrying the
+    /// [`FinishReason`] the provider observed (`Stop` for EOS,
+    /// `Length` for `max_tokens`, `Cancelled` for receiver-drop, etc.).
+    ///
+    /// The default implementation wraps [`complete_stream`] and
+    /// synthesises `Finish { reason: Stop, usage: None }` after the
+    /// underlying stream closes — adequate for providers that don't
+    /// observe truncation themselves (remote APIs that flatten the
+    /// signal away, deterministic test stubs). Providers that DO know
+    /// why generation stopped (`EmbeddedLlamaCpp`) override this method
+    /// so the SSE bridge can emit an accurate OpenAI `finish_reason`.
+    ///
+    /// Receivers MUST treat a closed channel without any terminal frame
+    /// as `Cancelled` rather than `Stop` — silent truncation is the bug
+    /// this method exists to make impossible.
+    async fn complete_stream_with_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>> {
+        use futures::StreamExt;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let inner = self.complete_stream(request).await?;
+        // Shared between the body map and the tail-once future so the
+        // tail can suppress the synthetic Stop when the body already
+        // emitted a terminal Error frame.
+        let terminal_emitted = Arc::new(AtomicBool::new(false));
+        let body_flag = Arc::clone(&terminal_emitted);
+        let mapped = inner.flat_map(move |item| {
+            let frames: Vec<StreamFrame> = match item {
+                Ok(text) => vec![StreamFrame::Token(text)],
+                Err(e) => {
+                    body_flag.store(true, Ordering::Relaxed);
+                    vec![StreamFrame::Finish {
+                        reason: FinishReason::Error(format!("{e}")),
+                        usage: None,
+                    }]
+                }
+            };
+            futures::stream::iter(frames)
+        });
+        // Append a synthetic Stop frame after the underlying stream
+        // closes (unless an Error already terminated it). This is a
+        // legacy-bridge default — overrides should emit Length /
+        // Cancelled / etc. with real fidelity.
+        let tail_flag = terminal_emitted;
+        let tail = futures::stream::once(async move {
+            if tail_flag.load(Ordering::Relaxed) {
+                None
+            } else {
+                Some(StreamFrame::Finish {
+                    reason: FinishReason::Stop,
+                    usage: None,
+                })
+            }
+        })
+        .filter_map(|f| async move { f });
+        Ok(Box::pin(mapped.chain(tail)))
+    }
+
     async fn embed(&self, text: &str) -> Result<Vec<f32>>;
 
     /// Embed a batch of texts in a single forward pass when the backend supports it.

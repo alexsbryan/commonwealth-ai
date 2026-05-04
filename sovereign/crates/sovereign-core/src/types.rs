@@ -264,6 +264,92 @@ pub struct ProviderCapabilities {
     pub relative_reasoning: Depth,
 }
 
+// ─── Stream framing (typed finish_reason) ──────────────────────
+//
+// The OpenAI streaming surface ends each stream with a chunk
+// carrying `finish_reason` ∈ {"stop","length","tool_calls",
+// "content_filter"}. The legacy `Stream<Item = Result<String>>`
+// shape on `InferenceProvider::complete_stream` could not carry
+// that signal — every truncation looked identical to a clean stop
+// at the wire, so the desktop saw a clipped reply with no way to
+// tell whether the model actually finished or hit its budget.
+//
+// `complete_stream_with_finish` (new on `InferenceProvider`,
+// optional override) yields `StreamFrame` instead, with a
+// terminal `Finish { reason, usage }` frame. Providers that want
+// accurate semantics override; the default impl wraps the legacy
+// stream and synthesises `Stop`.
+
+/// Why a stream stopped emitting tokens. Mirrors the OpenAI
+/// `finish_reason` enum plus a `Cancelled` variant for our
+/// CancellationToken / receiver-drop paths and a free-form
+/// `Error` variant for provider-side faults.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FinishReason {
+    /// Model emitted EOS (or an equivalent end-of-generation token).
+    Stop,
+    /// Generation hit `max_tokens`.
+    Length,
+    /// Model produced a tool-call payload. Reserved — streaming +
+    /// tools is not currently supported on this surface, but the
+    /// variant exists so callers don't have to guess.
+    ToolCalls,
+    /// Content filter or safety layer blocked the output.
+    ContentFilter,
+    /// Cancellation token tripped or the receiver was dropped.
+    Cancelled,
+    /// Provider-side error mid-stream. The string is the
+    /// human-readable cause; the SSE bridge maps this to a wire
+    /// `finish_reason: "error"`.
+    Error(String),
+}
+
+impl FinishReason {
+    /// OpenAI-compatible string for the SSE `finish_reason` field.
+    /// `Cancelled` and `Error` are not OpenAI-native; we surface
+    /// `"cancelled"` and `"error"` so clients that need to
+    /// distinguish them can, while OpenAI-strict clients can treat
+    /// any non-`"stop"` value as truncation.
+    pub const fn as_openai_str(&self) -> &'static str {
+        match self {
+            FinishReason::Stop => "stop",
+            FinishReason::Length => "length",
+            FinishReason::ToolCalls => "tool_calls",
+            FinishReason::ContentFilter => "content_filter",
+            FinishReason::Cancelled => "cancelled",
+            FinishReason::Error(_) => "error",
+        }
+    }
+}
+
+/// Token-usage counters carried on the terminal stream frame.
+/// Mirrors the OpenAI `usage` object so the SSE bridge can emit a
+/// matching final chunk without a second source of truth.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StreamUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
+/// One frame on a typed completion stream. Replaces the legacy
+/// `Result<String, Error>` items: `Token` carries a partial text
+/// delta, `Finish` is the terminal frame with the reason we
+/// stopped, and `Error` lets a provider abort mid-stream without
+/// ambiguity. Streams MUST end with either `Finish` or `Error`;
+/// receivers treat a closed channel without a terminal frame as
+/// `Cancelled`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StreamFrame {
+    Token(String),
+    Finish {
+        reason: FinishReason,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<StreamUsage>,
+    },
+    Error(String),
+}
+
 // ─── Routing Types ─────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1429,17 +1515,95 @@ pub struct RoutingPolicy {
 /// routing, synthesis, etc.). Extend additively; the UI should
 /// fallback gracefully for unknown variants (via `#[serde(other)]`
 /// on the consuming side).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Two families coexist:
+///
+/// - **Legacy single-stage variants** (`RoutingCommitted`,
+///   `PrimarySynthesisStart`, `GapCheckFired`, `RetrievalComplete`)
+///   were emitted by the pre-team-pipeline dispatch path. They are
+///   kept so existing callers and tests work unchanged.
+/// - **Team-pipeline stage frames** (`RoutingStart` /
+///   `RoutingComplete`, `RetrievalStart`, `CurationStart` /
+///   `CurationComplete`, `DraftingStart` / `DraftingComplete`,
+///   `PresentationStart` / `PresentationComplete`, `StageError`)
+///   are emitted by the five-stage pipeline introduced by the
+///   situated-team plan. The desktop renders each as an inline
+///   chip; payloads label the chip ("Curated 5 of 18 chunks").
+///
+/// `RetrievalComplete` was migrated from a unit variant to a struct
+/// variant — emit sites must now supply `chunks_in` and `corpora`.
+/// The Copy derive was dropped because struct variants with `String`
+/// / `Vec` payloads cannot be Copy; all known consumers move or
+/// clone.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NarrationPhase {
+    // ── Legacy (single-stage) variants ────────────────────────
     /// Routing committed, substantive work about to begin.
     RoutingCommitted,
-    /// Corpus/mesh retrieval finished; narration reports the shape.
-    RetrievalComplete,
     /// Primary-slot synthesis beginning (Slow path).
     PrimarySynthesisStart,
     /// Gap-check fired and found a missing piece.
     GapCheckFired,
+
+    // ── Team-pipeline stage frames ────────────────────────────
+    /// Router invocation began. Pairs with `RoutingComplete`.
+    RoutingStart,
+    /// Router classified the turn. Carries the verdict so the
+    /// desktop can label the stage chip.
+    RoutingComplete {
+        intent: String,
+        register: String,
+        confidence: f32,
+    },
+    /// Retriever began (vector + FTS + atlas).
+    RetrievalStart,
+    /// Retrieval finished. Carries shape so the chip can read
+    /// e.g. "Read 12 chunks across [sep, wikipedia]". Migrated
+    /// from the legacy unit variant; on the wire this is a struct
+    /// variant under `#[serde(rename_all = "snake_case")]`.
+    RetrievalComplete {
+        chunks_in: usize,
+        corpora: Vec<String>,
+    },
+    /// Curator began (Fast slot, structured output).
+    CurationStart,
+    /// Curator finished. `chunks_kept` is the number that
+    /// survived curation; `skeleton` is the ordered list of
+    /// section labels the Drafter will fill; `sufficient` is the
+    /// glass-box honesty signal — `false` short-circuits the
+    /// Drafter and routes the Presenter to an honest "I don't
+    /// have grounding for this" message.
+    CurationComplete {
+        chunks_kept: usize,
+        skeleton: Vec<String>,
+        sufficient: bool,
+    },
+    /// Drafter began (Primary slot).
+    DraftingStart,
+    /// Drafter finished. `tokens` is `completion_tokens`;
+    /// `finish_reason` is the OpenAI-style `stop` / `length` /
+    /// `cancelled` / `error`, sourced from the typed
+    /// `StreamFrame::Finish` introduced in the Phase 1.1 plumbing.
+    DraftingComplete {
+        tokens: u32,
+        finish_reason: String,
+    },
+    /// Presenter began (Fast slot, voice-shaping pass).
+    PresentationStart,
+    /// Presenter finished. `judge_score` is the optional
+    /// post-presentation voice-judge score (None when register
+    /// is Factual or the judge is disabled). Arrives on a
+    /// delayed narration frame from the async judge task.
+    PresentationComplete {
+        judge_score: Option<u8>,
+    },
+    /// Any stage emitted an error. The pipeline records this for
+    /// telemetry; user-facing messaging is decided per stage.
+    StageError {
+        stage: String,
+        error: String,
+    },
 }
 
 /// One narration entry emitted in the model's voice during a long

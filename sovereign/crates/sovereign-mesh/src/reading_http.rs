@@ -73,6 +73,56 @@ pub struct ChunkRecord {
     /// desktop can display extractor-specific fields without the
     /// HTTP layer needing to know about every extractor's shape.
     pub metadata: serde_json::Value,
+    /// Populated only when `corpus_id == "conversation-history"`.
+    /// The reading surface reads this to render conversation chunks
+    /// as role-tagged segments instead of book paragraphs and to
+    /// expose a "View conversation" jump back to the chat. `None`
+    /// for every other corpus (book / SEP / Wikipedia / catalog).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<ConversationChunkMeta>,
+}
+
+/// Conversation-shaped metadata derived from a
+/// `conversation-history` corpus chunk. The chunk's content is the
+/// recipe-built `[role] message\n\n[role] message…` string, so the
+/// segments here are produced by parsing that delimiter — no
+/// schema change in the underlying corpus, just a frontend-friendly
+/// view of the same bytes.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConversationChunkMeta {
+    /// The owning conversation's id. Equal to `source_doc_id` on
+    /// the chunk; surfaced explicitly so the desktop can wire the
+    /// "View conversation" button without re-deriving from
+    /// `source_doc_id` (which is "untyped" — could mean different
+    /// things for different corpora).
+    pub conversation_id: String,
+    /// User-or-system-set conversation title, when available.
+    /// Resolved at request time from the `conversations` table via
+    /// the daemon's `StateStore`. `None` means the conversation has
+    /// no title yet (auto-titling pending) or the lookup failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// Last-modified epoch seconds, sourced from the same store
+    /// lookup. `None` when the lookup is unavailable. The desktop
+    /// uses this to render a "Last updated <date>" line in the
+    /// breadcrumb.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<i64>,
+    /// Role-tagged segments parsed from the chunk content. Empty
+    /// when the chunk's content doesn't carry the recipe's
+    /// `[role] …\n\n[role] …` format (defensive — degrades to
+    /// raw-text rendering on the frontend).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<ConversationSegment>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ConversationSegment {
+    /// Either `"user"`, `"assistant"`, or `"system"`. The recipe
+    /// writes whatever the messages table holds in `role`; we don't
+    /// reinterpret beyond preserving the raw value.
+    pub role: String,
+    pub content: String,
 }
 
 /// Wire shape mirrors `corpus_engine::atlas_traversal::AtomSpan`.
@@ -212,19 +262,19 @@ pub struct SectionRef {
 pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route(
-            "/internal/corpus/:corpus/chunks/:chunk_id",
+            "/internal/corpus/{corpus}/chunks/{chunk_id}",
             get(get_chunk),
         )
         .route(
-            "/internal/corpus/:corpus/chunks/:chunk_id/neighbors",
+            "/internal/corpus/{corpus}/chunks/{chunk_id}/neighbors",
             get(get_neighbors),
         )
         .route(
-            "/internal/corpus/:corpus/atoms/:atom_id",
+            "/internal/corpus/{corpus}/atoms/{atom_id}",
             get(get_atom_card),
         )
         .route(
-            "/internal/corpus/:corpus/atoms/:atom_id/elsewhere",
+            "/internal/corpus/{corpus}/atoms/{atom_id}/elsewhere",
             get(get_atom_elsewhere),
         )
         .layer(axum::middleware::from_fn(crate::loopback_guard::loopback_only))
@@ -269,7 +319,9 @@ async fn get_chunk(
         return not_found("chunk not found");
     };
     let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
-    let record = chunk_record_from_row(&corpus, &row, atlas_atoms.as_deref());
+    let conv = maybe_resolve_conversation_meta(&daemon, &corpus, &row).await;
+    let record =
+        chunk_record_from_row_with_conv(&corpus, &row, atlas_atoms.as_deref(), conv);
     (StatusCode::OK, Json(record)).into_response()
 }
 
@@ -303,18 +355,28 @@ async fn get_neighbors(
     let atlas_atoms = load_atlas_atoms(&engine, &corpus).await;
     let atoms_ref = atlas_atoms.as_deref();
 
-    let center = chunk_record_from_row(&corpus, &window.center, atoms_ref);
+    // Conversation augmentation: resolve once per chunk in the
+    // window. The store lookup is keyed on `source_doc_id` so
+    // adjacent paragraphs in the same conversation incur the same
+    // (cheap) SQLite hit; we don't bother memoising across the
+    // three-chunk radius.
+    let center_conv =
+        maybe_resolve_conversation_meta(&daemon, &corpus, &window.center).await;
+    let center =
+        chunk_record_from_row_with_conv(&corpus, &window.center, atoms_ref, center_conv);
     let outbound_url = center.url.clone();
-    let prev = window
-        .prev
-        .iter()
-        .map(|r| chunk_record_from_row(&corpus, r, atoms_ref))
-        .collect();
-    let next = window
-        .next
-        .iter()
-        .map(|r| chunk_record_from_row(&corpus, r, atoms_ref))
-        .collect();
+    let mut prev_records = Vec::with_capacity(window.prev.len());
+    for r in &window.prev {
+        let conv = maybe_resolve_conversation_meta(&daemon, &corpus, r).await;
+        prev_records.push(chunk_record_from_row_with_conv(&corpus, r, atoms_ref, conv));
+    }
+    let prev = prev_records;
+    let mut next_records = Vec::with_capacity(window.next.len());
+    for r in &window.next {
+        let conv = maybe_resolve_conversation_meta(&daemon, &corpus, r).await;
+        next_records.push(chunk_record_from_row_with_conv(&corpus, r, atoms_ref, conv));
+    }
+    let next = next_records;
 
     let response = NeighborWindowResponse {
         center,
@@ -677,10 +739,11 @@ fn cross_corpus_links_for_atom(
         .collect()
 }
 
-pub(crate) fn chunk_record_from_row(
+pub(crate) fn chunk_record_from_row_with_conv(
     corpus_id: &str,
     row: &EnrichmentChunkRow,
     atoms: Option<&[AtomEnvelope]>,
+    conversation: Option<ConversationChunkMeta>,
 ) -> ChunkRecord {
     let metadata: serde_json::Value = row
         .metadata_raw
@@ -711,7 +774,101 @@ pub(crate) fn chunk_record_from_row(
         section_id,
         atom_spans,
         metadata,
+        conversation,
     }
+}
+
+/// The `conversation-history` corpus_id is special-cased on the
+/// reading surface. Centralised here so handlers don't repeat the
+/// magic string and a future view-id rename has one site to update.
+pub(crate) const CONVERSATION_HISTORY_CORPUS_ID: &str = "conversation-history";
+
+/// Parse the recipe's `[role] msg\n\n[role] msg…` chunk content
+/// into role-tagged segments. Returns an empty vector when the
+/// content doesn't carry the leading `[role]` marker, so the
+/// frontend can fall back to plain rendering on legacy / non-
+/// conversation chunks misclassified as conversation.
+pub(crate) fn parse_conversation_segments(content: &str) -> Vec<ConversationSegment> {
+    // Recipe writes the marker at the start of every line that
+    // begins a message. Splitting on `\n\n[` (after stripping the
+    // initial `[`) recovers the per-message blocks robustly even
+    // when a message body contains lone `[` characters.
+    if !content.starts_with('[') {
+        return Vec::new();
+    }
+    let mut segments: Vec<ConversationSegment> = Vec::new();
+    // Walk the content message-by-message. Each message begins at
+    // `[` and runs until the next `\n\n[` (or end-of-string).
+    let mut idx = 0usize;
+    while idx < content.len() {
+        if !content[idx..].starts_with('[') {
+            break;
+        }
+        // Find the closing `]` of the role tag.
+        let role_close = match content[idx + 1..].find(']') {
+            Some(rel) => idx + 1 + rel,
+            None => break, // malformed — bail
+        };
+        let role = content[idx + 1..role_close].to_string();
+        // Body starts after `] ` (the recipe inserts a space) but
+        // we accept `]` alone too.
+        let body_start = if content[role_close + 1..].starts_with(' ') {
+            role_close + 2
+        } else {
+            role_close + 1
+        };
+        // Body ends at `\n\n[` or end of content.
+        let body_end = match content[body_start..].find("\n\n[") {
+            Some(rel) => body_start + rel,
+            None => content.len(),
+        };
+        let body = content[body_start..body_end].to_string();
+        if !role.is_empty() {
+            segments.push(ConversationSegment {
+                role,
+                content: body,
+            });
+        }
+        // Advance past the trailing `\n\n` separator.
+        idx = if body_end == content.len() {
+            content.len()
+        } else {
+            body_end + 2 // skip "\n\n", land on `[`
+        };
+    }
+    segments
+}
+
+/// Look up conversation metadata for a chunk, when applicable.
+/// Returns `None` for non-conversation corpora and for conversation
+/// chunks whose `source_doc_id` couldn't be resolved (deleted
+/// conversation, store unavailable). Errors are swallowed because
+/// the reading surface should still render the chunk text even when
+/// the augmentation fails — a partial card beats a failed request.
+pub(crate) async fn maybe_resolve_conversation_meta(
+    daemon: &EmbeddedDaemon,
+    corpus_id: &str,
+    row: &EnrichmentChunkRow,
+) -> Option<ConversationChunkMeta> {
+    if corpus_id != CONVERSATION_HISTORY_CORPUS_ID {
+        return None;
+    }
+    let conversation_id = row.source_doc_id.clone()?;
+    let segments = parse_conversation_segments(&row.content);
+    let store = daemon.state_store().await;
+    let (title, updated_at) = match store {
+        Some(s) => match s.get_conversation(&conversation_id).await {
+            Ok(c) => (c.title.clone(), Some(c.updated_at)),
+            Err(_) => (None, None),
+        },
+        None => (None, None),
+    };
+    Some(ConversationChunkMeta {
+        conversation_id,
+        title,
+        updated_at,
+        segments,
+    })
 }
 
 fn not_found(msg: &str) -> axum::response::Response {
@@ -757,7 +914,8 @@ mod tests {
             metadata_raw: Some(r#"{"section_id":"sec_0001","other":"x"}"#.into()),
             source_doc_id: Some("brothers_karamazov".into()),
         };
-        let record = chunk_record_from_row("brothers_karamazov", &row, None);
+        let record =
+            chunk_record_from_row_with_conv("brothers_karamazov", &row, None, None);
         assert_eq!(record.chunk_id, 7);
         assert_eq!(record.section_id.as_deref(), Some("sec_0001"));
         assert_eq!(record.source_doc_id.as_deref(), Some("brothers_karamazov"));
@@ -774,9 +932,71 @@ mod tests {
             metadata_raw: None,
             source_doc_id: None,
         };
-        let record = chunk_record_from_row("any", &row, None);
+        let record = chunk_record_from_row_with_conv("any", &row, None, None);
         assert!(record.section_id.is_none());
         assert_eq!(record.metadata, serde_json::json!({}));
         assert!(record.atom_spans.is_empty());
+        assert!(
+            record.conversation.is_none(),
+            "non-conversation corpora must not populate conversation meta"
+        );
+    }
+
+    #[test]
+    fn parse_conversation_segments_handles_two_message_chunk() {
+        let content = "[user] How does Schrödinger frame negative entropy?\n\n\
+                       [assistant] He argues life sustains order by feeding on it.";
+        let segs = parse_conversation_segments(content);
+        assert_eq!(segs.len(), 2);
+        assert_eq!(segs[0].role, "user");
+        assert_eq!(
+            segs[0].content,
+            "How does Schrödinger frame negative entropy?"
+        );
+        assert_eq!(segs[1].role, "assistant");
+        assert_eq!(
+            segs[1].content,
+            "He argues life sustains order by feeding on it."
+        );
+    }
+
+    #[test]
+    fn parse_conversation_segments_handles_three_messages_with_inline_brackets() {
+        // Body containing a lone `[` must NOT be treated as a new
+        // role tag — the splitter only re-arms after `\n\n[`.
+        let content = "[user] What about [bracket] inside?\n\n\
+                       [assistant] Brackets like [foo] in prose stay attached.\n\n\
+                       [user] Got it.";
+        let segs = parse_conversation_segments(content);
+        assert_eq!(segs.len(), 3);
+        assert_eq!(segs[0].content, "What about [bracket] inside?");
+        assert_eq!(segs[1].content, "Brackets like [foo] in prose stay attached.");
+        assert_eq!(segs[2].content, "Got it.");
+    }
+
+    #[test]
+    fn parse_conversation_segments_returns_empty_on_non_role_content() {
+        // A chunk that doesn't start with `[role]` (e.g. mid-section
+        // chunk from a different corpus or legacy ingest) returns
+        // empty so the frontend renders the raw content.
+        let content = "Plain prose paragraph without role markers.";
+        assert!(parse_conversation_segments(content).is_empty());
+    }
+
+    #[test]
+    fn parse_conversation_segments_handles_empty_string() {
+        assert!(parse_conversation_segments("").is_empty());
+    }
+
+    #[test]
+    fn parse_conversation_segments_handles_malformed_role_tag() {
+        // `[user` (missing close bracket) is malformed — return what
+        // we got rather than panic.
+        let content = "[user no close bracket";
+        let segs = parse_conversation_segments(content);
+        assert!(
+            segs.is_empty(),
+            "malformed role tag should not produce a segment"
+        );
     }
 }

@@ -171,6 +171,7 @@ pub async fn run_one_round(
         now,
         availability,
         embed_model,
+        Some(app_state),
     )
     .await;
     // Step 1: touch self + decay stale peers. One write-lock window.

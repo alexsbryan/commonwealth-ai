@@ -1,0 +1,848 @@
+{
+  "started_at_unix": 1777852372,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "",
+      "length": {
+        "enabled": true,
+        "response_chars": 0,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "**, etc.), AI disclaimers (\"As an AI...\"), User address openings (\"You're asking me...\" as opening lines).\n        *   Keep verbatim: Names (Jordan, Mark, Sam, Aleksei, Devi), Dates (\"March 22nd\", \"since February\"), Counts (\"only one mention\"), Honesty phrases (\"I don't have enough\"), Calibration markers (\"you told me\").\n    *   Goal: Preserve substance, excise patterns, no padding.\n\n2.  **Analyze the Draft Content:**\n    *   Paragraph 1: Lists confirmed interactions involving Jordan (dates March 4th, April 2nd, March 19",
+      "length": {
+        "enabled": true,
+        "response_chars": 526,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "As an AI"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you told me",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "Let me analyze the draft against all the cut patterns:\n\n1. \"It sounds like you're feeling…\", \"I hear you saying…\", \"What I'm hearing is…\" - None present\n2. \"perhaps the question isn't X but Y\", \"the deeper question is…\", \"sometimes what we actually want is…\" - None present  \n3. \"thoughtful question\", \"beautiful insight\", \"genuine question\" - None present\n4. \"That makes sense\", \"That's understandable\", \"Whatever you decide is valid\" - First sentence starts with \"makes complete sense psychologically\"—this needs cutting or modification to avoid this exact phrasing pattern\n5. \"Does that make sense?\", \"What do you think?\", \"Want me to go deeper?\", \"What would actually help move this forward?\" - Last paragraph has similar language (\"help you explore\") which could be trimmed but isn't exactly the cut list\n\n6. \"---\", \"**Rewritten Response:**\", \"**Response:**\", \"**Analysis:**\" - Present at top, must remove\n7. \"As an AI…\", \"I'm just a language model…\" - Not present\n8. Opening lines: \"You're asking me…\", \"You've put yourself on notice…\", \"You've shown up as…\" - None present (starts with \"The weight...\")\n\nWitness anchors to preserve:\n- Names: Jordan, Mark, Sam, Aleksei, Devi — none in this draft\n- Dates: March 22nd, since February, last month — none in this draft",
+      "length": {
+        "enabled": true,
+        "response_chars": 1271,
+        "max_chars": 900,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 4,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "As an AI",
+          "I'm just a language model",
+          "It sounds like you're feeling"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "**\", etc.; \"As an AI…\", \"I'm just a language model…\"; Opening lines like \"You're asking me…\" or similar.\n    *   Anchors to Keep: Names (Manny, KiKe, Darnell), Dates (\"March 22nd\", etc.), Counts (\"only one mention\"), Honesty phrases (\"I don't have enough\"), Calibration markers (\"you told me\"). Note: The draft doesn't explicitly contain",
+      "length": {
+        "enabled": true,
+        "response_chars": 337,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "As an AI"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "Let me analyze this draft against the cutting rules:\n\n**Patterns to cut:**\n1. \"It sounds like you're feeling…\" - Not present in draft (but there's similar phrasing)\n2. \"I hear you saying…\" - Present: \"I hear that you're experiencing grief\" → needs change\n3. \"What I'm hearing is…\" - Not present directly, but close equivalents exist\n\n4. \"perhaps the question isn't X but Y\", \"the deeper question is…\", \"sometimes what we actually want is…\" - Not found as exact phrases\n\n5. \"thoughtful question\", \"beautiful insight\", \"genuine question\" - Not present\n\n6. \"That makes sense\", \"That's understandable\", \"Whatever you decide is valid\" - Not present\n\n7. \"Does that make sense?\", \"What do you think?\", \"Want me to go deeper?\", \"What would actually help move this forward?\" - Not present\n\n8. \"---\", \"**Rewritten Response:**\", \"**Response:**\", \"**Analysis:**\" - Present: `---` and `**Response:**` → needs removal\n\n9. \"As an AI…\", \"I'm just a language model…\" - Not found as opening lines, but there are similar disclosures later\n\n10. \"You're asking me…\", \"You've put yourself on notice…\", \"You've shown up as…\" as opening lines - Not used here\n\n**Witness anchors to keep verbatim:**\n- Names (Jordan, Mark, Sam, Aleksei, Devi) - None in",
+      "length": {
+        "enabled": true,
+        "response_chars": 1226,
+        "max_chars": 350,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 4,
+        "min": 0,
+        "max": 1,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "As an AI",
+          "I hear you saying",
+          "It sounds like you're feeling",
+          "perhaps the question isn't",
+          "the deeper question",
+          "thoughtful question"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "",
+      "length": {
+        "enabled": true,
+        "response_chars": 0,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "",
+      "length": {
+        "enabled": true,
+        "response_chars": 0,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "",
+      "length": {
+        "enabled": true,
+        "response_chars": 0,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "09-edge-of-competence-legal",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "Let me analyze the draft and identify all patterns that need to be cut:\n\n**Patterns to remove:**\n1. \"It sounds like you're feeling…\" - Not present in this draft\n2. \"I hear you saying…\" - Not present\n3. \"What I'm hearing is…\" - Not present\n4. \"perhaps the question isn't X but Y\" - Not present\n5. \"the deeper question is…\" - Not present\n6. \"sometimes what we actually want is…\" - Not present\n7. \"thoughtful question\", \"beautiful insight\", \"genuine question\" - None of these phrases appear\n8. \"That makes sense\", \"That's understandable\", \"Whatever you decide is valid\" - None appear\n9. \"Does that make sense?\", \"What do you think?\", \"Want me to go deeper?\", \"What would actually help move this forward?\" - None appear\n10. \"---\" - This separator needs removal (it was used in the draft)\n11. \"**Rewritten Response:**\", \"**Response:**\", \"**Analysis:**\" - The `## Response` and `### Section 0: Legal Framework for Deposits` headers need consideration, but they're not explicitly listed as patterns to remove. However, I should check if these count as markdown labels...\n\nLooking at the instructions again: \"- \\\"---\\\", \\\"**Rewritten Response:**\\\", \\\"**Response:**\\\", \\\"**Analysis:**\\\", any markdown label\"\n\nSo \"any markdown label\" is included. That means section headers like `### Section 0",
+      "length": {
+        "enabled": true,
+        "response_chars": 1283,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 4,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "**\", etc.).\n        *   Keep verbatim witness anchors (names, dates, counts, honesty phrases, calibration markers).\n        *   No preamble or explanation.\n\n2.  **Analyze the Draft:**\n    *   Paragraph 1: Empathy statement (\"I hear how frustrating...\"). Contains pattern \"I hear\". Needs modification to avoid \"I hear\" if it falls under the cut list? Wait, looking at the cut list: `\"It sounds like you're feeling…\", \"I hear you saying…\", \"What I'm hearing is…\"`. The draft uses \"I hear how frustrating...\", which isn't exactly one of those strings, but it's close enough in spirit to be considered a conversational opener that might need adjustment based on strict adherence. However, the instruction says \"Cut these patterns wherever they appear\". Since \"I hear how...\" isn't explicitly listed as a forbidden string (only \"I hear you saying...\"), technically I could keep it. But usually, these prompts imply removing empathetic framing clichés. Let's",
+      "length": {
+        "enabled": true,
+        "response_chars": 952,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "It sounds like you're feeling"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you say",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "Let me analyze the draft carefully to identify what needs polishing and what must be preserved.\n\n**Patterns to cut:**\n1. \"It sounds like you're feeling…\", \"I hear you saying…\", \"What I'm hearing is…\" - None appear in this draft\n2. \"perhaps the question isn't X but Y\", \"the deeper question is…\", \"sometimes what we actually want is…\" - Not present\n3. \"thoughtful question\", \"beautiful insight\", \"genuine question\" - Not present\n4. \"That makes sense\", \"That's understandable\", \"Whatever you decide is valid\" - Not present\n5. \"Does that make sense?\", \"What do you think?\", \"Want me to go deeper?\", \"What would actually help move this forward?\" - Not present\n6. \"---\", \"**Rewritten Response:**\", \"**Response:**\", \"**Analysis:**\", any markdown label - The draft has `# Response Generation`, `## Analysis & Reasoning` which are section headers, not labels I should remove per the instructions (the instruction says these specific patterns)\n7. \"As an AI…\", \"I'm just a language model…\" - None appear\n8. \"You're asking me…\", \"You've put yourself on notice…\", \"You've shown up as…\" as opening lines - None used\n\n**Witness anchors to keep verbatim:**\n- Names: Devi ✓\n- Dates: 2026-01-31 and 2025-09-14 ✓\n- Counts",
+      "length": {
+        "enabled": true,
+        "response_chars": 1203,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 4,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "As an AI",
+          "I'm just a language model"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "Let me analyze the draft and apply all the constraints:\n\n1. **Delete patterns:**\n   - \"I'm going to address your question honestly based on what's available:\" → This is a framing line, not one of the listed patterns, but I should check if it needs adjustment\n   \n2. **Keep verbatim anchors:**\n   - Names: None in this draft (Jordan, Mark, Sam, Aleksei, Devi)\n   - Dates: None (\"March 22nd\", \"since February\")\n   - Counts: None (\"only one mention\", etc.)\n   - Honesty phrases: \"The retrieved chunks don't actually contain\" ✓, \"none of which include *your* specific self-reflection\" ✓\n   - Calibration markers: None present\n\n3. **Check for forbidden opening lines:**\n   - \"As an AI…\" → Not used\n   - \"I'm just a language model…\" → Not used  \n   - \"You're asking me…\" → Not used as opener\n   - \"You've put yourself on notice…\" → Not used\n   - \"You've shown up as…\" → Not used\n   \n4. **Check for markdown labels to remove:**\n   - \"**Honest acknowledgment:**\" → Remove this label\n   - \"**What I can tell you directly:**\" → Remove this label\n   - \"**How such reflections typically manifest:**\" → Remove this label\n\n5. **Three short paragraphs maximum** ✓ (already has 3)\n\n6. No padding, keep it tight\n\nThe draft is already",
+      "length": {
+        "enabled": true,
+        "response_chars": 1216,
+        "max_chars": 500,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "As an AI",
+          "I'm just a language model"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 3,
+      "right_edge": 1,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 5,
+      "rationale": ""
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 0,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 3,
+      "rationale": ""
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 1,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 4,
+      "rationale": "The response is a meta-analysis of the candidate's own writing rather than an actual engagement with the user's emotional question about job decision weight."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 5,
+      "rationale": ""
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 2,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response fails to notice the specific relationship context or offer focused inquiry; it defaults to generic therapeutic framing with over-affirmation and AI disclaimers while attempting multiple questions that don't change subsequent conversation."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 5,
+      "rationale": "The response is entirely generic framework advice with no engagement to the user's specific situation; it opens a generic question but never answers anything substantive and includes multiple avoid-list patterns including therapist register language ('I'm glad you're reaching out'), wisdom voice framing about career growth being cyclical, over-affirmation calling their goal 'ambitious', plus generic AI disclaimers."
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 2,
+      "right_calibration": 0,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 1,
+      "right_edge": 3,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 4,
+      "rationale": "The response correctly identifies the medical urgency (chest pain + anxiety) and directs to professional help while avoiding therapeutic clichés."
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 2,
+      "right_calibration": 0,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The candidate failed to notice that the user was asking for legal analysis while it provided a meta-analysis of its own writing patterns; responses about what 'draft' contained and whether markdown headers should be removed are not right attention. It gave generic advice without calibration between law vs personal relationship dynamics (disagreement axis). The question only appeared twice with filler intent rather than changing direction."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 3,
+      "right_disagreement": 1,
+      "right_edge": 3,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 0,
+      "rationale": ""
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 1,
+      "right_silence": 3,
+      "right_disagreement": 1,
+      "right_edge": 2,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 7,
+      "rationale": "The response is a meta-critique of itself rather than an actual exchange with the user about their question; it fails attention and specificity while hitting nearly every avoid-list pattern (AI disclaimers, wisdom voice framing, over-affirmation markers)."
+    }
+  ],
+  "runtime_ms": [
+    27535,
+    37338,
+    24858,
+    25435,
+    33916,
+    31177,
+    24563,
+    20993,
+    42181,
+    30045,
+    27102,
+    30613
+  ],
+  "judge_ms": [
+    14482,
+    16300,
+    14800,
+    14269,
+    12466,
+    12609,
+    21152,
+    18064,
+    22768,
+    18809,
+    14125,
+    20620
+  ],
+  "stage_metrics": [
+    {
+      "routing_ms": 3182,
+      "memory_recall_ms": 184,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3182,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1243,
+      "tensions_ms": 0,
+      "total_turn_ms": 27534
+    },
+    {
+      "routing_ms": 3544,
+      "memory_recall_ms": 333,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3543,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1165,
+      "tensions_ms": 8714,
+      "total_turn_ms": 37336
+    },
+    {
+      "routing_ms": 3316,
+      "memory_recall_ms": 279,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3315,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1131,
+      "tensions_ms": 699,
+      "total_turn_ms": 24857
+    },
+    {
+      "routing_ms": 3327,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3326,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1114,
+      "tensions_ms": 0,
+      "total_turn_ms": 25434
+    },
+    {
+      "routing_ms": 3367,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3366,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1118,
+      "tensions_ms": 0,
+      "total_turn_ms": 33915
+    },
+    {
+      "routing_ms": 3190,
+      "memory_recall_ms": 275,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3190,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1141,
+      "tensions_ms": 1252,
+      "total_turn_ms": 31175
+    },
+    {
+      "routing_ms": 3325,
+      "memory_recall_ms": 188,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3325,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1138,
+      "tensions_ms": 1868,
+      "total_turn_ms": 24562
+    },
+    {
+      "routing_ms": 2984,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 2983,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1130,
+      "tensions_ms": 0,
+      "total_turn_ms": 20992
+    },
+    {
+      "routing_ms": 2953,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 2952,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1143,
+      "tensions_ms": 0,
+      "total_turn_ms": 42180
+    },
+    {
+      "routing_ms": 3373,
+      "memory_recall_ms": 180,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3372,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1130,
+      "tensions_ms": 1490,
+      "total_turn_ms": 30043
+    },
+    {
+      "routing_ms": 0,
+      "memory_recall_ms": 178,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 0,
+        "parse_ms": 0,
+        "used_llm": false
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1124,
+      "tensions_ms": 1212,
+      "total_turn_ms": 27101
+    },
+    {
+      "routing_ms": 3864,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3864,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1135,
+      "tensions_ms": 0,
+      "total_turn_ms": 30611
+    }
+  ],
+  "aggregate": {
+    "total": 12,
+    "passed": 0,
+    "failed": 12,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 0
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 0
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 0
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 3,
+        "passed": 0
+      },
+      "right-edge": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-self-honesty": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 0
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 0
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 12,
+        "passed": 6
+      },
+      "question_density": {
+        "enabled": 12,
+        "passed": 8
+      },
+      "banned_phrases": {
+        "enabled": 12,
+        "passed": 5
+      },
+      "required_content": {
+        "enabled": 9,
+        "passed": 2
+      }
+    }
+  }
+}

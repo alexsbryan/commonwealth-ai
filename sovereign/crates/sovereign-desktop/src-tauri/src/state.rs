@@ -144,6 +144,23 @@ pub struct DesktopConfig {
     /// Default: on. Existing configs without the field read as `true`.
     #[serde(default = "default_knowledge_view_enabled")]
     pub knowledge_view_enabled: bool,
+
+    /// Persisted ceiling on how much disk Sovereign is allowed to use
+    /// for corpus storage (sum of `~/.sovereign/indexes/*`). `None`
+    /// means "compute a sensible default at boot from free disk" —
+    /// the desktop's startup hook turns that into a concrete value
+    /// (~100 GiB target, scaled down for tighter machines), persists
+    /// it back here, and pushes the value to the daemon over
+    /// `POST /internal/storage/budget`. Subsequent edits via
+    /// Settings → Knowledge keep both this field and the running
+    /// daemon in sync.
+    ///
+    /// The actual enforcement happens in
+    /// `sovereign-mesh::capabilities::build_local_capabilities` —
+    /// this field is the persistence layer; the runtime control is
+    /// the AppState atomic the daemon owns.
+    #[serde(default)]
+    pub storage_budget_bytes: Option<u64>,
 }
 
 fn default_knowledge_view_enabled() -> bool {
@@ -275,6 +292,7 @@ impl Default for DesktopConfig {
             embed_family: ModelFamily::Unknown,
             node_name: String::new(),
             knowledge_view_enabled: default_knowledge_view_enabled(),
+            storage_budget_bytes: None,
         }
     }
 }
@@ -1040,6 +1058,15 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
     // its own CorpusEngine wired up.
     if let Some(mesh) = state.mesh.as_ref() {
         mesh.set_corpus_engine(Arc::clone(&corpus_engine)).await;
+        // Hand the SQLite store to the embedded daemon too — the
+        // reading-surface HTTP router needs it to resolve
+        // conversation-history chunks back to their owning
+        // conversation (title, updated_at). Cheap (one Arc clone)
+        // and only used by the reading surface; without it
+        // conversation citations render with no title.
+        let store_for_daemon: Arc<dyn sovereign_core::traits::StateStore> =
+            Arc::clone(&store);
+        mesh.set_state_store(store_for_daemon).await;
     }
 
     // Lazy-stamp canonical fingerprints for any installed canonicals

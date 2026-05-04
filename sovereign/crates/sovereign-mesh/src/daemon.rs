@@ -19,7 +19,7 @@ use commonwealth_discovery::membership;
 use corpus_engine::{CorpusEngine, NoteStore};
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_core::traits::InferenceProvider;
+use sovereign_core::traits::{InferenceProvider, StateStore};
 
 use crate::admin_http::{ConfigDiff, ProviderFactory};
 use crate::deep_link::DeepLink;
@@ -134,6 +134,15 @@ pub struct EmbeddedDaemon {
     /// `try_resume`; refreshed on `set_join_key` (called by the
     /// rotate handler); cleared on `stop`.
     join_key_plaintext: RwLock<Option<String>>,
+    /// Optional `StateStore` handle used by the reading-surface HTTP
+    /// router to resolve conversation-history chunks back to their
+    /// owning conversation (title, updated_at). The daemon doesn't
+    /// otherwise need a state store — search/inference goes through
+    /// the runtime — so this slot is only set by the desktop's
+    /// bootstrap when it wants reading-surface conversation
+    /// rendering. `None` means conversation chunks render with no
+    /// title metadata; the surface still shows the chunk text.
+    state_store: RwLock<Option<Arc<dyn StateStore>>>,
 }
 
 enum DaemonState {
@@ -203,6 +212,7 @@ impl EmbeddedDaemon {
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
+            state_store: RwLock::new(None),
         }
     }
 
@@ -226,6 +236,7 @@ impl EmbeddedDaemon {
             setup_config: RwLock::new(None),
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
+            state_store: RwLock::new(None),
         }
     }
 
@@ -440,6 +451,26 @@ impl EmbeddedDaemon {
     /// when bootstrap hasn't installed an engine yet.
     pub async fn corpus_engine(&self) -> Option<Arc<CorpusEngine>> {
         self.corpus_engine.read().await.clone()
+    }
+
+    /// Install the `StateStore` the reading-surface HTTP router uses
+    /// to look up conversation metadata when serving
+    /// `conversation-history` chunks. Same injection-timing
+    /// expectations as `set_corpus_engine`: call from the desktop
+    /// bootstrap once the SQLite store is open, before
+    /// `start_daemon`. Tests / CLI mesh paths skip this and the
+    /// reading surface degrades gracefully (chunk text without a
+    /// resolved conversation title).
+    pub async fn set_state_store(&self, store: Arc<dyn StateStore>) {
+        *self.state_store.write().await = Some(store);
+    }
+
+    /// Borrow the currently-installed `StateStore`, if any.
+    /// `reading_http` calls this when a chunk's `corpus_id` is
+    /// `"conversation-history"` to resolve `source_doc_id` →
+    /// conversation title.
+    pub async fn state_store(&self) -> Option<Arc<dyn StateStore>> {
+        self.state_store.read().await.clone()
     }
 
     /// Install the `InferenceProvider` that answers peer chat

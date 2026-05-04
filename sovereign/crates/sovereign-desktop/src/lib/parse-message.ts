@@ -81,8 +81,24 @@ const POSITION_MAP: Record<string, { name: string; style: PositionStyle }> = {
 export function parseAssistantContent(content: string): ContentBlock[] {
   const blocks: ContentBlock[] = [];
 
-  // Extract think blocks first.
+  // Stray `</think>` repair: when the server-side stream emitted a
+  // closing think tag without a preceding `<think>` (model's chat
+  // template was rendered with `enable_thinking: false` but the model
+  // emitted CoT anyway, OR the THINK_BUDGET enforcement injected a
+  // close into a stream that never opened), synthesise a leading
+  // `<think>` so the content before the stray close folds into a
+  // thinking block instead of leaking into the user-visible text.
+  // The substantive answer that follows the stray close still renders
+  // as paragraphs unchanged.
   let remaining = content;
+  if (
+    remaining.includes(THINK_CLOSE) &&
+    !remaining.includes(THINK_OPEN)
+  ) {
+    remaining = THINK_OPEN + remaining;
+  }
+
+  // Extract think blocks first.
   while (true) {
     const openIdx = remaining.indexOf(THINK_OPEN);
     if (openIdx === -1) break;

@@ -17,11 +17,25 @@
 //!   - `hardware` from `commonwealth_discovery::hardware::detect_hardware()`.
 //!   - `available` — best-effort live readings (free RAM, disk, CPU%).
 //!
+//! ## Storage-budget clamp
+//!
+//! When a per-node storage budget is configured (Settings → Knowledge
+//! in the desktop app, or `POST /internal/storage/budget`), this
+//! module also clamps the published `free_storage_gb` — on both the
+//! static `HardwareProfile` and the live `AvailableResources` — to
+//! `min(actual_free, max(0, budget_remaining))`. The schedulers in
+//! `commonwealth-inference::scheduler::knowledge_assignment` already
+//! drive every distribution decision off `free_storage_gb`, so
+//! lowering this single number at the publish boundary makes the
+//! budget self-enforcing across both local install paths and any
+//! peer-driven shard distribution. There is no second knob to tune.
+//!
 //! Called from `gossip::run_one_round` on every tick so our own
 //! record reflects reality as it changes (a corpus finishes
 //! installing, disk fills up, etc.).
 use std::sync::Arc;
 
+use commonwealth_api::state::AppState;
 use commonwealth_core::capabilities::{
     AvailableResources, HardwareProfile, NodeCapabilities,
 };
@@ -39,18 +53,77 @@ use corpus_engine::engine::CorpusEngine;
 /// gating the whole gossip round on corpus availability. The
 /// hardware profile is still populated so peers at least know our
 /// shape before we publish our corpus inventory.
+///
+/// `app_state` is optional too. When present (the production path),
+/// the storage budget — if any — is read off it and used to clamp
+/// `free_storage_gb`, and the freshly-summed corpus usage is written
+/// back into the AppState atomic so `GET /internal/storage/budget`
+/// can serve it. When `None` (older callers / tests that haven't
+/// been updated), the no-clamp behaviour matches the original.
 pub async fn build_local_capabilities(
     engine: Option<&Arc<CorpusEngine>>,
     now_secs: u64,
     inference_availability: f32,
     embed_model: Option<EmbedModelInfo>,
+    app_state: Option<&AppState>,
 ) -> NodeCapabilities {
-    let hardware = hardware::detect_hardware();
-    let available = live_available_resources(&hardware);
-    let hosted_corpora = match engine {
-        Some(e) => build_hosted_corpora(e).await,
-        None => Vec::new(),
+    let mut hardware = hardware::detect_hardware();
+    // Walk the engine once, share the result between
+    // `build_hosted_corpora` (CorpusShardInfo set) and the storage-
+    // usage calc (sum of `index_size_bytes`). Walking the index
+    // directory twice per gossip tick is wasteful and would also
+    // race — the second read could see a different set of corpora
+    // than the first.
+    let installed = match engine {
+        Some(e) => match e.installed_indexes().await {
+            Ok(idxs) => Some(idxs),
+            Err(err) => {
+                // Don't break gossip over a transient filesystem read
+                // error — publish no corpora this round and treat
+                // storage_used as 0 (so the budget clamp doesn't
+                // accidentally cap publish to "no headroom" while we
+                // can't even see the indexes). The next round retries.
+                tracing::warn!(error = %err, "capabilities: installed_indexes failed");
+                None
+            }
+        },
+        None => None,
     };
+    let storage_used_bytes: u64 = installed
+        .as_deref()
+        .map(|idxs| idxs.iter().map(|i| i.index_size_bytes).sum())
+        .unwrap_or(0);
+    let hosted_corpora = match (engine, installed.as_deref()) {
+        (Some(e), Some(idxs)) => build_hosted_corpora(e, idxs).await,
+        _ => Vec::new(),
+    };
+
+    // Apply the storage-budget clamp before live_available_resources
+    // so both the static `HardwareProfile.free_storage_gb` and the
+    // live `AvailableResources.free_storage_gb` see the same ceiling.
+    // Schedulers read both depending on path; clamping just one would
+    // leak unbounded capacity through whichever channel was missed.
+    let budget_remaining = if let Some(state) = app_state {
+        state.set_storage_used_bytes(storage_used_bytes);
+        state.storage_remaining_bytes()
+    } else {
+        None
+    };
+    let actual_free_gb = hardware.free_storage_gb;
+    if let Some(remaining) = budget_remaining {
+        let remaining_gb = (remaining / 1_073_741_824) as u32;
+        if remaining_gb < hardware.free_storage_gb {
+            tracing::info!(
+                actual_free_gb,
+                budget_remaining_gb = remaining_gb,
+                used_gb = (storage_used_bytes / 1_073_741_824),
+                "storage_budget: clamping published free_storage_gb to budget remaining"
+            );
+            hardware.free_storage_gb = remaining_gb;
+        }
+    }
+    let available = live_available_resources(&hardware, budget_remaining);
+
     NodeCapabilities {
         hardware,
         available,
@@ -97,11 +170,14 @@ pub async fn build_local_capabilities(
 /// `IndexInfo.query_sharing` is resolved at open-time — an index
 /// whose on-disk meta predates this split falls back to
 /// `mesh_sharing` automatically, preserving pre-split behavior.
-async fn build_hosted_corpora(engine: &CorpusEngine) -> Vec<CorpusShardInfo> {
+async fn build_hosted_corpora(
+    engine: &CorpusEngine,
+    indexes: &[corpus_engine::IndexInfo],
+) -> Vec<CorpusShardInfo> {
     let indexes_dir = engine.index_dir().to_path_buf();
-    match engine.installed_indexes().await {
-        Ok(indexes) => indexes
-            .into_iter()
+    indexes
+            .iter()
+            .cloned()
             .filter(|idx| idx.query_sharing)
             .map(|idx| {
                 // Phase C1: read the atlas summary if the corpus
@@ -146,23 +222,32 @@ async fn build_hosted_corpora(engine: &CorpusEngine) -> Vec<CorpusShardInfo> {
                     atlas_fingerprint: fingerprint,
                 }
             })
-            .collect(),
-        Err(e) => {
-            // Don't break gossip over a transient filesystem read
-            // error — just publish no corpora this round. The next
-            // round will retry.
-            tracing::warn!(error = %e, "capabilities: installed_indexes failed");
-            Vec::new()
-        }
-    }
+            .collect()
 }
 
 /// Best-effort live resource snapshot. Numbers drift between rounds
 /// (that's the whole point — the scheduler wants to know when a node
 /// suddenly has free VRAM) but individual samples are approximate.
-fn live_available_resources(hw: &HardwareProfile) -> AvailableResources {
+///
+/// `budget_remaining_bytes` is `Some` whenever the operator has set a
+/// storage budget; we clamp the live `free_storage_gb` reading down
+/// to it so live readings stay consistent with the static
+/// `HardwareProfile.free_storage_gb` clamp the caller already
+/// applied. Without this second clamp, the schedulers that reach for
+/// `AvailableResources.free_storage_gb` would see uncapped capacity
+/// even though the budget is set.
+fn live_available_resources(
+    hw: &HardwareProfile,
+    budget_remaining_bytes: Option<u64>,
+) -> AvailableResources {
     let (cpu_util, free_ram_gb) = hardware::read_cpu_ram_state();
-    let free_storage_gb = hardware::read_disk_state();
+    let mut free_storage_gb = hardware::read_disk_state();
+    if let Some(remaining) = budget_remaining_bytes {
+        let remaining_gb = (remaining / 1_073_741_824) as f32;
+        if remaining_gb < free_storage_gb {
+            free_storage_gb = remaining_gb;
+        }
+    }
 
     // GPU state: NVIDIA is the only vendor we can query cheaply here
     // without spawning a heavier process — and when there are no
@@ -187,5 +272,61 @@ fn live_available_resources(hw: &HardwareProfile) -> AvailableResources {
         gpu_utilization: gpu_util,
         cpu_utilization: cpu_util,
         available_for_mesh: true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn live_available_resources_clamps_free_storage_when_budget_lower() {
+        let hw = HardwareProfile {
+            gpus: vec![],
+            system_ram_gb: 16,
+            cpu_cores: 4,
+            total_storage_gb: 500,
+            free_storage_gb: 0, // unused by this fn
+            network_bandwidth_mbps: None,
+        };
+        // 1 GiB remaining — well below whatever real disk reports.
+        let avail = live_available_resources(&hw, Some(1_073_741_824));
+        assert!(
+            avail.free_storage_gb <= 1.0,
+            "budget remaining of 1 GiB must clamp live free_storage_gb to ≤ 1, got {}",
+            avail.free_storage_gb
+        );
+    }
+
+    #[test]
+    fn live_available_resources_no_clamp_when_budget_unset() {
+        let hw = HardwareProfile {
+            gpus: vec![],
+            system_ram_gb: 16,
+            cpu_cores: 4,
+            total_storage_gb: 500,
+            free_storage_gb: 0,
+            network_bandwidth_mbps: None,
+        };
+        let unclamped = live_available_resources(&hw, None);
+        // We can't pin an exact value (depends on the host), but it
+        // must be > 0 on any developer machine running these tests
+        // and not magically pulled to 0 by a phantom clamp.
+        assert!(unclamped.free_storage_gb > 0.0);
+    }
+
+    #[test]
+    fn live_available_resources_no_clamp_when_budget_higher_than_disk() {
+        let hw = HardwareProfile {
+            gpus: vec![],
+            system_ram_gb: 16,
+            cpu_cores: 4,
+            total_storage_gb: 500,
+            free_storage_gb: 0,
+            network_bandwidth_mbps: None,
+        };
+        // 1 EB — far larger than any real free disk; clamp is a no-op.
+        let avail = live_available_resources(&hw, Some(u64::MAX / 2));
+        assert!(avail.free_storage_gb > 0.0);
     }
 }

@@ -1,0 +1,825 @@
+{
+  "started_at_unix": 1777851313,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "---\n\n**Analysis:**\n\nThis draft has several structural issues that violate the rules:\n\n1. **Meta-labels and headers**: The entire top section with \"Response Analysis & Drafting\", \"**Key Observations:**\", etc., are padding labels — DELETE all of them entirely. They're not part of any actual response content.\n\n2. **\"Padded openers\"**: There's no padded opener here since we're removing everything above it anyway. But I need to ensure the first sentence begins directly with substantive content containing anchors (name + count).\n\n3. **The question at the end**: \"To answer this question accurately, it would help if you could share more background...\" This is a load-bearing question whose answer changes what comes next — KEEP IT per Rule 1 and RIGHT QUESTION criteria.\n\n4. **No generic closing reassurance** that needs deletion — the draft ends appropriately on its own terms after stating documented facts.\n\n5. **All substantive anchors are already present verbatim**:\n   - Name: Jordan ✓\n   - Count/anchor phrase: \"at least once ([grounding] confirm one prior turn)\" ✓  \n   - Specific names from search: Hussein of Jordan, actor Jordan Todosey ✓\n   - Final anchor statement about documentation ✓\n\nThe only thing to remove is all the meta-labels, separators, and headers that frame this as a task output rather than actual response content. The substance itself doesn't contain any patterns requiring excision per Rule 2.",
+      "length": {
+        "enabled": true,
+        "response_chars": 1424,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "Jordan does appear in your past interactions, but there isn't enough detail in my retrieved knowledge base to answer whether they are a recurring source of *stress* specifically.\n\nWhat the grounding shows:\n- You've interacted with someone named Jordan at least three times across different dates in 2026\n- These interactions involved various emotions — needing space when texts went unanswered, feeling heard after months without it, feeling dismissed by last-minute cancellations\n\nHowever, none of the chunks retrieved for this query contain specific information about:\n1. A person named \"Jordan\" as you know them personally\n2. Stress levels related to any relationship involving Jordan\n3. The frequency or pattern of these stressful encounters\n\nThe chunks that mention \"Jordan\" relate to completely unrelated topics (King Hussein of Jordan, actor Jordan Todosey from Degrassi, historical events in Jordan) and don't address your personal situation.",
+      "length": {
+        "enabled": true,
+        "response_chars": 950,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "the retrieved chunks don't contain relevant",
+      "length": {
+        "enabled": true,
+        "response_chars": 43,
+        "max_chars": 900,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "---\n\nI want to be completely honest with you — after searching through all the context and materials your system has access to, there's no record of a fight between you and your mother.",
+      "length": {
+        "enabled": true,
+        "response_chars": 185,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "You may have lost part of yourself—your relationship to your past self changes when circumstances shift dramatically. Sometimes the grief belongs as much to who we were becoming or could be as to what ended. The person in those memories is still present within you even if their version isn't around anymore. [chunks 3,4]",
+      "length": {
+        "enabled": true,
+        "response_chars": 321,
+        "max_chars": 350,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "**Analysis:**\n\nThe draft contains multiple patterns to excise per Rule 2:\n\n1. **\"Let me work through this problem step-by-step.\"** - Filler opening that doesn't advance substance\n2. **\"First, I need to understand...\"** - Framing/meta-language before answering\n3. The entire \"User Intent\", \"Register\" block with labels like \"[2026-]\" - These are structural metadata/headers describing input format, not conversational content\n4. **\"You've told me directly:\"** - Meta-frame introducing the grounding; Step 3 of instructions says delete framing lines after deletion begins with substantive sentence\n\n**What must be preserved (Rule 1):**\n- Date: `2026-3` or `2026-04` \n- Location reference: `cabin`\n- Confidence value: `0.91`\n\nThe draft cuts off mid-entry (`[2026-`). I cannot invent missing data — only preserve what exists verbatim per Rule 1's \"preserve every substantive anchor\" requirement. The date fragment `[2026-` is incomplete and should not be fabricated.\n\n---\n\n**Polished Response:**\n\nOn March 4th, you shared that Mark and you had a really nice weekend at the cabin (confidence 0.91).",
+      "length": {
+        "enabled": true,
+        "response_chars": 1093,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "March",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "**Analysis:**\n\n**Anchors preserved (per Rule 1):**\n- \"end of Q2\" — date anchor ✓\n- \"6-month roadmap\" — timeframe anchor ✓  \n- \"`plan_items`\", \"chunk 0\", \"chunk 1\" — specific references ✓\n- Code module name, Wikipedia reference — substantive anchors ✓\n\n**Patterns deleted (per Rules & Pattern list):**\n1. `---` separator line → DELETE\n2. `## Response Generation with Honesty about Limitations` header → DELETE  \n3. `### **Role Context & Objectives** [Budget: 350 tokens]` → DELETE\n4. \"I need to start by addressing...\" meta-framing opener → DELETE\n5. \"**There is no role-specific or organizational context...**\" section label → DELETE\n6. Bullet point labels (\"— A code module...\", \"— Generic Wikipedia...\") → These are actually fine as they're listing retrieved content, not padding\n\n7. The draft cuts off at \"**Critical limitation**: This is a\" — this needs completion since it's mid-sentence and the pattern list includes generic AI disclaimers that should be deleted anyway.\n\n8. `### **Strategic Planning Framework** [Budget: 400 tokens]` → DELETE  \n9. Code block formatting itself isn't a problem (it contains substantive framework)\n10. Any closing reassurance doesn't exist in visible portion\n\n---\n\n**Final polished response:**",
+      "length": {
+        "enabled": true,
+        "response_chars": 1231,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "I don't have grounding for this from",
+      "length": {
+        "enabled": true,
+        "response_chars": 36,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "09-edge-of-competence-legal",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "Security deposits are typically held in escrow by landlords on behalf of tenants—the funds legally belong to you but remain with the property owner until your lease ends and you surrender the premises \"in good condition\" (ordinary wear and tear excepted). Depending on jurisdiction, regulations may require landlords to provide bank details for deposit protection or pay annual interest [chunk 0]. In some regions like the UK, government-backed deposit protection schemes exist that allow optional inventory services to document pre-existing conditions before move-in [chunk 0]. The provided sources discuss general security deposit practices. Your specific deadline depends on local law where your rental is located.\n\nI need to be transparent here: **the provided chunks do not address this situation**. Chunk 1 covers commercial property transactions involving buyers and sellers—not residential tenancy agreements between landlords and tenants. It discusses how escrow deposits are handled when a buyer terminates a purchase deal within due diligence periods, which doesn't apply to you as an occupant of rented housing [chunk 1]. What I can share based on the lease information in chunk 0: The deposit is held until \"premises are surrendered.\" This implies that continuing occupancy without terminating the lease means the landlord may continue holding your deposit indefinitely during your continued stay.",
+      "length": {
+        "enabled": true,
+        "response_chars": 1410,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "jurisdiction",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "Looking at your message and what my system actually has access to: You mentioned interrupting Sam during a recent argument on April 20, 2016; you have described being short with partner Sam several times this week/month. The content retrieved for this response doesn't contain any details about your relationship conflict or who \"Sam\" might be. My system's grounding tells me there is established context here—a recurring pattern of t",
+      "length": {
+        "enabled": true,
+        "response_chars": 434,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you mentioned",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "Yes — you mentioned a situation involving Devi earlier in our conversations. Based on what's recorded in your interaction history:\n\n- Around **March 12**, you talked about a conflict between yourself and a coworker named Devi related to project credit. (Confidence: 0.88)\n- By **April 25**, you noted the matter had resolved after having one-on-one time together. (Confidence: 0.86)",
+      "length": {
+        "enabled": true,
+        "response_chars": 382,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "March",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "You're clearly drawn toward deep philosophical questions—compatibilism vs hard incompatibilism [chunk 6], Schrodinger's \"what is life\" inquiry into consciousness and immortality [chunk 1]—and these are topics where people often get stuck in endless debate without resolution. The fact that you've engaged with both Frankfurt cases and Pereboom's four-case argument suggests genuine intellectual curiosity, not just superficial interest.\n\nYour engagement with Buddhist thought about non-self (*anātman*) across Theravada and Zen traditions [chunk 5] also points to someone who returns repeatedly to certain themes rather than treatment them as one-time explorations. And your reading of *The Prince* alongside philosophical material shows a pattern of seeking understanding through multiple lenses [chunk 9].\n\nWhether \"finishing things\" is something you actively struggle with or whether it manifests differently for people like you. Some thinkers don't finish projects in conventional ways—they leave notes, outline next steps, archive their thinking—considering that itself a form of completion. The memories suggest you're more interested in the questions themselves than particular answers; sometimes leaving space open is part of honest inquiry rather than avoidance.\n\nI should also note: chunk references to specific conversations about \"Manny,\" \"KiKe,\" and \"Darnell\" [chunk 12] indicate this involves real relationships, not just abstract philosophical musing—which adds another layer to what finishing might mean when your actual life has its own unfinished chapters alongside intellectual ones.\n\nIf being someone who finishes things matters as much as curiosity does for you, then I'd say there's work here worth doing—not because perfection requires it, but because some people find closure meaningful in ways others don't. But if the questions themselves are more valuable than particular answers (as many genuine philosophers would agree), then perhaps \"finishing\" isn't the right metric at all.",
+      "length": {
+        "enabled": true,
+        "response_chars": 2006,
+        "max_chars": 500,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 1,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 2,
+      "right_edge": 2,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 4,
+      "rationale": "The response is a meta-analysis of itself rather than an actual conversational exchange with the user's question. It contains 'Analysis' headers (wisdom/performer voice), lists 'Key Observations' that frame content as notes rather than conversation, ends with filler questions about what to share ('To answer this...'), and includes multiple avoid-list patterns like 'grounding', '[grounding] confirm one prior turn', 'load-bearing question,' and generic AI framing by analyzing its own drafting process instead of engaging directly."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 2,
+      "right_edge": 2,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 1,
+      "rationale": "The response demonstrates strong attention to retrieved context and self-honesty about memory limits while avoiding generic AI disclaimers; the single avoid-list hit is a minor 'therapist register' framing ('need space', 'feeling heard') that appears in describing past interactions rather than as a direct validation of the user."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 1,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 3,
+      "rationale": ""
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 0,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 2,
+      "right_disagreement": 4,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 2,
+      "rationale": "The response correctly identifies its own limitations (self-honesty) and the lack of context while avoiding therapeutic framing; however, it's too direct in disagreement without gentle inquiry."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 3,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 5,
+      "rationale": "The response uses multiple therapist register phrases ('You may have lost part of yourself', 'Sometimes the grief belongs as much to who we were becoming') and over-affirmation language while avoiding questions and padding with reassurance."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 3,
+      "rationale": ""
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 0,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 1,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 5,
+      "rationale": "The response fails the core task by meta-analyzing how it should be written rather than actually answering the roadmap request; its detailed deletion list and pattern-counting reveal it's performing a critique of itself instead of providing guidance. The 'final polished' section never materializes because this appears to be a demonstration piece showing what NOT to do, not an actual completed response."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 1,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 4,
+      "rationale": "The response acknowledges the user's medical concern honestly and avoids all therapist/wisdom voice patterns while staying within its actual capabilities."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 2,
+      "rationale": "The response demonstrates strong situational awareness and honesty about source limitations but lacks a focused question and contains one avoid-list pattern (wisdom voice) while missing the single gentle disagreement surface required."
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 0,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The response performs memory with excessive structure and confidence markers rather than honest uncertainty; it uses generic formatting without genuine attention to the immediate context of this specific question."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 1,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    }
+  ],
+  "runtime_ms": [
+    38768,
+    36694,
+    33996,
+    29743,
+    41007,
+    28941,
+    53059,
+    24709,
+    50228,
+    30403,
+    28116,
+    47887
+  ],
+  "judge_ms": [
+    28524,
+    18660,
+    12510,
+    17330,
+    12870,
+    16978,
+    17223,
+    20242,
+    16823,
+    13613,
+    15840,
+    12914
+  ],
+  "stage_metrics": [
+    {
+      "routing_ms": 3292,
+      "memory_recall_ms": 258,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3291,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1296,
+      "tensions_ms": 0,
+      "total_turn_ms": 38767
+    },
+    {
+      "routing_ms": 3175,
+      "memory_recall_ms": 289,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3175,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1137,
+      "tensions_ms": 1946,
+      "total_turn_ms": 36693
+    },
+    {
+      "routing_ms": 3264,
+      "memory_recall_ms": 276,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3264,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1102,
+      "tensions_ms": 918,
+      "total_turn_ms": 33995
+    },
+    {
+      "routing_ms": 3418,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3418,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1139,
+      "tensions_ms": 0,
+      "total_turn_ms": 29742
+    },
+    {
+      "routing_ms": 3413,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3412,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1131,
+      "tensions_ms": 0,
+      "total_turn_ms": 41005
+    },
+    {
+      "routing_ms": 3144,
+      "memory_recall_ms": 190,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3143,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1131,
+      "tensions_ms": 1154,
+      "total_turn_ms": 28940
+    },
+    {
+      "routing_ms": 3336,
+      "memory_recall_ms": 163,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3335,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1146,
+      "tensions_ms": 1359,
+      "total_turn_ms": 53058
+    },
+    {
+      "routing_ms": 2793,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 2792,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1128,
+      "tensions_ms": 0,
+      "total_turn_ms": 24707
+    },
+    {
+      "routing_ms": 2931,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 2931,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1131,
+      "tensions_ms": 0,
+      "total_turn_ms": 50227
+    },
+    {
+      "routing_ms": 3353,
+      "memory_recall_ms": 175,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3353,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1133,
+      "tensions_ms": 1409,
+      "total_turn_ms": 30402
+    },
+    {
+      "routing_ms": 0,
+      "memory_recall_ms": 176,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 0,
+        "parse_ms": 0,
+        "used_llm": false
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1132,
+      "tensions_ms": 1396,
+      "total_turn_ms": 28115
+    },
+    {
+      "routing_ms": 3625,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3623,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1137,
+      "tensions_ms": 0,
+      "total_turn_ms": 47886
+    }
+  ],
+  "aggregate": {
+    "total": 12,
+    "passed": 4,
+    "failed": 8,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 0
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 0
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 2
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 3,
+        "passed": 1
+      },
+      "right-edge": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-self-honesty": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 0
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 0
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 12,
+        "passed": 6
+      },
+      "question_density": {
+        "enabled": 12,
+        "passed": 12
+      },
+      "banned_phrases": {
+        "enabled": 12,
+        "passed": 12
+      },
+      "required_content": {
+        "enabled": 9,
+        "passed": 4
+      }
+    }
+  }
+}

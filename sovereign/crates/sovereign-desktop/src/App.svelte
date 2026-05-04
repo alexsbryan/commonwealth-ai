@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { initEventListeners } from "./lib/events";
   import {
     detectBootstrap,
@@ -104,6 +104,14 @@
   }
 
   onMount(async () => {
+    // Reading surface "View conversation" → switch the chat sidebar.
+    // Wired here (not in the store) so the store stays free of
+    // direct chat coupling. The opener is reset on destroy below
+    // to avoid the closure outliving its state owner.
+    readingSession.setConversationOpener((conversationId: string) => {
+      handleConversationSelect(conversationId);
+    });
+
     await initEventListeners({
       onBackendReady: () => {
         backendReady = true;
@@ -224,6 +232,13 @@
     selectedConversationId = id;
     conversationListRef?.loadConversations?.();
   }
+
+  // Drop the opener on destroy so a stale closure can't survive
+  // teardown (matters most under HMR — without this, repeated
+  // component swaps stack a chain of dead callbacks that all fire).
+  onDestroy(() => {
+    readingSession.setConversationOpener(null);
+  });
 
 </script>
 

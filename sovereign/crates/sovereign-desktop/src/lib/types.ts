@@ -89,6 +89,9 @@ export interface DesktopConfig {
    *  resonance, and behaves exactly as it did before KnowledgeView
    *  existed. Requires a desktop restart to take effect. Default on. */
   knowledge_view_enabled: boolean;
+  /** Persisted disk-usage ceiling for corpus storage. `null` = auto
+   *  (compute at boot from free disk; persisted on first launch). */
+  storage_budget_bytes: number | null;
 }
 
 export interface SearchBackendConfig {

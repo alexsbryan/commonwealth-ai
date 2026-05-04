@@ -289,6 +289,22 @@ Each stage is a trait. A **Recipe** TOML configures the whole pipeline.
 expandable }` plus an optional `filter_override` so a corpus can be expanded
 in place (relax filters → delta-ingest the additions → rebuild IVF-PQ).
 
+**Per-node storage budget.** A user-set ceiling (Settings → Knowledge,
+or `POST /internal/storage/budget`) controls how much of the disk
+Sovereign will use for installed corpora. Enforcement lives at the
+gossip-tick capabilities builder
+(`sovereign-mesh::capabilities::build_local_capabilities`), which
+clamps the published `free_storage_gb` to
+`min(actual_free, max(0, budget − used))`. Every existing scheduler
+(`assign_knowledge_shards`, the three `plan_collaborative_ingestion*`
+planners) reads that single value to decide what to assign here, so
+the clamp self-enforces the budget for both local installs and
+peer-driven shard distribution — peers won't push us shards that
+breach the budget, and our own install path already gates on the
+same number. Default on the desktop is computed from free disk
+(target 100 GiB, scaled down for tighter machines, floor 20 GiB)
+and persisted in `desktop.toml`.
+
 ### 3.3 The injection contract
 
 `corpus-engine` never embeds or generates text itself.

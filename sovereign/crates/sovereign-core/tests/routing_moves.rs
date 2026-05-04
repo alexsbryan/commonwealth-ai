@@ -777,7 +777,7 @@ async fn deep_query_stream_emits_retrieval_and_synthesis_narration() {
             .any(|n| n.event.phase == NarrationPhase::PrimarySynthesisStart),
         "DeepQuery stream must emit PrimarySynthesisStart narration; \
          saw phases {:?}",
-        rec.narrations.iter().map(|n| n.event.phase).collect::<Vec<_>>()
+        rec.narrations.iter().map(|n| n.event.phase.clone()).collect::<Vec<_>>()
     );
     // RetrievalComplete fires only when retrieval produced
     // chunks. The harness has no corpus engine attached so this

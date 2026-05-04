@@ -20,8 +20,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use commonwealth_api::openai_types::{
-    ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, FunctionCall,
-    ToolCall, Usage,
+    self as wire, ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
+    FunctionCall, ToolCall, Usage,
 };
 use commonwealth_api::state::LocalInferenceService;
 use commonwealth_inference::oicp::{
@@ -31,7 +31,44 @@ use commonwealth_inference::oicp::{
 };
 use futures::{Stream, StreamExt};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+use sovereign_core::types::{
+    CompletionRequest, FinishReason as CoreFinishReason, Speed,
+    StreamFrame as CoreStreamFrame, StreamUsage as CoreStreamUsage,
+};
+
+/// Translate `sovereign_core` stream framing into the wire shape
+/// `LocalInferenceService::chat_completion_stream` exposes. The two
+/// enums are identical by design (see `openai_types::StreamFrame`),
+/// so this is a pure per-variant copy with no data loss.
+fn translate_stream_frame(frame: CoreStreamFrame) -> wire::StreamFrame {
+    match frame {
+        CoreStreamFrame::Token(text) => wire::StreamFrame::Token(text),
+        CoreStreamFrame::Finish { reason, usage } => wire::StreamFrame::Finish {
+            reason: translate_finish_reason(reason),
+            usage: usage.map(translate_stream_usage),
+        },
+        CoreStreamFrame::Error(msg) => wire::StreamFrame::Error(msg),
+    }
+}
+
+fn translate_finish_reason(r: CoreFinishReason) -> wire::FinishReason {
+    match r {
+        CoreFinishReason::Stop => wire::FinishReason::Stop,
+        CoreFinishReason::Length => wire::FinishReason::Length,
+        CoreFinishReason::ToolCalls => wire::FinishReason::ToolCalls,
+        CoreFinishReason::ContentFilter => wire::FinishReason::ContentFilter,
+        CoreFinishReason::Cancelled => wire::FinishReason::Cancelled,
+        CoreFinishReason::Error(msg) => wire::FinishReason::Error(msg),
+    }
+}
+
+fn translate_stream_usage(u: CoreStreamUsage) -> wire::StreamUsage {
+    wire::StreamUsage {
+        prompt_tokens: u.prompt_tokens,
+        completion_tokens: u.completion_tokens,
+        total_tokens: u.total_tokens,
+    }
+}
 
 /// Wraps a sovereign-core `InferenceProvider` so it can answer
 /// Commonwealth-flavoured `/v1/chat/completions` requests from
@@ -446,7 +483,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         &self,
         request: ChatCompletionRequest,
     ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>,
+        Pin<Box<dyn Stream<Item = commonwealth_api::openai_types::StreamFrame> + Send>>,
         String,
     > {
         // Streaming + tool_calls is not supported in M2. OpenAI's
@@ -470,15 +507,17 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         let req = self.build_completion_request(&request);
         let inner = self
             .provider
-            .complete_stream(&req)
+            .complete_stream_with_finish(&req)
             .await
             .map_err(|e| format!("{e}"))?;
         tracing::info!(
-            "sovereign inference adapter: streaming started"
+            "sovereign inference adapter: typed streaming started"
         );
-        // Adapt sovereign_core's Result<String, Error> to our
-        // Result<String, String> by stringifying the error.
-        let mapped = inner.map(|item| item.map_err(|e| format!("{e}")));
+        // Translate sovereign_core::types::StreamFrame →
+        // commonwealth_api::openai_types::StreamFrame. The two
+        // shapes are identical by design (see openai_types.rs);
+        // translation is a per-variant copy.
+        let mapped = inner.map(translate_stream_frame);
         Ok(Box::pin(mapped))
     }
 
@@ -932,6 +971,7 @@ mod adapter_translation_tests {
             oicp: None,
                     response_format: None,
                     chat_template_kwargs: None,
+            think_budget: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -962,6 +1002,7 @@ mod adapter_translation_tests {
             oicp: None,
                     response_format: None,
                     chat_template_kwargs: None,
+            think_budget: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -987,6 +1028,7 @@ mod adapter_translation_tests {
             oicp: None,
                     response_format: None,
                     chat_template_kwargs: None,
+            think_budget: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }

@@ -319,6 +319,15 @@ impl ModelSlot {
         let mut in_think = false;
         let mut think_tokens = 0usize;
         let mut think_budget_fired = false;
+        // Stray-close tracking: thinking-capable models occasionally
+        // emit `</think>` without a preceding `<think>` open (chat
+        // template rendered with `enable_thinking: false` but the
+        // model produced CoT anyway). When we observe the close
+        // without the open, the leading text was de-facto thinking;
+        // we wrap retroactively after the loop so the desktop's
+        // think-block parser folds it correctly. See plan §1.3.
+        let mut saw_open_tag = false;
+        let mut saw_close_tag = false;
 
         while n_generated < max_tokens {
             let token = sampler.sample(ctx, -1);
@@ -342,8 +351,13 @@ impl ModelSlot {
                 }
                 if !in_think && tail.contains("<think>") {
                     in_think = true;
+                    saw_open_tag = true;
                 } else if in_think && tail.contains("</think>") {
                     in_think = false;
+                    saw_close_tag = true;
+                } else if !in_think && tail.contains("</think>") {
+                    // Stray close — record so we can wrap post-loop.
+                    saw_close_tag = true;
                 }
                 if in_think {
                     think_tokens += 1;
@@ -387,6 +401,23 @@ impl ModelSlot {
         }
 
         ctx.clear_kv_cache();
+
+        // Stray `</think>` repair: see plan §1.3. If the model
+        // emitted a close tag without a preceding open, prepend a
+        // synthetic open so downstream parsers (desktop's
+        // `parseAssistantContent`, server-side `strip_thinking_response`)
+        // treat the leading text as thinking. This is the
+        // non-streaming path; the streaming siblings only warn,
+        // since pieces have already been flushed to the receiver.
+        if saw_close_tag && !saw_open_tag {
+            tracing::warn!(
+                model = model_id,
+                "thinking-tag stray close: model emitted </think> without a \
+                 preceding <think> — wrapping output as thinking content"
+            );
+            output = format!("<think>{output}");
+        }
+
         Ok((output, tokens.len(), n_generated))
     }
 
@@ -435,6 +466,11 @@ impl ModelSlot {
         let mut in_think = false;
         let mut think_tokens = 0usize;
         let mut think_budget_fired = false;
+        // Stray-close tracking: see plan §1.3. We can't rewrap once
+        // pieces have flushed to the receiver, but we log so the
+        // operator can see this happen.
+        let mut saw_open_tag = false;
+        let mut saw_close_tag = false;
 
         while n_generated < max_tokens {
             // Antifragile-routing cancel check: redirect-induced
@@ -472,8 +508,12 @@ impl ModelSlot {
                 }
                 if !in_think && tail.contains("<think>") {
                     in_think = true;
+                    saw_open_tag = true;
                 } else if in_think && tail.contains("</think>") {
                     in_think = false;
+                    saw_close_tag = true;
+                } else if !in_think && tail.contains("</think>") {
+                    saw_close_tag = true;
                 }
                 if in_think {
                     think_tokens += 1;
@@ -524,6 +564,195 @@ impl ModelSlot {
         }
 
         ctx.clear_kv_cache();
+
+        if saw_close_tag && !saw_open_tag {
+            tracing::warn!(
+                model = model_id,
+                "thinking-tag stray close (legacy stream): model emitted \
+                 </think> without a preceding <think> — desktop will repair \
+                 the rendering but tokens already flushed; cause is usually \
+                 enable_thinking:false on a thinking model"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Streaming generator that yields typed [`StreamFrame`]s and
+    /// always terminates the channel with [`StreamFrame::Finish`]
+    /// carrying the real [`FinishReason`] (`Stop` on EOS, `Length`
+    /// on `max_tokens`, `Cancelled` on receiver-drop /
+    /// CancellationToken, `Error(_)` on decode/batch faults).
+    ///
+    /// Mirrors [`Self::generate_stream_sync`] but for the new
+    /// [`InferenceProvider::complete_stream_with_finish`] surface.
+    /// The legacy helper keeps working for callers still on the
+    /// `Result<String>` shape.
+    fn generate_stream_sync_with_finish(
+        model: &LlamaModel,
+        model_id: &str,
+        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        request: &CompletionRequest,
+        tx: &tokio::sync::mpsc::Sender<StreamFrame>,
+        quirks: &ModelQuirks,
+        cancel: Option<&tokio_util::sync::CancellationToken>,
+    ) -> Result<()> {
+        ctx.clear_kv_cache();
+
+        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let tokens = model
+            .str_to_token(&full_prompt, AddBos::Always)
+            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+
+        let n_ctx = ctx.n_ctx() as usize;
+        let max_tokens = clamp_max_tokens(
+            request.max_tokens,
+            tokens.len(),
+            n_ctx,
+        )?;
+        let prompt_tokens = tokens.len();
+
+        let mut batch = LlamaBatch::new(tokens.len().max(512), 1);
+        let last_idx = tokens.len() - 1;
+        for (i, &token) in tokens.iter().enumerate() {
+            batch
+                .add(token, i as i32, &[0], i == last_idx)
+                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+        }
+
+        ctx.decode(&mut batch)
+            .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
+
+        let mut sampler = build_sampler(model, request, quirks);
+        let mut n_generated = 0usize;
+        let mut decoder = encoding_rs::UTF_8.new_decoder();
+
+        let mut tail = String::with_capacity(32);
+        let mut in_think = false;
+        let mut think_tokens = 0usize;
+        let mut think_budget_fired = false;
+        // Stray-close tracking: see plan §1.3. Streaming can't
+        // rewrap once tokens have flushed; we log so the operator
+        // can see this happen and the desktop's parse-message
+        // synthesises a virtual `<think>` open client-side.
+        let mut saw_open_tag = false;
+        let mut saw_close_tag = false;
+
+        // Default to Length: if the loop exits via the `while`
+        // condition we hit max_tokens. Each `break` path overwrites
+        // this with the more-specific reason.
+        let mut reason = FinishReason::Length;
+
+        while n_generated < max_tokens {
+            if let Some(t) = cancel {
+                if t.is_cancelled() {
+                    tracing::warn!(
+                        tokens_emitted = n_generated,
+                        "inference:cancelled via CancellationToken"
+                    );
+                    reason = FinishReason::Cancelled;
+                    break;
+                }
+            }
+
+            let token = sampler.sample(ctx, -1);
+            sampler.accept(token);
+
+            if model.is_eog_token(token) {
+                reason = FinishReason::Stop;
+                break;
+            }
+
+            if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
+                tail.push_str(&piece);
+                if tail.len() > 32 {
+                    let mut drain_to = tail.len() - 32;
+                    while drain_to > 0 && !tail.is_char_boundary(drain_to) {
+                        drain_to -= 1;
+                    }
+                    tail.drain(..drain_to);
+                }
+                if !in_think && tail.contains("<think>") {
+                    in_think = true;
+                    saw_open_tag = true;
+                } else if in_think && tail.contains("</think>") {
+                    in_think = false;
+                    saw_close_tag = true;
+                } else if !in_think && tail.contains("</think>") {
+                    saw_close_tag = true;
+                }
+                if in_think {
+                    think_tokens += 1;
+                }
+
+                if tx.blocking_send(StreamFrame::Token(piece)).is_err() {
+                    tracing::warn!(
+                        tokens_emitted = n_generated,
+                        "inference:cancelled via receiver-drop"
+                    );
+                    // Receiver is gone — don't try to send a Finish
+                    // frame either. Caller already knows.
+                    return Ok(());
+                }
+            }
+
+            n_generated += 1;
+
+            batch.clear();
+            batch
+                .add(token, (tokens.len() + n_generated - 1) as i32, &[0], true)
+                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+
+            ctx.decode(&mut batch)
+                .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+
+            if in_think && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET) && !think_budget_fired {
+                think_budget_fired = true;
+                let force = "\n</think>\n\n";
+                if let Ok(close_tokens) = model.str_to_token(force, AddBos::Never) {
+                    for &ct in &close_tokens {
+                        let fp = model
+                            .token_to_piece(ct, &mut decoder, true, None)
+                            .unwrap_or_default();
+                        sampler.accept(ct);
+                        batch.clear();
+                        batch
+                            .add(ct, (tokens.len() + n_generated) as i32, &[0], true)
+                            .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+                        ctx.decode(&mut batch)
+                            .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+                        n_generated += 1;
+                        if tx.blocking_send(StreamFrame::Token(fp)).is_err() {
+                            return Ok(());
+                        }
+                    }
+                }
+                in_think = false;
+            }
+        }
+
+        ctx.clear_kv_cache();
+
+        if saw_close_tag && !saw_open_tag {
+            tracing::warn!(
+                model = model_id,
+                "thinking-tag stray close (typed stream): model emitted \
+                 </think> without a preceding <think> — desktop will repair \
+                 the rendering but tokens already flushed; cause is usually \
+                 enable_thinking:false on a thinking model"
+            );
+        }
+
+        let usage = StreamUsage {
+            prompt_tokens: prompt_tokens as u32,
+            completion_tokens: n_generated as u32,
+            total_tokens: (prompt_tokens + n_generated) as u32,
+        };
+        let _ = tx.blocking_send(StreamFrame::Finish {
+            reason,
+            usage: Some(usage),
+        });
+
         Ok(())
     }
 }
@@ -2613,6 +2842,215 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         slot = "fast",
                         latency_ms = start.elapsed().as_millis() as u64,
                         "inference.complete_stream: done"
+                    );
+                }
+            });
+        }
+
+        Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
+    }
+
+    /// Typed-frame override: yield [`StreamFrame`] with an accurate
+    /// terminal [`FinishReason`]. Mirrors [`complete_stream`]'s
+    /// slot-routing dance so per-slot mutex / hot-swap semantics stay
+    /// identical — only the channel item type and the inner generate
+    /// helper change.
+    async fn complete_stream_with_finish(
+        &self,
+        request: &CompletionRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>> {
+        let target = self.select_slot_for_request(request);
+        let slot_name: String = match &target {
+            SlotTarget::Fast => "fast".into(),
+            SlotTarget::Primary => "primary".into(),
+            SlotTarget::Code => "code".into(),
+            SlotTarget::Extra(name) => format!("extras:{name}"),
+        };
+
+        tracing::debug!(
+            slot = %slot_name,
+            speed = ?request.preferred_speed,
+            prompt_chars = request.prompt.len(),
+            system_chars = request.system_message.as_ref().map(|s| s.len()).unwrap_or(0),
+            max_tokens = ?request.max_tokens,
+            "inference.complete_stream_with_finish: call"
+        );
+
+        let request = request.clone();
+        let (tx, rx) = tokio::sync::mpsc::channel::<StreamFrame>(32);
+
+        if let SlotTarget::Extra(name) = &target {
+            let Some((slot, quirks)) = self.extras_lookup(name) else {
+                return Err(Error::Inference(format!(
+                    "extras slot {name:?} was unloaded between selection \
+                     and dispatch — retry the request"
+                )));
+            };
+            let _permit = slot
+                .inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("slot permit closed: {e}")))?;
+            let slot_label_owned = slot_name.clone();
+            tokio::task::spawn_blocking(move || {
+                let _permit = _permit;
+                let start = Instant::now();
+                slot.last_used
+                    .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                let mut ctx_lock = slot.context.blocking_lock();
+                if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
+                    &slot.model,
+                    &slot.model_id,
+                    &mut ctx_lock.ctx,
+                    &request,
+                    &tx,
+                    &quirks,
+                    None,
+                ) {
+                    tracing::warn!(slot = %slot_label_owned, error = %e, "stream error");
+                    let _ = tx.blocking_send(StreamFrame::Finish {
+                        reason: FinishReason::Error(format!("{e}")),
+                        usage: None,
+                    });
+                } else {
+                    tracing::info!(
+                        slot = %slot_label_owned,
+                        latency_ms = start.elapsed().as_millis() as u64,
+                        "inference.complete_stream_with_finish: done"
+                    );
+                }
+            });
+            return Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
+        }
+
+        let lazy_target: Option<(PathBuf, ModelQuirks, &'static str)> = match target {
+            SlotTarget::Fast => None,
+            SlotTarget::Primary => Some((
+                self.primary_path.clone().unwrap(),
+                self.primary_quirks.clone(),
+                "primary",
+            )),
+            SlotTarget::Code => Some((
+                self.code_path.clone().unwrap(),
+                self.code_quirks.clone(),
+                "code",
+            )),
+            SlotTarget::Extra(_) => unreachable!("handled above"),
+        };
+
+        if let Some((target_path, quirks, slot_label)) = lazy_target {
+            let _permit = self
+                .lazy_inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("lazy slot permit closed: {e}")))?;
+            let primary_lock = Arc::clone(&self.primary);
+            let backend = Arc::clone(&self.primary_backend);
+            let ctx_size = self.primary_ctx_size;
+            let gpu_layers = self.gpu_layers;
+            let last_use = Arc::clone(&self.last_primary_use);
+            let loaded_path = Arc::clone(&self.primary_loaded_path);
+
+            tokio::task::spawn_blocking(move || {
+                let _permit = _permit;
+                let start = Instant::now();
+
+                let mut primary = primary_lock.blocking_lock();
+                let mut loaded = loaded_path.blocking_lock();
+                let needs_swap = loaded.as_deref() != Some(target_path.as_path());
+                if needs_swap {
+                    if primary.is_some() {
+                        tracing::info!(
+                            slot = slot_label,
+                            from = ?loaded.as_ref().map(|p| p.display().to_string()),
+                            to = %target_path.display(),
+                            "hot-swapping lazy slot (streaming, typed)"
+                        );
+                    } else {
+                        tracing::info!(
+                            slot = slot_label,
+                            path = %target_path.display(),
+                            "loading lazy slot (first use, streaming, typed)"
+                        );
+                    }
+                    *primary = None;
+                    *loaded = None;
+                    match ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers) {
+                        Ok(slot) => {
+                            *primary = Some(slot);
+                            *loaded = Some(target_path.clone());
+                        }
+                        Err(e) => {
+                            tracing::error!(slot = slot_label, error = %e, "slot load failed");
+                            let _ = tx.blocking_send(StreamFrame::Finish {
+                                reason: FinishReason::Error(format!("{e}")),
+                                usage: None,
+                            });
+                            return;
+                        }
+                    }
+                }
+                drop(loaded);
+
+                let slot = primary.as_ref().unwrap();
+                let mut ctx_lock = slot.context.blocking_lock();
+                *last_use.blocking_lock() = Some(Instant::now());
+                if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
+                    &slot.model,
+                    &slot.model_id,
+                    &mut ctx_lock.ctx,
+                    &request,
+                    &tx,
+                    &quirks,
+                    None,
+                ) {
+                    tracing::warn!(slot = slot_label, error = %e, "stream error");
+                    let _ = tx.blocking_send(StreamFrame::Finish {
+                        reason: FinishReason::Error(format!("{e}")),
+                        usage: None,
+                    });
+                } else {
+                    tracing::info!(
+                        slot = slot_label,
+                        latency_ms = start.elapsed().as_millis() as u64,
+                        "inference.complete_stream_with_finish: done"
+                    );
+                }
+            });
+        } else {
+            let slot = Arc::clone(&self.fast);
+            let _permit = slot
+                .inflight
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::Inference(format!("fast slot permit closed: {e}")))?;
+            let quirks = self.fast_quirks.clone();
+            tokio::task::spawn_blocking(move || {
+                let _permit = _permit;
+                let start = Instant::now();
+                let mut ctx_lock = slot.context.blocking_lock();
+                if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
+                    &slot.model,
+                    &slot.model_id,
+                    &mut ctx_lock.ctx,
+                    &request,
+                    &tx,
+                    &quirks,
+                    None,
+                ) {
+                    tracing::warn!(slot = "fast", error = %e, "stream error");
+                    let _ = tx.blocking_send(StreamFrame::Finish {
+                        reason: FinishReason::Error(format!("{e}")),
+                        usage: None,
+                    });
+                } else {
+                    tracing::info!(
+                        slot = "fast",
+                        latency_ms = start.elapsed().as_millis() as u64,
+                        "inference.complete_stream_with_finish: done"
                     );
                 }
             });

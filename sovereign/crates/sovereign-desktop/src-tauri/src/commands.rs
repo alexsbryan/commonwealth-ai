@@ -3556,6 +3556,194 @@ pub async fn set_mesh_quiesced(quiesced: bool) -> Result<MeshQuiesceState, Strin
         .map_err(|e| format!("decode /internal/mesh/quiesce: {e}"))
 }
 
+// ── Storage budget ───────────────────────────────────────────
+//
+// Mirror of `commonwealth_api::routes_internal::mesh_admin::
+// StorageBudgetState`. Defined here as a flat serde struct so the
+// desktop crate doesn't depend on commonwealth-api types just for
+// this round-trip — keeps the TypeScript bridge simple. The wire
+// shape must stay byte-compatible with the daemon's response.
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct StorageBudgetState {
+    /// `None` means "no budget configured — gossiped free_storage_gb
+    /// reports raw free disk and nothing is clamped".
+    pub budget_bytes: Option<u64>,
+    /// Sum of `index_size_bytes` across installed corpora as of the
+    /// last gossip tick.
+    pub used_bytes: u64,
+    /// Free disk across all mounted volumes, in bytes. Same number
+    /// the gossip path reports (modulo budget clamp).
+    pub free_disk_bytes: u64,
+    /// Suggested baseline the desktop's "Use recommended" affordance
+    /// applies. Computed server-side from current free disk so a
+    /// user with 250 GiB free sees a 100 GiB recommendation while a
+    /// user with 60 GiB free sees a 30 GiB one.
+    pub recommended_bytes: u64,
+}
+
+/// Read the daemon's current budget snapshot. Also seeds two
+/// stateful defaults so the user never sees a blank "no budget"
+/// state without an explicit choice:
+///
+///  1. If the persisted `desktop.toml` has a budget, push it to the
+///     daemon (covers daemon restart while desktop kept running, or
+///     first read after the desktop survived a launchd-restarted
+///     daemon).
+///  2. If neither the config nor the daemon has a budget, apply the
+///     daemon's recommended baseline AND persist it. The user can
+///     still override after — this just ensures Sovereign starts
+///     out as a respectful tenant of the disk on first launch
+///     instead of silently having no ceiling.
+///
+/// Returns whatever the daemon reports after these reconciliations.
+#[tauri::command]
+pub async fn get_storage_budget(
+    state: State<'_, Arc<AppState>>,
+) -> Result<StorageBudgetState, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/storage/budget");
+
+    let fetch = || async {
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("GET /internal/storage/budget: {e}"))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "daemon /internal/storage/budget returned {status}: {body}"
+            ));
+        }
+        resp.json::<StorageBudgetState>()
+            .await
+            .map_err(|e| format!("decode /internal/storage/budget: {e}"))
+    };
+
+    let snapshot = fetch().await?;
+    let persisted = state.config.read().await.storage_budget_bytes;
+
+    // Reconciliation case 1: config has a value, daemon doesn't.
+    // Push the persisted value forward.
+    if let (Some(persisted_bytes), None) = (persisted, snapshot.budget_bytes) {
+        let resp = client
+            .post(&url)
+            .json(&serde_json::json!({ "budget_bytes": persisted_bytes }))
+            .send()
+            .await
+            .map_err(|e| format!("rehydrate storage budget: {e}"))?;
+        if !resp.status().is_success() {
+            tracing::warn!(
+                status = %resp.status(),
+                "get_storage_budget: rehydrate POST failed; the daemon's atomic stays at no-budget"
+            );
+        } else {
+            return resp
+                .json::<StorageBudgetState>()
+                .await
+                .map_err(|e| format!("decode rehydrate response: {e}"));
+        }
+    }
+
+    // Reconciliation case 2: nobody has a value. Adopt the
+    // recommended baseline AND persist it so the choice survives
+    // restart. If the disk is too small for the recommendation to
+    // be meaningful (under the AppState 1 GiB floor), skip — the
+    // user will see the "Use recommended" affordance in Settings
+    // and can apply it explicitly.
+    if persisted.is_none() && snapshot.budget_bytes.is_none() {
+        const MIN_BUDGET: u64 = 1_073_741_824;
+        if snapshot.recommended_bytes >= MIN_BUDGET {
+            let resp = client
+                .post(&url)
+                .json(&serde_json::json!({
+                    "budget_bytes": snapshot.recommended_bytes
+                }))
+                .send()
+                .await
+                .map_err(|e| format!("seed recommended storage budget: {e}"))?;
+            if resp.status().is_success() {
+                let applied: StorageBudgetState = resp
+                    .json()
+                    .await
+                    .map_err(|e| format!("decode seed response: {e}"))?;
+                let mut cfg = state.config.write().await;
+                cfg.storage_budget_bytes = applied.budget_bytes;
+                if let Err(e) = cfg.save() {
+                    tracing::warn!(
+                        "get_storage_budget: seed persist failed: {e}"
+                    );
+                }
+                tracing::info!(
+                    budget_bytes = ?applied.budget_bytes,
+                    free_disk_bytes = applied.free_disk_bytes,
+                    "storage_budget: seeded recommended baseline on first launch"
+                );
+                return Ok(applied);
+            }
+            tracing::warn!(
+                status = %resp.status(),
+                "get_storage_budget: seed POST failed; user will see no-budget state"
+            );
+        }
+    }
+
+    Ok(snapshot)
+}
+
+/// Push a new budget to the daemon. `budget_bytes = None` clears the
+/// budget. Also rewrites the persisted `desktop.toml` so the choice
+/// survives a restart — the daemon's atomic is runtime state, the
+/// config file is the source of truth on next boot.
+#[tauri::command]
+pub async fn set_storage_budget(
+    state: State<'_, Arc<AppState>>,
+    budget_bytes: Option<u64>,
+) -> Result<StorageBudgetState, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/storage/budget");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "budget_bytes": budget_bytes }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/storage/budget: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/storage/budget returned {status}: {body}"
+        ));
+    }
+    let applied: StorageBudgetState = resp
+        .json()
+        .await
+        .map_err(|e| format!("decode /internal/storage/budget: {e}"))?;
+
+    // Persist into desktop.toml. Best-effort: if the disk write
+    // fails the daemon already has the new value in its atomic, so
+    // the runtime experience is correct; only the next-boot default
+    // would revert. Log and surface the error so the UI can show it.
+    {
+        let mut cfg = state.config.write().await;
+        cfg.storage_budget_bytes = applied.budget_bytes;
+        if let Err(e) = cfg.save() {
+            tracing::warn!("set_storage_budget: config save failed: {e}");
+            return Err(format!("daemon updated but config save failed: {e}"));
+        }
+    }
+
+    Ok(applied)
+}
+
 /// Return health details for a single installed corpus (claim/relationship
 /// counts, article profiles flag). Loaded on demand so `list_corpora` stays
 /// fast — the frontend calls this only when the user expands the detail panel.
@@ -3667,6 +3855,29 @@ pub struct ChunkRecordDto {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub atom_spans: Vec<AtomSpanDto>,
     pub metadata: serde_json::Value,
+    /// Populated when `corpus_id == "conversation-history"`. The
+    /// reading surface uses presence of this field to pick the
+    /// conversation-shaped renderer over the default book renderer.
+    /// Mirrors `ConversationChunkMeta` in the HTTP layer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation: Option<ConversationChunkMetaDto>,
+}
+
+#[derive(Serialize)]
+pub struct ConversationChunkMetaDto {
+    pub conversation_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<ConversationSegmentDto>,
+}
+
+#[derive(Serialize)]
+pub struct ConversationSegmentDto {
+    pub role: String,
+    pub content: String,
 }
 
 #[derive(Serialize)]
@@ -3703,6 +3914,7 @@ fn chunk_record_dto_from_row(
     corpus_id: &str,
     row: &corpus_engine::EnrichmentChunkRow,
     atoms: Option<&[corpus_engine::enrichment::atlas::AtomEnvelope]>,
+    conversation: Option<ConversationChunkMetaDto>,
 ) -> ChunkRecordDto {
     let metadata: serde_json::Value = row
         .metadata_raw
@@ -3739,7 +3951,81 @@ fn chunk_record_dto_from_row(
         section_id,
         atom_spans,
         metadata,
+        conversation,
     }
+}
+
+const CONVERSATION_HISTORY_CORPUS_ID: &str = "conversation-history";
+
+/// Same role-marker parser as the HTTP layer. Lives here in
+/// duplicate (small, no shared crate available between mesh-http
+/// and src-tauri) to keep the in-process Tauri path independent of
+/// the HTTP path. Both shapes are wire-compatible.
+fn parse_conversation_segments_dto(content: &str) -> Vec<ConversationSegmentDto> {
+    if !content.starts_with('[') {
+        return Vec::new();
+    }
+    let mut segments: Vec<ConversationSegmentDto> = Vec::new();
+    let mut idx = 0usize;
+    while idx < content.len() {
+        if !content[idx..].starts_with('[') {
+            break;
+        }
+        let role_close = match content[idx + 1..].find(']') {
+            Some(rel) => idx + 1 + rel,
+            None => break,
+        };
+        let role = content[idx + 1..role_close].to_string();
+        let body_start = if content[role_close + 1..].starts_with(' ') {
+            role_close + 2
+        } else {
+            role_close + 1
+        };
+        let body_end = match content[body_start..].find("\n\n[") {
+            Some(rel) => body_start + rel,
+            None => content.len(),
+        };
+        let body = content[body_start..body_end].to_string();
+        if !role.is_empty() {
+            segments.push(ConversationSegmentDto { role, content: body });
+        }
+        idx = if body_end == content.len() {
+            content.len()
+        } else {
+            body_end + 2
+        };
+    }
+    segments
+}
+
+/// Resolve conversation metadata for a chunk via the SQLite store.
+/// Returns `None` for non-conversation corpora and for conversation
+/// chunks whose `source_doc_id` (= conversation_id) couldn't be
+/// looked up. Errors are swallowed so the chunk still renders.
+async fn maybe_resolve_conversation_meta_for_commands(
+    state: &State<'_, Arc<AppState>>,
+    corpus_id: &str,
+    row: &corpus_engine::EnrichmentChunkRow,
+) -> Option<ConversationChunkMetaDto> {
+    if corpus_id != CONVERSATION_HISTORY_CORPUS_ID {
+        return None;
+    }
+    let conversation_id = row.source_doc_id.clone()?;
+    let segments = parse_conversation_segments_dto(&row.content);
+    let store_arc = state.store.read().await.clone();
+    let (title, updated_at) = match store_arc {
+        Some(s) => match s.get_conversation(&conversation_id).await {
+            Ok(c) => (c.title, Some(c.updated_at)),
+            Err(_) => (None, None),
+        },
+        None => (None, None),
+    };
+    Some(ConversationChunkMetaDto {
+        conversation_id,
+        title,
+        updated_at,
+        segments,
+    })
 }
 
 /// Load atlas atoms for the corpus from `atlas/atoms.json` next to
@@ -3789,9 +4075,22 @@ pub async fn read_get_chunk(
         .await
         .map_err(|e| format!("chunks_by_ids: {e}"))?;
     let atoms = load_atlas_atoms_for_commands(&engine, &corpus_id).await;
-    Ok(rows
-        .pop()
-        .map(|r| chunk_record_dto_from_row(&corpus_id, &r, atoms.as_deref())))
+    let row_opt = rows.pop();
+    let dto = match row_opt {
+        Some(row) => {
+            let conv =
+                maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, &row)
+                    .await;
+            Some(chunk_record_dto_from_row(
+                &corpus_id,
+                &row,
+                atoms.as_deref(),
+                conv,
+            ))
+        }
+        None => None,
+    };
+    Ok(dto)
 }
 
 #[tauri::command]
@@ -3825,18 +4124,31 @@ pub async fn read_get_chunk_neighbors(
     let atoms = load_atlas_atoms_for_commands(&engine, &corpus_id).await;
     let atoms_ref = atoms.as_deref();
 
-    let center = chunk_record_dto_from_row(&corpus_id, &window.center, atoms_ref);
+    // Conversation augmentation per chunk. Cheap (one SQLite hit
+    // per neighbor), and adjacent chunks tend to share a
+    // conversation_id so the get_conversation cache hits hot.
+    let center_conv =
+        maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, &window.center)
+            .await;
+    let center = chunk_record_dto_from_row(
+        &corpus_id,
+        &window.center,
+        atoms_ref,
+        center_conv,
+    );
     let outbound_url = center.url.clone();
-    let prev = window
-        .prev
-        .iter()
-        .map(|r| chunk_record_dto_from_row(&corpus_id, r, atoms_ref))
-        .collect();
-    let next = window
-        .next
-        .iter()
-        .map(|r| chunk_record_dto_from_row(&corpus_id, r, atoms_ref))
-        .collect();
+    let mut prev: Vec<ChunkRecordDto> = Vec::with_capacity(window.prev.len());
+    for r in &window.prev {
+        let conv =
+            maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, r).await;
+        prev.push(chunk_record_dto_from_row(&corpus_id, r, atoms_ref, conv));
+    }
+    let mut next: Vec<ChunkRecordDto> = Vec::with_capacity(window.next.len());
+    for r in &window.next {
+        let conv =
+            maybe_resolve_conversation_meta_for_commands(&state, &corpus_id, r).await;
+        next.push(chunk_record_dto_from_row(&corpus_id, r, atoms_ref, conv));
+    }
 
     Ok(Some(NeighborWindowDto {
         center,

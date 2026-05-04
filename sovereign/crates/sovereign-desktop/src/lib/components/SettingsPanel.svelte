@@ -8,7 +8,10 @@
     setIngestBudget,
     getMeshQuiesced,
     setMeshQuiesced,
+    getStorageBudget,
+    setStorageBudget,
   } from "../api";
+  import type { StorageBudgetState } from "../api";
   import type {
     BootstrapSnapshot,
     DesktopConfig,
@@ -65,6 +68,49 @@
   let meshQuiesced = $state<boolean>(false);
   let ingestStatusMessage = $state<string>("");
 
+  // ── Storage budget ────────────────────────────────────────────
+  // Same pattern: daemon owns the live value, the desktop persists
+  // the user choice in `desktop.toml` so it survives restart. The
+  // daemon-side `get_storage_budget` Tauri command auto-seeds a
+  // recommended default on first launch (when neither the config
+  // nor the running daemon has a budget) so the user never sees a
+  // blank "no budget" state without an explicit choice.
+  let storageBudget = $state<StorageBudgetState | null>(null);
+  // Pending GiB the user has typed but not yet applied. `null` means
+  // "use whatever budget says" (no pending edit). Apply happens
+  // explicitly via the button so an in-progress number doesn't push
+  // a value the user is still typing.
+  let storageDraftGib = $state<number | null>(null);
+  let storageStatusMessage = $state<string>("");
+  // Bytes ↔ GiB helpers. Use binary GiB throughout so the math
+  // matches the daemon's `1_073_741_824` divisor.
+  const BYTES_PER_GIB = 1_073_741_824;
+  function bytesToGib(b: number): number {
+    return b / BYTES_PER_GIB;
+  }
+  function gibToBytes(g: number): number {
+    return Math.round(g * BYTES_PER_GIB);
+  }
+  function fmtGib(b: number, digits = 1): string {
+    return `${bytesToGib(b).toFixed(digits)} GiB`;
+  }
+  // Usage / budget percent. Capped at 100 so the bar saturates rather
+  // than overflowing when used > budget (which can happen if the
+  // user dropped the budget below current usage — the daemon will
+  // then refuse new shards but the existing data stays put).
+  let usagePercent = $derived.by(() => {
+    if (!storageBudget?.budget_bytes) return 0;
+    return Math.min(100, (storageBudget.used_bytes / storageBudget.budget_bytes) * 100);
+  });
+  // What the bar means colour-wise. ≥95% = "near limit" — the
+  // scheduler is about to refuse new shards. We don't make this
+  // an error because the user *chose* the limit; it's a heads-up.
+  let usageState = $derived.by(() => {
+    if (usagePercent >= 100) return "over";
+    if (usagePercent >= 95) return "near";
+    return "ok";
+  });
+
   onMount(async () => {
     try {
       config = await getConfig();
@@ -88,7 +134,37 @@
     } catch (e) {
       console.warn("Failed to load mesh quiesce state:", e);
     }
+    try {
+      storageBudget = await getStorageBudget();
+    } catch (e) {
+      console.warn("Failed to load storage budget (daemon offline?):", e);
+    }
   });
+
+  async function applyStorageBudget(bytes: number | null) {
+    storageStatusMessage = "";
+    try {
+      storageBudget = await setStorageBudget(bytes);
+      storageDraftGib = null;
+    } catch (e) {
+      storageStatusMessage = `Could not update budget: ${e}`;
+    }
+  }
+  async function applyRecommendedStorageBudget() {
+    if (!storageBudget) return;
+    await applyStorageBudget(storageBudget.recommended_bytes);
+  }
+  async function clearStorageBudget() {
+    await applyStorageBudget(null);
+  }
+  async function applyDraftStorageBudget() {
+    if (storageDraftGib === null) return;
+    if (!Number.isFinite(storageDraftGib) || storageDraftGib < 1) {
+      storageStatusMessage = "Budget must be at least 1 GiB.";
+      return;
+    }
+    await applyStorageBudget(gibToBytes(storageDraftGib));
+  }
 
   /// Discrete slider positions. Off (1.0) is full speed — the
   /// daemon's default and what most users want when they're not
@@ -593,6 +669,107 @@
                 </span>
               </label>
             </div>
+          {/if}
+
+          <!-- ── Storage budget ──────────────────────────────── -->
+          <p class="section-label">Storage budget</p>
+          <p class="slot-desc" style="margin-bottom: 12px;">
+            How much disk Sovereign is allowed to use for installed corpora.
+            The scheduler — both for your own installs and for shards peers
+            ask this node to host — stops accepting new work once the budget
+            is reached. Existing corpora stay put either way.
+          </p>
+
+          {#if storageBudget}
+            <div class="param-card" style="margin-bottom: 16px;">
+              <div class="storage-summary">
+                <div class="storage-line">
+                  {#if storageBudget.budget_bytes !== null}
+                    <span class="storage-used">{fmtGib(storageBudget.used_bytes)}</span>
+                    <span class="storage-of">of</span>
+                    <span class="storage-budget">{fmtGib(storageBudget.budget_bytes)}</span>
+                    <span class="storage-meta">
+                      ({fmtGib(storageBudget.free_disk_bytes, 0)} free on disk)
+                    </span>
+                  {:else}
+                    <span class="storage-used">{fmtGib(storageBudget.used_bytes)}</span>
+                    <span class="storage-meta">
+                      used · no budget — Sovereign uses whatever the disk has
+                    </span>
+                  {/if}
+                </div>
+                {#if storageBudget.budget_bytes !== null}
+                  <div class="storage-bar" aria-hidden="true">
+                    <div
+                      class="storage-bar-fill"
+                      class:storage-bar-fill--near={usageState === "near"}
+                      class:storage-bar-fill--over={usageState === "over"}
+                      style="width: {usagePercent.toFixed(1)}%"
+                    ></div>
+                  </div>
+                  {#if usageState === "over"}
+                    <p class="storage-near-msg">
+                      Over budget. Sovereign won't accept new corpora or peer shards
+                      until usage drops or you raise the budget.
+                    </p>
+                  {:else if usageState === "near"}
+                    <p class="storage-near-msg">
+                      Near the budget. New shards will be deferred soon.
+                    </p>
+                  {/if}
+                {/if}
+              </div>
+
+              <div class="storage-controls">
+                <label class="storage-input-row">
+                  <span class="param-name">Budget (GiB)</span>
+                  <input
+                    class="param-input"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder={storageBudget.budget_bytes !== null
+                      ? bytesToGib(storageBudget.budget_bytes).toFixed(0)
+                      : "—"}
+                    value={storageDraftGib ?? ""}
+                    oninput={(e) => {
+                      const v = (e.target as HTMLInputElement).value;
+                      storageDraftGib = v === "" ? null : Number(v);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    class="slot-btn"
+                    disabled={storageDraftGib === null}
+                    onclick={applyDraftStorageBudget}
+                  >Apply</button>
+                </label>
+                <div class="storage-actions">
+                  <button
+                    type="button"
+                    class="slot-btn"
+                    onclick={applyRecommendedStorageBudget}
+                  >Use recommended ({fmtGib(storageBudget.recommended_bytes, 0)})</button>
+                  {#if storageBudget.budget_bytes !== null}
+                    <button
+                      type="button"
+                      class="slot-btn slot-btn--clear"
+                      onclick={clearStorageBudget}
+                    >Clear budget</button>
+                  {/if}
+                </div>
+              </div>
+
+              {#if storageStatusMessage}
+                <p class="slot-desc" style="color: var(--color-error, #c44); margin: 8px 0 0;">
+                  {storageStatusMessage}
+                </p>
+              {/if}
+            </div>
+          {:else}
+            <p class="slot-desc" style="margin-bottom: 16px;">
+              Loading storage budget…
+            </p>
           {/if}
 
           <!-- ── Ingest pressure ─────────────────────────────── -->
@@ -1404,5 +1581,70 @@
     font-size: 0.78rem;
     color: var(--text-muted);
     line-height: 1.45;
+  }
+
+  /* Storage-budget summary — usage / budget bar plus controls. */
+  .storage-summary {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .storage-line {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .storage-used { font-weight: 600; }
+  .storage-of { color: var(--text-muted); font-weight: 400; }
+  .storage-budget { font-weight: 500; }
+  .storage-meta {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-left: 4px;
+  }
+  .storage-bar {
+    height: 6px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .storage-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.2s ease, background 0.2s ease;
+  }
+  .storage-bar-fill--near {
+    background: var(--accent-light, #d4a13a);
+  }
+  .storage-bar-fill--over {
+    background: var(--error, #c44);
+  }
+  .storage-near-msg {
+    margin: 6px 0 0;
+    font-size: 0.74rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .storage-controls {
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .storage-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .storage-input-row .param-name { flex: 1; }
+  .storage-input-row .param-input { width: 100px; }
+  .storage-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
   }
 </style>
