@@ -103,6 +103,30 @@ toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/
 sha256 = ""
 
 [[recipes]]
+id = "wikipedia-catalog"
+name = "Wikipedia Catalog"
+description = "Catalog of all ~6.8M English Wikipedia articles (titles + abstracts + section anchors). Pairs with the `wikipedia` chunk corpus and the `wikipedia-article` on-demand recipe — the chat-with-wikipedia surface that gracefully fetches any article on miss."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.07
+size_indexed_gb = 4.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-catalog/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "wikipedia-article"
+name = "Wikipedia — Single Article"
+description = "On-demand single-article ingest from the MediaWiki Action API. Triggered by a `wikipedia-catalog` hit; lands as part of the `wikipedia` corpus so retrieval and mesh sharing treat fetched articles uniformly with curated L5 content."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+enrichment_enabled = true
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-article/recipe.toml"
+sha256 = ""
+
+[[recipes]]
 id = "crs_reports"
 name = "CRS Reports"
 description = "Congressional Research Service reports from EveryCRSReport.com — non-partisan policy analysis in the public domain."

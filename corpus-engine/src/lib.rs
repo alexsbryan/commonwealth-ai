@@ -108,7 +108,8 @@ pub use testing::{
     ValidationResult,
 };
 pub use sharding::{
-    merge_partitions_into_canonical, MergePhaseProgress, PartitionMergeReport,
+    append_partition_to_canonical, merge_partitions_into_canonical, AppendReport,
+    MergePhaseProgress, PartitionMergeReport,
 };
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use types::{

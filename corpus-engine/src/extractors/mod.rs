@@ -6,6 +6,8 @@ pub mod csv;
 pub mod gutenberg_catalog;
 pub mod parquet;
 pub mod plaintext;
+pub mod wikipedia_api_article;
+pub mod wikipedia_catalog;
 pub mod wikipedia_structured;
 pub mod wikipedia_jsonl;
 pub mod wikipedia_types;

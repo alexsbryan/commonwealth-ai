@@ -822,6 +822,245 @@ pub async fn merge_partitions_into_canonical(
     })
 }
 
+// ---------------------------------------------------------------------------
+// append_partition_to_canonical — incremental append into an existing corpus
+// ---------------------------------------------------------------------------
+
+/// Outcome of a single [`append_partition_to_canonical`] call.
+#[derive(Debug, Clone)]
+pub struct AppendReport {
+    pub canonical_path: PathBuf,
+    /// Total chunks in the canonical AFTER the append.
+    pub canonical_chunks_after: u64,
+    /// Number of input chunks read from `source_path`.
+    pub source_chunks: u64,
+    /// Number of chunks that survived dedupe and landed in canonical.
+    pub chunks_inserted: u64,
+    /// Number dropped because their `content_hash` already existed in
+    /// canonical or earlier in this same source batch.
+    pub chunks_deduped: u64,
+}
+
+/// Append every chunk from `source_path` (a per-work corpus dir
+/// produced by a one-off ingest) into the canonical corpus at
+/// `canonical_path`. If `canonical_path` is empty / non-existent
+/// the canonical is created fresh.
+///
+/// Used by the catalog-driven on-demand ingest to land each fetched
+/// article into a single shared corpus (e.g. `wikipedia-fetched`)
+/// rather than spawning one corpus per article. Mirrors the dedupe
+/// + renumber logic of [`merge_shards`] but operates on a single
+/// source against an existing canonical destination.
+///
+/// `dedupe by content_hash`: rows with a `content_hash` already
+/// present in canonical (or earlier in this source batch) are
+/// dropped. Rows with NULL `content_hash` fall back to
+/// `(unit_id, source_doc_id)` keying, then to "always insert".
+///
+/// Side effects:
+///   - canonical's `_corpus_meta.json` is created on first append
+///     and left intact on subsequent appends (chunk_count is
+///     recomputed by the next `info()` call).
+///   - FTS is NOT rebuilt here — caller is expected to do that
+///     after a batch of appends to amortise the cost.
+pub async fn append_partition_to_canonical(
+    source_path: &Path,
+    canonical_path: &Path,
+    canonical_corpus_id: &str,
+    canonical_corpus_name: &str,
+    embedding_model: &str,
+    embedding_dim: usize,
+    mesh_sharing: bool,
+) -> Result<AppendReport> {
+    if !source_path.join("_corpus_meta.json").exists() {
+        return Err(Error::NoShardsFound(format!(
+            "append_partition_to_canonical: source {} has no _corpus_meta.json",
+            source_path.display()
+        )));
+    }
+
+    // Open or create the canonical destination. `create_or_resume`
+    // tolerates both "fresh" and "already exists" — exactly what we
+    // need for a corpus that grows over time across many calls.
+    let (canonical, _existing_iter_pos) = CorpusIndex::create_or_resume(
+        canonical_path,
+        canonical_corpus_id,
+        canonical_corpus_name,
+        embedding_model,
+        embedding_dim,
+        mesh_sharing,
+        "",
+    )
+    .await?;
+
+    // Snapshot canonical state before the append so we can renumber
+    // ids contiguously and dedupe against existing content.
+    let pre_info = canonical.info().await?;
+    let mut next_id: i64 = pre_info.chunk_count.saturating_add(1) as i64;
+
+    // Pre-load existing content_hashes so we can drop dupes from the
+    // source before inserting. For very large canonicals this is N
+    // strings (one per chunk) — acceptable up to ~10M; if catalogs
+    // get larger we'd switch to a bloom filter.
+    let mut seen_hashes: std::collections::HashSet<String> = canonical
+        .list_indexed_content_hashes()
+        .await
+        .unwrap_or_default();
+    let mut seen_units: std::collections::HashSet<(i32, String)> =
+        std::collections::HashSet::new();
+
+    let source = CorpusIndex::open(source_path).await?;
+    let source_info = source.info().await?;
+    let dim = source_info.embedding_dimensions;
+    if dim != embedding_dim {
+        return Err(Error::Database(format!(
+            "append_partition_to_canonical: source dim {} mismatches canonical dim {}",
+            dim, embedding_dim
+        )));
+    }
+
+    let batches: Vec<RecordBatch> = source
+        .table()
+        .query()
+        .execute()
+        .await
+        .map_err(|e| Error::Database(format!("source read: {e}")))?
+        .try_collect()
+        .await
+        .map_err(|e| Error::Database(format!("source collect: {e}")))?;
+
+    let mut chunks_inserted: u64 = 0;
+    let mut chunks_deduped: u64 = 0;
+
+    for batch in &batches {
+        let num_rows = batch.num_rows();
+        if num_rows == 0 {
+            continue;
+        }
+
+        let hash_col = batch
+            .column_by_name("content_hash")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+        let unit_id_col = batch
+            .column_by_name("unit_id")
+            .and_then(|c| c.as_any().downcast_ref::<arrow_array::Int32Array>());
+        let source_doc_col = batch
+            .column_by_name("source_doc_id")
+            .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+        let keep_mask: BooleanArray = (0..num_rows)
+            .map(|row| {
+                if let Some(col) = hash_col {
+                    if !col.is_null(row) {
+                        let h = col.value(row);
+                        if seen_hashes.contains(h) {
+                            chunks_deduped += 1;
+                            return false;
+                        }
+                        seen_hashes.insert(h.to_string());
+                        return true;
+                    }
+                }
+                if let (Some(u_col), Some(d_col)) = (unit_id_col, source_doc_col) {
+                    if !u_col.is_null(row) && !d_col.is_null(row) {
+                        let key = (u_col.value(row), d_col.value(row).to_string());
+                        if seen_units.contains(&key) {
+                            chunks_deduped += 1;
+                            return false;
+                        }
+                        seen_units.insert(key);
+                        return true;
+                    }
+                }
+                true
+            })
+            .collect();
+
+        let filtered = filter_record_batch(batch, &keep_mask)
+            .map_err(|e| Error::Serialization(format!("dedup filter: {e}")))?;
+        let keep_count = filtered.num_rows();
+        if keep_count == 0 {
+            continue;
+        }
+
+        let new_ids: Vec<i64> = (0..keep_count)
+            .map(|i| next_id + i as i64)
+            .collect();
+        next_id += keep_count as i64;
+
+        let schema = crate::index::corpus_schema(dim);
+        let null_str_col: ArrayRef = Arc::new(
+            StringArray::from(vec![Option::<String>::None; keep_count]),
+        );
+        let null_i32_col: ArrayRef = Arc::new(
+            arrow_array::Int32Array::from(vec![Option::<i32>::None; keep_count]),
+        );
+        let null_i64_col: ArrayRef = Arc::new(
+            Int64Array::from(vec![Option::<i64>::None; keep_count]),
+        );
+        let col_or_null_str = |name: &str| {
+            filtered
+                .column_by_name(name)
+                .cloned()
+                .unwrap_or_else(|| null_str_col.clone())
+        };
+        let col_or_null_i32 = |name: &str| {
+            filtered
+                .column_by_name(name)
+                .cloned()
+                .unwrap_or_else(|| null_i32_col.clone())
+        };
+        let col_or_null_i64 = |name: &str| {
+            filtered
+                .column_by_name(name)
+                .cloned()
+                .unwrap_or_else(|| null_i64_col.clone())
+        };
+
+        let new_batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int64Array::from(new_ids)),
+                filtered.column_by_name("content").unwrap().clone(),
+                filtered.column_by_name("title").unwrap().clone(),
+                filtered.column_by_name("url").unwrap().clone(),
+                filtered.column_by_name("embedding").unwrap().clone(),
+                filtered.column_by_name("metadata").unwrap().clone(),
+                col_or_null_str("content_hash"),
+                col_or_null_str("source_doc_id"),
+                col_or_null_str("symbol_name"),
+                col_or_null_str("symbol_kind"),
+                col_or_null_str("file_path"),
+                col_or_null_i32("line_start"),
+                col_or_null_i32("line_end"),
+                col_or_null_str("language"),
+                col_or_null_i64("mtime"),
+                col_or_null_i32("unit_id"),
+            ],
+        )
+        .map_err(|e| Error::Serialization(format!("append batch: {e}")))?;
+
+        canonical
+            .table()
+            .add(vec![new_batch])
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("append insert: {e}")))?;
+
+        chunks_inserted += keep_count as u64;
+    }
+
+    let post_info = canonical.info().await?;
+
+    Ok(AppendReport {
+        canonical_path: canonical_path.to_path_buf(),
+        canonical_chunks_after: post_info.chunk_count,
+        source_chunks: source_info.chunk_count,
+        chunks_inserted,
+        chunks_deduped,
+    })
+}
+
 fn dir_size(path: &Path) -> u64 {
     let mut total = 0;
     if let Ok(entries) = std::fs::read_dir(path) {

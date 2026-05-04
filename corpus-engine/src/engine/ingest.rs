@@ -1719,6 +1719,12 @@ impl CorpusEngine {
             ExtractorConfig::GutenbergCatalog {} => {
                 Box::new(extractors::gutenberg_catalog::GutenbergCatalogExtractor)
             }
+            ExtractorConfig::WikipediaCatalog {} => {
+                Box::new(extractors::wikipedia_catalog::WikipediaCatalogExtractor)
+            }
+            ExtractorConfig::WikipediaApiArticle {} => {
+                Box::new(extractors::wikipedia_api_article::WikipediaApiArticleExtractor::default())
+            }
             ExtractorConfig::Parquet {
                 content_column,
                 label_column,

@@ -1642,31 +1642,38 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
     "section_id": { "type": "string" },
     "entities_introduced": {
       "type": "array",
+      "maxItems": 15,
       "items": { "$ref": "#/$defs/entity_sketch" }
     },
     "entities_developed": {
       "type": "array",
+      "maxItems": 10,
       "items": { "$ref": "#/$defs/entity_state_sketch" }
     },
     "relations_introduced": {
       "type": "array",
+      "maxItems": 10,
       "items": { "$ref": "#/$defs/relation_sketch" }
     },
     "relations_developed": {
       "type": "array",
+      "maxItems": 10,
       "items": { "$ref": "#/$defs/relation_state_sketch" }
     },
     "events": {
       "type": "array",
+      "maxItems": 10,
       "items": { "$ref": "#/$defs/event_sketch" }
     },
     "claims": {
       "type": "array",
+      "maxItems": 10,
       "items": { "$ref": "#/$defs/claim_sketch" }
     },
     "questions_raised": {
       "type": "array",
       "minItems": 1,
+      "maxItems": 25,
       "items": { "$ref": "#/$defs/question_sketch" }
     }
   },
@@ -1677,7 +1684,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "additionalProperties": false,
       "properties": {
         "canonical_name": { "type": "string" },
-        "aliases": { "type": "array", "items": { "type": "string" } },
+        "aliases": { "type": "array", "maxItems": 5, "items": { "type": "string" } },
         "entity_type": {
           "type": "string",
           "enum": ["person", "concept", "institution", "work", "place", "initiative"]
@@ -1701,7 +1708,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "participants": { "type": "array", "items": { "type": "string" } },
+        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
         "label": { "type": "string" },
         "anchor": { "type": "string" }
       },
@@ -1711,7 +1718,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "participants": { "type": "array", "items": { "type": "string" } },
+        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
         "label": { "type": "string" },
         "anchor": { "type": "string" }
       },
@@ -1722,7 +1729,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "additionalProperties": false,
       "properties": {
         "description": { "type": "string" },
-        "participants": { "type": "array", "items": { "type": "string" } },
+        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
         "anchor": { "type": "string" }
       },
       "required": ["description"]
@@ -1737,7 +1744,7 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
         "attributed_to": {
           "anyOf": [
             { "type": "string" },
-            { "type": "array", "items": { "type": "string" } },
+            { "type": "array", "maxItems": 8, "items": { "type": "string" } },
             { "type": "null" }
           ]
         },

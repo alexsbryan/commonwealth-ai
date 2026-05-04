@@ -721,6 +721,38 @@ pub struct CatalogConfig {
     /// minute. Default 500 wpm.
     #[serde(default)]
     pub enrich_estimate_wpm: Option<u32>,
+
+    /// Optional shared corpus id that catalog-driven ingests append
+    /// into. When set, every successful work-ingest writes its
+    /// chunks into a single growing corpus (e.g. `"wikipedia-fetched"`)
+    /// instead of creating one corpus per work. Atlas, mesh-share,
+    /// and retrieval all happen against the single shared corpus —
+    /// a much better fit for catalogs whose long-tail can be
+    /// thousands of articles. When unset (default), the legacy
+    /// per-work pattern (`<catalog_id>-<work_id>`) is used.
+    #[serde(default)]
+    pub target_corpus_id: Option<String>,
+
+    /// Enable one-hop "minesweeper" link-expansion after fetching an
+    /// article. When true, the just-ingested article's outgoing
+    /// links are queued for follow-up fetch into the same
+    /// `target_corpus_id`. Only meaningful when `target_corpus_id`
+    /// is set — without a shared target each expansion would
+    /// spawn yet another per-work corpus.
+    #[serde(default)]
+    pub expansion_enabled: bool,
+
+    /// Maximum number of linked articles to fetch in expansion.
+    /// Ranking is significance-first (lead-section links beat
+    /// body-section links, then document order). Default 20 keeps
+    /// the per-fetch cost bounded; raise for deeper neighbourhood
+    /// pre-loading, lower for fastest-only-the-asked behaviour.
+    #[serde(default = "default_expansion_link_cap")]
+    pub expansion_link_cap: u32,
+}
+
+fn default_expansion_link_cap() -> u32 {
+    20
 }
 
 // ---------------------------------------------------------------------------
@@ -1186,6 +1218,25 @@ pub enum ExtractorConfig {
     /// See [`crate::extractors::gutenberg_catalog`].
     #[serde(rename = "gutenberg_catalog")]
     GutenbergCatalog {},
+    /// Wikipedia catalog — one chunk per article carrying title +
+    /// abstract + section anchors. Pair with `chunker = "passthrough"`,
+    /// `[corpus] kind = "catalog"`, and a `[catalog]` block whose
+    /// `content_recipe` points at `wikipedia-article` for the per-
+    /// article on-demand fetch. Source JSONL is produced offline by
+    /// `sovereign-recipes/wikipedia-catalog/scripts/build_catalog.py`
+    /// from the Wikimedia abstract dump.
+    #[serde(rename = "wikipedia_catalog")]
+    WikipediaCatalog {},
+    /// Per-article on-demand extractor for Wikipedia. Consumes the
+    /// MediaWiki Action API JSON (`action=parse&prop=wikitext|sections|
+    /// links|properties`) and emits one `ExtractedDoc` per article
+    /// section with full `WikipediaChunkMetadata` — same shape as
+    /// the bulk JSONL extractor produces, so fetched articles are
+    /// indistinguishable from dump-extracted ones downstream
+    /// (atlas link graph, section-typed retrieval, contested-marker
+    /// classification all work identically).
+    #[serde(rename = "wikipedia_api_article")]
+    WikipediaApiArticle {},
     #[serde(rename = "parquet")]
     Parquet {
         content_column: String,
@@ -1610,6 +1661,8 @@ pub fn bundled_recipe_toml(id: &str) -> Option<&'static str> {
         "openalex" => Some(include_str!("../recipes/openalex/recipe.toml")),
         "gutenberg" => Some(include_str!("../recipes/gutenberg/recipe.toml")),
         "gutenberg-work" => Some(include_str!("../recipes/gutenberg-work/recipe.toml")),
+        "wikipedia-catalog" => Some(include_str!("../recipes/wikipedia-catalog/recipe.toml")),
+        "wikipedia-article" => Some(include_str!("../recipes/wikipedia-article/recipe.toml")),
         "sep" => Some(include_str!("../recipes/sep/recipe.toml")),
         "crs_reports" => Some(include_str!("../recipes/crs_reports/recipe.toml")),
         _ => None,
