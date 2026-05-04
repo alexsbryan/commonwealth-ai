@@ -466,6 +466,36 @@ Reply with ONLY the letter: A, B, or C"#
         )
     }
 
+    /// Pass 2.5: ask the model to pick the *specific* tool from the
+    /// available set. Schema-constrained downstream so the response
+    /// is forced to `{"tool": "<one of the ids>"}`.
+    fn build_pass2_tool_selection_prompt(
+        message: &str,
+        context: &ConversationContext,
+        available_tools: &[ToolDescriptor],
+    ) -> String {
+        let context_str = Self::format_context_summary(context);
+        let tools_str = available_tools
+            .iter()
+            .map(|t| format!("- {}: {}", t.id, t.description))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        format!(
+            r#"The user wants a single tool call. Pick the BEST tool for this request.
+
+Conversation context: {context_str}
+
+Available tools:
+{tools_str}
+
+User message: "{message}"
+
+Reply with JSON only:
+{{"tool": "<one of the tool ids above, exactly>"}}"#
+        )
+    }
+
     /// Build a summary of conversation context for the classification prompt.
     /// Includes working memory (current goal, facts) and recent messages.
     fn format_context_summary(context: &ConversationContext) -> String {
@@ -1209,7 +1239,56 @@ Reply with ONLY the letter: A, B, or C"#
         Ok(response.text)
     }
 
+    /// Schema-constrained call for Pass 2.5 tool selection. The
+    /// schema's `tool` enum is the set of registered tool ids — the
+    /// constraint enforcer mathematically can't emit anything else.
+    async fn classify_call_tool_json(
+        &self,
+        prompt: String,
+        tool_ids: &[String],
+    ) -> Result<String> {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "tool": {
+                    "type": "string",
+                    "enum": tool_ids,
+                },
+            },
+            "required": ["tool"],
+        });
+        let request = CompletionRequest {
+            prompt,
+            system_message: Some(
+                "You are a tool router. Respond with valid JSON only.".to_string(),
+            ),
+            preferred_speed: Speed::Fast,
+            max_tokens: Some(64),
+            temperature: Some(0.0),
+            structured_output: Some(schema),
+            think_budget: Some(0),
+            top_k: None,
+            top_p: None,
+            oicp: None,
+                tools: None,
+                tool_choice: None,
+                        model_id: None,
+                        enable_thinking: None,
+        };
+        let response = self.inference.complete(&request).await?;
+        eprintln!("[router] tool_select raw output: {:?}", response.text);
+        Ok(response.text)
+    }
+
     /// Refine the ACTION coarse classification via Pass 2.
+    ///
+    /// Pass 2 is a category check (single-tool / multi-step / knowledge).
+    /// When it returns `A` (single tool), we run Pass 2.5 — a follow-up
+    /// LLM call constrained to the actual tool ids — to *pick* the
+    /// specific tool. Hardcoding `available_tools.first()` here was the
+    /// original bug: the agent's autonomous tool selection picked
+    /// whatever tool happened to register first (e.g. `ShellTool`)
+    /// instead of the LLM-fit tool (e.g. `wikipedia_fetch`).
     async fn pass2_refine(
         &self,
         message: &str,
@@ -1224,15 +1303,43 @@ Reply with ONLY the letter: A, B, or C"#
         let refined = Self::parse_letter(&pass2_response);
         Ok(match refined {
             'A' => {
-                let tool = available_tools
-                    .first()
-                    .map(|t| t.id.clone())
-                    .unwrap_or_default();
+                let tool = self
+                    .pass2_select_tool(message, context, available_tools)
+                    .await?;
                 Intent::SimpleAction { tool }
             }
             'C' => Intent::KnowledgeQuery,
             _ => Intent::ComplexTask,
         })
+    }
+
+    /// Pass 2.5: pick the specific tool the user wants, constrained to
+    /// the registered tool ids. Schema-constrained output forces the
+    /// model into `{"tool": "<id>"}` where `<id>` is one of the actual
+    /// available tool ids — `JsonConstraint` masks logits so the small
+    /// fast-slot model can't hallucinate a tool name.
+    ///
+    /// On parse failure or off-schema output (rare given the constraint),
+    /// fall back to the first tool — preserving the prior behaviour as a
+    /// floor rather than as the default.
+    async fn pass2_select_tool(
+        &self,
+        message: &str,
+        context: &ConversationContext,
+        available_tools: &[ToolDescriptor],
+    ) -> Result<ToolId> {
+        debug_assert!(!available_tools.is_empty());
+        if available_tools.len() == 1 {
+            // No selection to make.
+            return Ok(available_tools[0].id.clone());
+        }
+        let prompt =
+            Self::build_pass2_tool_selection_prompt(message, context, available_tools);
+        let tool_ids: Vec<String> =
+            available_tools.iter().map(|t| t.id.clone()).collect();
+        let raw = self.classify_call_tool_json(prompt, &tool_ids).await?;
+        Ok(Self::parse_tool_selection(&raw, &tool_ids)
+            .unwrap_or_else(|| available_tools[0].id.clone()))
     }
 
     /// Called when Pass 1 returns SIMPLE. Runs a fast self-assessment to decide
@@ -1294,6 +1401,42 @@ Reply with ONLY the letter: A, B, or C"#
             .trim_end_matches("```")
             .trim();
         serde_json::from_str(cleaned).unwrap_or_default()
+    }
+
+    /// Parse a Pass 2.5 tool-selection JSON response. Returns
+    /// `Some(tool_id)` only when the parsed `tool` field is one of
+    /// `valid_ids`. Tolerant of `<think>` blocks and code fences for
+    /// the rare case the schema constraint is bypassed (e.g. legacy
+    /// providers without `JsonConstraint` wired in).
+    fn parse_tool_selection(raw: &str, valid_ids: &[String]) -> Option<String> {
+        let after_think = if let (Some(start), Some(end)) =
+            (raw.find("<think>"), raw.find("</think>"))
+        {
+            if end > start {
+                &raw[end + "</think>".len()..]
+            } else {
+                raw
+            }
+        } else {
+            raw
+        };
+        let cleaned = after_think
+            .trim()
+            .trim_start_matches("```json")
+            .trim_start_matches("```")
+            .trim_end_matches("```")
+            .trim();
+
+        #[derive(serde::Deserialize)]
+        struct ToolSelection {
+            tool: String,
+        }
+        let parsed: ToolSelection = serde_json::from_str(cleaned).ok()?;
+        if valid_ids.iter().any(|id| id == &parsed.tool) {
+            Some(parsed.tool)
+        } else {
+            None
+        }
     }
 
     /// Parse a letter response (A/B/C) from the model.
@@ -1859,6 +2002,54 @@ mod tests {
             LlmRouter::parse_intent("", &[]),
             Intent::SimpleQuery
         ));
+    }
+
+    #[test]
+    fn parse_tool_selection_extracts_valid_id() {
+        let valid = vec!["wikipedia_fetch".to_string(), "shell".to_string()];
+        let raw = r#"{"tool": "wikipedia_fetch"}"#;
+        assert_eq!(
+            LlmRouter::parse_tool_selection(raw, &valid),
+            Some("wikipedia_fetch".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_tool_selection_rejects_unknown_id() {
+        let valid = vec!["wikipedia_fetch".to_string(), "shell".to_string()];
+        let raw = r#"{"tool": "made_up_tool"}"#;
+        assert_eq!(LlmRouter::parse_tool_selection(raw, &valid), None);
+    }
+
+    #[test]
+    fn parse_tool_selection_strips_think_block() {
+        let valid = vec!["wikipedia_fetch".to_string(), "shell".to_string()];
+        let raw = "<think>this is the wikipedia case</think>{\"tool\": \"wikipedia_fetch\"}";
+        assert_eq!(
+            LlmRouter::parse_tool_selection(raw, &valid),
+            Some("wikipedia_fetch".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_tool_selection_strips_code_fences() {
+        let valid = vec!["wikipedia_fetch".to_string(), "shell".to_string()];
+        let raw = "```json\n{\"tool\": \"shell\"}\n```";
+        assert_eq!(
+            LlmRouter::parse_tool_selection(raw, &valid),
+            Some("shell".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_tool_selection_handles_garbage() {
+        let valid = vec!["wikipedia_fetch".to_string()];
+        assert_eq!(LlmRouter::parse_tool_selection("not json", &valid), None);
+        assert_eq!(LlmRouter::parse_tool_selection("", &valid), None);
+        assert_eq!(
+            LlmRouter::parse_tool_selection(r#"{"wrong_field": "x"}"#, &valid),
+            None
+        );
     }
 
     #[test]

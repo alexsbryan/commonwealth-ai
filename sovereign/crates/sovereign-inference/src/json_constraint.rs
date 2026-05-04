@@ -77,7 +77,22 @@ pub enum Schema {
         max_items: Option<usize>,
     },
     StringEnum(Arc<Vec<String>>),
-    StringAny,
+    /// Free-form string. `max_length` is the JSON-Schema `maxLength`
+    /// (in unicode code points, not bytes — counted on UTF-8 start
+    /// bytes during validation). When set and the running count
+    /// reaches it, the parser/validator treats every non-`"` next
+    /// byte as Invalid — the mask sampler then forces the close-
+    /// quote, just like the array-cap path uses `]`.
+    ///
+    /// Without this cap, an unbounded string field is the prime
+    /// runaway path on schema-constrained generation: nothing in
+    /// the mask makes the model ever close the quote, so a single
+    /// `description` or `content` field can swallow the entire
+    /// token budget. (Concrete repro: Phase 1 extraction on a
+    /// 78-word Wikipedia lead burned 11337 tokens before deadline.)
+    StringAny {
+        max_length: Option<usize>,
+    },
     Integer,
     Number,
     Boolean,
@@ -173,7 +188,11 @@ impl CompileCtx {
                         .collect::<Result<_, _>>()?;
                     Ok(Schema::StringEnum(Arc::new(opts)))
                 } else {
-                    Ok(Schema::StringAny)
+                    let max_length = obj
+                        .get("maxLength")
+                        .and_then(|v| v.as_u64())
+                        .map(|n| n as usize);
+                    Ok(Schema::StringAny { max_length })
                 }
             }
             "integer" => Ok(Schema::Integer),
@@ -372,7 +391,7 @@ fn parse_value(p: &mut Cursor, schema: &Schema) -> ParseStatus {
         } => parse_object(p, properties, *required_count, *additional),
         Schema::Array { items, max_items } => parse_array(p, items, *max_items),
         Schema::StringEnum(opts) => parse_string_enum(p, opts),
-        Schema::StringAny => parse_string_any(p),
+        Schema::StringAny { max_length } => parse_string_any(p, *max_length),
         Schema::Integer => parse_number(p, false),
         Schema::Number => parse_number(p, true),
         Schema::Boolean => parse_keyword_alt(p, &["true", "false"]),
@@ -746,13 +765,15 @@ fn parse_string_enum(p: &mut Cursor, opts: &[String]) -> ParseStatus {
 /// Capping consecutive escapes at `MAX_CONSECUTIVE_STRING_ESCAPES`
 /// (3) breaks the loop without forbidding legitimate uses (escaped
 /// runs that long are vanishingly rare in real JSON content).
-fn parse_string_any(p: &mut Cursor) -> ParseStatus {
+fn parse_string_any(p: &mut Cursor, max_length: Option<usize>) -> ParseStatus {
     if p.peek() != Some(b'"') {
         return ParseStatus::Invalid;
     }
     p.advance();
     let mut consecutive_escapes = 0usize;
+    let mut char_count = 0usize;
     loop {
+        let at_cap = matches!(max_length, Some(m) if char_count >= m);
         match p.peek() {
             None => return ParseStatus::Incomplete,
             Some(b'"') => {
@@ -760,6 +781,9 @@ fn parse_string_any(p: &mut Cursor) -> ParseStatus {
                 return ParseStatus::Complete;
             }
             Some(b'\\') => {
+                if at_cap {
+                    return ParseStatus::Invalid;
+                }
                 if consecutive_escapes >= MAX_CONSECUTIVE_STRING_ESCAPES {
                     return ParseStatus::Invalid;
                 }
@@ -770,6 +794,7 @@ fn parse_string_any(p: &mut Cursor) -> ParseStatus {
                     | Some(b'n') | Some(b'r') | Some(b't') => {
                         p.advance();
                         consecutive_escapes += 1;
+                        char_count = char_count.saturating_add(1);
                     }
                     Some(b'u') => {
                         p.advance();
@@ -781,13 +806,21 @@ fn parse_string_any(p: &mut Cursor) -> ParseStatus {
                             }
                         }
                         consecutive_escapes += 1;
+                        char_count = char_count.saturating_add(1);
                     }
                     _ => return ParseStatus::Invalid,
                 }
             }
             Some(b) if b < 0x20 => return ParseStatus::Invalid,
-            Some(_) => {
+            Some(b) => {
+                let is_continuation = (b & 0xC0) == 0x80;
+                if !is_continuation && at_cap {
+                    return ParseStatus::Invalid;
+                }
                 p.advance();
+                if !is_continuation {
+                    char_count = char_count.saturating_add(1);
+                }
                 consecutive_escapes = 0;
             }
         }
@@ -936,7 +969,7 @@ fn parse_value_any(p: &mut Cursor) -> ParseStatus {
         None => ParseStatus::Incomplete,
         Some(b'{') => parse_object(p, &[], 0, true),
         Some(b'[') => parse_array(p, &Schema::AnyOf(Arc::new(any_value_alts())), None),
-        Some(b'"') => parse_string_any(p),
+        Some(b'"') => parse_string_any(p, None),
         Some(b't') | Some(b'f') => parse_keyword_alt(p, &["true", "false"]),
         Some(b'n') => parse_keyword(p, "null"),
         Some(b'-') | Some(b'0'..=b'9') => parse_number(p, true),
@@ -951,7 +984,7 @@ fn any_value_alts() -> Vec<Schema> {
             required_count: 0,
             additional: true,
         },
-        Schema::StringAny,
+        Schema::StringAny { max_length: None },
         Schema::Number,
         Schema::Boolean,
         Schema::Null,
@@ -1007,9 +1040,20 @@ enum Frame {
     },
 
     /// Inside a free-form JSON string (escapes allowed).
+    ///
+    /// `char_count` is the running count of code points emitted into
+    /// the string body so far (counted on UTF-8 start bytes; each
+    /// `\X` and `\uXXXX` escape counts as 1). When `max_length` is
+    /// `Some(n)` and `char_count >= n`, the only valid next byte is
+    /// `"` — every other body byte is rejected as Invalid, which
+    /// the mask sampler reads as "force the close-quote." Without
+    /// the cap, an unbounded string is the prime token-budget
+    /// runaway path under schema-constrained generation.
     StringAny {
         consecutive_escapes: u8,
         sub: StringSub,
+        char_count: usize,
+        max_length: Option<usize>,
     },
 
     /// Inside a JSON number. `allow_fraction` distinguishes Number from
@@ -1334,7 +1378,9 @@ impl Frame {
             Frame::StringAny {
                 consecutive_escapes,
                 sub,
-            } => Self::step_string_any(consecutive_escapes, sub, byte),
+                char_count,
+                max_length,
+            } => Self::step_string_any(consecutive_escapes, sub, char_count, *max_length, byte),
             Frame::Number {
                 allow_fraction,
                 sub,
@@ -1390,13 +1436,15 @@ impl Frame {
                     accumulated: Vec::new(),
                 })
             }
-            Schema::StringAny => {
+            Schema::StringAny { max_length } => {
                 if byte != b'"' {
                     return StepResult::Invalid;
                 }
                 StepResult::ReplaceConsumed(Frame::StringAny {
                     consecutive_escapes: 0,
                     sub: StringSub::InBody,
+                    char_count: 0,
+                    max_length: *max_length,
                 })
             }
             Schema::Integer => {
@@ -1670,12 +1718,25 @@ impl Frame {
     fn step_string_any(
         consecutive_escapes: &mut u8,
         sub: &mut StringSub,
+        char_count: &mut usize,
+        max_length: Option<usize>,
         byte: u8,
     ) -> StepResult {
+        // Hard cap: once we've emitted `max_length` code points, the
+        // only valid next byte at a code-point boundary is `"`. UTF-8
+        // continuation bytes (10xxxxxx) finish the in-progress code
+        // point and pass even at-cap; new code-point starts and
+        // escape openers are rejected. Mask sampler then forces the
+        // close-quote (same pattern the array-cap uses for `]` once
+        // `maxItems` is hit).
+        let at_cap = matches!(max_length, Some(m) if *char_count >= m);
         match sub {
             StringSub::InBody => match byte {
                 b'"' => StepResult::PopConsumed,
                 b'\\' => {
+                    if at_cap {
+                        return StepResult::Invalid;
+                    }
                     if *consecutive_escapes >= MAX_CONSEC_ESCAPES_INCR {
                         return StepResult::Invalid;
                     }
@@ -1683,7 +1744,15 @@ impl Frame {
                     StepResult::Consumed
                 }
                 b if b < 0x20 => StepResult::Invalid,
-                _ => {
+                b => {
+                    let is_continuation = (b & 0xC0) == 0x80;
+                    if !is_continuation && at_cap {
+                        // A new code-point start would overrun the cap.
+                        return StepResult::Invalid;
+                    }
+                    if !is_continuation {
+                        *char_count = char_count.saturating_add(1);
+                    }
                     *consecutive_escapes = 0;
                     StepResult::Consumed
                 }
@@ -1692,6 +1761,7 @@ impl Frame {
                 b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => {
                     *sub = StringSub::InBody;
                     *consecutive_escapes = consecutive_escapes.saturating_add(1);
+                    *char_count = char_count.saturating_add(1);
                     StepResult::Consumed
                 }
                 b'u' => {
@@ -1708,6 +1778,7 @@ impl Frame {
                 if *remaining == 0 {
                     *sub = StringSub::InBody;
                     *consecutive_escapes = consecutive_escapes.saturating_add(1);
+                    *char_count = char_count.saturating_add(1);
                 }
                 StepResult::Consumed
             }
@@ -1843,7 +1914,7 @@ fn matches_first_byte(schema: &Schema, b: u8) -> bool {
     match schema {
         Schema::Object { .. } => b == b'{',
         Schema::Array { .. } => b == b'[',
-        Schema::StringEnum(_) | Schema::StringAny => b == b'"',
+        Schema::StringEnum(_) | Schema::StringAny { .. } => b == b'"',
         Schema::Integer | Schema::Number => matches!(b, b'-' | b'0'..=b'9'),
         Schema::Boolean => matches!(b, b't' | b'f'),
         Schema::Null => b == b'n',
@@ -2340,6 +2411,80 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(validate(&s, br#"[1,2,3,4,5,6,7,8,9,10]"#), ParseStatus::Complete);
+    }
+
+    #[test]
+    fn validate_string_max_length_caps_count() {
+        // maxLength=5 — five-char strings are Complete; six-char or
+        // more is Invalid because the only valid byte after char 5 is
+        // the closing `"`. This is the cap that prevents an unbounded
+        // string field from swallowing the entire token budget under
+        // schema-constrained generation.
+        let s = compile_schema(&json!({
+            "type": "string",
+            "maxLength": 5
+        }))
+        .unwrap();
+        assert_eq!(validate(&s, br#""""#), ParseStatus::Complete);
+        assert_eq!(validate(&s, br#""hi""#), ParseStatus::Complete);
+        assert_eq!(validate(&s, br#""abcde""#), ParseStatus::Complete);
+        // 5 chars in, no `"` yet — partial.
+        assert_eq!(validate(&s, br#""abcde"#), ParseStatus::Incomplete);
+        // 6th body byte rejected — only `"` would be valid.
+        assert_eq!(validate(&s, br#""abcdef"#), ParseStatus::Invalid);
+        assert_eq!(validate(&s, br#""abcdef""#), ParseStatus::Invalid);
+    }
+
+    #[test]
+    fn validate_string_max_length_unbounded_when_absent() {
+        // No `maxLength` → behaves as before, no cap.
+        let s = compile_schema(&json!({"type": "string"})).unwrap();
+        let long = format!("\"{}\"", "x".repeat(2000));
+        assert_eq!(validate(&s, long.as_bytes()), ParseStatus::Complete);
+    }
+
+    #[test]
+    fn validate_string_max_length_counts_unicode_code_points_not_bytes() {
+        // "café" is 4 code points but 5 UTF-8 bytes. With maxLength=4
+        // the string completes cleanly; with maxLength=3 it overruns.
+        let four = compile_schema(&json!({"type": "string", "maxLength": 4})).unwrap();
+        assert_eq!(validate(&four, "\"café\"".as_bytes()), ParseStatus::Complete);
+
+        let three = compile_schema(&json!({"type": "string", "maxLength": 3})).unwrap();
+        // After "caf" (3 chars) the 'é' start byte (0xC3) is rejected.
+        assert_eq!(validate(&three, "\"café\"".as_bytes()), ParseStatus::Invalid);
+    }
+
+    #[test]
+    fn validate_string_max_length_counts_escapes_as_one() {
+        // `\n` is 2 bytes on the wire but 1 character. With maxLength=3
+        // we should accept exactly three escape pairs and then close.
+        let s = compile_schema(&json!({"type": "string", "maxLength": 3})).unwrap();
+        assert_eq!(validate(&s, br#""\n\n\n""#), ParseStatus::Complete);
+        // 4 escapes overruns.
+        assert_eq!(validate(&s, br#""\n\n\n\n""#), ParseStatus::Invalid);
+    }
+
+    #[test]
+    fn validate_string_max_length_in_nested_object_property() {
+        // Schema-constrained generation pathology lives at the leaf
+        // level: an object with one unbounded string field is the
+        // shape that ate 11k tokens of LATIN's Phase-1 budget. With
+        // a property-level maxLength, the runaway is bounded.
+        let s = compile_schema(&json!({
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "maxLength": 8}
+            },
+            "required": ["summary"]
+        }))
+        .unwrap();
+        assert_eq!(validate(&s, br#"{"summary":"hi"}"#), ParseStatus::Complete);
+        assert_eq!(validate(&s, br#"{"summary":"12345678"}"#), ParseStatus::Complete);
+        assert_eq!(
+            validate(&s, br#"{"summary":"123456789"}"#),
+            ParseStatus::Invalid
+        );
     }
 
     /// Drive the incremental state machine over a byte buffer, return
