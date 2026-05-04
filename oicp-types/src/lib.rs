@@ -768,6 +768,18 @@ pub struct KnowledgeResult {
     pub score: f32,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, String>,
+    /// Stable LanceDB row id for the chunk on the producing peer.
+    /// Lets the desktop's reading surface deref a citation back to
+    /// the source chunk (see ENRICHMENT_V2 / glass-box reading
+    /// surface plan). `None` for synthetic chunks (atlas-virtual,
+    /// local-doc) and for older peers that haven't been upgraded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_id: Option<u64>,
+    /// Document grouping key for "elsewhere in this document"
+    /// lookups and for chunk-neighbor ordering. `None` when the
+    /// extractor didn't tag chunks with a document id.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_doc_id: Option<String>,
 }
 
 // -----------------------------------------------------------------
@@ -1420,6 +1432,42 @@ mod tests {
     #[test]
     fn version_constant_matches_spec() {
         assert_eq!(OICP_VERSION, "0.3.0");
+    }
+
+    #[test]
+    fn knowledge_result_legacy_json_deserialises_with_none_chunk_id() {
+        // Older peers (pre reading-surface plumbing) emit
+        // KnowledgeResult JSON without the chunk_id / source_doc_id
+        // fields. Verify they deserialise cleanly to None so
+        // wire-compat is preserved across mixed-version meshes.
+        let legacy = r#"{
+            "content": "Alyosha Karamazov is a novice",
+            "title": "The Brothers Karamazov",
+            "corpus_id": "brothers_karamazov",
+            "url": null,
+            "score": 0.87,
+            "metadata": {}
+        }"#;
+        let parsed: KnowledgeResult = serde_json::from_str(legacy).expect("deserialise");
+        assert_eq!(parsed.chunk_id, None);
+        assert_eq!(parsed.source_doc_id, None);
+        assert_eq!(parsed.corpus_id, "brothers_karamazov");
+
+        // And a forward-compat round-trip preserves both fields.
+        let modern = KnowledgeResult {
+            content: "passage".into(),
+            title: Some("title".into()),
+            corpus_id: "bk".into(),
+            url: None,
+            score: 0.5,
+            metadata: Default::default(),
+            chunk_id: Some(42),
+            source_doc_id: Some("bk-ch01".into()),
+        };
+        let json = serde_json::to_string(&modern).unwrap();
+        let back: KnowledgeResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.chunk_id, Some(42));
+        assert_eq!(back.source_doc_id.as_deref(), Some("bk-ch01"));
     }
 
     #[test]
