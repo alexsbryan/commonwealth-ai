@@ -179,6 +179,18 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/ingest/budget",
             get(routes_internal::ingest_budget_get).post(routes_internal::ingest_budget_set),
         )
+        // Storage budget. GET reports the current ceiling, observed
+        // usage, raw free disk, and a recommended baseline; POST
+        // accepts `{ "budget_bytes": <≥1 GiB | null> }`. The
+        // enforcement point is the gossip-tick capabilities builder
+        // (`sovereign-mesh::capabilities::build_local_capabilities`)
+        // which clamps the published `free_storage_gb` to budget
+        // remaining — every existing scheduler picks up the cap
+        // automatically.
+        .route(
+            "/internal/storage/budget",
+            get(routes_internal::storage_budget_get).post(routes_internal::storage_budget_set),
+        )
         .with_state(state)
 }
 

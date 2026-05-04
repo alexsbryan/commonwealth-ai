@@ -695,33 +695,63 @@ async fn serve_local_stream(
     let id_for_stream = id.clone();
     let model_for_stream = model.clone();
     let chunks_count_for_stream = chunks_count.clone();
-    let sse_events = token_stream.map(move |item| match item {
-        Ok(delta) => {
-            chunks_count_for_stream
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let chunk = serde_json::json!({
-                "id": id_for_stream,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model_for_stream,
-                "choices": [{
-                    "index": 0,
-                    "delta": { "content": delta },
-                    "finish_reason": null
-                }]
-            });
-            Ok::<_, std::convert::Infallible>(
-                Event::default().data(chunk.to_string()),
-            )
-        }
-        Err(e) => {
-            // Surface the error as a final event then let the
-            // stream close — clients handle the abrupt end.
-            warn!(error = %e, "chat_completions: local stream chunk error");
-            Ok(Event::default().data(format!(
-                "{{\"error\":{{\"message\":\"{}\"}}}}",
-                e.replace('"', "\\\"")
-            )))
+    let sse_events = token_stream.map(move |frame| {
+        use crate::openai_types::StreamFrame;
+        match frame {
+            StreamFrame::Token(delta) => {
+                chunks_count_for_stream
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let chunk = serde_json::json!({
+                    "id": id_for_stream,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model_for_stream,
+                    "choices": [{
+                        "index": 0,
+                        "delta": { "content": delta },
+                        "finish_reason": null
+                    }]
+                });
+                Ok::<_, std::convert::Infallible>(
+                    Event::default().data(chunk.to_string()),
+                )
+            }
+            StreamFrame::Finish { reason, usage } => {
+                // Terminal frame: emit an OpenAI-shaped chunk with
+                // an empty delta and the real `finish_reason`. This
+                // is the bug fix that motivated the typed surface —
+                // the legacy `Result<String>` couldn't carry the
+                // signal so every truncation looked like a clean
+                // stop on the wire.
+                let mut payload = serde_json::json!({
+                    "id": id_for_stream,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model_for_stream,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": reason.as_openai_str()
+                    }]
+                });
+                if let Some(u) = usage {
+                    payload["usage"] = serde_json::json!({
+                        "prompt_tokens": u.prompt_tokens,
+                        "completion_tokens": u.completion_tokens,
+                        "total_tokens": u.total_tokens,
+                    });
+                }
+                Ok(Event::default().data(payload.to_string()))
+            }
+            StreamFrame::Error(e) => {
+                // Surface the error as a final event then let the
+                // stream close — clients handle the abrupt end.
+                warn!(error = %e, "chat_completions: local stream error frame");
+                Ok(Event::default().data(format!(
+                    "{{\"error\":{{\"message\":\"{}\"}}}}",
+                    e.replace('"', "\\\"")
+                )))
+            }
         }
     });
 

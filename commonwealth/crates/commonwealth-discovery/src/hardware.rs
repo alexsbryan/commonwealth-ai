@@ -304,6 +304,15 @@ pub fn read_disk_state() -> f32 {
     free_bytes as f32 / 1_073_741_824.0
 }
 
+/// Aggregate free space across all mounted disks, in bytes. Mirrors
+/// the disk-aggregation logic of [`detect_hardware`] and
+/// [`read_disk_state`] without the GB-truncation, for callers that
+/// need to compare against byte-precise budgets.
+pub fn read_disk_free_bytes() -> u64 {
+    let disks = sysinfo::Disks::new_with_refreshed_list();
+    disks.list().iter().map(|d| d.available_space()).sum()
+}
+
 /// Read current CPU and RAM state.
 pub fn read_cpu_ram_state() -> (f32, f32) {
     let mut sys = sysinfo::System::new();

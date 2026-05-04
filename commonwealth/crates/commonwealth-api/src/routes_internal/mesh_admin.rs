@@ -462,6 +462,115 @@ pub async fn ingest_budget_set(
     }
 }
 
+// ── Storage budget ───────────────────────────────────────────
+//
+// User-set ceiling on how much disk Sovereign is allowed to use for
+// corpus storage. The desktop's Settings → Knowledge tab is the
+// primary writer. Enforcement happens in
+// `sovereign-mesh::capabilities::build_local_capabilities`, which
+// clamps the published `free_storage_gb` to the budget remaining —
+// every existing scheduler then refuses work that would push us
+// over without needing to know the budget exists.
+
+/// Wire shape for `GET /internal/storage/budget`.
+///
+/// `budget_bytes = None` ⇒ no budget configured (the publish path
+/// reports raw free disk and nothing is clamped). Desktop reads
+/// `used_bytes` and `free_disk_bytes` to render a usage bar without
+/// having to walk the index directory itself.
+#[derive(Debug, Serialize)]
+pub struct StorageBudgetState {
+    pub budget_bytes: Option<u64>,
+    pub used_bytes: u64,
+    pub free_disk_bytes: u64,
+    /// Suggested default for first-time setup or the "Use recommended"
+    /// affordance. Computed from current free disk: target 100 GiB
+    /// when the disk has at least that much breathing room (≥125 GiB
+    /// free), step down to 50% of free disk for tighter machines,
+    /// floor at 20 GiB. Always reported so the UI can offer the
+    /// affordance even when a budget is already configured.
+    pub recommended_bytes: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetStorageBudgetRequest {
+    /// `null` (or `0`) clears the budget. Values below 1 GiB are
+    /// rejected by the AppState setter.
+    pub budget_bytes: Option<u64>,
+}
+
+/// Recommended baseline budget. Aim for a capable 100 GiB when there's
+/// room, otherwise scale to what the disk can comfortably give up:
+/// half the current free space, never less than 20 GiB. Returns 20 GiB
+/// even when the disk has less than that available — the desktop UI
+/// surfaces this as a recommendation, not a hard floor, and the user
+/// can still pick a smaller number explicitly.
+pub fn recommended_storage_budget_bytes(free_disk_bytes: u64) -> u64 {
+    const TARGET: u64 = 100 * 1_073_741_824; // 100 GiB.
+    const MIN_BASELINE: u64 = 20 * 1_073_741_824; // 20 GiB.
+    // Want ≥25 GiB headroom above the target so we don't fill the
+    // disk; if the user's disk has at least 125 GiB free, recommend
+    // the full 100 GiB. Otherwise back off to half free, floor at
+    // 20 GiB so the recommendation stays meaningful on small disks.
+    if free_disk_bytes >= TARGET + (25 * 1_073_741_824) {
+        TARGET
+    } else {
+        (free_disk_bytes / 2).max(MIN_BASELINE)
+    }
+}
+
+fn current_free_disk_bytes() -> u64 {
+    // Aggregating across all mounted disks matches what the gossiped
+    // `HardwareProfile.free_storage_gb` reports — keeping the desktop
+    // UI's "X of Y free" in sync with the value the scheduler sees.
+    commonwealth_discovery::hardware::read_disk_free_bytes()
+}
+
+/// `GET /internal/storage/budget` — current budget, observed usage,
+/// raw free-disk total, and a recommended baseline the desktop can
+/// surface as a one-click default.
+pub async fn storage_budget_get(
+    State(state): State<AppState>,
+) -> Json<StorageBudgetState> {
+    let free_disk_bytes = current_free_disk_bytes();
+    Json(StorageBudgetState {
+        budget_bytes: state.storage_budget_bytes(),
+        used_bytes: state.storage_used_bytes(),
+        free_disk_bytes,
+        recommended_bytes: recommended_storage_budget_bytes(free_disk_bytes),
+    })
+}
+
+/// `POST /internal/storage/budget` — set or clear the budget.
+///
+/// Pass `{ "budget_bytes": null }` to clear (gossip then reports raw
+/// free disk). Pass `{ "budget_bytes": <≥ 1 GiB> }` to set. The
+/// AppState setter rejects anything tighter than 1 GiB to keep the
+/// scheduler from refusing work the moment a single index file is
+/// written.
+pub async fn storage_budget_set(
+    State(state): State<AppState>,
+    Json(req): Json<SetStorageBudgetRequest>,
+) -> Result<Json<StorageBudgetState>, (StatusCode, Json<ErrorBody>)> {
+    if let Err(msg) = state.set_storage_budget_bytes(req.budget_bytes) {
+        return Err((StatusCode::BAD_REQUEST, Json(ErrorBody { error: msg })));
+    }
+    let free_disk_bytes = current_free_disk_bytes();
+    let applied = state.storage_budget_bytes();
+    tracing::info!(
+        budget_bytes = ?applied,
+        used_bytes = state.storage_used_bytes(),
+        free_disk_bytes,
+        "storage_budget: budget updated"
+    );
+    Ok(Json(StorageBudgetState {
+        budget_bytes: applied,
+        used_bytes: state.storage_used_bytes(),
+        free_disk_bytes,
+        recommended_bytes: recommended_storage_budget_bytes(free_disk_bytes),
+    }))
+}
+
 // ── Mesh join handshake ─────────────────────────────────────
 //
 // The founder (or any existing member) receives a POST from a
@@ -733,7 +842,7 @@ mod tests {
             _request: crate::openai_types::ChatCompletionRequest,
         ) -> Result<
             std::pin::Pin<
-                Box<dyn futures::Stream<Item = Result<String, String>> + Send>,
+                Box<dyn futures::Stream<Item = crate::openai_types::StreamFrame> + Send>,
             >,
             String,
         > {
@@ -1056,4 +1165,9 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(body["extras"].as_array().unwrap().len(), 0);
     }
+
+    // Storage-budget HTTP round-trip + helper tests live as
+    // integration tests at `tests/storage_budget_route.rs` so they
+    // can run independently of the (currently-broken) lib test
+    // target.
 }

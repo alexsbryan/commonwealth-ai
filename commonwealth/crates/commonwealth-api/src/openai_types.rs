@@ -155,6 +155,74 @@ pub struct Usage {
     pub total_tokens: u32,
 }
 
+// ─── Streaming framing (typed finish_reason) ───────────────────
+//
+// `LocalInferenceService::chat_completion_stream` yields these
+// frames instead of the legacy `Result<String, String>` shape, so
+// the SSE bridge in `routes_inference::serve_local_stream` can emit
+// an OpenAI-shaped terminal chunk with a real `finish_reason`
+// rather than always lying with `null`.
+//
+// These mirror `sovereign_core::types::{StreamFrame, FinishReason,
+// StreamUsage}` exactly. Translation lives in
+// `sovereign-mesh::inference_adapter::SovereignInferenceAdapter`.
+// We don't share the type because commonwealth has no `sovereign`
+// dep — keeping a parallel definition here is preferable to a new
+// cross-project re-export through `oicp-types`.
+
+/// Why a stream stopped. Maps onto OpenAI `finish_reason`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FinishReason {
+    Stop,
+    Length,
+    ToolCalls,
+    ContentFilter,
+    Cancelled,
+    Error(String),
+}
+
+impl FinishReason {
+    /// OpenAI-compatible string for the SSE wire field. Matches
+    /// `sovereign_core::types::FinishReason::as_openai_str` so the
+    /// adapter translation is identity at the wire layer.
+    pub const fn as_openai_str(&self) -> &'static str {
+        match self {
+            FinishReason::Stop => "stop",
+            FinishReason::Length => "length",
+            FinishReason::ToolCalls => "tool_calls",
+            FinishReason::ContentFilter => "content_filter",
+            FinishReason::Cancelled => "cancelled",
+            FinishReason::Error(_) => "error",
+        }
+    }
+}
+
+/// Token-usage counters carried on the terminal stream frame.
+/// Distinct serialised type from [`Usage`] only because we want to
+/// keep the streaming and non-streaming surfaces orthogonal —
+/// fields are identical.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StreamUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
+/// One frame on a typed completion stream. Streams MUST end with
+/// either [`StreamFrame::Finish`] or [`StreamFrame::Error`];
+/// receivers treat a closed channel without a terminal frame as
+/// `Cancelled`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum StreamFrame {
+    Token(String),
+    Finish {
+        reason: FinishReason,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<StreamUsage>,
+    },
+    Error(String),
+}
+
 /// OpenAI-compatible `/v1/embeddings` request. `input` may be a single
 /// string or a list of strings; the handler fans out over the list
 /// and returns one `EmbeddingData` per item with a stable `index`.

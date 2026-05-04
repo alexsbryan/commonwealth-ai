@@ -21,7 +21,7 @@ use commonwealth_state::{ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
 
-use crate::openai_types::{ChatCompletionRequest, ChatCompletionResponse};
+use crate::openai_types::{ChatCompletionRequest, ChatCompletionResponse, StreamFrame};
 
 /// In-process inference service that fulfils chat-completions
 /// requests without spawning separate `llama-server` processes.
@@ -40,16 +40,25 @@ pub trait LocalInferenceService: Send + Sync {
         request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, String>;
 
-    /// Streaming chat completion. Each yielded item is a partial
-    /// text delta (as the LLM emits tokens). The handler turns the
-    /// stream into SSE frames for the wire.
+    /// Streaming chat completion. Yields a sequence of typed
+    /// [`StreamFrame`]s — `Token(piece)` for each text delta and a
+    /// terminal `Finish { reason, usage }` carrying the OpenAI
+    /// `finish_reason` (`Stop` / `Length` / `Cancelled` / etc.).
+    /// `serve_local_stream` translates this into OpenAI-shaped SSE
+    /// chunks, with a final empty-delta chunk that surfaces the
+    /// real `finish_reason` to the wire.
+    ///
+    /// The typed shape replaces the legacy `Stream<Item = Result<
+    /// String, String>>`: that surface couldn't tell the bridge
+    /// whether the model stopped naturally or hit `max_tokens`, so
+    /// every truncation rendered identically to a clean stop.
+    /// Streams MUST end with either `Finish` or `Error`;
+    /// `serve_local_stream` treats a closed channel without a
+    /// terminal frame as `Cancelled`.
     async fn chat_completion_stream(
         &self,
         request: ChatCompletionRequest,
-    ) -> Result<
-        Pin<Box<dyn Stream<Item = Result<String, String>> + Send>>,
-        String,
-    >;
+    ) -> Result<Pin<Box<dyn Stream<Item = StreamFrame> + Send>>, String>;
 
     /// Provider manifest for `/oicp/v1/capabilities`. Peers fetch
     /// this to know what capabilities this node advertises — the
@@ -251,6 +260,36 @@ pub struct AppStateInner {
     /// route to fully stop a corpus.
     pub ingest_throttle_milli: std::sync::atomic::AtomicU32,
 
+    /// User-set ceiling on how much disk Sovereign is allowed to use
+    /// for corpus storage (sum of `~/.sovereign/indexes/*`). Encoded
+    /// as bytes; `0` is the sentinel for "no budget — use whatever
+    /// disk says is free". The desktop Settings panel writes this at
+    /// boot (computed from free disk on first launch, then persisted
+    /// in `desktop.toml`) and via `POST /internal/storage/budget`.
+    ///
+    /// The enforcement point is `sovereign-mesh::capabilities::
+    /// build_local_capabilities`, which clamps the gossiped
+    /// `free_storage_gb` (both the static `HardwareProfile` field and
+    /// the live `AvailableResources` reading) to
+    /// `min(actual_free, max(0, budget − used))`. Every existing
+    /// scheduler (`knowledge_assignment::assign_knowledge_shards`,
+    /// the three `plan_collaborative_ingestion*` planners) reads
+    /// that one value to decide what to assign here, so clamping it
+    /// at the publish boundary makes the budget self-enforcing
+    /// across the whole mesh — peers won't push us shards that
+    /// would breach the budget, and our own local install path
+    /// already gates on the same number.
+    pub storage_budget_bytes: std::sync::atomic::AtomicU64,
+
+    /// Most recent observation of how much of the budget the corpus
+    /// engine is currently using on disk. Updated each gossip tick
+    /// from `CorpusEngine::installed_indexes()` (already walked once
+    /// per tick to publish `hosted_corpora`, so no extra IO). Read
+    /// by `GET /internal/storage/budget` to drive the desktop's
+    /// "X of Y GB used" indicator without forcing the UI to re-walk
+    /// the index directory.
+    pub storage_used_bytes: std::sync::atomic::AtomicU64,
+
     /// Dimensional contribution emitter. Each route handler records
     /// `LedgerEvent`s through this on completion (per write site
     /// listed in the Mesh Health design). Cheap to clone; emission
@@ -388,6 +427,13 @@ impl AppState {
                 // load per batch and otherwise behaves identically to
                 // the pre-throttle build.
                 ingest_throttle_milli: std::sync::atomic::AtomicU32::new(1000),
+                // 0 = unlimited (no clamp). The desktop overwrites
+                // this at boot with either the persisted user choice
+                // or a computed default; CLI/standalone daemons leave
+                // it at 0 so headless servers don't surprise their
+                // operators with a budget they didn't set.
+                storage_budget_bytes: std::sync::atomic::AtomicU64::new(0),
+                storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
                 contribution_emitter,
                 peer_preferences,
             }),
@@ -682,6 +728,68 @@ impl AppState {
             .ingest_throttle_milli
             .store(milli, std::sync::atomic::Ordering::Relaxed);
         Ok(milli as f32 / 1000.0)
+    }
+
+    /// Read the configured storage budget in bytes. Returns `None`
+    /// when no budget is set (the underlying atomic is `0`), in which
+    /// case the gossiped `free_storage_gb` is whatever the disk
+    /// reports — no budget clamp.
+    pub fn storage_budget_bytes(&self) -> Option<u64> {
+        let raw = self
+            .inner
+            .storage_budget_bytes
+            .load(std::sync::atomic::Ordering::Relaxed);
+        (raw > 0).then_some(raw)
+    }
+
+    /// Set the storage budget. `None` (or `Some(0)`) clears the
+    /// budget — the publish path falls back to raw free disk. Values
+    /// below 1 GiB are rejected: anything tighter than that and the
+    /// scheduler will essentially refuse work the moment the engine
+    /// metadata directory grows past the threshold.
+    pub fn set_storage_budget_bytes(&self, budget: Option<u64>) -> Result<(), String> {
+        const MIN_BUDGET: u64 = 1_073_741_824; // 1 GiB.
+        let raw = match budget {
+            None | Some(0) => 0,
+            Some(n) if n < MIN_BUDGET => {
+                return Err(format!(
+                    "storage budget must be either unset or ≥ 1 GiB ({MIN_BUDGET} bytes); got {n}"
+                ))
+            }
+            Some(n) => n,
+        };
+        self.inner
+            .storage_budget_bytes
+            .store(raw, std::sync::atomic::Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Most recent observation of disk consumed by installed corpora.
+    /// Updated by the gossip-tick capabilities builder.
+    pub fn storage_used_bytes(&self) -> u64 {
+        self.inner
+            .storage_used_bytes
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Update the cached storage usage. Called once per gossip tick
+    /// from the capabilities builder; the value is what
+    /// `GET /internal/storage/budget` reports back to the desktop.
+    pub fn set_storage_used_bytes(&self, used: u64) {
+        self.inner
+            .storage_used_bytes
+            .store(used, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Bytes the budget allows above current usage. `None` when no
+    /// budget is set (no clamping). Saturates at zero when usage has
+    /// already exceeded the budget — the capabilities builder turns
+    /// that into a published `free_storage_gb` of 0, which makes the
+    /// schedulers stop assigning new shards here.
+    pub fn storage_remaining_bytes(&self) -> Option<u64> {
+        let budget = self.storage_budget_bytes()?;
+        let used = self.storage_used_bytes();
+        Some(budget.saturating_sub(used))
     }
 
     /// Count online members.
