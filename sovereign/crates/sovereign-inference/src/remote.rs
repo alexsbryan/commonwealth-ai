@@ -424,7 +424,11 @@ mod tests {
             4096,
         );
 
-        let request = CompletionRequest::new("Hello, world!");
+        // Caller-specified `model_id` flows to the wire `model` field.
+        // When `request.model_id = None` (default), the field is left
+        // empty so the daemon's OICP slot picker decides — see the
+        // doc comment on `build_request`.
+        let request = CompletionRequest::new("Hello, world!").with_model_id("test-model");
         let body = provider.build_request(&request);
 
         assert_eq!(body["model"], "test-model");
@@ -432,6 +436,21 @@ mod tests {
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0]["role"], "user");
         assert_eq!(messages[0]["content"], "Hello, world!");
+    }
+
+    #[test]
+    fn build_request_default_model_id_is_empty_for_oicp_slot_routing() {
+        let provider = RemoteApiProvider::new(
+            "http://localhost:8000/v1",
+            None,
+            "test-model",
+            4096,
+        );
+        // CompletionRequest::new defaults model_id = None — the wire
+        // `model` field is empty so the daemon picks via OICP envelope.
+        let request = CompletionRequest::new("Hello");
+        let body = provider.build_request(&request);
+        assert_eq!(body["model"], "");
     }
 
     #[test]

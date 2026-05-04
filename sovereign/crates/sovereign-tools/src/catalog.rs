@@ -228,6 +228,9 @@ mod tests {
             estimated_words_field: None,
             ingest_estimate_wpm: Some(8000),
             enrich_estimate_wpm: Some(500),
+            target_corpus_id: None,
+            expansion_enabled: false,
+            expansion_link_cap: 20,
         }
     }
 

@@ -317,6 +317,16 @@ mod tests {
         // Trigger: write a spec.md.
         let foo = dir.path().join(".sovereign").join("features").join("foo");
         std::fs::create_dir_all(&foo).unwrap();
+        // On Linux, notify's recursive mode adds a watch on each
+        // newly-discovered subdirectory lazily — the worker thread
+        // sees the directory-create events and registers an inner
+        // watch *after* the fact. If we write spec.md immediately, the
+        // file-create event can fire before the inner watch is in
+        // place and we miss it. Production callers (Claude Code,
+        // `git checkout`) create the dir long before the file, so this
+        // race is test-specific. A brief settle between mkdir and write
+        // mirrors the real-world ordering.
+        tokio::time::sleep(Duration::from_millis(100)).await;
         std::fs::write(foo.join("spec.md"), b"# foo\n").unwrap();
 
         // Poll until the callback fires (or timeout). Notify on

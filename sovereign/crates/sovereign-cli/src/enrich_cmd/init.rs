@@ -1363,7 +1363,7 @@ mod tests {
         .map(|s| s.to_string())
         .collect();
         let err = parse_args(&args).unwrap_err();
-        assert!(err.contains("--source cannot be combined"), "err: {err}");
+        assert!(err.contains("mutually exclusive"), "err: {err}");
     }
 
     #[test]

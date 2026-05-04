@@ -188,6 +188,13 @@ async fn spec_creation_triggers_list_changed_notification_and_gates_tools_in() {
     // 3. Write the spec.
     let foo = dir.path().join(".sovereign").join("features").join("foo");
     std::fs::create_dir_all(&foo).unwrap();
+    // Notify's recursive mode adds inner watches lazily on Linux:
+    // creating the dir + the file in rapid succession can race the
+    // watch-registration so the file-create event lands on a not-
+    // yet-watched subdir. Production callers create the dir long
+    // before the file (git checkout, editor save) — settle briefly
+    // to mirror that ordering.
+    tokio::time::sleep(Duration::from_millis(100)).await;
     std::fs::write(foo.join("spec.md"), b"# foo\n").unwrap();
 
     // 4. Wait for the watcher to fire. macOS FSEvents has ~100-500ms

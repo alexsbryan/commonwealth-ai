@@ -566,18 +566,22 @@ async fn emit_phase(
 mod tests {
     use super::*;
 
+    // Env-var tests are process-global and race when cargo test runs
+    // them in parallel — one test removes the var while another
+    // expects it set. Serialise via a shared mutex so the cases
+    // execute sequentially even under parallel test runners.
+    static KILL_SWITCH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn kill_switch_off_when_env_var_absent() {
+        let _g = KILL_SWITCH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::remove_var(TEAM_PIPELINE_ENV_VAR);
         assert!(!is_team_pipeline_enabled());
     }
 
     #[test]
     fn kill_switch_on_when_env_var_truthy() {
-        // Note: env-var tests are inherently process-global. The
-        // CI watcher runs tests sequentially within a binary by
-        // default; if a parallel runner is introduced these need
-        // serial_test or a dedicated proc.
+        let _g = KILL_SWITCH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         for v in ["1", "true", "on", "yes", "TRUE", "On"] {
             std::env::set_var(TEAM_PIPELINE_ENV_VAR, v);
             assert!(
@@ -590,6 +594,7 @@ mod tests {
 
     #[test]
     fn kill_switch_off_for_explicit_false_values() {
+        let _g = KILL_SWITCH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         for v in ["0", "false", "off", "no", ""] {
             std::env::set_var(TEAM_PIPELINE_ENV_VAR, v);
             assert!(
