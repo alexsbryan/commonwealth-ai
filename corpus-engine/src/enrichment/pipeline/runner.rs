@@ -2452,15 +2452,22 @@ mod tests {
                 Box::pin(async move { Ok(body) })
             });
 
-        // Default chat must NOT be touched when the seed-bump path
-        // activates.
+        // The main Phase 1 branch must route through chat_with_tokens
+        // (verified below). Phase 1B coverage refinement, which the
+        // LiteraryAtlasPipeline opts into, runs after the main extraction
+        // and uses the default chat (no seed-budget bump needed for the
+        // small entity/concept coverage prompts). Track default_chat
+        // invocations so we can assert it was used for Phase 1B only,
+        // not for the main Phase 1 dispatch.
+        let default_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let default_calls_c = default_calls.clone();
         let default_chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
-            Box::pin(async move {
-                panic!(
-                    "default chat should not be invoked when seed is cached \
-                     and chat_with_tokens is configured"
-                );
-            })
+            default_calls_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            // Empty Phase 1B coverage response — the parser accepts this
+            // as "no missed entities/concepts" and the runner proceeds
+            // with the original Phase 1 atoms unchanged.
+            let body = r#"{"missed_entities": [], "missed_concepts": []}"#.to_string();
+            Box::pin(async move { Ok(body) })
         });
 
         let runner = PhaseRunner::new(
@@ -2484,6 +2491,14 @@ mod tests {
             recorded,
             vec![PHASE1_SEED_OUTPUT_BUDGET],
             "expected one token-aware call at the seed output budget"
+        );
+        // Phase 1B coverage runs after the main extraction (entity +
+        // concept passes) using the default chat. Two calls confirm
+        // both passes ran without affecting the seed-routing assertion.
+        let default_n = default_calls.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            default_n, 2,
+            "expected 2 default_chat calls (Phase 1B entity + concept coverage), got {default_n}"
         );
     }
 
