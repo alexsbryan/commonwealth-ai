@@ -397,8 +397,17 @@ async fn run_daemon(args: &[String]) -> i32 {
             .and_then(|s| s.to_str())
             .unwrap_or("unknown-embed-model")
             .to_string();
+        // recipes_dir doubles as the registry's overrides_dir. Locally-
+        // published recipes from `sovereign recipe publish` land at
+        // `~/.sovereign/recipes/<id>/recipe.toml` and only resolve when
+        // the engine's overrides_dir points there. Earlier this passed
+        // `indexes_dir` for the recipes argument, which made every
+        // `corpus install` skip the local override and try the public
+        // registry URL — the wikipedia-catalog dev variant could never
+        // be installed because its data URL is not yet hosted.
+        let recipes_dir = data_dir.join("recipes");
         Arc::new(
-            CorpusEngine::new(indexes_dir.clone(), indexes_dir, embed)
+            CorpusEngine::new(recipes_dir, indexes_dir, embed)
                 .with_embedding_model(&embed_model_name)
                 .with_batch_embed_fn(batch_embed)
                 .with_self_node_id(self_node_id.to_string()),
@@ -917,6 +926,14 @@ async fn build_tool_registry(
 
     // Doc-path checker — no state dependency.
     tools.register(Box::new(sovereign_tools::CheckDocPathsTool::new()));
+
+    // Wikipedia on-demand fetch — operates against the catalog corpus
+    // installed on this daemon. Wired here so `sovereign tools call
+    // wikipedia_fetch --title=…` and the MCP /mcp surface can drive
+    // catalog-hit → fetch end-to-end without a live chat session.
+    tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
+        Arc::clone(&engine),
+    )));
 
     // DESIGN.md structural signals — no state dependency; the tool
     // reads the DESIGN.md path argument at call time. No

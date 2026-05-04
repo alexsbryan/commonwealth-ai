@@ -7,6 +7,7 @@
 //! produced by `build_client_pair`.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -68,6 +69,52 @@ pub struct DaemonInferenceClient {
     /// signal. A 1024 cap halves that without affecting the
     /// schema-bound Phase 1 main.
     max_tokens_by_phase: BTreeMap<String, u32>,
+    /// Phase D2 — token ledger. Atomic counters bumped on every
+    /// successful `complete_inner` call. Cloned across `Clone`d
+    /// clients (Arc-wrapped), so the extract loop sees a unified
+    /// total even when `EmbedFn` / `ChatCompletionFn` closures are
+    /// constructed from a clone (`build_client_pair` does this).
+    /// Cheap (relaxed atomics; no lock) so the hot path stays hot.
+    usage: Arc<TokenUsageLedger>,
+}
+
+/// Cumulative token usage for a chat client. Atomic counters keep
+/// the bump operation cheap on the hot path; the read-side
+/// `snapshot` returns a plain struct for serialisation.
+#[derive(Debug, Default)]
+pub struct TokenUsageLedger {
+    pub calls: AtomicU64,
+    pub prompt_tokens: AtomicU64,
+    pub completion_tokens: AtomicU64,
+    pub total_tokens: AtomicU64,
+}
+
+impl TokenUsageLedger {
+    /// Snapshot the four counters with relaxed loads. Safe to call
+    /// from any thread; the snapshot is internally consistent only
+    /// at the per-counter level (we don't atomically read the
+    /// quartet), but the worst-case skew is one in-flight bump —
+    /// negligible for status display.
+    pub fn snapshot(&self) -> TokenUsageSnapshot {
+        TokenUsageSnapshot {
+            calls: self.calls.load(Ordering::Relaxed),
+            prompt_tokens: self.prompt_tokens.load(Ordering::Relaxed),
+            completion_tokens: self.completion_tokens.load(Ordering::Relaxed),
+            total_tokens: self.total_tokens.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// Plain snapshot of the ledger. Returned by [`DaemonInferenceClient::usage_snapshot`]
+/// and serialized to `<workspace>/_tokens.json` by the extract loop
+/// so `sovereign corpus status` / `/internal/atlas/status` can show
+/// per-corpus token spend without re-counting from logs.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Default)]
+pub struct TokenUsageSnapshot {
+    pub calls: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
 }
 
 impl DaemonInferenceClient {
@@ -87,7 +134,17 @@ impl DaemonInferenceClient {
             max_output_tokens: None,
             chat_models_by_phase: BTreeMap::new(),
             max_tokens_by_phase: BTreeMap::new(),
+            usage: Arc::new(TokenUsageLedger::default()),
         })
+    }
+
+    /// Shared handle to the underlying token-usage ledger. Survives
+    /// `into_closures*` (the closures Arc-wrap the client and bump
+    /// the same ledger), so the extract loop holds this handle
+    /// before consuming the client and reads cumulative spend via
+    /// `ledger.snapshot()`.
+    pub fn usage_ledger(&self) -> Arc<TokenUsageLedger> {
+        Arc::clone(&self.usage)
     }
 
     /// Set the per-request output cap. Applies to future `complete`
@@ -348,10 +405,27 @@ impl DaemonInferenceClient {
             .pointer("/usage/total_tokens")
             .and_then(|n| n.as_u64())
             .unwrap_or(0);
+        let prompt_tokens = v
+            .pointer("/usage/prompt_tokens")
+            .and_then(|n| n.as_u64())
+            .unwrap_or(0);
         let completion_tokens = v
             .pointer("/usage/completion_tokens")
             .and_then(|n| n.as_u64())
             .unwrap_or(0);
+        // Phase D2: bump the cumulative ledger. Relaxed ordering is
+        // sufficient — we never branch on these counts, just persist
+        // them periodically for status display.
+        self.usage.calls.fetch_add(1, Ordering::Relaxed);
+        self.usage
+            .prompt_tokens
+            .fetch_add(prompt_tokens, Ordering::Relaxed);
+        self.usage
+            .completion_tokens
+            .fetch_add(completion_tokens, Ordering::Relaxed);
+        self.usage
+            .total_tokens
+            .fetch_add(total_tokens, Ordering::Relaxed);
         let tok_per_s = if elapsed_ms > 0 {
             (completion_tokens as f64 * 1000.0) / (elapsed_ms as f64)
         } else {

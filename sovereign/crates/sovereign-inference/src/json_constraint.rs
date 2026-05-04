@@ -52,13 +52,15 @@ pub enum ConstraintError {
     Malformed { pointer: String, detail: String },
 }
 
-/// Compiled schema. Kept simple — recursive enum, no interning.
+/// Compiled schema. Children wrapped in `Arc` so the incremental
+/// validator's per-byte stack frames can hold cheap references
+/// without cloning entire subtrees.
 #[derive(Debug, Clone)]
 pub enum Schema {
     Object {
         /// Properties in declaration order — first `required_count`
         /// are required, the rest optional.
-        properties: Vec<(String, Schema)>,
+        properties: Arc<Vec<(String, Schema)>>,
         required_count: usize,
         /// If true, allow arbitrary additional name:value pairs
         /// after the typed ones. If false, reject anything beyond
@@ -66,15 +68,21 @@ pub enum Schema {
         additional: bool,
     },
     Array {
-        items: Box<Schema>,
+        items: Arc<Schema>,
+        /// Inclusive upper bound on number of elements. `None` means
+        /// unbounded. When set, the parser tracks the running count
+        /// and rejects `,` after the cap is reached, leaving `]` as
+        /// the only valid continuation — the mask sampler then
+        /// forces the model to close the array.
+        max_items: Option<usize>,
     },
-    StringEnum(Vec<String>),
+    StringEnum(Arc<Vec<String>>),
     StringAny,
     Integer,
     Number,
     Boolean,
     Null,
-    AnyOf(Vec<Schema>),
+    AnyOf(Arc<Vec<Schema>>),
 }
 
 /// Compile a JSON Schema into our internal representation.
@@ -109,7 +117,7 @@ impl CompileCtx {
                     .enumerate()
                     .map(|(i, sub)| self.compile(sub, &format!("{pointer}/{key}/{i}")))
                     .collect::<Result<_, _>>()?;
-                return Ok(Schema::AnyOf(alts));
+                return Ok(Schema::AnyOf(Arc::new(alts)));
             }
         }
 
@@ -123,7 +131,7 @@ impl CompileCtx {
                     self.compile(&Value::Object(clone), pointer)
                 })
                 .collect::<Result<_, _>>()?;
-            return Ok(Schema::AnyOf(alts));
+            return Ok(Schema::AnyOf(Arc::new(alts)));
         }
 
         let ty = obj
@@ -141,8 +149,13 @@ impl CompileCtx {
                     feature: "array without `items`".into(),
                     pointer: pointer.into(),
                 })?;
+                let max_items = obj
+                    .get("maxItems")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize);
                 Ok(Schema::Array {
-                    items: Box::new(self.compile(items, &format!("{pointer}/items"))?),
+                    items: Arc::new(self.compile(items, &format!("{pointer}/items"))?),
+                    max_items,
                 })
             }
             "string" => {
@@ -158,7 +171,7 @@ impl CompileCtx {
                                 .map(|s| s.to_string())
                         })
                         .collect::<Result<_, _>>()?;
-                    Ok(Schema::StringEnum(opts))
+                    Ok(Schema::StringEnum(Arc::new(opts)))
                 } else {
                     Ok(Schema::StringAny)
                 }
@@ -227,7 +240,7 @@ impl CompileCtx {
         }
 
         Ok(Schema::Object {
-            properties,
+            properties: Arc::new(properties),
             required_count,
             additional,
         })
@@ -357,7 +370,7 @@ fn parse_value(p: &mut Cursor, schema: &Schema) -> ParseStatus {
             required_count,
             additional,
         } => parse_object(p, properties, *required_count, *additional),
-        Schema::Array { items } => parse_array(p, items),
+        Schema::Array { items, max_items } => parse_array(p, items, *max_items),
         Schema::StringEnum(opts) => parse_string_enum(p, opts),
         Schema::StringAny => parse_string_any(p),
         Schema::Integer => parse_number(p, false),
@@ -621,7 +634,7 @@ fn any_property_starts_with(
         .any(|(name, _)| name.as_bytes().starts_with(prefix))
 }
 
-fn parse_array(p: &mut Cursor, items: &Schema) -> ParseStatus {
+fn parse_array(p: &mut Cursor, items: &Schema, max_items: Option<usize>) -> ParseStatus {
     if p.peek() != Some(b'[') {
         return ParseStatus::Invalid;
     }
@@ -634,6 +647,13 @@ fn parse_array(p: &mut Cursor, items: &Schema) -> ParseStatus {
         p.advance();
         return ParseStatus::Complete;
     }
+    // If max_items is Some(0) and the array isn't already closed, the
+    // input is invalid — there's no way to satisfy "0 items" with the
+    // bracket already consumed and content following.
+    if matches!(max_items, Some(0)) {
+        return ParseStatus::Invalid;
+    }
+    let mut count = 0usize;
     let mut first = true;
     loop {
         if !first {
@@ -642,7 +662,17 @@ fn parse_array(p: &mut Cursor, items: &Schema) -> ParseStatus {
                 return ParseStatus::Incomplete;
             }
             match p.peek() {
-                Some(b',') => p.advance(),
+                Some(b',') => {
+                    // Cap reached: reject `,`, only `]` is valid.
+                    // The mask sampler will see this as "comma is
+                    // not a valid next byte" and force the close.
+                    if let Some(max) = max_items {
+                        if count >= max {
+                            return ParseStatus::Invalid;
+                        }
+                    }
+                    p.advance();
+                }
                 Some(b']') => {
                     p.advance();
                     return ParseStatus::Complete;
@@ -659,6 +689,7 @@ fn parse_array(p: &mut Cursor, items: &Schema) -> ParseStatus {
             ParseStatus::Invalid => return ParseStatus::Invalid,
             ParseStatus::Complete => {}
         }
+        count += 1;
         first = false;
     }
 }
@@ -904,7 +935,7 @@ fn parse_value_any(p: &mut Cursor) -> ParseStatus {
     match p.peek() {
         None => ParseStatus::Incomplete,
         Some(b'{') => parse_object(p, &[], 0, true),
-        Some(b'[') => parse_array(p, &Schema::AnyOf(any_value_alts())),
+        Some(b'[') => parse_array(p, &Schema::AnyOf(Arc::new(any_value_alts())), None),
         Some(b'"') => parse_string_any(p),
         Some(b't') | Some(b'f') => parse_keyword_alt(p, &["true", "false"]),
         Some(b'n') => parse_keyword(p, "null"),
@@ -916,7 +947,7 @@ fn parse_value_any(p: &mut Cursor) -> ParseStatus {
 fn any_value_alts() -> Vec<Schema> {
     vec![
         Schema::Object {
-            properties: vec![],
+            properties: Arc::new(vec![]),
             required_count: 0,
             additional: true,
         },
@@ -925,6 +956,899 @@ fn any_value_alts() -> Vec<Schema> {
         Schema::Boolean,
         Schema::Null,
     ]
+}
+
+// ─── Incremental validator (explicit-stack state machine) ──────
+//
+// The recursive parser above re-walks `emitted` from byte 0 each call.
+// Per-token mask cost is O(V × N) where V≈32k vocab and N=emitted bytes
+// — quadratic in N when a chapter generates long output. This module
+// rebuilds the same validation as a byte-driven stack machine: each
+// `Frame` records progress through one schema element; `advance(byte)`
+// updates the top frame in O(stack_depth). The state is cheaply
+// cloneable, so `mask()` forks one snapshot per candidate token and
+// runs only the candidate's own bytes (~5) through advance — total
+// per-token cost becomes O(V × stack_depth × bytes_per_token), i.e.
+// constant in N.
+
+const MAX_CONSEC_ESCAPES_INCR: u8 = MAX_CONSECUTIVE_STRING_ESCAPES as u8;
+
+#[derive(Clone, Debug)]
+enum Frame {
+    /// Awaiting the first non-whitespace byte of a value matching this
+    /// schema. On the first non-ws byte we replace ourselves with the
+    /// concrete frame for the chosen value type.
+    AwaitValue(Schema),
+
+    /// Inside an object after the opening `{`. Sub-state tracks what
+    /// byte we expect next; key parsing is inlined (no separate frame).
+    Object {
+        properties: Arc<Vec<(String, Schema)>>,
+        required_count: usize,
+        additional: bool,
+        next_idx: usize,
+        pairs_consumed: usize,
+        sub: ObjectSub,
+    },
+
+    /// Inside an array after the opening `[`.
+    Array {
+        items: Arc<Schema>,
+        max_items: Option<usize>,
+        count: usize,
+        sub: ArraySub,
+    },
+
+    /// Inside an enum-string. We track accumulated bytes and verify
+    /// they remain a prefix of at least one enum option.
+    StringEnum {
+        opts: Arc<Vec<String>>,
+        accumulated: Vec<u8>,
+    },
+
+    /// Inside a free-form JSON string (escapes allowed).
+    StringAny {
+        consecutive_escapes: u8,
+        sub: StringSub,
+    },
+
+    /// Inside a JSON number. `allow_fraction` distinguishes Number from
+    /// Integer (matches `parse_number`).
+    Number {
+        allow_fraction: bool,
+        sub: NumberSub,
+    },
+
+    /// Matching a fixed keyword (`true`/`false`/`null`). `pos` indexes
+    /// into `word` for the next expected byte.
+    Keyword {
+        word: &'static [u8],
+        pos: u8,
+    },
+
+    /// Awaiting the disambiguating byte of an anyOf — once we see a
+    /// non-ws byte we narrow to the matching alternative and replace
+    /// ourselves with its `AwaitValue`.
+    AnyOf(Arc<Vec<Schema>>),
+
+    /// The root value has completed; only trailing whitespace is
+    /// permitted before EOS.
+    Finished,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ObjectSub {
+    /// Just consumed `{`; expecting `"` (key open) or `}` (close) or
+    /// whitespace.
+    AwaitFirstKeyOrClose,
+    /// After `,`; expecting `"` (next key open) or whitespace.
+    AwaitNextKey,
+    /// Inside the key string between the opening and closing quotes.
+    /// Bytes go into `accumulated`. No escapes allowed in keys (matches
+    /// the recursive parser's anti-loop guard).
+    InKey { accumulated: Vec<u8> },
+    /// After the closing `"` of the key; expecting `:` or whitespace.
+    /// `chosen` records which property the key matched.
+    AwaitColon { chosen: ChosenKeyKind },
+    /// After `:`; the next non-ws byte should start the value, so we
+    /// push a child `AwaitValue` frame (the byte is NOT consumed by us;
+    /// the child handles it).
+    AfterColon { chosen: ChosenKeyKind },
+    /// Child value frame is on top; we stay parked here until it pops.
+    /// On the next byte we see (i.e. the byte that triggered the child
+    /// to pop, or anything after if the child completed cleanly), we
+    /// transition to AwaitCommaOrClose without consuming.
+    InValue { chosen: ChosenKeyKind },
+    /// After a value: expecting `,` or `}` or whitespace.
+    AwaitCommaOrClose,
+}
+
+/// Mirrors `ChosenKey` from the recursive parser but stored inside
+/// `ObjectSub` so the Object frame can transition cleanly without a
+/// separate child frame.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ChosenKeyKind {
+    /// Declared property at this index (use `properties[i].1` as the
+    /// value schema).
+    Typed(usize),
+    /// `additionalProperties: true` wildcard — value can be any JSON.
+    Additional,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ArraySub {
+    /// Just consumed `[`; expecting value or `]` or whitespace.
+    AwaitFirstItemOrClose,
+    /// After an item: expecting `,` or `]` or whitespace.
+    AwaitCommaOrClose,
+    /// After `,`: expecting value or whitespace.
+    AwaitNextItem,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum StringSub {
+    /// Inside the string body; reading literal bytes.
+    InBody,
+    /// Just saw `\`; expecting one of the escape chars.
+    AfterBackslash,
+    /// Inside `\uXXXX`; counting hex digits remaining (0..4).
+    InUnicode { remaining: u8 },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum NumberSub {
+    /// At the start; sign byte has not been consumed yet.
+    Start,
+    /// Just consumed `-`; expecting first digit.
+    AfterSign,
+    /// Already emitted leading `0`; further digit means malformed
+    /// (JSON forbids `01`). `.`/`e`/`E` continue, otherwise complete.
+    AtLeadingZero,
+    /// In integer digits ([1-9][0-9]*).
+    InInt,
+    /// Just consumed `.`; need at least one fractional digit.
+    AfterDot,
+    /// In fractional digits.
+    InFrac,
+    /// Just consumed `e`/`E`; need optional sign + ≥1 exp digit.
+    AfterExpChar,
+    /// Just consumed `+`/`-` after `e`/`E`; need ≥1 exp digit.
+    AfterExpSign,
+    /// In exponent digits.
+    InExp,
+}
+
+#[derive(Clone, Debug)]
+struct ValidatorState {
+    stack: Vec<Frame>,
+    /// Latched once the root value completes — subsequent advance()
+    /// calls only accept whitespace (Complete) or reject (Invalid).
+    root_complete: bool,
+}
+
+/// One-byte step result. A frame's `step` returns a `StepResult` that
+/// the driver loop interprets to update the stack and decide whether
+/// to consume the byte.
+#[derive(Debug)]
+enum StepResult {
+    /// Byte handled; frame stays.
+    Consumed,
+    /// Frame done; byte was NOT consumed (re-process at parent).
+    Pop,
+    /// Frame done; byte WAS consumed.
+    PopConsumed,
+    /// Replace the top frame with this one; byte was NOT consumed.
+    Replace(Frame),
+    /// Replace the top frame with this one; byte WAS consumed.
+    ReplaceConsumed(Frame),
+    /// Push a child frame; byte was NOT consumed (child will see it).
+    Push(Frame),
+    /// Push a child frame; byte WAS consumed by the parent
+    /// (e.g. `{` consumed before pushing the Object frame's body).
+    PushConsumed(Frame),
+    /// Definitively invalid.
+    Invalid,
+}
+
+#[inline]
+fn is_ws(b: u8) -> bool {
+    matches!(b, b' ' | b'\t' | b'\n' | b'\r')
+}
+
+impl ValidatorState {
+    fn new(schema: Schema) -> Self {
+        Self {
+            stack: vec![Frame::AwaitValue(schema)],
+            root_complete: false,
+        }
+    }
+
+    fn current_status(&self) -> ParseStatus {
+        if self.root_complete {
+            ParseStatus::Complete
+        } else if self.stack.is_empty() {
+            // Stack drained without root_complete latched (shouldn't
+            // happen via advance), treat as Complete.
+            ParseStatus::Complete
+        } else {
+            ParseStatus::Incomplete
+        }
+    }
+
+    /// Feed one byte. Returns the resulting status.
+    fn advance(&mut self, byte: u8) -> ParseStatus {
+        // Trailing-whitespace handling once the root is closed.
+        if self.root_complete {
+            return if is_ws(byte) {
+                ParseStatus::Complete
+            } else {
+                ParseStatus::Invalid
+            };
+        }
+
+        let mut byte_consumed = false;
+        // Loop until the byte is consumed (or we decide the parse is
+        // done / invalid). Each iteration acts on the top frame.
+        // Bound by stack_depth × small constant — `Pop` chains are
+        // short because the schema tree is shallow.
+        let mut safety = 0usize;
+        loop {
+            safety += 1;
+            if safety > 256 {
+                // Schema-loop guard — should be unreachable under our
+                // supported schema subset; bail rather than spin.
+                return ParseStatus::Invalid;
+            }
+            if byte_consumed {
+                break;
+            }
+            let Some(top) = self.stack.last_mut() else {
+                // Stack drained while still expecting bytes → only
+                // trailing whitespace is permitted (matches the
+                // recursive parser's post-root behaviour).
+                self.root_complete = true;
+                return if is_ws(byte) {
+                    ParseStatus::Complete
+                } else {
+                    ParseStatus::Invalid
+                };
+            };
+            let result = top.step(byte);
+            match result {
+                StepResult::Consumed => {
+                    byte_consumed = true;
+                }
+                StepResult::Pop => {
+                    self.stack.pop();
+                    // Loop again — byte still in flight.
+                }
+                StepResult::PopConsumed => {
+                    self.stack.pop();
+                    byte_consumed = true;
+                }
+                StepResult::Replace(new) => {
+                    *self.stack.last_mut().unwrap() = new;
+                    // Loop again — byte still in flight.
+                }
+                StepResult::ReplaceConsumed(new) => {
+                    *self.stack.last_mut().unwrap() = new;
+                    byte_consumed = true;
+                }
+                StepResult::Push(child) => {
+                    self.stack.push(child);
+                    // Loop again — child will see this byte.
+                }
+                StepResult::PushConsumed(child) => {
+                    self.stack.push(child);
+                    byte_consumed = true;
+                }
+                StepResult::Invalid => return ParseStatus::Invalid,
+            }
+        }
+
+        // After consuming, if the stack drained, the root value is
+        // complete — only trailing ws is permitted from here on.
+        if self.stack.is_empty() {
+            self.root_complete = true;
+            return ParseStatus::Complete;
+        }
+        ParseStatus::Incomplete
+    }
+
+    /// Feed a slice of bytes. Returns the status with EOF-finalization
+    /// applied — a raw number like `0` reads Complete even though no
+    /// terminator byte arrived (matches the recursive parser's
+    /// `parse_number` behaviour at end-of-buffer). Short-circuits on
+    /// Invalid.
+    fn advance_bytes(&mut self, bytes: &[u8]) -> ParseStatus {
+        for &b in bytes {
+            let s = self.advance(b);
+            if matches!(s, ParseStatus::Invalid) {
+                return s;
+            }
+        }
+        self.eof_status()
+    }
+
+    /// Return Complete if the current state would be valid at EOF
+    /// (root completed, OR stack is entirely Numbers in
+    /// at-least-one-digit-consumed states). Pure inspection — does not
+    /// mutate state, so subsequent advance() calls still work
+    /// correctly if more bytes do arrive.
+    fn eof_status(&self) -> ParseStatus {
+        if self.root_complete || self.stack.is_empty() {
+            return ParseStatus::Complete;
+        }
+        if self.stack.iter().all(frame_can_eof_complete) {
+            ParseStatus::Complete
+        } else {
+            ParseStatus::Incomplete
+        }
+    }
+}
+
+fn frame_can_eof_complete(frame: &Frame) -> bool {
+    match frame {
+        Frame::Number { sub, .. } => matches!(
+            sub,
+            NumberSub::AtLeadingZero
+                | NumberSub::InInt
+                | NumberSub::InFrac
+                | NumberSub::InExp
+        ),
+        // All structural frames (object/array/string/keyword/anyOf/
+        // await-value) require an explicit terminator byte.
+        _ => false,
+    }
+}
+
+impl Frame {
+    fn step(&mut self, byte: u8) -> StepResult {
+        match self {
+            Frame::AwaitValue(schema) => Self::step_await_value(schema, byte),
+            Frame::Object {
+                properties,
+                required_count,
+                additional,
+                next_idx,
+                pairs_consumed,
+                sub,
+            } => Self::step_object(
+                properties,
+                *required_count,
+                *additional,
+                next_idx,
+                pairs_consumed,
+                sub,
+                byte,
+            ),
+            Frame::Array {
+                items,
+                max_items,
+                count,
+                sub,
+            } => Self::step_array(items, *max_items, count, sub, byte),
+            Frame::StringEnum { opts, accumulated } => {
+                Self::step_string_enum(opts, accumulated, byte)
+            }
+            Frame::StringAny {
+                consecutive_escapes,
+                sub,
+            } => Self::step_string_any(consecutive_escapes, sub, byte),
+            Frame::Number {
+                allow_fraction,
+                sub,
+            } => Self::step_number(*allow_fraction, sub, byte),
+            Frame::Keyword { word, pos } => Self::step_keyword(word, pos, byte),
+            Frame::AnyOf(alts) => Self::step_anyof(alts, byte),
+            Frame::Finished => StepResult::Invalid, // unreachable in driver
+        }
+    }
+
+    fn step_await_value(schema: &Schema, byte: u8) -> StepResult {
+        if is_ws(byte) {
+            return StepResult::Consumed;
+        }
+        // Dispatch on the value's first byte. The byte is consumed
+        // when it's the structural opener (`{`/`[`) since the new
+        // frame represents the post-opener state.
+        match schema {
+            Schema::Object {
+                properties,
+                required_count,
+                additional,
+            } => {
+                if byte != b'{' {
+                    return StepResult::Invalid;
+                }
+                StepResult::ReplaceConsumed(Frame::Object {
+                    properties: Arc::clone(properties),
+                    required_count: *required_count,
+                    additional: *additional,
+                    next_idx: 0,
+                    pairs_consumed: 0,
+                    sub: ObjectSub::AwaitFirstKeyOrClose,
+                })
+            }
+            Schema::Array { items, max_items } => {
+                if byte != b'[' {
+                    return StepResult::Invalid;
+                }
+                StepResult::ReplaceConsumed(Frame::Array {
+                    items: Arc::clone(items),
+                    max_items: *max_items,
+                    count: 0,
+                    sub: ArraySub::AwaitFirstItemOrClose,
+                })
+            }
+            Schema::StringEnum(opts) => {
+                if byte != b'"' {
+                    return StepResult::Invalid;
+                }
+                StepResult::ReplaceConsumed(Frame::StringEnum {
+                    opts: Arc::clone(opts),
+                    accumulated: Vec::new(),
+                })
+            }
+            Schema::StringAny => {
+                if byte != b'"' {
+                    return StepResult::Invalid;
+                }
+                StepResult::ReplaceConsumed(Frame::StringAny {
+                    consecutive_escapes: 0,
+                    sub: StringSub::InBody,
+                })
+            }
+            Schema::Integer => {
+                // The Number frame consumes the first byte itself
+                // (sign or digit) — pass through unconsumed.
+                StepResult::Replace(Frame::Number {
+                    allow_fraction: false,
+                    sub: NumberSub::Start,
+                })
+            }
+            Schema::Number => StepResult::Replace(Frame::Number {
+                allow_fraction: true,
+                sub: NumberSub::Start,
+            }),
+            Schema::Boolean => {
+                let word: &'static [u8] = match byte {
+                    b't' => b"true",
+                    b'f' => b"false",
+                    _ => return StepResult::Invalid,
+                };
+                StepResult::ReplaceConsumed(Frame::Keyword { word, pos: 1 })
+            }
+            Schema::Null => {
+                if byte != b'n' {
+                    return StepResult::Invalid;
+                }
+                StepResult::ReplaceConsumed(Frame::Keyword {
+                    word: b"null",
+                    pos: 1,
+                })
+            }
+            Schema::AnyOf(alts) => StepResult::Replace(Frame::AnyOf(Arc::clone(alts))),
+        }
+    }
+
+    fn step_object(
+        properties: &Arc<Vec<(String, Schema)>>,
+        required_count: usize,
+        additional: bool,
+        next_idx: &mut usize,
+        pairs_consumed: &mut usize,
+        sub: &mut ObjectSub,
+        byte: u8,
+    ) -> StepResult {
+        match sub {
+            ObjectSub::AwaitFirstKeyOrClose => {
+                if is_ws(byte) {
+                    return StepResult::Consumed;
+                }
+                match byte {
+                    b'}' => {
+                        if *next_idx < required_count {
+                            StepResult::Invalid
+                        } else {
+                            StepResult::PopConsumed
+                        }
+                    }
+                    b'"' => {
+                        *sub = ObjectSub::InKey {
+                            accumulated: Vec::new(),
+                        };
+                        StepResult::Consumed
+                    }
+                    _ => StepResult::Invalid,
+                }
+            }
+            ObjectSub::AwaitNextKey => {
+                if is_ws(byte) {
+                    return StepResult::Consumed;
+                }
+                if byte == b'"' {
+                    *sub = ObjectSub::InKey {
+                        accumulated: Vec::new(),
+                    };
+                    StepResult::Consumed
+                } else {
+                    StepResult::Invalid
+                }
+            }
+            ObjectSub::InKey { accumulated } => {
+                match byte {
+                    b'"' => {
+                        // Resolve the key.
+                        let key_str = match std::str::from_utf8(accumulated) {
+                            Ok(s) => s.to_string(),
+                            Err(_) => return StepResult::Invalid,
+                        };
+                        let chosen = match match_property(
+                            properties,
+                            required_count,
+                            *next_idx,
+                            &key_str,
+                        ) {
+                            KeyMatch::Picked(idx) => ChosenKeyKind::Typed(idx),
+                            KeyMatch::Forbidden => return StepResult::Invalid,
+                            KeyMatch::NotDeclared => {
+                                if additional {
+                                    ChosenKeyKind::Additional
+                                } else {
+                                    return StepResult::Invalid;
+                                }
+                            }
+                        };
+                        *sub = ObjectSub::AwaitColon { chosen };
+                        StepResult::Consumed
+                    }
+                    b'\\' => StepResult::Invalid,
+                    b if b < 0x20 => StepResult::Invalid,
+                    _ => {
+                        accumulated.push(byte);
+                        // Fast-fail prefix check (skip when additional
+                        // is allowed — any string is then valid).
+                        if !additional
+                            && !any_property_starts_with(
+                                properties,
+                                required_count,
+                                *next_idx,
+                                accumulated,
+                            )
+                        {
+                            return StepResult::Invalid;
+                        }
+                        StepResult::Consumed
+                    }
+                }
+            }
+            ObjectSub::AwaitColon { chosen } => {
+                if is_ws(byte) {
+                    return StepResult::Consumed;
+                }
+                if byte == b':' {
+                    *sub = ObjectSub::AfterColon {
+                        chosen: chosen.clone(),
+                    };
+                    StepResult::Consumed
+                } else {
+                    StepResult::Invalid
+                }
+            }
+            ObjectSub::AfterColon { chosen } => {
+                // Push the value frame; the byte is forwarded to the
+                // child (which will skip its own leading whitespace).
+                let chosen = chosen.clone();
+                let value_schema = match &chosen {
+                    ChosenKeyKind::Typed(i) => properties[*i].1.clone(),
+                    ChosenKeyKind::Additional => Schema::AnyOf(Arc::new(any_value_alts())),
+                };
+                *sub = ObjectSub::InValue { chosen };
+                StepResult::Push(Frame::AwaitValue(value_schema))
+            }
+            ObjectSub::InValue { chosen } => {
+                // Reached only after the child value frame has popped.
+                // Bump bookkeeping and re-process the byte at the new
+                // sub-state.
+                if let ChosenKeyKind::Typed(i) = chosen {
+                    *next_idx = *i + 1;
+                }
+                *pairs_consumed = pairs_consumed.saturating_add(1);
+                *sub = ObjectSub::AwaitCommaOrClose;
+                // Don't consume — the byte is `,` or `}` (or ws), which
+                // AwaitCommaOrClose handles.
+                // We're already the top frame; loop again.
+                // Re-enter via Replace? We're modifying ourselves
+                // in-place, so just signal "loop, don't consume":
+                // emulate via a no-op step that returns the same byte.
+                Self::step_object(
+                    properties,
+                    required_count,
+                    additional,
+                    next_idx,
+                    pairs_consumed,
+                    sub,
+                    byte,
+                )
+            }
+            ObjectSub::AwaitCommaOrClose => {
+                if is_ws(byte) {
+                    return StepResult::Consumed;
+                }
+                match byte {
+                    b'}' => {
+                        if *next_idx < required_count {
+                            StepResult::Invalid
+                        } else {
+                            StepResult::PopConsumed
+                        }
+                    }
+                    b',' => {
+                        *sub = ObjectSub::AwaitNextKey;
+                        StepResult::Consumed
+                    }
+                    _ => StepResult::Invalid,
+                }
+            }
+        }
+    }
+
+    fn step_array(
+        items: &Arc<Schema>,
+        max_items: Option<usize>,
+        count: &mut usize,
+        sub: &mut ArraySub,
+        byte: u8,
+    ) -> StepResult {
+        if is_ws(byte) {
+            return StepResult::Consumed;
+        }
+        match sub {
+            ArraySub::AwaitFirstItemOrClose => {
+                if byte == b']' {
+                    return StepResult::PopConsumed;
+                }
+                if matches!(max_items, Some(0)) {
+                    return StepResult::Invalid;
+                }
+                // We've committed to a value: bump count now so the
+                // post-pop comma/close check sees the right tally.
+                *count += 1;
+                *sub = ArraySub::AwaitCommaOrClose;
+                StepResult::Push(Frame::AwaitValue((**items).clone()))
+            }
+            ArraySub::AwaitCommaOrClose => match byte {
+                b']' => StepResult::PopConsumed,
+                b',' => {
+                    if let Some(max) = max_items {
+                        if *count >= max {
+                            return StepResult::Invalid;
+                        }
+                    }
+                    *sub = ArraySub::AwaitNextItem;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Invalid,
+            },
+            ArraySub::AwaitNextItem => {
+                *count += 1;
+                *sub = ArraySub::AwaitCommaOrClose;
+                StepResult::Push(Frame::AwaitValue((**items).clone()))
+            }
+        }
+    }
+
+    fn step_string_enum(
+        opts: &Arc<Vec<String>>,
+        accumulated: &mut Vec<u8>,
+        byte: u8,
+    ) -> StepResult {
+        match byte {
+            b'"' => {
+                let s = match std::str::from_utf8(accumulated) {
+                    Ok(s) => s,
+                    Err(_) => return StepResult::Invalid,
+                };
+                if opts.iter().any(|o| o == s) {
+                    StepResult::PopConsumed
+                } else {
+                    StepResult::Invalid
+                }
+            }
+            b'\\' => StepResult::Invalid,
+            _ => {
+                accumulated.push(byte);
+                if !opts.iter().any(|o| o.as_bytes().starts_with(accumulated)) {
+                    return StepResult::Invalid;
+                }
+                StepResult::Consumed
+            }
+        }
+    }
+
+    fn step_string_any(
+        consecutive_escapes: &mut u8,
+        sub: &mut StringSub,
+        byte: u8,
+    ) -> StepResult {
+        match sub {
+            StringSub::InBody => match byte {
+                b'"' => StepResult::PopConsumed,
+                b'\\' => {
+                    if *consecutive_escapes >= MAX_CONSEC_ESCAPES_INCR {
+                        return StepResult::Invalid;
+                    }
+                    *sub = StringSub::AfterBackslash;
+                    StepResult::Consumed
+                }
+                b if b < 0x20 => StepResult::Invalid,
+                _ => {
+                    *consecutive_escapes = 0;
+                    StepResult::Consumed
+                }
+            },
+            StringSub::AfterBackslash => match byte {
+                b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => {
+                    *sub = StringSub::InBody;
+                    *consecutive_escapes = consecutive_escapes.saturating_add(1);
+                    StepResult::Consumed
+                }
+                b'u' => {
+                    *sub = StringSub::InUnicode { remaining: 4 };
+                    StepResult::Consumed
+                }
+                _ => StepResult::Invalid,
+            },
+            StringSub::InUnicode { remaining } => {
+                if !byte.is_ascii_hexdigit() {
+                    return StepResult::Invalid;
+                }
+                *remaining -= 1;
+                if *remaining == 0 {
+                    *sub = StringSub::InBody;
+                    *consecutive_escapes = consecutive_escapes.saturating_add(1);
+                }
+                StepResult::Consumed
+            }
+        }
+    }
+
+    fn step_number(allow_fraction: bool, sub: &mut NumberSub, byte: u8) -> StepResult {
+        match sub {
+            NumberSub::Start => match byte {
+                b'-' => {
+                    *sub = NumberSub::AfterSign;
+                    StepResult::Consumed
+                }
+                b'0' => {
+                    *sub = NumberSub::AtLeadingZero;
+                    StepResult::Consumed
+                }
+                b'1'..=b'9' => {
+                    *sub = NumberSub::InInt;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Invalid,
+            },
+            NumberSub::AfterSign => match byte {
+                b'0' => {
+                    *sub = NumberSub::AtLeadingZero;
+                    StepResult::Consumed
+                }
+                b'1'..=b'9' => {
+                    *sub = NumberSub::InInt;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Invalid,
+            },
+            NumberSub::AtLeadingZero => match byte {
+                b'.' if allow_fraction => {
+                    *sub = NumberSub::AfterDot;
+                    StepResult::Consumed
+                }
+                b'e' | b'E' if allow_fraction => {
+                    *sub = NumberSub::AfterExpChar;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Pop,
+            },
+            NumberSub::InInt => match byte {
+                b'0'..=b'9' => StepResult::Consumed,
+                b'.' if allow_fraction => {
+                    *sub = NumberSub::AfterDot;
+                    StepResult::Consumed
+                }
+                b'e' | b'E' if allow_fraction => {
+                    *sub = NumberSub::AfterExpChar;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Pop,
+            },
+            NumberSub::AfterDot => match byte {
+                b'0'..=b'9' => {
+                    *sub = NumberSub::InFrac;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Invalid,
+            },
+            NumberSub::InFrac => match byte {
+                b'0'..=b'9' => StepResult::Consumed,
+                b'e' | b'E' => {
+                    *sub = NumberSub::AfterExpChar;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Pop,
+            },
+            NumberSub::AfterExpChar => match byte {
+                b'+' | b'-' => {
+                    *sub = NumberSub::AfterExpSign;
+                    StepResult::Consumed
+                }
+                b'0'..=b'9' => {
+                    *sub = NumberSub::InExp;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Invalid,
+            },
+            NumberSub::AfterExpSign => match byte {
+                b'0'..=b'9' => {
+                    *sub = NumberSub::InExp;
+                    StepResult::Consumed
+                }
+                _ => StepResult::Invalid,
+            },
+            NumberSub::InExp => match byte {
+                b'0'..=b'9' => StepResult::Consumed,
+                _ => StepResult::Pop,
+            },
+        }
+    }
+
+    fn step_keyword(word: &'static [u8], pos: &mut u8, byte: u8) -> StepResult {
+        let i = *pos as usize;
+        if i >= word.len() {
+            // Already complete — should not happen via driver.
+            return StepResult::Pop;
+        }
+        if word[i] != byte {
+            return StepResult::Invalid;
+        }
+        *pos += 1;
+        if (*pos as usize) == word.len() {
+            StepResult::PopConsumed
+        } else {
+            StepResult::Consumed
+        }
+    }
+
+    fn step_anyof(alts: &Arc<Vec<Schema>>, byte: u8) -> StepResult {
+        // Whitespace before disambiguation is allowed.
+        if is_ws(byte) {
+            return StepResult::Consumed;
+        }
+        // Pick the alternative that matches the leading byte. JSON's
+        // first-byte determinism means at most one alt can start with
+        // any given non-ws byte (`{`/`[`/`"`/digit/`-`/`t`/`f`/`n`).
+        for alt in alts.iter() {
+            if matches_first_byte(alt, byte) {
+                return StepResult::Replace(Frame::AwaitValue(alt.clone()));
+            }
+        }
+        StepResult::Invalid
+    }
+}
+
+fn matches_first_byte(schema: &Schema, b: u8) -> bool {
+    match schema {
+        Schema::Object { .. } => b == b'{',
+        Schema::Array { .. } => b == b'[',
+        Schema::StringEnum(_) | Schema::StringAny => b == b'"',
+        Schema::Integer | Schema::Number => matches!(b, b'-' | b'0'..=b'9'),
+        Schema::Boolean => matches!(b, b't' | b'f'),
+        Schema::Null => b == b'n',
+        Schema::AnyOf(alts) => alts.iter().any(|a| matches_first_byte(a, b)),
+    }
 }
 
 // ─── JsonConstraint ───────────────────────────────────────────
@@ -996,11 +1920,17 @@ fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
     arc
 }
 
-/// State carried across sample steps: the byte buffer of what's been
-/// emitted, and a lazily-cached vocab byte map.
+/// State carried across sample steps: the cached parser state at the
+/// end of `emitted`, the emitted buffer itself (kept for diagnostics
+/// + post-accept validation), and a lazily-cached vocab byte map.
 pub struct JsonConstraint {
     schema: Schema,
     emitted: Vec<u8>,
+    /// Incremental parser state at `emitted_len`. Cloned per candidate
+    /// inside `mask()` so each candidate just runs its own ~5 token
+    /// bytes through `advance` instead of re-parsing the whole buffer.
+    /// Updated in lock-step with `emitted` by `accept()`.
+    state: ValidatorState,
     /// byte sequence per token id (indexed by token id, sparse holes
     /// for unknown-type tokens are empty Vec). Shared across requests
     /// against the same model via `vocab_cache`.
@@ -1014,9 +1944,11 @@ impl JsonConstraint {
         let compiled = compile_schema(schema)?;
         let vocab_bytes = vocab_bytes_for(model);
         let eos_token = model.token_eos().0;
+        let state = ValidatorState::new(compiled.clone());
         Ok(Self {
             schema: compiled,
             emitted: Vec::new(),
+            state,
             vocab_bytes,
             eos_token,
         })
@@ -1026,36 +1958,29 @@ impl JsonConstraint {
     /// produce a definitively-invalid prefix when appended to the
     /// emitted buffer.
     ///
+    /// Uses the incremental parser: each candidate clones the cached
+    /// `ValidatorState` (Vec<Frame> shallow copy + Arc clones, not a
+    /// deep traversal) and runs only the candidate's own bytes through
+    /// `advance` — per-candidate cost is O(bytes_per_token × stack_depth)
+    /// rather than O(emitted_len × stack_depth) for the recursive
+    /// re-parse it replaced.
+    ///
     /// Parallelised across rayon's global pool — for Gemma-3-E4B
     /// (n_vocab ≈ 262K) the per-candidate validator is the dominant
-    /// cost of a generation step. `for_each_init` gives each rayon
-    /// worker its own scratch buffer pre-loaded with `emitted`, so we
-    /// pay one `Vec::clone` per worker per call instead of one per
-    /// candidate. Net effect on a 16-core box: ~16× fewer wall-time
-    /// seconds per token.
+    /// cost of a generation step.
     pub fn mask(&self, data: &mut LlamaTokenDataArray) {
-        // Pre-decide whether the buffer is a complete root value. If
-        // yes, only EOS (or trailing whitespace) is allowed.
-        let buffer_status = validate(&self.schema, &self.emitted);
-        let buffer_is_complete = matches!(buffer_status, ParseStatus::Complete);
-        let emitted_len = self.emitted.len();
-
-        let schema = &self.schema;
-        let emitted = &self.emitted;
+        let buffer_is_complete = matches!(self.state.eof_status(), ParseStatus::Complete);
         let vocab_bytes = &*self.vocab_bytes;
         let eos_token = self.eos_token;
+        let state = &self.state;
 
         data.data.par_iter_mut().for_each_init(
-            // Each rayon worker reuses one scratch buffer across all
-            // its candidates. Pre-load it with `emitted` once; per
-            // candidate we truncate to `emitted_len` and append the
-            // token bytes.
-            || {
-                let mut scratch = Vec::with_capacity(emitted_len + 64);
-                scratch.extend_from_slice(emitted);
-                scratch
-            },
-            |scratch, entry| {
+            // Each rayon worker reuses one scratch state across all
+            // its candidates. Pre-clone the cached state once; per
+            // candidate we re-clone (cheap — bounded stack depth) so
+            // sibling candidates don't see each other's mutations.
+            || state.clone(),
+            |worker_state, entry| {
                 let token_id = entry.id().0;
                 if token_id == eos_token {
                     if !buffer_is_complete {
@@ -1076,9 +2001,13 @@ impl JsonConstraint {
                     }
                     return;
                 }
-                scratch.truncate(emitted_len);
-                scratch.extend_from_slice(bytes);
-                if let ParseStatus::Invalid = validate(schema, scratch) {
+                // Fork worker_state for this candidate (the mutation
+                // would otherwise leak into sibling candidates).
+                let mut candidate_state = worker_state.clone();
+                if matches!(
+                    candidate_state.advance_bytes(bytes),
+                    ParseStatus::Invalid
+                ) {
                     entry.set_logit(f32::NEG_INFINITY);
                 }
             },
@@ -1107,6 +2036,11 @@ impl JsonConstraint {
             return;
         };
         self.emitted.extend_from_slice(&bytes);
+        // Advance the cached parser state by the new bytes. mask()
+        // forks this state per candidate — keeping it in lock-step
+        // with `emitted` is the whole point of the incremental
+        // validator.
+        let _ = self.state.advance_bytes(&bytes);
         // Per-token dump (env-gated). Set
         // `SOVEREIGN_CONSTRAINT_DUMP=/path/to/file` to record one line
         // per accepted token: token_id, bytes (escaped), running
@@ -1179,7 +2113,7 @@ impl JsonConstraint {
     /// True once the emitted bytes form a complete schema-conforming
     /// document (only trailing whitespace / EOS would follow).
     pub fn is_root_complete(&self) -> bool {
-        matches!(validate(&self.schema, &self.emitted), ParseStatus::Complete)
+        matches!(self.state.eof_status(), ParseStatus::Complete)
     }
 }
 
@@ -1372,5 +2306,228 @@ mod tests {
         assert_eq!(validate(&s, b"nul"), ParseStatus::Incomplete);
         assert_eq!(validate(&s, b"\"hi"), ParseStatus::Incomplete);
         assert_eq!(validate(&s, b"42"), ParseStatus::Invalid);
+    }
+
+    #[test]
+    fn validate_array_max_items_caps_count() {
+        // maxItems=3: arrays with up to 3 elements are Complete; a 4th
+        // element after the cap is Invalid (the parser must see `]`).
+        let s = compile_schema(&json!({
+            "type": "array",
+            "items": {"type": "string"},
+            "maxItems": 3
+        }))
+        .unwrap();
+        assert_eq!(validate(&s, br#"[]"#), ParseStatus::Complete);
+        assert_eq!(validate(&s, br#"["a"]"#), ParseStatus::Complete);
+        assert_eq!(validate(&s, br#"["a","b","c"]"#), ParseStatus::Complete);
+        // Cap reached, but bytes after the 3rd item haven't decided
+        // between `,` and `]` yet → Incomplete (mask still narrowing).
+        assert_eq!(validate(&s, br#"["a","b","c""#), ParseStatus::Incomplete);
+        // Comma after cap is Invalid — the mask sampler will reject
+        // any token that emits one, forcing the close.
+        assert_eq!(validate(&s, br#"["a","b","c","#), ParseStatus::Invalid);
+        // Already-emitted 4th element is also Invalid.
+        assert_eq!(validate(&s, br#"["a","b","c","d"]"#), ParseStatus::Invalid);
+    }
+
+    #[test]
+    fn validate_array_max_items_unbounded_when_absent() {
+        // No `maxItems` → behaves as before, no cap.
+        let s = compile_schema(&json!({
+            "type": "array",
+            "items": {"type": "integer"}
+        }))
+        .unwrap();
+        assert_eq!(validate(&s, br#"[1,2,3,4,5,6,7,8,9,10]"#), ParseStatus::Complete);
+    }
+
+    /// Drive the incremental state machine over a byte buffer, return
+    /// final ParseStatus (with EOF-finalization). Used by the parity
+    /// tests below.
+    fn validate_incremental(schema: &Schema, bytes: &[u8]) -> ParseStatus {
+        let mut state = ValidatorState::new(schema.clone());
+        for &b in bytes {
+            let s = state.advance(b);
+            if matches!(s, ParseStatus::Invalid) {
+                return s;
+            }
+        }
+        state.eof_status()
+    }
+
+    /// Cover every supported schema construct against the new validator.
+    /// Mirrors the recursive-parser asserts so we catch regressions
+    /// either way.
+    #[test]
+    fn incremental_parity_against_recursive() {
+        // Simple object
+        let s = compile_schema(&json!({
+            "type": "object",
+            "properties": {
+                "intent": {"type": "string", "enum": ["A", "B"]},
+                "confidence": {"type": "number"}
+            },
+            "required": ["intent", "confidence"]
+        }))
+        .unwrap();
+        let cases: &[(&[u8], ParseStatus)] = &[
+            (br#"{"intent":"A","confidence":0.9}"#, ParseStatus::Complete),
+            (br#"{"intent":"A"#, ParseStatus::Incomplete),
+            (br#"{"intent":"Z"#, ParseStatus::Invalid),
+            (br#"{"intent":"A","confidence":0.9}   "#, ParseStatus::Complete),
+        ];
+        for (bytes, expected) in cases {
+            let r = validate_incremental(&s, bytes);
+            let v = validate(&s, bytes);
+            assert_eq!(r, *expected, "incremental: {:?}", std::str::from_utf8(bytes));
+            assert_eq!(
+                v, *expected,
+                "recursive (parity): {:?}",
+                std::str::from_utf8(bytes)
+            );
+        }
+
+        // Array with maxItems
+        let s2 = compile_schema(&json!({
+            "type": "array",
+            "items": {"type": "string"},
+            "maxItems": 3
+        }))
+        .unwrap();
+        for (bytes, expected) in &[
+            (b"[]" as &[u8], ParseStatus::Complete),
+            (b"[\"a\"]", ParseStatus::Complete),
+            (b"[\"a\",\"b\",\"c\"]", ParseStatus::Complete),
+            (b"[\"a\",\"b\",\"c\",", ParseStatus::Invalid),
+            (b"[\"a\",", ParseStatus::Incomplete),
+        ] {
+            assert_eq!(
+                validate_incremental(&s2, bytes),
+                *expected,
+                "incremental array: {:?}",
+                std::str::from_utf8(bytes)
+            );
+        }
+
+        // anyOf string/null
+        let s3 = compile_schema(&json!({"type": ["string", "null"]})).unwrap();
+        for (bytes, expected) in &[
+            (b"\"hi\"" as &[u8], ParseStatus::Complete),
+            (b"null", ParseStatus::Complete),
+            (b"nul", ParseStatus::Incomplete),
+            (b"42", ParseStatus::Invalid),
+        ] {
+            assert_eq!(
+                validate_incremental(&s3, bytes),
+                *expected,
+                "incremental anyOf: {:?}",
+                std::str::from_utf8(bytes)
+            );
+        }
+
+        // Nested: object containing array of objects (mirrors phase1
+        // shape). This exercises object→array→object→string traversal.
+        let s4 = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "section_id": {"type": "string"},
+                "questions_raised": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {"content": {"type": "string"}},
+                        "required": ["content"]
+                    }
+                }
+            },
+            "required": ["section_id", "questions_raised"]
+        }))
+        .unwrap();
+        let nested = br#"{"section_id":"x","questions_raised":[{"content":"q1"},{"content":"q2"}]}"#;
+        assert_eq!(validate_incremental(&s4, nested), ParseStatus::Complete);
+        let over_cap =
+            br#"{"section_id":"x","questions_raised":[{"content":"q1"},{"content":"q2"},"#;
+        assert_eq!(validate_incremental(&s4, over_cap), ParseStatus::Invalid);
+
+        // Number / integer / negatives / fractions / exponent
+        let num = compile_schema(&json!({"type": "number"})).unwrap();
+        for (bytes, expected) in &[
+            (b"0" as &[u8], ParseStatus::Complete),
+            (b"-1", ParseStatus::Complete),
+            (b"1.5", ParseStatus::Complete),
+            (b"-3.14e10", ParseStatus::Complete),
+            (b"-3.14e-10", ParseStatus::Complete),
+            (b"01", ParseStatus::Invalid), // leading-zero rule
+            (b"1.", ParseStatus::Incomplete),
+            (b"1e", ParseStatus::Incomplete),
+        ] {
+            assert_eq!(
+                validate_incremental(&num, bytes),
+                *expected,
+                "incremental number: {:?}",
+                std::str::from_utf8(bytes)
+            );
+        }
+    }
+
+    /// Confirm the state-machine path catches the same bad-prefix that
+    /// `mask_shaped_validate_catches_mid_token_backtick_corruption`
+    /// catches via the recursive path (the gemma backtick bug).
+    #[test]
+    fn incremental_rejects_backtick_in_string_position() {
+        let s = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "a": {"type": "string"}
+            },
+            "required": ["a"]
+        }))
+        .unwrap();
+        // After '"a":', the next non-ws byte must be `"`. A backtick
+        // opens nothing valid.
+        let bad = br#"{"a":`"#;
+        assert_eq!(validate_incremental(&s, bad), ParseStatus::Invalid);
+    }
+
+    #[test]
+    fn validate_nested_array_max_items_in_object_property() {
+        // Schema mirrors the Phase 1 shape: an object with a capped
+        // questions_raised array. Verifies the cap is honoured when
+        // the array is nested inside object property dispatch.
+        let s = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "section_id": {"type": "string"},
+                "questions_raised": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {"content": {"type": "string"}},
+                        "required": ["content"]
+                    }
+                }
+            },
+            "required": ["section_id", "questions_raised"]
+        }))
+        .unwrap();
+        assert_eq!(
+            validate(&s, br#"{"section_id":"x","questions_raised":[{"content":"q1"},{"content":"q2"}]}"#),
+            ParseStatus::Complete
+        );
+        // Third item attempted after the cap → comma Invalid.
+        assert_eq!(
+            validate(&s, br#"{"section_id":"x","questions_raised":[{"content":"q1"},{"content":"q2"},"#),
+            ParseStatus::Invalid
+        );
     }
 }

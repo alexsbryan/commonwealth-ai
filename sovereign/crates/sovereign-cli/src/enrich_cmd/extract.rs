@@ -215,6 +215,11 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
             return 1;
         }
     };
+    // Phase D2 — grab the cumulative token ledger before consuming
+    // the client into closures. The Arc<TokenUsageLedger> is shared
+    // with the closures, so each chat call bumps it and the flusher
+    // task below sees the running totals.
+    let usage_ledger = client.usage_ledger();
     let (embed, chat, chat_with_tokens) = client.into_closures_with_tokens();
 
     let cache = PhaseCache::new(paths::cache_dir(&cfg.corpus_id));
@@ -491,16 +496,75 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
         }
     };
 
+    // Phase D2 — spawn a background flusher that writes the
+    // running token snapshot to `<workspace>/_tokens.json` every
+    // 30 s. A snapshot is written one final time after the runner
+    // returns so the on-disk ledger reflects the run-end state.
+    let tokens_path = paths::enrichment_root(&cfg.corpus_id).join("_tokens.json");
+    let started_at_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let flusher_ledger = std::sync::Arc::clone(&usage_ledger);
+    let flusher_path = tokens_path.clone();
+    let flusher_corpus = cfg.corpus_id.clone();
+    let flusher = tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        // First tick is immediate — skip it; we want the next 30s
+        // checkpoint, not a write before any work happens.
+        tick.tick().await;
+        loop {
+            tick.tick().await;
+            let _ = write_token_snapshot(
+                &flusher_path,
+                &flusher_corpus,
+                started_at_ms,
+                &flusher_ledger,
+            );
+        }
+    });
+
     let result = match runner
         .phase_1_extract_questions_with_retry(&inputs, &selection, retry_mode, progress)
         .await
     {
         Ok(r) => r,
         Err(e) => {
+            flusher.abort();
+            // Persist the partial spend so the operator can see how
+            // many tokens were burned even on a failed run.
+            let _ = write_token_snapshot(
+                &tokens_path,
+                &cfg.corpus_id,
+                started_at_ms,
+                &usage_ledger,
+            );
             eprintln!("error: phase 1 run failed: {e}");
             return 1;
         }
     };
+    flusher.abort();
+    if let Err(e) = write_token_snapshot(
+        &tokens_path,
+        &cfg.corpus_id,
+        started_at_ms,
+        &usage_ledger,
+    ) {
+        tracing::warn!(
+            path = %tokens_path.display(),
+            error = %e,
+            "extract: token snapshot write failed (non-fatal)"
+        );
+    } else {
+        let snap = usage_ledger.snapshot();
+        if snap.calls > 0 {
+            println!(
+                "  · token spend: {} call(s), {} prompt + {} completion = {} total",
+                snap.calls, snap.prompt_tokens, snap.completion_tokens, snap.total_tokens
+            );
+        }
+    }
 
     // Merge characters_present back into the manifest for every
     // chapter the run succeeded on.
@@ -852,6 +916,74 @@ pub async fn run_with_closures_for_test(
 // tuple, which the CLI explicitly names for clarity).
 #[allow(dead_code)]
 fn _hold_chapter_manifest(_: &ChapterManifest) {}
+
+/// Phase D2 — persisted token-spend record at `<workspace>/_tokens.json`.
+/// Schema kept stable so the corpus-status display + future
+/// `/internal/atlas/status` endpoint can deserialise the same file
+/// without coordination.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TokenSpendRecord {
+    pub schema_version: u32,
+    pub corpus_id: String,
+    pub calls: u64,
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+    /// Wall-clock start of the extract run that wrote this record
+    /// (Unix ms). Reset every run — this is per-run spend, not
+    /// lifetime-of-corpus spend, because Phase 1 caches and
+    /// `--resume` make lifetime accounting non-trivial.
+    pub started_at_ms: u64,
+    pub updated_at_ms: u64,
+}
+
+const TOKEN_SPEND_SCHEMA: u32 = 1;
+
+/// Atomically write a token-spend snapshot to `path`. Sibling `.tmp`
+/// + rename so a crash mid-write can't leave a half-finished file.
+pub fn write_token_snapshot(
+    path: &std::path::Path,
+    corpus_id: &str,
+    started_at_ms: u64,
+    ledger: &super::inference_client::TokenUsageLedger,
+) -> std::io::Result<()> {
+    let snap = ledger.snapshot();
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let record = TokenSpendRecord {
+        schema_version: TOKEN_SPEND_SCHEMA,
+        corpus_id: corpus_id.to_string(),
+        calls: snap.calls,
+        prompt_tokens: snap.prompt_tokens,
+        completion_tokens: snap.completion_tokens,
+        total_tokens: snap.total_tokens,
+        started_at_ms,
+        updated_at_ms: now_ms,
+    };
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    let bytes = serde_json::to_vec_pretty(&record)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(&tmp, path)
+}
+
+/// Read the persisted token-spend record from `path`. Returns
+/// `None` if the file is missing, malformed, or has a future
+/// schema. Used by the corpus-status display + atlas status
+/// endpoint.
+pub fn read_token_snapshot(path: &std::path::Path) -> Option<TokenSpendRecord> {
+    let raw = std::fs::read_to_string(path).ok()?;
+    let record: TokenSpendRecord = serde_json::from_str(&raw).ok()?;
+    if record.schema_version != TOKEN_SPEND_SCHEMA {
+        return None;
+    }
+    Some(record)
+}
 
 #[cfg(test)]
 mod tests {

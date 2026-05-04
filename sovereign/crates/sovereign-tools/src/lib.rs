@@ -1,6 +1,8 @@
 pub mod atlas_context_manager;
 pub mod atlas_peer_advice;
 pub mod atlas_postinstall;
+pub mod atlas_status;
+pub mod wikipedia_fetch;
 pub mod calendar;
 pub mod catalog;
 pub mod catalog_ingest;
@@ -63,6 +65,7 @@ pub use code::{
 pub use code::DesignSignalsExtractTool;
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
+pub use wikipedia_fetch::WikipediaFetchTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
 pub use recipe_author::{
     RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteTool,

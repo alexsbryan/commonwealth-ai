@@ -21,6 +21,7 @@
 //! gains.
 
 pub mod budget;
+pub mod status;
 pub mod wikipedia;
 
 use crate::util::help::{self, Help, HelpSection};
@@ -38,6 +39,10 @@ const HELP: Help = Help {
             (
                 "budget",
                 "Show or set the per-corpus Tier-2 enrichment budget (top-N articles).",
+            ),
+            (
+                "status",
+                "Per-corpus atlas readiness — atom counts, Tier-2 progress, token spend.",
             ),
         ]),
         HelpSection::Notes(
@@ -62,6 +67,7 @@ pub async fn run_atlas(args: &[String]) -> i32 {
     match first {
         "wikipedia" => wikipedia::run(&args[1..]).await,
         "budget" => budget::run(&args[1..]).await,
+        "status" => status::run(&args[1..]).await,
         other => {
             eprintln!("error: unknown atlas subcommand `{other}`");
             help::print(&HELP);

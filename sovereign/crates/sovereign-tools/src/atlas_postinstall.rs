@@ -149,21 +149,80 @@ pub const DEFAULT_TIER2_BUDGET: usize = 1000;
 /// state.
 pub const TRIAGE_CONFIG_FILE: &str = "triage-config.json";
 
-/// Persisted shape of the budget override. `schema_version = 1` lets
-/// future additions (token-budget caps, decay knobs) land without
-/// breaking existing files.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+/// Persisted shape of the triage override. `schema_version = 1` lets
+/// future additions land without breaking existing files. All fields
+/// are `Option` so partial overrides are fine — fields left absent
+/// fall through to the constants defined alongside.
+#[derive(Debug, serde::Serialize, serde::Deserialize, Default)]
 pub struct TriageConfig {
     pub schema_version: u32,
-    /// Cap on `top_in_corpus_by_centrality` after the tier prior +
-    /// bumps are applied. `None` (or absent file) → use
-    /// [`DEFAULT_TIER2_BUDGET`].
+    /// Cap on `top_in_corpus_by_centrality` after seed + expansion
+    /// picks merge. `None` (or absent file) → [`DEFAULT_TIER2_BUDGET`].
     pub budget_articles: Option<usize>,
+    /// Fraction of `budget_articles` reserved for seed-expansion picks
+    /// (1-hop outbound wikilinks from the seed set). `None` →
+    /// [`DEFAULT_EXPANSION_FRACTION`]. Set to `0.0` to disable
+    /// expansion and recover the old "pure tier+centrality" behaviour.
+    /// Clamped to [0.0, 0.9] at read time — at least 10% of the
+    /// budget always goes to seeds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expansion_fraction: Option<f64>,
+    /// How many wikilink hops to walk outward from each seed when
+    /// computing the expansion candidate pool. `None` →
+    /// [`DEFAULT_EXPANSION_HOPS`]. Values >2 explode quickly on
+    /// wiki-scale graphs; the loader caps at 2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expansion_hops: Option<u32>,
 }
 
-/// Read `<atlas_dir>/triage-config.json` and return the configured
-/// budget, or `None` if the file is missing / malformed / has no
-/// `budget_articles`. Callers fall back to [`DEFAULT_TIER2_BUDGET`].
+/// Default share of the Tier-2 budget reserved for expansion picks.
+/// 30% leaves room for the full vital roster (L1+L2+L3 = ~1100
+/// articles fit comfortably in the 70% seed cap of a 1000 budget)
+/// while still capturing several hundred connective-tissue articles
+/// (Einstein → Bohr, photoelectric effect, special relativity).
+pub const DEFAULT_EXPANSION_FRACTION: f64 = 0.3;
+
+/// Default expansion depth. 1-hop is the right tradeoff: the
+/// connective tissue we want IS the articles vital ones link
+/// directly to. 2-hop dilutes the signal (transitive neighbours
+/// are usually only loosely related to the seed) and quadruples
+/// the candidate pool size.
+pub const DEFAULT_EXPANSION_HOPS: u32 = 1;
+
+/// Read `<atlas_dir>/triage-config.json` and return the full
+/// resolved config (with defaults filled in). Missing / malformed
+/// file → defaults across the board.
+pub fn read_triage_config(atlas_dir: &Path) -> ResolvedTriageConfig {
+    let path = atlas_dir.join(TRIAGE_CONFIG_FILE);
+    let raw = std::fs::read_to_string(&path).ok();
+    let cfg: TriageConfig = raw
+        .and_then(|r| serde_json::from_str(&r).ok())
+        .unwrap_or_default();
+    ResolvedTriageConfig {
+        budget_articles: cfg.budget_articles.unwrap_or(DEFAULT_TIER2_BUDGET),
+        expansion_fraction: cfg
+            .expansion_fraction
+            .unwrap_or(DEFAULT_EXPANSION_FRACTION)
+            .clamp(0.0, 0.9),
+        expansion_hops: cfg
+            .expansion_hops
+            .unwrap_or(DEFAULT_EXPANSION_HOPS)
+            .min(2),
+    }
+}
+
+/// Resolved triage knobs after defaults + clamping. Returned by
+/// [`read_triage_config`]; the post-install chain reads this once
+/// per corpus install and threads it into the rest of the pipeline.
+#[derive(Debug, Clone, Copy)]
+pub struct ResolvedTriageConfig {
+    pub budget_articles: usize,
+    pub expansion_fraction: f64,
+    pub expansion_hops: u32,
+}
+
+/// Read just the `budget_articles` field for back-compat with the
+/// pre-expansion CLI. Prefer [`read_triage_config`] for new callers.
 pub fn read_triage_budget(atlas_dir: &Path) -> Option<usize> {
     let path = atlas_dir.join(TRIAGE_CONFIG_FILE);
     let raw = std::fs::read_to_string(&path).ok()?;
@@ -171,18 +230,50 @@ pub fn read_triage_budget(atlas_dir: &Path) -> Option<usize> {
     cfg.budget_articles
 }
 
-/// Persist a Tier-2 budget override. Atomic via sibling `.tmp` +
-/// rename so a crash mid-write can't corrupt the override. Used by
-/// `sovereign atlas budget <corpus> <n>` and by callers wiring up
-/// disk-aware autoscaling.
+/// Persist a Tier-2 budget override (legacy entry point — preserves
+/// any expansion knobs already on disk). New callers should use
+/// [`write_triage_config`] which sets all three fields atomically.
 pub fn write_triage_budget(atlas_dir: &Path, budget_articles: usize) -> std::io::Result<()> {
-    let cfg = TriageConfig {
-        schema_version: 1,
-        budget_articles: Some(budget_articles),
-    };
+    // Read existing config so we don't trample expansion knobs.
+    let path = atlas_dir.join(TRIAGE_CONFIG_FILE);
+    let mut cfg: TriageConfig = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|r| serde_json::from_str(&r).ok())
+        .unwrap_or_default();
+    cfg.schema_version = 1;
+    cfg.budget_articles = Some(budget_articles);
     let value = serde_json::to_value(&cfg)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    write_atomic_json(&path, &value)
+}
+
+/// Persist the full triage config (budget + expansion knobs).
+/// Atomic via sibling `.tmp` + rename. Use this for setting
+/// expansion-related knobs to make sure all three fields land
+/// in one consistent write.
+pub fn write_triage_config(
+    atlas_dir: &Path,
+    budget_articles: Option<usize>,
+    expansion_fraction: Option<f64>,
+    expansion_hops: Option<u32>,
+) -> std::io::Result<()> {
     let path = atlas_dir.join(TRIAGE_CONFIG_FILE);
+    let mut cfg: TriageConfig = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|r| serde_json::from_str(&r).ok())
+        .unwrap_or_default();
+    cfg.schema_version = 1;
+    if let Some(b) = budget_articles {
+        cfg.budget_articles = Some(b);
+    }
+    if let Some(f) = expansion_fraction {
+        cfg.expansion_fraction = Some(f);
+    }
+    if let Some(h) = expansion_hops {
+        cfg.expansion_hops = Some(h);
+    }
+    let value = serde_json::to_value(&cfg)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     write_atomic_json(&path, &value)
 }
 
@@ -212,24 +303,42 @@ pub enum TriageOutcome {
 }
 
 /// Read the structural atlas at `<indexes_dir>/<corpus_id>/atlas/`,
-/// rank in-corpus entities by Vital Articles tier (curator prior)
-/// then by inbound + outbound link degree, and persist the
-/// top-`budget` canonical names to `<corpus>/triage-candidates.json`.
+/// pick a seed set by (Vital Articles tier × centrality × bumps),
+/// expand 1-hop outbound through the wikilink graph to gather the
+/// connective-tissue articles each seed actually points at, rank
+/// the expansion candidates by hits-from-seeds + tier + centrality,
+/// and persist the merged top-`budget` canonical names to
+/// `<corpus>/triage-candidates.json`.
+///
+/// ## Why two-phase
+///
+/// Pure tier+centrality picks the 1000 most central articles. That
+/// IS the vital roster for the head, but it leaves no slots for the
+/// articles each vital one actually links to (Einstein → Bohr,
+/// special relativity, photoelectric effect — none of which are
+/// L1+L2). Two-phase keeps the head AND captures the directly-cited
+/// neighbourhood, which is what makes Q&A about a vital topic
+/// retrievable in depth.
 ///
 /// ## Scoring
 ///
-/// `score = (6 - tier) * BIG + centrality`, where `BIG` is large
-/// enough to guarantee strict tier ordering. `tier` comes from the
-/// bundled L1-L5 lists (see [`vital_tier`]); off-list entities
-/// score on centrality alone (effective tier = 6, prior = 0).
+/// **Seeds**: pick top-`(1 - expansion_fraction) * budget` by
+/// `(6 - tier) * BIG + centrality + bumps * BUMP_WEIGHT`. Tier
+/// dominates so all of L1+L2+L3 in-corpus lands in the seed set
+/// before any centrality-only off-list candidate.
 ///
-/// Effect on a Wikipedia-scale atlas: top-1000 deterministically
-/// includes every L1+L2+L3 article that's in-corpus (1,113 articles
-/// total — at budget 1000 the long tail of L3 spills into L4 by
-/// centrality), then top L4 by centrality, then bare-centrality
-/// L5 / off-list. Without the prior, top-1000 was dominated by
-/// disambiguation pages, list-of- pages, and templated geo
-/// stubs — high-degree but content-thin.
+/// **Expansion**: walk outbound wikilinks from every seed,
+/// counting `hits_from_seeds[target]++` per (seed, target) edge.
+/// Drop placeholders (off-corpus targets) and entities already in
+/// the seed set. Rank survivors by
+/// `hits_from_seeds * SEED_HIT_WEIGHT + (6 - tier) * SMALL_TIER_WEIGHT
+/// + centrality + bumps * BUMP_WEIGHT`. Take top `expansion_cap`.
+///
+/// **Combined output**: seeds (in seed-score order) followed by
+/// expansion picks. The downstream `enrich init --include-articles`
+/// consumer just reads the array — order matters only for the
+/// extract scheduler's first-N preference (seeds get processed
+/// first, so even a partial run gets the highest-priority work).
 ///
 /// ## Schema
 ///
@@ -265,6 +374,15 @@ pub async fn build_triage_candidates(
             }
         }
     };
+
+    // Read expansion knobs alongside the budget. We pass `budget`
+    // explicitly (the caller resolves it via `effective_tier2_budget`)
+    // but read fraction + hops here so a single triage rebuild
+    // honours operator overrides on those knobs without the caller
+    // needing to thread them through.
+    let cfg = read_triage_config(&atlas_dir);
+    let expansion_fraction = cfg.expansion_fraction;
+    let expansion_hops = cfg.expansion_hops;
 
     // Index entities, splitting placeholders from in-corpus.
     struct Ent {
@@ -305,16 +423,23 @@ pub async fn build_triage_candidates(
     // queries pull a long-tail article past most of its tier.
     const BUMP_WEIGHT: u64 = 10;
 
-    // Rank in-corpus by (Vital Articles tier, centrality + bumps).
-    // Tier comes from the bundled L1-L5 prior; missing → tier 6
-    // (off-list). The tier weight is large enough to guarantee
-    // strict ordering — within a tier, centrality + bumps break ties.
-    //
-    // BIG = max(centrality) + max(bumps*BUMP_WEIGHT) + 1. Picking
-    // u32::MAX + 1 leaves room for ~2^31 bump points, far past
-    // realistic usage on a single corpus.
+    // Tier weight is large enough that centrality + bumps + seed-
+    // hits never cross a tier boundary in seed scoring. Using
+    // u32::MAX + 1 leaves room for ~2^31 expansion points, far
+    // beyond realistic centrality + hits-from-seeds totals.
     const TIER_WEIGHT: u64 = (u32::MAX as u64) + 1;
+
+    // Each "this article is referenced by N seeds" hit is worth this
+    // many centrality units in the expansion ranker. 1000 means a
+    // candidate referenced by 10 seeds outranks a same-tier candidate
+    // with only +10K centrality — sensible: hits-from-seeds is a
+    // direct quality signal for "this is connective tissue", whereas
+    // raw centrality on the long tail is noisy.
+    const SEED_HIT_WEIGHT: u64 = 1_000;
+
+    // ── PHASE 1: score every in-corpus entity (full ranking) ────
     struct Ranked {
+        id: String,
         canonical_name: String,
         tier: u8, // 1..=5 for vital, 6 for off-list
         centrality: u32,
@@ -329,6 +454,7 @@ pub async fn build_triage_candidates(
             let tier = vital_tier(&e.canonical_name).unwrap_or(6);
             let bumps = bump_count_for(&bumps, &e.canonical_name);
             Ranked {
+                id: id.clone(),
                 canonical_name: e.canonical_name.clone(),
                 tier,
                 centrality,
@@ -336,30 +462,135 @@ pub async fn build_triage_candidates(
             }
         })
         .collect();
-    let score = |r: &Ranked| -> u64 {
+    let seed_score = |r: &Ranked| -> u64 {
         (6u64 - r.tier as u64) * TIER_WEIGHT
             + r.centrality as u64
             + r.bumps.saturating_mul(BUMP_WEIGHT)
     };
     ranked.sort_by(|a, b| {
-        score(b)
-            .cmp(&score(a))
+        seed_score(b)
+            .cmp(&seed_score(a))
             .then_with(|| a.canonical_name.cmp(&b.canonical_name))
     });
-    ranked.truncate(budget);
 
-    // Tier histogram on the kept set — useful telemetry for both
-    // post-install logs and `corpus status`.
-    let mut tier_counts = [0usize; 6]; // [0]=L1, [1]=L2, ..., [5]=off-list
+    // ── PHASE 2: pick seeds (top-K of full ranking) ─────────────
+    let seed_cap =
+        ((budget as f64) * (1.0 - expansion_fraction)).round() as usize;
+    // If expansion is disabled (fraction=0), seed_cap == budget and
+    // we recover the legacy pure-centrality behaviour.
+    let seed_cap = seed_cap.min(budget);
+    let seeds: Vec<Ranked> = ranked.drain(..seed_cap.min(ranked.len())).collect();
+    let seed_ids: std::collections::HashSet<String> =
+        seeds.iter().map(|r| r.id.clone()).collect();
+
+    // ── PHASE 3: 1-hop (or 2-hop) outbound expansion from seeds ─
+    // hits_from_seeds[target_id] = how many seeds reference it.
+    // For 2-hop, a second pass treats every 1-hop hit as a quasi-
+    // seed but at half weight, so direct neighbours always outrank
+    // grandchildren.
+    let mut hits_from_seeds: HashMap<String, u32> = HashMap::new();
+    if expansion_fraction > 0.0 && !seeds.is_empty() {
+        for edge in &edges.edges {
+            let src = edge.source.as_str();
+            let tgt = edge.target.as_str();
+            if seed_ids.contains(src) && !seed_ids.contains(tgt) {
+                *hits_from_seeds.entry(tgt.to_string()).or_insert(0) += 2;
+            }
+        }
+        if expansion_hops >= 2 {
+            // 2-hop: walk one more level from current 1-hop set.
+            // Half-weight (each 1-hop hit contributes 1, vs 2 for
+            // direct seed hits) so direct neighbours dominate.
+            let one_hop_ids: std::collections::HashSet<String> =
+                hits_from_seeds.keys().cloned().collect();
+            for edge in &edges.edges {
+                let src = edge.source.as_str();
+                let tgt = edge.target.as_str();
+                if one_hop_ids.contains(src)
+                    && !seed_ids.contains(tgt)
+                    && !one_hop_ids.contains(tgt)
+                {
+                    *hits_from_seeds.entry(tgt.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
+    // Score expansion candidates. Drop placeholders (off-corpus
+    // wikilink targets — can't enrich) and any seeds that snuck
+    // through. Score formula keeps tier as a strong influence so a
+    // vital article touched by even one seed beats a centrality-
+    // heavy off-list article touched by many.
+    struct Expansion {
+        id: String,
+        canonical_name: String,
+        tier: u8,
+        centrality: u32,
+        bumps: u64,
+        hits_from_seeds: u32,
+    }
+    let mut expansions: Vec<Expansion> = hits_from_seeds
+        .into_iter()
+        .filter_map(|(id, hits)| {
+            let ent = by_id.get(&id)?;
+            if ent.is_placeholder {
+                return None;
+            }
+            let centrality = inbound.get(&id).copied().unwrap_or(0)
+                + outbound.get(&id).copied().unwrap_or(0);
+            let tier = vital_tier(&ent.canonical_name).unwrap_or(6);
+            let bumps = bump_count_for(&bumps, &ent.canonical_name);
+            Some(Expansion {
+                id,
+                canonical_name: ent.canonical_name.clone(),
+                tier,
+                centrality,
+                bumps,
+                hits_from_seeds: hits,
+            })
+        })
+        .collect();
+    let expansion_score = |e: &Expansion| -> u64 {
+        // Tier weight stays large so a single vital-article hit
+        // outranks any off-list saturating with seeds. Within a
+        // tier, hits_from_seeds dominates centrality.
+        (6u64 - e.tier as u64) * TIER_WEIGHT
+            + (e.hits_from_seeds as u64).saturating_mul(SEED_HIT_WEIGHT)
+            + e.centrality as u64
+            + e.bumps.saturating_mul(BUMP_WEIGHT)
+    };
+    expansions.sort_by(|a, b| {
+        expansion_score(b)
+            .cmp(&expansion_score(a))
+            .then_with(|| a.canonical_name.cmp(&b.canonical_name))
+    });
+    let expansion_cap = budget.saturating_sub(seeds.len());
+    expansions.truncate(expansion_cap);
+
+    // ── Tier histograms + diagnostics for the persisted output ──
+    let mut tier_counts = [0usize; 6];
     let mut bumped_picks = 0usize;
-    for r in &ranked {
+    for r in &seeds {
         tier_counts[(r.tier as usize) - 1] += 1;
         if r.bumps > 0 {
             bumped_picks += 1;
         }
     }
+    let mut expansion_tier_counts = [0usize; 6];
+    for e in &expansions {
+        tier_counts[(e.tier as usize) - 1] += 1;
+        expansion_tier_counts[(e.tier as usize) - 1] += 1;
+        if e.bumps > 0 {
+            bumped_picks += 1;
+        }
+    }
 
-    let picked: Vec<String> = ranked.iter().map(|r| r.canonical_name.clone()).collect();
+    // ── Final pick list = seeds (in seed order) + expansions ────
+    let picked: Vec<String> = seeds
+        .iter()
+        .map(|r| r.canonical_name.clone())
+        .chain(expansions.iter().map(|e| e.canonical_name.clone()))
+        .collect();
     let n = picked.len();
 
     let payload = serde_json::json!({
@@ -367,9 +598,9 @@ pub async fn build_triage_candidates(
         "corpus_id": corpus_id,
         "budget": budget,
         "top_in_corpus_by_centrality": picked,
-        // Diagnostic: per-tier counts so an operator can sanity-
-        // check the prior took effect. Consumed by `corpus status`
-        // and surfaced in tracing logs from the post-install hook.
+        // Diagnostic: per-tier counts (combined seeds + expansion).
+        // Consumed by `corpus status` and surfaced in tracing logs
+        // from the post-install hook.
         "tier_breakdown": {
             "l1": tier_counts[0],
             "l2": tier_counts[1],
@@ -377,6 +608,21 @@ pub async fn build_triage_candidates(
             "l4": tier_counts[3],
             "l5": tier_counts[4],
             "off_list": tier_counts[5],
+        },
+        // Seed/expansion split — operator wants to confirm the
+        // expansion phase actually picked a meaningful pool, not
+        // that the seed cap absorbed the whole budget.
+        "seed_count": seeds.len(),
+        "expansion_count": expansions.len(),
+        "expansion_fraction": expansion_fraction,
+        "expansion_hops": expansion_hops,
+        "expansion_tier_breakdown": {
+            "l1": expansion_tier_counts[0],
+            "l2": expansion_tier_counts[1],
+            "l3": expansion_tier_counts[2],
+            "l4": expansion_tier_counts[3],
+            "l5": expansion_tier_counts[4],
+            "off_list": expansion_tier_counts[5],
         },
         // How many of the picks got an adaptive bump from the user's
         // own query history (Phase B2). When > 0 the triage queue
@@ -853,6 +1099,16 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let corpus = "synthetic-vital";
         write_synthetic_atlas(tmp.path(), corpus).unwrap();
+        // Disable expansion so this test exercises the seed-only
+        // behaviour. Seed-expansion gets its own dedicated test
+        // below; keeping this one focused on the tier prior.
+        write_triage_config(
+            &tmp.path().join(corpus).join("atlas"),
+            None,
+            Some(0.0),
+            None,
+        )
+        .unwrap();
 
         let outcome =
             build_triage_candidates(corpus, tmp.path().to_path_buf(), 3).await;
@@ -873,6 +1129,133 @@ mod tests {
         assert_eq!(v["tier_breakdown"]["off_list"].as_u64(), Some(2));
         // No bumps file → bumped_picks = 0.
         assert_eq!(v["bumped_picks"].as_u64(), Some(0));
+        // Expansion disabled.
+        assert_eq!(v["seed_count"].as_u64(), Some(3));
+        assert_eq!(v["expansion_count"].as_u64(), Some(0));
+    }
+
+    /// Seed-expansion: a small seed (one L1 vital article) plus a
+    /// long-tail web of articles it links to should produce a triage
+    /// list that's seeds + the highest-hit wikilink targets, even
+    /// when those targets aren't themselves vital and have low
+    /// centrality.
+    #[tokio::test]
+    async fn seed_expansion_picks_articles_linked_from_seeds() {
+        let tmp = tempfile::tempdir().unwrap();
+        let corpus = "synthetic-expansion";
+        let atlas_dir = tmp.path().join(corpus).join("atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+
+        // 1 L1 vital seed (Earth) + 4 off-list "neighbour" articles
+        // that Earth links to. None of the neighbours have any
+        // other inbound edges, so pure-centrality triage would never
+        // rank them above random off-list candidates. Plus 5 random
+        // off-list "noise" pages with high mutual centrality.
+        let mut atoms: Vec<AtomEnvelope> = Vec::new();
+        let mk = |i: usize, name: &str| {
+            AtomEnvelope::Entity(Entity {
+                id: AtomId::entity(i),
+                canonical_name: name.into(),
+                aliases: Vec::new(),
+                entity_type: EntityType::Concept,
+                first_appearance: ChunkRef::new("sec_0001", None),
+                description: "x".into(),
+                salience: 1.0,
+                enrichment_depth: EnrichmentDepth::Structural,
+                affiliation: None,
+                role: None,
+                participants: Vec::new(),
+            })
+        };
+        atoms.push(mk(1, "Earth")); // L1 seed
+        for (i, name) in ["Neighbour A", "Neighbour B", "Neighbour C", "Neighbour D"]
+            .iter()
+            .enumerate()
+        {
+            atoms.push(mk(2 + i, name));
+        }
+        for (i, name) in ["Noise 1", "Noise 2", "Noise 3", "Noise 4", "Noise 5"]
+            .iter()
+            .enumerate()
+        {
+            atoms.push(mk(6 + i, name));
+        }
+
+        let mk_edge = |idx: usize, src: usize, tgt: usize| Edge {
+            id: EdgeId::new(idx),
+            edge_type: EdgeType::Involves,
+            source: AtomId::entity(src),
+            target: AtomId::entity(tgt),
+            evidence: Vec::new(),
+            trigger_event: None,
+            sub_question: None,
+            confidence: 1.0,
+            provenance: EdgeProvenance::WikilinkStructural,
+        };
+        let mut edges = Vec::new();
+        let mut next = 0;
+        // Earth → each neighbour (4 edges).
+        for tgt in 2..=5 {
+            edges.push(mk_edge(next, 1, tgt));
+            next += 1;
+        }
+        // Noise pages link aggressively to each other (50 edges
+        // each → high centrality even though Earth doesn't touch
+        // them).
+        for src in 6..=10 {
+            for _ in 0..50 {
+                let tgt = 6 + ((src - 5) % 5); // cycle within noise
+                edges.push(mk_edge(next, src, tgt));
+                next += 1;
+            }
+        }
+        std::fs::write(
+            atlas_dir.join("atoms.json"),
+            serde_json::to_vec_pretty(&AtomsFile::new(atoms)).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            atlas_dir.join("edges.json"),
+            serde_json::to_vec_pretty(&EdgesFile::new(edges)).unwrap(),
+        )
+        .unwrap();
+
+        // Budget 2 with default 30% expansion → seed_cap=1
+        // (round 1.4), expansion_cap=1. Earth (only vital) takes
+        // the seed slot. Expansion must come from Earth's outbound
+        // links — Neighbour A wins on alphabetical tie-break (each
+        // neighbour has the same hits-from-seeds = 1).
+        // We use budget=2 (not 5) deliberately: a larger budget
+        // would let high-centrality noise pages claim seed slots,
+        // which would in turn promote OTHER noise pages via the
+        // expansion ranker. That edge case is real (mismatched
+        // tier supply vs. seed cap) but tested separately below.
+        let outcome =
+            build_triage_candidates(corpus, tmp.path().to_path_buf(), 2).await;
+        let path = match outcome {
+            TriageOutcome::Built { path, .. } => path,
+            other => panic!("triage failed: {other:?}"),
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        let picks: Vec<&str> = v["top_in_corpus_by_centrality"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap())
+            .collect();
+        assert_eq!(picks[0], "Earth", "Earth should lead the seeds");
+        assert_eq!(picks.len(), 2);
+        let expansion_pick = picks[1];
+        assert!(
+            expansion_pick.starts_with("Neighbour"),
+            "expected an expansion pick from Earth's outbound links, \
+             got '{expansion_pick}' instead — noise pages should not \
+             win expansion when seeds are vital-only"
+        );
+        assert_eq!(v["seed_count"].as_u64(), Some(1));
+        assert_eq!(v["expansion_count"].as_u64(), Some(1));
+        assert_eq!(v["expansion_tier_breakdown"]["off_list"].as_u64(), Some(1));
     }
 
     #[test]
@@ -910,6 +1293,9 @@ mod tests {
         let corpus = "synthetic-bumps";
         let atlas_dir = tmp.path().join(corpus).join("atlas");
         std::fs::create_dir_all(&atlas_dir).unwrap();
+        // Disable expansion so this test stays focused on the bump
+        // reordering rule. Expansion has its own test above.
+        write_triage_config(&atlas_dir, None, Some(0.0), None).unwrap();
 
         // Two off-list entities with equal centrality. Without the
         // bump file, they tie-break alphabetically (Alpha first).

@@ -740,6 +740,34 @@ async fn cmd_corpus_remove(args: &[String]) -> i32 {
     println!();
     println!("  total reclaim:  {}", human_bytes(total_bytes));
 
+    // Phase D3 — warn if removing destroys non-trivial Tier-2
+    // enrichment work. Each `extracted` entity is ~14 wall-hours
+    // of LLM time for the wiki-l5-tier2 reference run (52 entities
+    // / 14h = ~16 min/entity at canonical pace), so the warning
+    // helps the operator avoid an expensive accidental wipe.
+    if remove_canonical {
+        let atlas_dir = canonical_path.join("atlas");
+        if let Some(summary) =
+            corpus_engine::enrichment::atlas::read_or_compute_atlas_summary(&atlas_dir)
+                .ok()
+                .flatten()
+        {
+            if summary.tier2_count > 0 {
+                println!();
+                println!(
+                    "⚠  This corpus has {} Tier-2 enriched entities (atlas).",
+                    summary.tier2_count
+                );
+                println!(
+                    "   That work is local-only unless a mesh peer has pulled this atlas."
+                );
+                println!(
+                    "   Consider running `sovereign mesh push {corpus_id}` first if you have peers."
+                );
+            }
+        }
+    }
+
     if !yes {
         eprint!("\nProceed with removal? [y/N] ");
         use std::io::BufRead;
@@ -874,10 +902,10 @@ async fn cmd_corpus_status() -> i32 {
         return 0;
     }
     println!(
-        "{:<32} {:>14} {:>10} {:>10} {:>10}",
-        "corpus", "chunks", "atlas", "tier-2", "embed-cache"
+        "{:<32} {:>14} {:>10} {:>10} {:>10} {:>12}",
+        "corpus", "chunks", "atlas", "tier-2", "embed-cache", "tier-2 toks"
     );
-    println!("{}", "─".repeat(80));
+    println!("{}", "─".repeat(94));
     for r in rows {
         let chunks = r
             .chunk_count
@@ -896,9 +924,13 @@ async fn cmd_corpus_status() -> i32 {
         } else {
             "—".into()
         };
+        let tokens = r
+            .tier2_total_tokens
+            .map(format_count)
+            .unwrap_or_else(|| "—".into());
         println!(
-            "{:<32} {:>14} {:>10} {:>10} {:>10}",
-            r.corpus_id, chunks, atlas, tier2, cache
+            "{:<32} {:>14} {:>10} {:>10} {:>10} {:>12}",
+            r.corpus_id, chunks, atlas, tier2, cache, tokens
         );
     }
     0
@@ -911,6 +943,11 @@ struct CorpusStatusRow {
     atlas_entities: Option<usize>,
     atlas_extracted_entities: Option<usize>,
     atlas_embeddings_cached: bool,
+    /// Cumulative tokens spent in the corpus's `<corpus>-tier2`
+    /// workspace's most recent extract run (Phase D2). `None` when
+    /// no `_tokens.json` sidecar exists yet — i.e. Tier-2 hasn't
+    /// run for this corpus.
+    tier2_total_tokens: Option<u64>,
 }
 
 fn read_corpus_status_row(corpus_id: &str, dir: &std::path::Path) -> CorpusStatusRow {
@@ -940,12 +977,30 @@ fn read_corpus_status_row(corpus_id: &str, dir: &std::path::Path) -> CorpusStatu
         None => (None, None),
     };
     let atlas_embeddings_cached = atlas_dir.join("atoms.embeddings.bin").exists();
+
+    // Phase D2: read `<enrichment>/<corpus>-tier2/_tokens.json` if
+    // the Tier-2 workspace has run at least one extract pass.
+    // <enrichment> is sibling of <indexes> — derive from the
+    // corpus dir's grandparent.
+    let tier2_total_tokens = dir
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|data_dir| {
+            data_dir
+                .join("enrichment")
+                .join(format!("{corpus_id}-tier2"))
+                .join("_tokens.json")
+        })
+        .and_then(|p| crate::enrich_cmd::extract::read_token_snapshot(&p))
+        .map(|r| r.total_tokens);
+
     CorpusStatusRow {
         corpus_id: corpus_id.to_string(),
         chunk_count,
         atlas_entities,
         atlas_extracted_entities,
         atlas_embeddings_cached,
+        tier2_total_tokens,
     }
 }
 

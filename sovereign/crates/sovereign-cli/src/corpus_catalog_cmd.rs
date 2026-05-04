@@ -179,6 +179,9 @@ async fn cmd_simulate(args: &[String]) -> i32 {
         enrich,
         progress: Some(progress),
         cancel: None,
+        // Demo simulator runs synchronously — disable expansion so
+        // the user sees a single deterministic ingest.
+        expand_links: false,
     };
     match run_catalog_ingest(engine, req).await {
         Ok(corpus_id) => {

@@ -308,6 +308,9 @@ async fn main() {
         sovereign_tools::web::search::SearchBackend::DuckDuckGo,
     )));
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
+    tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     tools.register(Box::new(sovereign_tools::compute::ComputeTool));
     tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
         Arc::clone(&corpus_engine),

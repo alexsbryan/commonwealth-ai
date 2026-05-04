@@ -47,6 +47,11 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     "build", "lint_status", "get_lint_output",
     // Working notes (the audit's primary input).
     "note", "notes",
+    // Catalog-driven on-demand article ingest. Surfaced so an MCP
+    // client (or `mcp call wikipedia_fetch`) can drive the
+    // chat-with-wikipedia loop directly when the agent's autonomous
+    // tool-selection doesn't pick the catalog-hit follow-up.
+    "wikipedia_fetch",
 ];
 
 /// MCP tools that should only appear when a spec exists in the

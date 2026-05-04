@@ -82,6 +82,31 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
+/// Hard wall-clock deadline for any single chat inference, in
+/// seconds. Defends against pathological JSON-Schema mask states
+/// where the in-house constraint enforcer's per-token mask
+/// computation degrades from ~25 ms/token to 100s of ms/token —
+/// the slot's `Mutex<SlotContext>` is held for the entire
+/// generate_sync / generate_stream_sync call, so a stuck inference
+/// blocks every other request to that slot until the deadline
+/// fires and `ctx.clear_kv_cache()` runs.
+///
+/// Tunable via `SOVEREIGN_INFERENCE_TIMEOUT_SECS`. Default 300s —
+/// generous enough that any legitimate Slow-slot Phase-1 call
+/// (~60-160s observed worst-case under heavy grammar) finishes
+/// with margin, short enough that a runaway mask-state is killed
+/// before it pins the daemon for ~30 min and starves the mesh.
+fn inference_deadline_secs() -> u64 {
+    use std::sync::OnceLock;
+    static DEADLINE: OnceLock<u64> = OnceLock::new();
+    *DEADLINE.get_or_init(|| {
+        std::env::var("SOVEREIGN_INFERENCE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(300)
+    })
+}
+
 impl ModelSlot {
     fn load(
         backend: &Arc<LlamaBackend>,
@@ -312,6 +337,16 @@ impl ModelSlot {
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
 
+        // Wall-clock deadline. See `inference_deadline_secs` for
+        // rationale. We check at the top of each sample-loop iteration
+        // so a stuck mask-sample step still bounds at ~one slow token
+        // (typically 100s of ms in the pathological state) past the
+        // deadline before we clean up and return.
+        let deadline_secs = inference_deadline_secs();
+        let deadline = Instant::now()
+            + std::time::Duration::from_secs(deadline_secs);
+        let started_at = Instant::now();
+
         // Think-block budget forcing: track position inside <think>…</think>
         // and inject a closing tag once the budget is exhausted so the model
         // is forced to summarise rather than spiral indefinitely.
@@ -330,6 +365,24 @@ impl ModelSlot {
         let mut saw_close_tag = false;
 
         while n_generated < max_tokens {
+            if Instant::now() > deadline {
+                let elapsed = started_at.elapsed().as_secs();
+                tracing::warn!(
+                    model = %model_id,
+                    elapsed_s = elapsed,
+                    deadline_s = deadline_secs,
+                    n_generated,
+                    schema = request.structured_output.is_some(),
+                    "inference:deadline exceeded — clearing KV cache and returning"
+                );
+                ctx.clear_kv_cache();
+                return Err(Error::Inference(format!(
+                    "inference deadline exceeded after {elapsed}s ({n_generated} tokens generated; \
+                     deadline={deadline_secs}s) — likely pathological JSON-Schema mask state. \
+                     Set SOVEREIGN_INFERENCE_TIMEOUT_SECS to override."
+                )));
+            }
+
             let token = sampler.sample(ctx, -1);
             sampler.accept(token);
 
@@ -462,6 +515,17 @@ impl ModelSlot {
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
 
+        // Wall-clock deadline mirrors generate_sync — a stuck
+        // mask-sample step can starve the slot regardless of whether
+        // streaming is on. Cancellation checks below still take
+        // priority for clean shutdowns; the deadline is the backstop
+        // for the case where the sample step itself is slow enough
+        // that cancel-checks fire too rarely to help.
+        let deadline_secs = inference_deadline_secs();
+        let deadline = Instant::now()
+            + std::time::Duration::from_secs(deadline_secs);
+        let started_at = Instant::now();
+
         let mut tail = String::with_capacity(32);
         let mut in_think = false;
         let mut think_tokens = 0usize;
@@ -473,6 +537,24 @@ impl ModelSlot {
         let mut saw_close_tag = false;
 
         while n_generated < max_tokens {
+            if Instant::now() > deadline {
+                let elapsed = started_at.elapsed().as_secs();
+                tracing::warn!(
+                    model = %model_id,
+                    elapsed_s = elapsed,
+                    deadline_s = deadline_secs,
+                    n_generated,
+                    schema = request.structured_output.is_some(),
+                    "inference:deadline exceeded (stream) — clearing KV cache and returning"
+                );
+                ctx.clear_kv_cache();
+                return Err(Error::Inference(format!(
+                    "inference deadline exceeded after {elapsed}s ({n_generated} tokens generated; \
+                     deadline={deadline_secs}s) — likely pathological JSON-Schema mask state. \
+                     Set SOVEREIGN_INFERENCE_TIMEOUT_SECS to override."
+                )));
+            }
+
             // Antifragile-routing cancel check: redirect-induced
             // cancellation on the session-level CancellationToken stops
             // the sampler without waiting for the receiver to drop.
