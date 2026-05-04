@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use commonwealth_inference::oicp::EmbedModelInfo;
 
+mod atlas_status;
 mod corpus_collaborate;
 mod corpus_ingest;
 mod corpus_queue;
@@ -22,6 +23,7 @@ mod gossip;
 mod knowledge;
 mod mesh_admin;
 
+pub use atlas_status::{atlas_status, AtlasStatusResponse};
 pub use corpus_collaborate::{corpus_collaborate, CollaborateRequest};
 pub use corpus_ingest::{
     corpus_cancel, corpus_canonical_stream, corpus_expand, corpus_install, corpus_pause,

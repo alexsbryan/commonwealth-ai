@@ -73,6 +73,10 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::knowledge_search),
         )
         .route(
+            "/internal/atlas/status",
+            get(routes_internal::atlas_status),
+        )
+        .route(
             "/internal/latency/probe",
             get(routes_internal::latency_probe),
         )
