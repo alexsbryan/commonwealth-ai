@@ -23,13 +23,14 @@ use super::super::atlas::{
 use super::super::exemplar_bank::Exemplar;
 use super::super::trait_def::Pipeline;
 use super::super::types::*;
+use super::literary::prepare_phase_json;
 use super::literary_atlas::{
     parse_phase1b_coverage_response, phase1_section_extraction_schema,
     render_generic_phase3_exemplar, render_phase1_user_body,
     render_phase1b_user_body, LiteraryAtlasPipeline,
 };
 use crate::enrichment::domain::ClusteringConfig;
-use crate::error::Result;
+use crate::error::{Error, Result};
 
 // ── Referential-specific prompt assets ───────────────────────
 
@@ -286,14 +287,58 @@ impl Pipeline for ReferentialAtlasPipeline {
             "\n---\n\nRespond with a single JSON object per the schema in the system message.",
         );
 
-        Some(ChatPrompt::new(system, user).with_phase_id("phase3_facet"))
+        // Schema-constrained output. The Phase-3 naming run before
+        // this was added saw a 5–28% per-facet parse-failure rate on
+        // unconstrained Qwen3.5-4B output (claim facet was worst at
+        // 28%): the model would emit invented keys, drop required
+        // fields, or produce malformed JSON entirely. Each facet's
+        // schema mirrors its prompt's documented shape and uses
+        // `maxLength`/`maxItems` caps as runaway-prevention floors —
+        // the same JsonConstraint enforcer that bounds Phase 1.
+        let (schema_name, schema) = match facet {
+            Facet::Question => ("phase3_question", phase3_question_schema()),
+            Facet::Claim => ("phase3_claim", phase3_claim_schema()),
+            Facet::EntityState => {
+                ("phase3_entity_state", phase3_entity_state_schema())
+            }
+            Facet::RelationState => {
+                ("phase3_relation_state", phase3_relation_state_schema())
+            }
+            Facet::Event => ("phase3_event", phase3_event_schema()),
+        };
+
+        Some(
+            ChatPrompt::new(system, user)
+                .with_response_schema(schema_name, schema)
+                .with_phase_id("phase3_facet"),
+        )
     }
 
+    /// Parse a referential phase-3 facet response.
+    ///
+    /// The referential prompts (`phase3_question_naming.md` etc.) ask
+    /// the model for facet-specific shapes — `canonical_question`,
+    /// `canonical_claim`, `canonical_event`, `canonical_label` — not
+    /// the generic `{label, metadata}` the literary parser expects.
+    /// Mapping each facet's primary key onto `label` and threading the
+    /// remaining fields through `metadata` is what lets phases 5+
+    /// consume these results unchanged.
+    ///
+    /// We try the facet-specific shape first; if that fails, fall
+    /// back to the literary `{label, metadata}` parser so a manually
+    /// authored response (or a future prompt change) still works.
     fn parse_phase3_facet(
         &self,
         facet: Facet,
         response: &str,
     ) -> Result<Phase3FacetParseResult> {
+        let cleaned = prepare_phase_json(response, "phase 3 (referential)")?;
+        if let Some(parsed) = parse_referential_phase3_facet(facet, &cleaned) {
+            return Ok(parsed);
+        }
+        // Fall back to the generic literary parser for backward
+        // compatibility (and so the error message points at the
+        // generic shape if both attempts fail).
         self.inner.parse_phase3_facet(facet, response)
     }
 
@@ -358,6 +403,194 @@ impl Pipeline for ReferentialAtlasPipeline {
     // best read as a tragedy or a comedy?"). Referential corpora
     // don't admit such rollups — there's no editorial position to
     // collapse. Inherits the trait default (`false`).
+}
+
+// ── Phase 3 facet output schemas ─────────────────────────────
+//
+// One JSON Schema per facet, matching the per-facet prompts under
+// `referential_atlas_prompts/phase3_*_naming.md`. Each schema:
+//
+//  - lists the facet's required fields exactly as the prompt asks,
+//  - uses an `enum` for `kind`/`discourse_act` so the model can
+//    only pick a documented value,
+//  - caps every string with `maxLength` and every array with
+//    `maxItems` — same runaway-prevention floor we use for Phase 1,
+//  - uses `additionalProperties: false` so off-schema keys (which
+//    the parser would otherwise just discard) can't waste tokens.
+//
+// `JsonConstraint` enforces these via logit masking, so the model
+// physically cannot emit a malformed response. Without the schema,
+// the unconstrained Phase 3 pass had a 5–28% per-facet failure rate.
+
+const PHASE3_QUESTION_SCHEMA: &str = r##"{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "canonical_question": { "type": "string", "maxLength": 400 },
+    "kind": {
+      "type": "string",
+      "enum": ["factual", "definitional", "causal", "comparative", "procedural"]
+    },
+    "description": { "type": "string", "maxLength": 600 },
+    "aliases": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "type": "string", "maxLength": 200 }
+    }
+  },
+  "required": ["canonical_question", "kind"]
+}"##;
+
+const PHASE3_CLAIM_SCHEMA: &str = r##"{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "canonical_claim": { "type": "string", "maxLength": 600 },
+    "discourse_act": {
+      "type": "string",
+      "enum": ["assertion", "attribution", "position", "definition"]
+    },
+    "subject": { "type": "string", "maxLength": 200 },
+    "attributed_to": {
+      "anyOf": [
+        { "type": "string", "maxLength": 200 },
+        { "type": "null" }
+      ]
+    },
+    "description": { "type": "string", "maxLength": 600 }
+  },
+  "required": ["canonical_claim", "discourse_act"]
+}"##;
+
+const PHASE3_ENTITY_STATE_SCHEMA: &str = r##"{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "entity_name": { "type": "string", "maxLength": 200 },
+    "canonical_label": { "type": "string", "maxLength": 400 },
+    "kind": {
+      "type": "string",
+      "enum": ["biographical", "structural", "physical", "intellectual"]
+    },
+    "description": { "type": "string", "maxLength": 600 }
+  },
+  "required": ["canonical_label"]
+}"##;
+
+const PHASE3_RELATION_STATE_SCHEMA: &str = r##"{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "participants": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "string", "maxLength": 200 }
+    },
+    "canonical_label": { "type": "string", "maxLength": 400 },
+    "kind": {
+      "type": "string",
+      "enum": ["diplomatic", "political", "institutional", "biographical", "causal", "temporal"]
+    },
+    "description": { "type": "string", "maxLength": 600 }
+  },
+  "required": ["participants", "canonical_label"]
+}"##;
+
+const PHASE3_EVENT_SCHEMA: &str = r##"{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "canonical_event": { "type": "string", "maxLength": 400 },
+    "kind": {
+      "type": "string",
+      "enum": ["historical", "biographical", "scientific", "cultural", "natural"]
+    },
+    "participants": {
+      "type": "array",
+      "maxItems": 8,
+      "items": { "type": "string", "maxLength": 200 }
+    },
+    "time": {
+      "anyOf": [
+        { "type": "string", "maxLength": 200 },
+        { "type": "null" }
+      ]
+    },
+    "description": { "type": "string", "maxLength": 600 }
+  },
+  "required": ["canonical_event"]
+}"##;
+
+fn phase3_question_schema() -> serde_json::Value {
+    serde_json::from_str(PHASE3_QUESTION_SCHEMA)
+        .expect("PHASE3_QUESTION_SCHEMA must be valid JSON")
+}
+fn phase3_claim_schema() -> serde_json::Value {
+    serde_json::from_str(PHASE3_CLAIM_SCHEMA)
+        .expect("PHASE3_CLAIM_SCHEMA must be valid JSON")
+}
+fn phase3_entity_state_schema() -> serde_json::Value {
+    serde_json::from_str(PHASE3_ENTITY_STATE_SCHEMA)
+        .expect("PHASE3_ENTITY_STATE_SCHEMA must be valid JSON")
+}
+fn phase3_relation_state_schema() -> serde_json::Value {
+    serde_json::from_str(PHASE3_RELATION_STATE_SCHEMA)
+        .expect("PHASE3_RELATION_STATE_SCHEMA must be valid JSON")
+}
+fn phase3_event_schema() -> serde_json::Value {
+    serde_json::from_str(PHASE3_EVENT_SCHEMA)
+        .expect("PHASE3_EVENT_SCHEMA must be valid JSON")
+}
+
+/// Parse a facet-shaped phase-3 naming response into the generic
+/// `{label, metadata}` shape phases 5+ consume.
+///
+/// Returns `None` when the JSON doesn't match the expected facet
+/// shape — caller falls back to the literary parser.
+fn parse_referential_phase3_facet(
+    facet: Facet,
+    cleaned: &str,
+) -> Option<Phase3FacetParseResult> {
+    let value: serde_json::Value = serde_json::from_str(cleaned).ok()?;
+    let obj = value.as_object()?;
+
+    let primary_key = match facet {
+        Facet::Question => "canonical_question",
+        Facet::Claim => "canonical_claim",
+        Facet::EntityState | Facet::RelationState => "canonical_label",
+        Facet::Event => "canonical_event",
+    };
+
+    let label = obj
+        .get(primary_key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty() && !is_placeholder_literal(s))?;
+
+    let mut metadata: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
+    for (key, val) in obj {
+        if key == primary_key {
+            continue;
+        }
+        let stringified = match val {
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Null => continue,
+            serde_json::Value::Array(arr) => arr
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect::<Vec<_>>()
+                .join(", "),
+            other => other.to_string(),
+        };
+        let trimmed = stringified.trim().to_string();
+        if trimmed.is_empty() || is_placeholder_literal(&trimmed) {
+            continue;
+        }
+        metadata.insert(key.clone(), trimmed);
+    }
+
+    Some(Phase3FacetParseResult { label, metadata })
 }
 
 #[cfg(test)]
@@ -446,4 +679,198 @@ mod tests {
         );
     }
 
+    #[test]
+    fn parse_phase3_facet_question_uses_canonical_question_as_label() {
+        let response = r#"{
+            "canonical_question": "What caused the fall of Rome?",
+            "kind": "causal",
+            "description": "A common entry point for readers tracing late-antique decline.",
+            "aliases": ["decline of Rome", "why Rome fell"]
+        }"#;
+        let p = ReferentialAtlasPipeline::new();
+        let parsed = p
+            .parse_phase3_facet(Facet::Question, response)
+            .expect("referential question parse");
+        assert_eq!(parsed.label, "What caused the fall of Rome?");
+        assert_eq!(parsed.metadata.get("kind").map(String::as_str), Some("causal"));
+        assert!(parsed.metadata.contains_key("description"));
+        assert_eq!(
+            parsed.metadata.get("aliases").map(String::as_str),
+            Some("decline of Rome, why Rome fell"),
+            "aliases array should flatten to comma-joined string"
+        );
+    }
+
+    #[test]
+    fn parse_phase3_facet_claim_uses_canonical_claim_as_label() {
+        let response = r#"{
+            "canonical_claim": "Antibiotic resistance is rising globally.",
+            "discourse_act": "assertion",
+            "subject": "antibiotic resistance",
+            "attributed_to": null,
+            "description": "A modern public-health claim."
+        }"#;
+        let p = ReferentialAtlasPipeline::new();
+        let parsed = p
+            .parse_phase3_facet(Facet::Claim, response)
+            .expect("referential claim parse");
+        assert_eq!(parsed.label, "Antibiotic resistance is rising globally.");
+        assert_eq!(
+            parsed.metadata.get("discourse_act").map(String::as_str),
+            Some("assertion")
+        );
+        // Null fields should be filtered out.
+        assert!(!parsed.metadata.contains_key("attributed_to"));
+    }
+
+    #[test]
+    fn parse_phase3_facet_event_uses_canonical_event_as_label() {
+        let response = r#"{
+            "canonical_event": "Fall of the Berlin Wall",
+            "kind": "historical",
+            "participants": ["East Germany", "West Germany"],
+            "time": "1989-11-09",
+            "description": "Symbolic end of the Cold War in Europe."
+        }"#;
+        let p = ReferentialAtlasPipeline::new();
+        let parsed = p
+            .parse_phase3_facet(Facet::Event, response)
+            .expect("referential event parse");
+        assert_eq!(parsed.label, "Fall of the Berlin Wall");
+        assert_eq!(parsed.metadata.get("kind").map(String::as_str), Some("historical"));
+    }
+
+    #[test]
+    fn parse_phase3_facet_falls_back_to_literary_when_no_facet_key() {
+        // If the model returns the literary-style {label, metadata}
+        // shape instead of the referential per-facet shape, the
+        // fallback should still produce a valid result.
+        let response = r#"{
+            "label": "Some thematic concern",
+            "metadata": {"scope": "novel-wide"}
+        }"#;
+        let p = ReferentialAtlasPipeline::new();
+        let parsed = p
+            .parse_phase3_facet(Facet::Question, response)
+            .expect("literary fallback parse");
+        assert_eq!(parsed.label, "Some thematic concern");
+    }
+
+    #[test]
+    fn parse_phase3_facet_rejects_placeholder_label() {
+        let response = r#"{"canonical_question": "...", "kind": "factual"}"#;
+        let p = ReferentialAtlasPipeline::new();
+        // Placeholder triggers fallback, which itself errors.
+        let err = p.parse_phase3_facet(Facet::Question, response);
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn phase3_facet_schemas_parse_as_valid_json() {
+        // Each schema const must be parseable JSON; the helper
+        // functions panic loudly otherwise.
+        let _ = phase3_question_schema();
+        let _ = phase3_claim_schema();
+        let _ = phase3_entity_state_schema();
+        let _ = phase3_relation_state_schema();
+        let _ = phase3_event_schema();
+    }
+
+    #[test]
+    fn phase3_facet_schemas_have_required_keys_per_prompt() {
+        // Pin the required-keys list against each prompt's documented
+        // shape. The actual JsonConstraint compile path is exercised
+        // in `sovereign-inference`'s json_constraint tests; here we
+        // just sanity-check that the schemas state what they should.
+        let q = phase3_question_schema();
+        let q_required: Vec<&str> = q
+            .pointer("/required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(q_required.contains(&"canonical_question"));
+        assert!(q_required.contains(&"kind"));
+
+        let c = phase3_claim_schema();
+        let c_required: Vec<&str> = c
+            .pointer("/required")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(c_required.contains(&"canonical_claim"));
+        assert!(c_required.contains(&"discourse_act"));
+    }
+
+    fn sample_cluster() -> AtlasCluster {
+        AtlasCluster {
+            id: "test_cl_0001".into(),
+            facet: Facet::Question,
+            refs: vec![],
+        }
+    }
+
+    #[test]
+    fn compose_phase3_facet_attaches_question_schema() {
+        let p = ReferentialAtlasPipeline::new();
+        let prompt = p
+            .compose_phase3_facet(&sample_cluster(), Facet::Question, &[], &[])
+            .expect("question facet returns Some");
+        let schema = prompt
+            .response_schema
+            .as_ref()
+            .expect("question facet must attach a schema");
+        // Pin the structural shape: required `canonical_question`
+        // + `kind` keys with the documented enum.
+        let required = schema
+            .pointer("/required")
+            .and_then(|v| v.as_array())
+            .expect("required array");
+        let required_strs: Vec<&str> =
+            required.iter().filter_map(|v| v.as_str()).collect();
+        assert!(required_strs.contains(&"canonical_question"));
+        assert!(required_strs.contains(&"kind"));
+        // `kind` enum should be present and non-empty.
+        let enum_vals = schema
+            .pointer("/properties/kind/enum")
+            .and_then(|v| v.as_array())
+            .expect("kind.enum");
+        assert!(enum_vals.iter().any(|v| v == "factual"));
+    }
+
+    #[test]
+    fn compose_phase3_facet_attaches_per_facet_schema() {
+        let p = ReferentialAtlasPipeline::new();
+        let cases = [
+            (Facet::Claim, "canonical_claim", "phase3_claim"),
+            (Facet::EntityState, "canonical_label", "phase3_entity_state"),
+            (Facet::RelationState, "canonical_label", "phase3_relation_state"),
+            (Facet::Event, "canonical_event", "phase3_event"),
+        ];
+        for (facet, expected_prop, expected_name) in cases {
+            let prompt = p
+                .compose_phase3_facet(&sample_cluster(), facet, &[], &[])
+                .unwrap_or_else(|| panic!("{facet:?} returns Some"));
+            assert_eq!(
+                prompt.response_schema_name.as_deref(),
+                Some(expected_name),
+                "{facet:?}: schema name"
+            );
+            let schema = prompt
+                .response_schema
+                .as_ref()
+                .unwrap_or_else(|| panic!("{facet:?}: schema attached"));
+            assert!(
+                schema
+                    .pointer(&format!("/properties/{expected_prop}"))
+                    .is_some(),
+                "{facet:?}: property {expected_prop} must be in schema"
+            );
+        }
+    }
 }

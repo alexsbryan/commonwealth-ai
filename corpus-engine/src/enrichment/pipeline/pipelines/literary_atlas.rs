@@ -1635,11 +1635,29 @@ fn render_atlas_exemplar(buf: &mut String, n: usize, e: &Exemplar) {
 // missing, so the parser stays the source of truth on completeness.
 // Only `section_id` and `questions_raised` are required at the top
 // level (mirroring the existing parser checks at parse_phase1).
+// Note on `maxLength` annotations below: these are NOT data-quality
+// caps — they are runaway-prevention caps. The in-house JSON-Schema
+// constraint enforcer treats `maxLength` like `maxItems`: once the
+// running code-point count reaches the cap, the only valid next
+// byte is `"` (close-quote). Without these caps, a single unbounded
+// string field can swallow the whole token budget — concrete
+// 2026-05-04 repro: a 78-word LATIN lead burned 11337 generated
+// tokens before the daemon's 300s deadline tripped, with the model
+// elaborating into one long `description`/`content` string that
+// the mask had no way to terminate. The numbers below are sized
+// generously so legitimate output is never clipped:
+//   - canonical_name / entity_name / label: 200 (entity names are
+//     usually <50 chars; 200 leaves room for institutional names)
+//   - description: 600 (one short paragraph)
+//   - content (claim, question): 800 (one full sentence with caveats)
+//   - anchor: 800 (a quoted span; sometimes a paragraph)
+//   - discourse_act / epistemic_status: 200 (short labels)
+//   - aliases / participants items: 200 (same as canonical names)
 const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "section_id": { "type": "string" },
+    "section_id": { "type": "string", "maxLength": 200 },
     "entities_introduced": {
       "type": "array",
       "maxItems": 15,
@@ -1683,14 +1701,14 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "canonical_name": { "type": "string" },
-        "aliases": { "type": "array", "maxItems": 5, "items": { "type": "string" } },
+        "canonical_name": { "type": "string", "maxLength": 200 },
+        "aliases": { "type": "array", "maxItems": 5, "items": { "type": "string", "maxLength": 200 } },
         "entity_type": {
           "type": "string",
           "enum": ["person", "concept", "institution", "work", "place", "initiative"]
         },
-        "description": { "type": "string" },
-        "anchor": { "type": "string" }
+        "description": { "type": "string", "maxLength": 600 },
+        "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["canonical_name", "entity_type"]
     },
@@ -1698,9 +1716,9 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "entity_name": { "type": "string" },
-        "label": { "type": "string" },
-        "anchor": { "type": "string" }
+        "entity_name": { "type": "string", "maxLength": 200 },
+        "label": { "type": "string", "maxLength": 200 },
+        "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["entity_name", "label"]
     },
@@ -1708,9 +1726,9 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
-        "label": { "type": "string" },
-        "anchor": { "type": "string" }
+        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } },
+        "label": { "type": "string", "maxLength": 200 },
+        "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["participants", "label"]
     },
@@ -1718,9 +1736,9 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
-        "label": { "type": "string" },
-        "anchor": { "type": "string" }
+        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } },
+        "label": { "type": "string", "maxLength": 200 },
+        "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["participants", "label"]
     },
@@ -1728,9 +1746,9 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "description": { "type": "string" },
-        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string" } },
-        "anchor": { "type": "string" }
+        "description": { "type": "string", "maxLength": 600 },
+        "participants": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } },
+        "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["description"]
     },
@@ -1738,17 +1756,17 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "content": { "type": "string" },
-        "discourse_act": { "type": "string" },
-        "epistemic_status": { "type": "string" },
+        "content": { "type": "string", "maxLength": 800 },
+        "discourse_act": { "type": "string", "maxLength": 200 },
+        "epistemic_status": { "type": "string", "maxLength": 200 },
         "attributed_to": {
           "anyOf": [
-            { "type": "string" },
-            { "type": "array", "maxItems": 8, "items": { "type": "string" } },
+            { "type": "string", "maxLength": 200 },
+            { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 200 } },
             { "type": "null" }
           ]
         },
-        "anchor": { "type": "string" }
+        "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["content", "discourse_act"]
     },
@@ -1756,8 +1774,8 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "content": { "type": "string" },
-        "anchor": { "type": "string" }
+        "content": { "type": "string", "maxLength": 800 },
+        "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["content"]
     }
