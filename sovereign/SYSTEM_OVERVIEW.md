@@ -486,7 +486,7 @@ and `… show <id>` (render findings).
 
 **Agent-callable tools** (`sovereign-tools/src/recipe_author/`)
 
-Five Tool impls, each requiring `Permission::RecipeAuthoring`:
+Eight Tool impls, each requiring `Permission::RecipeAuthoring`:
 
 - `RecipeReadTool`, `RecipeWriteTool` — allowlisted to
   `~/.sovereign/recipes/`; refuse `..` traversal.
@@ -495,10 +495,102 @@ Five Tool impls, each requiring `Permission::RecipeAuthoring`:
   `{passed, errors[], warnings[], section_misses[]}` so the LLM iterates
   on `nearby_text` hints.
 - `RegistryBrowseTool` — bundled + local list with `is_local` per row.
+- `DecisionLogTool` — feature-scoped NoteStore writes with five
+  `decision_kind` variants (`source_choice | extraction_choice |
+  schema_choice | domain_clarification | deferred_question`) and three
+  attribution variants (`partner | agent_default | deferred`); structured
+  payload lands in the v7 `notes.payload_json` column so the dashboard
+  groups without reparsing free-text content.
+- `CheckpointTool` — recoverable per-project snapshots (TOML + decision-
+  log frontier + meta). Restore is a sibling helper that re-writes the
+  active recipe TOML and emits a `kind = checkpoint_restored` note so the
+  decision feed renders the restoration narrative inline.
+- `CapabilityRequestTool` — maintainer-escalation surface for engine
+  gaps. Requires `partner_confirmed: true`; refuses without explicit
+  confirmation. Dual-write: per-project at
+  `~/.sovereign/recipe-projects/<feature_id>/capability-requests/<ts>.json`
+  plus a global maintainer inbox at
+  `~/.sovereign/capability-requests/inbox/<feature_id>-<ts>.json`.
 
-Registered in `sovereign-cli/src/main.rs:591`. Validation-only mode
-(`sample_size=0` + no `--params`) skips parameter resolution so the agent
-doesn't have to fabricate values just to run `validate`.
+Registered in `sovereign-cli/src/main.rs` (the chat REPL). All ten
+recipe-author + web-research tool ids are exposed via
+`MCP_TOOLS_ALWAYS` in `sovereign-tools/src/mcp_surface.rs` — the
+single load-bearing line that lets the live agent loop reach them
+through `/mcp`. Validation-only mode (`sample_size=0` + no
+`--params`) skips parameter resolution so the agent doesn't have to
+fabricate values just to run `validate`.
+
+**Recipe-author agent loop** (`sovereign-tools/src/recipe_author/`)
+
+A specialized agent loop that lets a non-technical domain expert (the
+*partner*) build a corpus + investigation schema by conversation and
+research, without writing TOML. Six load-bearing principles per the
+v1 spec: situated before expressing; domain language outward,
+technical inward; narrate judgement not action; backing up cheap
+(checkpoints); surface what isn't known; respect the partner's
+competence.
+
+- **Project model** (`recipe_author/project.rs`) — A "project" is a
+  `FeatureRow` in state `RecipeAuthoring` with the partner's charter,
+  plus a sidecar directory under `~/.sovereign/recipe-projects/<feature_id>/`
+  holding `project.json` (summary), `checkpoints/<ts>-<slug>/`,
+  `capability-requests/<ts>.json`, and `research/<ts>.json`. Reuses
+  NoteStore (feature-scoped notes) and FeatureStore (charter +
+  lifecycle) rather than a parallel persistence layer.
+- **Skill manifest** (`sovereign/skills/recipe-author/skill.toml`) —
+  System prompt structured per spec §7 (role framing, behavioural
+  guidance from the six principles, legal-domain standing
+  instructions, tool reference, out-of-scope). `privacy =
+  "local_only"` tags conversations so the KnowledgeView
+  conversational acquirer excludes them from the shared corpus —
+  recipe-author transcripts stay scoped to the project.
+- **Situated context** (`recipe_author/situated_context.rs`) — Per-
+  turn renderer that builds a `[Project state]` block (charter,
+  current TOML pointer, last 8 decisions with attribution + kind,
+  outstanding issues, pending capability requests) and a
+  `[Project state]/[Partner says]` envelope helper. Capped at 3000
+  chars so a long-running project's decision log doesn't crowd the
+  partner's actual message. M1 splices at the CLI/driver layer; M2
+  moves the splice into `runtime::build_context` once the desktop
+  workspace lands.
+- **CLI surface** (`sovereign-cli/src/recipe_agent_cmd.rs`):
+  - `sovereign recipe-agent new --charter <FILE> [--title <T>]` —
+    provision; prints the new `feature_id` to stdout.
+  - `sovereign recipe-agent show <feature_id>` — render the per-turn
+    situated-context block (sanity-check surface).
+  - `sovereign recipe-agent list` — list recipe-author projects.
+  - `sovereign recipe-agent live-trial --charter <FILE> --script <FILE>
+    [--feature-id <ID>] [--sample-size <N>]` — drive the agent loop
+    end-to-end against the running daemon's `/v1/chat/completions`,
+    using a script of partner messages, then validate the generated
+    recipe and run an initial fetch. Implementation in
+    `sovereign-cli/src/recipe_agent_live_trial.rs`. Worked example
+    + script under `sovereign/skills/recipe-author/examples/`.
+  - `sovereign maintainer inbox` — dump the global maintainer inbox;
+    one summary per request followed by the source path.
+
+`live-trial` is intentionally non-interactive: deterministic partner
+messages from a file, daemon-backed real LLM, real network fetch on
+the post-trial recipe test. Built for prompt iteration + regression
+testing of the recipe-author skill before scheduling a real partner
+session. The full interactive agent flow runs through the existing
+chat REPL once the recipe-author skill is on `~/.sovereign/skills/`.
+
+**Persistence schema bumps**
+
+- **NoteStore v6 → v7** (`corpus-engine/src/notes.rs`) — six new
+  `kind` values (`research_finding`, `capability_request`,
+  `recipe_issue`, `checkpoint`, `checkpoint_restored`,
+  `deferred_question`) plus a nullable `payload_json TEXT` column
+  for per-kind structured data. Standard rename-recreate-copy
+  pattern; `write_note_full` is the API for the new tools.
+- **FeatureStore — `RecipeAuthoring` state** (`features.rs`) — new
+  variant on `FeatureState`. Pre-existing DBs need a CHECK rebuild;
+  the migration uses `PRAGMA foreign_keys = OFF` for the duration to
+  prevent SQLite ≥ 3.26's automatic FK rewrite from breaking
+  `feature_milestones`'s `REFERENCES features(id)` link. Every
+  pre-recipe-authoring column (notably `auto_redteam`) is preserved
+  through the rebuild.
 
 **Desktop "Add Knowledge Source"**
 (`sovereign-desktop/src-tauri/src/recipe_commands.rs`)
@@ -1576,7 +1668,10 @@ Default ports:
 | Add a corpus filter                              | `corpus-engine/src/filters/` (impl `DocumentFilter`) + `recipe.rs::FilterConfig` + `filters/loader.rs` |
 | Bundle a generated data file in corpus-engine    | Place in `sovereign-recipes/<corpus>/data/`, append filename to `corpus-engine/build.rs::BUNDLED_ASSETS`, `include_bytes!(concat!(env!("OUT_DIR"), …))` in `filters/assets.rs` |
 | Write a recipe                                   | `sovereign-recipes/<id>/recipe.toml` then add an entry to `registry.toml` |
-| Author a recipe via the agent loop               | `sovereign-tools/src/recipe_author/` (5 tools, `Permission::RecipeAuthoring`); wired in `sovereign-cli/src/main.rs:591` |
+| Author a recipe via the agent loop               | `sovereign-tools/src/recipe_author/` (8 tools, `Permission::RecipeAuthoring`); wired in `sovereign-cli/src/main.rs`. Skill manifest at `sovereign/skills/recipe-author/skill.toml` |
+| Provision / inspect a recipe-author project      | `sovereign recipe-agent {new, show, list}` → `sovereign-cli/src/recipe_agent_cmd.rs`; `RecipeProject` data layer at `sovereign-tools/src/recipe_author/project.rs` |
+| Surface a maintainer-escalation request          | `CapabilityRequestTool` (requires `partner_confirmed: true`) → per-project + global inbox; read via `sovereign maintainer inbox` |
+| Render the per-turn situated-context block       | `sovereign-tools/src/recipe_author/situated_context.rs::render` (CLI splice for M1; runtime splice planned for M2) |
 | Add an `http_api` recipe (REST source)           | See §3.10; example shape in `corpus-engine/src/recipe.rs` round-trip tests |
 | Add an investigation recipe                      | Declare `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]`; run via `sovereign enrich investigation build <id>` |
 | Surface findings in an audit                     | `sovereign-cli/src/project_cmd.rs::compose_publish_recipe_nudge` reads `<index>/investigation/pattern_findings.json` |

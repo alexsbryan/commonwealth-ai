@@ -217,6 +217,9 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
         Box::new(RecipeValidateTool::new()),
         Box::new(sovereign_tools::RecipeTestTool::new()),
         Box::new(RegistryBrowseTool),
+        Box::new(sovereign_tools::CheckpointTool::new()),
+        Box::new(sovereign_tools::DecisionLogTool::new()),
+        Box::new(sovereign_tools::CapabilityRequestTool::new()),
     ];
     for tool in &tools {
         assert!(
@@ -226,4 +229,218 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
             tool.descriptor().id
         );
     }
+}
+
+/// Drives the new tools end-to-end against a tempdir-anchored
+/// `RecipeProject`: provision → checkpoint at creation → log
+/// decisions covering all five `decision_kind` variants → capability
+/// request gated on partner_confirmed → restore from the creation
+/// checkpoint. Mirrors the M1 acceptance scenario in the plan file.
+#[tokio::test]
+async fn recipe_author_project_lifecycle_end_to_end() {
+    use std::sync::Arc;
+
+    use corpus_engine::{FeatureStore, NoteScope, NoteStore, ScopeFilter};
+    use sovereign_tools::recipe_author::{
+        capability_request::CapabilityRequest,
+        checkpoint::{do_create as checkpoint_create, restore_checkpoint},
+        decision_log::{DecisionAttribution, DecisionKind, DecisionPayload},
+        situated_context, CapabilityRequestTool, DecisionLogTool,
+    };
+    use sovereign_tools::RecipeProject;
+
+    let home = tempfile::tempdir().unwrap();
+    std::env::set_var("HOME", home.path());
+    let recipes_dir = home.path().join(".sovereign/recipes");
+    std::fs::create_dir_all(&recipes_dir).unwrap();
+
+    let notes = Arc::new(NoteStore::open(&home.path().join("notes.db")).unwrap());
+    let features =
+        Arc::new(FeatureStore::open(&home.path().join("features.db")).unwrap());
+
+    let project = RecipeProject::new(
+        "Federal case law (CourtListener)",
+        "Build a corpus of federal published opinions over CourtListener \
+         with a citation graph and a counsel-of-record investigation.",
+        Arc::clone(&notes),
+        Arc::clone(&features),
+    )
+    .await
+    .unwrap();
+
+    // Project-creation checkpoint — recipe path absent because the
+    // recipe hasn't been drafted yet.
+    let creation = checkpoint_create(
+        &project,
+        "creation",
+        "Project just provisioned.",
+        "project_creation",
+        None,
+        Some(&recipes_dir),
+        "session-1",
+        None,
+    )
+    .await
+    .unwrap();
+    assert!(creation.snapshot_path.exists());
+
+    // Five decisions — one per kind. The DecisionLogTool wraps
+    // the NoteStore write path; calling it directly through the tool
+    // exercises the JSON entry surface the live agent would use.
+    let dl = DecisionLogTool::with_notes(Arc::clone(&notes));
+    let kinds = [
+        ("source_choice", DecisionAttribution::Partner),
+        ("extraction_choice", DecisionAttribution::AgentDefault),
+        ("schema_choice", DecisionAttribution::Partner),
+        ("domain_clarification", DecisionAttribution::Partner),
+        ("deferred_question", DecisionAttribution::Deferred),
+    ];
+    for (k, attribution) in &kinds {
+        let attr_str = match attribution {
+            DecisionAttribution::Partner => "partner",
+            DecisionAttribution::AgentDefault => "agent_default",
+            DecisionAttribution::Deferred => "deferred",
+        };
+        dl.execute(
+            &serde_json::json!({
+                "feature_id": project.feature_id(),
+                "kind": k,
+                "summary": format!("a {k}"),
+                "attribution": attr_str,
+            }),
+            &ctx(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("{k}: {e}"));
+    }
+    // All five `decision_kind` variants survive the round-trip.
+    let scope = ScopeFilter {
+        scopes: vec![NoteScope::Feature],
+        feature_id: Some(project.feature_id().to_string()),
+    };
+    let decision_rows = notes
+        .read_notes_scoped(
+            None,
+            &[],
+            &[],
+            &["decision".to_string()],
+            100,
+            false,
+            &scope,
+        )
+        .await
+        .unwrap();
+    assert_eq!(decision_rows.len(), 5);
+    let mut kinds_seen = std::collections::HashSet::new();
+    for r in &decision_rows {
+        let payload: DecisionPayload =
+            serde_json::from_str(r.payload_json.as_deref().unwrap()).unwrap();
+        kinds_seen.insert(payload.decision_kind);
+    }
+    for expected in [
+        DecisionKind::SourceChoice,
+        DecisionKind::ExtractionChoice,
+        DecisionKind::SchemaChoice,
+        DecisionKind::DomainClarification,
+        DecisionKind::DeferredQuestion,
+    ] {
+        assert!(kinds_seen.contains(&expected), "missing {expected:?}");
+    }
+
+    // Capability request — refusal path first, then the confirmed
+    // path. Persistence side-effect on the inbox lives in a tempdir.
+    let inbox = tempfile::tempdir().unwrap();
+    let cap = CapabilityRequestTool::with_stores(
+        Arc::clone(&notes),
+        Arc::clone(&features),
+    )
+    .with_inbox_dir(inbox.path().to_path_buf());
+    let refuse = cap
+        .execute(
+            &serde_json::json!({
+                "feature_id": project.feature_id(),
+                "format_or_source": "PACER docket XML",
+                "analysis": "existing xml extractor flattens the structure",
+                "partner_confirmed": false,
+            }),
+            &ctx(),
+        )
+        .await
+        .unwrap_err();
+    assert!(format!("{refuse}").contains("partner_confirmed"));
+
+    let submitted = cap
+        .execute(
+            &serde_json::json!({
+                "feature_id": project.feature_id(),
+                "format_or_source": "PACER docket XML",
+                "analysis": "Need an XML extractor that preserves nested \
+                             docket-entry hierarchy.",
+                "existing_extractors_tried": ["xml", "html"],
+                "failure_modes": ["xml flattens", "html splits boundaries"],
+                "blocked_recipe_parts": ["extract"],
+                "partner_confirmed": true,
+            }),
+            &ctx(),
+        )
+        .await
+        .unwrap();
+    let inbox_path = match &submitted {
+        StepOutput::Json(v) => v["inbox_path"].as_str().unwrap().to_string(),
+        other => panic!("expected Json, got {other:?}"),
+    };
+    let cap_request: CapabilityRequest =
+        serde_json::from_str(&std::fs::read_to_string(&inbox_path).unwrap()).unwrap();
+    assert_eq!(cap_request.status, "submitted");
+    assert_eq!(cap_request.feature_id, project.feature_id());
+
+    // Now write a real recipe + checkpoint it, then mutate, then
+    // restore. Confirms the restore wires the checkpoint snapshot
+    // back to the live recipe path.
+    std::fs::create_dir_all(recipes_dir.join("trial")).unwrap();
+    std::fs::write(
+        recipes_dir.join("trial/recipe.toml"),
+        "[corpus]\nid=\"trial\"\nname=\"v1\"\n",
+    )
+    .unwrap();
+    let v1 = checkpoint_create(
+        &project,
+        "v1 settled",
+        "first working draft",
+        "auto_strategy_change",
+        Some("trial"),
+        Some(&recipes_dir),
+        "session-1",
+        None,
+    )
+    .await
+    .unwrap();
+    std::fs::write(
+        recipes_dir.join("trial/recipe.toml"),
+        "[corpus]\nid=\"trial\"\nname=\"v2-broken\"\n",
+    )
+    .unwrap();
+    let _restored = restore_checkpoint(
+        &project,
+        &v1.checkpoint_id,
+        Some("trial"),
+        Some(&recipes_dir),
+        "session-1",
+    )
+    .await
+    .unwrap();
+    let restored_text =
+        std::fs::read_to_string(recipes_dir.join("trial/recipe.toml")).unwrap();
+    assert!(restored_text.contains("v1"));
+    assert!(!restored_text.contains("v2-broken"));
+
+    // Situated-context render covers the project after all the
+    // above: charter, recent decisions (newest first), pending
+    // capability request, and the restore-anchor checkpoint should
+    // all be reachable from the rendered block.
+    let block = situated_context::render(&project).await.unwrap();
+    assert!(block.contains("Federal case law"));
+    assert!(block.contains("Recent decisions"));
+    assert!(block.contains("Pending capability requests"));
+    assert!(block.contains("PACER"));
 }

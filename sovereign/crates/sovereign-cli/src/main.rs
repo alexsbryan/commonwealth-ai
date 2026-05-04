@@ -38,6 +38,8 @@ mod plan_composer;
 mod project_cmd;
 mod project_toml;
 mod reading_diag_cmd;
+mod recipe_agent_cmd;
+mod recipe_agent_live_trial;
 mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;
@@ -395,6 +397,14 @@ async fn main() {
             }
             "recipe" => {
                 let code = recipe_cmd::run_recipe(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "recipe-agent" => {
+                let code = recipe_agent_cmd::run_recipe_agent(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "maintainer" => {
+                let code = recipe_agent_cmd::run_maintainer(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "code" => {
@@ -827,6 +837,39 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::RecipeValidateTool::new()));
     tools.register(Box::new(sovereign_tools::RecipeTestTool::new()));
     tools.register(Box::new(sovereign_tools::RegistryBrowseTool));
+
+    // Recipe-author project tools — DecisionLog / Checkpoint /
+    // CapabilityRequest. These funnel through NoteStore +
+    // FeatureStore for state, so we open both stores under
+    // ~/.sovereign/ and pass them into the tool constructors. Same
+    // permission gate (RecipeAuthoring) as the five above.
+    let recipe_notes_path = home.join(".sovereign").join("notes.db");
+    let recipe_features_path = home.join(".sovereign").join("features.db");
+    if let (Ok(rn), Ok(rf)) = (
+        corpus_engine::NoteStore::open(&recipe_notes_path),
+        corpus_engine::FeatureStore::open(&recipe_features_path),
+    ) {
+        let rn = Arc::new(rn);
+        let rf = Arc::new(rf);
+        tools.register(Box::new(sovereign_tools::DecisionLogTool::with_notes(
+            Arc::clone(&rn),
+        )));
+        tools.register(Box::new(sovereign_tools::CheckpointTool::with_stores(
+            Arc::clone(&rn),
+            Arc::clone(&rf),
+        )));
+        tools.register(Box::new(
+            sovereign_tools::CapabilityRequestTool::with_stores(
+                Arc::clone(&rn),
+                Arc::clone(&rf),
+            ),
+        ));
+    } else {
+        eprintln!(
+            "Recipe-author state stores unavailable; \
+             DecisionLog/Checkpoint/CapabilityRequest will not be registered."
+        );
+    }
 
     eprintln!("Tools: {} registered", tools.count());
 

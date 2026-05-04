@@ -10,6 +10,7 @@ members = [
     "crates/sovereign-desktop/src-tauri",
     "crates/sovereign-cli",
     "crates/sovereign-atos",
+    "crates/sovereign-eval",
 ]
 
 [workspace.package]

@@ -52,6 +52,17 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // chat-with-wikipedia loop directly when the agent's autonomous
     // tool-selection doesn't pick the catalog-hit follow-up.
     "wikipedia_fetch",
+    // Recipe-author surface. The five existing tools drive the
+    // author → validate → test loop; web_search / web_fetch supply
+    // domain research; checkpoint / decision_log / capability_request
+    // are the recipe-author-only escalation + audit surface. Together
+    // they're the live tool set for the `recipe-author` skill — the
+    // skill's `[tools] required` list is descriptive; MCP exposure is
+    // the gate that actually lets the live agent loop reach them.
+    "recipe_read", "recipe_write", "recipe_validate", "recipe_test",
+    "registry_browse",
+    "web_search", "web_fetch",
+    "checkpoint", "decision_log", "capability_request",
 ];
 
 /// MCP tools that should only appear when a spec exists in the

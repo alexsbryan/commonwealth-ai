@@ -398,6 +398,7 @@ mod tests {
                 related_entity: None,
                 source: "agent".into(),
                 supersedes: None,
+                payload_json: None,
             },
         ];
         let out = fallback_header_digest(&rows);

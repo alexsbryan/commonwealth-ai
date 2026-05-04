@@ -26,12 +26,24 @@
 //! to invoke it. The Rust-level publish surface is intentionally
 //! small.
 
+pub mod capability_request;
+pub mod checkpoint;
+pub mod decision_log;
+pub mod project;
 pub mod read;
 pub mod registry_browse;
+pub mod situated_context;
 pub mod test_tool;
 pub mod validate;
 pub mod write;
 
+pub use capability_request::CapabilityRequestTool;
+pub use checkpoint::CheckpointTool;
+pub use decision_log::DecisionLogTool;
+pub use project::{
+    maintainer_inbox_dir, projects_root_dir, CheckpointMeta, DecisionFrontier,
+    ProjectSummary, RecipeProject,
+};
 pub use read::RecipeReadTool;
 pub use registry_browse::RegistryBrowseTool;
 pub use test_tool::RecipeTestTool;

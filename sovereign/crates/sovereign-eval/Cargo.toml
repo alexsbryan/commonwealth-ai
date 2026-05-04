@@ -1,0 +1,33 @@
+[package]
+name = "sovereign-eval"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Tool-efficacy self-host harness — manifest dumper, oracle grader, scorer"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "sovereign-eval"
+path = "src/bin/main.rs"
+
+[dependencies]
+corpus-engine.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+reqwest = { workspace = true, features = ["blocking", "json", "rustls-tls"] }
+clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.35", features = ["bundled"] }
+sha2 = "0.10"
+hex = "0.4"
+anyhow = "1"
+
+[dev-dependencies]
+tempfile = "3"

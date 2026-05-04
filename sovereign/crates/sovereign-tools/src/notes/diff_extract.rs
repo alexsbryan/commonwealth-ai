@@ -282,6 +282,7 @@ mod tests {
             related_entity: None,
             source: NoteSource::Agent.as_str().to_string(),
             supersedes: None,
+            payload_json: None,
         }
     }
 
