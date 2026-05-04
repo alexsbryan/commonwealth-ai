@@ -183,6 +183,13 @@ pub struct NoteRow {
     /// original decision. The referenced row is left intact — only the
     /// audit display treats this as a reversal.
     pub supersedes: Option<String>,
+    /// Structured per-kind payload (v7+). Used by the recipe-author
+    /// kinds (`decision` with a `decision_kind`, `research_finding`
+    /// with `authority`, `recipe_issue` with category/count, etc.) so
+    /// the dashboard / CLI can read fields without reparsing
+    /// `content`. NULL for pre-v7 rows and for kinds that don't carry
+    /// structured data.
+    pub payload_json: Option<String>,
 }
 
 /// Retrieval filter for scope/feature combinations.
@@ -327,6 +334,23 @@ impl NoteStore {
             })?;
         }
 
+        // v6 → v7: Recipe-author note kinds + structured payload column.
+        // Six new kinds — `research_finding`, `capability_request`,
+        // `recipe_issue`, `checkpoint`, `checkpoint_restored`,
+        // `deferred_question` — plus a nullable `payload_json` TEXT
+        // column for per-kind structured data (decision_kind on
+        // `decision` rows, authority on `research_finding`, category
+        // on `recipe_issue`, etc.). Rename-recreate because the CHECK
+        // constraint changes; SQLite can't ALTER one in place.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 7 {
+            conn.execute_batch(MIGRATION_V7).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v7: {e}")))
+            })?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -457,9 +481,47 @@ impl NoteStore {
         source: NoteSource,
         supersedes: Option<&str>,
     ) -> Result<String> {
+        self.write_note_full(
+            kind,
+            content,
+            symbols,
+            files,
+            session_id,
+            scope,
+            feature_id,
+            related_entity,
+            source,
+            supersedes,
+            None,
+        )
+        .await
+    }
+
+    /// Full-fat v7 write path that also accepts a structured
+    /// `payload_json` blob for per-kind data (e.g. `decision_kind`
+    /// on `decision` rows, `authority` on `research_finding`,
+    /// `category`/`status` on `recipe_issue`). The string is stored
+    /// verbatim — callers serialise their own JSON and own its
+    /// schema. NULL is the valid "no payload" value and matches
+    /// pre-v7 semantics.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn write_note_full(
+        &self,
+        kind: &str,
+        content: &str,
+        symbols: Vec<String>,
+        files: Vec<String>,
+        session_id: &str,
+        scope: NoteScope,
+        feature_id: Option<&str>,
+        related_entity: Option<&str>,
+        source: NoteSource,
+        supersedes: Option<&str>,
+        payload_json: Option<&str>,
+    ) -> Result<String> {
         if scope == NoteScope::Feature && feature_id.is_none() {
             return Err(Error::InvalidInput(
-                "write_note_with_source: scope='feature' requires feature_id".into(),
+                "write_note_full: scope='feature' requires feature_id".into(),
             ));
         }
         let id = uuid::Uuid::new_v4().to_string();
@@ -469,11 +531,11 @@ impl NoteStore {
 
         let conn = self.conn.lock().await;
         conn.execute(
-            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, scope, feature_id, related_entity, source, supersedes)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO notes (id, kind, content, symbols, files, session_id, created_at, updated_at, scope, feature_id, related_entity, source, supersedes, payload_json)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 id, kind, content, symbols_json, files_json, session_id, now,
-                scope.as_str(), feature_id, related_entity, source.as_str(), supersedes
+                scope.as_str(), feature_id, related_entity, source.as_str(), supersedes, payload_json
             ],
         )
         .map_err(sqlite_err)?;
@@ -610,7 +672,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes
+                        source, supersedes, payload_json
                  FROM notes WHERE id = ?",
                 params![id],
                 map_note_row,
@@ -756,7 +818,7 @@ impl NoteStore {
                     SELECT n.id, n.kind, n.content, n.symbols, n.files, n.session_id,
                            n.created_at, n.tool_name, n.retired_at, n.retired_by,
                            n.scope, n.feature_id, n.promoted_from, n.related_entity,
-                           n.source, n.supersedes
+                           n.source, n.supersedes, n.payload_json
                     FROM notes n
                     JOIN ranked r ON r.rowid = n.rowid
                     WHERE 1=1 {retired_clause}
@@ -774,7 +836,7 @@ impl NoteStore {
                     "SELECT id, kind, content, symbols, files, session_id,
                             created_at, tool_name, retired_at, retired_by,
                             scope, feature_id, promoted_from, related_entity,
-                            source, supersedes
+                            source, supersedes, payload_json
                      FROM notes
                      WHERE 1=1 {retired_clause}
                      ORDER BY created_at DESC
@@ -830,7 +892,7 @@ impl NoteStore {
             "SELECT id, kind, content, symbols, files, session_id,
                     created_at, tool_name, retired_at, retired_by,
                     scope, feature_id, promoted_from, related_entity,
-                    source, supersedes
+                    source, supersedes, payload_json
              FROM notes
              WHERE kind = 'reflection'
                AND created_at >= ?
@@ -878,7 +940,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes
+                        source, supersedes, payload_json
                  FROM notes
                  WHERE related_entity = ?1
                    AND retired_at IS NULL
@@ -979,7 +1041,7 @@ impl NoteStore {
                 "SELECT id, kind, content, symbols, files, session_id,
                         created_at, tool_name, retired_at, retired_by,
                         scope, feature_id, promoted_from, related_entity,
-                        source, supersedes
+                        source, supersedes, payload_json
                  FROM notes
                  WHERE kind = 'todo' AND retired_at IS NULL
                  ORDER BY created_at DESC
@@ -1361,6 +1423,128 @@ PRAGMA user_version = 6;
 COMMIT;
 ";
 
+// ─── Schema migration v6 → v7 (Recipe-author note kinds + payload_json) ───────
+
+/// Applied to databases at `user_version = 6`. Two interleaved
+/// changes for the recipe-author surface (single source of truth for
+/// recipe-project state lives in NoteStore + sidecar files):
+///
+/// 1. Expand the `notes.kind` CHECK constraint to admit six new
+///    kinds:
+///    - `research_finding` — web-search authority-tagged findings.
+///    - `capability_request` — structured maintainer escalation.
+///    - `recipe_issue` — categorised test-run findings the partner
+///      tracks (open/resolved/deferred/won't_fix).
+///    - `checkpoint` — named recoverable snapshots.
+///    - `checkpoint_restored` — restoration markers (preserves the
+///      decision-and-research-log narrative across a restore).
+///    - `deferred_question` — partner-can't-evaluate technical
+///      tradeoffs (lighter weight than `capability_request`; no
+///      maintainer-inbox side-effect).
+/// 2. Add a nullable `payload_json TEXT` column for per-kind
+///    structured data: `{decision_kind, attribution, alternatives}`
+///    on `decision` rows; `{authority, query, summary}` on
+///    `research_finding`; `{category, count, status}` on
+///    `recipe_issue`; `{checkpoint_id, name, trigger,
+///    snapshot_path}` on `checkpoint`; `{from_checkpoint_id,
+///    to_checkpoint_id}` on `checkpoint_restored`. Pre-v7 rows get
+///    NULL.
+///
+/// Same rename-recreate-copy pattern as MIGRATION_V5 — SQLite can't
+/// ALTER a CHECK constraint in place. FTS5 + triggers are rebuilt
+/// because they reference the table by name.
+const MIGRATION_V7: &str = "
+BEGIN;
+
+ALTER TABLE notes RENAME TO notes_v6;
+
+CREATE TABLE notes (
+    id            TEXT    PRIMARY KEY,
+    kind          TEXT    NOT NULL CHECK(kind IN (
+        'decision','attempt','invariant','todo','reflection',
+        'uncertainty','postmortem_pointer','redteam_finding',
+        'deviation','commitment','follow_up','goal',
+        'research_finding','capability_request','recipe_issue',
+        'checkpoint','checkpoint_restored','deferred_question'
+    )),
+    content       TEXT    NOT NULL,
+    symbols       TEXT    NOT NULL DEFAULT '[]',
+    files         TEXT    NOT NULL DEFAULT '[]',
+    session_id    TEXT    NOT NULL,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    tool_name     TEXT,
+    retired_at    INTEGER,
+    retired_by    TEXT,
+    scope         TEXT    NOT NULL DEFAULT 'global'
+                  CHECK(scope IN ('global','feature','session')),
+    feature_id    TEXT,
+    promoted_from TEXT,
+    related_entity TEXT,
+    source        TEXT    NOT NULL DEFAULT 'agent',
+    supersedes    TEXT,
+    payload_json  TEXT
+);
+
+INSERT INTO notes (
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from,
+    related_entity, source, supersedes, payload_json
+)
+SELECT
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from,
+    related_entity, source, supersedes, NULL
+FROM notes_v6;
+
+DROP TABLE notes_v6;
+
+CREATE INDEX IF NOT EXISTS idx_notes_kind            ON notes(kind);
+CREATE INDEX IF NOT EXISTS idx_notes_created         ON notes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_tool_name       ON notes(tool_name);
+CREATE INDEX IF NOT EXISTS idx_notes_retired_at      ON notes(retired_at);
+CREATE INDEX IF NOT EXISTS idx_notes_scope_feature   ON notes(scope, feature_id);
+CREATE INDEX IF NOT EXISTS idx_notes_feature
+    ON notes(feature_id) WHERE feature_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_related_entity
+    ON notes(related_entity) WHERE related_entity IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_source_created
+    ON notes(source, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_supersedes
+    ON notes(supersedes) WHERE supersedes IS NOT NULL;
+
+DROP TABLE IF EXISTS notes_fts;
+CREATE VIRTUAL TABLE notes_fts USING fts5(
+    content, kind,
+    content='notes',
+    content_rowid='rowid'
+);
+INSERT INTO notes_fts(notes_fts) VALUES('rebuild');
+
+DROP TRIGGER IF EXISTS notes_fts_ai;
+DROP TRIGGER IF EXISTS notes_fts_ad;
+DROP TRIGGER IF EXISTS notes_fts_au;
+
+CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+END;
+
+CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+PRAGMA user_version = 7;
+
+COMMIT;
+";
+
 // ─── Schema migration v2 → v3 (ATOS note kinds: uncertainty,
 //     postmortem_pointer, redteam_finding) ─────────────────────────────────
 
@@ -1654,6 +1838,7 @@ fn map_note_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<NoteRow> {
         related_entity: row.get(13)?,
         source: row.get(14)?,
         supersedes: row.get(15)?,
+        payload_json: row.get(16)?,
     })
 }
 
@@ -2775,6 +2960,145 @@ mod tests {
             )
             .unwrap();
         assert_eq!(has_supersedes_idx, 1);
+    }
+
+    // ── v6 → v7 migration (recipe-author kinds + payload_json) ────────────
+
+    /// Build a v6 database by hand and confirm the v7 migration:
+    ///
+    /// 1. Adds the six new kinds to the CHECK constraint (verified
+    ///    by writing a `research_finding` after the migration runs).
+    /// 2. Adds the nullable `payload_json` column (verified by
+    ///    reading back a written value).
+    /// 3. Preserves every pre-v7 row, with `payload_json = NULL`.
+    #[tokio::test]
+    async fn migrates_v6_to_v7_preserving_existing_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Build a v6 database manually. v6 = v5 + (source, supersedes,
+        // two indexes); we replicate enough to look like a real on-disk
+        // v6 then bump user_version.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE notes (
+                     id            TEXT    PRIMARY KEY,
+                     kind          TEXT    NOT NULL CHECK(kind IN (
+                         'decision','attempt','invariant','todo','reflection',
+                         'uncertainty','postmortem_pointer','redteam_finding',
+                         'deviation','commitment','follow_up','goal'
+                     )),
+                     content       TEXT    NOT NULL,
+                     symbols       TEXT    NOT NULL DEFAULT '[]',
+                     files         TEXT    NOT NULL DEFAULT '[]',
+                     session_id    TEXT    NOT NULL,
+                     created_at    INTEGER NOT NULL,
+                     updated_at    INTEGER NOT NULL,
+                     tool_name     TEXT,
+                     retired_at    INTEGER,
+                     retired_by    TEXT,
+                     scope         TEXT    NOT NULL DEFAULT 'global'
+                                   CHECK(scope IN ('global','feature','session')),
+                     feature_id    TEXT,
+                     promoted_from TEXT,
+                     related_entity TEXT,
+                     source        TEXT    NOT NULL DEFAULT 'agent',
+                     supersedes    TEXT
+                 );
+                 CREATE VIRTUAL TABLE notes_fts USING fts5(
+                     content, kind, content='notes', content_rowid='rowid'
+                 );
+                 CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+                     INSERT INTO notes_fts(rowid, content, kind)
+                         VALUES (new.rowid, new.content, new.kind);
+                 END;
+                 CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+                     INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+                         VALUES ('delete', old.rowid, old.content, old.kind);
+                 END;
+                 CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+                     INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+                         VALUES ('delete', old.rowid, old.content, old.kind);
+                     INSERT INTO notes_fts(rowid, content, kind)
+                         VALUES (new.rowid, new.content, new.kind);
+                 END;
+                 CREATE TABLE meta_counters (key TEXT PRIMARY KEY, val INTEGER NOT NULL);
+                 INSERT INTO meta_counters(key, val) VALUES ('notes_version', 0);
+                 CREATE TABLE note_digest_cache (
+                     scope_hash    TEXT    PRIMARY KEY,
+                     digest_text   TEXT    NOT NULL,
+                     notes_version INTEGER NOT NULL,
+                     created_at    INTEGER NOT NULL
+                 );
+                 CREATE TABLE tool_call_log (
+                     id         TEXT    PRIMARY KEY,
+                     session_id TEXT    NOT NULL,
+                     tool_name  TEXT    NOT NULL,
+                     outcome    TEXT    NOT NULL,
+                     called_at  INTEGER NOT NULL
+                 );
+                 INSERT INTO notes (
+                     id, kind, content, session_id, created_at, updated_at,
+                     scope, source
+                 ) VALUES (
+                     'pre-v7-row', 'decision', 'before v7 migration',
+                     'sess-1', 1000, 1000, 'global', 'agent'
+                 );
+                 PRAGMA user_version = 6;
+                 COMMIT;",
+            )
+            .unwrap();
+        }
+
+        // Open through NoteStore — should run V7 and rebuild the table.
+        let store = NoteStore::open(&db_path).unwrap();
+
+        // Pre-existing row preserved with payload_json = NULL.
+        let row = store
+            .read_note_by_id("pre-v7-row")
+            .await
+            .unwrap()
+            .expect("row preserved across v6→v7 migration");
+        assert_eq!(row.kind, "decision");
+        assert_eq!(row.payload_json, None, "pre-v7 rows default payload to NULL");
+
+        // user_version is now 7.
+        let conn = Connection::open(&db_path).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 7);
+
+        // The new kinds are admitted by the rebuilt CHECK. Round-trip
+        // a `research_finding` write through `write_note_full` to
+        // confirm both the CHECK and the payload column work.
+        let payload =
+            r#"{"authority":"authoritative","host":"courtlistener.com"}"#;
+        let id = store
+            .write_note_full(
+                "research_finding",
+                "CourtListener documents API supports cursor pagination",
+                vec![],
+                vec![],
+                "sess-1",
+                NoteScope::Feature,
+                Some("p1"),
+                None,
+                NoteSource::Agent,
+                None,
+                Some(payload),
+            )
+            .await
+            .unwrap();
+        let written = store
+            .read_note_by_id(&id)
+            .await
+            .unwrap()
+            .expect("research_finding row should round-trip");
+        assert_eq!(written.kind, "research_finding");
+        assert_eq!(written.payload_json.as_deref(), Some(payload));
     }
 
     /// New writes via `write_note_with_source` carry their explicit

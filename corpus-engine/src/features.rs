@@ -27,6 +27,13 @@ use crate::error::{Error, Result};
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 /// Lifecycle state of an ATOS feature.
+///
+/// `RecipeAuthoring` is a sibling lifecycle for the recipe-author
+/// surface: a recipe-authoring "project" maps onto a `FeatureRow`
+/// with this state and a charter, and its decisions / research log
+/// are scoped to `notes.feature_id`. The classic ATOS milestones /
+/// runs simply sit unused on these rows. Treated as terminal —
+/// recipe-author projects don't transition to `Active`/`Completed`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FeatureState {
     Provisioned,
@@ -34,6 +41,7 @@ pub enum FeatureState {
     Paused,
     Archived,
     Completed,
+    RecipeAuthoring,
 }
 
 impl FeatureState {
@@ -44,6 +52,7 @@ impl FeatureState {
             Self::Paused => "paused",
             Self::Archived => "archived",
             Self::Completed => "completed",
+            Self::RecipeAuthoring => "recipe_authoring",
         }
     }
 
@@ -54,6 +63,7 @@ impl FeatureState {
             "paused" => Some(Self::Paused),
             "archived" => Some(Self::Archived),
             "completed" => Some(Self::Completed),
+            "recipe_authoring" => Some(Self::RecipeAuthoring),
             _ => None,
         }
     }
@@ -180,6 +190,27 @@ impl FeatureStore {
             "INTEGER NOT NULL DEFAULT 0",
         )?;
 
+        // Recipe-author migration: if an existing `features` table's
+        // CHECK constraint pre-dates the recipe-authoring lifecycle
+        // state, rebuild it. Runs AFTER the additive migrations above
+        // so the rename-copy preserves every column added by previous
+        // upgrades (notably `auto_redteam`). Idempotent — skipped
+        // when the table doesn't exist yet (fresh DB took SCHEMA
+        // above with the new CHECK already in place) or when
+        // 'recipe_authoring' is already in the constraint.
+        let needs_state_migration: bool = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='features'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .map(|sql| !sql.contains("'recipe_authoring'"))
+            .unwrap_or(false);
+        if needs_state_migration {
+            conn.execute_batch(MIGRATION_FEATURES_RECIPE_AUTHORING)
+                .map_err(sqlite_err)?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -227,6 +258,58 @@ impl FeatureStore {
             sovereign_md: sovereign_md.into(),
             state: "provisioned".into(),
             stop_condition: stop_condition.into(),
+            created_at: now,
+            updated_at: now,
+            archived_at: None,
+            auto_redteam: false,
+        })
+    }
+
+    /// Insert a recipe-authoring "project" — a sibling lifecycle to
+    /// the classic ATOS feature that reuses the same row shape but
+    /// lands in the `recipe_authoring` state instead of
+    /// `provisioned`. The recipe-author surface uses `charter_md` for
+    /// the partner's stated goals; `stop_condition` and `sovereign_md`
+    /// are recorded empty (no ATOS milestones / invariants apply).
+    ///
+    /// Returns [`Error::InvalidInput`] if `id` already exists.
+    pub async fn provision_recipe_project(
+        &self,
+        id: &str,
+        title: &str,
+        charter_md: &str,
+    ) -> Result<FeatureRow> {
+        if id.is_empty() {
+            return Err(Error::InvalidInput(
+                "recipe project id cannot be empty".into(),
+            ));
+        }
+        let now = unix_now();
+
+        let conn = self.conn.lock().await;
+        let affected = conn
+            .execute(
+                "INSERT INTO features
+                   (id, title, charter_md, sovereign_md, state, stop_condition,
+                    created_at, updated_at, archived_at)
+                 VALUES (?1, ?2, ?3, '', 'recipe_authoring', '', ?4, ?4, NULL)
+                 ON CONFLICT(id) DO NOTHING",
+                params![id, title, charter_md, now],
+            )
+            .map_err(sqlite_err)?;
+        if affected == 0 {
+            return Err(Error::InvalidInput(format!(
+                "recipe project '{id}' already exists"
+            )));
+        }
+
+        Ok(FeatureRow {
+            id: id.into(),
+            title: title.into(),
+            charter_md: charter_md.into(),
+            sovereign_md: String::new(),
+            state: "recipe_authoring".into(),
+            stop_condition: String::new(),
             created_at: now,
             updated_at: now,
             archived_at: None,
@@ -753,6 +836,62 @@ fn map_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AtosToolEvent> {
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
 
+/// One-shot migration that rebuilds the `features` table with the
+/// `recipe_authoring` state admitted by its CHECK constraint.
+/// SQLite has no in-place CHECK alteration; we follow the same
+/// rename-recreate-copy pattern used by `notes.rs` migrations.
+///
+/// Idempotent — gated by the `'recipe_authoring' not in old CHECK`
+/// detection in [`FeatureStore::open`].
+///
+/// `feature_milestones` references `features(id) ON DELETE CASCADE`.
+/// Modern SQLite (>= 3.26 with `legacy_alter_table = 0`, the
+/// default) automatically rewrites FK references when a table is
+/// renamed — which would break the migration here, since the
+/// referencing FK would then point at `features_pre_recipe` after
+/// the rename, leaving the new `features` table unreferenced.
+/// `PRAGMA foreign_keys = OFF` inside the transaction suppresses
+/// that rewrite (per SQLite docs at lang_altertable.html), so the
+/// FK string `REFERENCES features(id)` stays textual and resolves
+/// back to the rebuilt table after the swap.
+const MIGRATION_FEATURES_RECIPE_AUTHORING: &str = "
+PRAGMA foreign_keys = OFF;
+BEGIN;
+
+ALTER TABLE features RENAME TO features_pre_recipe;
+
+CREATE TABLE features (
+    id             TEXT PRIMARY KEY,
+    title          TEXT NOT NULL,
+    charter_md     TEXT NOT NULL,
+    sovereign_md   TEXT NOT NULL DEFAULT '',
+    state          TEXT NOT NULL CHECK(state IN
+                     ('provisioned','active','paused','archived','completed',
+                      'recipe_authoring')),
+    stop_condition TEXT NOT NULL DEFAULT '',
+    created_at     INTEGER NOT NULL,
+    updated_at     INTEGER NOT NULL,
+    archived_at    INTEGER,
+    auto_redteam   INTEGER NOT NULL DEFAULT 0
+);
+
+INSERT INTO features (
+    id, title, charter_md, sovereign_md, state, stop_condition,
+    created_at, updated_at, archived_at, auto_redteam
+)
+SELECT
+    id, title, charter_md, sovereign_md, state, stop_condition,
+    created_at, updated_at, archived_at, auto_redteam
+FROM features_pre_recipe;
+
+DROP TABLE features_pre_recipe;
+
+CREATE INDEX IF NOT EXISTS idx_features_state ON features(state);
+
+COMMIT;
+PRAGMA foreign_keys = ON;
+";
+
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS features (
     id             TEXT PRIMARY KEY,
@@ -760,7 +899,8 @@ CREATE TABLE IF NOT EXISTS features (
     charter_md     TEXT NOT NULL,
     sovereign_md   TEXT NOT NULL DEFAULT '',
     state          TEXT NOT NULL CHECK(state IN
-                     ('provisioned','active','paused','archived','completed')),
+                     ('provisioned','active','paused','archived','completed',
+                      'recipe_authoring')),
     stop_condition TEXT NOT NULL DEFAULT '',
     created_at     INTEGER NOT NULL,
     updated_at     INTEGER NOT NULL,
@@ -1246,5 +1386,103 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, Error::InvalidInput(_)));
+    }
+
+    /// Provisioning a recipe-author project lands in the new
+    /// `recipe_authoring` state and round-trips through `get`. Also
+    /// verifies the classic `provision` path still produces
+    /// `provisioned` rows so the lifecycle didn't drift.
+    #[tokio::test]
+    async fn recipe_authoring_state_round_trips() {
+        let store = make_store().await;
+        let row = store
+            .provision_recipe_project("rp1", "Federal case law", "Build over CourtListener")
+            .await
+            .unwrap();
+        assert_eq!(row.state, "recipe_authoring");
+        assert_eq!(row.charter_md, "Build over CourtListener");
+
+        let loaded = store.get("rp1").await.unwrap().unwrap();
+        assert_eq!(loaded.state, "recipe_authoring");
+        assert_eq!(
+            FeatureState::parse(&loaded.state),
+            Some(FeatureState::RecipeAuthoring)
+        );
+
+        // Classic ATOS provision still lands in `provisioned`.
+        let classic = store
+            .provision("f-classic", "t", "c", "", "true")
+            .await
+            .unwrap();
+        assert_eq!(classic.state, "provisioned");
+    }
+
+    /// Migrating a pre-recipe-authoring `features` table preserves
+    /// every row + the `auto_redteam` column, and admits the new
+    /// state through the rebuilt CHECK constraint. Regression for
+    /// the FK-rewrite hazard around the rename: SQLite ≥ 3.26
+    /// rewrites FK references on rename by default; the migration
+    /// disables foreign keys for the duration so
+    /// `feature_milestones.feature_id REFERENCES features(id)`
+    /// resolves back to the rebuilt table.
+    #[tokio::test]
+    async fn migrates_pre_recipe_features_table_preserving_rows() {
+        use rusqlite::Connection;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("features.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE features (
+                     id TEXT PRIMARY KEY, title TEXT NOT NULL,
+                     charter_md TEXT NOT NULL,
+                     sovereign_md TEXT NOT NULL DEFAULT '',
+                     state TEXT NOT NULL CHECK(state IN
+                       ('provisioned','active','paused','archived','completed')),
+                     stop_condition TEXT NOT NULL DEFAULT '',
+                     created_at INTEGER NOT NULL,
+                     updated_at INTEGER NOT NULL,
+                     archived_at INTEGER,
+                     auto_redteam INTEGER NOT NULL DEFAULT 0);
+                 CREATE TABLE feature_milestones (
+                     id TEXT PRIMARY KEY,
+                     feature_id TEXT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+                     ordinal INTEGER NOT NULL, brief_md TEXT NOT NULL,
+                     started_at INTEGER, ended_at INTEGER,
+                     compliance_report_json TEXT);
+                 INSERT INTO features VALUES (
+                   'old1','classic','c','','provisioned','true',
+                   1000,1000,NULL,1
+                 );
+                 INSERT INTO feature_milestones VALUES (
+                   'mm','old1',1,'brief',NULL,NULL,NULL
+                 );",
+            )
+            .unwrap();
+        }
+
+        // Re-open through FeatureStore — the recipe-authoring CHECK
+        // migration runs because 'recipe_authoring' isn't yet in the
+        // sqlite_master CREATE statement.
+        let store = FeatureStore::open(&path).unwrap();
+
+        // Old row preserved with auto_redteam intact.
+        let row = store.get("old1").await.unwrap().unwrap();
+        assert_eq!(row.state, "provisioned");
+        assert!(row.auto_redteam, "auto_redteam preserved through rebuild");
+
+        // The milestone's FK still resolves — list_milestones returns
+        // the row, which would fail if the FK pointed at the dropped
+        // `features_pre_recipe`.
+        let milestones = store.list_milestones("old1").await.unwrap();
+        assert_eq!(milestones.len(), 1);
+
+        // The new state is admitted. Provision a recipe-authoring
+        // project on the freshly-migrated DB.
+        let rp = store
+            .provision_recipe_project("rp1", "trial", "charter")
+            .await
+            .unwrap();
+        assert_eq!(rp.state, "recipe_authoring");
     }
 }
