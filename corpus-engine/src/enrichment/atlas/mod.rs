@@ -70,3 +70,120 @@ pub use writer::{
     write_atlas_failures, write_atlas_full, write_atlas_gaps, write_tension_candidates,
     AtlasWritten, ResolutionFailuresFile, TrajectoriesFile, ATLAS_DIRNAME,
 };
+
+use std::path::Path;
+
+/// Folder-ingest v1 §3.3 — atomically remove a corpus's
+/// `atlas/` directory under its index root. Used when the user
+/// disables enrichment on a watched-folder corpus, or when a
+/// failed build leaves partial state behind.
+///
+/// "Atomic" here means: rename the live directory to a `.retired-
+/// <ts>` sibling first, then `remove_dir_all` the renamed copy.
+/// A concurrent reader that resolved the path before the rename
+/// still sees a consistent atlas state (under the renamed path);
+/// a reader that resolves after the rename sees no atlas dir.
+/// The actual remove is best-effort — if it fails (permissions,
+/// race, etc.), the renamed directory is left on disk for the
+/// operator to inspect; subsequent calls re-rename to a fresh
+/// timestamp so we never block on stale debris.
+///
+/// Idempotent: a missing `atlas/` dir returns `Ok(())` rather
+/// than `Err`. Callers can drive teardown without first checking
+/// existence.
+///
+/// # Examples
+/// ```
+/// # use std::fs;
+/// # let dir = tempfile::tempdir().unwrap();
+/// // No-op when the dir doesn't exist.
+/// corpus_engine::atlas_teardown(dir.path(), "missing-corpus").unwrap();
+/// ```
+pub fn atlas_teardown(index_dir: &Path, corpus_id: &str) -> std::io::Result<()> {
+    let atlas_dir = index_dir.join(corpus_id).join(ATLAS_DIRNAME);
+    if !atlas_dir.exists() {
+        return Ok(());
+    }
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let retired = index_dir
+        .join(corpus_id)
+        .join(format!(".atlas-retired-{ts}"));
+    std::fs::rename(&atlas_dir, &retired)?;
+    // Best-effort delete. Failure here is logged, not fatal —
+    // the rename already succeeded so the corpus is in the
+    // post-teardown state from any reader's perspective.
+    if let Err(e) = std::fs::remove_dir_all(&retired) {
+        tracing::warn!(
+            retired = %retired.display(),
+            "atlas_teardown: rename succeeded but remove_dir_all failed: {e}"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod teardown_tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn teardown_missing_dir_is_ok() {
+        // Idempotent: calling teardown on a corpus that has no
+        // atlas/ subdir is a no-op success.
+        let dir = tempdir().unwrap();
+        atlas_teardown(dir.path(), "no-such-corpus").unwrap();
+    }
+
+    #[test]
+    fn teardown_removes_atlas_directory() {
+        let index = tempdir().unwrap();
+        let atlas = index.path().join("c1").join(ATLAS_DIRNAME);
+        fs::create_dir_all(&atlas).unwrap();
+        fs::write(atlas.join("atoms.json"), "[]").unwrap();
+        fs::write(atlas.join("edges.json"), "[]").unwrap();
+
+        atlas_teardown(index.path(), "c1").unwrap();
+
+        assert!(!atlas.exists(), "atlas dir should be gone");
+        // The corpus's index dir survives — only `atlas/` was
+        // removed. Other corpus state (chunks, manifest) lives
+        // alongside and stays untouched.
+        assert!(index.path().join("c1").exists());
+    }
+
+    #[test]
+    fn teardown_is_atomic_via_rename() {
+        // The teardown renames the atlas dir to a `.atlas-
+        // retired-<ts>` sibling before deletion. Even if the
+        // remove fails (e.g. a file is in use on Windows), the
+        // canonical `atlas/` path is gone — readers that
+        // resolve the path post-rename see no atlas state. The
+        // retired sibling may linger but is not the canonical
+        // location any reader looks at.
+        let index = tempdir().unwrap();
+        let atlas = index.path().join("c1").join(ATLAS_DIRNAME);
+        fs::create_dir_all(&atlas).unwrap();
+        fs::write(atlas.join("atoms.json"), "[]").unwrap();
+
+        atlas_teardown(index.path(), "c1").unwrap();
+        assert!(!atlas.exists(), "canonical atlas dir gone after teardown");
+    }
+
+    #[test]
+    fn teardown_can_be_called_twice() {
+        // Calling teardown after a successful teardown is a
+        // no-op (the dir is already gone). This matters because
+        // the watched-folder manager calls teardown on disable;
+        // a user who clicks Disable then Disable-again must not
+        // see an error.
+        let index = tempdir().unwrap();
+        let atlas = index.path().join("c1").join(ATLAS_DIRNAME);
+        fs::create_dir_all(&atlas).unwrap();
+        atlas_teardown(index.path(), "c1").unwrap();
+        atlas_teardown(index.path(), "c1").unwrap();
+    }
+}

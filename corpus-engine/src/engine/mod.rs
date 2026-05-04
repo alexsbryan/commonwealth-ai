@@ -862,6 +862,65 @@ impl CorpusEngine {
             .collect()
     }
 
+    /// Return corpus IDs where 2+ on-disk index directories advertise
+    /// the same `corpus_id` in their `_corpus_meta.json`.
+    ///
+    /// The mirror of [`corpora_with_stranded_partitions`]: that one
+    /// detects partition shards with no canonical (a merge that never
+    /// finished); this one detects partition shards alongside a live
+    /// canonical (cleanup that never finished, or a fresh ingest
+    /// landing while old partitions still linger).
+    ///
+    /// Why this matters: `(corpus_id, chunk_id)` is the system's
+    /// citation handle, and chunk IDs are scoped per physical index.
+    /// When two physical indexes both claim `corpus_id="wikipedia"`,
+    /// retrieval can pull a chunk from one while the reading desk
+    /// dereferences the same `(corpus_id, chunk_id)` against the
+    /// other — silently rendering a different document.
+    /// `installed_indexes()` defends against this at runtime by
+    /// deduping with canonical preference; this primitive surfaces
+    /// the same condition in doctor / `sovereign project list` so
+    /// the operator can resolve it permanently (rename the stale dir
+    /// to `<name>.retired` or remove it).
+    ///
+    /// Out-of-band names (containing `.`) and underscore-prefixed
+    /// internal dirs are excluded, matching `installed_indexes`.
+    pub fn corpora_with_colliding_indexes(&self) -> Vec<String> {
+        let Ok(entries) = std::fs::read_dir(&self.index_dir) else {
+            return vec![];
+        };
+
+        let mut counts: std::collections::BTreeMap<String, usize> =
+            Default::default();
+        for entry in entries.flatten() {
+            let name_os = entry.file_name();
+            let Some(name) = name_os.to_str() else { continue };
+            if name.starts_with('_') {
+                continue;
+            }
+            if Self::is_out_of_band_index_name(name) {
+                continue;
+            }
+            let meta_path = entry.path().join("_corpus_meta.json");
+            let Ok(content) = std::fs::read_to_string(&meta_path) else {
+                continue;
+            };
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(&content)
+            else {
+                continue;
+            };
+            let Some(cid) = v.get("corpus_id").and_then(|x| x.as_str()) else {
+                continue;
+            };
+            *counts.entry(cid.to_string()).or_insert(0) += 1;
+        }
+        counts
+            .into_iter()
+            .filter(|(_, n)| *n > 1)
+            .map(|(cid, _)| cid)
+            .collect()
+    }
+
     /// Return corpus IDs where ingestion has started but not finished.
     ///
     /// Considers two on-disk shapes, both produced by the unified ingest
@@ -993,6 +1052,24 @@ impl CorpusEngine {
 
     /// List all indexes present in the index directory.
     /// Each index is a subdirectory containing LanceDB data.
+    ///
+    /// **Uniqueness invariant:** at most one entry per `corpus_id`. The
+    /// `(corpus_id, chunk_id)` pair is the system's citation handle —
+    /// retrieval emits it on every `ScoredChunk` and the reading-surface
+    /// HTTP layer dereferences it via [`open_index_for_corpus`], which
+    /// always opens `<index_dir>/<corpus_id>`. If two on-disk
+    /// directories advertise the same `corpus_id` (typically a stale
+    /// per-peer `<corpus>-partition-<peer>/` shard left over after the
+    /// canonical merge ran), search would pull chunks from the
+    /// partition while the reading desk re-resolves the same chunk id
+    /// against the canonical, silently misrouting citations to whatever
+    /// chunk happens to live at that row id in the canonical index.
+    /// We dedupe by `corpus_id` here, preferring the directory whose
+    /// basename equals the `corpus_id` (the canonical that the reading
+    /// path will open) and `warn!`-logging the dropped paths so the
+    /// operator can clean them up. Rename a stale partition to
+    /// `<name>.retired` (or any name containing `.`) to take it
+    /// out-of-band reversibly.
     pub async fn installed_indexes(&self) -> Result<Vec<IndexInfo>> {
         let mut indexes = Vec::new();
         if !self.index_dir.is_dir() {
@@ -1045,7 +1122,66 @@ impl CorpusEngine {
                 }
             }
         }
-        Ok(indexes)
+
+        Ok(self.dedupe_by_corpus_id(indexes))
+    }
+
+    /// Collapse `IndexInfo`s with duplicate `corpus_id`s to one entry
+    /// each, preferring the directory whose basename equals the
+    /// `corpus_id` (i.e., the canonical path that
+    /// `open_index_for_corpus` opens). If neither candidate is
+    /// canonically named, the lexicographically smaller path wins so
+    /// the choice is stable across calls. Every drop emits a `warn!`
+    /// naming both paths.
+    fn dedupe_by_corpus_id(&self, indexes: Vec<IndexInfo>) -> Vec<IndexInfo> {
+        use std::collections::HashMap;
+
+        let mut by_id: HashMap<String, IndexInfo> = HashMap::new();
+        for info in indexes {
+            let canonical_path = self.index_dir.join(&info.corpus_id);
+            match by_id.remove(&info.corpus_id) {
+                None => {
+                    by_id.insert(info.corpus_id.clone(), info);
+                }
+                Some(existing) => {
+                    let new_is_canonical = info.path == canonical_path;
+                    let existing_is_canonical = existing.path == canonical_path;
+                    let (kept, dropped) = match (new_is_canonical, existing_is_canonical) {
+                        (true, false) => (info, existing),
+                        (false, true) => (existing, info),
+                        _ => {
+                            // Neither (or both — impossible) is canonical.
+                            // Pick the lexicographically smaller path so
+                            // the kept index is deterministic.
+                            if info.path <= existing.path {
+                                (info, existing)
+                            } else {
+                                (existing, info)
+                            }
+                        }
+                    };
+                    tracing::warn!(
+                        corpus_id = %kept.corpus_id,
+                        kept = %kept.path.display(),
+                        dropped = %dropped.path.display(),
+                        "installed_indexes: corpus_id collision — multiple physical indexes \
+                         advertise the same corpus_id. The dropped one is invisible to search \
+                         until you rename it out-of-band (any name containing '.', e.g. \
+                         '<name>.retired') or remove it. Without dedup, retrieval and the \
+                         reading desk could disagree on which chunk a (corpus_id, chunk_id) \
+                         pair resolves to."
+                    );
+                    by_id.insert(kept.corpus_id.clone(), kept);
+                }
+            }
+        }
+
+        let mut out: Vec<IndexInfo> = by_id.into_values().collect();
+        // Stable order — tests + log diffs need this. read_dir order
+        // is filesystem-defined; sort by corpus_id for a deterministic
+        // surface.
+        out.sort_by(|a, b| a.corpus_id.cmp(&b.corpus_id));
+        out
     }
 
     /// Dump diagnostic information about all installed indexes.
@@ -2165,6 +2301,145 @@ mod tests {
         std::fs::create_dir_all(&idx_dir).unwrap();
         let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
         assert!(engine.corpora_with_stranded_partitions().is_empty());
+    }
+
+    /// Pins the load-bearing fix for the citation-misroute bug:
+    /// `(corpus_id, chunk_id)` is the system's citation handle, but
+    /// chunk IDs are scoped to a physical index. If two on-disk
+    /// directories advertise the same corpus_id, retrieval and the
+    /// reading desk could disagree on which physical index to consult.
+    /// `corpora_with_colliding_indexes` is the operator-facing surface
+    /// for the same condition `installed_indexes` defends against at
+    /// runtime via dedupe.
+    #[test]
+    fn corpora_with_colliding_indexes_finds_canonical_plus_lingering_partitions() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+
+        // Colliding: canonical + two partition shards all advertise
+        // corpus_id="wikipedia".
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia/_corpus_meta.json"),
+            r#"{"corpus_id":"wikipedia"}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-aaaa")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia-partition-aaaa/_corpus_meta.json"),
+            r#"{"corpus_id":"wikipedia"}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(idx_dir.join("wikipedia-partition-bbbb")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia-partition-bbbb/_corpus_meta.json"),
+            r#"{"corpus_id":"wikipedia"}"#,
+        )
+        .unwrap();
+
+        // Not colliding: only the canonical exists for SEP.
+        std::fs::create_dir_all(idx_dir.join("sep")).unwrap();
+        std::fs::write(
+            idx_dir.join("sep/_corpus_meta.json"),
+            r#"{"corpus_id":"sep"}"#,
+        )
+        .unwrap();
+
+        // Excluded by out-of-band rule even though its meta carries
+        // corpus_id="wikipedia" — `.` in the dir name takes it
+        // off-stage everywhere.
+        std::fs::create_dir_all(idx_dir.join("wikipedia.legacy-backup")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia.legacy-backup/_corpus_meta.json"),
+            r#"{"corpus_id":"wikipedia"}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        let collisions = engine.corpora_with_colliding_indexes();
+        assert_eq!(collisions, vec!["wikipedia"]);
+    }
+
+    #[test]
+    fn corpora_with_colliding_indexes_returns_empty_with_unique_corpus_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        std::fs::write(
+            idx_dir.join("wikipedia/_corpus_meta.json"),
+            r#"{"corpus_id":"wikipedia"}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(idx_dir.join("sep")).unwrap();
+        std::fs::write(
+            idx_dir.join("sep/_corpus_meta.json"),
+            r#"{"corpus_id":"sep"}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir, mock_embed_fn());
+        assert!(engine.corpora_with_colliding_indexes().is_empty());
+    }
+
+    /// Pins the dedup invariant: when two physical indexes advertise
+    /// the same corpus_id, `installed_indexes` returns exactly one
+    /// entry per corpus_id, and the kept entry is the one whose
+    /// directory basename equals the corpus_id (the canonical that
+    /// `open_index_for_corpus` will dereference). Without this,
+    /// retrieval can return chunks from a partition while the reading
+    /// desk re-resolves their `(corpus_id, chunk_id)` against the
+    /// canonical, silently misrouting citations to unrelated content.
+    #[tokio::test]
+    async fn installed_indexes_dedupes_corpus_id_collisions_preferring_canonical() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+
+        // Real canonical wikipedia index.
+        let canonical = idx_dir.join("wikipedia");
+        CorpusIndex::create(&canonical, "wikipedia", "Wikipedia", "test-model", 4, true, "MIT")
+            .await
+            .unwrap();
+        std::fs::write(
+            canonical.join("_corpus_meta.json"),
+            r#"{"corpus_id":"wikipedia","corpus_name":"Wikipedia","embedding_model":"test-model",
+                 "embedding_dimensions":4,"mesh_sharing":true,"license":"MIT",
+                 "created_at":0,"last_updated":0,"schema_version":3,"is_shard":false,
+                 "ingestion_in_progress":false,"indexes_built":true,
+                 "vector_index_built":true,"content_fts_built":true,
+                 "title_fts_built":true,"committed_iter_pos":0,
+                 "committed_shard_set":[]}"#,
+        )
+        .unwrap();
+
+        // Lingering per-peer partition advertising the same corpus_id.
+        let partition = idx_dir.join("wikipedia-partition-peerX");
+        CorpusIndex::create(&partition, "wikipedia", "Wikipedia", "test-model", 4, true, "MIT")
+            .await
+            .unwrap();
+        std::fs::write(
+            partition.join("_corpus_meta.json"),
+            r#"{"corpus_id":"wikipedia","corpus_name":"Wikipedia","embedding_model":"test-model",
+                 "embedding_dimensions":4,"mesh_sharing":true,"license":"MIT",
+                 "created_at":0,"last_updated":0,"schema_version":3,"is_shard":false,
+                 "ingestion_in_progress":false,"indexes_built":true,
+                 "vector_index_built":true,"content_fts_built":true,
+                 "title_fts_built":true,"committed_iter_pos":0,
+                 "committed_shard_set":[]}"#,
+        )
+        .unwrap();
+
+        let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());
+        let listed = engine.installed_indexes().await.unwrap();
+
+        let by_id: Vec<&str> = listed.iter().map(|i| i.corpus_id.as_str()).collect();
+        assert_eq!(by_id, vec!["wikipedia"], "expected exactly one wikipedia entry after dedup, got: {by_id:?}");
+        let kept = listed.iter().find(|i| i.corpus_id == "wikipedia").unwrap();
+        assert_eq!(
+            kept.path,
+            canonical,
+            "dedup must prefer the canonical-named dir (matches open_index_for_corpus)"
+        );
     }
 
     #[test]

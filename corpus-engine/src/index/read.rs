@@ -249,4 +249,69 @@ impl CorpusIndex {
         }
         Ok(out)
     }
+
+    /// Folder-ingest v1 §3.7: small read used by the per-document
+    /// inspector. Returns `(chunk_count, first_chunk_preview)` for
+    /// a given `source_doc_id`. The preview is truncated to
+    /// `preview_chars` so the wire payload stays small even on
+    /// large corpora — the UI paginates if the user wants more.
+    ///
+    /// Returns `Ok((0, None))` when no chunks exist for `doc_id`,
+    /// which is the right answer for a freshly-registered watched
+    /// folder (the first sweep hasn't ingested the file yet) and
+    /// for files that failed extraction.
+    pub async fn doc_summary(
+        &self,
+        doc_id: &str,
+        preview_chars: usize,
+    ) -> Result<(usize, Option<String>)> {
+        let safe_id = doc_id.replace('\'', "''");
+        let filter = format!("source_doc_id = '{safe_id}'");
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .only_if(filter)
+            .select(Select::Columns(vec![
+                "id".to_string(),
+                "content".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("doc_summary query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("doc_summary collect: {e}")))?;
+        let mut count = 0usize;
+        let mut min_id: Option<i64> = None;
+        let mut min_content: Option<String> = None;
+        for batch in &batches {
+            count += batch.num_rows();
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>());
+            let contents = batch
+                .column_by_name("content")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let (Some(ids), Some(contents)) = (ids, contents) else {
+                continue;
+            };
+            for i in 0..batch.num_rows() {
+                let id = ids.value(i);
+                if min_id.map_or(true, |m| id < m) {
+                    min_id = Some(id);
+                    let content = if contents.is_null(i) {
+                        String::new()
+                    } else {
+                        contents.value(i).to_string()
+                    };
+                    let preview: String = content
+                        .chars()
+                        .take(preview_chars.max(1))
+                        .collect();
+                    min_content = Some(preview);
+                }
+            }
+        }
+        Ok((count, min_content))
+    }
 }

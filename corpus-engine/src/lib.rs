@@ -80,6 +80,7 @@ pub use enrichment::{
     Domain, EnrichmentProgress, FieldModelEngine, FieldModelStats, FieldSkeleton,
     reprocess_skeleton_failures,
 };
+pub use enrichment::atlas::atlas_teardown;
 pub use extractors::html_sections::MissReport as SectionMissReport;
 pub use extractors::wikipedia_types::{WikiLink, WikipediaChunkMetadata};
 pub use error::{Error, Result};
