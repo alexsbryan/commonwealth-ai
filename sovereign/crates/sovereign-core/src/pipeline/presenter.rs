@@ -40,13 +40,19 @@ pub struct PresentedOutput {
     pub register: SkillRegister,
 }
 
-/// Hard cap on Presenter output. iter7 — 240 tokens (~840 chars).
-/// iter5 at 200 truncated otherwise-clean responses mid-sentence
-/// (scenario 01 emitted "I can't confirm whether Jordan" then was
-/// chopped). 240 leaves room for a 2-paragraph witness reply
-/// without licensing rambling. Caller's `max_tokens` is honoured
-/// when smaller.
-pub const PRESENTER_MAX_TOKENS_CAP: u32 = 240;
+/// Hard cap on Presenter output. iter10 — 1024 tokens (~3500
+/// chars). Earlier caps (200/240/320) were bench-fitted to the
+/// inner-work scenarios where witness replies are naturally short
+/// (50-200 tokens). But real synthesis questions —
+/// "is free will compatible with determinism?", "what's the
+/// difference between objectivism and subjectivism?" — need
+/// 800-1500 tokens to land well. The Presenter is the user-facing
+/// streaming surface; it needs headroom. The bench may show length
+/// blowouts on inner-work scenarios as a result, but those are a
+/// SIGNAL that the Drafter's "be brief" discipline isn't holding,
+/// not a runtime bug. Caller's `max_tokens` is honoured when
+/// smaller.
+pub const PRESENTER_MAX_TOKENS_CAP: u32 = 1024;
 
 /// Deterministic post-processing on Presenter output. iter4 — all
 /// the mechanical artifact stripping that iter1–iter3 had been
@@ -143,6 +149,17 @@ pub fn strip_presenter_artifacts(raw: &str) -> String {
     // Stage 4: leading preamble sentences. Strip up to the first
     // double-newline (or single newline) when the FIRST sentence is
     // recognisable as a preamble.
+    //
+    // iter9: extended with analytical preambles ("Let me analyze",
+    // "Looking at the", "Key considerations", "Key observations",
+    // "First, let me", "To respond properly"). iter8 surfaced
+    // these as the model's "thinking out loud" pattern when
+    // `enable_thinking=false` is set — the model emits a Markdown-
+    // style analysis without `<think>` tags. Treating them as
+    // preambles strips the analysis and surfaces the actual reply
+    // (when one follows) or returns empty (when the model never
+    // got past the analysis, which is itself a useful failure
+    // signal).
     const PREAMBLE_PREFIXES: &[&str] = &[
         "Sure, here's ",
         "Sure, here is ",
@@ -158,8 +175,16 @@ pub fn strip_presenter_artifacts(raw: &str) -> String {
         "I'll clean ",
         "Let me clean ",
         "Let me polish ",
-        "Let me analyze the draft",
+        "Let me analyze",
         "Let me work through",
+        "Let me think",
+        "Looking at the",
+        "Looking at this",
+        "First, let me",
+        "To respond properly",
+        "Key considerations",
+        "Key observations",
+        "Key insight",
     ];
     let next = {
         let trimmed = text.trim_start();
@@ -490,6 +515,33 @@ mod tests {
         assert_eq!(
             strip_presenter_artifacts(raw),
             "You said only one mention of Jordan exists."
+        );
+    }
+
+    #[test]
+    fn strip_presenter_artifacts_removes_analytical_preambles_iter9() {
+        // iter9 — model emits "Let me analyze this carefully:\n\n1. The user is..."
+        // as visible meta-narration when enable_thinking=false. Strip
+        // up to the first reply-shaped sentence after the analysis.
+        let raw = "Let me analyze this carefully:\n\n\
+                   The only mention of Jordan I have is from April 12.";
+        assert_eq!(
+            strip_presenter_artifacts(raw),
+            "The only mention of Jordan I have is from April 12."
+        );
+
+        let raw2 = "Looking at the user's question and the drafter notes carefully:\n\n\
+                    I don't have any record of that.";
+        assert_eq!(
+            strip_presenter_artifacts(raw2),
+            "I don't have any record of that."
+        );
+
+        let raw3 = "Key considerations for this reply:\n\n\
+                    From what I can see, you only mentioned this once.";
+        assert_eq!(
+            strip_presenter_artifacts(raw3),
+            "From what I can see, you only mentioned this once."
         );
     }
 

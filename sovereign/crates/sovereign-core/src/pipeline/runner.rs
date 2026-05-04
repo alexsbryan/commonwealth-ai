@@ -49,20 +49,37 @@ use crate::types::{
 /// on.
 pub const DEFAULT_TEAM_PIPELINE_MAX_TOKENS: u32 = 2048;
 
+/// iter9 — hard cap on the Drafter's max_tokens when the register
+/// is Relational. Witness replies live in the 50-200 token range;
+/// the Drafter on a passthrough package (no Curator skeleton) had
+/// been given the orchestrator's full 2048 budget and wrote
+/// 800-1000 token analytical drafts that the Presenter then
+/// mirrored as visible meta-narration. 240 tokens (~840 chars)
+/// fits a 2-paragraph witness reply with comfortable headroom.
+pub const DRAFTER_RELATIONAL_MAX_TOKENS: usize = 240;
+
 /// Environment variable that gates the team-pipeline path. Set to
 /// `"1"` (or `"true"` / `"on"`) to enable; anything else (including
 /// unset) leaves the legacy chat path in place.
 ///
-/// Per the plan, the long-term posture is **default-on with a
-/// kill-switch** (`SOVEREIGN_TEAM_PIPELINE=0` reverts). Until T2
-/// bench validates the rollout, we ship default-off so a smoke-test
-/// regression doesn't break every chat. Flipping the default is a
-/// one-constant change in [`is_team_pipeline_enabled`].
+/// **STATUS (2026-05-03): EXPERIMENTALLY REJECTED — DEFAULT-OFF PERMANENT.**
+/// The plan originally targeted "default-on with a kill-switch." The full
+/// A/B (legacy vs team iter10, same daemon, same models) found the team
+/// pipeline regresses 5/12 on the base voice bench, regresses 1/8 on the
+/// hard set, and is 2–4× slower on the synthesis case the architecture
+/// was designed to fix — which legacy now handles cleanly without
+/// tangling. **Do NOT flip the default.** See
+/// `sovereign/bench/voice/baseline/team-pipeline-findings.md` for the
+/// full A/B numbers, the 10-iteration Presenter tuning log, and the
+/// "what stays / what goes" inventory before deleting any pipeline code.
 pub const TEAM_PIPELINE_ENV_VAR: &str = "SOVEREIGN_TEAM_PIPELINE";
 
 /// Read [`TEAM_PIPELINE_ENV_VAR`] per-turn (NOT cached at boot, per
 /// plan §4.2) so flipping the env var on a running daemon is
-/// immediate.
+/// immediate. Returns `false` by default — the team pipeline was
+/// experimentally rejected on 2026-05-03; see the doc comment on
+/// [`TEAM_PIPELINE_ENV_VAR`] and
+/// `sovereign/bench/voice/baseline/team-pipeline-findings.md`.
 pub fn is_team_pipeline_enabled() -> bool {
     match std::env::var(TEAM_PIPELINE_ENV_VAR) {
         Ok(v) => matches!(
@@ -517,14 +534,34 @@ fn build_drafter_request(
     );
 
     let mut req = CompletionRequest::new(&prompt).with_speed(Speed::Slow);
-    // iter4: the Drafter no longer carries the witness contract.
-    // iter3 put it on the Drafter; iter4 moves it to the Presenter
-    // which is now a generation pass over the Drafter's substantive
-    // output. The Drafter's job is "produce substance from the
-    // package"; the Presenter's job is "speak that substance to the
-    // user in the witness voice." Single source of truth: the
-    // contract lives on the Presenter, see `present_request`.
-    let _ = register; // intent above; register threaded for future use.
+    // iter8: the Drafter carries the witness contract again
+    // (RELATIONAL_BASE_SYSTEM_PROMPT for Relational) so it
+    // produces witness-voice prose, not retrieval-analytical
+    // prose. iter7 showed the Presenter mirrored the Drafter's
+    // analytical structure ("1. The user asks... 2. The records
+    // show...") regardless of how the Presenter prompt was framed.
+    // With the witness contract on the Drafter, the Presenter
+    // sees clean witness prose and its few-shot polish has clean
+    // input to work on. For Factual we leave the Drafter's general
+    // prompt — Factual responses don't need the witness frame.
+    if matches!(register, SkillRegister::Relational) {
+        req.system_message =
+            Some(crate::runtime::epistemic_contract_for(register).to_string());
+    }
+
+    // iter9: clamp Drafter max_tokens for Relational. iter8 gave
+    // the Drafter the orchestrator's full 2048 cap on passthrough
+    // packages (no Curator skeleton); the Drafter then wrote
+    // 800-1000 token analytical drafts that the Presenter mirrored
+    // as visible meta-narration ("Let me analyze this carefully: 1.
+    // The user is sharing..."). Witness replies live in the
+    // 50-200 token range; forcing the Drafter to fit there cuts
+    // the analytical bloat at the source. Factual untouched —
+    // factual answers can be longer.
+    if matches!(register, SkillRegister::Relational) {
+        let cap = req.max_tokens.unwrap_or(usize::MAX).min(DRAFTER_RELATIONAL_MAX_TOKENS);
+        req.max_tokens = Some(cap);
+    }
     // Cap to the SUM of per-section target_tokens (the Curator's
     // composed budget), not the ceiling. The ceiling is the caller's
     // hard maximum (typically the orchestrator's full 2048); the

@@ -1,6 +1,18 @@
 //! Situated team-pipeline (Router → Retriever → Curator → Drafter
 //! → Presenter).
 //!
+//! **STATUS (2026-05-03): EXPERIMENTALLY REJECTED.** This module is
+//! kept as research scaffolding behind the `SOVEREIGN_TEAM_PIPELINE`
+//! kill-switch (default-off). The full A/B against the legacy
+//! single-pass chat path showed a 5/12 regression on the base voice
+//! bench, a 1/8 regression on the hard set, and 2–4× latency on the
+//! synthesis case the architecture was designed to fix. The original
+//! motivating failure (synthesis tangling) is no longer reproducible
+//! on legacy. **Read `sovereign/bench/voice/baseline/team-pipeline-findings.md`
+//! before reviving, expanding, or deleting any code in this module.**
+//!
+//! ---
+//!
 //! The Fast slot does heavy assembly (route, retrieve, curate,
 //! plan a per-section budget) so the Primary slot draws inside a
 //! tight, structured task. A Presenter pass after the draft shapes
@@ -9,7 +21,10 @@
 //! is that bounded expression on a curated package is the task
 //! open-weight Primary models are actually good at, and that
 //! blowouts become rare planner-quality regression signals rather
-//! than runtime hiccups the user has to absorb.
+//! than runtime hiccups the user has to absorb. The findings doc
+//! linked above explains why the experiment didn't pan out in
+//! practice and which ingredients (Curator section budgets,
+//! `strip_presenter_artifacts`) earned their keep regardless.
 //!
 //! This crate-internal module ships in phases:
 //!
@@ -22,12 +37,8 @@
 //! - **Phase 3** (next): `Presenter` stage. Voice-shaping pass over
 //!   the Drafter's raw output, with an async voice judge.
 //! - **Phase 4** (last): runtime wire-up + kill-switch
-//!   (`SOVEREIGN_TEAM_PIPELINE=0` reverts to the legacy chat path).
-//!
-//! Until Phase 4, nothing here is invoked from `Runtime`. The seams
-//! are in place so each stage can be tuned in isolation against the
-//! curator-unit / presenter-delta `voice_eval` modes the plan
-//! describes (§Iteration loops).
+//!   (`SOVEREIGN_TEAM_PIPELINE=0` reverts to the legacy chat path —
+//!   per the rejection above, this is the default).
 
 pub mod curator;
 pub mod judge;
