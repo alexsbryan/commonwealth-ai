@@ -7,6 +7,7 @@ mod insight_commands;
 mod local_corpus_commands;
 mod watched_folder_commands;
 mod mesh_commands;
+mod recipe_author_commands;
 mod recipe_commands;
 mod routing_events;
 mod smoketest;
@@ -304,6 +305,11 @@ fn main() -> ExitCode {
             recipe_commands::corpus_import_recipe,
             recipe_commands::corpus_get_recipe_parameters,
             recipe_commands::corpus_install_with_parameters,
+            recipe_author_commands::recipe_author_list_projects,
+            recipe_author_commands::recipe_author_new_project,
+            recipe_author_commands::recipe_author_dashboard_state,
+            recipe_author_commands::recipe_author_restore_checkpoint,
+            recipe_author_commands::recipe_author_set_workspace_active,
             mesh_commands::mesh_create,
             mesh_commands::mesh_join,
             mesh_commands::mesh_preview_join_link,

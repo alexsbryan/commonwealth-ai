@@ -78,6 +78,11 @@
       embedding_model: null,
       chat_model: null,
       mesh_enabled: false,
+      // M3 — recipe-author workspace gate. Default `true` in the
+      // shim so existing specs that exercise the workspace don't
+      // need to flip it; specs that want the OFF state set it via
+      // setHandler before navigating.
+      enable_recipe_authoring: true,
     }),
     diagnose_corpus: () => "ok",
     create_conversation: () => ({
@@ -191,6 +196,63 @@
     redirect_turn: () => ({
       message_id: `asst-${Math.random().toString(36).slice(2, 10)}`,
     }),
+    // ── Recipe Author Workspace (M2) ──────────────────────────
+    // Default stubs let the workspace mount + render in e2e mode
+    // without a real daemon. The state is held on
+    // `__sovereign_test__.recipeAuthor` so specs can manipulate it
+    // via `setHandler` overrides without rewriting all the defaults.
+    recipe_author_set_workspace_active: ({ active }) => {
+      window.__sovereign_test__.recipeAuthor.active = !!active;
+      return !!active;
+    },
+    recipe_author_list_projects: () => {
+      return window.__sovereign_test__.recipeAuthor.projects.slice();
+    },
+    recipe_author_new_project: ({ req }) => {
+      const id = `feat-${Math.random().toString(36).slice(2, 10)}`;
+      const now = Math.floor(Date.now() / 1000);
+      const entry = {
+        feature_id: id,
+        title: req.title,
+        charter_excerpt: (req.charter_md ?? "").slice(0, 200),
+        recipe_id: null,
+        current_sample_size: null,
+        last_test_status: null,
+        created_at: now,
+        updated_at: now,
+      };
+      window.__sovereign_test__.recipeAuthor.projects.unshift(entry);
+      window.__sovereign_test__.recipeAuthor.dashboards[id] = {
+        feature_id: id,
+        title: entry.title,
+        charter_md: req.charter_md ?? "",
+        recipe_id: null,
+        recipe_path: null,
+        recipe_toml: null,
+        current_sample_size: null,
+        last_test_status: null,
+        last_test_at: null,
+        created_at: now,
+        updated_at: now,
+        decisions: [],
+        research_findings: [],
+        capability_requests: [],
+        recipe_issues: [],
+        deferred_questions: [],
+        checkpoints: [],
+        validation: { ok: false, errors: [], no_recipe: true },
+      };
+      return entry;
+    },
+    recipe_author_dashboard_state: ({ featureId }) => {
+      const d = window.__sovereign_test__.recipeAuthor.dashboards[featureId];
+      if (!d) throw new Error(`unknown feature_id ${featureId}`);
+      return d;
+    },
+    recipe_author_restore_checkpoint: ({ req }) => ({
+      new_checkpoint_id: `restore-${Math.random().toString(36).slice(2, 8)}`,
+      source_checkpoint_id: req.checkpoint_id,
+    }),
     // Internal Tauri event-plugin commands (intercepted, never reach a backend).
     "plugin:event|listen": ({ event, handler }) => {
       const eventId = nextEventId++;
@@ -279,6 +341,15 @@
     setHandler(cmd, fn) {
       if (fn === null || fn === undefined) overrides.delete(cmd);
       else overrides.set(cmd, fn);
+    },
+    /** In-memory recipe-author state. Specs that exercise the
+     *  workspace can pre-seed `projects` / `dashboards` before
+     *  navigating, or read `active` to assert the skill toggle ran.
+     *  Defaults are an empty workspace. */
+    recipeAuthor: {
+      active: false,
+      projects: [],
+      dashboards: {},
     },
     /** Emit a Tauri event to all live listeners. Returns delivered count. */
     emit,

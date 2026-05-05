@@ -92,6 +92,10 @@ export interface DesktopConfig {
   /** Persisted disk-usage ceiling for corpus storage. `null` = auto
    *  (compute at boot from free disk; persisted on first launch). */
   storage_budget_bytes: number | null;
+  /** M3 — opt-in for the Recipe Author workspace. When false (the
+   *  default), the workspace switcher is hidden in the chat sidebar.
+   *  Surfaced in the SetupWizard advanced section and in Settings. */
+  enable_recipe_authoring: boolean;
 }
 
 export interface SearchBackendConfig {
@@ -109,6 +113,10 @@ export interface SetupConfig {
   search_provider?: string;
   search_api_key?: string;
   selected_tier?: string;
+  /** M3 — opt-in for the Recipe Author workspace. `undefined` from a
+   *  wizard step that doesn't surface the toggle preserves the
+   *  existing config value rather than silently defaulting to false. */
+  enable_recipe_authoring?: boolean;
 }
 
 /** Snapshot of the desktop's bootstrap probe. Emitted by the
@@ -1497,4 +1505,89 @@ export interface PhaseFailure {
   /// header. Populated by the CLI's `--json` view; absent only if
   /// an older CLI ships without the view wrapper.
   remediation?: string;
+}
+
+
+// ─── Recipe Author Workspace (M2) ────────────────────────────
+
+/** Sidebar entry for one recipe-author project. */
+export interface RecipeProjectListEntry {
+  feature_id: string;
+  title: string;
+  /** First ~200 chars of the charter — sidebar tooltip. */
+  charter_excerpt: string;
+  recipe_id?: string | null;
+  current_sample_size?: number | null;
+  last_test_status?: string | null;
+  /** Unix seconds. */
+  created_at: number;
+  updated_at: number;
+}
+
+/** One feature-scoped note (decision / research / capability /
+ *  issue / deferred-question) with payload pre-parsed for the UI. */
+export interface DashboardNoteEntry {
+  id: string;
+  kind: string;
+  content: string;
+  /** RFC 3339. */
+  created_at: string;
+  decision_kind?: string | null;
+  attribution?: string | null;
+  /** Parsed payload_json — null for legacy rows. */
+  payload?: unknown;
+}
+
+/** On-disk metadata for one project checkpoint. */
+export interface RecipeCheckpointMeta {
+  checkpoint_id: string;
+  name: string;
+  trigger: string;
+  summary?: string;
+  /** Set when this checkpoint was created via restore. Carries the
+   *  source checkpoint id. */
+  restored_from?: string | null;
+  /** RFC 3339 timestamp. */
+  created_at: string;
+}
+
+/** Result of running the on-disk recipe.toml through the engine's
+ *  parser. The dashboard's `RecipeValidationCard` renders this so a
+ *  partner sees "your recipe doesn't parse — here's why" without
+ *  having to read agent tool output. `errors` is human-readable and
+ *  already carries the engine's translate_parse_error rewrites. */
+export interface RecipeValidationReport {
+  ok: boolean;
+  errors: string[];
+  /** True when the project hasn't drafted a recipe yet — distinguishes
+   *  "nothing to validate" from "we tried and it failed". */
+  no_recipe: boolean;
+}
+
+/** Single coarse read for the workspace dashboard. */
+export interface RecipeAuthorDashboardState {
+  feature_id: string;
+  title: string;
+  charter_md: string;
+  recipe_id?: string | null;
+  recipe_path?: string | null;
+  recipe_toml?: string | null;
+  current_sample_size?: number | null;
+  last_test_status?: string | null;
+  last_test_at?: string | null;
+  /** Unix seconds. */
+  created_at: number;
+  updated_at: number;
+  decisions: DashboardNoteEntry[];
+  research_findings: DashboardNoteEntry[];
+  capability_requests: DashboardNoteEntry[];
+  recipe_issues: DashboardNoteEntry[];
+  deferred_questions: DashboardNoteEntry[];
+  checkpoints: RecipeCheckpointMeta[];
+  validation: RecipeValidationReport;
+}
+
+export interface RestoreCheckpointOutcome {
+  new_checkpoint_id: string;
+  source_checkpoint_id: string;
 }

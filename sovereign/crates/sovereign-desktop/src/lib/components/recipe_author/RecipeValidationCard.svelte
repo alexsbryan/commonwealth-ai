@@ -1,0 +1,144 @@
+<script lang="ts">
+  // Glassbox card: did the on-disk recipe.toml parse? If not, why?
+  //
+  // The engine's `Recipe::from_toml` runs every dashboard poll. On
+  // failure, the error text comes from `translate_parse_error`,
+  // which has already rewritten generic toml-parse messages into
+  // partner-readable guidance ("Recipe is missing the [acquire]
+  // section. Add it with type = ..."). We render those verbatim.
+  //
+  // Three visual states:
+  // - ok=true                   → green "valid" pill
+  // - ok=false + no_recipe=true → muted "no recipe drafted yet"
+  // - ok=false + errors.length  → red "needs attention" + each error
+  //                                in its own block, copy-friendly
+  import Card from "./Card.svelte";
+  import type { RecipeValidationReport } from "../../types";
+
+  let { validation }: { validation: RecipeValidationReport } = $props();
+
+  let copiedIdx: number | null = $state(null);
+
+  async function copy(text: string, idx: number) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedIdx = idx;
+      setTimeout(() => {
+        if (copiedIdx === idx) copiedIdx = null;
+      }, 1200);
+    } catch {
+      // Clipboard may be unavailable in some browsers / sandboxes;
+      // silently degrade rather than throw across the workspace.
+    }
+  }
+</script>
+
+<Card title="Recipe validation">
+  {#if validation.no_recipe}
+    <p class="muted">No recipe drafted yet.</p>
+  {:else if validation.ok}
+    <div class="row">
+      <span class="pill ok">valid</span>
+      <span class="muted">Engine parsed the recipe.toml without errors.</span>
+    </div>
+  {:else}
+    <div class="row">
+      <span class="pill fail">needs attention</span>
+      <span class="muted">
+        {validation.errors.length === 1
+          ? "1 issue blocking the recipe"
+          : `${validation.errors.length} issues blocking the recipe`}
+      </span>
+    </div>
+    <ul class="errors">
+      {#each validation.errors as err, i}
+        <li>
+          <pre class="err-text">{err}</pre>
+          <button
+            type="button"
+            class="copy"
+            onclick={() => copy(err, i)}
+            data-testid="recipe-validation-copy"
+          >
+            {copiedIdx === i ? "copied" : "copy"}
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+</Card>
+
+<style>
+  .muted {
+    margin: 0;
+    color: var(--muted, #8a8c93);
+    font-style: italic;
+  }
+  .row {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    font-size: 0.82rem;
+  }
+  .pill {
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .pill.ok {
+    background: rgba(120, 220, 160, 0.18);
+    color: #b9f0c9;
+  }
+  .pill.fail {
+    background: rgba(240, 130, 130, 0.18);
+    color: #f6c0c0;
+  }
+  .errors {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .errors li {
+    position: relative;
+    background: rgba(240, 130, 130, 0.06);
+    border: 1px solid rgba(240, 130, 130, 0.25);
+    border-radius: 4px;
+    padding: 0.5rem 0.6rem;
+  }
+  .err-text {
+    margin: 0;
+    font-family:
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      monospace;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    color: var(--fg, #e6e6e8);
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding-right: 3rem;
+  }
+  .copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: transparent;
+    border: 1px solid var(--border, #2a2c33);
+    color: var(--muted, #8a8c93);
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .copy:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--fg, #e6e6e8);
+  }
+</style>

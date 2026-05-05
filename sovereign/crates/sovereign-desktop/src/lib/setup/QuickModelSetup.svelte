@@ -28,6 +28,11 @@
   let enableWebSearch = $state(true);
   let enableShell = $state(true);
   let enableKnowledge = $state(true);
+  // Advanced toggles default-off — power-user surfaces, not the
+  // first-launch happy path. Hidden behind a disclosure so the
+  // wizard stays readable for the typical user.
+  let showAdvanced = $state(false);
+  let enableRecipeAuthoring = $state(false);
   let localError = $state("");
 
   function handleSubmit() {
@@ -51,6 +56,7 @@
       model_path: modelPath,
       active_skills: [],
       enabled_tools: tools,
+      enable_recipe_authoring: enableRecipeAuthoring,
     });
   }
 </script>
@@ -94,6 +100,37 @@
     </label>
   </div>
 
+  <div class="advanced">
+    <button
+      type="button"
+      class="advanced-toggle"
+      onclick={() => (showAdvanced = !showAdvanced)}
+      aria-expanded={showAdvanced}
+      data-testid="setup-advanced-toggle"
+    >
+      {showAdvanced ? "▾" : "▸"} Advanced
+    </button>
+    {#if showAdvanced}
+      <div class="advanced-body">
+        <label class="toggle-row">
+          <input
+            type="checkbox"
+            bind:checked={enableRecipeAuthoring}
+            data-testid="setup-recipe-author-toggle"
+          />
+          <span>
+            <span class="toggle-title">Recipe Author workspace</span>
+            <span class="toggle-sub">
+              A guided workspace for building Sovereign corpus recipes
+              by conversation. Surfaces a "Recipe Author →" entry in
+              the chat sidebar; can be flipped any time in Settings.
+            </span>
+          </span>
+        </label>
+      </div>
+    {/if}
+  </div>
+
   {#if localError}
     <p class="error">{localError}</p>
   {:else if errorMessage}
@@ -129,6 +166,29 @@
     font-size: 0.92rem;
     line-height: 1.55;
     max-width: 58ch;
+  }
+
+  .advanced {
+    margin-top: 14px;
+    margin-bottom: 18px;
+  }
+  .advanced-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    cursor: pointer;
+    padding: 0;
+  }
+  .advanced-toggle:hover {
+    color: var(--accent-light);
+  }
+  .advanced-body {
+    margin-top: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 8px);
+    padding: 12px 14px;
   }
 
   .toggles {

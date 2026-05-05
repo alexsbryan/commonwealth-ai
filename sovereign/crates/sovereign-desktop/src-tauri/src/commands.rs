@@ -96,6 +96,12 @@ pub struct SetupConfig {
     pub search_api_key: Option<String>,
     #[serde(default)]
     pub selected_tier: Option<String>,
+    /// M3 — opt-in for the Recipe Author workspace. `None` from a
+    /// wizard step that doesn't surface the toggle preserves the
+    /// existing `DesktopConfig.enable_recipe_authoring` value rather
+    /// than silently defaulting to `false`.
+    #[serde(default)]
+    pub enable_recipe_authoring: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -1319,6 +1325,9 @@ pub async fn complete_setup(
     }
     config.search_backend.api_key = setup.search_api_key;
     config.selected_tier = setup.selected_tier.clone();
+    if let Some(flag) = setup.enable_recipe_authoring {
+        config.enable_recipe_authoring = flag;
+    }
     config.setup_complete = true;
 
     config.save()?;

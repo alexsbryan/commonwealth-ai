@@ -14,9 +14,19 @@
     selectedConversationId: string | null;
     onSelect: (id: string | null) => void;
     onToggleSettings: () => void;
+    /** When provided, renders an "Open Recipe Author" entry above
+     *  the conversation list. Wired in App.svelte under the M2 dev
+     *  flag (`recipeAuthorEnabled`); M3 will gate it on the real
+     *  setup-config flag. */
+    onOpenRecipeAuthor?: () => void;
   }
 
-  let { selectedConversationId, onSelect, onToggleSettings }: Props = $props();
+  let {
+    selectedConversationId,
+    onSelect,
+    onToggleSettings,
+    onOpenRecipeAuthor,
+  }: Props = $props();
 
   let conversations: ConversationEntry[] = $state([]);
 
@@ -157,6 +167,16 @@
       </svg>
       New conversation
     </button>
+    {#if onOpenRecipeAuthor}
+      <button
+        class="recipe-author-btn"
+        onclick={onOpenRecipeAuthor}
+        title="Open the Recipe Author workspace"
+        data-testid="open-recipe-author"
+      >
+        ◇ Recipe Author →
+      </button>
+    {/if}
   </div>
 
   <div class="list-items">
@@ -288,6 +308,29 @@
   }
 
   .new-btn:hover {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .recipe-author-btn {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px dashed var(--border-mid);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .recipe-author-btn:hover {
     background: var(--accent-dim);
     border-color: var(--accent);
     color: var(--accent);

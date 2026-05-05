@@ -669,6 +669,33 @@
                 </span>
               </label>
             </div>
+
+            <p class="section-label">Recipe Author</p>
+            <p class="slot-desc" style="margin-bottom: 12px;">
+              A guided workspace for building Sovereign corpus recipes
+              by conversation — drafting the TOML, probing the source
+              API, surfacing decisions and validation errors on a
+              dashboard. Off by default; flip on to expose the
+              workspace switcher in the chat sidebar.
+            </p>
+            <div class="param-card" style="margin-bottom: 24px;">
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  bind:checked={config.enable_recipe_authoring}
+                  onchange={markDirty}
+                  data-testid="settings-recipe-author-toggle"
+                />
+                <span class="toggle-label">
+                  <span class="toggle-title">Enable Recipe Author workspace</span>
+                  <span class="toggle-sub">
+                    Adds a "Recipe Author →" entry to the chat sidebar.
+                    Closing Settings refreshes the sidebar — no
+                    desktop restart required.
+                  </span>
+                </span>
+              </label>
+            </div>
           {/if}
 
           <!-- ── Storage budget ──────────────────────────────── -->

@@ -1063,3 +1063,63 @@ export async function isFirstRun(): Promise<boolean> {
 export async function markFirstRunComplete(): Promise<void> {
   return invoke("mark_first_run_complete");
 }
+
+// ─── Recipe Author Workspace (M2) ────────────────────────────
+
+import type {
+  RecipeProjectListEntry,
+  RecipeAuthorDashboardState,
+  RestoreCheckpointOutcome,
+} from "./types";
+
+/** List recipe-author projects, newest first. Each entry carries a
+ *  charter excerpt for the sidebar tooltip + summary fields driving
+ *  the row state. */
+export async function recipeAuthorListProjects(): Promise<
+  RecipeProjectListEntry[]
+> {
+  return invoke("recipe_author_list_projects");
+}
+
+/** Create a new recipe-author project. Allocates a v4 UUID
+ *  feature_id, lays down the FeatureRow + sidecar dir, returns the
+ *  freshly-created list entry. */
+export async function recipeAuthorNewProject(
+  title: string,
+  charterMd: string,
+): Promise<RecipeProjectListEntry> {
+  return invoke("recipe_author_new_project", {
+    req: { title, charter_md: charterMd },
+  });
+}
+
+/** The single read powering the workspace dashboard. Coarse on
+ *  purpose — the cards are pure presentation over slices of this
+ *  struct. Polled at 2s while the workspace is open. */
+export async function recipeAuthorDashboardState(
+  featureId: string,
+): Promise<RecipeAuthorDashboardState> {
+  return invoke("recipe_author_dashboard_state", { featureId });
+}
+
+/** Restore a project to a prior checkpoint snapshot. Lays down a new
+ *  restore-anchor checkpoint and (when the project has a recipe id)
+ *  overwrites the live recipe.toml from the snapshot. */
+export async function recipeAuthorRestoreCheckpoint(
+  featureId: string,
+  checkpointId: string,
+): Promise<RestoreCheckpointOutcome> {
+  return invoke("recipe_author_restore_checkpoint", {
+    req: { feature_id: featureId, checkpoint_id: checkpointId },
+  });
+}
+
+/** Toggle the recipe-author skill in `active_skills`. Called on
+ *  workspace mount (active=true) so primary_skill_id_for_conversation
+ *  picks the recipe-author system prompt for new conversations
+ *  started while the workspace is open. */
+export async function recipeAuthorSetWorkspaceActive(
+  active: boolean,
+): Promise<boolean> {
+  return invoke("recipe_author_set_workspace_active", { active });
+}

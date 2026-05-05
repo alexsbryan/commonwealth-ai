@@ -3,6 +3,7 @@
   import { initEventListeners } from "./lib/events";
   import {
     detectBootstrap,
+    getConfig,
     isFirstRun,
     isSetupComplete,
   } from "./lib/api";
@@ -16,6 +17,7 @@
   } from "./lib/types";
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
+  import RecipeAuthorWorkspace from "./lib/components/recipe_author/RecipeAuthorWorkspace.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
   import InsightsPanel from "./lib/components/InsightsPanel.svelte";
   import ReadingSurface from "./lib/components/reading/ReadingSurface.svelte";
@@ -26,9 +28,32 @@
   import FirstCorpusFlow from "./lib/components/onboarding/FirstCorpusFlow.svelte";
   import ToastHost from "./lib/components/ToastHost.svelte";
 
-  type AppView = "loading" | "setup" | "first_corpus" | "chat" | "settings";
+  type AppView =
+    | "loading"
+    | "setup"
+    | "first_corpus"
+    | "chat"
+    | "settings"
+    | "recipe_author";
 
   let view: AppView = $state("loading");
+
+  // M3 — Recipe Author workspace gate. Read from `DesktopConfig`
+  // on bootstrap and cached in $state so it stays reactive when the
+  // user flips the toggle in Settings (where save_config rebuilds
+  // the runtime). Default `false`: a fresh install hides the
+  // workspace until the user opts in.
+  let recipeAuthorEnabled = $state(false);
+
+  async function refreshRecipeAuthorFlag() {
+    try {
+      const cfg = await getConfig();
+      recipeAuthorEnabled = !!cfg.enable_recipe_authoring;
+    } catch {
+      // Config unreadable (early bootstrap) — leave the flag off.
+      recipeAuthorEnabled = false;
+    }
+  }
   let backendReady = $state(false);
   let backendError: string | null = $state(null);
   let selectedConversationId: string | null = $state(null);
@@ -116,6 +141,10 @@
       onBackendReady: () => {
         backendReady = true;
         backendError = null;
+        // The recipe-author flag lives in DesktopConfig — read it as
+        // soon as the backend is ready so the sidebar entry appears
+        // (or stays hidden) on the very first paint of the chat view.
+        void refreshRecipeAuthorFlag();
         if (view === "loading") {
           // First-corpus probe runs async; default to chat and
           // upgrade if the probe says onboarding is warranted.
@@ -271,6 +300,8 @@
     onComplete={handleFirstCorpusComplete}
     onDropToChat={handleDropToChat}
   />
+{:else if view === "recipe_author"}
+  <RecipeAuthorWorkspace onExit={() => (view = "chat")} />
 {:else}
   <div
     class="app-layout"
@@ -283,12 +314,21 @@
         {selectedConversationId}
         onSelect={handleConversationSelect}
         onToggleSettings={handleToggleSettings}
+        onOpenRecipeAuthor={recipeAuthorEnabled
+          ? () => (view = "recipe_author")
+          : undefined}
       />
     </aside>
     <main class="main-content">
       {#if showSettings}
         <SettingsPanel
-          onClose={() => (showSettings = false)}
+          onClose={() => {
+            showSettings = false;
+            // The user may have flipped enable_recipe_authoring in
+            // Settings — re-read so the sidebar entry appears /
+            // disappears without a desktop restart.
+            void refreshRecipeAuthorFlag();
+          }}
           onOpenChatWithSeed={handleSettingsStarterPick}
           onDropToChat={handleDropToChat}
         />

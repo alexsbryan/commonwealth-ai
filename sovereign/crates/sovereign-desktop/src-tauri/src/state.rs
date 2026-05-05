@@ -5,7 +5,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use corpus_engine::CorpusEngine;
+use corpus_engine::{CorpusEngine, FeatureStore, NoteStore};
 
 use sovereign_core::health_monitor::{HealthMonitor, MonitorConfig};
 use sovereign_core::insight::{InsightService, InsightSinkRegistry};
@@ -69,6 +69,18 @@ pub struct DesktopConfig {
     pub setup_complete: bool,
     #[serde(default)]
     pub selected_tier: Option<String>,
+    /// Opt-in for the Recipe Author workspace (M2/M3). When `false`
+    /// (the default for new and existing configs), the workspace
+    /// switcher is hidden and `recipe_author_*` Tauri commands are
+    /// only callable via direct invocation. When `true`, the
+    /// ConversationList sidebar exposes a "Recipe Author →" entry
+    /// that swaps `App.svelte`'s view to the workspace.
+    ///
+    /// Surfaced both in the SetupWizard (advanced section) and in
+    /// Settings, so a user who skipped it during setup can flip it on
+    /// later without restarting through the wizard.
+    #[serde(default)]
+    pub enable_recipe_authoring: bool,
 
     // ── Advanced Tuning ─────────────────────────────────────────
     /// Generation temperature (0.0–1.0). Higher = more creative, lower = more focused.
@@ -293,6 +305,7 @@ impl Default for DesktopConfig {
             node_name: String::new(),
             knowledge_view_enabled: default_knowledge_view_enabled(),
             storage_budget_bytes: None,
+            enable_recipe_authoring: false,
         }
     }
 }
@@ -466,6 +479,14 @@ pub struct AppState {
     /// daemon's wire-up completes in Local mode.
     pub watched_subsystem:
         RwLock<Option<sovereign_mesh::watched_folder_setup::WatchedSubsystem>>,
+    /// Recipe-author project layer needs both notes (decision log,
+    /// research findings, capability requests, checkpoints) and
+    /// features (RecipeAuthoring-state FeatureRow per project).
+    /// Both opened during bootstrap from `<data_dir>/notes.db` and
+    /// `<data_dir>/features.db`; `None` until bootstrap completes
+    /// or when those DBs failed to open.
+    pub notes: RwLock<Option<Arc<NoteStore>>>,
+    pub features: RwLock<Option<Arc<FeatureStore>>>,
 }
 
 impl AppState {
@@ -533,6 +554,8 @@ impl AppState {
             insight_service: RwLock::new(None),
             local_corpus: RwLock::new(None),
             watched_subsystem: RwLock::new(None),
+            notes: RwLock::new(None),
+            features: RwLock::new(None),
         }
     }
 }
@@ -735,6 +758,41 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             s
         }
     };
+
+    // Open the recipe-author backing stores in BOTH bootstrap modes.
+    // The CLI live-trial uses these too; desktop must mirror them so
+    // the recipe-author workspace works whether or not the user has a
+    // separately-running CLI daemon. Failures here are warned-and-
+    // skipped — the rest of the desktop should not 503 because notes
+    // or features couldn't open.
+    if state.notes.read().await.is_none() {
+        let notes_path = config.data_dir.join("notes.db");
+        match NoteStore::open(&notes_path) {
+            Ok(s) => {
+                *state.notes.write().await = Some(Arc::new(s));
+                tracing::info!(path = %notes_path.display(), "recipe-author: NoteStore opened");
+            }
+            Err(e) => tracing::warn!(
+                path = %notes_path.display(),
+                error = %e,
+                "recipe-author: NoteStore open failed; recipe-author workspace will be disabled",
+            ),
+        }
+    }
+    if state.features.read().await.is_none() {
+        let features_path = config.data_dir.join("features.db");
+        match FeatureStore::open(&features_path) {
+            Ok(s) => {
+                *state.features.write().await = Some(Arc::new(s));
+                tracing::info!(path = %features_path.display(), "recipe-author: FeatureStore opened");
+            }
+            Err(e) => tracing::warn!(
+                path = %features_path.display(),
+                error = %e,
+                "recipe-author: FeatureStore open failed; recipe-author workspace will be disabled",
+            ),
+        }
+    }
 
     // Load skills. Two sources:
     //
