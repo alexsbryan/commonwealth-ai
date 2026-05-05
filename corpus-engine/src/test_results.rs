@@ -318,11 +318,29 @@ impl TestResultStore {
         Ok(count > 0)
     }
 
+    /// Delete rows where `finished_at IS NULL` — these are the orphans
+    /// left when a watcher process was killed mid-run (SIGKILL, panic,
+    /// machine sleep with the daemon's tokio task aborted before
+    /// `finish_run` could fire). Without this, [`run_in_progress`]
+    /// returns `true` indefinitely against a stale row, and
+    /// `test_status` reports `running` forever.
+    ///
+    /// Idempotent. Returns the number of orphans purged. Safe to call
+    /// at watcher startup before any new runs begin.
+    pub async fn clear_orphan_runs(&self) -> Result<usize> {
+        let conn = self.conn.lock().await;
+        let n = conn
+            .execute("DELETE FROM test_runs WHERE finished_at IS NULL", [])
+            .map_err(sqlite_err)?;
+        Ok(n)
+    }
+
     /// Returns true if the most recent run is still in progress.
     ///
     /// Checks only the latest row — abandoned runs (task aborted before
     /// `finish_run` was called) leave orphaned NULL rows that would otherwise
-    /// make this return true forever.
+    /// make this return true forever. Watcher startup should call
+    /// [`clear_orphan_runs`] to wipe such rows from a previous process.
     pub async fn run_in_progress(&self) -> Result<bool> {
         let conn = self.conn.lock().await;
         // None → no runs at all; Some(None) → latest run not finished; Some(Some(_)) → finished.
@@ -479,5 +497,31 @@ mod tests {
 
         store.clear_stale().await.unwrap();
         assert!(!store.has_stale_files().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn clear_orphan_runs_purges_unfinished_rows() {
+        let store = make_store().await;
+        let r1 = store.begin_run().await.unwrap();
+        store.finish_run(r1, 0).await.unwrap();
+        let _r2 = store.begin_run().await.unwrap();
+
+        // Latest row is unfinished — run_in_progress would report
+        // true forever without cleanup.
+        assert!(store.run_in_progress().await.unwrap());
+
+        let purged = store.clear_orphan_runs().await.unwrap();
+        assert_eq!(purged, 1);
+
+        assert!(!store.run_in_progress().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn clear_orphan_runs_is_idempotent_and_safe_when_empty() {
+        let store = make_store().await;
+        assert_eq!(store.clear_orphan_runs().await.unwrap(), 0);
+        let r1 = store.begin_run().await.unwrap();
+        store.finish_run(r1, 0).await.unwrap();
+        assert_eq!(store.clear_orphan_runs().await.unwrap(), 0);
     }
 }
