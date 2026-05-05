@@ -29,26 +29,37 @@
 pub mod capability_request;
 pub mod checkpoint;
 pub mod decision_log;
+pub mod json_to_toml;
+pub mod probe_url;
 pub mod project;
 pub mod read;
+pub mod recipe_schema;
 pub mod registry_browse;
+pub mod research_finding;
 pub mod situated_context;
 pub mod test_tool;
 pub mod validate;
 pub mod write;
+pub mod write_structured;
 
 pub use capability_request::CapabilityRequestTool;
 pub use checkpoint::CheckpointTool;
 pub use decision_log::DecisionLogTool;
+pub use probe_url::{detect_pagination_hint, PaginationHint, ProbeUrlTool};
+pub use research_finding::{
+    FindingConfidence, FindingScope, ResearchFindingPayload, ResearchFindingTool,
+};
 pub use project::{
     maintainer_inbox_dir, projects_root_dir, CheckpointMeta, DecisionFrontier,
     ProjectSummary, RecipeProject,
 };
 pub use read::RecipeReadTool;
+pub use recipe_schema::recipe_json_schema;
 pub use registry_browse::RegistryBrowseTool;
 pub use test_tool::RecipeTestTool;
 pub use validate::RecipeValidateTool;
 pub use write::RecipeWriteTool;
+pub use write_structured::RecipeWriteStructuredTool;
 
 use std::path::PathBuf;
 

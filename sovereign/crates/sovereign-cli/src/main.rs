@@ -834,6 +834,7 @@ async fn main() {
     // once instead of granting blanket FileWrite.
     tools.register(Box::new(sovereign_tools::RecipeReadTool::new()));
     tools.register(Box::new(sovereign_tools::RecipeWriteTool::new()));
+    tools.register(Box::new(sovereign_tools::RecipeWriteStructuredTool::new()));
     tools.register(Box::new(sovereign_tools::RecipeValidateTool::new()));
     tools.register(Box::new(sovereign_tools::RecipeTestTool::new()));
     tools.register(Box::new(sovereign_tools::RegistryBrowseTool));

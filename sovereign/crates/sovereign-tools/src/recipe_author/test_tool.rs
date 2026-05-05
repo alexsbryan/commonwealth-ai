@@ -218,7 +218,16 @@ impl Tool for RecipeTestTool {
             })
             .collect::<Vec<_>>();
 
-        Ok(StepOutput::Json(serde_json::json!({
+        // A "passed schema validation but landed zero docs" outcome
+        // is the agent's most common silent-failure mode: the recipe
+        // is well-formed but points at the wrong host / endpoint /
+        // pagination shape, and the agent often retries with another
+        // recipe variant instead of confirming the URL works first.
+        // Surface a single-line nudge so the agent reaches for
+        // probe_url before another draft cycle.
+        let nudge = compose_nudge(&report);
+
+        let mut payload = serde_json::json!({
             "passed": passed,
             "path": resolved.display().to_string(),
             "validation": {
@@ -227,8 +236,68 @@ impl Tool for RecipeTestTool {
             },
             "extraction": extraction,
             "section_misses": section_misses,
-        })))
+        });
+        if let Some(n) = nudge {
+            payload["nudge"] = serde_json::Value::String(n);
+        }
+        Ok(StepOutput::Json(payload))
     }
+}
+
+/// Compose a single-line "you might want to try X first" nudge
+/// based on the test report's failure shape. Returns `None` when
+/// the test passed cleanly — we don't want noise on green runs.
+fn compose_nudge(report: &corpus_engine::TestReport) -> Option<String> {
+    if report.passed() {
+        return None;
+    }
+    // Acquisition / HTTP failures land in `validation.errors` with a
+    // characteristic prefix. The fix path is almost always to confirm
+    // the URL with `probe_url` (one GET, gets you status / pagination
+    // hint / body excerpt) before drafting again.
+    let acq_failed = report
+        .validation
+        .errors
+        .iter()
+        .any(|e| {
+            let l = e.to_ascii_lowercase();
+            l.contains("acquisition failed")
+                || l.contains("http error")
+                || l.contains("dns")
+                || l.contains("could not resolve host")
+                || l.contains("connection refused")
+                || l.contains("certificate")
+        });
+    if acq_failed {
+        return Some(
+            "Acquisition failed before any docs were fetched. \
+             Don't redraft yet — call `probe_url` against the \
+             request URL (with the same headers/params) to confirm \
+             the host, version, and auth work. If probe_url errors \
+             too, the host is wrong; try a sibling host or ask the \
+             partner for the canonical API docs URL."
+                .into(),
+        );
+    }
+    // Acquisition succeeded but extraction yielded nothing — usually
+    // a wrong `document_path` JSONPath or `content_field` name.
+    let zero_extracted = matches!(
+        report.extraction.as_ref(),
+        Some(e) if e.records_attempted > 0 && e.records_succeeded == 0
+    );
+    if zero_extracted {
+        return Some(
+            "Acquisition fetched pages but extraction yielded zero \
+             documents. The recipe URL works; the issue is in \
+             `[extract]`. Call `probe_url` against the request URL \
+             and read the `top_level_keys` / `body_excerpt` to \
+             confirm `document_path` resolves to an array of doc \
+             objects and `content_field` is a real field name on \
+             each."
+                .into(),
+        );
+    }
+    None
 }
 
 fn build_stub_engine() -> CorpusEngine {

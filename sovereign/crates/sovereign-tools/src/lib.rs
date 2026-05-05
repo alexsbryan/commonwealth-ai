@@ -68,8 +68,9 @@ pub use document_operation::DocumentOperationTool;
 pub use wikipedia_fetch::WikipediaFetchTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
 pub use recipe_author::{
-    CapabilityRequestTool, CheckpointTool, DecisionLogTool, RecipeProject,
-    RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteTool,
-    RegistryBrowseTool,
+    CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool,
+    RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
+    RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool,
+    ResearchFindingTool,
 };
 pub use sovereign_core;

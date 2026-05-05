@@ -1,51 +1,167 @@
 //! `sovereign recipe-agent live-trial` — scripted, daemon-driven trial.
 //!
-//! Drives the recipe-author agent loop end-to-end against a real LLM
-//! (the running sovereign daemon's `/v1/chat/completions`). Reads
-//! partner messages from a script file, prepends the situated-context
-//! envelope to each turn, calls `Runtime::handle_message`, and at
-//! the end validates the generated recipe + runs an initial fetch.
+//! Drives the recipe-author agent loop end-to-end against the running
+//! sovereign daemon's `/v1/chat/completions`. Reads partner messages
+//! from a script file, runs an OpenAI-style tool-call loop with the
+//! recipe-author skill's system prompt and tool definitions, then
+//! validates the generated recipe + runs an initial fetch.
 //!
-//! Intended uses:
+//! ## Production integration
 //!
-//! - Regression test: pin Marcus's first-session script and assert
-//!   the resulting recipe passes validation + extracts ≥ 1 doc.
+//! The harness deliberately reuses every production-side primitive
+//! that the M2 desktop workspace will eventually drive:
+//!
+//! - **Daemon endpoint** — `POST /v1/chat/completions` is the same
+//!   surface the desktop chat will call.
+//! - **Skill manifest** — reads `recipe-author/skill.toml` directly
+//!   (parses `[prompts] synthesis = "..."`); no copy of the prompt.
+//! - **Tool implementations** — the same `RecipeReadTool /
+//!   RecipeWriteTool / RecipeValidateTool / RecipeTestTool /
+//!   RegistryBrowseTool / DecisionLogTool / CheckpointTool /
+//!   CapabilityRequestTool / WebFetchTool / WebSearchTool` registered
+//!   in `sovereign-cli/src/main.rs`.
+//! - **Persistence** — `NoteStore` + `FeatureStore` at the user's
+//!   real `~/.sovereign/{notes,features}.db`. Capability requests
+//!   land in the user's real maintainer inbox.
+//! - **Project model** — `RecipeProject` provisioned via
+//!   `provision_recipe_project`; sidecar dir at
+//!   `~/.sovereign/recipe-projects/<feature_id>/`.
+//! - **Situated-context renderer** — same
+//!   `recipe_author::situated_context::render` the M2 desktop will
+//!   call.
+//!
+//! The one place the harness diverges from the production runtime:
+//! it does NOT go through `sovereign_core::runtime::Runtime`.
+//! Runtime classifies every turn into an `Intent` (SimpleQuery /
+//! DeepQuery / KnowledgeQuery / MetalingualQuery / …) and routes to
+//! a synthesis path tuned for chat-style retrieval. The recipe-
+//! author agent is a different shape — a long-lived tool-using loop
+//! — and Runtime's classifier doesn't pass tool schemas through to
+//! that synthesis path, so the model never sees the tools it should
+//! be calling. Going direct to the daemon's OpenAI-compatible
+//! surface gives the model the tool list explicitly. M2's desktop
+//! workspace will face the same routing question; the resolution
+//! (skill-aware bypass in Runtime, or a parallel agent-loop
+//! entrypoint) lands there. This harness exercises the right shape
+//! today so the M2 work has a working ground-truth comparison.
+//!
+//! ## Intended uses
+//!
+//! - Regression test: pin a partner-message script and assert the
+//!   resulting recipe passes validation + extracts ≥ 1 doc.
 //! - Prompt iteration: tweak the recipe-author skill manifest and
-//!   re-run the same script to see how behaviour changes.
+//!   re-run the same script.
 //! - Smoke test before a real partner session: verify the daemon +
 //!   tools + skill + situated-context renderer all wire together.
-//!
-//! Minimal Runtime build — no atlas, no wikipedia graph, no mesh
-//! knowledge. Just the chat REPL essentials plus the 10 recipe-
-//! author + web-research tools.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use corpus_engine::{FeatureStore, NoteScope, NoteStore, ScopeFilter};
-use sovereign_core::error::Result;
-use sovereign_core::planner::LlmPlanner;
-use sovereign_core::router::LlmRouter;
-use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{
-    ApprovalChannel, InferenceProvider, StateStore, Tool,
-};
-use sovereign_core::types::{
-    ActionPreview, CompletionRequest, CompletionResponse, InferenceConfig,
-    ProviderCapabilities, Speed, Step, StepOutput,
-};
-use sovereign_core::SkillRegistry;
+use sovereign_core::traits::{InferenceProvider, Tool};
+use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_core::ToolRegistry;
 use sovereign_inference::remote::RemoteApiProvider;
-use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::recipe_author::{
     situated_context, CapabilityRequestTool, CheckpointTool, DecisionLogTool,
-    RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
-    RecipeWriteTool, RegistryBrowseTool,
+    ProbeUrlTool, RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
+    RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool,
+    ResearchFindingTool,
 };
+
+// ─── OpenAI-style wire types ────────────────────────────────────
+//
+// Defined locally rather than pulled in via `commonwealth-api` so
+// `sovereign-cli` doesn't acquire a heavy commonwealth dependency.
+// Field set tracks what the daemon's `/v1/chat/completions` route
+// requires + emits today; missing fields land via `serde(default)`
+// so this stays forward-compat with daemon-side additions.
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ChatMessage {
+    role: String,
+    content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    tool_calls: Option<Vec<ToolCall>>,
+}
+
+impl ChatMessage {
+    fn new(role: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            role: role.into(),
+            content: content.into(),
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ToolDefinition {
+    #[serde(rename = "type")]
+    kind: String,
+    function: ToolFunction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ToolFunction {
+    name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    parameters: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: String,
+    function: FunctionCall,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FunctionCall {
+    name: String,
+    arguments: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ChatCompletionRequest {
+    model: Option<String>,
+    messages: Vec<ChatMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<ToolDefinition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_choice: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ChatCompletionResponse {
+    #[serde(default)]
+    choices: Vec<ChatChoice>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ChatChoice {
+    message: ChatMessage,
+    /// Daemon-supplied stop reason. Read for diagnostics — kept on
+    /// the type so the deserializer doesn't reject an upstream that
+    /// promotes it from optional to required.
+    #[serde(default)]
+    #[allow(dead_code)]
+    finish_reason: Option<String>,
+}
 
 // ─── Args ────────────────────────────────────────────────────────
 
@@ -59,7 +175,21 @@ struct Args {
     skills_dir: PathBuf,
     sample_size: u64,
     chat_model: Option<String>,
-    embed_model: Option<String>,
+    /// Install-time parameter values forwarded to the post-trial
+    /// `recipe_test` call. Repeatable: `--param api_token=<TOKEN>
+    /// --param court=ca9`. Lets the partner inject auth secrets and
+    /// other runtime values without baking them into the recipe.
+    params: Vec<(String, String)>,
+    /// Maximum tool-call iterations per partner turn before bailing.
+    /// 12 leaves plenty of headroom for browse → read → write → validate
+    /// → write → validate → test → write → validate → test → checkpoint.
+    max_tool_iters: usize,
+    /// Drop assistant `<think>...</think>` blocks before logging /
+    /// re-sending. Reasoning models like Qwen3 emit these and they
+    /// crowd the trial log; the daemon strips them on the next turn
+    /// anyway, but stripping client-side keeps the printed transcript
+    /// readable.
+    strip_think: bool,
 }
 
 fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
@@ -71,7 +201,9 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
     let mut skills_dir: Option<PathBuf> = None;
     let mut sample_size: u64 = 50;
     let mut chat_model: Option<String> = None;
-    let mut embed_model: Option<String> = None;
+    let mut max_tool_iters: usize = 20;
+    let mut strip_think = true;
+    let mut params: Vec<(String, String)> = Vec::new();
 
     let mut iter = argv.iter();
     while let Some(a) = iter.next() {
@@ -93,17 +225,28 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
                     .ok_or_else(|| "--sample-size requires an integer".to_string())?;
             }
             "--chat-model" => chat_model = iter.next().cloned(),
-            "--embed-model" => embed_model = iter.next().cloned(),
+            "--max-tool-iters" => {
+                max_tool_iters = iter
+                    .next()
+                    .and_then(|v| v.parse().ok())
+                    .ok_or_else(|| "--max-tool-iters requires an integer".to_string())?;
+            }
+            "--keep-think" => strip_think = false,
+            "--param" => {
+                let kv = iter
+                    .next()
+                    .ok_or_else(|| "--param requires KEY=VALUE".to_string())?;
+                let (k, v) = kv.split_once('=').ok_or_else(|| {
+                    format!("--param expects KEY=VALUE, got `{kv}`")
+                })?;
+                params.push((k.to_string(), v.to_string()));
+            }
             other => return Err(format!("unknown flag `{other}`")),
         }
     }
     let charter_path = charter.ok_or("missing --charter <FILE>")?;
     let script_path = script.ok_or("missing --script <FILE>")?;
     let skills_dir = skills_dir.unwrap_or_else(|| {
-        // Default: look for `<repo-root>/sovereign/skills/` relative
-        // to the binary's working dir, falling back to
-        // `~/.sovereign/skills/`. The trial harness is meant to be
-        // run from the workspace root during development.
         let cwd = std::env::current_dir().unwrap_or_default();
         let candidate = cwd.join("sovereign").join("skills");
         if candidate.exists() {
@@ -127,24 +270,32 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
         skills_dir,
         sample_size,
         chat_model,
-        embed_model,
+        max_tool_iters,
+        strip_think,
+        params,
     })
 }
 
 fn print_help() {
     eprintln!(
         "Usage:\n  sovereign recipe-agent live-trial \\\n    \
-         --charter <FILE> \\\n    \
-         --script <FILE> \\\n    \
+         --charter <FILE> --script <FILE> \\\n    \
          [--feature-id <ID>] [--title <T>] \\\n    \
          [--daemon <URL>] [--skills-dir <D>] \\\n    \
-         [--sample-size <N>] \\\n    \
-         [--chat-model <ID>] [--embed-model <ID>]\n\n\
+         [--sample-size <N>] [--chat-model <ID>] \\\n    \
+         [--max-tool-iters <N>] [--keep-think] \\\n    \
+         [--param KEY=VALUE ...]\n\n\
          Drive the recipe-author agent loop end-to-end against the \
          daemon's\n  /v1/chat/completions, then validate the generated \
          recipe and run\n  an initial fetch with --sample-size docs (default 50).\n\n\
          Script file format: one partner message per blank-line-separated \
-         block.\n  Lines starting with # are comments and skipped.\n"
+         block.\n  Lines starting with # are comments and skipped.\n\n\
+         --param: install-time parameter values forwarded to the\n  \
+         post-trial recipe_test call. Use this for auth tokens and\n  \
+         other secrets. The recipe should declare them in its\n  \
+         [parameters] section and reference them in [acquire].headers\n  \
+         via `{{name}}` placeholders. Example:\n  \
+         --param api_token=<COURTLISTENER_TOKEN>\n"
     );
 }
 
@@ -175,105 +326,7 @@ fn parse_script(text: &str) -> Vec<String> {
     blocks
 }
 
-// ─── Approval ────────────────────────────────────────────────────
-
-/// Same auto-approve channel the chat REPL uses, repeated here so
-/// this module doesn't depend on `chat_cmd::bootstrap` private items.
-struct AutoApprove;
-
-#[async_trait]
-impl ApprovalChannel for AutoApprove {
-    async fn request_approval(
-        &self,
-        _step: &Step,
-        _preview: &ActionPreview,
-    ) -> Result<bool> {
-        Ok(true)
-    }
-    async fn ask_user(&self, _question: &str) -> Result<String> {
-        Ok(String::new())
-    }
-    fn emit_progress(&self, _step: &Step, _output: &StepOutput) {}
-}
-
-// ─── Inference provider — daemon over HTTP ───────────────────────
-
-/// Mirror of `chat_cmd::bootstrap::SplitInferenceProvider`. Repeated
-/// here rather than re-exported because `bootstrap`'s build_session
-/// pulls in a lot of chat-specific scaffolding (atlas, wiki graph,
-/// mesh knowledge) the trial harness doesn't want.
-struct SplitInferenceProvider {
-    chat: Arc<RemoteApiProvider>,
-    embed: Arc<RemoteApiProvider>,
-    chat_model_id: String,
-}
-
-impl SplitInferenceProvider {
-    fn new(
-        endpoint_v1: &str,
-        chat_model_id: String,
-        embed_model_id: String,
-        context_size: u32,
-    ) -> Self {
-        let chat = Arc::new(RemoteApiProvider::new(
-            endpoint_v1,
-            None,
-            &chat_model_id,
-            context_size,
-        ));
-        let embed = Arc::new(RemoteApiProvider::new(
-            endpoint_v1,
-            None,
-            &embed_model_id,
-            context_size,
-        ));
-        Self {
-            chat,
-            embed,
-            chat_model_id,
-        }
-    }
-}
-
-#[async_trait]
-impl InferenceProvider for SplitInferenceProvider {
-    async fn complete(
-        &self,
-        request: &CompletionRequest,
-    ) -> Result<CompletionResponse> {
-        self.chat.complete(request).await
-    }
-
-    async fn complete_stream(
-        &self,
-        request: &CompletionRequest,
-    ) -> Result<
-        std::pin::Pin<
-            Box<dyn futures::Stream<Item = Result<String>> + Send>,
-        >,
-    > {
-        self.chat.complete_stream(request).await
-    }
-
-    async fn complete_batch(
-        &self,
-        requests: &[CompletionRequest],
-    ) -> Result<Vec<CompletionResponse>> {
-        self.chat.complete_batch(requests).await
-    }
-
-    async fn embed(&self, text: &str) -> Result<Vec<f32>> {
-        self.embed.embed(text).await
-    }
-
-    fn model_id_for(&self, _speed: Speed) -> String {
-        self.chat_model_id.clone()
-    }
-
-    fn capabilities(&self) -> ProviderCapabilities {
-        self.chat.capabilities()
-    }
-}
+// ─── Daemon probe + model resolve ────────────────────────────────
 
 async fn probe_daemon(base: &str) -> std::result::Result<(), String> {
     let url = format!("{base}/v1/models");
@@ -295,36 +348,24 @@ async fn probe_daemon(base: &str) -> std::result::Result<(), String> {
     }
 }
 
-async fn resolve_models(
+async fn resolve_chat_model(
     base: &str,
-    args: &Args,
-) -> std::result::Result<(String, String), String> {
-    if let (Some(c), Some(e)) = (&args.chat_model, &args.embed_model) {
-        return Ok((c.clone(), e.clone()));
+    explicit: Option<&str>,
+) -> std::result::Result<String, String> {
+    if let Some(c) = explicit {
+        return Ok(c.to_string());
     }
-    // Prefer the daemon's setup config (the file the daemon actually
-    // loaded). Falls back to /v1/models probe.
     if let Ok(cfg) = sovereign_core::setup_config::SetupConfig::load() {
-        let chat_stem = cfg
+        if let Some(stem) = cfg
             .models
             .primary
             .file_stem()
             .and_then(|s| s.to_str())
-            .map(String::from);
-        let embed_stem = cfg
-            .models
-            .embed
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(String::from);
-        if let (Some(c), Some(e)) = (chat_stem, embed_stem) {
-            return Ok((
-                args.chat_model.clone().unwrap_or(c),
-                args.embed_model.clone().unwrap_or(e),
-            ));
+            .map(String::from)
+        {
+            return Ok(stem);
         }
     }
-    // Final fallback: probe /v1/models.
     let url = format!("{base}/v1/models");
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -342,29 +383,713 @@ async fn resolve_models(
         .get("data")
         .and_then(|v| v.as_array())
         .ok_or_else(|| "/v1/models has no .data array".to_string())?;
-    // Heuristics: pick the first non-embed-shaped id for chat, the
-    // first embed-shaped id for embed.
-    let chat = args
-        .chat_model
-        .clone()
-        .or_else(|| {
-            data.iter()
-                .filter_map(|m| m.get("id").and_then(|v| v.as_str()))
-                .find(|id| !id.to_lowercase().contains("embed"))
-                .map(String::from)
+    data.iter()
+        .filter_map(|m| m.get("id").and_then(|v| v.as_str()))
+        .find(|id| !id.to_lowercase().contains("embed"))
+        .map(String::from)
+        .ok_or_else(|| "no chat model on /v1/models".to_string())
+}
+
+// ─── Skill manifest loader (system prompt) ──────────────────────
+
+fn load_recipe_author_system_prompt(skills_dir: &PathBuf) -> std::result::Result<String, String> {
+    let path = skills_dir.join("recipe-author").join("skill.toml");
+    if !path.exists() {
+        return Err(format!(
+            "recipe-author skill not found at {}",
+            path.display()
+        ));
+    }
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    let toml: toml::Value = toml::from_str(&raw).map_err(|e| {
+        format!("parse {}: {e}", path.display())
+    })?;
+    let prompt = toml
+        .get("prompts")
+        .and_then(|p| p.get("synthesis"))
+        .and_then(|s| s.as_str())
+        .ok_or_else(|| {
+            format!(
+                "{} is missing [prompts] synthesis = \"...\"",
+                path.display()
+            )
+        })?;
+    Ok(prompt.trim().to_string())
+}
+
+// ─── Tool descriptors → OpenAI tool defs ─────────────────────────
+
+fn registry_to_tool_defs(registry: &ToolRegistry) -> Vec<ToolDefinition> {
+    registry
+        .descriptors()
+        .into_iter()
+        .map(|d| ToolDefinition {
+            kind: "function".to_string(),
+            function: ToolFunction {
+                name: d.id,
+                description: Some(d.description),
+                parameters: d.parameters,
+            },
         })
-        .ok_or_else(|| "no chat model on /v1/models".to_string())?;
-    let embed = args
-        .embed_model
-        .clone()
-        .or_else(|| {
-            data.iter()
-                .filter_map(|m| m.get("id").and_then(|v| v.as_str()))
-                .find(|id| id.to_lowercase().contains("embed"))
-                .map(String::from)
+        .collect()
+}
+
+// ─── Tool execution ─────────────────────────────────────────────
+
+async fn execute_tool_call(
+    registry: &ToolRegistry,
+    call: &ToolCall,
+    ctx: &ToolContext,
+    project: &RecipeProject,
+) -> ChatMessage {
+    let args: serde_json::Value = match serde_json::from_str(&call.function.arguments) {
+        Ok(v) => v,
+        Err(e) => {
+            return ChatMessage {
+                role: "tool".into(),
+                content: serde_json::json!({
+                    "error": format!("malformed tool arguments JSON: {e}"),
+                    "raw": call.function.arguments,
+                })
+                .to_string(),
+                tool_call_id: Some(call.id.clone()),
+                tool_calls: None,
+            };
+        }
+    };
+    let tool = match registry.get(&call.function.name) {
+        Ok(t) => t,
+        Err(_) => {
+            return ChatMessage {
+                role: "tool".into(),
+                content: serde_json::json!({
+                    "error": format!(
+                        "unknown tool `{}`. The trial harness only \
+                         registers the recipe-author + web-research \
+                         tool set; pick one of those.",
+                        call.function.name
+                    )
+                })
+                .to_string(),
+                tool_call_id: Some(call.id.clone()),
+                tool_calls: None,
+            };
+        }
+    };
+    let outcome = tool.execute(&args, ctx).await;
+    let content = match &outcome {
+        Ok(StepOutput::Json(v)) => v.to_string(),
+        Ok(StepOutput::Text(t)) => serde_json::json!({ "text": t }).to_string(),
+        Ok(other) => serde_json::json!({
+            "non_json_output": format!("{other:?}")
         })
-        .ok_or_else(|| "no embed model on /v1/models".to_string())?;
-    Ok((chat, embed))
+        .to_string(),
+        Err(e) => serde_json::json!({ "error": e.to_string() }).to_string(),
+    };
+    // Surface a peek of every tool result alongside the existing
+    // "→ tool: foo({…})" line so it's possible to tell from the
+    // transcript whether the agent's narration matches what the
+    // tool actually returned. Cap at 400 chars to keep the log
+    // legible — tool results that matter to debugging (probe_url,
+    // recipe_test) fit comfortably under that.
+    let preview: String = content
+        .chars()
+        .take(400)
+        .collect();
+    eprintln!(
+        "    ← result: {}{}",
+        preview.replace('\n', " "),
+        if content.len() > 400 { "…" } else { "" }
+    );
+
+    // Side effect: when a recipe-writing tool succeeds, derive the
+    // recipe_id from the path argument and stamp it onto the project
+    // summary. The agent never has to remember to call a separate
+    // "register recipe" tool; the act of writing the TOML *is* the
+    // registration. This keeps `RecipeProject::read_summary().recipe_id`
+    // consistent with the on-disk recipe path the agent just produced.
+    //
+    // Both `recipe_write` (raw TOML) and `recipe_write_structured`
+    // (JSON-then-converted) are recipe-writing tools and both should
+    // trigger the summary update. `recipe_write_structured` also
+    // returns a non-error JSON when the validator finds problems
+    // (the file is on disk but malformed) — we still record the id
+    // because the agent's NEXT recipe_write call may overwrite a
+    // valid version.
+    let is_recipe_write = matches!(
+        call.function.name.as_str(),
+        "recipe_write" | "recipe_write_structured"
+    );
+    if is_recipe_write {
+        if let Ok(StepOutput::Json(_)) = &outcome {
+            if let Some(rid) = derive_recipe_id_from_args(&args) {
+                if let Ok(mut summary) = project.read_summary() {
+                    if summary.recipe_id.as_deref() != Some(rid.as_str()) {
+                        summary.recipe_id = Some(rid);
+                        summary.updated_at = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs() as i64)
+                            .unwrap_or(0);
+                        let _ = project.write_summary(&summary);
+                    }
+                }
+            }
+        }
+    }
+
+    ChatMessage {
+        role: "tool".into(),
+        content,
+        tool_call_id: Some(call.id.clone()),
+        tool_calls: None,
+    }
+}
+
+/// Derive a recipe id from a `recipe_write`'s `path` argument. The
+/// agent passes either a bare id (`"foo"`) or a relative path
+/// (`"foo/recipe.toml"` or `"foo"`). We strip any `recipe.toml`
+/// suffix and any leading `~/.sovereign/recipes/` prefix to land
+/// on the canonical id. Returns `None` for malformed paths so the
+/// summary update fails closed rather than corrupting state.
+fn derive_recipe_id_from_args(args: &serde_json::Value) -> Option<String> {
+    let raw = args.get("path").and_then(|v| v.as_str())?;
+    let trimmed = raw.trim_end_matches('/');
+    // Strip trailing `/recipe.toml` if present.
+    let without_file = trimmed
+        .strip_suffix("/recipe.toml")
+        .unwrap_or(trimmed)
+        .strip_suffix(".toml")
+        .map(|s| s.trim_end_matches('/'))
+        .unwrap_or(trimmed.strip_suffix("/recipe.toml").unwrap_or(trimmed));
+    // Strip any path prefix the agent might have included.
+    let id = without_file
+        .rsplit('/')
+        .find(|seg| !seg.is_empty())?
+        .to_string();
+    if id.is_empty() || id.contains("..") {
+        return None;
+    }
+    Some(id)
+}
+
+fn strip_think_block(content: &str) -> String {
+    let lower = content;
+    if let Some(start) = lower.find("<think>") {
+        if let Some(end_rel) = lower[start..].find("</think>") {
+            let end = start + end_rel + "</think>".len();
+            let mut s = String::with_capacity(content.len());
+            s.push_str(&content[..start]);
+            s.push_str(content[end..].trim_start());
+            return s.trim_start().to_string();
+        }
+    }
+    content.to_string()
+}
+
+/// Stable signature for a tool call used by the per-turn loop
+/// detector. We collapse whitespace + lowercase the arguments JSON
+/// so cosmetically-different repeats (different whitespace, case)
+/// still bucket together. This is *not* a content hash — semantic
+/// duplicates (same intent, slightly different wording) won't
+/// match. The intent is to catch the most common loop mode: the
+/// model retrying the literal same tool call after getting nothing
+/// useful from the prior result.
+fn call_signature(call: &ToolCall) -> String {
+    let args_compact: String = call
+        .function
+        .arguments
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    format!(
+        "{}::{}",
+        call.function.name,
+        args_compact.to_lowercase()
+    )
+}
+
+/// Build a tool-result message that breaks the model out of a
+/// per-tool repetition loop. Two trip wires:
+/// - `kind = "exact_args"` — same call hash repeated > threshold.
+/// - `kind = "same_tool"` — same tool name repeated regardless of
+///   args. Catches the "barely-permuted query" failure mode where
+///   the agent burns 7 web_searches changing one word each time.
+fn synthesize_loop_break_message(
+    call: &ToolCall,
+    count: usize,
+    kind: &'static str,
+) -> ChatMessage {
+    let hint = if call.function.name == "web_search" {
+        "You've called web_search many times this turn and it isn't \
+         converging — DDG is rate-limiting or the docs aren't where \
+         you're looking. Switch tactics NOW: \
+         (1) ASK THE PARTNER. If you don't know the canonical \
+         endpoint or the correct field names, the partner can \
+         answer in one sentence — surfacing the question is better \
+         than another search. \
+         (2) probe_url with a corrected guess (e.g. swap the \
+         rejected field names from a 4xx body for the API's \
+         convention) and READ the body. \
+         (3) draft with reasonable defaults via \
+         recipe_write_structured and let recipe_test surface the \
+         real errors. \
+         Do NOT call web_search again."
+            .to_string()
+    } else {
+        format!(
+            "You've called this tool {count} times this turn ({kind}). \
+             Switch tactics: ASK THE PARTNER (a clean question beats \
+             more retries), try a different tool, or proceed with the \
+             info you have. Repeated calls won't converge."
+        )
+    };
+    let body = serde_json::json!({
+        "loop_detected": true,
+        "tool": call.function.name,
+        "repeat_count": count,
+        "kind": kind,
+        "hint": hint,
+    });
+    ChatMessage {
+        role: "tool".into(),
+        content: body.to_string(),
+        tool_call_id: Some(call.id.clone()),
+        tool_calls: None,
+    }
+}
+
+/// Salvage `<tool_call>...</tool_call>` blocks the model emitted as
+/// plain text but the daemon's tool-call parser didn't pick up.
+///
+/// Why this is needed: the daemon (`sovereign-mesh::inference_adapter`)
+/// is supposed to extract every `<tool_call>...</tool_call>` JSON
+/// block from a model's raw output and surface it as a structured
+/// `tool_calls[]` field on the response, then strip the block from
+/// the visible content. In practice the parser sometimes misses a
+/// block — JSON-with-bad-escapes inside a `content`-as-a-string
+/// arguments field, leading whitespace differences, or the model
+/// using a slightly off tag shape. The block survives in the
+/// content and the `tool_calls` field comes back empty.
+///
+/// We treat this defensively: if the model emitted no structured
+/// `tool_calls` AND the content carries `<tool_call>{...}</tool_call>`
+/// blocks, parse them out and synthesise `ToolCall` entries. The
+/// content the agent ends up seeing in subsequent turns has the
+/// blocks removed (matching what the daemon would have produced if
+/// its parser had succeeded).
+///
+/// Returns `(content_with_blocks_stripped, recovered_calls)`. An
+/// empty recovered_calls vec means nothing was salvaged and the
+/// content is returned unchanged.
+fn salvage_text_tool_calls(content: &str) -> (String, Vec<ToolCall>) {
+    let mut recovered = Vec::new();
+    let mut clean = String::with_capacity(content.len());
+    let mut cursor = 0usize;
+    while let Some(start_rel) = content[cursor..].find("<tool_call>") {
+        let start = cursor + start_rel;
+        clean.push_str(&content[cursor..start]);
+        let inner_start = start + "<tool_call>".len();
+
+        // Find the inner-blob end. Two strategies:
+        //
+        // (a) An explicit `</tool_call>` closer between this
+        //     `<tool_call>` and the next `<tool_call>` (or EOF).
+        // (b) **No closer** — the model chained multiple
+        //     `<tool_call>` blocks without closing them. Use the
+        //     next `<tool_call>` as a soft delimiter so each block
+        //     gets parsed independently.
+        //
+        // The "no closer" path matters because real models
+        // (Hermes-style 35B builds in particular) frequently emit
+        // 2–3 chained tool calls in one assistant message and only
+        // close the last one — or close none at all.
+        let next_open_rel = content[inner_start..].find("<tool_call>");
+        let close_rel = content[inner_start..].find("</tool_call>");
+        let (inner_end, advance_past_close): (usize, usize) =
+            match (close_rel, next_open_rel) {
+                (Some(c), Some(n)) if c < n => {
+                    (inner_start + c, inner_start + c + "</tool_call>".len())
+                }
+                (Some(c), None) => {
+                    (inner_start + c, inner_start + c + "</tool_call>".len())
+                }
+                (_, Some(n)) => {
+                    // No closer before the next opener — stop the
+                    // blob at the next opener, leaving the next
+                    // iteration to consume it.
+                    (inner_start + n, inner_start + n)
+                }
+                (None, None) => {
+                    // No closer, no next opener — try to parse
+                    // everything to EOF. If parse fails the caller
+                    // sees the block in clean content.
+                    (content.len(), content.len())
+                }
+            };
+        let inner = content[inner_start..inner_end].trim();
+        if let Some(call) = parse_tool_call_blob(inner, recovered.len()) {
+            recovered.push(call);
+        } else {
+            // Could not parse — keep the block visible so the agent
+            // can see (and possibly correct) what it emitted.
+            clean.push_str(&content[start..advance_past_close.min(content.len())]);
+        }
+        cursor = advance_past_close;
+        if cursor >= content.len() {
+            break;
+        }
+    }
+    if cursor < content.len() {
+        clean.push_str(&content[cursor..]);
+    }
+    (clean.trim().to_string(), recovered)
+}
+
+/// Parse one inner `<tool_call>` payload into a structured
+/// [`ToolCall`]. The expected shape is `{"name": "<id>",
+/// "arguments": <object-or-string>}`. Tolerates `arguments` being
+/// either a JSON object (the model dropped the OpenAI-style string
+/// wrapping) or a JSON-string-of-an-object.
+///
+/// Resilient to four common model failure modes observed in real
+/// trials:
+///
+/// - **Truncated trailing braces.** Model stops sampling one `}`
+///   short of balanced.
+/// - **Trailing noise after the JSON object.** Model continues
+///   emitting unrelated fields (e.g. `,"feature_id":"..."`)
+///   *after* the proper close. We slice at the first balanced
+///   close and ignore the rest.
+/// - **Trailing JSON noise** (e.g. `</think>` markers). Parse
+///   forward from the first `{`.
+/// - **Multiple chained tool calls** in the same block. The
+///   outer salvage loop handles N distinct blocks; the per-blob
+///   parser just takes the first complete object.
+///
+/// Returns `None` for unrecoverable payloads — the caller leaves
+/// the block in content for the agent to see.
+fn parse_tool_call_blob(blob: &str, ordinal: usize) -> Option<ToolCall> {
+    let trimmed = blob.trim();
+    let first_brace = trimmed.find('{')?;
+    let candidate = &trimmed[first_brace..];
+
+    // Pull just the first balanced JSON object out of `candidate`.
+    // Handles "trailing noise" (extra fields after the proper close)
+    // and multi-blob blocks.
+    let balanced = first_balanced_object(candidate);
+    let to_parse = balanced.as_deref().unwrap_or(candidate);
+
+    // Three-tier recovery: literal parse → trailing-`}` recovery →
+    // unescaped-arguments rewrite. The third rung catches a Qwen-
+    // family failure mode where the model emits the tool's
+    // `arguments` field as raw JSON (`"arguments":{...}` -shaped
+    // payload but written as `"arguments":"{...}"` with the inner
+    // quotes left unescaped). Without recovery the outer object
+    // never parses and a perfectly intentional tool call is dropped
+    // — exactly what cost us the second `research_finding` call in
+    // the b5jlf1b0w trial.
+    let parsed: serde_json::Value = if let Ok(v) = serde_json::from_str(to_parse) {
+        v
+    } else if let Some(v) = parse_with_brace_recovery(to_parse) {
+        v
+    } else {
+        // Try the rewrite; fall through to brace-recovery on its
+        // output too, since the rewrite often leaves the outer wrapper
+        // one `}` short of balanced (the model truncated before
+        // closing the wrapper).
+        let rewritten = recover_unescaped_arguments_object(to_parse)?;
+        match serde_json::from_str(&rewritten) {
+            Ok(v) => v,
+            Err(_) => parse_with_brace_recovery(&rewritten)?,
+        }
+    };
+    let name = parsed.get("name").and_then(|n| n.as_str())?.to_string();
+    let arguments = match parsed.get("arguments") {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(other) => other.to_string(),
+        None => "{}".to_string(),
+    };
+    Some(ToolCall {
+        id: format!("salvaged-{ordinal}-{}", name),
+        kind: "function".to_string(),
+        function: FunctionCall { name, arguments },
+    })
+}
+
+/// Return the first balanced `{...}` JSON object in `s`, or
+/// `None` if `s` doesn't open with `{` or never balances. Walks
+/// the bytes tracking string boundaries (so braces inside JSON
+/// strings don't count) and the `\` escape state. Stops at the
+/// first `}` that makes depth = 0 and returns everything up to
+/// and including that close.
+///
+/// Cheap and self-contained: we don't need a full JSON parser to
+/// decide where a balanced close lands, and a real parser would
+/// reject the trailing noise that motivates this helper.
+fn first_balanced_object(s: &str) -> Option<String> {
+    let bytes = s.as_bytes();
+    if bytes.first() != Some(&b'{') {
+        return None;
+    }
+    let mut depth: i32 = 0;
+    let mut in_string = false;
+    let mut escape = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if escape {
+            escape = false;
+            continue;
+        }
+        if in_string {
+            match b {
+                b'\\' => escape = true,
+                b'"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(s[..=i].to_string());
+                }
+                if depth < 0 {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Recover the Qwen-style `"arguments":"{...}"` emission where the
+/// inner JSON was meant to be a stringified object but was written
+/// with unescaped inner quotes. Rewrite to `"arguments":{...}`
+/// (raw object) which the upstream `parse_tool_call_blob` handler
+/// already accepts via the `Some(other) => other.to_string()` arm.
+///
+/// The model often also drops the closing `"` and the wrapper's
+/// closing `}`. We strip the post-object `"` if present and let
+/// `parse_with_brace_recovery` add the missing wrapper close.
+///
+/// Returns `None` if the anchor isn't present or the balanced inner
+/// object can't be found — i.e. nothing to recover.
+fn recover_unescaped_arguments_object(text: &str) -> Option<String> {
+    // Anchor on the exact literal that signals the failure mode.
+    // Tolerate optional whitespace between `:` and `"` since some
+    // emissions have `"arguments": "{` and others have no space.
+    let anchor_variants = [
+        "\"arguments\":\"{",
+        "\"arguments\": \"{",
+    ];
+    let (anchor_pos, anchor_len) = anchor_variants
+        .iter()
+        .find_map(|a| text.find(a).map(|p| (p, a.len())))?;
+    // The `{` is the last byte of the anchor.
+    let object_start = anchor_pos + anchor_len - 1;
+    let balanced = first_balanced_object(&text[object_start..])?;
+    let after_obj = object_start + balanced.len();
+    // Skip the trailing `"` the model meant to close the arguments
+    // string with, if present. Without this we'd produce
+    // `"arguments":{...}"` which is itself malformed.
+    let tail_start = if text.as_bytes().get(after_obj) == Some(&b'"') {
+        after_obj + 1
+    } else {
+        after_obj
+    };
+    let mut out = String::with_capacity(text.len());
+    out.push_str(&text[..anchor_pos]);
+    out.push_str("\"arguments\":");
+    out.push_str(&balanced);
+    out.push_str(&text[tail_start..]);
+    Some(out)
+}
+
+/// Try to parse `candidate` as JSON, appending up to 4 trailing
+/// closing braces if the original parse fails with an "unfinished
+/// JSON term" / unbalanced-braces error. Stops as soon as parsing
+/// succeeds. Returns `None` if no amount of trailing-`}` recovery
+/// produces valid JSON — that's a genuinely-malformed payload, not
+/// a mid-emission truncation.
+fn parse_with_brace_recovery(candidate: &str) -> Option<serde_json::Value> {
+    const MAX_APPEND: usize = 4;
+    let mut buf = candidate.to_string();
+    for _ in 0..MAX_APPEND {
+        buf.push('}');
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&buf) {
+            return Some(v);
+        }
+    }
+    None
+}
+
+// ─── Tool-call loop for one partner turn ────────────────────────
+
+struct TurnOutcome {
+    final_content: String,
+    tool_calls: usize,
+    iters: usize,
+    elapsed_secs: f32,
+}
+
+async fn run_one_turn(
+    http: &reqwest::Client,
+    base: &str,
+    chat_model: &str,
+    messages: &mut Vec<ChatMessage>,
+    tools: &[ToolDefinition],
+    registry: &ToolRegistry,
+    ctx: &ToolContext,
+    project: &RecipeProject,
+    max_iters: usize,
+    strip_think: bool,
+) -> std::result::Result<TurnOutcome, String> {
+    let started = std::time::Instant::now();
+    let mut tool_calls = 0usize;
+    let mut iters = 0usize;
+    // Per-turn loop detector with two trip wires:
+    // - `EXACT_ARGS_THRESHOLD` (3) for the literal-same-call case.
+    // - `SAME_TOOL_THRESHOLD` (5) for the case where the agent
+    //   permutes one word per call to dodge the exact-args check.
+    //   Real failure mode this caught: 7 web_search calls each with
+    //   a slightly different phrasing, all returning 0 results
+    //   because DDG is rate-limited.
+    const EXACT_ARGS_THRESHOLD: usize = 3;
+    const SAME_TOOL_THRESHOLD: usize = 5;
+    let mut tool_signature_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    let mut tool_name_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    loop {
+        if iters >= max_iters {
+            return Err(format!(
+                "tool-call loop exceeded {max_iters} iterations without \
+                 a final assistant message"
+            ));
+        }
+        iters += 1;
+        let req = ChatCompletionRequest {
+            model: Some(chat_model.to_string()),
+            messages: messages.clone(),
+            temperature: Some(0.3),
+            // 8192 tokens per response. The natural budget is the
+            // sum of "diagnose the result + emit the next tool call".
+            // 4096 broke down on the bw9pkay71 trial: agent received
+            // a recipe_write_structured validation error, narrated 30
+            // lines of analysis weighing PDF vs HTML vs JSON
+            // alternatives, and ran out of generation tokens before
+            // emitting the corrective tool call. 8192 leaves room
+            // for both a complex think AND a tool call in the same
+            // assistant message.
+            max_tokens: Some(8192),
+            stream: Some(false),
+            tools: Some(tools.to_vec()),
+            tool_choice: Some(serde_json::json!("auto")),
+        };
+        let url = format!("{base}/v1/chat/completions");
+        let resp: ChatCompletionResponse = http
+            .post(&url)
+            .json(&req)
+            .send()
+            .await
+            .map_err(|e| format!("POST {url}: {e}"))?
+            .error_for_status()
+            .map_err(|e| format!("daemon returned non-success: {e}"))?
+            .json()
+            .await
+            .map_err(|e| format!("parse chat completion: {e}"))?;
+        let ChatChoice { message, .. } = resp
+            .choices
+            .into_iter()
+            .next()
+            .ok_or_else(|| "chat completion has no choices".to_string())?;
+        let raw_content = if strip_think {
+            strip_think_block(&message.content)
+        } else {
+            message.content.clone()
+        };
+        // Daemon-supplied structured tool calls take priority. If the
+        // daemon parser missed a `<tool_call>` block in the raw
+        // content, recover it client-side so the loop can continue.
+        let mut calls = message.tool_calls.clone().unwrap_or_default();
+        let (content_for_log, salvaged) = if calls.is_empty() {
+            salvage_text_tool_calls(&raw_content)
+        } else {
+            (raw_content.clone(), Vec::new())
+        };
+        if !salvaged.is_empty() {
+            eprintln!(
+                "  (salvaged {} tool call(s) from text-format <tool_call> blocks)",
+                salvaged.len()
+            );
+            calls.extend(salvaged);
+        }
+        messages.push(ChatMessage {
+            role: "assistant".into(),
+            content: content_for_log.clone(),
+            tool_call_id: None,
+            tool_calls: if calls.is_empty() {
+                None
+            } else {
+                Some(calls.clone())
+            },
+        });
+        if calls.is_empty() {
+            return Ok(TurnOutcome {
+                final_content: content_for_log,
+                tool_calls,
+                iters,
+                elapsed_secs: started.elapsed().as_secs_f32(),
+            });
+        }
+        for call in &calls {
+            tool_calls += 1;
+            eprintln!(
+                "  → tool: {}({}…)",
+                call.function.name,
+                &call.function.arguments
+                    [..call.function.arguments.len().min(120)]
+                    .replace('\n', " ")
+            );
+            // Loop-detection: two trip wires per turn.
+            // - Exact-args repeat: caught by `tool_signature_counts`
+            //   on `(name, normalised_args)` — fires at >3.
+            // - Same-tool spam: caught by `tool_name_counts` on
+            //   `name` only — fires at >5. Catches the case where
+            //   the agent permutes one query word per call.
+            // Either trip emits a synthesised tool result that
+            // nudges the agent to ask the partner / switch tools.
+            let signature = call_signature(call);
+            let sig_count = tool_signature_counts.entry(signature).or_insert(0);
+            *sig_count += 1;
+            let name_count = tool_name_counts
+                .entry(call.function.name.clone())
+                .or_insert(0);
+            *name_count += 1;
+            let tool_msg = if *sig_count > EXACT_ARGS_THRESHOLD {
+                eprintln!(
+                    "  (loop detector: {} exact-args repeat {} — \
+                     short-circuiting)",
+                    call.function.name, *sig_count
+                );
+                synthesize_loop_break_message(call, *sig_count, "exact_args")
+            } else if *name_count > SAME_TOOL_THRESHOLD {
+                eprintln!(
+                    "  (loop detector: {} same-tool repeat {} — \
+                     short-circuiting)",
+                    call.function.name, *name_count
+                );
+                synthesize_loop_break_message(call, *name_count, "same_tool")
+            } else {
+                execute_tool_call(registry, call, ctx, project).await
+            };
+            messages.push(tool_msg);
+        }
+    }
 }
 
 // ─── Trial entry ─────────────────────────────────────────────────
@@ -405,9 +1130,12 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
             return 1;
         }
     };
-    let messages = parse_script(&script_text);
-    if messages.is_empty() {
-        eprintln!("live-trial: script {} has no messages", args.script_path.display());
+    let messages_in = parse_script(&script_text);
+    if messages_in.is_empty() {
+        eprintln!(
+            "live-trial: script {} has no messages",
+            args.script_path.display()
+        );
         return 1;
     }
 
@@ -417,26 +1145,19 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     }
 
     eprintln!("Daemon: {}", args.daemon_base);
-    let v1 = format!("{}/v1", args.daemon_base);
-    let (chat_model, embed_model) = match resolve_models(&args.daemon_base, &args).await {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("live-trial: {e}");
-            return 2;
-        }
-    };
-    eprintln!("Chat model:  {chat_model}");
-    eprintln!("Embed model: {embed_model}");
-
-    let inference: Arc<dyn InferenceProvider> = Arc::new(
-        SplitInferenceProvider::new(&v1, chat_model, embed_model, 8192),
-    );
+    let chat_model =
+        match resolve_chat_model(&args.daemon_base, args.chat_model.as_deref()).await {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("live-trial: {e}");
+                return 2;
+            }
+        };
+    eprintln!("Chat model: {chat_model}");
 
     // Stores. We touch the user's real ~/.sovereign/{notes,features}.db
     // on purpose — a live trial against the running daemon is a real
-    // session, not a sandbox. The harness is honest about its side
-    // effects (project gets persisted, capability requests land in the
-    // user's inbox). For a sandboxed run, point HOME at a tempdir.
+    // session. To sandbox, point HOME at a tempdir before invoking.
     let home = match dirs::home_dir() {
         Some(h) => h,
         None => {
@@ -461,17 +1182,19 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     };
 
     let project = match args.feature_id.as_deref() {
-        Some(fid) => {
-            match RecipeProject::load(fid, Arc::clone(&notes), Arc::clone(&features))
-                .await
-            {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!("live-trial: load project {fid}: {e}");
-                    return 2;
-                }
+        Some(fid) => match RecipeProject::load(
+            fid,
+            Arc::clone(&notes),
+            Arc::clone(&features),
+        )
+        .await
+        {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("live-trial: load project {fid}: {e}");
+                return 2;
             }
-        }
+        },
         None => {
             let title = args
                 .title
@@ -500,138 +1223,120 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         }
     };
     eprintln!(
-        "Project:     {} (feature_id={})",
+        "Project:    {} (feature_id={})",
         project.title(),
         project.feature_id()
     );
     eprintln!("Project dir: {}", project.project_dir().display());
 
-    // Skills.
-    let mut skills_reg = SkillRegistry::new();
-    skills_reg.load_and_register(&args.skills_dir);
-    skills_reg.activate("recipe-author");
-    if !skills_reg
-        .list()
-        .iter()
-        .any(|s| s.id == "recipe-author")
-    {
-        eprintln!(
-            "live-trial: recipe-author skill not found under {}. \
-             Did you copy or symlink sovereign/skills/recipe-author/ \
-             to the skills dir?",
-            args.skills_dir.display()
-        );
-        return 2;
-    }
-    eprintln!(
-        "Skills:      {} loaded from {} (active: recipe-author)",
-        skills_reg.list().len(),
-        args.skills_dir.display()
-    );
-    let skills = Arc::new(skills_reg);
-
-    // State store at <data>/sovereign.db. Use a per-trial sub-directory
-    // so trial conversations don't pollute the desktop DB.
-    let trial_data_dir = dotsovereign.join("recipe-agent-trial");
-    if let Err(e) = std::fs::create_dir_all(&trial_data_dir) {
-        eprintln!(
-            "live-trial: failed to create {}: {e}",
-            trial_data_dir.display()
-        );
-        return 2;
-    }
-    let store: Arc<dyn StateStore> = match SqliteStateStore::open(
-        &trial_data_dir.join("sovereign.db"),
-    ) {
-        Ok(s) => Arc::new(s),
+    // System prompt from skill manifest.
+    let system_prompt = match load_recipe_author_system_prompt(&args.skills_dir) {
+        Ok(p) => p,
         Err(e) => {
-            eprintln!("live-trial: open trial state store: {e}");
+            eprintln!("live-trial: {e}");
             return 2;
         }
     };
-
-    // CorpusEngine — needed by RecipeTestTool's underlying
-    // `CorpusEngine::test_recipe`. Hardcode `~/.sovereign/{recipes,indexes}`.
-    let recipes_dir = dotsovereign.join("recipes");
-    let indexes_dir = dotsovereign.join("indexes");
-    let _ = std::fs::create_dir_all(&recipes_dir);
-    let _ = std::fs::create_dir_all(&indexes_dir);
-    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference));
-    let inference_fn =
-        sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference));
-    let corpus_engine = Arc::new(
-        corpus_engine::CorpusEngine::new(
-            recipes_dir.clone(),
-            indexes_dir,
-            embed_fn,
-        )
-        .with_embedding_model(&embed_model_stem(&dotsovereign))
-        .with_inference_fn(inference_fn),
+    eprintln!(
+        "Skill prompt: {} chars from {}",
+        system_prompt.len(),
+        args.skills_dir.join("recipe-author").join("skill.toml").display()
     );
 
-    // Tools — exactly the recipe-author surface plus web research.
-    // No chat / claim / search / wiki tools; the live trial is
-    // focused.
-    let mut tools = ToolRegistry::new();
-    tools.register(Box::new(RecipeReadTool::new()));
-    tools.register(Box::new(RecipeWriteTool::new()));
-    tools.register(Box::new(RecipeValidateTool::new()));
-    tools.register(Box::new(RecipeTestTool::new()));
-    tools.register(Box::new(RegistryBrowseTool));
-    tools.register(Box::new(DecisionLogTool::with_notes(Arc::clone(&notes))));
-    tools.register(Box::new(CheckpointTool::with_stores(
+    // Tool registry — focused on recipe-author + web research only.
+    let recipes_dir = dotsovereign.join("recipes");
+    let _ = std::fs::create_dir_all(&recipes_dir);
+    let mut registry = ToolRegistry::new();
+    registry.register(Box::new(RecipeReadTool::new()));
+    registry.register(Box::new(RecipeWriteTool::new()));
+    registry.register(Box::new(RecipeWriteStructuredTool::new()));
+    registry.register(Box::new(RecipeValidateTool::new()));
+    registry.register(Box::new(RecipeTestTool::new()));
+    registry.register(Box::new(RegistryBrowseTool));
+    registry.register(Box::new(DecisionLogTool::with_notes(Arc::clone(&notes))));
+    registry.register(Box::new(CheckpointTool::with_stores(
         Arc::clone(&notes),
         Arc::clone(&features),
     )));
-    tools.register(Box::new(CapabilityRequestTool::with_stores(
+    registry.register(Box::new(CapabilityRequestTool::with_stores(
         Arc::clone(&notes),
         Arc::clone(&features),
     )));
-    tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
-    tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-        sovereign_tools::web::search::SearchBackend::DuckDuckGo,
-    )));
-    eprintln!("Tools:       {} registered", tools.count());
-
-    let router: Box<dyn sovereign_core::traits::Router> = Box::new(
-        LlmRouter::new(
-            Arc::clone(&inference),
-            Arc::clone(&store),
-            Arc::clone(&skills),
+    // probe_url + research_finding close the API-shape loop the
+    // earlier trial revealed: probe_url lets the agent confirm an
+    // endpoint contract before drafting; research_finding gives the
+    // v7 NoteStore `research_finding` kind a real writer so web
+    // findings survive across sessions and checkpoint restores.
+    //
+    // Forward the trial's `--param key=value` flags into probe_url
+    // so the agent can probe auth-gated endpoints by writing
+    // `Authorization: Token {api_token}` without ever pasting the
+    // literal token. Same surface as the http_api acquirer's
+    // `[acquire].headers` interpolation.
+    let probe_params: std::collections::BTreeMap<String, String> = args
+        .params
+        .iter()
+        .cloned()
+        .collect();
+    registry.register(Box::new(
+        ProbeUrlTool::new().with_parameters(Arc::new(probe_params)),
+    ));
+    registry.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(&notes))));
+    registry.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
+    // WebSearchTool runs a query → extract → synthesise pipeline that
+    // needs an inference provider for the synthesis step. We back it
+    // with a `RemoteApiProvider` pointing at the same daemon we're
+    // driving the agent against — keeps the live trial honest about
+    // what the production agent loop would see.
+    let inference_for_search: Arc<dyn InferenceProvider> = Arc::new(
+        RemoteApiProvider::new(
+            &format!("{}/v1", args.daemon_base),
+            None,
+            &chat_model,
+            8192,
         ),
     );
-    let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
-    let approval: Arc<dyn ApprovalChannel> = Arc::new(AutoApprove);
+    registry.register(Box::new(sovereign_tools::web::WebSearchTool::new(
+        inference_for_search,
+    )));
+    let tool_defs = registry_to_tool_defs(&registry);
+    eprintln!("Tools:      {} registered", tool_defs.len());
 
-    let runtime = Runtime::new(
-        Arc::clone(&inference),
-        router,
-        Box::new(planner),
-        Arc::new(tools),
-        Arc::clone(&store),
-        Arc::clone(&skills),
-        approval,
-        InferenceConfig::default(),
-    )
-    .with_corpus_engine(Arc::clone(&corpus_engine));
+    // Conversation. The system prompt anchors the recipe-author
+    // contract; the situated context lives in the first user message
+    // (regenerated each turn so decisions made earlier this session
+    // are visible). The tool-call loop appends assistant + tool
+    // messages between partner turns.
+    let conversation_id: ConversationId = uuid::Uuid::new_v4().to_string();
+    let ctx = ToolContext {
+        conversation_id: conversation_id.clone(),
+        task_id: None,
+        working_directory: None,
+        in_reasoning_loop: false,
+    };
+    let http = match reqwest::Client::builder()
+        .timeout(Duration::from_secs(180))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("live-trial: http client: {e}");
+            return 2;
+        }
+    };
+    let mut messages: Vec<ChatMessage> =
+        vec![ChatMessage::new("system", system_prompt)];
 
-    // Drive turns.
-    let conversation_id = uuid::Uuid::new_v4().to_string();
     eprintln!(
         "\nDriving {} partner turn(s) on conversation {}\n",
-        messages.len(),
+        messages_in.len(),
         conversation_id
     );
-    let mut tool_calls_per_turn: Vec<usize> = Vec::with_capacity(messages.len());
-    let mut last_tool_call_count = match notes.tool_call_log_rows(10_000, 0).await {
-        Ok(rows) => rows.len(),
-        Err(_) => 0,
-    };
-    for (i, msg) in messages.iter().enumerate() {
+
+    let mut total_tool_calls = 0usize;
+    for (i, partner_msg) in messages_in.iter().enumerate() {
         eprintln!("──── Turn {} ─────────────────────────────────", i + 1);
-        eprintln!("Partner: {msg}\n");
+        eprintln!("Partner: {partner_msg}\n");
         let situated = match situated_context::render(&project).await {
             Ok(s) => s,
             Err(e) => {
@@ -639,33 +1344,41 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                 return 2;
             }
         };
-        let envelope = situated_context::compose_envelope(&situated, msg);
-        let started = std::time::Instant::now();
-        match runtime
-            .handle_message(&envelope, &conversation_id)
-            .await
+        // Combine situated context + partner message into a single
+        // user turn. NO bracketed framing — the router-free path
+        // doesn't need cues, and unframed prose stays out of the
+        // model's "this is meta-discussion" bucket.
+        let user_text = format!(
+            "Project state for this turn:\n\n{situated}\n\n\
+             ---\n\nPartner says: {partner_msg}"
+        );
+        messages.push(ChatMessage::new("user", user_text));
+        match run_one_turn(
+            &http,
+            &args.daemon_base,
+            &chat_model,
+            &mut messages,
+            &tool_defs,
+            &registry,
+            &ctx,
+            &project,
+            args.max_tool_iters,
+            args.strip_think,
+        )
+        .await
         {
-            Ok(resp) => {
-                let elapsed = started.elapsed();
+            Ok(out) => {
                 eprintln!(
-                    "Agent ({:.1}s): {}\n",
-                    elapsed.as_secs_f32(),
-                    resp.message.content
+                    "\nAgent ({:.1}s, {} tool call(s) over {} iter(s)):\n{}\n",
+                    out.elapsed_secs, out.tool_calls, out.iters, out.final_content
                 );
+                total_tool_calls += out.tool_calls;
             }
             Err(e) => {
                 eprintln!("live-trial: turn {} failed: {e}\n", i + 1);
                 return 3;
             }
         }
-        let now_count = match notes.tool_call_log_rows(10_000, 0).await {
-            Ok(rows) => rows.len(),
-            Err(_) => last_tool_call_count,
-        };
-        let calls_this_turn = now_count.saturating_sub(last_tool_call_count);
-        tool_calls_per_turn.push(calls_this_turn);
-        last_tool_call_count = now_count;
-        eprintln!("(tool calls this turn: {calls_this_turn})\n");
     }
 
     // ─── Post-trial assertions ────────────────────────────────
@@ -706,7 +1419,6 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         )
         .await
         .unwrap_or_default();
-    let total_tool_calls: usize = tool_calls_per_turn.iter().sum();
 
     eprintln!("Recipe id:           {:?}", summary.recipe_id);
     eprintln!("Decisions logged:    {}", decisions.len());
@@ -714,24 +1426,12 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     eprintln!("Capability requests: {}", cap_requests.len());
     eprintln!("Total tool calls:    {total_tool_calls}");
 
-    // The agent might not have written a recipe — that's an outcome,
-    // not a fatal error. We still validate + try the test fetch when
-    // a recipe id is set, and surface a clear miss otherwise.
     let mut overall_pass = true;
     if let Some(recipe_id) = summary.recipe_id.as_deref() {
         eprintln!("\nValidating {} …", recipe_id);
         let validate_tool = RecipeValidateTool::with_recipes_dir(recipes_dir.clone());
-        let validate_ctx = sovereign_core::types::ToolContext {
-            conversation_id: conversation_id.clone(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-        };
         match validate_tool
-            .execute(
-                &serde_json::json!({"path": recipe_id}),
-                &validate_ctx,
-            )
+            .execute(&serde_json::json!({"path": recipe_id}), &ctx)
             .await
         {
             Ok(StepOutput::Json(v)) => {
@@ -759,18 +1459,33 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         }
 
         eprintln!(
-            "\nFetching initial sample (sample_size={}) …",
-            args.sample_size
+            "\nFetching initial sample (sample_size={}, params={}) …",
+            args.sample_size,
+            args.params.len()
         );
         let test_tool = RecipeTestTool::with_recipes_dir(recipes_dir.clone());
+        // Forward `--param k=v` flags through to `recipe_test` so
+        // recipes that declare an install-time parameter (auth tokens,
+        // jurisdiction filters, etc.) get the partner's value at fetch
+        // time without ever entering the recipe file.
+        let mut params_json = serde_json::Map::new();
+        for (k, v) in &args.params {
+            params_json.insert(k.clone(), serde_json::Value::String(v.clone()));
+        }
+        let mut test_args = serde_json::Map::new();
+        test_args.insert(
+            "path".into(),
+            serde_json::Value::String(recipe_id.to_string()),
+        );
+        test_args.insert(
+            "sample_size".into(),
+            serde_json::Value::from(args.sample_size),
+        );
+        if !params_json.is_empty() {
+            test_args.insert("params".into(), serde_json::Value::Object(params_json));
+        }
         match test_tool
-            .execute(
-                &serde_json::json!({
-                    "path": recipe_id,
-                    "sample_size": args.sample_size,
-                }),
-                &validate_ctx,
-            )
+            .execute(&serde_json::Value::Object(test_args), &ctx)
             .await
         {
             Ok(StepOutput::Json(v)) => {
@@ -835,19 +1550,6 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
     }
 }
 
-fn embed_model_stem(_dotsovereign: &Path) -> String {
-    sovereign_core::setup_config::SetupConfig::load()
-        .ok()
-        .and_then(|c| {
-            c.models
-                .embed
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(String::from)
-        })
-        .unwrap_or_else(|| "qwen3-embedding-0.6b".to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -873,5 +1575,96 @@ mod tests {
     fn parse_script_trims_trailing_whitespace() {
         let blocks = parse_script("Just one line.   \n\n");
         assert_eq!(blocks, vec!["Just one line."]);
+    }
+
+    #[test]
+    fn strip_think_block_removes_paired_tags() {
+        let s = "<think>plan</think>\n\nFinal answer here.";
+        assert_eq!(strip_think_block(s), "Final answer here.");
+    }
+
+    #[test]
+    fn strip_think_block_passes_through_when_unpaired() {
+        // Unmatched <think> with no closing tag — preserve as-is so
+        // we don't silently drop content.
+        let s = "<think>still thinking";
+        assert_eq!(strip_think_block(s), s);
+    }
+
+    #[test]
+    fn salvage_recovers_truncated_one_brace_short() {
+        // Real-world failure mode: model stops sampling one `}` short
+        // of balanced. Salvage should recover via brace-balancing.
+        let content = r#"<tool_call>{"name":"recipe_write_structured","arguments":{"path":"demo","recipe":{"corpus":{"id":"demo","name":"demo"},"acquire":{"type":"bulk_download","url":"https://x"},"extract":{"type":"html"},"chunk":{"type":"paragraph"}}}</tool_call>"#;
+        let (_clean, calls) = salvage_text_tool_calls(content);
+        assert_eq!(calls.len(), 1, "expected one recovered call");
+        assert_eq!(calls[0].function.name, "recipe_write_structured");
+    }
+
+    #[test]
+    fn salvage_returns_none_for_genuinely_broken_json() {
+        // Random bytes inside a tool_call block — neither valid JSON
+        // nor recoverable by brace-balancing.
+        let content = "<tool_call>not json at all { missing quotes</tool_call>";
+        let (clean, calls) = salvage_text_tool_calls(content);
+        assert!(calls.is_empty(), "expected no recovered calls");
+        // Block is preserved in clean content.
+        assert!(clean.contains("<tool_call>"));
+    }
+
+    #[test]
+    fn salvage_strips_trailing_noise_after_balanced_close() {
+        // Real-world failure mode: model emits a balanced JSON object
+        // and then tacks an extra `feature_id` field on after the
+        // proper close — invalid JSON but the meaningful tool call is
+        // up front.
+        let content = r#"<tool_call>{"name":"checkpoint","arguments":{"feature_id":"abc","name":"test","trigger":"partner_request"}},"feature_id":"abc"}</tool_call>"#;
+        let (_clean, calls) = salvage_text_tool_calls(content);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "checkpoint");
+    }
+
+    #[test]
+    fn salvage_recovers_multiple_chained_unclosed_blocks() {
+        // Real-world failure mode: model emits 2+ `<tool_call>` blocks
+        // in one assistant message without `</tool_call>` between them.
+        // The outer salvage loop should treat each `<tool_call>` as a
+        // soft boundary.
+        let content = r#"<tool_call>{"name":"recipe_validate","arguments":{"path":"x"}}<tool_call>{"name":"checkpoint","arguments":{"feature_id":"y","name":"z","trigger":"partner_request"}}"#;
+        let (_clean, calls) = salvage_text_tool_calls(content);
+        assert_eq!(calls.len(), 2, "expected two recovered calls");
+        assert_eq!(calls[0].function.name, "recipe_validate");
+        assert_eq!(calls[1].function.name, "checkpoint");
+    }
+
+    #[test]
+    fn salvage_recovers_unescaped_arguments_object_qwen_emit() {
+        // Real-world failure mode (b5jlf1b0w trial Turn 3): Qwen
+        // emits the tool's `arguments` field as raw JSON (`{...}`)
+        // but writes it inside an outer string literal without
+        // escaping the inner quotes. The result is malformed at
+        // the outer level — `serde_json::from_str` rejects it on
+        // the first inner `"` after `"arguments":"`. Salvage's
+        // third-tier recovery rewrites `"arguments":"{...}"` to
+        // `"arguments":{...}` and re-parses.
+        let content = r#"<tool_call>{"name":"research_finding","arguments":"{"feature_id": "abc", "claim": "v4 uses cluster__docket__court", "source_url": "https://example.com", "confidence": "high", "scope": "api_contract"}
+</tool_call>"#;
+        let (_clean, calls) = salvage_text_tool_calls(content);
+        assert_eq!(calls.len(), 1, "expected one recovered call");
+        assert_eq!(calls[0].function.name, "research_finding");
+        // Arguments should round-trip back to a valid JSON object
+        // string with the original fields intact.
+        let args: serde_json::Value =
+            serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["feature_id"], "abc");
+        assert_eq!(args["confidence"], "high");
+    }
+
+    #[test]
+    fn first_balanced_object_handles_strings_with_braces() {
+        // Brace inside a JSON string must not affect depth tracking.
+        let s = r#"{"url":"https://x?a={b}&c=1","tail":true}EXTRA"#;
+        let bal = first_balanced_object(s).unwrap();
+        assert_eq!(bal, r#"{"url":"https://x?a={b}&c=1","tail":true}"#);
     }
 }

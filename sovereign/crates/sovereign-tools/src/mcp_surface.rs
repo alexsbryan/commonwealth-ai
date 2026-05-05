@@ -59,10 +59,17 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // they're the live tool set for the `recipe-author` skill — the
     // skill's `[tools] required` list is descriptive; MCP exposure is
     // the gate that actually lets the live agent loop reach them.
-    "recipe_read", "recipe_write", "recipe_validate", "recipe_test",
-    "registry_browse",
+    "recipe_read", "recipe_write", "recipe_write_structured",
+    "recipe_validate", "recipe_test", "registry_browse",
     "web_search", "web_fetch",
     "checkpoint", "decision_log", "capability_request",
+    // API-shape probing + durable web findings — closed the loop
+    // where the agent guessed at API contracts and never persisted
+    // what it learned. probe_url returns one HTTP GET's structured
+    // response (status, top-level JSON keys, pagination hint, body
+    // excerpt). research_finding is the ResearchFinding writer the
+    // v7 NoteStore migration left without a tool wrapping it.
+    "probe_url", "research_finding",
 ];
 
 /// MCP tools that should only appear when a spec exists in the
