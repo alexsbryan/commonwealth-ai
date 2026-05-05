@@ -348,6 +348,7 @@ async fn seed_memories(
             version: 0,
             deleted_at: None,
             source_conversation_id: seed.source_conversation_id.clone(),
+            source_skill_id: None,
         };
         store.save_memory(&memory).await?;
     }

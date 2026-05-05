@@ -1043,6 +1043,111 @@ pub async fn submit_information_response(
         .await)
 }
 
+/// Trigger memory extraction on a finished inner-work conversation.
+///
+/// Until 2026-05-05 the desktop had no path to invoke memory
+/// extraction — `Runtime::end_conversation` was called only from the
+/// CLI, so a desktop-only inner-work user accumulated zero
+/// long-term memory across sessions despite the storage and recall
+/// pipelines being fully wired. This command closes that gap.
+///
+/// Caller is `InnerWorkSurface.onDestroy`. Best-effort: we ignore
+/// errors at the runtime layer so a failure here doesn't stall the
+/// surface unmount. The runtime's own `end_conversation` is a no-op
+/// when the conversation has fewer than 4 messages, so empty inner-
+/// work entries don't trigger extraction noise.
+///
+/// The skill_id wall is enforced inside `Runtime::end_conversation`:
+/// each extracted memory is stamped with `source_skill_id` =
+/// `conversations.skill_id`. Inner-work conversations therefore
+/// produce inner-work-scoped memories, never general-pool ones.
+#[tauri::command]
+pub async fn finalize_inner_work_conversation(
+    state: State<'_, Arc<AppState>>,
+    conversation_id: String,
+) -> Result<(), String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap();
+    if let Err(e) = runtime.end_conversation(&conversation_id).await {
+        tracing::warn!(
+            error = %e,
+            conversation_id = %conversation_id,
+            "finalize_inner_work_conversation: extraction failed"
+        );
+    }
+    Ok(())
+}
+
+/// Tombstone a memory the user has flagged as wrong. Soft-delete via
+/// `delete_memory` (sets `deleted_at`) — the row is preserved for
+/// audit but excluded from all recall paths. Used by the inner-work
+/// "drop this memory" affordance.
+#[tauri::command]
+pub async fn forget_memory(
+    state: State<'_, Arc<AppState>>,
+    memory_id: String,
+) -> Result<(), String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap();
+    runtime
+        .store
+        .delete_memory(&memory_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Halve the confidence of a memory. Used by the "this is partly
+/// right but the witness over-extrapolated" path — the memory stays
+/// recallable but with reduced weight, and the standard decay floor
+/// will eventually prune it if the user keeps weakening.
+#[tauri::command]
+pub async fn weaken_memory(
+    state: State<'_, Arc<AppState>>,
+    memory_id: String,
+) -> Result<(), String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap();
+    let all = runtime
+        .store
+        .get_all_memories()
+        .await
+        .map_err(|e| e.to_string())?;
+    let current = all
+        .iter()
+        .find(|m| m.id == memory_id)
+        .ok_or_else(|| format!("memory {memory_id} not found"))?;
+    let new_conf = (current.confidence * 0.5).max(0.0);
+    runtime
+        .store
+        .update_memory_confidence(&memory_id, new_conf)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Glassbox: return the most recent witness-turn provenance the
+/// runtime captured for `conversation_id`, if any.
+///
+/// Used by the desktop's inner-work surface bound to Cmd+? to surface
+/// "what did the model actually see" — the assembled system prompt,
+/// the recalled memories, the conversation history slice (today: empty
+/// — the streaming witness path doesn't pass prior turns to the
+/// model), the model id + token budget, and Pass A timing.
+///
+/// Returns `Ok(None)` when no provenance is recorded for that
+/// conversation in this Runtime's lifetime — typically because the
+/// conversation hasn't received a streaming witness response yet, or
+/// because it ran on the non-streaming path (we don't capture there
+/// today; mirror the capture in `handle_expressive_query` if needed).
+#[tauri::command]
+pub async fn get_last_turn_provenance(
+    state: State<'_, Arc<AppState>>,
+    conversation_id: String,
+) -> Result<Option<sovereign_core::runtime::TurnProvenance>, String> {
+    let guard = require_runtime!(state);
+    let runtime = guard.as_ref().unwrap();
+    Ok(runtime.get_last_turn_provenance(&conversation_id))
+}
+
 #[tauri::command]
 pub async fn list_skills(state: State<'_, Arc<AppState>>) -> Result<Vec<SkillEntry>, String> {
     let guard = require_runtime!(state);

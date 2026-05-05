@@ -330,6 +330,374 @@ pub fn strip_thinking_response(raw: &str) -> String {
     strip_think_blocks_impl(raw)
 }
 
+/// Streaming counterpart to [`strip_thinking_response`] for the
+/// witness path.
+///
+/// Given a `Stream<Result<String>>` of incoming chat tokens, returns
+/// a `Stream<Result<String>>` that yields the *reply* portion only —
+/// i.e. content emitted after the model closes its planning trace
+/// with `</think>`. Behaviour:
+///
+/// * **Buffer phase.** While no `</think>` has been observed,
+///   tokens are accumulated into an internal buffer. Nothing is
+///   emitted to the consumer.
+/// * **Cutover.** When a chunk arrives that completes a `</think>`
+///   marker (taking buffer continuity into account, so the marker
+///   may straddle chunk boundaries), the strip emits a single
+///   chunk consisting of all content *after* that closer (with
+///   leading whitespace trimmed) and switches to passthrough mode.
+/// * **Passthrough.** Subsequent chunks are forwarded unchanged.
+/// * **Stream end without `</think>`.** Falls back to
+///   [`strip_thinking_response`] over the entire buffer and emits
+///   the result as a single trailing chunk. This handles the
+///   markdown-preamble shape (no closer ever emitted) — the user
+///   sees the cleaned reply at the end, same UX as today's
+///   non-streaming witness path.
+///
+/// Errors propagate immediately — they're emitted before the
+/// terminal flush and the buffer is dropped.
+///
+/// One known imperfection: if the model emits multiple
+/// `</think>...</think>` blocks (uncommon on Qwen3.x witness work
+/// but possible), this strip cuts over at the FIRST closer rather
+/// than the last — meaning content between subsequent block pairs
+/// would leak through. The non-streaming sibling uses `rfind` and
+/// gets the LAST closer; we'd need full buffering to match exactly,
+/// which would defeat streaming. Live with it; flag if it becomes
+/// real.
+pub fn strip_thinking_stream<S>(
+    inner: S,
+) -> std::pin::Pin<Box<dyn futures::Stream<Item = crate::error::Result<String>> + Send>>
+where
+    S: futures::Stream<Item = crate::error::Result<String>> + Send + 'static,
+{
+    use futures::StreamExt;
+    const CLOSE: &str = "</think>";
+
+    enum Phase {
+        Buffering(String),
+        Emitting,
+        /// Trailing flush has been emitted; stream should now end.
+        Done,
+    }
+
+    struct State<S> {
+        inner: std::pin::Pin<Box<S>>,
+        phase: Phase,
+    }
+
+    let init = State {
+        inner: Box::pin(inner),
+        phase: Phase::Buffering(String::new()),
+    };
+
+    let s = futures::stream::unfold(init, |mut st| async move {
+        loop {
+            match st.phase {
+                Phase::Done => return None,
+                Phase::Emitting => match st.inner.next().await {
+                    Some(Ok(chunk)) => return Some((Ok(chunk), st)),
+                    Some(Err(e)) => return Some((Err(e), st)),
+                    None => return None,
+                },
+                Phase::Buffering(mut buffer) => match st.inner.next().await {
+                    Some(Err(e)) => {
+                        // Drop buffer; surface error and end.
+                        st.phase = Phase::Done;
+                        return Some((Err(e), st));
+                    }
+                    Some(Ok(chunk)) => {
+                        buffer.push_str(&chunk);
+                        if let Some(idx) = buffer.find(CLOSE) {
+                            let after = buffer[idx + CLOSE.len()..]
+                                .trim_start()
+                                .to_string();
+                            st.phase = Phase::Emitting;
+                            if !after.is_empty() {
+                                return Some((Ok(after), st));
+                            }
+                            // Empty after-tag — keep looping into
+                            // Emitting mode to consume next chunk.
+                            continue;
+                        }
+                        // No closer yet — keep buffering.
+                        st.phase = Phase::Buffering(buffer);
+                        continue;
+                    }
+                    None => {
+                        // Stream closed without ever seeing </think>.
+                        // Fall back to strip_thinking_response over
+                        // the full buffer (handles markdown-preamble
+                        // shapes) and emit the cleaned text as a
+                        // single trailing chunk.
+                        st.phase = Phase::Done;
+                        if buffer.is_empty() {
+                            return None;
+                        }
+                        let cleaned = strip_thinking_response(&buffer);
+                        if cleaned.is_empty() {
+                            return None;
+                        }
+                        return Some((Ok(cleaned), st));
+                    }
+                },
+            }
+        }
+    });
+    Box::pin(s)
+}
+
+/// Strip `[Source: ...]` citation markers from a witness reply.
+///
+/// Why this exists on a code path with no corpus to cite from:
+/// the witness/relational register has no system-prompt language
+/// inviting citations, no retrieval feeding the prompt, and no
+/// downstream UI that renders citations on this surface — yet
+/// modern fine-tunes (the 35B Darwin in particular, observed
+/// 2026-05-05) sometimes emit `[Source: <something>]` anyway,
+/// reaching for the RAG-formatted idiom from their training
+/// distribution when asked to ground in "the record." The marker
+/// reads to the user as a fabricated citation, which it is.
+///
+/// We strip the markers post-hoc rather than instructing the prompt
+/// to avoid them, because instructing the prompt to avoid citations
+/// is itself prompt-noise that primes the model toward citation
+/// behavior. The witness contract stays clean of the topic; this
+/// transformer cleans up the rare leakage.
+///
+/// Match shape: literal `[Source:` open, search for the next `]`
+/// close within 200 chars of the open (anything longer is treated
+/// as not-a-marker — likely real bracketed prose). Trailing space
+/// before the marker is also trimmed when the marker was preceded
+/// by " ", so `"foo [Source: X]."` becomes `"foo."` instead of
+/// `"foo ."`. Other casings (`[source: X]`, `[SOURCE: X]`) and
+/// other RAG idioms (e.g. `[1]`, `[citation needed]`) are NOT
+/// touched — extend if observed in production.
+pub fn strip_source_citations(raw: &str) -> String {
+    const OPEN: &str = "[Source:";
+    const CLOSE: char = ']';
+    const MAX_MARKER_LEN: usize = 200;
+
+    let mut out = String::with_capacity(raw.len());
+    let mut remaining = raw;
+
+    loop {
+        match remaining.find(OPEN) {
+            None => {
+                out.push_str(remaining);
+                return out;
+            }
+            Some(open_idx) => {
+                // Search for the close within the cap.
+                let search_end = (open_idx + MAX_MARKER_LEN).min(remaining.len());
+                let after_open = &remaining[open_idx..search_end];
+                match after_open.find(CLOSE) {
+                    None => {
+                        // No close in the cap — bail; emit verbatim.
+                        out.push_str(remaining);
+                        return out;
+                    }
+                    Some(rel_close) => {
+                        // Strip `[Source: ...]` and an optional single
+                        // preceding space so we don't leave a "word ."
+                        // seam.
+                        let mut emit_end = open_idx;
+                        if emit_end > 0
+                            && remaining.as_bytes()[emit_end - 1] == b' '
+                        {
+                            emit_end -= 1;
+                        }
+                        out.push_str(&remaining[..emit_end]);
+                        let drop_end = open_idx + rel_close + 1;
+                        remaining = &remaining[drop_end..];
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Streaming counterpart to [`strip_source_citations`].
+///
+/// Composes after [`strip_thinking_stream`] in the witness streaming
+/// path: thinking-tag stripper drops the planning trace; this drops
+/// hallucinated citation markers from the reply. Errors propagate.
+///
+/// Implementation: small state machine with a buffered window.
+/// `Normal` emits incoming text minus any trailing partial-prefix of
+/// `[Source:`. `InMarker` swallows everything until `]` (capped at
+/// 200 chars; if the cap is exceeded the buffer is treated as not-a-
+/// marker and emitted verbatim — better to leak a stray `[Source:`
+/// than swallow legitimate prose with brackets).
+pub fn strip_source_citations_stream<S>(
+    inner: S,
+) -> std::pin::Pin<Box<dyn futures::Stream<Item = crate::error::Result<String>> + Send>>
+where
+    S: futures::Stream<Item = crate::error::Result<String>> + Send + 'static,
+{
+    use futures::StreamExt;
+    const OPEN: &str = "[Source:";
+    const MAX_MARKER_LEN: usize = 200;
+
+    struct State<S> {
+        inner: std::pin::Pin<Box<S>>,
+        /// Buffer holds bytes we haven't decided on yet — either the
+        /// trailing part of the previous emit that might be the start
+        /// of a `[Source:` marker, or the contents of an in-progress
+        /// marker.
+        buffer: String,
+        ended: bool,
+    }
+
+    let init = State {
+        inner: Box::pin(inner),
+        buffer: String::new(),
+        ended: false,
+    };
+
+    let s = futures::stream::unfold(init, |mut st| async move {
+        if st.ended {
+            return None;
+        }
+        loop {
+            // 1. Try to drop any complete markers in the buffer.
+            if let Some(open_idx) = st.buffer.find(OPEN) {
+                let search_end = (open_idx + MAX_MARKER_LEN).min(st.buffer.len());
+                if let Some(rel_close) = st.buffer[open_idx..search_end].find(']') {
+                    // Complete marker — drop, optionally with one
+                    // preceding space.
+                    let close_idx = open_idx + rel_close + 1;
+                    let mut emit_end = open_idx;
+                    if emit_end > 0 && st.buffer.as_bytes()[emit_end - 1] == b' ' {
+                        emit_end -= 1;
+                    }
+                    let to_emit = st.buffer[..emit_end].to_string();
+                    st.buffer = st.buffer[close_idx..].to_string();
+                    if !to_emit.is_empty() {
+                        return Some((Ok(to_emit), st));
+                    }
+                    // Empty emit — loop to handle next marker / refill.
+                    continue;
+                }
+                if st.buffer.len() - open_idx >= MAX_MARKER_LEN {
+                    // Cap exceeded with no close — treat as not-a-marker
+                    // and emit verbatim. Real prose with a bracketed
+                    // segment longer than 200 chars is rare; the
+                    // alternative (swallowing it) is worse.
+                    let to_emit = std::mem::take(&mut st.buffer);
+                    return Some((Ok(to_emit), st));
+                }
+                // Incomplete marker — emit content before `[Source:`,
+                // hold the rest including any preceding space, pull
+                // more. (The space is held alongside the marker so
+                // that, when the marker completes, the strip drops
+                // both together — preventing a "word ." seam where
+                // a "word [Source: X]." was.)
+                let mut hold_start = open_idx;
+                if hold_start > 0 && st.buffer.as_bytes()[hold_start - 1] == b' ' {
+                    hold_start -= 1;
+                }
+                let to_emit = st.buffer[..hold_start].to_string();
+                st.buffer = st.buffer[hold_start..].to_string();
+                if !to_emit.is_empty() {
+                    return Some((Ok(to_emit), st));
+                }
+                // No new emit; fall through to pull more input.
+            } else {
+                // 2. No `[Source:` in buffer. Emit everything except
+                //    any tail that could be a partial prefix.
+                let safe_end = compute_safe_prefix_end(&st.buffer, OPEN);
+                if safe_end > 0 {
+                    let to_emit = st.buffer[..safe_end].to_string();
+                    st.buffer = st.buffer[safe_end..].to_string();
+                    return Some((Ok(to_emit), st));
+                }
+                // safe_end == 0 means buffer is either empty or
+                // entirely a partial prefix. Pull more.
+            }
+
+            // 3. Pull next chunk (or end).
+            match st.inner.next().await {
+                Some(Ok(chunk)) => {
+                    st.buffer.push_str(&chunk);
+                    continue;
+                }
+                Some(Err(e)) => {
+                    st.ended = true;
+                    return Some((Err(e), st));
+                }
+                None => {
+                    // Stream ended; flush whatever's in the buffer
+                    // (may include an unclosed `[Source:` — we'd rather
+                    // leak the marker than swallow what follows).
+                    st.ended = true;
+                    if st.buffer.is_empty() {
+                        return None;
+                    }
+                    let last = std::mem::take(&mut st.buffer);
+                    return Some((Ok(last), st));
+                }
+            }
+        }
+    });
+    Box::pin(s)
+}
+
+/// Returns the byte index up to which `buffer` is safe to emit
+/// without emitting a partial prefix of `marker`. The "unsafe tail"
+/// is the longest suffix of `buffer` that is also a prefix of
+/// `marker` — that tail must be held back in case the next chunk
+/// completes the marker.
+///
+/// Two extra invariants beyond the basic suffix-as-prefix check, both
+/// motivated by the "drop one preceding space when stripping a marker"
+/// rule (which keeps `"foo [Source: X]."` from becoming `"foo ."`):
+///
+/// 1. When the suffix-prefix match is found and the char immediately
+///    before the matched suffix is a space, hold the space too.
+///    Otherwise the preceding space gets emitted in one round and the
+///    marker gets dropped in the next, leaving a stranded space.
+/// 2. Always hold back a single trailing whitespace char (space, tab,
+///    newline). If the next chunk starts a marker, we want that
+///    whitespace available to drop with it. If the next chunk is
+///    ordinary content, the held char rejoins the stream cleanly on
+///    the next emission. At stream end the held char is flushed.
+fn compute_safe_prefix_end(buffer: &str, marker: &str) -> usize {
+    if buffer.is_empty() {
+        return 0;
+    }
+    let mut safe = buffer.len();
+    let max_overlap = marker.len().saturating_sub(1).min(buffer.len());
+    // Suffix-as-prefix check (longest overlap wins).
+    for overlap in (1..=max_overlap).rev() {
+        let split_at = buffer.len() - overlap;
+        if !buffer.is_char_boundary(split_at) {
+            continue;
+        }
+        let tail = &buffer[split_at..];
+        if marker.starts_with(tail) {
+            safe = safe.min(split_at);
+            // Invariant 1: hold back preceding space too.
+            if split_at > 0 && buffer.as_bytes()[split_at - 1] == b' ' {
+                safe = safe.min(split_at - 1);
+            }
+            break;
+        }
+    }
+    // Invariant 2: hold back a single trailing whitespace char.
+    if safe == buffer.len() {
+        let bytes = buffer.as_bytes();
+        let last = bytes[bytes.len() - 1];
+        if matches!(last, b' ' | b'\t' | b'\n') {
+            let new_safe = buffer.len() - 1;
+            if buffer.is_char_boundary(new_safe) {
+                safe = new_safe;
+            }
+        }
+    }
+    safe
+}
+
 fn strip_think_blocks_impl(raw: &str) -> String {
     const OPEN: &str = "<think>";
     const CLOSE: &str = "</think>";
@@ -484,5 +852,225 @@ mod tests {
         assert!(s.starts_with(t));
         // Valid UTF-8: no panic on str::chars().
         let _ = t.chars().count();
+    }
+
+    // ---------------------------------------------------------------
+    // strip_thinking_stream — streaming counterpart tests.
+    // ---------------------------------------------------------------
+
+    use crate::error::Result as CoreResult;
+    use futures::StreamExt;
+
+    fn ok_stream(
+        chunks: Vec<&'static str>,
+    ) -> impl futures::Stream<Item = CoreResult<String>> + Send + 'static {
+        futures::stream::iter(chunks.into_iter().map(|s| Ok(s.to_string())))
+    }
+
+    async fn collect(
+        stream: std::pin::Pin<
+            Box<dyn futures::Stream<Item = CoreResult<String>> + Send>,
+        >,
+    ) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut s = stream;
+        while let Some(item) = s.next().await {
+            out.push(item.expect("stream yielded an error in test"));
+        }
+        out
+    }
+
+    #[tokio::test]
+    async fn strip_stream_emits_after_close_tag() {
+        // The canonical Qwen3.x witness shape: planning, then </think>,
+        // then the reply. Should buffer the planning silently and emit
+        // the reply.
+        let inner = ok_stream(vec![
+            "<think>planning planning</think>\n\n",
+            "Hello, ",
+            "world.",
+        ]);
+        let out = collect(strip_thinking_stream(inner)).await;
+        // First chunk emitted: everything after </think>, trim_start'd.
+        assert_eq!(out[0], "Hello, ");
+        // Subsequent chunks pass through.
+        assert_eq!(out[1], "world.");
+        assert_eq!(out.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn strip_stream_handles_close_tag_straddling_chunk_boundary() {
+        // </think> arrives split across chunk boundaries — the buffer
+        // should accumulate enough to recognise it.
+        let inner = ok_stream(vec!["<think>plan</thi", "nk>", "Hi."]);
+        let out = collect(strip_thinking_stream(inner)).await;
+        assert_eq!(out[0], "Hi.");
+        assert_eq!(out.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn strip_stream_no_closer_falls_back_to_strip_helper() {
+        // Model never emits </think> — we should still surface a
+        // cleaned reply at end via strip_thinking_response, matching
+        // the non-streaming witness UX. Use the markdown-preamble
+        // shape that strip_thinking_response handles via
+        // PREAMBLE_OPENERS.
+        let inner = ok_stream(vec![
+            "Thinking Process:\n\nFirst I\nReply: ",
+            "Hello there.",
+        ]);
+        let out = collect(strip_thinking_stream(inner)).await;
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0], "Hello there.");
+    }
+
+    #[tokio::test]
+    async fn strip_stream_clean_text_with_no_tags_passes_through_at_end() {
+        // No tags, no preamble. strip_thinking_response is identity in
+        // this case, so the buffer flushes verbatim at end.
+        let inner = ok_stream(vec!["Just a clean ", "witness reply."]);
+        let out = collect(strip_thinking_stream(inner)).await;
+        // Single trailing flush.
+        assert_eq!(out, vec!["Just a clean witness reply.".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn strip_stream_propagates_inner_error() {
+        let inner = futures::stream::iter(vec![
+            Ok::<String, crate::error::Error>("<think>p".to_string()),
+            Err(crate::error::Error::Other("boom".into())),
+        ]);
+        let mut s = strip_thinking_stream(inner);
+        // First item should be the error — buffer dropped, no later
+        // emissions.
+        let first = s.next().await.expect("stream yielded none");
+        assert!(first.is_err());
+        assert!(s.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn strip_stream_empty_after_close_does_not_emit_empty_chunk() {
+        // </think> at the very end with nothing after — the empty
+        // after-tag string must not be yielded as a no-op chunk.
+        let inner = ok_stream(vec!["<think>only planning</think>"]);
+        let out = collect(strip_thinking_stream(inner)).await;
+        assert!(out.is_empty(), "expected no chunks, got {out:?}");
+    }
+
+    // ── Citation stripper ─────────────────────────────────────
+
+    #[test]
+    fn citations_drop_marker_and_preceding_space() {
+        let raw = "the framework defines projects [Source: Project management] as goal-bound.";
+        assert_eq!(
+            strip_source_citations(raw),
+            "the framework defines projects as goal-bound."
+        );
+    }
+
+    #[test]
+    fn citations_drop_multiple_in_one_paragraph() {
+        let raw =
+            "Robinson [Source: Joan Robinson] critiqued the model [Source: Cambridge Capital].";
+        assert_eq!(
+            strip_source_citations(raw),
+            "Robinson critiqued the model."
+        );
+    }
+
+    #[test]
+    fn citations_leave_real_brackets_alone() {
+        // [1], [citation needed], etc. are not citation-source markers.
+        let raw = "Some say so [1], others disagree [citation needed].";
+        assert_eq!(strip_source_citations(raw), raw);
+    }
+
+    #[test]
+    fn citations_no_change_when_clean() {
+        let raw = "You said you feel like a chain gang in a coal mine.";
+        assert_eq!(strip_source_citations(raw), raw);
+    }
+
+    #[test]
+    fn citations_unclosed_marker_left_alone() {
+        // No `]` within the cap — emit verbatim rather than swallow rest.
+        let raw =
+            "weird sentence with [Source: this never closes and just keeps going forever";
+        assert_eq!(strip_source_citations(raw), raw);
+    }
+
+    #[test]
+    fn citations_at_start_of_string() {
+        let raw = "[Source: X] is the source.";
+        // No preceding space to consume; just drop the marker.
+        assert_eq!(strip_source_citations(raw), " is the source.");
+    }
+
+    // ── Citation stripper — streaming ─────────────────────────
+
+    #[tokio::test]
+    async fn citations_stream_strips_marker_split_across_chunks() {
+        // Worst case: marker is fragmented byte-by-byte across chunks.
+        let inner = ok_stream(vec![
+            "the framework ", "[", "Source", ":", " Project", " management", "]", " continues.",
+        ]);
+        let out = collect(strip_source_citations_stream(inner)).await;
+        assert_eq!(out.concat(), "the framework continues.");
+    }
+
+    #[tokio::test]
+    async fn citations_stream_passthrough_when_no_marker() {
+        let inner = ok_stream(vec!["You feel like a chain gang ", "in a coal mine."]);
+        let out = collect(strip_source_citations_stream(inner)).await;
+        assert_eq!(out.concat(), "You feel like a chain gang in a coal mine.");
+    }
+
+    #[tokio::test]
+    async fn citations_stream_holds_partial_prefix_until_resolved() {
+        // Buffer ends with `[` — need to wait for next chunk to know.
+        let inner = ok_stream(vec!["text and [", "1] more text"]);
+        let out = collect(strip_source_citations_stream(inner)).await;
+        assert_eq!(out.concat(), "text and [1] more text");
+    }
+
+    #[tokio::test]
+    async fn citations_stream_unclosed_marker_emits_at_end() {
+        // Marker opens but stream ends before close — the opener leaks
+        // verbatim rather than swallowing everything.
+        let inner = ok_stream(vec!["start [Source: never closes"]);
+        let out = collect(strip_source_citations_stream(inner)).await;
+        assert_eq!(out.concat(), "start [Source: never closes");
+    }
+
+    #[tokio::test]
+    async fn citations_stream_composes_with_thinking_stripper() {
+        // Real wire shape: planning trace + close + reply containing a
+        // hallucinated citation. Composition order matches runtime:
+        // strip_thinking first, then strip_source_citations.
+        let inner = ok_stream(vec![
+            "<think>planning</think>",
+            "You said it ",
+            "[Source: X]",
+            " feels like waiting.",
+        ]);
+        let out = collect(strip_source_citations_stream(strip_thinking_stream(inner))).await;
+        assert_eq!(out.concat(), "You said it feels like waiting.");
+    }
+
+    #[test]
+    fn safe_prefix_end_handles_partial_prefix() {
+        // Hold the partial marker prefix AND its preceding space, so
+        // when the marker completes the space drops with it.
+        assert_eq!(compute_safe_prefix_end("hello [", "[Source:"), 5);
+        assert_eq!(compute_safe_prefix_end("hello [So", "[Source:"), 5);
+        // Trailing whitespace is held back (Invariant 2) so a future
+        // marker can absorb it.
+        assert_eq!(compute_safe_prefix_end("hello world ", "[Source:"), 11);
+        assert_eq!(compute_safe_prefix_end("hello world", "[Source:"), 11);
+        assert_eq!(compute_safe_prefix_end("", "[Source:"), 0);
+        // Buffer entirely a prefix — must hold all of it.
+        assert_eq!(compute_safe_prefix_end("[So", "[Source:"), 0);
+        // Single trailing space alone — hold it.
+        assert_eq!(compute_safe_prefix_end(" ", "[Source:"), 0);
     }
 }

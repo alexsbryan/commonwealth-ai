@@ -19,6 +19,10 @@
      *  flag (`recipeAuthorEnabled`); M3 will gate it on the real
      *  setup-config flag. */
     onOpenRecipeAuthor?: () => void;
+    /** Routes to the dedicated Inner Work surface — a quiet writing
+     *  page distinct from chat. Always-on; the entry point is a
+     *  small affordance above the conversation list. */
+    onOpenInnerWork?: () => void;
   }
 
   let {
@@ -26,6 +30,7 @@
     onSelect,
     onToggleSettings,
     onOpenRecipeAuthor,
+    onOpenInnerWork,
   }: Props = $props();
 
   let conversations: ConversationEntry[] = $state([]);
@@ -175,6 +180,16 @@
         data-testid="open-recipe-author"
       >
         ◇ Recipe Author →
+      </button>
+    {/if}
+    {#if onOpenInnerWork}
+      <button
+        class="inner-work-btn"
+        onclick={onOpenInnerWork}
+        title="Open Inner Work — a quiet page for reflection"
+        data-testid="open-inner-work"
+      >
+        ◯ Inner Work →
       </button>
     {/if}
   </div>
@@ -331,6 +346,29 @@
     transition: all 0.2s;
   }
   .recipe-author-btn:hover {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .inner-work-btn {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px dashed var(--border-mid);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .inner-work-btn:hover {
     background: var(--accent-dim);
     border-color: var(--accent);
     color: var(--accent);

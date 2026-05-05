@@ -223,6 +223,32 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
         report::print_text_report(&run);
     }
 
+    // Axis-level diff against a baseline. The tuning loop's primary
+    // signal: prompt-edit X moved right_silence by Y. Pass/fail
+    // flips have run-to-run variance the README documents at ±2-4
+    // scenarios; axis means pool across all scenarios so they're
+    // more stable.
+    if let Some(diff_path) = get_flag(&flags, "diff").filter(|s| !s.is_empty()) {
+        let baseline_path = std::path::PathBuf::from(&diff_path);
+        match report::load_axis_means_from_report(&baseline_path) {
+            Ok(baseline) => match report::AxisMeans::from_run(&run) {
+                Some(current) => report::print_axis_diff(&baseline, &current),
+                None => {
+                    eprintln!(
+                        "voice eval: --diff requested but current run has no judge scores — \
+                         was --no-judge in effect?"
+                    );
+                }
+            },
+            Err(e) => {
+                eprintln!(
+                    "voice eval: failed to load baseline from {}: {e}",
+                    baseline_path.display()
+                );
+            }
+        }
+    }
+
     if run.has_failures() { 1 } else { 0 }
 }
 
@@ -230,16 +256,25 @@ fn print_help() {
     eprintln!("sovereign voice eval — score the relational voice contract");
     eprintln!();
     eprintln!("USAGE");
-    eprintln!("  sovereign voice eval [--scenario <id>] [--all] [--canned-response \"...\"] [--report <path>]");
+    eprintln!("  sovereign voice eval [--scenario <id> | --skill <id> | --all]");
+    eprintln!("                       [--scenarios-dir <path>] [--canned-response \"...\"]");
+    eprintln!("                       [--report <path>] [--chat-model <id>] [--judge-model <id>]");
     eprintln!();
     eprintln!("FLAGS");
     eprintln!("  --scenario <id>            Run only the named scenario.");
+    eprintln!("  --skill <id>               Run every scenario whose [scenario].skill matches.");
+    eprintln!("                             E.g. `--skill inner-work` filters out the personal-");
+    eprintln!("                             assistant scenarios so a baseline reflects one skill.");
     eprintln!("  --all                      Run every scenario in the scenarios dir.");
     eprintln!("  --canned-response \"...\"    Dry-run: skip the live Runtime and score the");
     eprintln!("                             passed text against the scenario's checks. Useful");
     eprintln!("                             for CI and harness validation.");
     eprintln!("  --scenarios-dir <path>     Override the default `bench/voice/` location.");
     eprintln!("  --report <path>            Write the per-scenario JSON report to this path.");
+    eprintln!("  --diff <baseline.json>     After the run, print per-axis deltas against the");
+    eprintln!("                             baseline JSON. Axis means are the tuning loop's");
+    eprintln!("                             primary signal — pass/fail flips have run-to-run");
+    eprintln!("                             variance, axis means pool across scenarios.");
     eprintln!("  --json                     Suppress the text report; print only the JSON path.");
     eprintln!("  --no-judge                 Skip the LLM-as-judge call; deterministic checks only.");
     eprintln!("  --chat-model <id>          Pin the runtime turn to this model id (gguf stem).");
@@ -294,18 +329,44 @@ fn select_scenarios(
     let by_flag = get_flag(flags, "scenario").filter(|s| !s.is_empty());
     let by_positional = positional.iter().find(|s| !s.starts_with("--")).cloned();
     let target_id = by_flag.or(by_positional);
+    // `--skill <id>` filters the loaded set to scenarios whose
+    // `[scenario].skill` matches. Composes with `--all` (run every
+    // scenario for that skill) and is mutually exclusive with
+    // `--scenario` (since a single id already pins the skill).
+    let skill_filter = get_flag(flags, "skill").filter(|s| !s.is_empty());
 
     if all && target_id.is_some() {
         return Err("pass either --all or --scenario <id>, not both".into());
     }
+    if skill_filter.is_some() && target_id.is_some() {
+        return Err("pass either --skill <id> or --scenario <id>, not both".into());
+    }
 
     let loaded = scenarios::load_all(dir)?;
+
+    if let Some(skill) = skill_filter.as_deref() {
+        // --skill is the new first-class filter. Combine with --all
+        // (or treat as implicit --all when neither is passed) to run
+        // every scenario for that skill.
+        let filtered: Vec<scenarios::Scenario> = loaded
+            .into_iter()
+            .filter(|s| s.scenario.skill == skill)
+            .collect();
+        if filtered.is_empty() {
+            return Err(format!(
+                "no scenarios in {} declare skill = \"{skill}\"",
+                dir.display()
+            ));
+        }
+        return Ok(filtered);
+    }
+
     if all {
         return Ok(loaded);
     }
 
     let id = target_id.ok_or_else(|| {
-        "no scenario selected. Pass --scenario <id> or --all.".to_string()
+        "no scenario selected. Pass --scenario <id>, --skill <id>, or --all.".to_string()
     })?;
 
     let one = loaded
@@ -313,4 +374,72 @@ fn select_scenarios(
         .find(|s| s.scenario.id == id)
         .ok_or_else(|| format!("scenario `{id}` not found in {}", dir.display()))?;
     Ok(vec![one])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn write_scenario(dir: &std::path::Path, id: &str, skill: &str) {
+        let body = format!(
+            r#"[scenario]
+id = "{id}"
+skill = "{skill}"
+description = "test scenario for {id}"
+
+[turn]
+user = "hello"
+
+[expected]
+"#
+        );
+        fs::write(dir.join(format!("{id}.toml")), body).unwrap();
+    }
+
+    #[test]
+    fn select_by_skill_filters_to_matching_scenarios() {
+        let dir = tempfile::tempdir().unwrap();
+        write_scenario(dir.path(), "i01", "inner-work");
+        write_scenario(dir.path(), "i02", "inner-work");
+        write_scenario(dir.path(), "p01", "personal-assistant");
+
+        let flags = vec![("skill".to_string(), "inner-work".to_string())];
+        let picked = select_scenarios(dir.path(), &flags, &[]).unwrap();
+        let ids: Vec<&str> = picked.iter().map(|s| s.scenario.id.as_str()).collect();
+        assert_eq!(ids, vec!["i01", "i02"]);
+    }
+
+    #[test]
+    fn select_by_skill_with_no_matches_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        write_scenario(dir.path(), "i01", "inner-work");
+        let flags = vec![("skill".to_string(), "research".to_string())];
+        let err = select_scenarios(dir.path(), &flags, &[]).unwrap_err();
+        assert!(err.contains("no scenarios"));
+        assert!(err.contains("research"));
+    }
+
+    #[test]
+    fn select_by_skill_and_scenario_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        write_scenario(dir.path(), "i01", "inner-work");
+        let flags = vec![
+            ("skill".to_string(), "inner-work".to_string()),
+            ("scenario".to_string(), "i01".to_string()),
+        ];
+        let err = select_scenarios(dir.path(), &flags, &[]).unwrap_err();
+        assert!(err.contains("--skill"));
+        assert!(err.contains("--scenario"));
+    }
+
+    #[test]
+    fn select_all_still_returns_every_scenario() {
+        let dir = tempfile::tempdir().unwrap();
+        write_scenario(dir.path(), "i01", "inner-work");
+        write_scenario(dir.path(), "p01", "personal-assistant");
+        let flags = vec![("all".to_string(), String::new())];
+        let picked = select_scenarios(dir.path(), &flags, &[]).unwrap();
+        assert_eq!(picked.len(), 2);
+    }
 }

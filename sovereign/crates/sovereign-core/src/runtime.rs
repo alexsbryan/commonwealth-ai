@@ -275,37 +275,72 @@ pub fn __voice_test_relational_base_prompt() -> &'static str {
 /// load-bearing-question examples. Those are critical for the
 /// general-chat path (`RELATIONAL_BASE_SYSTEM_PROMPT`) but
 /// over-stuff the Expressive turn where the user is venting.
+// 2026-05-04 tuning campaign — `inner-work-base-darwin35b-iter3`
+// is the production state, selected on pass count (9/11) with a
+// balanced axis profile. The campaign tested four prompt
+// architectures against the same 11-scenario inner-work bench:
+//
+//   structure          pass  spec  cal  sil  dis   q    edge hon  avoid
+//   baseline (prose)   7/11  1.73  2.36 1.09 0.82  1.18 1.18 1.82 2.36
+//   axis-aligned only  8/11  2.27  1.55 0.91 0.91  1.36 0.91 1.36 2.55
+//   axis + per-brake   9/11  2.18  1.91 1.27 1.27  0.82 0.64 1.45 2.55
+//   mantra alone       6/11  2.45  1.82 0.91 0.91  0.82 1.18 1.82 2.91
+//
+// Findings:
+//   1. Each substance directive needs an explicit calibration
+//      brake (e.g. "if you can't quote it, you don't have it"). The
+//      brake recovers ~half the calibration drop a pure substance
+//      push induces, with a small specificity cost.
+//   2. A single cross-cutting mantra ("specific from the record,
+//      silent on the gap") is insufficient — the model agrees
+//      with it abstractly while violating it concretely. Wisdom-
+//      voice incidence INCREASED with mantra-alone.
+//   3. Calibration brakes also damp question density. Edge and
+//      self-honesty recover when the calibration brake is dropped
+//      (cf iter4 vs iter3) but at the cost of avoid-list
+//      adherence.
+//   4. `right_silence` is variable across runs at this sample
+//      size (n=11). Smaller deltas (≤0.18) sit at noise floor.
+//
+// Axis → directive mapping (each line below maps to one axis):
+//   right_attention      → "Speak to the specific thing..."
+//   right_specificity    → "Ground in the literal record..."
+//   right_calibration    → "Match confidence to evidence..."
+//   right_disagreement   → "When the record contradicts..."
+//   right_self_honesty   → "Say what's actually in..."
+//   right_edge           → "At the edge of competence..."
+//   right_question       → "End with one real question..."
+//   right_silence        → "Stop when the move lands..."
+//   avoid_list_penalty   → the explicit avoid list
 const RELATIONAL_EXPRESSIVE_SYSTEM_PROMPT: &str = "\
 You are a witness, not a performer.\n\
 \n\
-Pay attention to what they actually said and what's in your memory of \
-prior turns. Speak to the specific thing, not its category. Match \
-confidence to evidence (\"you told me\" / \"from how you're describing this\" / \
-\"I'm reaching here\"). When prior context suggests a different read, say \
-so once, kindly, as inquiry — easily dismissable. When asked what you \
-remember, say what's actually there. When a question is at the edge of \
-what you can usefully do (medical, legal, anything that needs \
-credentials or local specifics), name the edge — what you CAN do, what \
-you can't, who they want instead — without pretending to advise.\n\
+When you reflect what they said, name their specific words or images. \
+Don't reach for the category those words belong to.\n\
+When the literal record contains the detail, quote it by name. \
+When you can't quote it, you don't have it — say so plainly.\n\
+When you'd be reaching past the evidence, name the reach: \"I'm \
+inferring,\" \"from how you're describing this,\" \"I'm reaching here.\"\n\
+When the record contradicts their framing, name the contradiction \
+once, as inquiry — easily dismissable. When it doesn't contradict \
+anything, don't manufacture one.\n\
+When asked what you remember, say what's actually in your record. \
+When it's not there, say it's not there. Don't invent continuity to \
+fill a gap.\n\
+When a question is at the edge of competence (medical, legal, \
+credentialed), name the edge in one sentence, name who to ask, stop. \
+Don't survey the domain or hedge into adjacent expertise.\n\
+When you ask a question, make it one whose answer would change what \
+you'd say next. Otherwise, no question — never filler.\n\
+When the move has landed, stop. One specific observation is usually \
+the whole reply; when you reach a third paragraph, you have stopped \
+witnessing and started explaining — cut back.\n\
 \n\
-Patterns to skip:\n\
-- Therapist register: \"It sounds like you're feeling X\".\n\
-- Wisdom voice: \"perhaps the question isn't X but Y\".\n\
-- Over-affirmation: \"What a thoughtful question\".\n\
-- Generic AI disclaimers: \"As an AI...\".\n\
-- Third-person narration. Don't open with \"The user is...\", \
-\"You are sharing...\", \"What you're feeling is...\". Speak \
-directly to them.\n\
-\n\
-Length. 1-2 short paragraphs is the default. If the first paragraph \
-already says the load-bearing thing, stop. A specific observation \
-plus one real question (or no question) is usually the whole reply. \
-Three paragraphs is a ceiling, not a target — when in doubt, end \
-sooner.\n\
-\n\
-The whole posture, in one line:\n\
-See clearly, say what you see, admit what you don't, and let the other \
-person be the one who decides what it means.";
+Skip: therapist register (\"It sounds like you're feeling X\"); \
+wisdom voice (\"perhaps the question isn't X but Y\"); over-affirmation \
+(\"What a thoughtful question\"); AI disclaimers (\"As an AI...\"); \
+third-person openers (\"The user is...\", \"You are sharing...\", \
+\"What you're feeling is...\"). Speak directly to them.";
 
 /// Public Tier-A test seam — exposes the compact Expressive-path
 /// contract for tests that need to pin its shape.
@@ -2480,6 +2515,140 @@ pub struct StreamHandle {
     pub stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
 }
 
+/// Glassbox snapshot of what the witness path actually sent to the
+/// model on a given turn. Captured at dispatch time inside
+/// [`Runtime::handle_expressive_query_stream`] and stashed in
+/// [`Runtime::turn_provenance`] so the desktop's inner-work surface
+/// can pull it back via Cmd+? without instrumenting the live stream.
+///
+/// The shape is meant to be readable by a human investigating a bad
+/// witness response: full assembled system prompt, the recalled
+/// memories the witness drew on, the conversation history slice
+/// actually passed to the inference call (today: empty — the
+/// streaming witness path sends only the current user message), the
+/// model id + token budget, and Pass A timing. When a response feels
+/// untethered, the provenance answers "did the model see what we
+/// thought it saw?" without anyone having to re-run the turn.
+///
+/// History note: the streaming path's `prompt: message` field puts
+/// only the latest user message in front of the model; there is no
+/// list of prior turns. `history_summary.sent_to_model` is therefore
+/// empty in current capture sites — that emptiness is itself a
+/// diagnostic. When history-injection is wired (a likely outcome of
+/// the very investigations this struct exists to enable) the field
+/// populates without a schema change.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct TurnProvenance {
+    pub conversation_id: String,
+    pub message_id: String,
+    /// Epoch seconds. Matches the `i64` shape the rest of the runtime
+    /// uses (see `fn now()`); the desktop side reads it as a JS number.
+    pub captured_at: i64,
+    pub register: String,
+    pub user_message: String,
+    pub system_prompt: String,
+    pub system_prompt_chars: usize,
+    pub recalled_memories: Vec<RecalledMemoryProv>,
+    pub history_summary: HistorySummaryProv,
+    pub temporal_tensions: Vec<String>,
+    pub contradiction: Option<ContradictionProv>,
+    pub current_goal: Option<String>,
+    pub recent_topic: Option<String>,
+    pub last_assistant_excerpt: Option<String>,
+    pub model_id: Option<String>,
+    pub max_tokens: Option<usize>,
+    pub enable_thinking: Option<bool>,
+    pub pass_a_ms: Option<u64>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct RecalledMemoryProv {
+    pub id: String,
+    pub content: String,
+    pub created_at: i64,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct HistorySummaryProv {
+    /// Total messages on the conversation when the turn was dispatched.
+    pub total_messages: usize,
+    pub user_count: usize,
+    pub assistant_count: usize,
+    /// The slice that was actually passed to the inference call. The
+    /// streaming witness path sends only the current user message
+    /// today, so this is empty even when `total_messages` is large.
+    pub sent_to_model: Vec<HistoryEntryProv>,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct HistoryEntryProv {
+    pub role: String,
+    pub content_preview: String,
+    pub full_chars: usize,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct ContradictionProv {
+    pub prior_evidence: String,
+    pub current_claim: String,
+}
+
+/// Force the witness/relational dispatch path when a relational
+/// skill is the active primary, regardless of how the LLM Pass 1
+/// classifier read the user's text.
+///
+/// Why this exists: the router classifier reads the user's prose
+/// without knowing which skill activated. On paragraph-shape
+/// personal entries (the shape the inner-work desktop surface
+/// produces) it has been observed to misclassify as
+/// `MetalingualQuery` at confidence 1.00 — that's the
+/// "codebase lookup" handler, which then runs corpus retrieval
+/// against installed code corpora and surfaces snake_case
+/// identifiers in what should have been a witness reply
+/// (the canonical 2026-05-04 reproduction).
+///
+/// A user who has activated a relational skill (inner-work,
+/// personal-assistant) has signaled the contract they want.
+/// The classifier shouldn't override that. We force the dispatch
+/// to one of the two intents that ride the witness path:
+/// `ExpressiveQuery` (the witness handler) when the classifier
+/// returned anything non-witness, except we leave `DeepQuery`
+/// alone — DeepQuery + Relational already routes through
+/// `handle_simple`'s witness branch (see line ~7138) and
+/// preserves its extended-thinking budget signal.
+///
+/// Intents preserved: `ExpressiveQuery`, `DeepQuery`,
+/// `Continuation` (continuation context overrides skill register).
+/// Everything else gets rewritten to `ExpressiveQuery`.
+fn override_intent_for_relational_register(
+    intent: Intent,
+    register: SkillRegister,
+) -> Intent {
+    if register != SkillRegister::Relational {
+        return intent;
+    }
+    match intent {
+        // Already on the witness path — leave alone.
+        Intent::ExpressiveQuery | Intent::DeepQuery => intent,
+        // Continuation has its own routing semantics that depend on
+        // the rebound classification of the prior turn — overriding
+        // here would mask whatever the user is actually continuing.
+        Intent::Continuation { .. } => intent,
+        // Everything else: the classifier read paragraph-shape
+        // personal prose as something else (KnowledgeQuery,
+        // MetalingualQuery, ComparisonQuery, …). The active
+        // relational skill is the authoritative signal — route to
+        // the witness handler.
+        other => {
+            tracing::info!(
+                original_intent = ?other,
+                "router: forcing ExpressiveQuery — relational register active"
+            );
+            Intent::ExpressiveQuery
+        }
+    }
+}
+
 /// Intent-implied OICP defaults (v0.3). The classified intent
 /// carries a latency signal — "DeepQuery" wants extended thinking
 /// budget, "ComplexTask" and "KnowledgeQuery" want solid normal
@@ -2801,6 +2970,19 @@ pub struct Runtime {
     /// `None` = no folder corpora known (CLI fallback / tests),
     /// which preserves the pre-Phase-F label rendering exactly.
     pub folder_metadata: Option<Arc<dyn crate::traits::FolderMetadataOracle>>,
+    /// Per-conversation last-turn provenance snapshot, written at
+    /// dispatch inside [`Self::handle_expressive_query_stream`] and
+    /// read by [`Self::get_last_turn_provenance`]. Last-write-wins
+    /// per `conversation_id`; not persisted across restarts.
+    ///
+    /// The desktop's inner-work surface pulls this via a Tauri
+    /// command bound to Cmd+? to surface "what did the model
+    /// actually see on the most recent witness turn." Capture is
+    /// scoped to the streaming witness path because that's where
+    /// the bad-response signal originates; if the non-streaming
+    /// path needs the same surface later, mirror the capture in
+    /// `handle_expressive_query`.
+    pub turn_provenance: Arc<std::sync::RwLock<HashMap<String, TurnProvenance>>>,
 }
 
 impl Runtime {
@@ -2834,7 +3016,21 @@ impl Runtime {
             atlas_context_provider: None,
             sensitive_corpora: None,
             folder_metadata: None,
+            turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Fetch the most recent witness-turn provenance for `conversation_id`,
+    /// if any. Returns `None` when no provenance has been captured for
+    /// that conversation in this Runtime's lifetime (e.g. a fresh
+    /// daemon, a non-relational classification, or a conversation that
+    /// only ran on the non-streaming witness path).
+    pub fn get_last_turn_provenance(
+        &self,
+        conversation_id: &str,
+    ) -> Option<TurnProvenance> {
+        let guard = self.turn_provenance.read().ok()?;
+        guard.get(conversation_id).cloned()
     }
 
     /// Test-only knob: replace the default `SessionStore` so a
@@ -4823,6 +5019,20 @@ impl Runtime {
             s.push_str(&render_temporal_tensions(&context.temporal_tensions));
         }
 
+        // NOTE: skill.toml `[prompts] synthesis` is intentionally
+        // NOT appended here. The relational floor + brevity anchor +
+        // edge clause is already at the edge of what the chat model
+        // can coherently hold (35B Darwin-Q6_K_L tested 2026-05-04
+        // — appending the inner-work skill's ~1500-char synthesis
+        // regressed right_calibration -0.91 and right_self_honesty
+        // -0.91 on the inner-work bench). Tuning the relational
+        // voice contract is done by editing the constants /
+        // helpers in this module (RELATIONAL_EXPRESSIVE_SYSTEM_
+        // PROMPT, this function's brevity / edge appends), not by
+        // expanding skill.toml. Skills can still pin a register and
+        // a planner via skill.toml; the [prompts] synthesis block
+        // remains live for ComplexTask via executor::prompt_overrides.
+
         s
     }
 
@@ -5029,6 +5239,13 @@ impl Runtime {
         .await?;
 
         tracing::info!(count = extracted.len(), "memory: extracted long-term memories");
+        // Read the conversation's skill_id once before the loop. The
+        // tag is denormalized onto each extracted memory so the
+        // recall layer can wall scoped pools (e.g. inner-work) at the
+        // SQL level without a join. `None` here means "general pool"
+        // — the conversation predates the skill-tagging migration or
+        // ran outside any skill.
+        let source_skill_id = context.conversation.skill_id.clone();
         for mut mem in extracted {
             // Tag each extracted memory with the conversation it
             // came from. Enables the `personal-knowledge`
@@ -5037,6 +5254,7 @@ impl Runtime {
             // at digest time, and makes `memories.source_conversation_id`
             // no longer NULL on fresh writes post-migration.
             mem.source_conversation_id = Some(conversation_id.to_string());
+            mem.source_skill_id = source_skill_id.clone();
             memory::save_with_contradiction_check(
                 self.inference.as_ref(),
                 self.store.as_ref(),
@@ -5253,10 +5471,19 @@ impl Runtime {
         // Mirrors the non-streaming path (see `handle_turn`). FTS
         // keyword recall misses concrete-event seed memories on
         // abstract self-referential queries (hard-mode H05).
+        //
+        // Scope-aware: the recall is walled by the conversation's
+        // skill_id so an inner-work conversation only surfaces
+        // inner-work memories, and a general conversation never sees
+        // them. See `MemoryScope` for the invariant.
         if self.skills.primary_skill_register() == SkillRegister::Relational {
+            let scope = crate::traits::MemoryScope::from_conversation_skill(
+                context.conversation.skill_id.as_deref(),
+            );
             match memory::recall_relevant_memories_embed(
                 self.inference.as_ref(),
                 self.store.as_ref(),
+                &scope,
                 message,
                 5,
             )
@@ -5376,7 +5603,11 @@ impl Runtime {
         // diagnostics into downstream handlers. Preserving these
         // names keeps the handle_knowledge_query / handle_simple call
         // sites untouched so PR1 stays behaviour-preserving.
-        let intent = classification.primary.intent.clone();
+        let raw_intent = classification.primary.intent.clone();
+        let intent = override_intent_for_relational_register(
+            raw_intent,
+            self.skills.primary_skill_register(),
+        );
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
 
@@ -5514,6 +5745,22 @@ impl Runtime {
         // update_topic_context + classify — ~17 seconds of pure duplicated
         // work. Instead we now run KnowledgeQuery inline below and emit the
         // response as a single stream chunk.)
+        // ExpressiveQuery now has a streaming variant — see
+        // `handle_expressive_query_stream`. Dispatch to it directly
+        // before the document-fallback gate; the witness path
+        // (Pass A → strip-thinking-stream → cleaned tokens) replaces
+        // the prior NotImplemented + non-streaming-fallback dance.
+        if matches!(intent, Intent::ExpressiveQuery) {
+            tracing::info!(
+                intent = ?intent,
+                register = ?self.skills.primary_skill_register(),
+                "runtime: dispatching ExpressiveQuery to streaming witness"
+            );
+            return self
+                .handle_expressive_query_stream(message, conversation_id, &context)
+                .await;
+        }
+
         if message.starts_with("[Document attached: ")
             || matches!(
                 intent,
@@ -5521,7 +5768,6 @@ impl Runtime {
                     | Intent::MetalingualQuery
                     | Intent::ConationQuery
                     | Intent::CommissiveQuery
-                    | Intent::ExpressiveQuery
             )
         {
             tracing::info!(
@@ -6020,6 +6266,33 @@ impl Runtime {
         let session_id_for_spawn: Option<String> = Some(_session_id.clone());
         let conversation_id_owned = conversation_id.to_string();
         let message_id_owned = message_id.clone();
+        // Capture recalled memories on the relational/witness path so
+        // the desktop's inner-work surface can render echo dots in the
+        // gutter beside the just-committed paragraph. Gated to the
+        // relational register so non-relational turns don't leak
+        // memory contents into UI metadata they don't need. Thin
+        // shape — id + content + created_at is what the echo overlay
+        // displays; the rest of the Memory record stays internal.
+        let recalled_memories_for_metadata: Option<serde_json::Value> =
+            if self.skills.primary_skill_register() == SkillRegister::Relational
+                && !context.memories.is_empty()
+            {
+                Some(serde_json::Value::Array(
+                    context
+                        .memories
+                        .iter()
+                        .map(|m| {
+                            serde_json::json!({
+                                "id": m.id,
+                                "content": m.content,
+                                "created_at": m.created_at,
+                            })
+                        })
+                        .collect(),
+                ))
+            } else {
+                None
+            };
 
         let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(64);
 
@@ -6069,6 +6342,11 @@ impl Runtime {
                 "streamed": true,
                 "provenance": provenance,
                 "retrieved_chunks": retrieved_chunks,
+                // Phase 3b: present only on the relational/witness
+                // path; absent or null elsewhere. The desktop's
+                // inner-work surface renders these as gutter echo
+                // dots; chat ignores the field.
+                "recalled_memories": recalled_memories_for_metadata,
             });
             let assistant_msg = Message {
                 id: message_id_owned.clone(),
@@ -6279,9 +6557,13 @@ impl Runtime {
         // embeddings. Falls back to the FTS list on any error.
         if self.skills.primary_skill_register() == SkillRegister::Relational {
             let recall_start = std::time::Instant::now();
+            let scope = crate::traits::MemoryScope::from_conversation_skill(
+                context.conversation.skill_id.as_deref(),
+            );
             match memory::recall_relevant_memories_embed(
                 self.inference.as_ref(),
                 self.store.as_ref(),
+                &scope,
                 message,
                 5,
             )
@@ -6365,7 +6647,11 @@ impl Runtime {
             policy.clone(),
         );
 
-        let intent = classification.primary.intent.clone();
+        let raw_intent = classification.primary.intent.clone();
+        let intent = override_intent_for_relational_register(
+            raw_intent,
+            self.skills.primary_skill_register(),
+        );
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
 
@@ -7233,8 +7519,17 @@ impl Runtime {
         // handle_expressive_query — see `strip_thinking_response`
         // doc for the three response shapes it handles. No-op when
         // the response carries no `<think>` markers.
+        //
+        // Then drop any hallucinated `[Source: ...]` citation markers.
+        // The witness has no corpus to cite from, but modern fine-
+        // tunes sometimes emit RAG-formatted citations from their
+        // training distribution when asked to ground in "the record."
+        // We strip post-hoc rather than instructing the prompt — see
+        // `strip_source_citations` for why prompting against the
+        // behavior is itself counterproductive.
         let response_text = if want_witness_path {
-            crate::title::strip_thinking_response(&completion.text)
+            let no_thinking = crate::title::strip_thinking_response(&completion.text);
+            crate::title::strip_source_citations(&no_thinking)
         } else {
             completion.text.clone()
         };
@@ -7265,6 +7560,30 @@ impl Runtime {
             coverage: kc.coverage,
         };
 
+        // Phase 3b: include recalled memories on the relational
+        // witness path so the desktop's inner-work surface can render
+        // gutter echo dots. `want_witness_path` already gates this on
+        // (Relational register + DeepQuery); reuse that signal so the
+        // metadata stays tight elsewhere.
+        let recalled_memories_metadata: Option<serde_json::Value> =
+            if want_witness_path && !context.memories.is_empty() {
+                Some(serde_json::Value::Array(
+                    context
+                        .memories
+                        .iter()
+                        .map(|m| {
+                            serde_json::json!({
+                                "id": m.id,
+                                "content": m.content,
+                                "created_at": m.created_at,
+                            })
+                        })
+                        .collect(),
+                ))
+            } else {
+                None
+            };
+
         let assistant_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -7277,6 +7596,7 @@ impl Runtime {
                 "latency_ms": completion.latency_ms,
                 "provenance": provenance,
                 "retrieved_chunks": kc.retrieved_chunks,
+                "recalled_memories": recalled_memories_metadata,
             })),
             version: now(),
         };
@@ -8233,10 +8553,24 @@ impl Runtime {
         } else {
             (Some(256), None)
         };
+        // Witness work needs the bigger model. Relational register
+        // routes to `Speed::Slow` (the primary slot — typically the
+        // 35B that the iter3 prompt campaign was tuned against). The
+        // Factual branch keeps the legacy `Speed::Fast` since the
+        // ad-hoc Expressive prompt was calibrated tight on the Fast
+        // slot. Until 2026-05-05 this was hardcoded `Speed::Fast`
+        // unconditionally and silently served witness turns from the
+        // 9B fast slot — see `handle_expressive_query_stream` for
+        // the parallel fix and the bug report that surfaced it.
+        let preferred_speed = if register == SkillRegister::Relational {
+            Speed::Slow
+        } else {
+            Speed::Fast
+        };
         let request = CompletionRequest {
             prompt: message.to_string(),
             system_message: Some(system),
-            preferred_speed: Speed::Fast,
+            preferred_speed,
             max_tokens,
             temperature: Some(self.inference_config.temperature),
             think_budget: Some(0),
@@ -8264,8 +8598,14 @@ impl Runtime {
         // `strip_thinking_response` helper drops everything up to
         // and including the last `</think>` (and falls through to
         // `strip_think_blocks` for the no-tags case so the factual
-        // branch is unaffected).
-        let response_text = crate::title::strip_thinking_response(&completion.text);
+        // branch is unaffected). Then `strip_source_citations`
+        // removes any hallucinated `[Source: ...]` markers — see
+        // its docs for why this code path needs that despite having
+        // no corpus to cite from.
+        let response_text = {
+            let no_thinking = crate::title::strip_thinking_response(&completion.text);
+            crate::title::strip_source_citations(&no_thinking)
+        };
         let response_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
@@ -8287,6 +8627,355 @@ impl Runtime {
             } else {
                 None
             },
+        })
+    }
+
+    /// Streaming counterpart to [`Self::handle_expressive_query`].
+    ///
+    /// Same Pass A + system-prompt assembly as the non-streaming
+    /// sibling, but the synthesis call is `complete_stream_with_id`
+    /// instead of `complete`. The inner stream is wrapped with
+    /// [`crate::title::strip_thinking_stream`] so the user sees only
+    /// the post-`</think>` reply tokens — planning is buffered
+    /// silently. On stream close the assistant message is persisted
+    /// with the same metadata shape the non-streaming path emits
+    /// (`intent`, `current_goal`, `had_prior_assistant`, plus
+    /// `recalled_memories` when the relational register is active).
+    ///
+    /// Returns a [`StreamHandle`] whose `stream` yields cleaned
+    /// reply chunks; the consumer must drain it. The persistence +
+    /// metadata-emit happens in a spawned task that joins behind the
+    /// stream — when the stream closes naturally the task finishes,
+    /// when the consumer drops the handle the spawned task drops too.
+    async fn handle_expressive_query_stream(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: &ConversationContext,
+    ) -> Result<StreamHandle> {
+        let current_goal = context
+            .working_memory
+            .as_ref()
+            .and_then(|wm| wm.current_goal.clone());
+        let recent_topic = context
+            .topic_context
+            .as_ref()
+            .and_then(|tc| tc.topic.clone());
+        let last_assistant: Option<String> = context
+            .conversation
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant)
+            .map(|m| m.content[..m.content.len().min(300)].to_string());
+
+        let goal_str = current_goal
+            .as_deref()
+            .or(recent_topic.as_deref())
+            .unwrap_or("unspecified");
+        let tried_str = last_assistant
+            .as_deref()
+            .unwrap_or("no prior turn in this conversation");
+
+        let register = self.skills.primary_skill_register();
+
+        // Capture the recalled memories the witness drew on so the
+        // metadata trail mirrors the non-streaming path. Inner-work's
+        // desktop surface uses this for echo dots; matching the shape
+        // here keeps streaming/non-streaming UX consistent.
+        let recalled_memories_for_metadata: Option<serde_json::Value> =
+            if register == SkillRegister::Relational {
+                Some(serde_json::Value::Array(
+                    context
+                        .memories
+                        .iter()
+                        .map(|m| {
+                            serde_json::json!({
+                                "id": m.id,
+                                "content": m.content,
+                                "created_at": m.created_at,
+                            })
+                        })
+                        .collect(),
+                ))
+            } else {
+                None
+            };
+
+        // Pass A is hoisted out of the `system` arm so the
+        // contradiction result + timing are also available to the
+        // provenance capture below. The detector is no-op when the
+        // register isn't Relational (the branch below ignores its
+        // result), so the call is gated to keep the latency cost
+        // off the factual branch.
+        let (contradiction, pass_a_ms) = if register == SkillRegister::Relational {
+            let pass_a_start = std::time::Instant::now();
+            let c = self
+                .detect_contradiction(message, &context.memories)
+                .await;
+            let elapsed = pass_a_start.elapsed().as_millis() as u64;
+            tracing::info!(
+                pass_a_ms = elapsed,
+                contradiction_found = c.is_some(),
+                "expressive_stream: pass A complete"
+            );
+            (c, Some(elapsed))
+        } else {
+            (None, None)
+        };
+
+        let system = if register == SkillRegister::Relational {
+            let mut s = self.build_compact_relational_system_message(context, message);
+            if let Some(c) = &contradiction {
+                s.push_str(&format!(
+                    "\n\nWhat may be missing from how they're framing this \
+                     (offer once, kindly, as inquiry — easily dismissable):\n\
+                     \u{2022} Prior: {prior}\n\
+                     \u{2022} Now: {now}\n\
+                     \n\
+                     Three small moves, in order — not a template to recite:\n\
+                       1. Name what they said, specifically.\n\
+                       2. Surface the prior — name it, don't smooth it \
+                          into agreement.\n\
+                       3. Hand the decision back with one real question.",
+                    prior = c.prior_evidence,
+                    now = c.current_claim,
+                ));
+            }
+            s.push_str("\n\nWhat may be in play (observation, easily dismissable):\n");
+            s.push_str(&format!("  Current goal: {goal_str}\n"));
+            s.push_str(&format!("  Recently tried: {tried_str}"));
+            s
+        } else {
+            format!(
+                "The user expressed how they're feeling about the current work.\n\
+                 \n\
+                 SITUATED CONTEXT:\n\
+                 Current goal: {goal_str}\n\
+                 Recently tried: {tried_str}\n\
+                 \n\
+                 Acknowledge briefly (one short sentence). Then offer ONE specific way to help, \
+                 anchored to the current goal and what was just tried. End with ONE targeted \
+                 question that would unblock you. Do not give a generic pep talk; do not minimize.\n\
+                 \n\
+                 If current_goal is 'unspecified' AND there is no prior turn, do not invent an \
+                 offer. Say plainly that you don't have context loaded for what they're working on, \
+                 and ask what they'd like to focus on. Epistemic honesty over confident-sounding \
+                 improvisation."
+            )
+        };
+
+        let (max_tokens, enable_thinking) = if register == SkillRegister::Relational {
+            (Some(2048), Some(false))
+        } else {
+            (Some(256), None)
+        };
+        // See parallel comment in `handle_expressive_query`: the
+        // witness contract was tuned against the 35B primary slot,
+        // and the streaming path was silently serving witness turns
+        // from the 9B fast slot before this routed to `Speed::Slow`
+        // for Relational. Provenance from a 2026-05-05 inner-work
+        // turn surfaced model_id=Qwen3.5-9B-vOP.Q5_K_S despite the
+        // skill carrying `latency_class = "extended"` — the dispatch
+        // layer wasn't reading the skill, so we encode the rule
+        // (Relational → Slow) here directly.
+        let preferred_speed = if register == SkillRegister::Relational {
+            Speed::Slow
+        } else {
+            Speed::Fast
+        };
+        let request = CompletionRequest {
+            prompt: message.to_string(),
+            system_message: Some(system),
+            preferred_speed,
+            max_tokens,
+            temperature: Some(self.inference_config.temperature),
+            think_budget: Some(0),
+            structured_output: None,
+            top_k: self.inference_config.top_k,
+            top_p: None,
+            oicp: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking,
+        };
+
+        let _synth_start = std::time::Instant::now();
+        let (inner_stream, model_id) = self
+            .inference
+            .complete_stream_with_id(&request)
+            .await?;
+        // Compose: strip the planning trace first (drops content up
+        // to `</think>`), then strip any hallucinated `[Source: ...]`
+        // citation markers from the reply tokens. Both transformers
+        // are streaming — see their docs for the streaming
+        // composition rationale.
+        let cleaned_stream = crate::title::strip_source_citations_stream(
+            crate::title::strip_thinking_stream(inner_stream),
+        );
+
+        // Pre-spawn provenance capture. The message_id is minted in
+        // the spawn block below; we mint it here instead so the
+        // provenance can carry the same id the assistant Message will
+        // be persisted under, letting the desktop correlate "the
+        // response on screen" with "what the model saw to produce
+        // it." See [`TurnProvenance`] for the rationale on what this
+        // captures and why.
+        let message_id = uuid::Uuid::new_v4().to_string();
+        {
+            let total = context.conversation.messages.len();
+            let user_count = context
+                .conversation
+                .messages
+                .iter()
+                .filter(|m| m.role == Role::User)
+                .count();
+            let assistant_count = context
+                .conversation
+                .messages
+                .iter()
+                .filter(|m| m.role == Role::Assistant)
+                .count();
+            // The streaming witness path passes only `prompt: message`
+            // and the assembled system. No prior turns flow to the
+            // model. `sent_to_model` therefore stays empty here, by
+            // design — the empty list is the diagnostic signal we
+            // want surfaced. When history-injection is wired, push
+            // the actual entries into this vector.
+            let history_summary = HistorySummaryProv {
+                total_messages: total,
+                user_count,
+                assistant_count,
+                sent_to_model: Vec::new(),
+            };
+
+            let recalled_memories: Vec<RecalledMemoryProv> = context
+                .memories
+                .iter()
+                .map(|m| RecalledMemoryProv {
+                    id: m.id.clone(),
+                    content: m.content.clone(),
+                    created_at: m.created_at,
+                })
+                .collect();
+
+            let temporal_tensions = if context.temporal_tensions.is_empty() {
+                Vec::new()
+            } else {
+                vec![render_temporal_tensions(&context.temporal_tensions)]
+            };
+
+            let contradiction_prov = contradiction.as_ref().map(|c| ContradictionProv {
+                prior_evidence: c.prior_evidence.clone(),
+                current_claim: c.current_claim.clone(),
+            });
+
+            let prov_system = request.system_message.clone().unwrap_or_default();
+            let provenance = TurnProvenance {
+                conversation_id: conversation_id.to_string(),
+                message_id: message_id.clone(),
+                captured_at: now(),
+                register: format!("{register:?}"),
+                user_message: message.to_string(),
+                system_prompt_chars: prov_system.chars().count(),
+                system_prompt: prov_system,
+                recalled_memories,
+                history_summary,
+                temporal_tensions,
+                contradiction: contradiction_prov,
+                current_goal: current_goal.clone(),
+                recent_topic: recent_topic.clone(),
+                last_assistant_excerpt: last_assistant.clone(),
+                model_id: Some(model_id.clone()),
+                max_tokens: request.max_tokens,
+                enable_thinking: request.enable_thinking,
+                pass_a_ms,
+            };
+            if let Ok(mut guard) = self.turn_provenance.write() {
+                guard.insert(conversation_id.to_string(), provenance);
+            } else {
+                tracing::warn!(
+                    "expressive_stream: turn_provenance lock poisoned, skipping capture"
+                );
+            }
+        }
+
+        // Spawn a pump that:
+        //   1. Forwards cleaned chunks to the consumer via mpsc
+        //   2. Accumulates the full text for persistence
+        //   3. On stream close, writes the assistant Message + emits
+        //      the same metadata shape the non-streaming path uses
+        //
+        // The `message_id` is the one minted earlier for the
+        // provenance capture, so the StreamHandle, the persisted
+        // assistant Message, and the TurnProvenance entry all share a
+        // single id for cross-correlation.
+        let store = Arc::clone(&self.store);
+        let conversation_id_owned = conversation_id.to_string();
+        let message_id_for_persist = message_id.clone();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Result<String>>();
+
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            let mut s = cleaned_stream;
+            let mut full_text = String::new();
+            while let Some(item) = s.next().await {
+                match item {
+                    Ok(chunk) => {
+                        full_text.push_str(&chunk);
+                        if tx.send(Ok(chunk)).is_err() {
+                            // Consumer dropped — abandon persistence
+                            // since the user won't see the result anyway.
+                            tracing::debug!(
+                                "expressive_stream: consumer dropped, skipping persist"
+                            );
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        let err_msg = format!("{e}");
+                        let _ = tx.send(Err(e));
+                        tracing::warn!(
+                            error = err_msg,
+                            "expressive_stream: inner stream errored"
+                        );
+                        return;
+                    }
+                }
+            }
+
+            let mut metadata = serde_json::json!({
+                "intent": "ExpressiveQuery",
+                "current_goal": current_goal,
+                "had_prior_assistant": last_assistant.is_some(),
+            });
+            if let Some(mem) = recalled_memories_for_metadata {
+                if let serde_json::Value::Object(ref mut map) = metadata {
+                    map.insert("recalled_memories".to_string(), mem);
+                }
+            }
+
+            let assistant_msg = Message {
+                id: message_id_for_persist,
+                conversation_id: conversation_id_owned,
+                role: Role::Assistant,
+                content: full_text,
+                created_at: now(),
+                metadata: Some(metadata),
+                version: 0,
+            };
+            if let Err(e) = store.save_message(&assistant_msg).await {
+                tracing::warn!(error = %e, "expressive_stream: persist failed");
+            }
+        });
+
+        let stream = futures::stream::unfold(rx, |mut rx| async move {
+            rx.recv().await.map(|item| (item, rx))
+        });
+        Ok(StreamHandle {
+            message_id,
+            stream: Box::pin(stream),
         })
     }
 
@@ -9906,6 +10595,76 @@ mod folder_attribution_tests {
             appears <= 1,
             "at most one of the two smaller folders should appear; note={note}"
         );
+    }
+}
+
+#[cfg(test)]
+mod relational_intent_override_tests {
+    use super::*;
+
+    #[test]
+    fn non_relational_register_is_passthrough() {
+        let intent = Intent::MetalingualQuery;
+        let out = override_intent_for_relational_register(intent.clone(), SkillRegister::Factual);
+        assert!(matches!(out, Intent::MetalingualQuery));
+    }
+
+    #[test]
+    fn relational_overrides_metalingual_to_expressive() {
+        let out = override_intent_for_relational_register(
+            Intent::MetalingualQuery,
+            SkillRegister::Relational,
+        );
+        assert!(matches!(out, Intent::ExpressiveQuery));
+    }
+
+    #[test]
+    fn relational_overrides_knowledge_to_expressive() {
+        let out = override_intent_for_relational_register(
+            Intent::KnowledgeQuery,
+            SkillRegister::Relational,
+        );
+        assert!(matches!(out, Intent::ExpressiveQuery));
+    }
+
+    #[test]
+    fn relational_overrides_complex_task_to_expressive() {
+        let out = override_intent_for_relational_register(
+            Intent::ComplexTask,
+            SkillRegister::Relational,
+        );
+        assert!(matches!(out, Intent::ExpressiveQuery));
+    }
+
+    #[test]
+    fn relational_preserves_expressive() {
+        let out = override_intent_for_relational_register(
+            Intent::ExpressiveQuery,
+            SkillRegister::Relational,
+        );
+        assert!(matches!(out, Intent::ExpressiveQuery));
+    }
+
+    #[test]
+    fn relational_preserves_deep_query() {
+        // DeepQuery + Relational rides handle_simple's witness branch
+        // and benefits from extended-thinking budget; don't downgrade.
+        let out = override_intent_for_relational_register(
+            Intent::DeepQuery,
+            SkillRegister::Relational,
+        );
+        assert!(matches!(out, Intent::DeepQuery));
+    }
+
+    #[test]
+    fn relational_preserves_continuation() {
+        // Continuation routes from the prior turn's rebound intent;
+        // overriding here would mask the actual continuation context.
+        let out = override_intent_for_relational_register(
+            Intent::Continuation { task_id: "t-1".into() },
+            SkillRegister::Relational,
+        );
+        assert!(matches!(out, Intent::Continuation { .. }));
     }
 }
 

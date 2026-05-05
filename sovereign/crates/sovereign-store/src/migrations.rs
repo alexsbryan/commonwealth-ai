@@ -408,3 +408,41 @@ pub fn run_knowledge_view_migrations(conn: &Connection) -> rusqlite::Result<()> 
     );
     Ok(())
 }
+
+/// Inner-work memory wall (2026-05-05). Adds a denormalized
+/// `source_skill_id` column to `memories` so recall can be filtered
+/// at the SQL layer instead of a join: in inner-work conversations
+/// only `source_skill_id = 'inner-work'` recalls; in non-inner-work
+/// conversations memories with `source_skill_id = 'inner-work'` are
+/// excluded. The wall is bidirectional.
+///
+/// Backfill: existing memories whose `source_conversation_id` resolves
+/// to a conversation with a `skill_id` get their `source_skill_id`
+/// populated from that conversation. Memories predating the
+/// `source_conversation_id` migration (or with a NULL conversation
+/// link) stay NULL — they're treated as "general" pool, recallable
+/// anywhere except scoped contexts. The backfill is one-shot
+/// (`WHERE source_skill_id IS NULL`); re-running is a no-op.
+pub fn run_inner_work_memory_wall_migrations(conn: &Connection) -> rusqlite::Result<()> {
+    let _ = conn.execute_batch(
+        "ALTER TABLE memories ADD COLUMN source_skill_id TEXT",
+    );
+    // Backfill: tag memories whose source conversation has a known skill.
+    // Idempotent because of the `IS NULL` guard.
+    let _ = conn.execute_batch(
+        "UPDATE memories SET source_skill_id = (
+             SELECT skill_id FROM conversations
+             WHERE conversations.id = memories.source_conversation_id
+         )
+         WHERE source_skill_id IS NULL
+           AND source_conversation_id IS NOT NULL",
+    );
+    // Index for the recall filter — every relational/witness recall
+    // touches this column, so an index is worth the write cost on
+    // memory inserts (which are bursty and not in the hot path).
+    let _ = conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_memories_source_skill_id
+         ON memories(source_skill_id) WHERE deleted_at IS NULL",
+    );
+    Ok(())
+}

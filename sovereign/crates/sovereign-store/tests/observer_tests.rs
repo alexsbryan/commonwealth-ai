@@ -73,6 +73,7 @@ fn mem(id: &str) -> Memory {
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
+        source_skill_id: None,
     }
 }
 

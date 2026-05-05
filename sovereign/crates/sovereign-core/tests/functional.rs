@@ -220,6 +220,7 @@ async fn deleted_memory_excluded_from_retrieval() {
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
+        source_skill_id: None,
     };
     h.store.save_memory(&mem).await.unwrap();
     assert_eq!(h.store.get_all_memories().await.unwrap().len(), 1);

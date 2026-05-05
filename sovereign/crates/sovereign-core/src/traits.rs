@@ -532,6 +532,36 @@ pub trait TaskStore: Send + Sync {
     async fn get_task(&self, id: &str) -> Result<Task>;
 }
 
+/// Scope filter for memory recall. Enforces the inner-work memory
+/// wall: scoped pools never recall outside their scope, and general
+/// recall never sees scoped memories. The wall is bidirectional and
+/// applied at the SQL layer.
+///
+/// Construct from a conversation's `skill_id`: `Some("inner-work")`
+/// → `Scoped("inner-work")`; `None` → `General`. The runtime calls
+/// `MemoryScope::from_conversation` and threads the result through
+/// to the *_for_scope methods.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemoryScope {
+    /// Pool that excludes any scoped memories. The default for chat,
+    /// research, and any non-scoped surface. A memory whose
+    /// `source_skill_id` is `None` recalls here; one whose
+    /// `source_skill_id` is `Some(_)` does NOT.
+    General,
+    /// Pool restricted to memories tagged with this skill_id. Other
+    /// memories (general or other-scope) do NOT recall here.
+    Scoped(String),
+}
+
+impl MemoryScope {
+    pub fn from_conversation_skill(skill_id: Option<&str>) -> Self {
+        match skill_id {
+            Some(id) if !id.is_empty() => Self::Scoped(id.to_string()),
+            _ => Self::General,
+        }
+    }
+}
+
 #[async_trait]
 pub trait MemoryStore: Send + Sync {
     async fn save_memory(&self, memory: &Memory) -> Result<()>;
@@ -540,6 +570,52 @@ pub trait MemoryStore: Send + Sync {
     async fn delete_memory(&self, id: &str) -> Result<()>;
     async fn update_memory_confidence(&self, id: &str, confidence: f64) -> Result<()>;
     async fn touch_memory(&self, id: &str, timestamp: i64) -> Result<()>;
+
+    /// Scoped variant of `get_relevant_memories`. Default impl filters
+    /// the unscoped result in-process so existing impls compile, but
+    /// SQL backends should override with a server-side filter for the
+    /// wall to be a real privacy guarantee (in-process filtering still
+    /// loads scoped rows into memory before discarding them, which
+    /// the postgres path leaks via observers and replication).
+    async fn get_relevant_memories_for_scope(
+        &self,
+        scope: &MemoryScope,
+        context: &str,
+        limit: usize,
+    ) -> Result<Vec<Memory>> {
+        let raw = self.get_relevant_memories(context, limit * 4).await?;
+        Ok(filter_memories_for_scope(raw, scope, limit))
+    }
+
+    /// Scoped variant of `get_all_memories`. Same default-impl caveat.
+    async fn get_all_memories_for_scope(&self, scope: &MemoryScope) -> Result<Vec<Memory>> {
+        let raw = self.get_all_memories().await?;
+        Ok(raw
+            .into_iter()
+            .filter(|m| matches_scope(m, scope))
+            .collect())
+    }
+}
+
+/// In-process scope filter. Used by the default impls above and as
+/// the in-memory store's enforcement point.
+pub fn matches_scope(memory: &Memory, scope: &MemoryScope) -> bool {
+    match scope {
+        MemoryScope::General => memory.source_skill_id.is_none(),
+        MemoryScope::Scoped(id) => memory.source_skill_id.as_deref() == Some(id.as_str()),
+    }
+}
+
+fn filter_memories_for_scope(
+    memories: Vec<Memory>,
+    scope: &MemoryScope,
+    limit: usize,
+) -> Vec<Memory> {
+    memories
+        .into_iter()
+        .filter(|m| matches_scope(m, scope))
+        .take(limit)
+        .collect()
 }
 
 #[async_trait]

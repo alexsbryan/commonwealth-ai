@@ -68,6 +68,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
         migrations::run_knowledge_view_migrations(&conn)
             .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
+        migrations::run_inner_work_memory_wall_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Inner-work memory wall migration failed: {e}")))?;
         migrations::run_antifragile_routing_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
 
@@ -205,6 +207,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
         migrations::run_knowledge_view_migrations(&conn)
             .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
+        migrations::run_inner_work_memory_wall_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Inner-work memory wall migration failed: {e}")))?;
         migrations::run_antifragile_routing_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
 
@@ -556,8 +560,9 @@ impl MemoryStore for SqliteStateStore {
             let conn = self.conn.lock().await;
             conn.execute(
                 "INSERT OR REPLACE INTO memories
-                   (id, content, source, confidence, created_at, last_used, source_conversation_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                   (id, content, source, confidence, created_at, last_used,
+                    source_conversation_id, source_skill_id)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 rusqlite::params![
                     memory.id,
                     memory.content,
@@ -566,6 +571,7 @@ impl MemoryStore for SqliteStateStore {
                     memory.created_at,
                     memory.last_used,
                     memory.source_conversation_id,
+                    memory.source_skill_id,
                 ],
             )
             .map_err(map_db)?;
@@ -596,7 +602,8 @@ impl MemoryStore for SqliteStateStore {
 
         let mut stmt = conn
             .prepare(
-                "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used, m.source_conversation_id
+                "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used,
+                        m.source_conversation_id, m.source_skill_id
                  FROM memories m
                  JOIN memories_fts fts ON m.rowid = fts.rowid
                  WHERE memories_fts MATCH ?1 AND m.deleted_at IS NULL
@@ -616,6 +623,7 @@ impl MemoryStore for SqliteStateStore {
                     version: 0,
                     deleted_at: None,
                     source_conversation_id: row.get(6)?,
+                    source_skill_id: row.get(7)?,
                 })
             })
             .map_err(map_db)?
@@ -650,10 +658,163 @@ impl MemoryStore for SqliteStateStore {
         Ok(scored.into_iter().map(|(_, m)| m).collect())
     }
 
+    async fn get_all_memories_for_scope(
+        &self,
+        scope: &sovereign_core::MemoryScope,
+    ) -> Result<Vec<Memory>> {
+        let conn = self.conn.lock().await;
+        // Filter at the SQL layer — the inner-work wall is a privacy
+        // contract; in-process filtering would still load scoped rows
+        // through the observer hooks and any future replication
+        // transport. This route ensures we never even read scoped
+        // bytes when serving a general query.
+        let (where_clause, scope_param): (&str, Option<String>) = match scope {
+            sovereign_core::MemoryScope::General => (
+                "WHERE deleted_at IS NULL AND source_skill_id IS NULL",
+                None,
+            ),
+            sovereign_core::MemoryScope::Scoped(id) => (
+                "WHERE deleted_at IS NULL AND source_skill_id = ?1",
+                Some(id.clone()),
+            ),
+        };
+        let sql = format!(
+            "SELECT id, content, source, confidence, created_at, last_used,
+                    source_conversation_id, source_skill_id
+             FROM memories {where_clause}"
+        );
+        let mut stmt = conn.prepare(&sql).map_err(map_db)?;
+        let row_to_mem = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Memory> {
+            Ok(Memory {
+                id: row.get(0)?,
+                content: row.get(1)?,
+                source: row.get(2)?,
+                confidence: row.get(3)?,
+                created_at: row.get(4)?,
+                last_used: row.get(5)?,
+                version: 0,
+                deleted_at: None,
+                source_conversation_id: row.get(6)?,
+                source_skill_id: row.get(7)?,
+            })
+        };
+        let memories: Vec<Memory> = if let Some(id) = scope_param {
+            stmt.query_map(rusqlite::params![id], row_to_mem)
+                .map_err(map_db)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(map_db)?
+        } else {
+            stmt.query_map([], row_to_mem)
+                .map_err(map_db)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(map_db)?
+        };
+        Ok(memories)
+    }
+
+    async fn get_relevant_memories_for_scope(
+        &self,
+        scope: &sovereign_core::MemoryScope,
+        context_query: &str,
+        limit: usize,
+    ) -> Result<Vec<Memory>> {
+        if context_query.is_empty() {
+            return Ok(Vec::new());
+        }
+        let fts_context = sanitize_fts5_query(context_query);
+        if fts_context.is_empty() {
+            return Ok(Vec::new());
+        }
+        let conn = self.conn.lock().await;
+        let current_time = now();
+
+        // Same SQL-level wall as get_all_memories_for_scope — the FTS
+        // path has to honor the same invariant or scoped memories
+        // could leak through the keyword fallback.
+        let (scope_clause, scope_param): (&str, Option<String>) = match scope {
+            sovereign_core::MemoryScope::General => (
+                "AND m.source_skill_id IS NULL",
+                None,
+            ),
+            sovereign_core::MemoryScope::Scoped(id) => (
+                "AND m.source_skill_id = ?3",
+                Some(id.clone()),
+            ),
+        };
+        let sql = format!(
+            "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used,
+                    m.source_conversation_id, m.source_skill_id
+             FROM memories m
+             JOIN memories_fts fts ON m.rowid = fts.rowid
+             WHERE memories_fts MATCH ?1 AND m.deleted_at IS NULL {scope_clause}
+             LIMIT ?2"
+        );
+        let mut stmt = conn.prepare(&sql).map_err(map_db)?;
+        let row_to_mem = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Memory> {
+            Ok(Memory {
+                id: row.get(0)?,
+                content: row.get(1)?,
+                source: row.get(2)?,
+                confidence: row.get(3)?,
+                created_at: row.get(4)?,
+                last_used: row.get(5)?,
+                version: 0,
+                deleted_at: None,
+                source_conversation_id: row.get(6)?,
+                source_skill_id: row.get(7)?,
+            })
+        };
+        let raw: Vec<Memory> = if let Some(id) = scope_param {
+            stmt.query_map(
+                rusqlite::params![fts_context, (limit * 3) as i64, id],
+                row_to_mem,
+            )
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap_or_default()
+        } else {
+            stmt.query_map(
+                rusqlite::params![fts_context, (limit * 3) as i64],
+                row_to_mem,
+            )
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap_or_default()
+        };
+
+        // Same confidence-decay floor + last-used touch as the
+        // unscoped path so callers can swap freely.
+        let mut scored: Vec<(f64, Memory)> = raw
+            .into_iter()
+            .filter_map(|m| {
+                let months = (current_time - m.last_used) as f64 / (30.0 * 86400.0);
+                let decayed = m.confidence * 0.9_f64.powf(months);
+                if decayed >= 0.2 {
+                    Some((decayed, m))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+        for (_, mem) in &scored {
+            let _ = conn.execute(
+                "UPDATE memories SET last_used = ?2 WHERE id = ?1",
+                rusqlite::params![mem.id, current_time],
+            );
+        }
+        Ok(scored.into_iter().map(|(_, m)| m).collect())
+    }
+
     async fn get_all_memories(&self) -> Result<Vec<Memory>> {
         let conn = self.conn.lock().await;
         let mut stmt = conn
-            .prepare("SELECT id, content, source, confidence, created_at, last_used, source_conversation_id FROM memories WHERE deleted_at IS NULL")
+            .prepare(
+                "SELECT id, content, source, confidence, created_at, last_used,
+                        source_conversation_id, source_skill_id
+                 FROM memories WHERE deleted_at IS NULL",
+            )
             .map_err(map_db)?;
 
         let memories: Vec<Memory> = stmt
@@ -668,6 +829,7 @@ impl MemoryStore for SqliteStateStore {
                     version: 0,
                     deleted_at: None,
                     source_conversation_id: row.get(6)?,
+                    source_skill_id: row.get(7)?,
                 })
             })
             .map_err(map_db)?

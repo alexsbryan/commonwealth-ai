@@ -18,6 +18,7 @@
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
   import RecipeAuthorWorkspace from "./lib/components/recipe_author/RecipeAuthorWorkspace.svelte";
+  import InnerWorkSurface from "./lib/components/inner_work/InnerWorkSurface.svelte";
   import SettingsPanel from "./lib/components/SettingsPanel.svelte";
   import InsightsPanel from "./lib/components/InsightsPanel.svelte";
   import ReadingSurface from "./lib/components/reading/ReadingSurface.svelte";
@@ -34,7 +35,8 @@
     | "first_corpus"
     | "chat"
     | "settings"
-    | "recipe_author";
+    | "recipe_author"
+    | "inner_work";
 
   let view: AppView = $state("loading");
 
@@ -302,6 +304,8 @@
   />
 {:else if view === "recipe_author"}
   <RecipeAuthorWorkspace onExit={() => (view = "chat")} />
+{:else if view === "inner_work"}
+  <InnerWorkSurface onExit={() => (view = "chat")} />
 {:else}
   <div
     class="app-layout"
@@ -317,6 +321,7 @@
         onOpenRecipeAuthor={recipeAuthorEnabled
           ? () => (view = "recipe_author")
           : undefined}
+        onOpenInnerWork={() => (view = "inner_work")}
       />
     </aside>
     <main class="main-content">

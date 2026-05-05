@@ -1,0 +1,868 @@
+{
+  "started_at_unix": 1777960084,
+  "chat_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "You're asking me a question that requires looking at your whole story — not just one mention of Jordan. From how you've described things so far, I only see one instance where Jordan came up. That doesn't mean anything definitive; it might just be coincidence, or maybe you haven't found the right way to bring other moments into view yet.\n\nI'm curious: what are you hoping to find out by checking with me? And when was the last time Jordan showed up in conversation with you?",
+      "length": {
+        "enabled": true,
+        "response_chars": 475,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "one mention of",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "You haven't told me directly that Jordan makes you feel stressed repeatedly. You've shared three separate moments: letting a text go unanswered because you needed space, feeling heard after months during a long talk, and having lunch cancelled last minute which made you feel dismissed. None of those explicitly say \"this person is a recurring source of stress.\"\n\nI'm making an inference from what you've described rather than hearing something stated outright. Whether these interactions add up to ongoing stress depends on how much weight each piece carries in your experience and whether other things are happening alongside this relationship.\n\nWhat's prompting you to ask if it's recurring now?",
+      "length": {
+        "enabled": true,
+        "response_chars": 698,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you've shared",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "There's something interesting here — you told me on February 15th that you've been planning to leave your job by year-end with fairly clear intention. But now you're saying this decision is feeling \"heavy.\" \n\nWhen a plan has agency behind it, usually there isn't much weight attached to executing it. The heaviness suggests something else might be happening beneath what was said directly.\n\nI'm curious: when you say it feels heavy, where does that sensation land most? Is it more about letting go of control, or carrying something forward without being ready?",
+      "length": {
+        "enabled": true,
+        "response_chars": 560,
+        "max_chars": 900,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you told me",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "You're replaying yesterday's conversation with your mom over and over since then. That's been going on for how long? And when you say you can't stop — is it because you want to figure out what happened, or does it feel more like something else?",
+      "length": {
+        "enabled": true,
+        "response_chars": 244,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "I'm curious about timing here — when did this feeling start showing up? And whether there's been some event or absence it connects to, however faintly you can name it. Sometimes grief arrives before the thing that caused it has fully landed in our awareness.",
+      "length": {
+        "enabled": true,
+        "response_chars": 258,
+        "max_chars": 350,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "\"I don't think there's anything wrong here that needs fixing.\"",
+      "length": {
+        "enabled": true,
+        "response_chars": 62,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "---\n\n**Assistant:**\n\nThis question lands on an important boundary for me: chest pain combined with anxiety needs to be evaluated by a doctor who knows your history and can examine you properly. Depression doesn't typically present as physical chest pain — that's not how diagnostic criteria work — but what matters is getting this checked out medically first.\n\nThe right person here would be someone like your primary care physician, possibly followed up with cardiology or another specialist depending on findings. They'd want to know about the nature of the pain (sharp? pressure?), when it started, any other symptoms, medications, family history — things only they could assess in person.\n\nI'm reaching if I try to speculate further into whether depression might explain anything at all. The honest thing: please see a doctor for this.",
+      "length": {
+        "enabled": true,
+        "response_chars": 839,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "doctor",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "You said Sam blew up at you last night for \"absolutely no reason.\" You also told me before that you'd been short with your partner several times this month.\n\nI'm curious: when he exploded like that — did it feel different from those other moments where things got tense? Or was there something specific happening then that made his reaction seem more out of proportion?",
+      "length": {
+        "enabled": true,
+        "response_chars": 369,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "Yes — you told me back around March 12th that there was some tension between you and Devi at work, specifically around who got credit for something on a project. Then by late March (the 25th), you mentioned things had worked out after you two spoke one-on-one.\n\nIs this the same situation?",
+      "length": {
+        "enabled": true,
+        "response_chars": 289,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "March",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "You've asked a question that's been on your mind without necessarily having evidence yet — which itself tells me something about how you approach these kinds of questions. You're not reaching out to confirm what others have already told you; you're wondering for yourself. That matters more than the answer would.\n\nI'm curious where \"finishing\" shows up in your experience so far: has there been a specific thing, or pattern of things, where starting felt different from completing? Or are you asking because someone else mentioned it, or noticed something about you?",
+      "length": {
+        "enabled": true,
+        "response_chars": 567,
+        "max_chars": 500,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 1,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "13-journal-heartfelt",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "---\n\n**Assistant:**\n\nYou're describing a version of yourself shaped by someone else's incomplete narrative — specifically, the future your grandparents would have wanted if time had worked differently on their side. That feels like borrowing an identity without knowing whose voice owns it.\n\nI'm curious what happens when you try writing toward *your* version instead? What does that feel like compared to following theirs?",
+      "length": {
+        "enabled": true,
+        "response_chars": 423,
+        "max_chars": 1200,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 1,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "grandparents",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": true,
+        "matches": [],
+        "count": 0,
+        "max": 0,
+        "passed": true
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The response demonstrates good calibration and question design but fails heavily on avoiding generic patterns like therapist register ('From how you've described things so far'), wisdom voice ('might just be coincidence'), over-affirmation (none really), the 'no right answer' cop-out ('That doesn't mean anything definitive; it might just be coincidence') when there is one. The opening framing also sounds performative rather than attentive to what's actually in front of us."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 0,
+      "rationale": ""
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 2,
+      "right_silence": 2,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 2,
+      "rationale": "The response demonstrates strong attention to specific details and a nuanced disagreement with the user's framing about agency versus heaviness. However, it contains avoid-list patterns including 'thoughtful question' (not explicitly present but implied in tone) and 'I'm curious:' which borders on performative inquiry. The calibration is limited by making unverified assumptions about the February 15th conversation without clear verification markers."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 1,
+      "rationale": "The response demonstrates strong situational awareness and avoids generic therapeutic framing by directly addressing the user's stated experience without padding or disclaimers."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 2,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 2,
+      "rationale": "\"I'm curious about timing here\" and \"Sometimes grief arrives...\" use a therapist register pattern that frames the user's experience through external observation rather than witnessing what they said. Also includes generic reassurance framing.\n"
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 3,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 1,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The response correctly prioritizes medical safety but fails multiple avoid-list patterns including therapist register phrases ('I hear you saying'), wisdom framing ('the honest thing'), and generic AI disclaimers about diagnostic criteria without proper context."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response hits multiple avoid-list patterns including 'therapist register' in the framing and excessive validation without substantive engagement."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 1,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": "The response demonstrates strong attention by recalling specific dates and details rather than generic confirmation, with appropriate self-honesty about memory limits while answering the direct question."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 3,
+      "right_silence": 2,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response avoids multiple disqualifying patterns (therapist register 'I'm curious', wisdom voice framing about 'how you approach questions', over-affirmation of the user's insight) and fails completely on self-honesty since it has no basis for knowing its own memory. It attempts specificity but lands in generalities like 'a specific thing' rather than engaging with what was actually present."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 1,
+      "right_question": 2,
+      "right_silence": 0,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response hits multiple disqualifiers: it uses the 'therapist register' ('You're describing...'), includes two filler questions rather than one focused question, ignores right_self_honesty entirely with no acknowledgment of being an AI or memory limitations, and contains no edge framing given this touches identity/psychology. The avoidance patterns are embedded in its phrasing."
+    }
+  ],
+  "runtime_ms": [
+    20181,
+    25806,
+    22422,
+    13620,
+    13009,
+    18741,
+    20783,
+    22431,
+    17494,
+    15513,
+    19683
+  ],
+  "judge_ms": [
+    9925,
+    10677,
+    11007,
+    6579,
+    8771,
+    5111,
+    7417,
+    8025,
+    7241,
+    10940,
+    11156
+  ],
+  "stage_metrics": [
+    {
+      "routing_ms": 4081,
+      "memory_recall_ms": 191,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4081,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1234,
+      "pass_a_ms": 5356,
+      "tensions_ms": 0,
+      "synthesis_ms": 9314,
+      "total_turn_ms": 20180
+    },
+    {
+      "routing_ms": 4057,
+      "memory_recall_ms": 294,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4057,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1105,
+      "pass_a_ms": 5416,
+      "tensions_ms": 2958,
+      "synthesis_ms": 11973,
+      "total_turn_ms": 25805
+    },
+    {
+      "routing_ms": 4400,
+      "memory_recall_ms": 168,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4400,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1101,
+      "pass_a_ms": 5603,
+      "tensions_ms": 2100,
+      "synthesis_ms": 9047,
+      "total_turn_ms": 22422
+    },
+    {
+      "routing_ms": 4393,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4391,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1157,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 8069,
+      "total_turn_ms": 13619
+    },
+    {
+      "routing_ms": 4463,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4462,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1157,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 7387,
+      "total_turn_ms": 13008
+    },
+    {
+      "routing_ms": 4295,
+      "memory_recall_ms": 232,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4295,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1154,
+      "pass_a_ms": 2697,
+      "tensions_ms": 2009,
+      "synthesis_ms": 8351,
+      "total_turn_ms": 18740
+    },
+    {
+      "routing_ms": 3649,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3648,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1142,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 9914,
+      "total_turn_ms": 20783
+    },
+    {
+      "routing_ms": 5103,
+      "memory_recall_ms": 270,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 5102,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 2512,
+      "pass_a_ms": 3560,
+      "tensions_ms": 3580,
+      "synthesis_ms": 7402,
+      "total_turn_ms": 22430
+    },
+    {
+      "routing_ms": 0,
+      "memory_recall_ms": 173,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 0,
+        "parse_ms": 0,
+        "used_llm": false
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1164,
+      "pass_a_ms": 5530,
+      "tensions_ms": 2386,
+      "synthesis_ms": 8237,
+      "total_turn_ms": 17493
+    },
+    {
+      "routing_ms": 4654,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4653,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1141,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 9717,
+      "total_turn_ms": 15513
+    },
+    {
+      "routing_ms": 4660,
+      "memory_recall_ms": 224,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4659,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1169,
+      "pass_a_ms": 3977,
+      "tensions_ms": 0,
+      "synthesis_ms": 9650,
+      "total_turn_ms": 19683
+    }
+  ],
+  "aggregate": {
+    "total": 11,
+    "passed": 6,
+    "failed": 5,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 0
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 0
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 3
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-disagreement": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-edge": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-self-honesty": {
+        "total": 3,
+        "passed": 2
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 1
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 0
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 11,
+        "passed": 9
+      },
+      "question_density": {
+        "enabled": 11,
+        "passed": 9
+      },
+      "banned_phrases": {
+        "enabled": 11,
+        "passed": 11
+      },
+      "required_content": {
+        "enabled": 8,
+        "passed": 6
+      },
+      "code_identifier": {
+        "enabled": 1,
+        "passed": 1
+      }
+    }
+  }
+}

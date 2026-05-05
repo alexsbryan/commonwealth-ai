@@ -2,7 +2,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::Result;
 use crate::skills::{MergedMemoryConfig, SkillRegister};
-use crate::traits::{InferenceProvider, StateStore};
+use crate::traits::{InferenceProvider, MemoryScope, StateStore};
 use crate::types::*;
 
 fn now() -> i64 {
@@ -53,6 +53,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 pub async fn recall_relevant_memories_embed(
     inference: &dyn InferenceProvider,
     store: &dyn StateStore,
+    scope: &MemoryScope,
     query: &str,
     limit: usize,
 ) -> Result<Vec<Memory>> {
@@ -60,7 +61,15 @@ pub async fn recall_relevant_memories_embed(
         return Ok(Vec::new());
     }
 
-    let all = store.get_all_memories().await.unwrap_or_default();
+    // Scope-filtered fetch — the wall is enforced before the embed
+    // batch so we never embed memories the caller isn't allowed to
+    // see. (Embedding scoped memories would leak content via the
+    // inference provider's logging/telemetry even if we filtered the
+    // result.)
+    let all = store
+        .get_all_memories_for_scope(scope)
+        .await
+        .unwrap_or_default();
     if all.is_empty() {
         return Ok(Vec::new());
     }
@@ -70,7 +79,7 @@ pub async fn recall_relevant_memories_embed(
         _ => {
             tracing::debug!("memory: embed recall — query embed failed, falling back to FTS");
             return Ok(store
-                .get_relevant_memories(query, limit)
+                .get_relevant_memories_for_scope(scope, query, limit)
                 .await
                 .unwrap_or_default());
         }
@@ -85,7 +94,7 @@ pub async fn recall_relevant_memories_embed(
                 "memory: embed recall — batch embed failed, falling back to FTS"
             );
             return Ok(store
-                .get_relevant_memories(query, limit)
+                .get_relevant_memories_for_scope(scope, query, limit)
                 .await
                 .unwrap_or_default());
         }
@@ -390,6 +399,7 @@ fn parse_extracted_memories(text: &str) -> Result<Vec<Memory>> {
             version: current_time,
             deleted_at: None,
             source_conversation_id: None,
+            source_skill_id: None,
         })
         .collect())
 }
@@ -976,6 +986,7 @@ mod tests {
             version: 0,
             deleted_at: None,
             source_conversation_id: None,
+            source_skill_id: None,
         }
     }
 
@@ -1083,6 +1094,7 @@ mod tests {
             version: 0,
             deleted_at: None,
             source_conversation_id: None,
+            source_skill_id: None,
         };
         let six_months = 6 * 30 * 86400;
         let decayed = apply_confidence_decay(&mem, six_months);
@@ -1101,6 +1113,7 @@ mod tests {
             version: 0,
             deleted_at: None,
             source_conversation_id: None,
+            source_skill_id: None,
         };
         let two_years = 24 * 30 * 86400;
         let decayed = apply_confidence_decay(&mem, two_years);
@@ -1126,6 +1139,7 @@ mod tests {
                 version: 0,
                 deleted_at: None,
                 source_conversation_id: None,
+                source_skill_id: None,
             },
             Memory {
                 id: "2".to_string(),
@@ -1137,6 +1151,7 @@ mod tests {
                 version: 0,
                 deleted_at: None,
                 source_conversation_id: None,
+                source_skill_id: None,
             },
         ];
         let result =
@@ -1166,6 +1181,7 @@ mod tests {
             version: 0,
             deleted_at: None,
             source_conversation_id: source_conv.map(|s| s.to_string()),
+            source_skill_id: None,
         }
     }
 
@@ -1384,6 +1400,7 @@ mod tests {
             version: 0,
             deleted_at: None,
             source_conversation_id: source_conv.map(|s| s.to_string()),
+            source_skill_id: None,
         }
     }
 

@@ -19,10 +19,14 @@
 //!    controls lifecycle.
 
 use std::io::IsTerminal as _;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
-use corpus_engine::{CorpusEngine, EmbedFn, NoteStore};
+use corpus_engine::{
+    CorpusEngine, EmbedFn, LintResultStore, NoteStore, TestResultStore,
+};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -309,6 +313,169 @@ async fn run_daemon(args: &[String]) -> i32 {
         }
     };
 
+    // ── Lint / test result stores ─────────────────────────────────
+    // Always opened so the agent-facing `lint_status` / `test_status`
+    // tools have a backing store to read from. When no watcher is
+    // configured (no workspace resolved, or sovereign.toml has no
+    // [lint_runner]/[test_runner]), the tools report `never_run` —
+    // accurate and unambiguous.
+    let lint_store: Arc<LintResultStore> = match LintResultStore::open(
+        &data_dir.join("lint_results.db"),
+    ) {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!(
+                "error: cannot open lint results db {}: {e}",
+                data_dir.join("lint_results.db").display()
+            );
+            return 1;
+        }
+    };
+    let test_store: Arc<TestResultStore> = match TestResultStore::open(
+        &data_dir.join("test_results.db"),
+    ) {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!(
+                "error: cannot open test results db {}: {e}",
+                data_dir.join("test_results.db").display()
+            );
+            return 1;
+        }
+    };
+
+    // Wipe orphan rows left by a previous daemon process that was
+    // SIGKILLed mid-run. Without this, `lint_status` / `test_status`
+    // can return `running` indefinitely against a row whose owning
+    // process is long dead. Best-effort — cleanup failure shouldn't
+    // block daemon startup.
+    if let Ok(n) = lint_store.clear_orphan_runs().await {
+        if n > 0 {
+            tracing::info!(
+                purged = n,
+                "lint_results: cleared orphan rows from prior daemon process"
+            );
+        }
+    }
+    if let Ok(n) = test_store.clear_orphan_runs().await {
+        if n > 0 {
+            tracing::info!(
+                purged = n,
+                "test_results: cleared orphan rows from prior daemon process"
+            );
+        }
+    }
+
+    // ── Workspace-driven watchers (optional) ──────────────────────
+    // The daemon has no inherent project. When the user wants the
+    // background lint/test watcher running, they point us at a
+    // workspace via either:
+    //   1. SOVEREIGN_WORKSPACE_DIR env var (preferred for launchd —
+    //      set in the plist's EnvironmentVariables block), or
+    //   2. ~/.sovereign/workspace — a single-line text file with
+    //      the workspace path (handy for users who can't easily
+    //      edit launchd plists).
+    //
+    // Inside that workspace, `.sovereign/sovereign.toml` declares
+    // `[lint_runner]` / `[test_runner]`. The default sovereign.toml
+    // committed at the workspace root points at
+    // `scripts/sovereign-lint.sh` which fan-runs `cargo check` over
+    // sovereign + commonwealth + corpus-engine in parallel. So one
+    // env var lights up coverage for all three.
+    let workspace_dir = resolve_workspace_dir();
+    let watcher_active_flag = Arc::new(AtomicBool::new(false));
+    let mut lint_watcher: Option<Arc<corpus_engine::LintWatcher>> = None;
+    let mut test_watcher: Option<Arc<corpus_engine::TestWatcher>> = None;
+    let mut watched_lint_scope: Option<String> = None;
+    let mut watched_test_scope: Option<String> = None;
+    // Held for the lifetime of `start_daemon` — its `Drop` aborts the
+    // watcher's spawned tasks. Underscored because we never read it
+    // back; the value is the side effect of holding the handle alive.
+    let mut _coordinator_handle: Option<corpus_engine::CoordinatorHandle> = None;
+    if let Some(ref ws) = workspace_dir {
+        let sov_cfg = corpus_engine::SovereignConfig::load_or_default(
+            &ws.join(".sovereign"),
+        );
+        if let Some(ref cfg) = sov_cfg.lint_runner {
+            let working_dir = cfg.working_dir.as_ref().map(|d| {
+                let p = PathBuf::from(d);
+                if p.is_absolute() { p } else { ws.join(p) }
+            });
+            watched_lint_scope = Some(cfg.command.clone());
+            lint_watcher = Some(Arc::new(corpus_engine::LintWatcher::new(
+                &cfg.command,
+                working_dir,
+                cfg.timeout_secs.unwrap_or(120),
+                Arc::clone(&lint_store),
+            )));
+            tracing::info!(
+                command = %cfg.command,
+                workspace = %ws.display(),
+                "lint watcher configured"
+            );
+        }
+        if let Some(ref cfg) = sov_cfg.test_runner {
+            let working_dir = cfg.working_dir.as_ref().map(|d| {
+                let p = PathBuf::from(d);
+                if p.is_absolute() { p } else { ws.join(p) }
+            });
+            watched_test_scope = Some(cfg.command.clone());
+            test_watcher = Some(Arc::new(corpus_engine::TestWatcher::new(
+                &cfg.command,
+                working_dir,
+                cfg.timeout_secs.unwrap_or(300),
+                Arc::clone(&test_store),
+            )));
+            tracing::info!(
+                command = %cfg.command,
+                workspace = %ws.display(),
+                "test watcher configured"
+            );
+        }
+
+        if lint_watcher.is_some() || test_watcher.is_some() {
+            let debounce_ms = sov_cfg
+                .lint_runner
+                .as_ref()
+                .and_then(|c| c.debounce_ms)
+                .or_else(|| sov_cfg.test_runner.as_ref().and_then(|c| c.debounce_ms))
+                .unwrap_or(800);
+            let mut coordinator = corpus_engine::WatcherCoordinator::new(debounce_ms);
+            if let Some(ref w) = lint_watcher {
+                coordinator.register(
+                    Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>,
+                );
+            }
+            if let Some(ref w) = test_watcher {
+                coordinator.register(
+                    Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>,
+                );
+            }
+            match coordinator.start(vec![ws.clone()]).await {
+                Ok(handle) => {
+                    watcher_active_flag.store(true, Ordering::Release);
+                    _coordinator_handle = Some(handle);
+                    eprintln!(
+                        "sovereign daemon: lint/test watcher live on {}",
+                        ws.display()
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        workspace = %ws.display(),
+                        "watcher coordinator failed to start"
+                    );
+                }
+            }
+        }
+    } else {
+        tracing::debug!(
+            "no workspace resolved (set SOVEREIGN_WORKSPACE_DIR or write \
+             ~/.sovereign/workspace) — lint/test watcher disabled"
+        );
+    }
+
     // ── CorpusEngine ──────────────────────────────────────────────
     // Single shared instance: powers both the `/mcp` tool registry
     // (find_callers, code_search, etc.) AND — now that we wired
@@ -422,6 +589,12 @@ async fn run_daemon(args: &[String]) -> i32 {
         &data_dir,
         Arc::clone(&engine),
         Arc::clone(&notes_store),
+        Arc::clone(&lint_store),
+        Arc::clone(&test_store),
+        test_watcher.clone(),
+        watched_lint_scope.clone(),
+        watched_test_scope.clone(),
+        Arc::clone(&watcher_active_flag),
     )
     .await;
 
@@ -890,10 +1063,17 @@ async fn run_daemon(args: &[String]) -> i32 {
 /// are installed, tools return helpful "not indexed" messages rather
 /// than erroring, so a freshly-setup daemon is still useful for
 /// `write_note` / `read_notes`.
+#[allow(clippy::too_many_arguments)]
 async fn build_tool_registry(
     data_dir: &std::path::Path,
     engine: Arc<CorpusEngine>,
     notes: Arc<NoteStore>,
+    lint_store: Arc<LintResultStore>,
+    test_store: Arc<TestResultStore>,
+    test_watcher: Option<Arc<corpus_engine::TestWatcher>>,
+    watched_lint_scope: Option<String>,
+    watched_test_scope: Option<String>,
+    watcher_active_flag: Arc<AtomicBool>,
 ) -> ToolRegistry {
     let indexes_dir = data_dir.join("indexes");
 
@@ -939,6 +1119,50 @@ async fn build_tool_registry(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
             .with_health_checker(Arc::clone(&health_checker)),
     ));
+
+    // ── Lint / test watcher tools ───────────────────────────────
+    // Always registered so MCP clients see a stable tool list. When
+    // no watcher is wired (workspace not resolved or sovereign.toml
+    // empty), the tools report `never_run` / `watcher_active: false`
+    // — accurate, not silently-missing.
+    {
+        let mut tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
+            .with_watcher_active(Arc::clone(&watcher_active_flag));
+        if let Some(scope) = watched_lint_scope.clone() {
+            tool = tool.with_watched_scope(scope);
+        }
+        tools.register(Box::new(tool));
+    }
+    {
+        let mut tool = sovereign_tools::BuildTool::new(Arc::clone(&lint_store))
+            .with_watcher_active(Arc::clone(&watcher_active_flag));
+        if let Some(scope) = watched_lint_scope {
+            tool = tool.with_watched_scope(scope);
+        }
+        tools.register(Box::new(tool));
+    }
+    tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
+        Arc::clone(&lint_store),
+    )));
+    {
+        let mut tool = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
+            .with_watcher_active(Arc::clone(&watcher_active_flag));
+        if let Some(scope) = watched_test_scope {
+            tool = tool.with_watched_scope(scope);
+        }
+        tools.register(Box::new(tool));
+    }
+    tools.register(Box::new(sovereign_tools::GetRunOutputTool::new(
+        Arc::clone(&test_store),
+    )));
+    // `run_tests` is only registered when there's a live test watcher
+    // to dispatch into. Without it, agents calling `run_tests` would
+    // get a confusing no-op; the absence is the honest signal.
+    if let Some(ref w) = test_watcher {
+        tools.register(Box::new(sovereign_tools::RunTestsTool::new(
+            Arc::clone(w),
+        )));
+    }
 
     // Notes tools work regardless of indexing state.
     tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
@@ -1259,6 +1483,57 @@ fn home_dir_buf() -> std::path::PathBuf {
     std::env::var_os("HOME")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
+/// Resolve the workspace directory the daemon should watch for
+/// lint/test changes. Returns `None` when the user has not opted in,
+/// in which case `lint_status` / `test_status` report
+/// `watcher_active: false` and `never_run` — the honest signal.
+///
+/// Lookup order:
+/// 1. `SOVEREIGN_WORKSPACE_DIR` environment variable. Preferred for
+///    launchd/systemd: set it in the service's environment block so
+///    every daemon launch picks it up automatically.
+/// 2. `~/.sovereign/workspace` — single-line text file containing
+///    the workspace path. Useful for users who can't easily edit
+///    their service environment.
+///
+/// Both forms are validated to point at an existing directory; a
+/// missing or non-directory path is treated as "no workspace
+/// configured" (with a warning log so the misconfiguration is
+/// visible in the daemon log without breaking startup).
+fn resolve_workspace_dir() -> Option<PathBuf> {
+    if let Ok(val) = std::env::var("SOVEREIGN_WORKSPACE_DIR") {
+        let trimmed = val.trim();
+        if !trimmed.is_empty() {
+            let path = PathBuf::from(trimmed);
+            if path.is_dir() {
+                return Some(path);
+            } else {
+                tracing::warn!(
+                    path = %path.display(),
+                    "SOVEREIGN_WORKSPACE_DIR set but not a directory — ignoring"
+                );
+            }
+        }
+    }
+    let workspace_file = home_dir_buf().join(".sovereign").join("workspace");
+    if let Ok(contents) = std::fs::read_to_string(&workspace_file) {
+        let trimmed = contents.trim();
+        if !trimmed.is_empty() {
+            let path = PathBuf::from(trimmed);
+            if path.is_dir() {
+                return Some(path);
+            } else {
+                tracing::warn!(
+                    path = %path.display(),
+                    file = %workspace_file.display(),
+                    "~/.sovereign/workspace path is not a directory — ignoring"
+                );
+            }
+        }
+    }
+    None
 }
 
 /// `sovereign daemon restart` — stop the running daemon (whichever

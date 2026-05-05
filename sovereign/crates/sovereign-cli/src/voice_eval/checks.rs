@@ -64,6 +64,7 @@ pub struct ScenarioResult {
     pub question_density: QuestionDensityCheck,
     pub banned_phrases: BannedPhraseCheck,
     pub required_content: RequiredContentCheck,
+    pub code_identifier: CodeIdentifierCheck,
     /// Overall pass — every individual check that's enabled (i.e.
     /// the scenario specified a constraint) must pass.
     pub passed: bool,
@@ -106,6 +107,25 @@ pub struct RequiredContentCheck {
     pub passed: bool,
 }
 
+/// Snake_case / SCREAMING_SNAKE identifier scan. Witness responses
+/// are prose; identifiers like `make_sep_like_parquet` or
+/// `MIN_CLAIM_LENGTH` are a tell that the planner invoked a
+/// corpus-retrieval path and the model echoed chunk titles into
+/// its output. The 2026-05-04 inner-work incident — heartfelt
+/// journal routed through the citation-grounded knowledge prompt —
+/// is the canonical reproduction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CodeIdentifierCheck {
+    pub enabled: bool,
+    /// Distinct identifiers found in the response, sorted by
+    /// first-seen order. Capped at 32 in the report so a runaway
+    /// regression doesn't bloat the JSON file.
+    pub matches: Vec<String>,
+    pub count: usize,
+    pub max: Option<usize>,
+    pub passed: bool,
+}
+
 /// Run all enabled deterministic checks for a scenario against a
 /// candidate response. Pure function — no I/O, no inference.
 pub fn run_checks(scenario: &Scenario, response: &str) -> ScenarioResult {
@@ -113,11 +133,13 @@ pub fn run_checks(scenario: &Scenario, response: &str) -> ScenarioResult {
     let question_density = question_density_check(scenario, response);
     let banned_phrases = banned_phrase_check(scenario, response);
     let required_content = required_content_check(scenario, response);
+    let code_identifier = code_identifier_check(scenario, response);
 
     let passed = length.passed
         && question_density.passed
         && banned_phrases.passed
-        && required_content.passed;
+        && required_content.passed
+        && code_identifier.passed;
 
     ScenarioResult {
         scenario_id: scenario.scenario.id.clone(),
@@ -128,6 +150,7 @@ pub fn run_checks(scenario: &Scenario, response: &str) -> ScenarioResult {
         question_density,
         banned_phrases,
         required_content,
+        code_identifier,
         passed,
     }
 }
@@ -216,6 +239,106 @@ fn required_content_check(scenario: &Scenario, response: &str) -> RequiredConten
         enabled: true,
         matched,
         passed,
+    }
+}
+
+/// Maximum number of distinct snake_case identifiers we'll keep in
+/// the report. A clean witness response has zero; a polluted one
+/// might have dozens. Capping the report list keeps the JSON small
+/// without losing the regression signal — the `count` field still
+/// reflects the true total even when `matches` is truncated.
+const CODE_IDENTIFIER_REPORT_CAP: usize = 32;
+
+/// Returns true when `word` is a snake_case / SCREAMING_SNAKE
+/// identifier of the shape `<seg>(_<seg>)+` where each segment is
+/// `[A-Za-z][A-Za-z0-9]*` and at least one underscore separates two
+/// non-empty alphanumeric segments.
+///
+/// Conservative on purpose: a single underscore between two letters
+/// is enough to flag the token. False positives (e.g. user prose
+/// that legitimately contains `well_being` or `co_worker`) are
+/// possible but rare in witness register; the cost of a false
+/// positive is "bench fails, author tightens the prompt or adds an
+/// allow-list" — far cheaper than missing a corpus-pollution
+/// regression. If the false-positive rate becomes a problem,
+/// consider an `allow_snake_case` field on `Expected`.
+fn is_codeish_identifier(word: &str) -> bool {
+    if !word.contains('_') {
+        return false;
+    }
+    let segments: Vec<&str> = word.split('_').collect();
+    if segments.len() < 2 {
+        return false;
+    }
+    for seg in &segments {
+        if seg.is_empty() {
+            return false; // leading/trailing/double underscore
+        }
+        let mut chars = seg.chars();
+        let first = chars.next().expect("non-empty");
+        if !first.is_ascii_alphabetic() {
+            return false;
+        }
+        for c in chars {
+            if !c.is_ascii_alphanumeric() {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn code_identifier_check(scenario: &Scenario, response: &str) -> CodeIdentifierCheck {
+    let max = scenario.expected.max_snake_case_identifier_count;
+    let Some(max) = max else {
+        return CodeIdentifierCheck {
+            enabled: false,
+            matches: Vec::new(),
+            count: 0,
+            max: None,
+            passed: true,
+        };
+    };
+
+    // Tokenise on anything that's not [A-Za-z0-9_]. Track first-seen
+    // order via a Vec<String> and a HashSet for dedup; preserves the
+    // most useful debugging signal (which identifier appeared first)
+    // when truncating to the report cap.
+    let mut current = String::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut ordered: Vec<String> = Vec::new();
+    let mut total: usize = 0;
+    for c in response.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' {
+            current.push(c);
+        } else {
+            if !current.is_empty() {
+                if is_codeish_identifier(&current) && seen.insert(current.clone()) {
+                    total += 1;
+                    if ordered.len() < CODE_IDENTIFIER_REPORT_CAP {
+                        ordered.push(current.clone());
+                    }
+                }
+                current.clear();
+            }
+        }
+    }
+    if !current.is_empty()
+        && is_codeish_identifier(&current)
+        && seen.insert(current.clone())
+    {
+        total += 1;
+        if ordered.len() < CODE_IDENTIFIER_REPORT_CAP {
+            ordered.push(current);
+        }
+    }
+
+    CodeIdentifierCheck {
+        enabled: true,
+        matches: ordered,
+        count: total,
+        max: Some(max),
+        passed: total <= max,
     }
 }
 
@@ -384,6 +507,124 @@ mod tests {
         let r2 = run_checks(&s, "as an ai I note you said no Saturdays.");
         assert!(!r2.passed);
         assert!(!r2.banned_phrases.passed);
+    }
+
+    #[test]
+    fn code_identifier_disabled_when_max_unset() {
+        let s = fixture(Expected::default());
+        let r = run_checks(&s, "the words make_sep_like_parquet appear");
+        assert!(!r.code_identifier.enabled);
+        assert!(r.code_identifier.passed);
+    }
+
+    #[test]
+    fn code_identifier_passes_on_pure_prose() {
+        let s = fixture(Expected {
+            max_snake_case_identifier_count: Some(0),
+            ..Expected::default()
+        });
+        let r = run_checks(&s, "I notice you're sitting with something difficult.");
+        assert!(r.code_identifier.enabled);
+        assert!(r.code_identifier.passed);
+        assert_eq!(r.code_identifier.count, 0);
+        assert!(r.code_identifier.matches.is_empty());
+    }
+
+    #[test]
+    fn code_identifier_flags_snake_case() {
+        let s = fixture(Expected {
+            max_snake_case_identifier_count: Some(0),
+            ..Expected::default()
+        });
+        let r = run_checks(
+            &s,
+            "Looking at retrieved sources: make_sep_like_parquet, \
+             skeleton_extraction_prompt, and ingest were considered.",
+        );
+        assert!(!r.code_identifier.passed);
+        assert_eq!(r.code_identifier.count, 2);
+        assert!(r.code_identifier.matches.contains(&"make_sep_like_parquet".to_string()));
+        assert!(r.code_identifier.matches.contains(&"skeleton_extraction_prompt".to_string()));
+    }
+
+    #[test]
+    fn code_identifier_flags_screaming_snake() {
+        let s = fixture(Expected {
+            max_snake_case_identifier_count: Some(0),
+            ..Expected::default()
+        });
+        let r = run_checks(&s, "MIN_CLAIM_LENGTH must be at least 20 chars.");
+        assert!(!r.code_identifier.passed);
+        assert_eq!(r.code_identifier.count, 1);
+        assert_eq!(r.code_identifier.matches, vec!["MIN_CLAIM_LENGTH"]);
+    }
+
+    #[test]
+    fn code_identifier_dedupes_repeats() {
+        let s = fixture(Expected {
+            max_snake_case_identifier_count: Some(5),
+            ..Expected::default()
+        });
+        let r = run_checks(&s, "ingest_chunk and ingest_chunk and ingest_chunk again");
+        assert_eq!(r.code_identifier.count, 1);
+        assert_eq!(r.code_identifier.matches, vec!["ingest_chunk"]);
+        assert!(r.code_identifier.passed); // 1 ≤ 5
+    }
+
+    #[test]
+    fn code_identifier_ignores_single_word_or_lone_underscore() {
+        let s = fixture(Expected {
+            max_snake_case_identifier_count: Some(0),
+            ..Expected::default()
+        });
+        // Pure prose with no underscore — must not flag.
+        let r = run_checks(&s, "ingest is fine, simple words pass");
+        assert!(r.code_identifier.passed);
+        // Leading/trailing/double underscore are not identifiers.
+        let r2 = run_checks(&s, "_leading and trailing_ and __double__");
+        assert!(r2.code_identifier.passed);
+    }
+
+    #[test]
+    fn code_identifier_threshold_allows_some() {
+        let s = fixture(Expected {
+            max_snake_case_identifier_count: Some(2),
+            ..Expected::default()
+        });
+        let r = run_checks(&s, "saw query_plan and corpus_id");
+        assert_eq!(r.code_identifier.count, 2);
+        assert!(r.code_identifier.passed); // 2 ≤ 2
+        let r2 = run_checks(&s, "saw query_plan and corpus_id and chunk_id");
+        assert_eq!(r2.code_identifier.count, 3);
+        assert!(!r2.code_identifier.passed); // 3 > 2
+    }
+
+    /// Smoke-test the actual leaked output from the 2026-05-04
+    /// inner-work incident. The bench is only as honest as the
+    /// canary; if the canary doesn't trip, the bench isn't tight.
+    #[test]
+    fn code_identifier_catches_2026_05_04_leak() {
+        let s = fixture(Expected {
+            max_snake_case_identifier_count: Some(0),
+            ..Expected::default()
+        });
+        let leaked = "Looking at my retrieved sources: \
+                      - make_sep_like_parquet \
+                      - long_passage \
+                      - skeleton_extraction_prompt \
+                      - PersonalDomain (no underscore — not a hit) \
+                      - MIN_CLAIM_LENGTH \
+                      - recommendation_for \
+                      - ExemplarKind (no underscore) \
+                      - QueryPlan (no underscore) \
+                      None of these passages contain the phrases.";
+        let r = run_checks(&s, leaked);
+        assert!(!r.code_identifier.passed);
+        // Five snake_case / SCREAMING_SNAKE: make_sep_like_parquet,
+        // long_passage, skeleton_extraction_prompt, MIN_CLAIM_LENGTH,
+        // recommendation_for. The CamelCase ones are deliberately
+        // not matched — that's a separate signal class.
+        assert_eq!(r.code_identifier.count, 5);
     }
 
     #[test]

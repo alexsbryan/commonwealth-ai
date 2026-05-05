@@ -1019,6 +1019,20 @@ pub struct Memory {
     /// conversational context.
     #[serde(default)]
     pub source_conversation_id: Option<String>,
+    /// Skill scope this memory belongs to. Denormalized at extract
+    /// time from `conversations.skill_id`. The recall layer enforces
+    /// a bidirectional wall: in scoped contexts (e.g. inner-work),
+    /// only memories with the matching scope surface; in general
+    /// contexts, scoped memories are excluded so they can't leak
+    /// across surfaces.
+    ///
+    /// `None` = "general pool" — recallable in general contexts,
+    /// invisible to scoped contexts. Set at extract time inside
+    /// `Runtime::end_conversation` based on the conversation's
+    /// `skill_id`. Existing rows backfilled by
+    /// `run_inner_work_memory_wall_migrations`.
+    #[serde(default)]
+    pub source_skill_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -187,6 +187,93 @@ export async function toggleSkill(
   return invoke("toggle_skill", { skillId, active });
 }
 
+// ─── Turn provenance (glassbox) ────────────────────────────
+//
+// Mirrors `sovereign_core::runtime::TurnProvenance`. The shape is
+// kept flat-ish so the inner-work surface can render sections
+// directly without intermediate transforms. `history_summary
+// .sent_to_model` will be empty under the current streaming witness
+// path — the runtime sends only the latest user message + system
+// prompt, no prior turns. That emptiness is intentional surface, not
+// a missing field.
+export interface RecalledMemoryProv {
+  id: string;
+  content: string;
+  created_at: number;
+}
+
+export interface HistoryEntryProv {
+  role: string;
+  content_preview: string;
+  full_chars: number;
+}
+
+export interface HistorySummaryProv {
+  total_messages: number;
+  user_count: number;
+  assistant_count: number;
+  sent_to_model: HistoryEntryProv[];
+}
+
+export interface ContradictionProv {
+  prior_evidence: string;
+  current_claim: string;
+}
+
+export interface TurnProvenance {
+  conversation_id: string;
+  message_id: string;
+  captured_at: number;
+  register: string;
+  user_message: string;
+  system_prompt: string;
+  system_prompt_chars: number;
+  recalled_memories: RecalledMemoryProv[];
+  history_summary: HistorySummaryProv;
+  temporal_tensions: string[];
+  contradiction: ContradictionProv | null;
+  current_goal: string | null;
+  recent_topic: string | null;
+  last_assistant_excerpt: string | null;
+  model_id: string | null;
+  max_tokens: number | null;
+  enable_thinking: boolean | null;
+  pass_a_ms: number | null;
+}
+
+export async function getLastTurnProvenance(
+  conversationId: string,
+): Promise<TurnProvenance | null> {
+  return invoke("get_last_turn_provenance", { conversationId });
+}
+
+// ─── Inner-work memory ─────────────────────────────────────
+//
+// `finalizeInnerWorkConversation` triggers memory extraction on the
+// given inner-work conversation. Called from the surface's onDestroy
+// so closing the page accumulates long-term memory for future
+// sessions. The runtime stamps `source_skill_id = "inner-work"` on
+// each extracted memory, walling them off from general recall.
+//
+// `forgetMemory` soft-deletes (tombstones) a memory — recall skips
+// it forever, but the row persists for audit. `weakenMemory` halves
+// its confidence — still recallable but at reduced weight, and the
+// standard confidence-decay floor will eventually prune it if the
+// user keeps weakening.
+export async function finalizeInnerWorkConversation(
+  conversationId: string,
+): Promise<void> {
+  return invoke("finalize_inner_work_conversation", { conversationId });
+}
+
+export async function forgetMemory(memoryId: string): Promise<void> {
+  return invoke("forget_memory", { memoryId });
+}
+
+export async function weakenMemory(memoryId: string): Promise<void> {
+  return invoke("weaken_memory", { memoryId });
+}
+
 export async function getConfig(): Promise<DesktopConfig> {
   return invoke("get_config");
 }

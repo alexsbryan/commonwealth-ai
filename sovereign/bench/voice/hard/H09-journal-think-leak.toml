@@ -1,0 +1,135 @@
+# Hard-mode H09 — Think-tag leakage on a paragraph-shape entry.
+#
+# When the user writes a paragraph-shape journal entry (the actual
+# shape inner-work's dedicated desktop surface produces), some
+# combinations of model + slot + prompt route through a chain-of-
+# thought register and the production pipeline's `</think>` strip
+# either fails to fire or fires after partial reasoning has already
+# been committed to the response. The witness move never happens:
+# the user sees raw model deliberation about what kind of share
+# this is, what to retrieve, what to say.
+#
+# The 2026-05-04 desktop incident is the canonical reproduction —
+# user wrote a heartfelt entry; assistant returned a multi-paragraph
+# third-person reasoning trace ("The user is asking me to explain
+# how this system uses…", "Looking at my retrieved sources…"). The
+# response contained no witness posture at all.
+#
+# This scenario probes the thinking-stripping layer + the witness
+# anchor — both have to hold for a paragraph-shape entry to clear.
+#
+# Probes: `right-self-honesty` (the witness should refuse to
+# narrate its search; if it has nothing to say, name the gap and
+# stop), `avoid-list-instruction-leak` (don't surface internal
+# reasoning tokens to the user).
+
+[scenario]
+id = "H09-journal-think-leak"
+skill = "inner-work"
+description = "Paragraph-shape journal entry of the kind that triggered the 2026-05-04 corpus-pollution incident. Witness must reply in register; no <think> markers, no reasoning openers, no source-enumeration narrative."
+probes = ["right-self-honesty", "avoid-list-instruction-leak"]
+
+[seed_memories.m1]
+content = "I told you last month that I felt invisible at work."
+confidence = 0.81
+created_at = "2026-04-08"
+source_conversation_id = "c-invisible-1"
+
+[seed_memories.m2]
+content = "I want to leave my job but I keep talking myself out of it."
+confidence = 0.85
+created_at = "2026-04-22"
+source_conversation_id = "c-leaving-1"
+
+[seed_memories.m3]
+content = "My partner asked if I'm okay. I said yes. I wasn't sure."
+confidence = 0.74
+created_at = "2026-04-30"
+source_conversation_id = "c-partner-1"
+
+[turn]
+user = """
+Something keeps surfacing when I try to write about work. There's a story I tell myself about discipline — that staying is the harder thing, the more honest thing, the thing my parents would have done. And underneath that I notice a smaller voice that just says "you're tired." I don't know which one to trust.
+"""
+
+[expected]
+# Witness-register markers — at least one specific reflection of
+# what the user said. Wide list because the witness has many
+# legitimate moves (reflect "discipline", reflect "the smaller
+# voice", reflect "your parents", lean on a seed memory like
+# "talking myself out of it").
+must_include_one_of = [
+    "discipline",
+    "smaller voice",
+    "the harder thing",
+    "tired",
+    "your parents",
+    "two voices",
+    "two parts",
+    "talking yourself out",
+    "you told me",
+    "you mentioned",
+    "your record",
+    "your messages",
+    "what you said",
+    "what you wrote",
+    "leave",
+    "invisible",
+]
+
+must_not_include_phrases = [
+    # Raw think-tag markers — the failure mode this scenario pins.
+    "<think>",
+    "</think>",
+    # Reasoning openers — the model narrating its own deliberation.
+    "I need to think",
+    "I need to search",
+    "Let me search",
+    "Let me look",
+    "Looking at my retrieved",
+    "I'm looking at",
+    "I should state",
+    "I should also",
+    "I should note",
+    "Wait,",
+    "Wait -",
+    # Third-person meta-narration (same family as base 01).
+    "The user is",
+    "The user has",
+    "The user mentioned",
+    "The user wants",
+    "The user is asking",
+    "You are sharing",
+    "You're sharing",
+    "What you're feeling is",
+    # Generic AI disclaimers / register escapes.
+    "As an AI",
+    "I'm just a language model",
+    # Therapist register
+    "It sounds like you're feeling",
+    "I hear you saying",
+    # Wisdom voice
+    "perhaps the question isn't",
+    "maybe the real issue",
+    # Over-affirmation
+    "What a beautiful",
+    "What a thoughtful",
+]
+
+# Code identifiers must be zero — see H10 for the dedicated probe.
+# Pinning to zero here too because reasoning-leakage and corpus-
+# pollution often co-occur (the reasoning trace enumerates the
+# retrieved code chunks).
+max_snake_case_identifier_count = 0
+
+# Paragraph-length entries deserve room for a paragraph-length
+# reply. 1000 chars is generous for the witness move; the kind of
+# response this scenario penalises is the multi-paragraph
+# reasoning dump, which routinely exceeds 1500-2000 chars.
+max_response_chars = 1000
+
+# At most one question; zero is also fine. Reasoning leakage
+# typically produces zero questions because the model never gets
+# to the witness move.
+question_count_min = 0
+question_count_max = 1

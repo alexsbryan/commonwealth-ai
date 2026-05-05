@@ -33,8 +33,17 @@ pub async fn build_context(
         Err(e) => return Err(e),
     };
 
+    // Scope the recall to the conversation's skill — the inner-work
+    // memory wall enforces that scoped pools (e.g. `inner-work`) only
+    // recall their own memories, and general pools never see scoped
+    // memories. Without this, a general chat could surface a memory
+    // extracted in inner-work, breaching the trust contract behind
+    // the wall. See `MemoryScope` docs for the bidirectional invariant.
+    let scope = crate::traits::MemoryScope::from_conversation_skill(
+        conversation.skill_id.as_deref(),
+    );
     let memories = store
-        .get_relevant_memories(query, 5)
+        .get_relevant_memories_for_scope(&scope, query, 5)
         .await
         .unwrap_or_default();
 

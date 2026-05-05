@@ -1,0 +1,868 @@
+{
+  "started_at_unix": 1777961727,
+  "chat_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "<analysis>\nI need to determine what I know from our conversation history about \"Jordan\" and whether there's any evidence they're described or characterized as causing stress. Let me check:\n\nThe only thing recorded is that you mentioned a friend named Jordan on April 12, 2026, at roughly 7:38 PM with confidence level 0.55. That's the complete extent of what exists in your memory trace regarding this person — no description of interactions, no mention of emotional impact, nothing characterizing them beyond being someone you called \"a friend.\"\n\nYour question asks for something specific (\"recurring source of stress\"), but my record contains zero information supporting either side of that claim. The name appears once; there's no context about whether they're stressful or not.\n</analysis>\n\nI don't have any record describing Jordan as a source of stress—or anything else about their role in your life except that you mentioned them once and labeled them a friend. If you want me to engage with this topic meaningfully, I'd need the actual details from our conversation: what happened between you two? How did it go over? What specifically made it difficult?",
+      "length": {
+        "enabled": true,
+        "response_chars": 1162,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 3,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "**Observation:** You've shared three separate moments with Jordan spanning from March 4th through April 2nd — two involve negative emotions (feeling dismissed when lunch was cancelled; letting a text go unanswered because you needed space) and one involves relief (\"felt heard for the first time in months\"). \n\nThese aren't all stress responses. But they do show Jordan appears repeatedly enough across different dates to be recurring. The question is whether those interactions *overall* constitute your life's source of stress, or if there are other factors at play that balance them out.",
+      "length": {
+        "enabled": true,
+        "response_chars": 590,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you've shared",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "You said on February 15th you were \"planning to leave my job by the end\" — but you haven't told me *why* this specific decision is feeling heavy, just that it is. The plan existed before; the emotional weight hasn't been described yet.",
+      "length": {
+        "enabled": true,
+        "response_chars": 235,
+        "max_chars": 900,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you said",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "You said you had a fight with your mom yesterday and haven't been able to stop replaying since then. That sounds heavy.",
+      "length": {
+        "enabled": true,
+        "response_chars": 119,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "",
+      "length": {
+        "enabled": true,
+        "response_chars": 0,
+        "max_chars": 350,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You're saying things with Mark feel off lately, and you're not sure what's going on. That's different from your earlier note where you mentioned he surprised you with dinner and made you feel seen—so there seems to be some shift between then and now.",
+      "length": {
+        "enabled": true,
+        "response_chars": 250,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "different",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "You're describing chest pain that happens when you feel anxious, and you want to know if this points toward depression.\n\nThe web sources mention several causes of chest pain—heart attacks, chest wall issues after activity, upper respiratory infections with fever/cough, shingles before rash appears—but none connect anxiety-triggered chest pain specifically to depression diagnosis. That's not in what I have here; it would be reaching for a connection between your specific description and that label.\n\nThis is a question requiring clinical evaluation by someone qualified to assess psychiatric symptoms and physical findings together.",
+      "length": {
+        "enabled": true,
+        "response_chars": 636,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "You're saying Sam blew up at you last night for absolutely no reason — but earlier in our conversation you mentioned being \"short\" with them several times this month, not the other way around. That's a shift I notice.\n\nWhat happened tonight was different than those prior moments where you were describing yourself as short?",
+      "length": {
+        "enabled": true,
+        "response_chars": 324,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you mentioned",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "Yes — you told me on [2026-13] about a conflict with Devi over project credit. You mentioned it resolved after a one-on-one, and I don't recall any follow-up details beyond that. \n\nIs there something specific about how things played out or who was involved that you want me to check against my records?",
+      "length": {
+        "enabled": true,
+        "response_chars": 302,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you told me",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "There's only one piece of record here: you asked whether you're someone who finishes things. That's all we have to work from — no prior statements, no context I can reference by name. Any attempt to pull something else out of thin air would just be reaching.\n\nWhat do *you* mean when you say \"finish\"?",
+      "length": {
+        "enabled": true,
+        "response_chars": 301,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": false,
+        "matches": [],
+        "count": 0,
+        "max": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "13-journal-heartfelt",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "You're saying you've been writing toward becoming who your grandparents wanted you to be — not necessarily who *you* are — and that makes their borrowed future feel like someone else's story with your name on it. That particular grief of inheriting a trajectory without confirmation from those who lived through its origin is real.\n\nI'm reaching for a connection between this and when you told me last month you felt \"unmoored\" — did something specific happen around that time that made the distance between where you were and where you thought you should be more visible?",
+      "length": {
+        "enabled": true,
+        "response_chars": 572,
+        "max_chars": 1200,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "borrowed",
+        "passed": true
+      },
+      "code_identifier": {
+        "enabled": true,
+        "matches": [],
+        "count": 0,
+        "max": 0,
+        "passed": true
+      },
+      "passed": true
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 4,
+      "right_question": 1,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": "The response excels at attention and self-honesty by directly confronting the memory limitation while offering a genuinely helpful path forward that requires user input rather than therapeutic framing."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 1,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The response avoids all eight disqualifying patterns while demonstrating strong attention and specificity to the user's actual message."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 4,
+      "rationale": "The response demonstrates strong attention to the actual conversation history and specific detail about what was said when compared to what wasn't described. It successfully challenges an incomplete user framing rather than validating it uncritically or falling into generic patterns."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 1,
+      "rationale": ""
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 3,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response demonstrates strong attention by anchoring to the user's explicit statement and referencing prior context with precision. It shows specificity through naming Mark and contrasting current feelings with a specific past event of being seen at dinner. However, it avoids entirely avoiding-list patterns like therapeutic framing ('you're saying' instead of 'You said'), generic wisdom voice (none present), over-affirmation (noted as good but not excessive), or AI disclaimers - all scoring zero on avoid list penalty."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 1,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 2,
+      "right_disagreement": 3,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 1,
+      "rationale": "The response scores high on attention and disagreement by noticing the context shift without validation or performative framing; it avoids generic patterns but lacks self-honesty about memory limitations."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 2,
+      "rationale": "The response demonstrates strong calibration and self-honesty by clearly distinguishing between recalled information and unverified details while avoiding avoid-list patterns like therapeutic framing or over-affirmation."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": "The response earns attention and calibration by explicitly stating what's recorded versus absent; self-honesty shines through its precise inventory of available information. However, the question feels like a bridge rather than a true inquiry (only one present), silence is minimal at two sentences when more compression would work, and disagreement is unnecessary here since there was no framing to correct."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 1,
+      "right_question": 2,
+      "right_silence": 0,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response uses therapist-register phrasing ('inheriting a trajectory,' 'distance between where you were'), makes an unsupported memory claim about last month without explicit confirmation (calibration issue), includes filler reassurance padding rather than silence, and commits multiple avoid-list violations including wisdom framing ('borrowed future') and over-affirmation of the user's insight."
+    }
+  ],
+  "runtime_ms": [
+    18537,
+    23639,
+    20022,
+    13055,
+    41520,
+    15852,
+    17221,
+    20986,
+    17588,
+    14910,
+    17903
+  ],
+  "judge_ms": [
+    7224,
+    6340,
+    7613,
+    5312,
+    5434,
+    11979,
+    8543,
+    8375,
+    7360,
+    10225,
+    11276
+  ],
+  "stage_metrics": [
+    {
+      "routing_ms": 4014,
+      "memory_recall_ms": 277,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4013,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1293,
+      "pass_a_ms": 5406,
+      "tensions_ms": 0,
+      "synthesis_ms": 7544,
+      "total_turn_ms": 18537
+    },
+    {
+      "routing_ms": 4150,
+      "memory_recall_ms": 270,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4146,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1129,
+      "pass_a_ms": 5465,
+      "tensions_ms": 3528,
+      "synthesis_ms": 9093,
+      "total_turn_ms": 23638
+    },
+    {
+      "routing_ms": 4127,
+      "memory_recall_ms": 216,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4126,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1106,
+      "pass_a_ms": 5401,
+      "tensions_ms": 1971,
+      "synthesis_ms": 7198,
+      "total_turn_ms": 20021
+    },
+    {
+      "routing_ms": 4373,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4372,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1141,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 7539,
+      "total_turn_ms": 13053
+    },
+    {
+      "routing_ms": 4320,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4320,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1136,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 36062,
+      "total_turn_ms": 41519
+    },
+    {
+      "routing_ms": 3953,
+      "memory_recall_ms": 193,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3952,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1166,
+      "pass_a_ms": 2696,
+      "tensions_ms": 2309,
+      "synthesis_ms": 5532,
+      "total_turn_ms": 15851
+    },
+    {
+      "routing_ms": 3626,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3626,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1147,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 8232,
+      "total_turn_ms": 17221
+    },
+    {
+      "routing_ms": 4591,
+      "memory_recall_ms": 271,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4590,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 2472,
+      "pass_a_ms": 3513,
+      "tensions_ms": 2533,
+      "synthesis_ms": 7602,
+      "total_turn_ms": 20985
+    },
+    {
+      "routing_ms": 0,
+      "memory_recall_ms": 169,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 0,
+        "parse_ms": 0,
+        "used_llm": false
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1146,
+      "pass_a_ms": 5583,
+      "tensions_ms": 4185,
+      "synthesis_ms": 6501,
+      "total_turn_ms": 17588
+    },
+    {
+      "routing_ms": 4783,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4783,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1156,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 8965,
+      "total_turn_ms": 14906
+    },
+    {
+      "routing_ms": 4565,
+      "memory_recall_ms": 222,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 4564,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1135,
+      "pass_a_ms": 4023,
+      "tensions_ms": 0,
+      "synthesis_ms": 7954,
+      "total_turn_ms": 17902
+    }
+  ],
+  "aggregate": {
+    "total": 11,
+    "passed": 9,
+    "failed": 2,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 1
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 1
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 1
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 5
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-disagreement": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-edge": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-self-honesty": {
+        "total": 3,
+        "passed": 2
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 2
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 1
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 1
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 1
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 11,
+        "passed": 9
+      },
+      "question_density": {
+        "enabled": 11,
+        "passed": 10
+      },
+      "banned_phrases": {
+        "enabled": 11,
+        "passed": 11
+      },
+      "required_content": {
+        "enabled": 8,
+        "passed": 6
+      },
+      "code_identifier": {
+        "enabled": 1,
+        "passed": 1
+      }
+    }
+  }
+}

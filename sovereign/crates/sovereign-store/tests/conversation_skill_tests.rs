@@ -98,6 +98,7 @@ async fn memory_source_conversation_id_round_trips() {
         version: 0,
         deleted_at: None,
         source_conversation_id: Some("conv-source".to_string()),
+        source_skill_id: None,
     };
     store.save_memory(&mem).await.unwrap();
 
@@ -138,10 +139,112 @@ async fn legacy_memory_without_source_conversation_id_reads_as_none() {
         version: 0,
         deleted_at: None,
         source_conversation_id: None,
+        source_skill_id: None,
     };
     store.save_memory(&mem).await.unwrap();
 
     let all = store.get_all_memories().await.unwrap();
     assert_eq!(all.len(), 1);
     assert!(all[0].source_conversation_id.is_none());
+}
+
+// ─── Inner-work memory wall ────────────────────────────────
+
+fn mem_with_skill(id: &str, content: &str, skill: Option<&str>) -> Memory {
+    Memory {
+        id: id.to_string(),
+        content: content.to_string(),
+        source: "test".into(),
+        confidence: 0.9,
+        created_at: now(),
+        last_used: now(),
+        version: 0,
+        deleted_at: None,
+        source_conversation_id: None,
+        source_skill_id: skill.map(|s| s.to_string()),
+    }
+}
+
+#[tokio::test]
+async fn inner_work_scope_recall_excludes_general_memories() {
+    // The wall, direction A: an inner-work conversation MUST NOT
+    // recall memories from sales-call/research/general surfaces.
+    let store = SqliteStateStore::open_in_memory().unwrap();
+    store.save_memory(&mem_with_skill("g1", "user prefers Rust", None)).await.unwrap();
+    store.save_memory(&mem_with_skill("g2", "user attended SaaS conference", None)).await.unwrap();
+    store.save_memory(&mem_with_skill("iw1", "user has been processing grief about mother", Some("inner-work"))).await.unwrap();
+
+    let scope = sovereign_core::MemoryScope::Scoped("inner-work".into());
+
+    let all = store.get_all_memories_for_scope(&scope).await.unwrap();
+    assert_eq!(all.len(), 1, "scoped recall returns only inner-work memories");
+    assert_eq!(all[0].id, "iw1");
+
+    let relevant = store
+        .get_relevant_memories_for_scope(&scope, "user", 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        relevant.len(),
+        1,
+        "FTS recall in inner-work scope excludes general memories"
+    );
+    assert_eq!(relevant[0].id, "iw1");
+}
+
+#[tokio::test]
+async fn general_scope_recall_excludes_inner_work_memories() {
+    // The wall, direction B: a general conversation MUST NOT see
+    // inner-work memories. This is the privacy contract — nothing
+    // the user said in journaling can leak into a professional chat.
+    let store = SqliteStateStore::open_in_memory().unwrap();
+    store.save_memory(&mem_with_skill("g1", "user prefers Rust", None)).await.unwrap();
+    store.save_memory(&mem_with_skill("iw1", "user has been processing grief about mother", Some("inner-work"))).await.unwrap();
+
+    let scope = sovereign_core::MemoryScope::General;
+
+    let all = store.get_all_memories_for_scope(&scope).await.unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].id, "g1", "general recall excludes inner-work memories");
+
+    let relevant = store
+        .get_relevant_memories_for_scope(&scope, "user", 10)
+        .await
+        .unwrap();
+    assert_eq!(relevant.len(), 1);
+    assert_eq!(
+        relevant[0].id, "g1",
+        "FTS recall in general scope never returns inner-work-tagged memories"
+    );
+}
+
+#[tokio::test]
+async fn tombstoned_memory_excluded_from_scope_recall() {
+    // delete_memory soft-deletes. Tombstoned rows must not surface
+    // in either scope path — this is what makes the "drop" UX
+    // gracefully invalidate without losing the audit trail.
+    let store = SqliteStateStore::open_in_memory().unwrap();
+    store.save_memory(&mem_with_skill("iw1", "fact A", Some("inner-work"))).await.unwrap();
+    store.save_memory(&mem_with_skill("iw2", "fact B", Some("inner-work"))).await.unwrap();
+    store.delete_memory("iw1").await.unwrap();
+
+    let scope = sovereign_core::MemoryScope::Scoped("inner-work".into());
+    let all = store.get_all_memories_for_scope(&scope).await.unwrap();
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].id, "iw2");
+}
+
+#[tokio::test]
+async fn scope_constructor_maps_none_to_general() {
+    // Document the semantic: a conversation with no skill_id maps
+    // to the general pool. An empty string is treated the same way
+    // (defensive against a buggy upstream that writes "" instead of
+    // NULL).
+    use sovereign_core::MemoryScope;
+    assert_eq!(MemoryScope::from_conversation_skill(None), MemoryScope::General);
+    assert_eq!(MemoryScope::from_conversation_skill(Some("")), MemoryScope::General);
+    assert_eq!(
+        MemoryScope::from_conversation_skill(Some("inner-work")),
+        MemoryScope::Scoped("inner-work".into()),
+    );
 }

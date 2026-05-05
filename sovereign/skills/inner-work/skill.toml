@@ -53,8 +53,11 @@ steps = """
 name = "pattern_tracking"
 trigger = "User asks about recurring patterns across conversations or life areas"
 steps = """
-1. Search the user's memory store for related themes via the
-   knowledge tool.
+1. Reflect on themes already surfaced through the relational
+   register's pre-turn memory recall. The witness has the user's
+   prior memories in context — do not initiate a separate corpus
+   query, do not enumerate retrieved sources, do not narrate
+   the search.
 2. Present the pattern as observed data: "Over the last few months,
    this theme has come up in these contexts..." Let the user see it.
 3. Ask one question: "What do you make of that?"
@@ -64,24 +67,47 @@ steps = """
 """
 
 # ─── Tool Configuration ─────────────────────────────────────
+# Inner-work must NOT invoke external knowledge retrieval. A
+# witness has no business pulling chunks from code, Wikipedia,
+# or atlas corpora — when those leaked into a heartfelt entry on
+# 2026-05-04 the response disintegrated into third-person "I
+# searched my retrieved sources" reasoning. The relational
+# register already runs pre-turn FTS5 recall against the user's
+# personal memory store (recall_relevant_memories_embed); that
+# is the witness's only memory access path and it is not a tool
+# the planner can extend or override.
 [tools]
 required = []
-optional = ["knowledge"]
+optional = []
 
 # ─── Inference ───────────────────────────────────────────────
+# `latency_class = "extended"`: witness work is reasoning-heavy.
+# OICP pick_slot_v03 maps both Normal and Extended to Speed::Slow
+# (primary slot) for local routing — functionally identical here —
+# but Extended is the honest signal: this is sustained reflection,
+# not low-latency chat. The distinction also matters in mesh mode
+# where a peer scheduler may use the latency_class to pick a
+# differently-configured remote slot.
 [inference]
 privacy            = "local_only"
 capability_hint    = "general"
-latency_class      = "normal"
+latency_class      = "extended"
 min_context_tokens = 8192
 max_output_tokens  = 3000
 # Opt this skill into the glass-box relational voice contract
-# (RELATIONAL_BASE_SYSTEM_PROMPT in sovereign-core::runtime). The
-# relational base is layered *before* the [prompts] synthesis
-# block below — Socratic-first, parts-aware orientation stays as
-# is, but the relational contract sets the epistemic floor
-# (specific uncertainty, three registers for user history,
-# banned generic disclaimers, willingness to disagree once).
+# (RELATIONAL_BASE_SYSTEM_PROMPT + build_compact_relational_system_
+# message in sovereign-core::runtime). The witness path's system
+# prompt is composed entirely from those constants/helpers — the
+# `[prompts] synthesis` block below is NOT layered into the witness
+# path on relational skills (verified 2026-05-04: appending the
+# 1500-char synthesis regressed right_calibration -0.91 and
+# right_self_honesty -0.91 on the 35B Darwin bench; the 35B's
+# planning budget is already at the edge with the relational floor
+# alone). To tune the witness voice, edit the relational helpers in
+# runtime.rs directly. The synthesis block remains live for
+# ComplexTask paths via executor::prompt_overrides — kept here as
+# documentation of the skill's design intent and as a future
+# specialisation surface if a smarter merge strategy is built.
 register           = "relational"
 
 # ─── Prompt Templates ───────────────────────────────────────

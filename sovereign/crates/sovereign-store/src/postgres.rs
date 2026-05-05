@@ -190,6 +190,10 @@ impl PostgresStateStore {
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_conversation_id TEXT;
             ALTER TABLE conversations ADD COLUMN IF NOT EXISTS skill_id TEXT;
 
+            -- Inner-work memory wall (denormalized scope tag). Mirror
+            -- of run_inner_work_memory_wall_migrations on SQLite.
+            ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_skill_id TEXT;
+
             -- Antifragile-routing signal columns (PR4). Mirror of
             -- migrations::run_antifragile_routing_migrations on the
             -- SQLite side. Captured when the user redirects away
@@ -494,6 +498,7 @@ impl MemoryStore for PostgresStateStore {
             version: 0,
             deleted_at: None,
             source_conversation_id: None,
+            source_skill_id: None,
         }).collect())
     }
 
@@ -514,6 +519,7 @@ impl MemoryStore for PostgresStateStore {
             version: 0,
             deleted_at: None,
             source_conversation_id: None,
+            source_skill_id: None,
         }).collect())
     }
 

@@ -117,6 +117,17 @@ pub struct Expected {
     /// Inclusive maximum number of `?` characters in the response.
     #[serde(default)]
     pub question_count_max: Option<usize>,
+    /// Maximum number of distinct snake_case / SCREAMING_SNAKE
+    /// identifiers permitted in the response. Set to 0 for "the
+    /// witness must not surface any code-shaped tokens" — the
+    /// 2026-05-04 incident leaked names like `make_sep_like_parquet`,
+    /// `PersonalDomain`, `QueryPlan`, `MIN_CLAIM_LENGTH` into a
+    /// heartfelt journal entry, a clear sign that the planner had
+    /// invoked a corpus-retrieval path it should never have. This
+    /// check is the cheap regression gate against that recurrence.
+    /// `None` disables the check.
+    #[serde(default)]
+    pub max_snake_case_identifier_count: Option<usize>,
 }
 
 /// Load every `*.toml` under `dir` (non-recursive) as a scenario.

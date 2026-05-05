@@ -83,6 +83,7 @@ pub struct ChecksAggregate {
     pub question_density: CheckAggregate,
     pub banned_phrases: CheckAggregate,
     pub required_content: CheckAggregate,
+    pub code_identifier: CheckAggregate,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -183,6 +184,12 @@ impl VoiceEvalRun {
                 agg.required_content.passed += 1;
             }
         }
+        if result.code_identifier.enabled {
+            agg.code_identifier.enabled += 1;
+            if result.code_identifier.passed {
+                agg.code_identifier.passed += 1;
+            }
+        }
 
         self.results.push(result);
     }
@@ -247,6 +254,22 @@ pub fn print_text_report(run: &VoiceEvalRun) {
         if !r.required_content.passed && r.required_content.enabled {
             println!("      required content: none of the must-include phrases matched");
         }
+        if !r.code_identifier.passed && r.code_identifier.enabled {
+            // Show up to four offenders by name — enough to recognise
+            // which corpus the planner pulled from without dumping the
+            // full set into the operator's terminal.
+            let preview: Vec<&str> = r
+                .code_identifier
+                .matches
+                .iter()
+                .take(4)
+                .map(String::as_str)
+                .collect();
+            println!(
+                "      code identifiers: {} (max {:?}) — first: {:?}",
+                r.code_identifier.count, r.code_identifier.max, preview
+            );
+        }
     }
 
     println!();
@@ -270,6 +293,7 @@ pub fn print_text_report(run: &VoiceEvalRun) {
     print_check_line("question_density", &agg.question_density);
     print_check_line("banned_phrases", &agg.banned_phrases);
     print_check_line("required_content", &agg.required_content);
+    print_check_line("code_identifier", &agg.code_identifier);
 
     // Latency summary — only printed if any scenario has a non-zero
     // wall-clock (i.e., it's a live run, not a dry-run from canned
@@ -372,28 +396,159 @@ pub fn print_text_report(run: &VoiceEvalRun) {
     // points between small and large" without forcing the operator
     // to diff JSON. Only printed if the judge actually ran for at
     // least one scenario; the dry-run path leaves judge_scores empty.
-    let scored: Vec<&JudgeScore> = run
-        .judge_scores
-        .iter()
-        .filter_map(|s| s.as_ref())
-        .collect();
-    if !scored.is_empty() {
+    if let Some(means) = AxisMeans::from_run(run) {
         println!();
-        println!("Judge axes (mean over {} scenarios):", scored.len());
-        let n = scored.len() as f64;
-        let mean = |get: fn(&JudgeScore) -> u8| {
-            scored.iter().map(|s| get(s) as f64).sum::<f64>() / n
-        };
-        println!("  right_attention      {:.2}", mean(|s| s.right_attention));
-        println!("  right_specificity    {:.2}", mean(|s| s.right_specificity));
-        println!("  right_calibration    {:.2}", mean(|s| s.right_calibration));
-        println!("  right_question       {:.2}", mean(|s| s.right_question));
-        println!("  right_silence        {:.2}", mean(|s| s.right_silence));
-        println!("  right_disagreement   {:.2}", mean(|s| s.right_disagreement));
-        println!("  right_edge           {:.2}", mean(|s| s.right_edge));
-        println!("  right_self_honesty   {:.2}", mean(|s| s.right_self_honesty));
-        println!("  avoid_list_penalty   {:.2}  (lower is better)", mean(|s| s.avoid_list_penalty));
+        println!("Judge axes (mean over {} scenarios):", means.n);
+        means.print_lines("  ");
     }
+}
+
+/// Per-axis means over scored judge calls. Refactored out of
+/// `print_text_report` so the diff path (`--diff <baseline.json>`)
+/// can reuse the same shape against a stored baseline.
+///
+/// `n` carries the sample size so callers can include it in the
+/// header — comparing means over different sample sizes is the
+/// most common foot-gun in this kind of bench, and surfacing N
+/// makes the comparison legible.
+#[derive(Debug, Clone)]
+pub struct AxisMeans {
+    pub n: usize,
+    pub right_attention: f64,
+    pub right_specificity: f64,
+    pub right_calibration: f64,
+    pub right_question: f64,
+    pub right_silence: f64,
+    pub right_disagreement: f64,
+    pub right_edge: f64,
+    pub right_self_honesty: f64,
+    /// Lower is better — kept as a positive number; the printer
+    /// adds the explanatory annotation.
+    pub avoid_list_penalty: f64,
+}
+
+impl AxisMeans {
+    pub fn from_run(run: &VoiceEvalRun) -> Option<Self> {
+        let scored: Vec<&JudgeScore> = run
+            .judge_scores
+            .iter()
+            .filter_map(|s| s.as_ref())
+            .collect();
+        if scored.is_empty() {
+            return None;
+        }
+        let n = scored.len();
+        let denom = n as f64;
+        let mean = |get: fn(&JudgeScore) -> u8| {
+            scored.iter().map(|s| get(s) as f64).sum::<f64>() / denom
+        };
+        Some(Self {
+            n,
+            right_attention: mean(|s| s.right_attention),
+            right_specificity: mean(|s| s.right_specificity),
+            right_calibration: mean(|s| s.right_calibration),
+            right_question: mean(|s| s.right_question),
+            right_silence: mean(|s| s.right_silence),
+            right_disagreement: mean(|s| s.right_disagreement),
+            right_edge: mean(|s| s.right_edge),
+            right_self_honesty: mean(|s| s.right_self_honesty),
+            avoid_list_penalty: mean(|s| s.avoid_list_penalty),
+        })
+    }
+
+    pub fn print_lines(&self, indent: &str) {
+        println!("{indent}right_attention      {:.2}", self.right_attention);
+        println!("{indent}right_specificity    {:.2}", self.right_specificity);
+        println!("{indent}right_calibration    {:.2}", self.right_calibration);
+        println!("{indent}right_question       {:.2}", self.right_question);
+        println!("{indent}right_silence        {:.2}", self.right_silence);
+        println!("{indent}right_disagreement   {:.2}", self.right_disagreement);
+        println!("{indent}right_edge           {:.2}", self.right_edge);
+        println!("{indent}right_self_honesty   {:.2}", self.right_self_honesty);
+        println!(
+            "{indent}avoid_list_penalty   {:.2}  (lower is better)",
+            self.avoid_list_penalty
+        );
+    }
+
+    pub fn axes(&self) -> [(&'static str, f64, bool); 9] {
+        // (name, value, higher_is_better)
+        [
+            ("right_attention", self.right_attention, true),
+            ("right_specificity", self.right_specificity, true),
+            ("right_calibration", self.right_calibration, true),
+            ("right_question", self.right_question, true),
+            ("right_silence", self.right_silence, true),
+            ("right_disagreement", self.right_disagreement, true),
+            ("right_edge", self.right_edge, true),
+            ("right_self_honesty", self.right_self_honesty, true),
+            ("avoid_list_penalty", self.avoid_list_penalty, false),
+        ]
+    }
+}
+
+/// Print a diff table: baseline vs. current means + per-axis delta
+/// flagged by direction-of-better.
+///
+/// The tuning loop's primary signal — per-scenario pass/fail flips
+/// are noisy run-to-run (±2-4 scenarios per the bench README), but
+/// axis means pool across all scenarios so they're more stable.
+/// "Did this prompt edit move right_silence?" answered with one
+/// number is what makes the loop tight enough to actually drive
+/// changes from.
+pub fn print_axis_diff(baseline: &AxisMeans, current: &AxisMeans) {
+    println!();
+    println!(
+        "Axis diff (current n={} vs. baseline n={}):",
+        current.n, baseline.n
+    );
+    println!(
+        "  {:<22} {:>10} {:>10} {:>12}",
+        "axis", "baseline", "current", "delta"
+    );
+    let base_axes = baseline.axes();
+    let cur_axes = current.axes();
+    for (i, (name, cur, higher_is_better)) in cur_axes.iter().enumerate() {
+        let base = base_axes[i].1;
+        let delta = cur - base;
+        // Visual marker: ↑ when moved in the right direction,
+        // ↓ when wrong direction, · when within ±0.05 (noise floor).
+        let marker = if delta.abs() < 0.05 {
+            "·"
+        } else {
+            let improved = if *higher_is_better {
+                delta > 0.0
+            } else {
+                delta < 0.0
+            };
+            if improved {
+                "↑"
+            } else {
+                "↓"
+            }
+        };
+        println!(
+            "  {:<22} {:>10.2} {:>10.2} {:>+10.2} {marker}",
+            name, base, cur, delta
+        );
+    }
+}
+
+/// Load an `AxisMeans` from a previously-archived JSON report.
+/// Used by the `--diff <baseline.json>` flag on `voice eval`.
+pub fn load_axis_means_from_report(path: &Path) -> std::io::Result<AxisMeans> {
+    let body = std::fs::read_to_string(path)?;
+    let run: VoiceEvalRun = serde_json::from_str(&body)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    AxisMeans::from_run(&run).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "report at {} contains no scored scenarios — was --no-judge in effect?",
+                path.display()
+            ),
+        )
+    })
 }
 
 /// Median / p95 / max over a list of latency samples. Pure
@@ -435,7 +590,8 @@ fn print_check_line(name: &str, agg: &CheckAggregate) {
 mod tests {
     use super::*;
     use crate::voice_eval::checks::{
-        BannedPhraseCheck, LengthCheck, QuestionDensityCheck, RequiredContentCheck,
+        BannedPhraseCheck, CodeIdentifierCheck, LengthCheck, QuestionDensityCheck,
+        RequiredContentCheck,
     };
 
     fn fake_result(id: &str, passed: bool, probes: Vec<String>) -> ScenarioResult {
@@ -465,6 +621,13 @@ mod tests {
             required_content: RequiredContentCheck {
                 enabled: false,
                 matched: None,
+                passed: true,
+            },
+            code_identifier: CodeIdentifierCheck {
+                enabled: false,
+                matches: Vec::new(),
+                count: 0,
+                max: None,
                 passed: true,
             },
             passed,
