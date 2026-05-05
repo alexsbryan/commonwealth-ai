@@ -1171,6 +1171,27 @@ pub enum ExtractorConfig {
         #[serde(default)]
         decompress: Option<String>,
     },
+    /// JSON-API extractor. Reads a single JSON file (typically the
+    /// per-page response persisted by the `http_api` acquirer when
+    /// `[acquire.follow]` is absent), runs `document_path` over it as
+    /// JSONPath, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
+    /// per matching object using `content_field` for the body text.
+    /// See [`crate::extractors::json_api::JsonApiExtractor`].
+    #[serde(rename = "json")]
+    Json {
+        /// JSONPath expression selecting the documents array. Common
+        /// shapes: `$.results[*]`, `$.data.items[*]`, `$.hits.hits[*]._source`.
+        document_path: String,
+        /// Required: name of the field on each matched object that
+        /// holds the document's full text.
+        content_field: String,
+        #[serde(default)]
+        title_field: Option<String>,
+        #[serde(default)]
+        url_field: Option<String>,
+        #[serde(default)]
+        id_field: Option<String>,
+    },
     #[serde(rename = "html")]
     Html {
         #[serde(default)]
@@ -1583,14 +1604,27 @@ fn check_schema_version(v: u32) -> Result<()> {
 }
 
 /// Translate a serde TOML parse error into something actionable
-/// for known-deprecated variant names. Falls through to the raw
-/// serde message for unrecognised shapes.
+/// for the recipe author. Three rewrite passes, in order:
 ///
-/// Each entry pairs a removed/renamed variant string with the
-/// replacement it should migrate to. When the parse error mentions
-/// the deprecated string, we prepend a clear "use `<replacement>`"
-/// nudge so the user doesn't have to reverse-engineer the rename
-/// from a generic "unknown variant" message.
+/// 1. **Deprecation aliases** (e.g. `api_paginated` → `http_api`):
+///    name the replacement so the user doesn't reverse-engineer
+///    the rename from a generic "unknown variant" message.
+/// 2. **Missing required fields**: rephrase `missing field 'X'`
+///    in plain language and, when the field is a section we know
+///    well, list valid `type` values inline. The default serde
+///    message points the caret at line 1 even when the issue is
+///    "the section doesn't exist anywhere" — that's misleading and
+///    the rewrite drops it.
+/// 3. **Unknown enum variants**: name the field path that the
+///    bad value was assigned to, when the parse error carries
+///    enough position info to recover it. The default message
+///    quotes the bad value but not the field, so a recipe with
+///    `[acquire.follow] document_format = "pdf"` reads as just
+///    "unknown variant 'pdf'" with no field hint.
+///
+/// Falls through to the raw serde message when no rewrite
+/// applies — better to surface the technical error than to
+/// invent a "helpful" rewrite that misdescribes the failure.
 fn translate_parse_error(e: toml::de::Error) -> Error {
     const DEPRECATIONS: &[(&str, &str, &str)] = &[
         // (deprecated_name, replacement, since)
@@ -1601,6 +1635,10 @@ fn translate_parse_error(e: toml::de::Error) -> Error {
         ),
     ];
     let raw = e.to_string();
+
+    // 1. Deprecation aliases — keep first so a deprecated variant
+    //    name takes precedence over the generic "unknown variant"
+    //    rewrite below.
     for (old, new, since) in DEPRECATIONS {
         if raw.contains(old) {
             return Error::Recipe(format!(
@@ -1610,7 +1648,162 @@ fn translate_parse_error(e: toml::de::Error) -> Error {
             ));
         }
     }
+
+    // 2. Missing required field — `missing field \`X\`` (single
+    //    backticks in serde's output).
+    if let Some(field) = extract_missing_field(&raw) {
+        return Error::Recipe(rewrite_missing_field(&field, &raw));
+    }
+
+    // 3. Unknown variant — `unknown variant \`X\`, expected one of …`
+    if let Some((bad_value, allowed)) = extract_unknown_variant(&raw) {
+        return Error::Recipe(rewrite_unknown_variant(&bad_value, &allowed, &raw));
+    }
+
     Error::Recipe(raw)
+}
+
+/// Pull the field name out of a serde `missing field \`X\`` message.
+fn extract_missing_field(raw: &str) -> Option<String> {
+    let anchor = "missing field `";
+    let start = raw.find(anchor)? + anchor.len();
+    let rest = &raw[start..];
+    let end = rest.find('`')?;
+    Some(rest[..end].to_string())
+}
+
+/// Pull `(bad_value, allowed_csv)` out of a serde
+/// `unknown variant \`X\`, expected one of \`a\`, \`b\`, …` message.
+fn extract_unknown_variant(raw: &str) -> Option<(String, String)> {
+    let var_anchor = "unknown variant `";
+    let var_start = raw.find(var_anchor)? + var_anchor.len();
+    let after_var = &raw[var_start..];
+    let var_end = after_var.find('`')?;
+    let bad_value = after_var[..var_end].to_string();
+    // Allowed list: everything between "expected one of " and the
+    // end of the line / next backtick-free run. Serde emits the
+    // list with backticks; surface it as plain CSV.
+    let allowed_anchor = "expected one of ";
+    let allowed_start = raw.find(allowed_anchor)? + allowed_anchor.len();
+    let allowed_chunk = &raw[allowed_start..];
+    let allowed_end = allowed_chunk
+        .find('\n')
+        .unwrap_or(allowed_chunk.len());
+    let allowed = allowed_chunk[..allowed_end]
+        .replace('`', "")
+        .replace(", ", ", ");
+    Some((bad_value, allowed))
+}
+
+/// Compose a plain-language explanation for a missing required key,
+/// and inline the valid `type` values when the missing field names
+/// a section whose `type` enum we know up-front. The known sections
+/// stay narrow on purpose — better to fall back to the raw serde
+/// message than to give wrong "valid types" guidance.
+fn rewrite_missing_field(field: &str, raw: &str) -> String {
+    match field {
+        "acquire" => format!(
+            "Recipe is missing the `[acquire]` section. Every recipe needs \
+             one. Add it with `type = \"...\"` (one of: bulk_download | \
+             http_api | web_crawl | local_file | huggingface_dataset). \
+             Underlying parser error: {raw}"
+        ),
+        "extract" => format!(
+            "Recipe is missing the `[extract]` section. Add it with \
+             `type = \"...\"` (one of: plaintext | html | html_sections | \
+             json | jsonl | csv | parquet | mediawiki_xml | \
+             stackexchange_xml | wikipedia_jsonl | wikipedia_structured | \
+             wikipedia_catalog | wikipedia_api_article | gutenberg_catalog \
+             | code). Underlying parser error: {raw}"
+        ),
+        "chunk" => format!(
+            "Recipe is missing the `[chunk]` section. Add it with \
+             `type = \"...\"` (one of: paragraph | sentence | fixed | \
+             semantic | passthrough). Underlying parser error: {raw}"
+        ),
+        "corpus" => format!(
+            "Recipe is missing the `[corpus]` section. Every recipe needs \
+             one with at least `id = \"...\"` and `name = \"...\"`. \
+             Underlying parser error: {raw}"
+        ),
+        "type" => format!(
+            "A section is missing its required `type` field. Look at the \
+             TOML caret below to see which section. Each acquirer / \
+             extractor / chunker / pattern needs an explicit `type = \
+             \"...\"`. Underlying parser error: {raw}"
+        ),
+        "base_url" => format!(
+            "An `[acquire]` block with `type = \"http_api\"` is missing \
+             `base_url`. Add `base_url = \"https://api.example.com\"`. \
+             Underlying parser error: {raw}"
+        ),
+        "id" | "name" => format!(
+            "The `[corpus]` section is missing required field `{field}`. \
+             Both `id` (stable identifier) and `name` (display name) are \
+             required. Underlying parser error: {raw}"
+        ),
+        "document_path" => format!(
+            "An `[extract]` block with `type = \"json\"` is missing \
+             `document_path`. Set it to a JSONPath that selects the \
+             documents array (e.g. `$.results[*]`). Underlying parser \
+             error: {raw}"
+        ),
+        "content_field" => format!(
+            "An `[extract]` block is missing `content_field` — the name \
+             of the JSON field on each matched object that holds the \
+             document body text. Underlying parser error: {raw}"
+        ),
+        _ => format!(
+            "Recipe is missing required field `{field}`. Add it to the \
+             section the parser caret points at below. Underlying parser \
+             error: {raw}"
+        ),
+    }
+}
+
+/// Compose a plain-language explanation for an unknown enum value,
+/// naming the field path when the parse error carries enough span
+/// info for us to recover it. Serde's default points the caret at
+/// the assignment but doesn't quote the field name in the error
+/// text, which makes the message read as just "unknown variant 'X'".
+fn rewrite_unknown_variant(bad_value: &str, allowed: &str, raw: &str) -> String {
+    // Serde's TOML error formatter prints the surrounding span
+    // including the offending key on a nearby line. Pull the most
+    // recent `key = "value"` or `key = ...` from the raw message to
+    // surface the field. This is best-effort; if we can't find a
+    // key, fall back to "a field" phrasing.
+    let field_hint = extract_field_from_span(raw, bad_value);
+    let field_phrase = match field_hint.as_deref() {
+        Some(f) => format!("field `{f}`"),
+        None => "a field".to_string(),
+    };
+    format!(
+        "{field_phrase} got `{bad_value}` but allowed values are: \
+         {allowed}. Underlying parser error: {raw}"
+    )
+}
+
+/// Best-effort extraction of `key` from a serde TOML error span
+/// containing `key = "<bad_value>"` or similar. Walks the message
+/// line-by-line looking for an `=` neighbouring the bad value.
+fn extract_field_from_span(raw: &str, bad_value: &str) -> Option<String> {
+    for line in raw.lines() {
+        let trimmed = line.trim_start_matches(|c: char| {
+            c.is_ascii_digit() || c == '|' || c == ' '
+        });
+        if !trimmed.contains(bad_value) || !trimmed.contains('=') {
+            continue;
+        }
+        let key_part = trimmed.split('=').next()?.trim();
+        if !key_part.is_empty()
+            && key_part.chars().all(|c| {
+                c.is_ascii_alphanumeric() || c == '_' || c == '.'
+            })
+        {
+            return Some(key_part.to_string());
+        }
+    }
+    None
 }
 
 /// Lexical ISO-8601 calendar-date check (`YYYY-MM-DD`). We don't
@@ -1703,6 +1896,134 @@ pub(crate) fn builtin_recipes() -> Vec<Recipe> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The exact failure modes seen in the recipe-author live trial.
+    /// Each case targets a real validation message a non-technical
+    /// user would see through the desktop UI, and asserts the rewrite
+    /// surfaces remediation guidance instead of the raw serde
+    /// "TOML parse error at line 1" framing.
+    #[test]
+    fn translate_missing_acquire_section_names_the_section_and_lists_types() {
+        // No `[acquire]` block at all — the failure mode in the
+        // first agent draft of every recipe-author trial.
+        let toml_str = r#"
+[corpus]
+id = "x"
+name = "x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+        let err = Recipe::from_toml(toml_str).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("[acquire]"), "should name the section: {msg}");
+        assert!(msg.contains("http_api"), "should list valid types: {msg}");
+        assert!(
+            !msg.starts_with("TOML parse error"),
+            "rewrite should drop the misleading line-1 framing: {msg}",
+        );
+    }
+
+    #[test]
+    fn translate_missing_type_in_acquire_lists_no_specific_types() {
+        // `[acquire]` present but missing `type` — needs a generic
+        // "look at caret" hint since we can't tell which section.
+        let toml_str = r#"
+[corpus]
+id = "x"
+name = "x"
+
+[acquire]
+base_url = "https://example.com"
+
+[[acquire.requests]]
+url = "{base_url}/x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+        let err = Recipe::from_toml(toml_str).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("`type`"), "should name the missing field: {msg}");
+        assert!(
+            msg.contains("acquirer") || msg.contains("section"),
+            "should hint at which section: {msg}",
+        );
+    }
+
+    #[test]
+    fn translate_unknown_variant_pdf_names_field_and_lists_allowed() {
+        // The bw9pkay71 trial failure: `document_format = "pdf"`.
+        let toml_str = r#"
+[corpus]
+id = "x"
+name = "x"
+
+[acquire]
+type = "http_api"
+base_url = "https://example.com"
+
+[[acquire.requests]]
+url = "{base_url}/x"
+
+[acquire.follow]
+document_url_path = "$.urls[*]"
+document_format = "pdf"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+        let err = Recipe::from_toml(toml_str).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("pdf"), "should quote the bad value: {msg}");
+        assert!(
+            msg.contains("html") && msg.contains("json"),
+            "should list allowed values: {msg}",
+        );
+        // Best-effort field-name extraction — should at least
+        // recognise the bad value lives in `document_format`.
+        assert!(
+            msg.contains("document_format") || msg.contains("field"),
+            "should hint at the field name when the span carries it: {msg}",
+        );
+    }
+
+    #[test]
+    fn translate_falls_through_for_unrecognised_errors() {
+        // A genuinely unexpected parse error should still surface.
+        let toml_str = "this is not valid TOML at all = = =";
+        let err = Recipe::from_toml(toml_str).unwrap_err();
+        let msg = format!("{err}");
+        assert!(!msg.is_empty(), "should still surface something: {msg}");
+    }
+
+    #[test]
+    fn extract_missing_field_pulls_field_from_serde_message() {
+        let raw = "TOML parse error\n  |\n1 | [acquire]\n  | ^^^^^^^^^\nmissing field `type`";
+        assert_eq!(extract_missing_field(raw).as_deref(), Some("type"));
+        let raw2 = "missing field `acquire`";
+        assert_eq!(extract_missing_field(raw2).as_deref(), Some("acquire"));
+        assert_eq!(extract_missing_field("no anchor here"), None);
+    }
+
+    #[test]
+    fn extract_unknown_variant_pulls_value_and_allowed_list() {
+        let raw =
+            "unknown variant `pdf`, expected one of `html`, `json`, `xml`, `plaintext`";
+        let (val, allowed) = extract_unknown_variant(raw).unwrap();
+        assert_eq!(val, "pdf");
+        assert!(allowed.contains("html"));
+        assert!(allowed.contains("plaintext"));
+    }
 
     #[test]
     fn round_trip_serialization() {

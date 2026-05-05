@@ -1678,6 +1678,19 @@ impl CorpusEngine {
                 filter: filter.clone(),
                 decompress: decompress.clone(),
             }),
+            ExtractorConfig::Json {
+                document_path,
+                content_field,
+                title_field,
+                url_field,
+                id_field,
+            } => Box::new(extractors::json_api::JsonApiExtractor {
+                document_path: document_path.clone(),
+                content_field: content_field.clone(),
+                title_field: title_field.clone(),
+                url_field: url_field.clone(),
+                id_field: id_field.clone(),
+            }),
             ExtractorConfig::Html {
                 content_selector,
                 title_selector,

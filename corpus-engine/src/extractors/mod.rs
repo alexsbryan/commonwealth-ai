@@ -1,4 +1,5 @@
 pub mod json;
+pub mod json_api;
 pub mod xml;
 pub mod html;
 pub mod html_sections;

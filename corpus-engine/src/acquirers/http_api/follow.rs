@@ -62,17 +62,29 @@ pub fn document_path(docs_dir: &Path, url: &str, format: DocFormat) -> PathBuf {
 /// Fetch a single document URL, write it to disk, and return the
 /// final on-disk path. If the file already exists (resume), short-
 /// circuits without re-fetching.
+///
+/// `headers` is the per-binding map of templated headers (e.g.
+/// `Authorization: Token <api_token>`) that the orchestrator
+/// rendered against the active `for_each` binding. Apply it on
+/// every follow fetch — same auth surface as the page request.
 pub async fn fetch_document(
     client: &reqwest::Client,
     url: &str,
     docs_dir: &Path,
     follow: &FollowConfig,
+    headers: &reqwest::header::HeaderMap,
 ) -> Result<PathBuf> {
     let path = document_path(docs_dir, url, follow.document_format);
     if path.exists() {
         return Ok(path);
     }
-    let response = client.get(url).send().await?;
+    let request = client.get(url);
+    let request = if headers.is_empty() {
+        request
+    } else {
+        request.headers(headers.clone())
+    };
+    let response = request.send().await?;
     if !response.status().is_success() {
         return Err(Error::Recipe(format!(
             "follow fetch of `{url}` failed with HTTP {}",

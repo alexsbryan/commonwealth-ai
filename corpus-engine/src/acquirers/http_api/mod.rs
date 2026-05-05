@@ -71,6 +71,14 @@ pub struct HttpApiAcquirer {
     rate_limiter: TokenBucket,
     client: reqwest::Client,
     parameters: ResolvedParameters,
+    /// Headers whose value contains a `{name}` placeholder. The name
+    /// is validated at construction time (so a typo fails fast) but
+    /// the value template is interpolated per-request via
+    /// [`render_request_headers`](Self::render_request_headers) so
+    /// the final string can vary by `for_each` binding. Static
+    /// headers (no placeholder) are baked into the client's
+    /// `default_headers` instead.
+    templated_headers: Vec<(reqwest::header::HeaderName, String)>,
 }
 
 impl HttpApiAcquirer {
@@ -102,17 +110,23 @@ impl HttpApiAcquirer {
             .user_agent(ua)
             .timeout(Duration::from_secs(60));
 
+        // Headers split into:
+        //   - static (no `{...}` placeholder) → client default_headers
+        //   - templated → kept on Self, interpolated per-request
+        //     against the active for_each binding so values that
+        //     reference parameters (e.g. `{api_token}`) actually
+        //     reach the wire. The header *name* is validated now so
+        //     a typo fails at construction, not at first request.
+        let mut templated_headers: Vec<(reqwest::header::HeaderName, String)> = Vec::new();
         if let Some(headers) = &headers {
-            // Only static header values (no `{name}` placeholders)
-            // are baked into the default header map. Templated
-            // headers are added per-request; we detect them here.
             let mut default_headers = reqwest::header::HeaderMap::new();
             for (k, v) in headers {
-                if v.contains('{') {
-                    continue;
-                }
                 let name = reqwest::header::HeaderName::from_bytes(k.as_bytes())
                     .map_err(|e| Error::Recipe(format!("invalid header `{k}`: {e}")))?;
+                if v.contains('{') {
+                    templated_headers.push((name, v.clone()));
+                    continue;
+                }
                 let value = reqwest::header::HeaderValue::from_str(v).map_err(|e| {
                     Error::Recipe(format!("invalid header value for `{k}`: {e}"))
                 })?;
@@ -138,7 +152,30 @@ impl HttpApiAcquirer {
             rate_limiter,
             client,
             parameters,
+            templated_headers,
         })
+    }
+
+    /// Render every templated header against the current `binding`
+    /// and assemble a [`reqwest::header::HeaderMap`] that
+    /// `fetch_one_page` and `fetch_document` apply to each outbound
+    /// request. Static headers are already on the client.
+    fn render_request_headers(
+        &self,
+        binding: &BTreeMap<String, String>,
+    ) -> Result<reqwest::header::HeaderMap> {
+        let mut map = reqwest::header::HeaderMap::new();
+        for (name, template) in &self.templated_headers {
+            let rendered = render_template(template, &self.base_url, binding)?;
+            let value = reqwest::header::HeaderValue::from_str(&rendered).map_err(|e| {
+                Error::Recipe(format!(
+                    "header `{}` rendered to an invalid value: {e}",
+                    name.as_str()
+                ))
+            })?;
+            map.insert(name.clone(), value);
+        }
+        Ok(map)
     }
 
     /// Run the acquirer end-to-end. Returns the directory under
@@ -177,6 +214,10 @@ impl HttpApiAcquirer {
         let mut current_url = render_template(&template.url, &self.base_url, binding)?;
         let body_template = template.body.clone();
         let mut state = PaginationState::default();
+        // Templated headers are stable across the page-loop within a
+        // single binding: render once, reuse for every page + every
+        // followed document.
+        let request_headers = self.render_request_headers(binding)?;
 
         loop {
             // Skip the page if we already finished it on a prior run.
@@ -200,7 +241,12 @@ impl HttpApiAcquirer {
             };
 
             let response_value = self
-                .fetch_one_page(&current_url, template.method, body_str.as_deref())
+                .fetch_one_page(
+                    &current_url,
+                    template.method,
+                    body_str.as_deref(),
+                    &request_headers,
+                )
                 .await?;
 
             // Persist (or follow + persist documents) for this page.
@@ -212,6 +258,7 @@ impl HttpApiAcquirer {
                         follow_cfg,
                         journal,
                         progress,
+                        &request_headers,
                     )
                     .await?;
                 }
@@ -246,6 +293,7 @@ impl HttpApiAcquirer {
         url: &str,
         method: HttpMethod,
         body: Option<&str>,
+        headers: &reqwest::header::HeaderMap,
     ) -> Result<serde_json::Value> {
         let request = match method {
             HttpMethod::Get => self.client.get(url),
@@ -259,16 +307,42 @@ impl HttpApiAcquirer {
                 req
             }
         };
+        let request = if headers.is_empty() {
+            request
+        } else {
+            request.headers(headers.clone())
+        };
         let response = request.send().await?;
-        if !response.status().is_success() {
+        let status = response.status();
+        // Read the body up-front so non-2xx errors can include the
+        // server's actual reason (e.g. CourtListener returns
+        // `{"detail":"Invalid token."}` with 401). Without the body
+        // a 401 is indistinguishable from "no auth header sent",
+        // and the recipe author has to re-curl by hand to find out.
+        let body = response.bytes().await?;
+        if !status.is_success() {
+            // Cap the excerpt at 400 bytes — the actionable content
+            // (status detail / API error message) is always at the
+            // start; long bodies are usually HTML error pages and
+            // not useful here.
+            let excerpt = String::from_utf8_lossy(
+                &body[..body.len().min(400)],
+            )
+            .trim()
+            .to_string();
+            let body_suffix = if excerpt.is_empty() {
+                String::new()
+            } else {
+                format!(" — body: {excerpt}")
+            };
             return Err(Error::Recipe(format!(
-                "http_api request failed: {} {} -> HTTP {}",
+                "http_api request failed: {} {} -> HTTP {}{}",
                 method_label(method),
                 url,
-                response.status()
+                status,
+                body_suffix,
             )));
         }
-        let body = response.bytes().await?;
         let value: serde_json::Value = serde_json::from_slice(&body).map_err(|e| {
             Error::Recipe(format!(
                 "http_api response from `{url}` is not valid JSON: {e}"
@@ -284,6 +358,7 @@ impl HttpApiAcquirer {
         follow: &FollowConfig,
         journal: &mut ProgressJournal,
         progress: &Option<ProgressCallback>,
+        headers: &reqwest::header::HeaderMap,
     ) -> Result<()> {
         let urls = extract_document_urls(page_body, &follow.document_url_path)?;
         if urls.is_empty() {
@@ -294,6 +369,7 @@ impl HttpApiAcquirer {
         let rate_limiter = self.rate_limiter.clone();
         let docs_dir_buf = docs_dir.to_path_buf();
         let follow_clone = follow.clone();
+        let headers_clone = headers.clone();
 
         // Bounded-concurrent fetch with per-doc rate limiting.
         let results: Vec<Result<String>> = stream::iter(urls)
@@ -302,9 +378,10 @@ impl HttpApiAcquirer {
                 let rate_limiter = rate_limiter.clone();
                 let docs_dir = docs_dir_buf.clone();
                 let follow = follow_clone.clone();
+                let headers = headers_clone.clone();
                 async move {
                     rate_limiter.wait().await;
-                    fetch_document(&client, &url, &docs_dir, &follow).await?;
+                    fetch_document(&client, &url, &docs_dir, &follow, &headers).await?;
                     Ok::<_, Error>(url)
                 }
             })
