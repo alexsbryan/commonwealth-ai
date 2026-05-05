@@ -459,7 +459,7 @@
     gap: 8px;
     padding: 6px 12px;
     font-size: 0.72rem;
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     letter-spacing: 0.04em;
     color: var(--text-secondary);
     background: var(--bg-surface);

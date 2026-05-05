@@ -218,7 +218,7 @@
   }
 
   .salience {
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 0.7rem;
     color: var(--text-muted);
     letter-spacing: 0.04em;
@@ -307,7 +307,7 @@
 
   .rel-edge {
     color: var(--accent, #c9a84c);
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 0.74rem;
   }
 
@@ -353,7 +353,7 @@
   }
 
   .section-id {
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 0.74rem;
     color: var(--accent, #c9a84c);
     letter-spacing: 0.04em;
@@ -388,7 +388,7 @@
   }
 
   .peer-corpus {
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 0.74rem;
     color: var(--lavender, #9b87c4);
   }

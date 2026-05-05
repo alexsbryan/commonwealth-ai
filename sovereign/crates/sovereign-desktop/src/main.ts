@@ -1,9 +1,11 @@
-import "@fontsource/syne/400.css";
-import "@fontsource/syne/500.css";
-import "@fontsource/syne/600.css";
-import "@fontsource/syne/700.css";
-import "@fontsource/syne/800.css";
-import "@fontsource/syne-mono/400.css";
+// IBM Plex Sans Variable — chrome and outer-work face (ss03+ss05+calt at weight 420)
+import "@fontsource-variable/ibm-plex-sans";
+// Source Serif 4 Variable with optical-size axis — body and inner-work face (opsz 14, weight 380)
+import "@fontsource-variable/source-serif-4/opsz.css";
+import "@fontsource-variable/source-serif-4/opsz-italic.css";
+// IBM Plex Mono — shares family DNA with Plex Sans; replaces Syne Mono
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
 import { mount } from "svelte";
 import App from "./App.svelte";
 import "./app.css";

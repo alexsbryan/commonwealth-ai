@@ -19,6 +19,9 @@
     "report:ttfi:save-baseline": "cp tests/e2e/.ttfi-report.json tests/e2e/.ttfi-baseline.json"
   },
   "dependencies": {
+    "@fontsource-variable/ibm-plex-sans": "^5.2.8",
+    "@fontsource-variable/source-serif-4": "^5.2.9",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/syne": "^5.2.7",
     "@fontsource/syne-mono": "^5.2.7",
     "@tauri-apps/api": "^2.0.0",

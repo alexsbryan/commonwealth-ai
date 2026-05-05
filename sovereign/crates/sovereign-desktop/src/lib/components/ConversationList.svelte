@@ -444,7 +444,7 @@
     display: block;
     font-size: 0.67rem;
     color: var(--text-muted);
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     letter-spacing: 0.02em;
   }
 

@@ -72,7 +72,7 @@
 
   .prefix {
     color: var(--text-muted);
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     letter-spacing: 0.04em;
     font-size: 0.72rem;
   }

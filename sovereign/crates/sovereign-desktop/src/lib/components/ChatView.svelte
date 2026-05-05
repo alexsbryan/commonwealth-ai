@@ -1203,7 +1203,7 @@
     border: 1px solid var(--border-mid);
     border-radius: 100px;
     color: var(--text-muted);
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     letter-spacing: 0.04em;
     background: var(--bg-surface);
   }
@@ -1220,7 +1220,7 @@
     font-size: 0.72rem;
     color: var(--text-muted);
     letter-spacing: 0.02em;
-    font-family: 'Syne Mono', monospace;
+    font-family: var(--font-mono);
     position: relative;
   }
   .empty-building-hint {
