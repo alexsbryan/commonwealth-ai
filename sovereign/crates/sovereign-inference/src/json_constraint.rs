@@ -481,13 +481,17 @@ fn parse_object(
             return ParseStatus::Incomplete;
         }
         // Pick the value schema. If `Picked::Typed(idx)`, use that
-        // property's schema and bump next_idx. If `Picked::Additional`,
-        // accept any value (use a wildcard StringAny-like wildcard).
+        // property's schema and ratchet next_idx forward (never
+        // backward — picking an EARLIER optional after a later one
+        // would otherwise revert next_idx and re-open already-
+        // consumed indices for re-emission, which is the duplicate
+        // loop the rejection logic in `match_property` exists to
+        // prevent). If `Picked::Additional`, accept any value.
         let value_status = match chosen_key {
             ChosenKey::Typed(idx) => {
                 let s = parse_value(p, &properties[idx].1);
                 if s == ParseStatus::Complete {
-                    next_idx = idx + 1;
+                    next_idx = next_idx.max(idx + 1);
                 }
                 s
             }
@@ -620,17 +624,28 @@ fn match_property(
         }
         return KeyMatch::NotDeclared;
     }
-    // Optional block: any unconsumed optional property is valid.
-    for (i, (name, _)) in properties.iter().enumerate().skip(required_count) {
+    // Optional block: only properties at index >= next_idx are still
+    // available. Iterating from `required_count` (the original bug)
+    // re-matched already-consumed optionals — under temp=0 + greedy
+    // the model would emit the same `description` field over and
+    // over, blowing the token budget on a runaway loop. Iterating
+    // from `next_idx` skips consumed indices; duplicates fall through
+    // to the Forbidden check below.
+    let optional_start = next_idx.max(required_count);
+    for (i, (name, _)) in properties
+        .iter()
+        .enumerate()
+        .skip(optional_start)
+    {
         if name == key {
             return KeyMatch::Picked(i);
         }
     }
-    // A required property name appearing again in optional position
-    // is a duplicate → forbidden.
+    // A declared property name reappearing at an index we've already
+    // passed (required OR optional) is a duplicate → forbidden.
     if properties
         .iter()
-        .take(required_count)
+        .take(optional_start)
         .any(|(name, _)| name == key)
     {
         return KeyMatch::Forbidden;
@@ -647,9 +662,14 @@ fn any_property_starts_with(
     if next_idx < required_count {
         return properties[next_idx].0.as_bytes().starts_with(prefix);
     }
+    // Match `match_property`: only properties at index >= next_idx
+    // are still reachable. Skipping by `required_count` (the bug
+    // partner of `match_property`) would let the prefix check pass
+    // on already-consumed property names.
+    let optional_start = next_idx.max(required_count);
     properties
         .iter()
-        .skip(required_count)
+        .skip(optional_start)
         .any(|(name, _)| name.as_bytes().starts_with(prefix))
 }
 
@@ -1598,9 +1618,10 @@ impl Frame {
             ObjectSub::InValue { chosen } => {
                 // Reached only after the child value frame has popped.
                 // Bump bookkeeping and re-process the byte at the new
-                // sub-state.
+                // sub-state. `next_idx` ratchets forward only — see
+                // the `parse_object` recursive parser for why.
                 if let ChosenKeyKind::Typed(i) = chosen {
-                    *next_idx = *i + 1;
+                    *next_idx = (*next_idx).max(*i + 1);
                 }
                 *pairs_consumed = pairs_consumed.saturating_add(1);
                 *sub = ObjectSub::AwaitCommaOrClose;
@@ -2007,6 +2028,16 @@ pub struct JsonConstraint {
     /// against the same model via `vocab_cache`.
     vocab_bytes: Arc<Vec<Vec<u8>>>,
     eos_token: i32,
+    /// Latched once `accept()` sees the cumulative buffer go Invalid by
+    /// a fresh `validate()` re-parse. The masker's incremental
+    /// `advance_bytes` and the recursive `validate()` can disagree on
+    /// edge cases; without a latch the model would otherwise tail-loop
+    /// for thousands of tokens against an unrecoverable prefix until
+    /// the inference deadline fires. With it, the very next `mask()`
+    /// call clamps every non-EOS token to NEG_INFINITY so the slot
+    /// returns whatever truncated bytes it has and Phase-3 falls into
+    /// `parse_drift` (a fast-failure outcome — seconds, not 5 min).
+    emitted_invalid: bool,
 }
 
 impl JsonConstraint {
@@ -2022,6 +2053,7 @@ impl JsonConstraint {
             state,
             vocab_bytes,
             eos_token,
+            emitted_invalid: false,
         })
     }
 
@@ -2044,6 +2076,18 @@ impl JsonConstraint {
         let vocab_bytes = &*self.vocab_bytes;
         let eos_token = self.eos_token;
         let state = &self.state;
+        // Buffer has already drifted Invalid (validate() vs incremental
+        // advance_bytes disagreed in a prior accept()). Mute every
+        // non-EOS token so the slot exits the generation loop on the
+        // next sample step instead of running to deadline.
+        if self.emitted_invalid {
+            data.data.par_iter_mut().for_each(|entry| {
+                if entry.id().0 != eos_token {
+                    entry.set_logit(f32::NEG_INFINITY);
+                }
+            });
+            return;
+        }
 
         data.data.par_iter_mut().for_each_init(
             // Each rayon worker reuses one scratch state across all
@@ -2148,6 +2192,11 @@ impl JsonConstraint {
         // (`"entities_introduced` 0x60). Surface it loudly.
         let status = validate(&self.schema, &self.emitted);
         if matches!(status, ParseStatus::Invalid) {
+            // Latch so the next mask() call only allows EOS. Every
+            // extension of an Invalid prefix is itself Invalid by
+            // definition, but the incremental walker disagreed once
+            // and would keep disagreeing until the deadline fires.
+            self.emitted_invalid = true;
             let head: String = self
                 .emitted
                 .iter()
@@ -2168,7 +2217,7 @@ impl JsonConstraint {
                 token_bytes = %token_bytes_repr,
                 emitted_tail = %head,
                 emitted_len = self.emitted.len(),
-                "JsonConstraint::accept: post-accept buffer is Invalid — masker did not catch this token"
+                "JsonConstraint::accept: post-accept buffer is Invalid — masker did not catch this token; latching to EOS-only on next mask()"
             );
         } else if std::env::var("SOVEREIGN_CONSTRAINT_TRACE").as_deref() == Ok("1") {
             tracing::info!(
@@ -2463,6 +2512,101 @@ mod tests {
         assert_eq!(validate(&s, br#""\n\n\n""#), ParseStatus::Complete);
         // 4 escapes overruns.
         assert_eq!(validate(&s, br#""\n\n\n\n""#), ParseStatus::Invalid);
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_optional_property() {
+        // Schema with one required + two optional. Once `description`
+        // is consumed, a second `description` is a duplicate and
+        // must be Invalid — otherwise greedy temp=0 sampling under
+        // an optional unbounded-string field can loop forever
+        // re-emitting the same key. (Concrete repro 2026-05-04: a
+        // Phase-3 question naming response burned 11681 tokens
+        // emitting `description` field over and over.)
+        let s = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+                "alias": {"type": "string"}
+            },
+            "required": ["name"]
+        }))
+        .unwrap();
+        // Single-instance optional is fine.
+        assert_eq!(
+            validate(&s, br#"{"name":"x","description":"hi"}"#),
+            ParseStatus::Complete
+        );
+        // Duplicate optional → Invalid.
+        assert_eq!(
+            validate(
+                &s,
+                br#"{"name":"x","description":"a","description":"b"}"#
+            ),
+            ParseStatus::Invalid
+        );
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_required_property() {
+        // Same problem on the required side — must also reject.
+        let s = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "id": {"type": "string"}
+            },
+            "required": ["id"]
+        }))
+        .unwrap();
+        assert_eq!(validate(&s, br#"{"id":"x"}"#), ParseStatus::Complete);
+        assert_eq!(
+            validate(&s, br#"{"id":"x","id":"y"}"#),
+            ParseStatus::Invalid
+        );
+    }
+
+    #[test]
+    fn validate_optional_properties_in_declaration_order() {
+        // Policy: optionals must appear in declaration order. This is
+        // stricter than JSON Schema spec (which doesn't enforce order)
+        // but it's the closure of "no duplicates allowed" + "track
+        // progress with a single high-water-mark cursor." Tracking a
+        // bitmask of consumed indices instead would relax this — that
+        // would be a larger change with its own state-management cost,
+        // and in practice schema-aware models like Qwen3 emit fields
+        // in schema order at temp=0. Schema authors should declare
+        // optional properties in the order they want them generated.
+        let s = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "name": {"type": "string"},
+                "a": {"type": "string"},
+                "b": {"type": "string"}
+            },
+            "required": ["name"]
+        }))
+        .unwrap();
+        // In-order: accepted.
+        assert_eq!(
+            validate(&s, br#"{"name":"x","a":"1","b":"2"}"#),
+            ParseStatus::Complete
+        );
+        // Out-of-order: rejected. Picking `b` first ratchets next_idx
+        // past `a`'s declaration index, so a subsequent `a` falls
+        // into the "declared at a passed index" → Forbidden branch.
+        assert_eq!(
+            validate(&s, br#"{"name":"x","b":"2","a":"1"}"#),
+            ParseStatus::Invalid
+        );
+        // Skipping an optional is fine — only `b` is OK.
+        assert_eq!(
+            validate(&s, br#"{"name":"x","b":"2"}"#),
+            ParseStatus::Complete
+        );
     }
 
     #[test]
