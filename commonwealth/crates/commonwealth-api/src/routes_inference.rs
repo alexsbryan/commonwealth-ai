@@ -63,6 +63,23 @@ pub async fn chat_completions(
     // OpenAI-compatible error so opencode surfaces it as a model
     // error rather than a transport failure.
     let requested_model = request.model.clone().unwrap_or_default();
+
+    // Slot-alias rewrite. `commonwealth/primary` / `primary` etc.
+    // resolve to the GGUF stem bound to that slot in `SetupConfig`,
+    // so opencode (and other OpenAI-shape clients) can name slots
+    // instead of GGUF filenames. Pipeline aliases below still take
+    // precedence — a client that explicitly names a pipeline alias
+    // gets the full middleware stack rather than the bare slot.
+    if let Some(slot_target) = state.resolve_slot_alias(&requested_model) {
+        debug!(
+            requested = %requested_model,
+            target = %slot_target,
+            "chat_completions: slot alias resolved"
+        );
+        request.model = Some(slot_target);
+    }
+
+    let requested_model = request.model.clone().unwrap_or_default();
     let _post_guard: Option<PostPathGuard>;
     if let Some(pipeline_res) = state
         .inner
@@ -537,7 +554,7 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
 
     let plan = state.inner.inference_store.get_plan().unwrap_or_default();
 
-    let data: Vec<ModelObject> = state
+    let mut data: Vec<ModelObject> = state
         .inner
         .inference_store
         .list_models_with_origins()
@@ -572,6 +589,33 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
             }
         })
         .collect();
+
+    // Append synthetic entries for each registered slot alias so
+    // discovery surfaces (opencode's model picker, /v1/models curl)
+    // see the slot names alongside the GGUF stems. These are
+    // dereferenced server-side at request time — no client config
+    // churn when an operator swaps GGUFs in `[models]`.
+    let slot_aliases = state.inner.slot_aliases.load();
+    let mut alias_entries: Vec<(String, String)> = slot_aliases
+        .iter()
+        .map(|(alias, target)| (alias.clone(), target.clone()))
+        .collect();
+    alias_entries.sort();
+    for (alias, target) in alias_entries {
+        // Skip namespaced duplicates when the bare form already
+        // appears — opencode treats them as separate ids and we want
+        // both visible (operator typing `commonwealth/primary` finds
+        // the namespaced entry; bare CLI users find `primary`).
+        let owned_by = format!("alias→{target}");
+        data.push(ModelObject {
+            id: alias,
+            object: "model".into(),
+            created: 0,
+            owned_by,
+            capabilities: None,
+            performance: None,
+        });
+    }
 
     Json(ModelListResponse {
         object: "list".into(),
@@ -709,6 +753,47 @@ async fn serve_local_stream(
                     "choices": [{
                         "index": 0,
                         "delta": { "content": delta },
+                        "finish_reason": null
+                    }]
+                });
+                Ok::<_, std::convert::Infallible>(
+                    Event::default().data(chunk.to_string()),
+                )
+            }
+            StreamFrame::ToolCalls(calls) => {
+                // Synthetic tools-streaming chunk. Local backends
+                // parse `<tool_call>` markup post-generation, so we
+                // emit one chunk carrying every parsed call rather
+                // than the per-fragment `arguments` deltas the
+                // OpenAI spec also permits. Both shapes are
+                // wire-legal — clients accumulate by `tool_calls[i].
+                // index` regardless of chunk count.
+                chunks_count_for_stream
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let tool_calls_json: Vec<serde_json::Value> = calls
+                    .iter()
+                    .enumerate()
+                    .map(|(i, c)| serde_json::json!({
+                        "index": i,
+                        "id": c.id,
+                        "type": c.kind,
+                        "function": {
+                            "name": c.function.name,
+                            "arguments": c.function.arguments,
+                        }
+                    }))
+                    .collect();
+                let chunk = serde_json::json!({
+                    "id": id_for_stream,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model_for_stream,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {
+                            "role": "assistant",
+                            "tool_calls": tool_calls_json,
+                        },
                         "finish_reason": null
                     }]
                 });

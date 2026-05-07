@@ -157,6 +157,23 @@ pub struct AppStateInner {
     /// `commonwealth/sovereign-coder`. Loaded from the embedded
     /// `default_pipelines.toml` at `AppState::new` time.
     pub pipeline_aliases: commonwealth_core::pipeline_aliases::PipelineAliasTable,
+    /// Dynamic slot-name aliases. Map keys are operator-friendly slot
+    /// labels (`primary`, `fast`, `code`, `embed`) — possibly prefixed
+    /// `commonwealth/` for namespaced lookups. Values are the GGUF
+    /// stems (model_ids) currently bound to that slot.
+    ///
+    /// Populated at daemon boot from `SetupConfig.models.*` so an
+    /// operator can write `commonwealth/primary` in opencode's config
+    /// (or any other client) and have requests follow whatever GGUF
+    /// the daemon happens to be loading without rewriting the client
+    /// config when models swap. `ArcSwap` lets the admin reload path
+    /// hot-swap the table when `[models]` changes on disk.
+    ///
+    /// Empty when the daemon hasn't installed slot bindings yet
+    /// (early boot, or non-embedded daemons that don't own a
+    /// `SetupConfig`). Resolution then falls through to the
+    /// existing pipeline / model alias paths.
+    pub slot_aliases: ArcSwap<std::collections::HashMap<String, String>>,
     /// ATOS middleware registry. Holds one instance of each
     /// middleware the pipelines can reference by id.
     pub middleware_registry: Arc<crate::middleware::MiddlewareRegistry>,
@@ -307,6 +324,41 @@ pub struct AppStateInner {
 }
 
 impl AppState {
+    /// Resolve a slot-name alias (`primary`, `fast`, `code`, `embed`,
+    /// or any of those prefixed `commonwealth/`) to the concrete model
+    /// id (GGUF stem) currently bound to that slot. Returns `None`
+    /// when the input is not a registered slot alias — callers fall
+    /// through to the next resolution layer.
+    ///
+    /// Lookup is exact-match on both the bare alias and the
+    /// `commonwealth/`-namespaced form. We pre-register both forms at
+    /// install time so the lookup is a single map probe regardless of
+    /// which form the client sent.
+    pub fn resolve_slot_alias(&self, model_name: &str) -> Option<String> {
+        let map = self.inner.slot_aliases.load();
+        map.get(model_name).cloned()
+    }
+    /// Replace the slot alias table atomically. Daemon startup calls
+    /// this once after `SetupConfig` is loaded; the admin reload path
+    /// calls it again whenever `[models]` changes on disk so clients
+    /// using `commonwealth/primary` follow the swap without restart.
+    pub fn install_slot_aliases(
+        &self,
+        aliases: std::collections::HashMap<String, String>,
+    ) {
+        self.inner.slot_aliases.store(Arc::new(aliases));
+    }
+    /// Return a snapshot of the registered slot alias names (both
+    /// bare and `commonwealth/`-prefixed) suitable for inclusion in
+    /// `/v1/models`. Stable order: alphabetical, deterministic.
+    pub fn slot_alias_names(&self) -> Vec<String> {
+        let map = self.inner.slot_aliases.load();
+        let mut names: Vec<String> = map.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
         let mesh_store = Arc::new(
             MeshStore::in_memory().expect("in-memory MeshStore failed"),
@@ -395,6 +447,7 @@ impl AppState {
                 model_aliases: ModelAliasTable::default_table(),
                 pipeline_aliases:
                     commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table(),
+                slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
                 middleware_registry: Arc::new(middleware_registry),
                 session_store,
                 repo_root: std::env::current_dir().ok(),

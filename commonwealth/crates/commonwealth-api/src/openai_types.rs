@@ -212,9 +212,20 @@ pub struct StreamUsage {
 /// either [`StreamFrame::Finish`] or [`StreamFrame::Error`];
 /// receivers treat a closed channel without a terminal frame as
 /// `Cancelled`.
+///
+/// `ToolCalls` was added to support streaming responses that include
+/// tool calls. Local backends extract tool calls from a fully-buffered
+/// model response (the `<tool_call>` markup parser runs after
+/// generation completes), so a tools-streaming run yields one
+/// `ToolCalls(...)` frame containing every parsed call rather than
+/// the per-character `arguments` deltas the OpenAI spec also permits.
+/// Both shapes are wire-legal — clients accumulate `tool_calls[i]`
+/// fragments by `index` regardless of how many chunks the server
+/// chose to split them across.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StreamFrame {
     Token(String),
+    ToolCalls(Vec<ToolCall>),
     Finish {
         reason: FinishReason,
         #[serde(default, skip_serializing_if = "Option::is_none")]
