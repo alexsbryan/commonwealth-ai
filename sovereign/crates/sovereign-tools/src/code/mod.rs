@@ -114,6 +114,8 @@ pub mod read_note_digest;
 #[cfg(feature = "treesitter")]
 pub mod record_atos_event;
 pub mod atos_plan_emit;
+pub mod atos_utils;
+pub mod atos_verify;
 #[cfg(feature = "treesitter")]
 pub mod write_redteam_finding;
 
@@ -181,6 +183,7 @@ pub use read_note_digest::ReadNoteDigestTool;
 pub use record_atos_event::RecordAtosEventTool;
 #[cfg(feature = "treesitter")]
 pub use atos_plan_emit::AtosPlanEmitTool;
+pub use atos_verify::AtosVerifyTool;
 #[cfg(feature = "treesitter")]
 pub use write_redteam_finding::WriteRedteamFindingTool;
 #[cfg(feature = "treesitter")]

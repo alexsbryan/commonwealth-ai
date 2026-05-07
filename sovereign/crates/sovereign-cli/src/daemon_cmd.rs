@@ -1178,6 +1178,10 @@ async fn build_tool_registry(
         Arc::clone(&notes),
     )));
 
+    // ATOS step verification — runs verify commands with
+    // hollow/untouched gates to catch silent agent no-ops.
+    tools.register(Box::new(sovereign_tools::AtosVerifyTool::new()));
+
     // Project context — served from `indexes/project_docs.db` if a
     // project has been init'd. Absent on a bare-setup daemon; that's
     // fine, just one fewer tool.

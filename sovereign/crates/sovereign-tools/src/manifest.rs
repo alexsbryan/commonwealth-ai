@@ -37,12 +37,12 @@ use sovereign_core::traits::Tool;
 use sovereign_core::types::ToolDescriptor;
 
 use crate::code::{
-    ArchiveFeatureTool, BlastRadiusTool, CheckDocPathsTool, CodeSearchTool, DeleteNoteTool,
-    FindCalleesTool, FindCallersTool, GetLintOutputTool, GetRunOutputTool, IndexHealthChecker,
-    LintStatusTool, ProjectContextTool, PromoteNoteTool, ProvisionFeatureTool, ReadNoteByIdTool,
-    ReadNoteDigestTool, ReadNotesTool, RecentChangesTool, RecordAtosEventTool, ScipGraphHandle,
-    SessionReflectionTool, SymbolLookupTool, TestStatusTool, WriteNoteTool,
-    WriteRedteamFindingTool,
+    ArchiveFeatureTool, AtosVerifyTool, BlastRadiusTool, CheckDocPathsTool, CodeSearchTool,
+    DeleteNoteTool, FindCalleesTool, FindCallersTool, GetLintOutputTool, GetRunOutputTool,
+    IndexHealthChecker, LintStatusTool, ProjectContextTool, PromoteNoteTool,
+    ProvisionFeatureTool, ReadNoteByIdTool, ReadNoteDigestTool, ReadNotesTool,
+    RecentChangesTool, RecordAtosEventTool, ScipGraphHandle, SessionReflectionTool,
+    SymbolLookupTool, TestStatusTool, WriteNoteTool, WriteRedteamFindingTool,
 };
 
 /// All canonical sovereign tool descriptors, computed once per
@@ -146,6 +146,7 @@ fn build_descriptors() -> Vec<ToolDescriptor> {
         //   the structured-JSON path the tool was designed for. Tool
         //   source kept for future use; manifest withdrawal is the
         //   minimum unwiring that hides it from the discovery surface.
+        AtosVerifyTool::new().descriptor(),
         WriteRedteamFindingTool::new(Arc::clone(&notes)).descriptor(),
         SessionReflectionTool::new(Arc::clone(&notes)).descriptor(),
         ProjectContextTool::new(Arc::clone(&docs))

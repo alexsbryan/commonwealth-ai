@@ -63,6 +63,7 @@ pub use code::{
 };
 #[cfg(feature = "treesitter")]
 pub use code::DesignSignalsExtractTool;
+pub use code::AtosVerifyTool;
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use wikipedia_fetch::WikipediaFetchTool;

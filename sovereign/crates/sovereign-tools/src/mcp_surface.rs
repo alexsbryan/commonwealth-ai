@@ -70,6 +70,8 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     // excerpt). research_finding is the ResearchFinding writer the
     // v7 NoteStore migration left without a tool wrapping it.
     "probe_url", "research_finding",
+    // ATOS step verification — runs verify command + hollow/untouched gates.
+    "atos_verify",
 ];
 
 /// MCP tools that should only appear when a spec exists in the

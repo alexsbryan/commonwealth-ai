@@ -18,12 +18,16 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 use corpus_engine::{FeatureStore, NoteStore};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use sovereign_atos::{AtosOrchestrator, LocalAtosOrchestrator, RunMode};
+use sovereign_tools::code::atos_utils::{
+    detect_hollow_files, detect_missing_scaffold, detect_untouched_files, extract_verify_cmd,
+    is_weak_verify, parse_inline_list, run_verify_cmd, sha256_hex, snapshot_file_mtimes,
+    split_state_marker, step_goal_is_scaffold, strip_failure_cruft, truncate,
+};
 
 use super::args::{get_flag, split_args};
 
@@ -376,6 +380,43 @@ impl Plan {
                     step.id
                 ));
             }
+            if is_weak_verify(&step.verify_cmd, step_goal_is_scaffold(&step.goal)) {
+                return Err(format!(
+                    "step {} has a weak verify: `{}`. For Rust: add `-- test_name` filter after `--test` (e.g. `cargo test --test test_foo -- roundtrip`). \
+                     For scaffold steps, use `cargo build -p <crate>` instead of bare `cargo test --test`. Weak verifies pass even when the test file is empty — the FSM credits forward motion that didn't happen.",
+                    step.id, step.verify_cmd
+                ));
+            }
+            // Reject non-ASCII characters in verify commands and file
+            // paths. Observed with bilingual models (Qwen-based 35B):
+            // Chinese characters leak into --test names (硬, 测试),
+            // producing shell commands that can't resolve to real files.
+            // Shell commands and filesystem paths MUST be ASCII.
+            if step.verify_cmd.chars().any(|c| !c.is_ascii()) {
+                return Err(format!(
+                    "step {} verify_cmd contains non-ASCII characters: `{}`. Shell commands must be ASCII-only — use English identifiers for test names, file paths, and flags.",
+                    step.id, step.verify_cmd
+                ));
+            }
+            for f in &step.files_touched {
+                if f.chars().any(|c| !c.is_ascii()) {
+                    return Err(format!(
+                        "step {} files_touched contains non-ASCII path: `{f}`. File paths must be ASCII-only.",
+                        step.id
+                    ));
+                }
+                // Also reject files_touched entries that look like
+                // prose descriptions rather than actual file paths
+                // (observed: "tests for forward-compat deserialization
+                // of older peers' JSON"). Real file paths don't contain
+                // spaces or start with lowercase prose.
+                if f.split_ascii_whitespace().count() > 3 {
+                    return Err(format!(
+                        "step {} files_touched entry looks like prose, not a file path: `{f}`. Use actual relative file paths (e.g. `tests/test_foo.rs`), not descriptions.",
+                        step.id
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -566,7 +607,17 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
             );
         }
         None
-    } else if let Ok(prior) = Plan::load(&workdir_plan_path) {
+    } else if let Ok(mut prior) = Plan::load(&workdir_plan_path) {
+        // Any step left in `in_progress` state means the previous run
+        // was killed mid-execution. Treat as failed so the FSM retries
+        // them — otherwise `next_pending()` skips them and we resume
+        // at a later step with missing prerequisites.
+        for s in &mut prior.steps {
+            if s.state == StepState::InProgress {
+                s.state = StepState::Failed;
+                s.last_failure = Some("previous run interrupted mid-execution".into());
+            }
+        }
         let done_count = prior
             .steps
             .iter()
@@ -704,12 +755,42 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                         if workdir_plan_path.exists() {
                             Plan::load(&workdir_plan_path)
                         } else {
-                            extract_and_validate_plan(&cfg.workdir, &iter_dir)
+                            // PLAN.md not on disk — the agent may have
+                            // emitted it via a `write` tool call (pure
+                            // tool-call responses don't show up in text
+                            // extraction). Try extracting from the
+                            // opencode session text first; fall back to
+                            // fenced-JSON extraction.
+                            let text = fetch_last_assistant_text(&cfg.workdir);
+                            let defaults = PlanDefaults {
+                                feature_id: feature_id.clone(),
+                                design_sha: None,
+                                created_at: chrono::Utc::now().to_rfc3339(),
+                            };
+                            match try_parse_tool_emitted_plan(&text, &defaults, true) {
+                                Some(result) => result,
+                                None => extract_and_validate_plan(&cfg.workdir, &iter_dir),
+                            }
                         }
                     }
                 };
                 match load_result {
                     Ok(p) => {
+                        // Validate plan against workdir state.
+                        // A plan whose first step runs `cargo test`
+                        // when Cargo.toml doesn't exist is structurally
+                        // valid but impossible to execute — the agent
+                        // skipped the scaffold step entirely.
+                        let step_verify_cmds: Vec<String> = p.steps.iter().map(|s| s.verify_cmd.clone()).collect();
+                        let step01_files: Vec<String> = p.steps.first().map(|s| s.files_touched.clone()).unwrap_or_default();
+                        if let Some(gap) = detect_missing_scaffold(&step_verify_cmds, &step01_files, &cfg.workdir) {
+                            record.verdict = "plan_invalid".into();
+                            record.notes = Some(gap);
+                            record.wall_seconds = iter_start.elapsed().as_secs();
+                            record.ended_at = chrono::Utc::now().to_rfc3339();
+                            append_jsonl(&iter_log_path, &record)?;
+                            continue;
+                        }
                         save_plan_dual(&p, &plan_path, &workdir_plan_path, &workdir_plan_md)?;
                         println!(
                             "atos run: ✓ plan written ({} steps, revision {})",
@@ -762,6 +843,7 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                     &diff,
                     &recent_notes,
                     &atos_context,
+                    artifacts.design.as_ref().map(|d| d.body.as_str()),
                 );
                 let prompt_path = iter_dir.join("prompt.md");
                 std::fs::write(&prompt_path, &prompt)
@@ -887,7 +969,23 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                         }
                     }
                 } else {
-                    let reason = if let Some(h) = hollow_warning {
+                    // Compose a tight failure reason. Order matters:
+                    // when verify itself failed, that's the real story
+                    // — lead with the verify_log, and only mention
+                    // gate warnings as follow-up. The previous ordering
+                    // (hollow/untouched first) produced misleading
+                    // "verify_cmd exited 0" messaging when verify
+                    // actually crashed, gaslighting the agent on retry.
+                    let reason = if !verify_passed {
+                        let mut msg = verify_log.clone();
+                        if let Some(h) = hollow_warning {
+                            msg.push_str(&format!("\n\n(also: {h})"));
+                        }
+                        if let Some(u) = untouched_warning {
+                            msg.push_str(&format!("\n\n(also: {u})"));
+                        }
+                        msg
+                    } else if let Some(h) = hollow_warning {
                         println!(
                             "atos run: ✗ {} verify exited 0 but files are hollow — {}",
                             step_id, h
@@ -975,33 +1073,36 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                 let prior_created_at = p.created_at.clone();
                 let prior_revision = p.revision;
                 let plan_md_path = cfg.workdir.join("PLAN.md");
+                let reassess_defaults = PlanDefaults {
+                    feature_id: prior_feature_id.clone(),
+                    design_sha: Some(prior_design_sha.clone()),
+                    created_at: prior_created_at.clone(),
+                };
                 let load_result: Result<Plan, String> = match std::fs::read_to_string(
                     &plan_md_path,
                 ) {
-                    Ok(text) => match parse_plan_md(&text) {
-                        Ok(mut parsed) => {
-                            if parsed.feature_id.trim().is_empty() {
-                                parsed.feature_id = prior_feature_id.clone();
-                            }
-                            if parsed.design_sha.trim().is_empty() {
-                                parsed.design_sha = prior_design_sha.clone();
-                            }
-                            if parsed.created_at.trim().is_empty() {
-                                parsed.created_at = prior_created_at.clone();
-                            }
-                            Ok(parsed)
+                    Ok(text) => parse_plan_md(&text).map(|mut parsed| {
+                        apply_plan_defaults(&mut parsed, &reassess_defaults);
+                        parsed
+                    }),
+                    Err(_) => {
+                        // Try tool-call extraction first (same logic as
+                        // PLAN phase — the agent may have emitted the
+                        // new plan purely via a write tool call).
+                        let text = fetch_last_assistant_text(&cfg.workdir);
+                        match try_parse_tool_emitted_plan(&text, &reassess_defaults, false) {
+                            Some(result) => result,
+                            None => match Plan::load(&workdir_plan_path) {
+                                Ok(disk) if disk.revision > prior_revision => Ok(disk),
+                                _ => extract_and_validate_plan_with_defaults(
+                                    &cfg.workdir,
+                                    &iter_dir,
+                                    &prior_feature_id,
+                                    &prior_design_sha,
+                                    &prior_created_at,
+                                ),
+                            },
                         }
-                        Err(e) => Err(e),
-                    },
-                    Err(_) => match Plan::load(&workdir_plan_path) {
-                        Ok(disk) if disk.revision > prior_revision => Ok(disk),
-                        _ => extract_and_validate_plan_with_defaults(
-                            &cfg.workdir,
-                            &iter_dir,
-                            &prior_feature_id,
-                            &prior_design_sha,
-                            &prior_created_at,
-                        ),
                     },
                 };
                 match load_result {
@@ -1716,29 +1817,63 @@ fn build_plan_prompt(
             file and its test file when applicable.\n\
          3. **Verify exit code 0 must mean the step's contract is met.** If \
             verify_cmd exits 0 on an empty implementation, it's wrong.\n\
-         4. The runner caps each verify at 60s wall — keep tests fast.\n\n\
+         4. The runner caps each verify at 60s wall — keep tests fast.\n\
+         5. **For Rust projects: every verify (except scaffold) MUST include \
+            a `--` test-name filter after `--test`. ** The runner rejects \
+            bare `cargo test --test test_foo` — it must be \
+            `cargo test --test test_foo -- test_name`. This filter makes \
+            cargo exit non-zero if the named test function doesn't exist, \
+            closing the \"empty test file passes\" gap. Name your test \
+            something descriptive of the specific contract being verified.\n\n\
          Concrete shape — pick the idiom for whatever language the design \
          calls for. Examples by ecosystem (replace with whatever your \
          project uses):\n\n\
-         - Rust: `cargo test --test <step_test>` (NOT `cargo check` after \
-           the scaffold step)\n\
-         - Python: `pytest tests/test_<step>.py -q`\n\
+         - Rust: `cargo test --test test_foo -- roundtrip_general_hint` \
+           (NOT bare `cargo test --test test_foo`)\n\
+         - Rust scaffold step: `cargo build -p <crate>` or \
+           `cargo check -p <crate>` (no `--` filter needed). **Files \
+           must include BOTH `Cargo.toml` AND `src/lib.rs`** — Rust's \
+           `cargo check` fails if the lib entry-point is missing. A \
+           scaffold step with `Files:` listing only `Cargo.toml` will \
+           be rejected or will fail at runtime because cargo can't \
+           resolve the crate.\n\
+         - Python: `pytest tests/test_<step>.py -q -k test_name`\n\
          - JS/TS: `npm test -- <step.test.ts>` or `vitest run <path>`\n\
          - Go: `go test ./<pkg> -run TestStep<NN>`\n\
          - Any: a custom script the step itself writes that asserts the \
            step's behaviour and exits non-zero on failure.\n\n",
     );
     out.push_str(
-        "## Constraints\n\n\
-         - **3 to 12 steps**, 32 hard cap.\n\
-         - **Flat layout** — files at workdir root unless the language \
-           ecosystem requires otherwise. `Verify:` runs from workdir root.\n\
-         - **Be consistent across step verify_cmds.** Use the same \
-           package/module name everywhere — no typo variants. The runner \
-           auto-canonicalises some Rust-specific cases (`cargo check -p X` \
-           against on-disk `Cargo.toml`) but you should not rely on that.\n\
-         - Order by dependency: scaffold → primitives → behaviour → \
-           integration. Each step builds on those before it.\n\n",
+         "## Constraints\n\n\
+          - **3 to 12 steps**, 32 hard cap. Fewer = better. Each step adds a \
+            FSM transition cost; consolidate what naturally ships together.\n\
+          - **If the workdir has no build file** (Cargo.toml, package.json, \
+            go.mod, etc.), step-01 MUST create one alongside a minimal \
+            source stub. Later steps depend on the build system existing; \
+            the runner validates that any referenced build tool has its \
+            project file either already on disk or in step-01's \
+            `Files:`. For existing projects with a build file already \
+            present, this validation is a no-op.\n\
+          - **Flat layout** — files at workdir root unless the language \
+            ecosystem requires otherwise. `Verify:` runs from workdir root.\n\
+          - **Be consistent across step verify_cmds.** Use the same \
+            package/module name everywhere — no typo variants. The runner \
+            auto-canonicalises some Rust-specific cases (`cargo check -p X` \
+            against on-disk `Cargo.toml`) but you should not rely on that.\n\
+          - Order by dependency: scaffold → primitives → behaviour → \
+            integration. Each step builds on those before it.\n\n\
+          ## Anti-patterns — what the validator will REJECT\n\n\
+          - `cargo test --test test_foo` (bare, no `--` filter) — REJECTED. \
+            Use `cargo test --test test_foo -- descriptive_test_name`.\n\
+          - Files with inline commentary: ` **Files:** `lib.rs (Capability)`, \
+            `tests/test_x.rs` ` — the parser will treat ` (Capability)` as \
+            part of the filename. Write only the bare file path: \
+            `**Files:** `lib.rs`, `tests/test_x.rs` `.\n\
+          - Verifies that pass trivially: `echo ok`, `true`, `exit 0` — \
+            REJECTED. The command must run a real check.\n\
+          - Scaffold step listing only `Cargo.toml` without `src/lib.rs` — \
+            `cargo check` fails if the lib entry-point is missing. Both \
+            files are required for a minimal compilable Rust crate.\n\n",
     );
 
     if let Some(design) = artifacts.design.as_ref() {
@@ -2091,63 +2226,13 @@ impl PendingStep {
             goal: self.goal,
             files_touched: self.files_touched,
             verify_cmd: self.verify_cmd,
-            rationale: self.rationale.trim().to_string(),
+            rationale: strip_failure_cruft(&self.rationale),
             state: self.state,
             attempts: 0,
             last_failure: None,
             last_verify_stdout: None,
         }
     }
-}
-
-/// Pull `[STATE]` out of a heading tail. Returns `(head_without_marker,
-/// optional_marker_text)`.
-fn split_state_marker(line: &str) -> (String, Option<String>) {
-    if let Some(open) = line.rfind('[') {
-        if let Some(close_rel) = line[open..].find(']') {
-            let close = open + close_rel;
-            let marker = line[open + 1..close].to_string();
-            let head = line[..open].trim().to_string();
-            return (head, Some(marker));
-        }
-    }
-    (line.trim().to_string(), None)
-}
-
-/// Parse a comma-separated list of items, each optionally wrapped in
-/// backticks. Used by both `**Files:**` parsing and any future
-/// inline-list field.
-fn parse_inline_list(payload: &str) -> Vec<String> {
-    payload
-        .split(',')
-        .map(|s| s.trim().trim_matches('`').trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
-/// Pull a runnable shell command out of a `**Verify:**` line payload.
-///
-/// Agents reliably write the command inside backticks and *frequently*
-/// append commentary after the closing backtick (observed
-/// 2026-05-06: `cargo test --test x` (expects exit code 1 if Y)`).
-/// A naive `trim_matches('`')` strips one outer backtick on each
-/// side, leaving the inner backtick + prose embedded in the
-/// command — which then fails at runtime because shells choke on the
-/// stray backtick.
-///
-/// Strategy: if there's a backtick-delimited chunk in the payload,
-/// take the *first* such chunk verbatim. Anything else (commentary,
-/// trailing backticks, second commands) is dropped. If there are no
-/// backticks at all, fall back to trimming the line.
-fn extract_verify_cmd(payload: &str) -> String {
-    let trimmed = payload.trim();
-    if let Some(open) = trimmed.find('`') {
-        if let Some(close_rel) = trimmed[open + 1..].find('`') {
-            let close = open + 1 + close_rel;
-            return trimmed[open + 1..close].trim().to_string();
-        }
-    }
-    trimmed.trim_matches('`').trim().to_string()
 }
 
 /// Pull a fenced JSON block out of free-form agent text. Tries
@@ -2304,6 +2389,110 @@ fn fetch_last_assistant_text(workdir: &Path) -> String {
         out.push('\n');
     }
     out
+}
+
+/// Outcome of looking for a `write` tool call to PLAN.md inside an
+/// agent reply. Opencode stores tool calls as text parts wrapped in
+/// `<tool_call>JSON</tool_call>`, but the text is often truncated
+/// (observed at ~3800 bytes) — the opening tag is present but the
+/// closing tag is cut off. When that happens, PLAN.md never lands on
+/// disk and the caller needs to distinguish "agent never tried" from
+/// "agent tried, payload was clipped" so it can produce a useful
+/// failure message instead of the misleading "no fenced JSON block."
+enum PlanFromAgent {
+    /// No write-to-PLAN.md tool call appears in the text at all.
+    NotPresent,
+    /// A write-to-PLAN.md call is present but the wrapper was
+    /// truncated and the payload is unrecoverable.
+    Truncated,
+    /// We extracted the plan markdown from the tool-call arguments.
+    Markdown(String),
+}
+
+fn detect_write_tool_for_plan(text: &str) -> PlanFromAgent {
+    if !text.contains("<tool_call>") {
+        return PlanFromAgent::NotPresent;
+    }
+    let has_plan_write = text.contains("PLAN.md") && text.contains("\"write\"");
+    if !has_plan_write {
+        return PlanFromAgent::NotPresent;
+    }
+    if let Some(tag_start) = text.find("<tool_call>") {
+        let json_start = tag_start + "<tool_call>".len();
+        if let Some(tag_end) = text[json_start..].find("</tool_call>") {
+            let json_str = &text[json_start..json_start + tag_end];
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if let Some(content) = val
+                    .get("arguments")
+                    .and_then(|a| a.get("content"))
+                    .and_then(|v| v.as_str())
+                {
+                    return PlanFromAgent::Markdown(content.to_string());
+                }
+            }
+        }
+    }
+    PlanFromAgent::Truncated
+}
+
+/// Operational metadata fields the agent typically omits when it
+/// emits a plan. The runner backfills any empty field from these
+/// defaults — `design_sha` is `None` for the PLAN phase (the agent
+/// is expected to set it from the design body) and `Some(prior)`
+/// for REASSESS (preserve the prior plan's value).
+struct PlanDefaults {
+    feature_id: String,
+    design_sha: Option<String>,
+    created_at: String,
+}
+
+/// Common parse path for a plan emitted via opencode's `write` tool
+/// call (PLAN.md). Returns:
+///   - `None` when no tool call was detected (caller should fall back
+///     to fenced-JSON extraction);
+///   - `Some(Err(...))` when a tool call was detected but parsing /
+///     validation failed (this is a hard error — caller should not
+///     fall back, the agent's plan is broken);
+///   - `Some(Ok(plan))` on success.
+fn try_parse_tool_emitted_plan(
+    text: &str,
+    defaults: &PlanDefaults,
+    validate: bool,
+) -> Option<Result<Plan, String>> {
+    let md = match detect_write_tool_for_plan(text) {
+        PlanFromAgent::NotPresent => return None,
+        PlanFromAgent::Truncated => {
+            return Some(Err(
+                "detected write-to-PLAN.md tool call but the <tool_call> envelope was truncated by opencode (~3800 byte limit). Re-emit PLAN.md as a smaller payload.".into()
+            ));
+        }
+        PlanFromAgent::Markdown(md) => md,
+    };
+    let mut parsed = match parse_plan_md(&md) {
+        Ok(p) => p,
+        Err(e) => return Some(Err(e)),
+    };
+    apply_plan_defaults(&mut parsed, defaults);
+    if validate {
+        if let Err(e) = parsed.validate() {
+            return Some(Err(e));
+        }
+    }
+    Some(Ok(parsed))
+}
+
+fn apply_plan_defaults(plan: &mut Plan, defaults: &PlanDefaults) {
+    if plan.feature_id.trim().is_empty() {
+        plan.feature_id = defaults.feature_id.clone();
+    }
+    if let Some(ds) = &defaults.design_sha {
+        if plan.design_sha.trim().is_empty() {
+            plan.design_sha = ds.clone();
+        }
+    }
+    if plan.created_at.trim().is_empty() {
+        plan.created_at = defaults.created_at.clone();
+    }
 }
 
 /// Persist the agent's reply (PLAN or REASSESS) and pull a JSON block
@@ -2619,106 +2808,6 @@ fn sanitize_crate_name(s: &str) -> String {
     }
 }
 
-/// After a step's verify_cmd exits 0, the runner checks that the
-/// `files_touched` list is non-trivially populated. A step that
-/// scaffolds `Cargo.toml` + `src/lib.rs` but leaves `lib.rs` empty
-/// would technically pass `cargo check` (an empty crate compiles)
-/// while delivering nothing. Treat that as a verify failure so the
-/// FSM can REASSESS instead of marching past hollow work.
-///
-/// Threshold: any of `files_touched` having < 16 non-whitespace
-/// characters is "hollow". Files outside `files_touched` are not
-/// inspected — the step's promise is bounded by what it declared.
-fn detect_hollow_files(workdir: &Path, files_touched: &[String]) -> Option<String> {
-    let mut hollow: Vec<String> = Vec::new();
-    for f in files_touched {
-        let p = workdir.join(f);
-        if !p.exists() {
-            hollow.push(format!("`{f}` (missing)"));
-            continue;
-        }
-        let bytes = std::fs::read(&p).unwrap_or_default();
-        let non_ws = bytes.iter().filter(|b| !b.is_ascii_whitespace()).count();
-        if non_ws < 16 {
-            hollow.push(format!("`{f}` ({non_ws} non-whitespace bytes)"));
-        }
-    }
-    if hollow.is_empty() {
-        None
-    } else {
-        Some(format!(
-            "step's verify_cmd exited 0 but the files it promised to touch are empty/near-empty: {}. Either the step needs real content or files_touched was wrong.",
-            hollow.join(", ")
-        ))
-    }
-}
-
-/// Snapshot mtimes of `files_touched` before EXECUTE runs.
-/// Pair with `detect_untouched_files` after the agent exits to
-/// determine whether it actually wrote any of the files it
-/// promised to. Files that don't yet exist appear as `None`.
-fn snapshot_file_mtimes(workdir: &Path, files: &[String]) -> Vec<Option<SystemTime>> {
-    files
-        .iter()
-        .map(|f| {
-            let p = workdir.join(f);
-            std::fs::metadata(&p).and_then(|m| m.modified()).ok()
-        })
-        .collect()
-}
-
-/// Verify the agent actually wrote at least one of the files this
-/// step promised to touch. Without this, a step that says "edit
-/// src/lib.rs to add an enum" can pass `cargo check` simply
-/// because the existing `src/lib.rs` already compiles — the agent
-/// silently no-ops and the FSM credits the step (observed in the
-/// 2026-05-06 smoke run: 4 consecutive "successful" EXECUTE iters
-/// produced zero net code change).
-///
-/// Returns `None` when the gate passes — at least one declared
-/// file was modified or newly created during the iter — and
-/// `Some(reason)` otherwise.
-///
-/// Skipped (returns `None`) when `files_touched` is empty or
-/// contains only sentinel entries like `N/A`. Some integration /
-/// smoke-check steps are pure verify-only and have no files to
-/// modify.
-fn detect_untouched_files(
-    workdir: &Path,
-    files: &[String],
-    pre_snapshot: &[Option<SystemTime>],
-) -> Option<String> {
-    let real_files: Vec<(usize, &String)> = files
-        .iter()
-        .enumerate()
-        .filter(|(_, f)| {
-            let trimmed = f.trim();
-            !trimmed.is_empty() && !trimmed.eq_ignore_ascii_case("N/A")
-        })
-        .collect();
-    if real_files.is_empty() {
-        return None;
-    }
-    for (i, _f) in &real_files {
-        let p = workdir.join(files[*i].as_str());
-        let post = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
-        let pre = pre_snapshot.get(*i).copied().flatten();
-        match (pre, post) {
-            (None, Some(_)) => return None,
-            (Some(a), Some(b)) if b > a => return None,
-            _ => continue,
-        }
-    }
-    let names: Vec<String> = real_files
-        .iter()
-        .map(|(_, f)| format!("`{}`", f.as_str()))
-        .collect();
-    Some(format!(
-        "step claimed completion but none of {} were modified during this iteration — agent silently no-op'd. Either the step's `Files:` list was wrong or the agent exited without writing the changes.",
-        names.join(", ")
-    ))
-}
-
 // ─── Phase: EXECUTE ──────────────────────────────────────────────────────────
 
 fn build_execute_prompt(
@@ -2728,6 +2817,7 @@ fn build_execute_prompt(
     diff_since_plan: &str,
     recent_notes: &str,
     atos_context: &str,
+    design_body: Option<&str>,
 ) -> String {
     let mut out = String::new();
     if !atos_context.trim().is_empty() {
@@ -2740,21 +2830,47 @@ fn build_execute_prompt(
     out.push_str(&format!("**Verify command:** `{}`\n", step.verify_cmd));
     out.push_str(&format!("**Why this step:** {}\n\n", step.rationale));
 
+    // Scaffold steps don't need the design spec — their job is
+    // project skeleton, not spec implementation. Including 8KB of
+    // irrelevant spec text consumes the agent's context budget and
+    // correlates with the consistent step-01 failure pattern
+    // (agent exits without writing files). For implementation
+    // steps, the design stays — it was the breakthrough that got
+    // step-02 passing (per HANDOFF 2026-05-06).
+    let is_scaffold = step_goal_is_scaffold(&step.goal);
+    if !is_scaffold {
+        if let Some(design) = design_body {
+            let snippet = if design.len() > 8000 {
+                &design[..8000]
+            } else {
+                design
+            };
+            out.push_str("## Design (relevant excerpt)\n\n");
+            out.push_str(snippet);
+            out.push_str("\n\n");
+        }
+    }
+
     out.push_str(
-        "## What you must NOT touch\n\n\
-         These files are runner-managed. Editing them during EXECUTE \
-         confuses the FSM and produces broken plan state — observed \
-         failure mode where the model edits `PLAN.md` instead of the \
-         source files declared above:\n\n\
-         - `PLAN.md` — the runner rewrites this file from `plan.json` after \
-           each PLAN/REASSESS phase. Your edits will be silently \
-           overwritten next iter and waste your tool budget.\n\
-         - `DESIGN.md` / `IMPLEMENTATION_PLAN.md` — frozen inputs.\n\
-         - `.sovereign/` directory — runner state.\n\n\
-         **Only write to the files listed above in `Files this step \
-         touches:`**. If you think the plan needs to change, exit the \
-         session without writing anything; the runner triggers REASSESS \
-         after your exit and rewrites the plan there.\n\n",
+         "## What you must NOT touch\n\n\
+          These files are runner-managed. Editing them during EXECUTE \
+          confuses the FSM and produces broken plan state — observed \
+          failure mode where the model edits `PLAN.md` instead of the \
+          source files declared above:\n\n\
+          - `PLAN.md` — the runner rewrites this file from `plan.json` after \
+            each PLAN/REASSESS phase. Your edits will be silently \
+            overwritten next iter and waste your tool budget.\n\
+          - `DESIGN.md` / `IMPLEMENTATION_PLAN.md` — frozen inputs.\n\
+          - `.sovereign/` directory — runner state.\n\n\
+          **Only write to the files listed above in `Files this step \
+          touches:`**. If you think the plan needs to change, exit the \
+          session without writing anything; the runner triggers REASSESS \
+          after your exit and rewrites the plan there.\n\n\
+          ## Tool schema (opencode driver)\n\n\
+          The `read` tool requires `filePath` (not `path`). The `bash` \
+          tool requires a `description` field. Using the wrong field \
+          names causes the tool call to fail and wastes your turn budget. \
+          Always include these required fields.\n\n",
     );
 
     out.push_str(
@@ -2853,34 +2969,6 @@ fn build_execute_prompt(
         workdir.display(),
     ));
     out
-}
-
-/// Run the step's verify command. Returns (passed, captured_stdout_or_err).
-async fn run_verify_cmd(workdir: &Path, cmd: &str) -> (bool, String) {
-    if cmd.trim().is_empty() {
-        return (false, "verify_cmd is empty (strict mode)".into());
-    }
-    let output = match tokio::process::Command::new("sh")
-        .arg("-c")
-        .arg(cmd)
-        .current_dir(workdir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-    {
-        Ok(o) => o,
-        Err(e) => return (false, format!("verify spawn failed: {e}")),
-    };
-    let mut combined = String::new();
-    combined.push_str(&String::from_utf8_lossy(&output.stdout));
-    if !output.stderr.is_empty() {
-        combined.push_str("\n---stderr---\n");
-        combined.push_str(&String::from_utf8_lossy(&output.stderr));
-    }
-    let truncated = truncate(&combined, 8 * 1024);
-    (output.status.success(), truncated)
 }
 
 // ─── Phase: REASSESS ─────────────────────────────────────────────────────────
@@ -3153,12 +3241,6 @@ fn git_diff_against(workdir: &Path, base_sha: &str) -> std::io::Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut h = Sha256::new();
-    h.update(bytes);
-    format!("{:x}", h.finalize())
-}
-
 fn strip_fences(raw: &str) -> String {
     let trimmed = raw.trim();
     if let Some(rest) = trimmed.strip_prefix("```json") {
@@ -3168,14 +3250,6 @@ fn strip_fences(raw: &str) -> String {
         return rest.trim_end_matches("```").trim().to_string();
     }
     trimmed.to_string()
-}
-
-fn truncate(s: &str, limit: usize) -> String {
-    if s.len() <= limit {
-        s.to_string()
-    } else {
-        format!("{}\n... (truncated to {} bytes)", &s[..limit], limit)
-    }
 }
 
 // ─── Help ────────────────────────────────────────────────────────────────────
@@ -3710,6 +3784,102 @@ serde = "1"
     }
 
     #[test]
+    fn validate_rejects_non_ascii_verify_cmd() {
+        let plan = Plan {
+            schema_version: "1".into(),
+            feature_id: "feat".into(),
+            design_sha: "abc".into(),
+            created_at: "now".into(),
+            revision: 1,
+            steps: vec![Step {
+                id: "step-01".into(),
+                goal: "Add types".into(),
+                files_touched: vec!["src/lib.rs".into()],
+                verify_cmd: "cargo test --test test_硬_gate -- foo".into(),
+                rationale: "".into(),
+                state: StepState::Pending,
+                attempts: 0,
+                last_failure: None,
+                last_verify_stdout: None,
+            }],
+        };
+        let err = plan.validate().unwrap_err();
+        assert!(err.contains("non-ASCII"), "expected non-ASCII rejection, got: {err}");
+    }
+
+    #[test]
+    fn validate_rejects_prose_instead_of_file_path() {
+        let plan = Plan {
+            schema_version: "1".into(),
+            feature_id: "feat".into(),
+            design_sha: "abc".into(),
+            created_at: "now".into(),
+            revision: 1,
+            steps: vec![Step {
+                id: "step-01".into(),
+                goal: "Add types".into(),
+                files_touched: vec![
+                    "tests for forward-compat deserialization of older peers' JSON".into(),
+                ],
+                verify_cmd: "cargo test --test test_foo -- bar".into(),
+                rationale: "".into(),
+                state: StepState::Pending,
+                attempts: 0,
+                last_failure: None,
+                last_verify_stdout: None,
+            }],
+        };
+        let err = plan.validate().unwrap_err();
+        assert!(err.contains("prose"), "expected prose rejection, got: {err}");
+    }
+
+    #[test]
+    fn validate_accepts_normal_multi_word_file_paths() {
+        // "src/some module/lib.rs" has 3 words — borderline but valid.
+        let plan = Plan {
+            schema_version: "1".into(),
+            feature_id: "feat".into(),
+            design_sha: "abc".into(),
+            created_at: "now".into(),
+            revision: 1,
+            steps: vec![Step {
+                id: "step-01".into(),
+                goal: "Add types".into(),
+                files_touched: vec!["src/some_module/lib.rs".into()],
+                verify_cmd: "cargo test --test test_foo -- bar".into(),
+                rationale: "".into(),
+                state: StepState::Pending,
+                attempts: 0,
+                last_failure: None,
+                last_verify_stdout: None,
+            }],
+        };
+        assert!(plan.validate().is_ok());
+    }
+
+    #[test]
+    fn strip_failure_cruft_removes_embedded_failure_blocks() {
+        // Simulates what REASSESS produces after multiple step-03
+        // failures: the agent copies failure text into the rationale.
+        let cases = [
+            // Clean rationale — untouched.
+            ("Implement three latency classes per spec.", "Implement three latency classes per spec."),
+            // Failure block appended after rationale prose.
+            ("Do the thing.\n\n```\nverify_cmd exited 0 but hollow-file gate failed: x\n\nverify output:\n\n---stderr---\nerror: ...\n```", "Do the thing."),
+            // stderr dump.
+            ("Add types.\n\n---stderr---\nerror: no test target", "Add types."),
+            // <details> block.
+            ("Setup project.\n\n<details><summary>last_failure (2 attempts)</summary>", "Setup project."),
+            // "verify output:" line.
+            ("Write tests.\n\nverify output:\n---stderr---", "Write tests."),
+        ];
+        for (input, expected) in cases {
+            let got = strip_failure_cruft(input);
+            assert_eq!(got, expected, "input: {input:?}");
+        }
+    }
+
+    #[test]
     fn build_execute_prompt_warns_against_editing_runner_managed_files() {
         // Regression: 2026-05-06 smoke run #2 showed the agent
         // editing PLAN.md during EXECUTE instead of the declared
@@ -3735,7 +3905,7 @@ serde = "1"
             }],
         };
         let tmp = tempfile::tempdir().unwrap();
-        let prompt = build_execute_prompt(&plan.steps[0], &plan, tmp.path(), "", "", "");
+        let prompt = build_execute_prompt(&plan.steps[0], &plan, tmp.path(), "", "", "", None);
         assert!(
             prompt.contains("PLAN.md"),
             "EXECUTE prompt must explicitly mention PLAN.md as off-limits"
