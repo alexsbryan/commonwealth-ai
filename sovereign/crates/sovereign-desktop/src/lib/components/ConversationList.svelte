@@ -13,24 +13,17 @@
   interface Props {
     selectedConversationId: string | null;
     onSelect: (id: string | null) => void;
-    onToggleSettings: () => void;
     /** When provided, renders an "Open Recipe Author" entry above
      *  the conversation list. Wired in App.svelte under the M2 dev
      *  flag (`recipeAuthorEnabled`); M3 will gate it on the real
      *  setup-config flag. */
     onOpenRecipeAuthor?: () => void;
-    /** Routes to the dedicated Inner Work surface — a quiet writing
-     *  page distinct from chat. Always-on; the entry point is a
-     *  small affordance above the conversation list. */
-    onOpenInnerWork?: () => void;
   }
 
   let {
     selectedConversationId,
     onSelect,
-    onToggleSettings,
     onOpenRecipeAuthor,
-    onOpenInnerWork,
   }: Props = $props();
 
   let conversations: ConversationEntry[] = $state([]);
@@ -38,6 +31,10 @@
   // Inline-rename state: at most one item is being edited at a time.
   let editingId: string | null = $state(null);
   let editingTitle: string = $state("");
+
+  // Context menu state — null when hidden.
+  let contextMenu: { x: number; y: number; convo: ConversationEntry } | null =
+    $state(null);
 
   let unlisten: (() => void) | undefined;
 
@@ -129,6 +126,10 @@
 
   async function handleDelete(id: string, event: Event) {
     event.stopPropagation();
+    await deleteById(id);
+  }
+
+  async function deleteById(id: string) {
     try {
       await deleteConversation(id);
       conversations = conversations.filter((c) => c.id !== id);
@@ -138,6 +139,35 @@
     } catch (e) {
       console.error("Failed to delete conversation:", e);
     }
+  }
+
+  function openContextMenu(e: MouseEvent, convo: ConversationEntry) {
+    e.preventDefault();
+    e.stopPropagation();
+    // Flip upward if close to the bottom of the viewport.
+    const MENU_H = 88;
+    const y =
+      e.clientY + MENU_H > window.innerHeight ? e.clientY - MENU_H : e.clientY;
+    contextMenu = { x: e.clientX, y, convo };
+  }
+
+  function closeContextMenu() {
+    contextMenu = null;
+  }
+
+  function contextMenuRename() {
+    if (!contextMenu) return;
+    const convo = contextMenu.convo;
+    closeContextMenu();
+    editingId = convo.id;
+    editingTitle = convo.title ?? "";
+  }
+
+  async function contextMenuDelete() {
+    if (!contextMenu) return;
+    const id = contextMenu.convo.id;
+    closeContextMenu();
+    await deleteById(id);
   }
 
   function formatTime(epoch: number): string {
@@ -157,12 +187,6 @@
   <div class="sidebar-brand">
     <span class="brand-mark">◈</span>
     <span class="brand-name">SOVEREIGN</span>
-    <button class="settings-btn" onclick={onToggleSettings} title="Settings">
-      <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
-        <circle cx="7.5" cy="7.5" r="2.2" stroke="currentColor" stroke-width="1.4"/>
-        <path d="M7.5 1.5v1.8M7.5 11.7v1.8M1.5 7.5h1.8M11.7 7.5h1.8M3.2 3.2l1.3 1.3M10.5 10.5l1.3 1.3M3.2 11.8l1.3-1.3M10.5 4.5l1.3-1.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-      </svg>
-    </button>
   </div>
 
   <div class="list-header">
@@ -182,16 +206,6 @@
         ◇ Recipe Author →
       </button>
     {/if}
-    {#if onOpenInnerWork}
-      <button
-        class="inner-work-btn"
-        onclick={onOpenInnerWork}
-        title="Open Inner Work — a quiet page for reflection"
-        data-testid="open-inner-work"
-      >
-        ◯ Inner Work →
-      </button>
-    {/if}
   </div>
 
   <div class="list-items">
@@ -203,6 +217,7 @@
         tabindex="0"
         onclick={() => onSelect(convo.id)}
         onkeydown={(e) => e.key === "Enter" && onSelect(convo.id)}
+        oncontextmenu={(e) => openContextMenu(e, convo)}
       >
         <div class="convo-body">
           {#if editingId === convo.id}
@@ -222,7 +237,7 @@
               role="button"
               tabindex="-1"
               ondblclick={(e) => startRename(convo, e)}
-              title="Double-click to rename"
+              title="Double-click or right-click to rename"
             >
               {convo.title || "New conversation"}
             </span>
@@ -249,9 +264,32 @@
   </div>
 
   <div class="sidebar-footer">
-    <MeshStatusIndicator onOpen={onToggleSettings} />
+    <MeshStatusIndicator />
   </div>
 </div>
+
+{#if contextMenu}
+  <div class="ctx-backdrop" role="presentation" onclick={closeContextMenu} oncontextmenu={(e) => { e.preventDefault(); closeContextMenu(); }}></div>
+  <div
+    class="ctx-menu"
+    style="top: {contextMenu.y}px; left: {contextMenu.x}px"
+    role="menu"
+  >
+    <button class="ctx-item" role="menuitem" onclick={contextMenuRename}>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+        <path d="M8.5 1.5a1.41 1.41 0 0 1 2 2L3.5 10.5l-3 .5.5-3 7.5-6.5z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
+      </svg>
+      Rename
+    </button>
+    <div class="ctx-divider"></div>
+    <button class="ctx-item ctx-item--danger" role="menuitem" onclick={contextMenuDelete}>
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+        <path d="M1 3h10M4 3V2h4v1M2 3l1 7h6l1-7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Delete
+    </button>
+  </div>
+{/if}
 
 <style>
   .conversation-list {
@@ -481,5 +519,62 @@
   .sidebar-footer {
     padding: 10px 10px 12px;
     border-top: 1px solid var(--border);
+  }
+
+  /* ── Context menu ── */
+  .ctx-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+  }
+
+  .ctx-menu {
+    position: fixed;
+    z-index: 201;
+    min-width: 148px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+    animation: ctx-appear 0.08s ease;
+  }
+
+  @keyframes ctx-appear {
+    from { opacity: 0; transform: scale(0.96) translateY(-2px); }
+    to   { opacity: 1; transform: scale(1)   translateY(0); }
+  }
+
+  .ctx-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    font-family: inherit;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+
+  .ctx-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+  }
+
+  .ctx-item--danger { color: var(--text-muted); }
+  .ctx-item--danger:hover {
+    color: var(--error);
+    background: rgba(212, 72, 72, 0.1);
+  }
+
+  .ctx-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 2px 0;
   }
 </style>

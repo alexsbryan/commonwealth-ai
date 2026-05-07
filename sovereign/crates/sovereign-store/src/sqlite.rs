@@ -358,7 +358,10 @@ impl ConversationStore for SqliteStateStore {
         let mut stmt = conn
             .prepare(
                 "SELECT id, title, created_at, updated_at, skill_id
-                 FROM conversations WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
+                 FROM conversations
+                 WHERE deleted_at IS NULL
+                   AND (skill_id IS NULL OR skill_id != 'inner-work')
+                 ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
             )
             .map_err(map_db)?;
 

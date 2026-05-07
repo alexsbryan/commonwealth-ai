@@ -4,6 +4,9 @@
 /* the purple depth of the hall; the warmth of "Commonwealth"     */
 /* in the gold that crosses it. Grain of velvet. No green.        */
 :root {
+  /* ── Chrome ── */
+  --nav-rail-width: 60px;
+
   /* ── Backgrounds — warm plum-dark, amethyst undertone ── */
   /* Key shift: no green tint in any dark. Warm purple-red base.   */
   --bg-root:       #0E0B15;

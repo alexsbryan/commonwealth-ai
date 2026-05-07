@@ -73,6 +73,14 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| cwd.clone());
     let data_dir = default_data_dir().unwrap_or_else(|| PathBuf::from("./sovereign-indexes"));
+    // Flat-file stores (lint_results.db, test_results.db) live at
+    // `~/.sovereign/` directly — the canonical path the running
+    // `sovereign daemon` writes to. Resolving them under `data_dir`
+    // (= `~/.sovereign/indexes/`) makes the CLI tool read from a
+    // stale orphan DB and report `running` indefinitely while the
+    // daemon's actual store reflects fresh results — observed
+    // 2026-05-06 with rows untouched since Apr 21.
+    let flat_stores_dir = crate::util::dirs::sovereign_root();
 
     // Zero-vector embed function. Descriptor() + every tool here does
     // a pure SQL/FTS lookup — embeddings are consulted inside
@@ -86,12 +94,12 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // Stores — open each; degrade to in-memory on error so the CLI
     // still works in a cold repo.
     let test_store = Arc::new(
-        TestResultStore::open(&data_dir.join("test_results.db"))
+        TestResultStore::open(&flat_stores_dir.join("test_results.db"))
             .or_else(|_| TestResultStore::open(std::path::Path::new(":memory:")))
             .map_err(|e| format!("test results store: {e}"))?,
     );
     let lint_store = Arc::new(
-        LintResultStore::open(&data_dir.join("lint_results.db"))
+        LintResultStore::open(&flat_stores_dir.join("lint_results.db"))
             .or_else(|_| LintResultStore::open(std::path::Path::new(":memory:")))
             .map_err(|e| format!("lint results store: {e}"))?,
     );
@@ -207,6 +215,15 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     tools.register(Box::new(sovereign_tools::RecordAtosEventTool::new(
         Arc::clone(&features_store),
     )));
+    // `atos_plan_emit` was added then withdrawn the same session
+    // after a first-principles check: forcing the agent through a
+    // structured-JSON tool for plan emission solved a problem we
+    // didn't actually have. PLAN.md as the source of truth (the
+    // agent's `write` tool, markdown the model is fluent in) won
+    // out. The tool's source stays in `sovereign-tools` as an
+    // escape hatch for future work where rigid structure matters,
+    // but it is intentionally NOT registered with the live MCP
+    // surface so opencode stops advertising it.
     tools.register(Box::new(sovereign_tools::WriteRedteamFindingTool::new(
         Arc::clone(&notes_store),
     )));

@@ -94,7 +94,7 @@ export interface DesktopConfig {
   storage_budget_bytes: number | null;
   /** M3 — opt-in for the Recipe Author workspace. When false (the
    *  default), the workspace switcher is hidden in the chat sidebar.
-   *  Surfaced in the SetupWizard advanced section and in Settings. */
+   *  Toggled from Settings → Advanced. */
   enable_recipe_authoring: boolean;
 }
 

@@ -180,10 +180,25 @@ pub async fn try_auto_title(
     Ok(Some(title))
 }
 
+/// The same preamble openers used by `strip_thinking_response` — duplicated
+/// here as a const so `sanitize_title` can detect the markdown thinking
+/// pattern without calling the full response-stripping path.
+const PREAMBLE_OPENERS: &[&str] = &[
+    "Thinking Process:",
+    "Thinking process:",
+    "thinking process:",
+    "**Thinking Process",
+    "Reasoning Process:",
+    "Internal reasoning:",
+];
+
 /// Clean up model output into a storable title:
 /// - strip `<think>...</think>` blocks (complete and unclosed) — thinking
 ///   models emit these even when told not to, and truncated thinking caused
 ///   titles like `"<think>"` to be saved verbatim in a prior trial
+/// - detect markdown planning preambles ("Thinking Process:" etc.) and
+///   extract the actual title from the tail of the output rather than
+///   the preamble header
 /// - take the first non-empty line of what's left
 /// - strip outer quotes (both straight and curly)
 /// - strip trailing period
@@ -193,13 +208,50 @@ pub async fn try_auto_title(
 fn sanitize_title(raw: &str) -> String {
     let after_think = strip_think_blocks(raw);
 
-    // First-line only — the prompt asks for no explanation, but models
-    // occasionally ignore that. Take just the first non-empty line.
-    let first_line = after_think
-        .lines()
-        .map(str::trim)
-        .find(|l| !l.is_empty())
-        .unwrap_or("");
+    // Some Fast-slot models bypass XML thinking and write their planning as
+    // visible Markdown ("Thinking Process:" / "Reasoning Process:" etc.).
+    // In that case taking the first non-empty line gives us the preamble
+    // header — not the title. Instead, scan for an explicit "Title:" prefix
+    // first, then fall back to the last non-empty line (models put the
+    // actual answer last when using planning preambles).
+    let first_line = {
+        let trimmed = after_think.trim_start();
+        if PREAMBLE_OPENERS.iter().any(|m| trimmed.starts_with(m)) {
+            // Try "Title: ..." prefix anywhere in the output first.
+            let title_from_prefix = after_think
+                .lines()
+                .find_map(|l| {
+                    let t = l.trim();
+                    t.strip_prefix("Title:")
+                        .or_else(|| t.strip_prefix("title:"))
+                        .map(|rest| rest.trim())
+                        .filter(|rest| !rest.is_empty())
+                })
+                .map(str::to_string);
+
+            if let Some(t) = title_from_prefix {
+                t
+            } else {
+                // Fall back to the last non-empty line — the model puts the
+                // actual answer after the planning dump.
+                after_think
+                    .lines()
+                    .map(str::trim)
+                    .filter(|l| !l.is_empty())
+                    .last()
+                    .unwrap_or("")
+                    .to_string()
+            }
+        } else {
+            // Normal case: first non-empty line.
+            after_think
+                .lines()
+                .map(str::trim)
+                .find(|l| !l.is_empty())
+                .unwrap_or("")
+                .to_string()
+        }
+    };
 
     let mut s = first_line.trim().to_string();
 
@@ -831,6 +883,33 @@ mod tests {
     fn sanitize_preserves_angle_brackets_in_title() {
         // Non-<think> angle brackets must survive.
         assert_eq!(sanitize_title("C++ vs <tag>"), "C++ vs <tag>");
+    }
+
+    // ── Markdown thinking preamble handling ─────────────────────
+
+    #[test]
+    fn sanitize_extracts_title_from_thinking_process_preamble() {
+        let input = "Thinking Process:\nLet me analyze...\nStep 1: user asks about X\n\nFree Will and Determinism";
+        assert_eq!(sanitize_title(input), "Free Will and Determinism");
+    }
+
+    #[test]
+    fn sanitize_extracts_title_prefix_from_preamble() {
+        let input = "Thinking Process:\nAnalyzing...\nTitle: Exploring Free Will";
+        assert_eq!(sanitize_title(input), "Exploring Free Will");
+    }
+
+    #[test]
+    fn sanitize_preamble_does_not_fire_on_midtext() {
+        // "Thinking Process:" not at the start — should use first-line logic.
+        let input = "Real Title\nThinking Process: some explanation";
+        assert_eq!(sanitize_title(input), "Real Title");
+    }
+
+    #[test]
+    fn sanitize_reasoning_process_preamble() {
+        let input = "Reasoning Process:\nStep 1...\nStep 2...\nPhilosophy of Mind";
+        assert_eq!(sanitize_title(input), "Philosophy of Mind");
     }
 
     #[test]

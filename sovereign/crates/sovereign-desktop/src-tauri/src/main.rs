@@ -10,6 +10,7 @@ mod mesh_commands;
 mod recipe_author_commands;
 mod recipe_commands;
 mod routing_events;
+mod setup_flow;
 mod smoketest;
 mod state;
 mod tray;
@@ -152,6 +153,31 @@ fn main() -> ExitCode {
             let state_clone = Arc::clone(&app_state);
             let handle_clone = handle.clone();
             tauri::async_runtime::spawn(async move {
+                // Dev escape hatch: `SOVEREIGN_DEV_FORCE_SETUP=1`
+                // makes the app behave as if it's a first launch —
+                // routes to WelcomeThreshold → SetupFlow even when
+                // the persisted `DesktopConfig.setup_complete` says
+                // we're past it. Lets us iterate on the onboarding
+                // surface without wiping `~/.sovereign/` and
+                // re-downloading the multi-GB GGUFs (the planner's
+                // download_gguf validates existing files and
+                // short-circuits, so SetupFlow plays through fast).
+                //
+                // In-memory override only: not persisted to disk, so
+                // restarting without the env var resumes the saved
+                // setup state.
+                let force_setup = std::env::var("SOVEREIGN_DEV_FORCE_SETUP")
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                    .unwrap_or(false);
+                if force_setup {
+                    tracing::info!(
+                        "SOVEREIGN_DEV_FORCE_SETUP=1 — re-running onboarding \
+                         (in-memory override; persisted setup state unchanged)"
+                    );
+                    let mut cfg = state_clone.config.write().await;
+                    cfg.setup_complete = false;
+                }
+
                 let config = state_clone.config.read().await;
                 let setup_done = config.setup_complete;
                 let model_exists = config.model_path.exists();
@@ -267,6 +293,8 @@ fn main() -> ExitCode {
             commands::save_config,
             commands::is_setup_complete,
             commands::complete_setup,
+            commands::complete_setup_auto,
+            commands::start_default_corpus_install,
             commands::detect_hardware,
             commands::detect_bootstrap,
             commands::warmup_primary_slot,

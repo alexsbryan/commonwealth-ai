@@ -565,6 +565,29 @@
       return;
     }
 
+    // One-shot draft hydration. Used by seeded conversations on
+    // first launch — a pre-filled prompt sits in the input box
+    // when the user opens the conversation, and once it's been
+    // surfaced it's removed so reopening the same conversation
+    // doesn't keep re-pre-filling on top of whatever the user
+    // typed.
+    const draftKey = `chat-draft:${targetId}`;
+    const draft = (() => {
+      try {
+        return localStorage.getItem(draftKey);
+      } catch {
+        return null;
+      }
+    })();
+    if (draft && !inputText) {
+      inputText = draft;
+      try {
+        localStorage.removeItem(draftKey);
+      } catch {
+        // Best-effort; private-mode storage failures are tolerable.
+      }
+    }
+
     // Eager clear: bind the new conversation id and empty the
     // message list synchronously, BEFORE awaiting the backend
     // fetch. Without this, switching to a conversation with a

@@ -4,8 +4,8 @@
   import {
     detectBootstrap,
     getConfig,
-    isFirstRun,
     isSetupComplete,
+    startDefaultCorpusInstall,
   } from "./lib/api";
   import type { BootstrapSnapshot, StarterQuestion } from "./lib/types";
   import { approvalStore } from "./lib/stores/approval.svelte";
@@ -15,6 +15,7 @@
     StepDonePayload,
     TaskStep,
   } from "./lib/types";
+  import NavRail from "./lib/components/NavRail.svelte";
   import ConversationList from "./lib/components/ConversationList.svelte";
   import ChatView from "./lib/components/ChatView.svelte";
   import RecipeAuthorWorkspace from "./lib/components/recipe_author/RecipeAuthorWorkspace.svelte";
@@ -25,20 +26,35 @@
   import AtomPanel from "./lib/components/reading/AtomPanel.svelte";
   import { readingSession } from "./lib/stores/readingSession.svelte";
   import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
-  import SetupWizard from "./lib/setup/SetupWizard.svelte";
-  import FirstCorpusFlow from "./lib/components/onboarding/FirstCorpusFlow.svelte";
+  import SetupFlow from "./lib/setup/SetupFlow.svelte";
+  import WelcomeThreshold from "./lib/setup/WelcomeThreshold.svelte";
+  import { ensureSeededConversations } from "./lib/setup/seededConversations";
   import ToastHost from "./lib/components/ToastHost.svelte";
 
   type AppView =
     | "loading"
+    | "welcome"
     | "setup"
-    | "first_corpus"
     | "chat"
     | "settings"
     | "recipe_author"
     | "inner_work";
 
+  type RailMode = "chat" | "inner_work" | "settings";
+
   let view: AppView = $state("loading");
+
+  // The rail is visible in all post-onboarding views. recipe_author
+  // maps to "chat" on the rail since it's a sub-surface of outer work.
+  let railMode: RailMode = $derived(
+    view === "inner_work" ? "inner_work"
+    : view === "settings" ? "settings"
+    : "chat"
+  );
+
+  let showNavRail = $derived(
+    view !== "loading" && view !== "welcome" && view !== "setup"
+  );
 
   // M3 — Recipe Author workspace gate. Read from `DesktopConfig`
   // on bootstrap and cached in $state so it stays reactive when the
@@ -56,11 +72,25 @@
       recipeAuthorEnabled = false;
     }
   }
+
   let backendReady = $state(false);
   let backendError: string | null = $state(null);
   let selectedConversationId: string | null = $state(null);
-  let showSettings = $state(false);
   let showInsights = $state(false);
+
+  // Conversation list collapse — toggled by Cmd+[ when in chat view.
+  let convListCollapsed = $state(false);
+  // Signal counter for the inner-work history drawer — increment to toggle.
+  let innerWorkHistoryToggle = $state(0);
+
+  // InnerWorkSurface mounts once on first visit and stays alive so
+  // subsequent toggles are instant (CSS show/hide, no re-mount).
+  // Without this, every navigation to inner_work re-runs the full
+  // mount lifecycle: skill snapshot, conversation lookup, API calls.
+  let innerWorkMounted = $state(false);
+  $effect(() => {
+    if (view === "inner_work") innerWorkMounted = true;
+  });
 
   // Reading surface visibility — driven entirely by the
   // readingSession store. Mutually exclusive with InsightsPanel
@@ -87,47 +117,30 @@
   let bootstrap = $state<BootstrapSnapshot | null>(null);
   let attachedToDaemon = $derived(bootstrap?.daemon_running === true);
 
-  async function shouldRouteToFirstCorpus(): Promise<boolean> {
-    // The first-run marker (`~/.sovereign/first_run_complete`) is
-    // the single source of truth. It's written by
-    // `markFirstRunComplete()` at the end of the onboarding flow
-    // (whether the user built an atlas or skipped). Absent marker =
-    // user hasn't been through onboarding yet.
-    //
-    // An earlier version also checked `enrichListCorpora().length`,
-    // on the theory that anyone with enriched corpora had clearly
-    // onboarded. That gave false negatives for developers/testers
-    // with prior SEP/book corpora from manual CLI runs — they'd be
-    // skipped past onboarding despite having never seen it. The
-    // marker is a cleaner contract.
-    try {
-      return await isFirstRun();
-    } catch (e) {
-      console.warn("shouldRouteToFirstCorpus probe failed:", e);
-      // Fail open: land on chat rather than stranding the user on
-      // a broken onboarding gate.
-      return false;
+  // Dismiss the attach-badge after 4 s when everything is fine.
+  // The badge stays visible for the initial glance so the user
+  // understands the connection mode, then fades out to top-right.
+  let badgeDismissed = $state(false);
+  $effect(() => {
+    if (attachedToDaemon) {
+      badgeDismissed = false;
+      const t = setTimeout(() => { badgeDismissed = true; }, 4000);
+      return () => clearTimeout(t);
     }
-  }
-
-  function handleFirstCorpusComplete(seed: StarterQuestion | null) {
-    if (seed) chatSeedStore.set(seed);
-    view = "chat";
-  }
+  });
 
   function handleSettingsStarterPick(question: StarterQuestion) {
     chatSeedStore.set(question);
-    showSettings = false;
+    view = "chat";
   }
 
-  /// Called by FolderDropFlow (inside FirstCorpusFlow or Settings)
-  /// when the user clicks "Start chatting — atlas keeps building".
-  /// The sample atlas is still running; the toast will fire when it
-  /// completes, and ChatView's empty-state chips will populate from
+  /// Called by FolderDropFlow inside Settings → Knowledge when the
+  /// user clicks "Start chatting — atlas keeps building". The sample
+  /// atlas is still running; the toast will fire when it completes,
+  /// and ChatView's empty-state chips will populate from
   /// `enrich_get_starter_questions` in the meantime.
   function handleDropToChat() {
     view = "chat";
-    showSettings = false;
   }
 
   onMount(async () => {
@@ -148,21 +161,16 @@
         // (or stays hidden) on the very first paint of the chat view.
         void refreshRecipeAuthorFlag();
         if (view === "loading") {
-          // First-corpus probe runs async; default to chat and
-          // upgrade if the probe says onboarding is warranted.
           view = "chat";
-          void (async () => {
-            if (await shouldRouteToFirstCorpus()) {
-              view = "first_corpus";
-            }
-          })();
         }
       },
       onBackendError: (error) => {
         backendError = error;
       },
       onSetupRequired: () => {
-        view = "setup";
+        // Backend signals setup is needed — go to the welcome
+        // threshold rather than straight into the wizard.
+        view = "welcome";
       },
       onStepDone: (payload: StepDonePayload) => {
         const existing = taskSteps.find((s) => s.id === payload.step_id);
@@ -199,7 +207,8 @@
     try {
       const complete = await isSetupComplete();
       if (!complete) {
-        view = "setup";
+        // First launch: show the threshold screen before the wizard.
+        view = "welcome";
       }
       // If complete, wait for backend-ready event (async bootstrap).
     } catch {
@@ -217,28 +226,31 @@
   });
 
   async function handleSetupComplete() {
-    // complete_setup already bootstrapped the backend before returning,
-    // so we can go directly to chat rather than waiting for backend-ready.
-    // (backend-ready fires before complete_setup returns, so it would be
-    // missed if we set view = "loading" here.)
+    // complete_setup_auto already bootstrapped the backend before
+    // returning, so we can go directly to chat rather than waiting
+    // for backend-ready. (backend-ready fires before the command
+    // returns, so it would be missed if we flipped to "loading" here.)
     backendReady = true;
-    // One-time gate: first launch with no enriched corpora → route
-    // to the onboarding corpus flow. Returning users (marker exists
-    // OR they already have an atlas) land on chat as today.
-    if (await shouldRouteToFirstCorpus()) {
-      view = "first_corpus";
-    } else {
-      view = "chat";
+    // Seed two starter conversations on truly-first launch. The
+    // helper is a no-op if the user already has any conversations.
+    try {
+      await ensureSeededConversations();
+    } catch (e) {
+      // Non-fatal — chat still opens, just without seed conversations.
+      console.warn("ensureSeededConversations failed:", e);
     }
+    view = "chat";
+    // Fire-and-forget background install of `wikipedia-simple` so
+    // the user lands in chat with retrieval gradually coming online.
+    // Idempotent on the daemon; safe to call on every setup
+    // completion. Errors are silent — the user discovers Knowledge
+    // from Settings if they care.
+    void startDefaultCorpusInstall().catch(() => {});
   }
 
   function handleConversationSelect(id: string | null) {
     selectedConversationId = id;
-    showSettings = false;
-  }
-
-  function handleToggleSettings() {
-    showSettings = !showSettings;
+    if (view === "settings") view = "chat";
   }
 
   function clearTaskState() {
@@ -264,14 +276,55 @@
     conversationListRef?.loadConversations?.();
   }
 
+  function handleRailNavigate(mode: "chat" | "inner_work" | "settings") {
+    // Close reading surface when leaving outer work to keep layout clean.
+    if (mode !== "chat" && readingSession.isOpen) {
+      readingSession.close();
+    }
+    // Tapping the already-active inner work icon toggles the history drawer.
+    if (mode === "inner_work" && view === "inner_work") {
+      innerWorkHistoryToggle++;
+      return;
+    }
+    view = mode;
+  }
+
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if (!showNavRail) return;
+    if (!e.metaKey && !e.ctrlKey) return;
+    switch (e.key) {
+      case "1":
+        e.preventDefault();
+        handleRailNavigate("chat");
+        break;
+      case "2":
+        e.preventDefault();
+        handleRailNavigate("inner_work");
+        break;
+      case "3":
+        e.preventDefault();
+        handleRailNavigate("settings");
+        break;
+      case "[":
+        e.preventDefault();
+        if (view === "inner_work") {
+          innerWorkHistoryToggle++;
+        } else {
+          convListCollapsed = !convListCollapsed;
+        }
+        break;
+    }
+  }
+
   // Drop the opener on destroy so a stale closure can't survive
   // teardown (matters most under HMR — without this, repeated
   // component swaps stack a chain of dead callbacks that all fire).
   onDestroy(() => {
     readingSession.setConversationOpener(null);
   });
-
 </script>
+
+<svelte:window onkeydown={handleGlobalKeydown} />
 
 {#if view === "loading"}
   <div class="loading-screen">
@@ -295,90 +348,108 @@
       {/if}
     </div>
   </div>
+{:else if view === "welcome"}
+  <WelcomeThreshold onBegin={() => (view = "setup")} />
 {:else if view === "setup"}
-  <SetupWizard onComplete={handleSetupComplete} />
-{:else if view === "first_corpus"}
-  <FirstCorpusFlow
-    onComplete={handleFirstCorpusComplete}
-    onDropToChat={handleDropToChat}
-  />
-{:else if view === "recipe_author"}
-  <RecipeAuthorWorkspace onExit={() => (view = "chat")} />
-{:else if view === "inner_work"}
-  <InnerWorkSurface onExit={() => (view = "chat")} />
+  <SetupFlow onComplete={handleSetupComplete} />
 {:else}
-  <div
-    class="app-layout"
-    class:reading-open={readingOpen}
-    class:atom-open={atomPanelOpen}
-  >
-    <aside class="sidebar">
-      <ConversationList
-        bind:this={conversationListRef}
-        {selectedConversationId}
-        onSelect={handleConversationSelect}
-        onToggleSettings={handleToggleSettings}
-        onOpenRecipeAuthor={recipeAuthorEnabled
-          ? () => (view = "recipe_author")
-          : undefined}
-        onOpenInnerWork={() => (view = "inner_work")}
-      />
-    </aside>
-    <main class="main-content">
-      {#if showSettings}
-        <SettingsPanel
-          onClose={() => {
-            showSettings = false;
-            // The user may have flipped enable_recipe_authoring in
-            // Settings — re-read so the sidebar entry appears /
-            // disappears without a desktop restart.
-            void refreshRecipeAuthorFlag();
-          }}
-          onOpenChatWithSeed={handleSettingsStarterPick}
-          onDropToChat={handleDropToChat}
-        />
+  <!-- Post-onboarding chrome shell: rail + content area side by side -->
+  <div class="app-chrome">
+    <NavRail active={railMode} onNavigate={handleRailNavigate} />
+    <div class="app-chrome-content">
+      <!-- InnerWork keep-alive layer: mounted on first visit, shown/hidden
+           via CSS so the mount lifecycle (skill snapshot, conversation
+           lookup) only runs once regardless of how many times the user
+           toggles between modes. -->
+      {#if innerWorkMounted}
+        <div
+          class="inner-work-layer"
+          class:active={view === "inner_work"}
+          aria-hidden={view !== "inner_work"}
+        >
+          <InnerWorkSurface onExit={() => (view = "chat")} historyToggle={innerWorkHistoryToggle} />
+        </div>
+      {/if}
+
+      {#if view === "recipe_author"}
+        <RecipeAuthorWorkspace onExit={() => (view = "chat")} />
+      {:else if view === "settings"}
+        <div class="settings-surface">
+          <SettingsPanel
+            onClose={() => {
+              view = "chat";
+              // The user may have flipped enable_recipe_authoring in
+              // Settings — re-read so the sidebar entry appears /
+              // disappears without a desktop restart.
+              void refreshRecipeAuthorFlag();
+            }}
+            onOpenChatWithSeed={handleSettingsStarterPick}
+            onDropToChat={handleDropToChat}
+          />
+        </div>
       {:else}
-        <ChatView
-          conversationId={selectedConversationId}
-          {taskSteps}
-          onClearTask={clearTaskState}
-          onOpenSettings={() => (showSettings = true)}
-          onToggleInsights={() => (showInsights = !showInsights)}
-          onConversationCreated={handleConversationCreated}
-        />
+        <div
+          class="app-layout"
+          class:reading-open={readingOpen}
+          class:atom-open={atomPanelOpen}
+          class:convlist-collapsed={convListCollapsed}
+        >
+          <aside class="sidebar">
+            <ConversationList
+              bind:this={conversationListRef}
+              {selectedConversationId}
+              onSelect={handleConversationSelect}
+              onOpenRecipeAuthor={recipeAuthorEnabled
+                ? () => (view = "recipe_author")
+                : undefined}
+            />
+          </aside>
+          <main class="main-content">
+            <ChatView
+              conversationId={selectedConversationId}
+              {taskSteps}
+              onClearTask={clearTaskState}
+              onOpenSettings={() => (view = "settings")}
+              onToggleInsights={() => (showInsights = !showInsights)}
+              onConversationCreated={handleConversationCreated}
+            />
+          </main>
+          {#if readingOpen}
+            <ReadingSurface />
+            {#if atomPanelOpen}
+              <AtomPanel />
+            {/if}
+          {:else if showInsights}
+            <InsightsPanel
+              conversationId={selectedConversationId}
+              onNavigate={(id) => {
+                selectedConversationId = id;
+                showInsights = false;
+              }}
+              onClose={() => (showInsights = false)}
+            />
+          {/if}
+        </div>
       {/if}
-    </main>
-    {#if readingOpen}
-      <ReadingSurface />
-      {#if atomPanelOpen}
-        <AtomPanel />
-      {/if}
-    {:else if showInsights && !showSettings}
-      <InsightsPanel
-        conversationId={selectedConversationId}
-        onNavigate={(id) => {
-          selectedConversationId = id;
-          showInsights = false;
-        }}
-        onClose={() => (showInsights = false)}
-      />
-    {/if}
+    </div>
   </div>
 {/if}
 
 <ToastHost />
 
 {#if attachedToDaemon}
-  <!-- Small pill anchored bottom-left; informational only. Lets
-       the user understand why stopping the CLI daemon would break
-       inference, and where to look for logs. -->
-  <div
+  <!-- Pill anchored top-right; shows briefly on startup then fades out.
+       Re-appears if the user triggers a recheck (future: daemon health poll). -->
+  <button
     class="attach-badge"
-    title="This desktop is using the daemon started by `sovereign daemon run`. Stopping that service will break inference until it restarts."
+    class:dismissed={badgeDismissed}
+    title="Using daemon started by 'sovereign daemon run' on :{bootstrap?.client_port ?? 9741}. Click to re-show."
+    aria-live="polite"
+    onclick={() => { badgeDismissed = false; setTimeout(() => { badgeDismissed = true; }, 4000); }}
   >
     <span class="attach-dot" aria-hidden="true"></span>
     connected to daemon · :{bootstrap?.client_port ?? 9741}
-  </div>
+  </button>
 {/if}
 
 {#if pendingJoinLink}
@@ -387,7 +458,7 @@
     onClose={() => joinLinkStore.clear()}
     onJoined={() => {
       joinLinkStore.clear();
-      showSettings = true;
+      view = "settings";
     }}
   />
 {/if}
@@ -451,14 +522,14 @@
   /* ── Attach-mode badge ── */
   .attach-badge {
     position: fixed;
-    bottom: 12px;
-    left: 12px;
+    top: 12px;
+    right: 12px;
     z-index: 40;
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 12px;
-    font-size: 0.72rem;
+    padding: 5px 11px;
+    font-size: 0.7rem;
     font-family: var(--font-mono);
     letter-spacing: 0.04em;
     color: var(--text-secondary);
@@ -466,8 +537,17 @@
     border: 1px solid var(--border-mid);
     border-radius: 999px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-    pointer-events: auto;
+    cursor: pointer;
     user-select: none;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+
+  .attach-badge.dismissed {
+    opacity: 0;
+    transform: translateY(-6px);
+    pointer-events: none;
   }
 
   .attach-dot {
@@ -551,6 +631,25 @@
     100% { transform: translateX(520%); }
   }
 
+  /* ── Chrome shell ──
+     NavRail (60px) sits as a fixed left column in a flex row. The
+     content area takes the rest of the viewport and is `position:
+     relative` so InnerWorkSurface (position: absolute) fills it
+     correctly — viewport minus the rail — without needing fixed
+     coordinates. */
+  .app-chrome {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .app-chrome-content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+  }
+
   /* ── App shell ──
      Three-column grid for the glass-box reading layout. The
      reading column collapses to 0 when no citation is open, so
@@ -562,7 +661,7 @@
   .app-layout {
     display: grid;
     grid-template-columns: 262px 1fr 0 0;
-    height: 100vh;
+    height: 100%;
     transition: grid-template-columns 220ms cubic-bezier(.2, .8, .2, 1);
   }
 
@@ -575,6 +674,27 @@
   .app-layout.reading-open.atom-open {
     grid-template-columns:
       262px
+      minmax(320px, 1fr)
+      minmax(360px, 1.4fr)
+      minmax(300px, 1fr);
+  }
+
+  /* Conversation list collapse — zero the sidebar column */
+  .app-layout.convlist-collapsed {
+    grid-template-columns: 0 1fr 0 0;
+  }
+
+  .app-layout.convlist-collapsed > .sidebar {
+    display: none;
+  }
+
+  .app-layout.convlist-collapsed.reading-open {
+    grid-template-columns: 0 minmax(360px, 1fr) minmax(440px, 2fr) 0;
+  }
+
+  .app-layout.convlist-collapsed.reading-open.atom-open {
+    grid-template-columns:
+      0
       minmax(320px, 1fr)
       minmax(360px, 1.4fr)
       minmax(300px, 1fr);
@@ -648,6 +768,10 @@
     .app-layout.reading-open > :global(.reading-surface) {
       left: 0;
     }
+    /* Hide the rail at very narrow widths too */
+    .app-chrome > :global(.nav-rail) {
+      display: none;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -672,5 +796,30 @@
     overflow: hidden;
     background: var(--bg-primary);
     min-width: 0;
+  }
+
+  /* InnerWork keep-alive: sits as an absolute layer inside the
+     content area. Hidden by default; `.active` makes it visible.
+     `display: none` means zero layout/paint cost when not active. */
+  .inner-work-layer {
+    position: absolute;
+    inset: 0;
+    display: none;
+    z-index: 1;
+  }
+
+  .inner-work-layer.active {
+    display: block;
+  }
+
+  /* Settings renders outside the chat grid so it gets full width
+     with no sidebar. Provides the same flex column context that
+     SettingsPanel expects from its former main-content parent. */
+  .settings-surface {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg-primary);
   }
 </style>

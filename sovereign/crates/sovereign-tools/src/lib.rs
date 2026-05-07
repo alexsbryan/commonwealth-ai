@@ -58,7 +58,7 @@ pub use code::SessionReflectionTool;
 pub use code::CheckDocPathsTool;
 #[cfg(feature = "treesitter")]
 pub use code::{
-    ArchiveFeatureTool, PromoteNoteTool, ProvisionFeatureTool, ReadNoteByIdTool,
+    ArchiveFeatureTool, AtosPlanEmitTool, PromoteNoteTool, ProvisionFeatureTool, ReadNoteByIdTool,
     ReadNoteDigestTool, RecordAtosEventTool, WriteRedteamFindingTool,
 };
 #[cfg(feature = "treesitter")]

@@ -141,6 +141,11 @@ fn build_descriptors() -> Vec<ToolDescriptor> {
         ProvisionFeatureTool::new(Arc::clone(&features)).descriptor(),
         ArchiveFeatureTool::new(Arc::clone(&features)).descriptor(),
         RecordAtosEventTool::new(Arc::clone(&features)).descriptor(),
+        // AtosPlanEmitTool::new().descriptor(),
+        // ^ intentionally commented out — markdown PLAN.md replaces
+        //   the structured-JSON path the tool was designed for. Tool
+        //   source kept for future use; manifest withdrawal is the
+        //   minimum unwiring that hides it from the discovery surface.
         WriteRedteamFindingTool::new(Arc::clone(&notes)).descriptor(),
         SessionReflectionTool::new(Arc::clone(&notes)).descriptor(),
         ProjectContextTool::new(Arc::clone(&docs))

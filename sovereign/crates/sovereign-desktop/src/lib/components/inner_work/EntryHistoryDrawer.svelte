@@ -231,10 +231,12 @@
   .panel {
     position: absolute;
     top: 0;
-    left: 0;
+    /* Start flush with the nav rail's right edge so the panel doesn't
+       slide out behind it. --nav-rail-width is defined in app.css. */
+    left: var(--nav-rail-width, 60px);
     height: 100%;
     width: 360px;
-    max-width: 80vw;
+    max-width: calc(80vw - var(--nav-rail-width, 60px));
     display: flex;
     flex-direction: column;
     background: var(--inner-bg-warm);

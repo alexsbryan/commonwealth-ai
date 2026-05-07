@@ -290,6 +290,23 @@ export async function completeSetup(setup: SetupConfig): Promise<void> {
   return invoke("complete_setup", { setup });
 }
 
+/** Auto-config first-launch flow. No user input — runs hardware
+ *  probe, picks defaults from the bundled manifest, downloads the
+ *  three model slots, opens the database, loads the model. The
+ *  `setup-progress` Tauri event channel narrates progress; this
+ *  promise resolves when the backend is ready to serve chat. */
+export async function completeSetupAuto(): Promise<void> {
+  return invoke("complete_setup_auto");
+}
+
+/** Fire-and-forget background install of the default
+ *  `wikipedia-simple` corpus. Idempotent. The desktop kicks this
+ *  off once the user lands in chat after first-launch setup; it
+ *  runs silently with no setup-flow UI surface. */
+export async function startDefaultCorpusInstall(): Promise<void> {
+  return invoke("start_default_corpus_install");
+}
+
 export async function detectHardware(): Promise<HardwareInfo> {
   return invoke("detect_hardware");
 }

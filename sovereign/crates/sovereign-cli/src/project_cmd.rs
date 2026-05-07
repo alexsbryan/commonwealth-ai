@@ -198,14 +198,19 @@ const HELP_PLAN: crate::util::help::Help = crate::util::help::Help {
     summary: "Compose IMPLEMENTATION_PLAN.md from DESIGN.md + OPEN_QUESTIONS.md; upsert rows into .sovereign/plan.db.",
     sections: &[
         crate::util::help::HelpSection::Usage(
-            "sovereign project plan [--allow-open]",
+            "sovereign project plan [--allow-open] [--no-enrich] [--enrich-model <id>] [--daemon-url <url>]",
         ),
         crate::util::help::HelpSection::Flags(&[
-            ("--allow-open", "Proceed even if OPEN_QUESTIONS.md has unanswered entries (they surface as open risks on the matching phase)"),
+            ("--allow-open",        "Proceed even if OPEN_QUESTIONS.md has unanswered entries (they surface as open risks on the matching phase)"),
+            ("--no-enrich",         "Skip the inference-driven phase enrichment pass; produce the deterministic skeleton only"),
+            ("--enrich-model <id>", "Override the chat model used for enrichment (default: FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L)"),
+            ("--daemon-url <url>",  "Override the daemon URL for enrichment (default: http://localhost:9741)"),
         ]),
         crate::util::help::HelpSection::Notes(
             "Phase 0 = Skeleton (language-specific build+test stop).\n\
              Phases 1..N come from H2 sections in DESIGN.md, in order (skipping Anchors / Open questions).\n\
+             Each phase 1..N is enriched by one chat call: the model rewrites the body and proposes an executable stop_hint. \
+             If the daemon is unreachable, enrichment is skipped silently and the deterministic placeholders survive.\n\
              Answered OPEN_QUESTIONS.md entries surface as `Resolved (for the record)` on the matching phase.\n\
              Unanswered OQs block the plan unless --allow-open is set; they then surface as open risks.\n\
              Stale plan_items (from an older DESIGN.md) are marked `deferred` rather than deleted, preserving references.",
@@ -1331,15 +1336,35 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     }
 
     let mut allow_open = false;
-    for arg in args {
-        match arg.as_str() {
+    let mut no_enrich = false;
+    let mut enrich_model: Option<String> = None;
+    let mut daemon_url = "http://localhost:9741".to_string();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
             "--allow-open" => allow_open = true,
+            "--no-enrich" => no_enrich = true,
+            "--enrich-model" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    enrich_model = Some(v.clone());
+                }
+            }
+            "--daemon-url" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    daemon_url = v.clone();
+                }
+            }
             flag if flag.starts_with("--") => {
                 eprintln!("warning: unknown flag '{flag}' — ignored");
             }
             _ => {}
         }
+        i += 1;
     }
+    let enrich_model = enrich_model
+        .unwrap_or_else(|| "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L".to_string());
 
     let repo_root = match find_repo_root() {
         Some(r) => r,
@@ -1405,14 +1430,55 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     // Compose (pure).
     let signals = corpus_engine::design_signals::extract(&design_md);
     let today = today_iso();
-    let composed = crate::plan_composer::compose_plan(&crate::plan_composer::ComposeInputs {
+    let compose_inputs = crate::plan_composer::ComposeInputs {
         project_id: &project_id,
         design_md: &design_md,
         signals: &signals,
         open_questions: &oqs,
         primary_language: primary_language.as_deref(),
         today: &today,
-    });
+    };
+    let mut composed = crate::plan_composer::compose_plan(&compose_inputs);
+
+    // Inference enrichment pass (default-on; --no-enrich opts out).
+    // The composer's structural skeleton has placeholder phase bodies
+    // and "(fill this in)" stop hints — exactly the output a coding
+    // agent can't act on. The enricher calls the daemon's chat slot
+    // once per phase to replace those with concrete prose + an
+    // executable shell command. Failures are silent: each phase falls
+    // back to the composer's deterministic output, the plan still
+    // ships, and the operator sees a one-line summary.
+    if !no_enrich {
+        if crate::plan_enricher::daemon_reachable(&daemon_url).await {
+            eprintln!(
+                "    \u{2026} enriching {} phase(s) via {} (this can take ~10-30s/phase)…",
+                composed.items.len().saturating_sub(1),
+                enrich_model
+            );
+            let outcome = crate::plan_enricher::enrich(
+                &mut composed.items,
+                &design_md,
+                &signals.sections,
+                primary_language.as_deref(),
+                &daemon_url,
+                &enrich_model,
+            )
+            .await;
+            eprintln!(
+                "    \u{2026} enrichment: {} enriched, {} skipped (Phase 0), {} failed (deterministic fallback)",
+                outcome.enriched, outcome.skipped, outcome.failed
+            );
+            // Re-render with the mutated items.
+            composed.markdown =
+                crate::plan_composer::render(&compose_inputs, &composed.items, &composed.design_hash);
+        } else {
+            eprintln!(
+                "    \u{26a0} enrich: daemon at {} not reachable — keeping deterministic plan. \
+                 Pass --no-enrich to silence this warning.",
+                daemon_url
+            );
+        }
+    }
 
     // Persist plan_items rows. Open a plan.db under .sovereign/.
     // The store tolerates running before .sovereign/ exists (creates
@@ -2892,6 +2958,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     tools.register(Box::new(sovereign_tools::RecordAtosEventTool::new(
         Arc::clone(&features_store),
     )));
+    // atos_plan_emit intentionally NOT registered — see runtime
+    // tools_cmd/registry.rs for rationale (markdown plan path
+    // replaced structured-JSON path).
     tools.register(Box::new(sovereign_tools::WriteRedteamFindingTool::new(
         Arc::clone(&notes_store),
     )));

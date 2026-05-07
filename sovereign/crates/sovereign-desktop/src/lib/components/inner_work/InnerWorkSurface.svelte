@@ -34,9 +34,25 @@
     /// sidebar entry doubles as the toggle; the brand mark in the
     /// corner also routes here.
     onExit?: () => void;
+    /// Increment to trigger a history-drawer toggle from outside
+    /// (nav-rail re-tap, Cmd+[ while inner work is active).
+    historyToggle?: number;
   }
 
-  let { onExit }: Props = $props();
+  let { onExit, historyToggle = 0 }: Props = $props();
+
+  // React to external toggle signals (nav-rail re-tap, Cmd+[).
+  let prevHistoryToggle = historyToggle;
+  $effect(() => {
+    if (historyToggle !== prevHistoryToggle) {
+      prevHistoryToggle = historyToggle;
+      if (historyVisible) {
+        closeHistory();
+      } else {
+        void openHistory();
+      }
+    }
+  });
 
   // ── Threshold ───────────────────────────────────────────────
   // Once-per-window. The first navigation into inner-work plays an
@@ -1108,7 +1124,7 @@
     --inner-grain-blend: multiply;
     --inner-grain-opacity: 0.025;
 
-    position: fixed;
+    position: absolute;
     inset: 0;
     overflow: hidden;
     color: var(--inner-ink);
@@ -1194,6 +1210,7 @@
     z-index: 2;
     height: 100%;
     overflow-y: auto;
+    scroll-padding-bottom: 5rem;
     opacity: 1;
     transition: opacity 1200ms ease-out;
   }
@@ -1394,7 +1411,7 @@
     line-height: inherit;
     letter-spacing: inherit;
     resize: none;
-    padding: 0;
+    padding: 0 0 4rem;
     margin: 1.7em 0 0;
     overflow: hidden; /* auto-resize handles height */
     caret-color: var(--inner-caret);

@@ -39,92 +39,114 @@
       url: "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf",
       size_estimate: "~640 MB",
       ram_minimum: "4 GB",
-      description: "Purpose-built retrieval model with last-token pooling. Best default choice.",
-      min_ram_gb: 2,
-    },
-    {
-      name: "mxbai-embed-large-v1",
-      file_name: "mxbai-embed-large-v1.Q4_K_M.gguf",
-      url: "https://huggingface.co/mixedbread-ai/mxbai-embed-large-v1-GGUF/resolve/main/mxbai-embed-large-v1.Q4_K_M.gguf",
-      size_estimate: "~340 MB",
-      ram_minimum: "4 GB",
-      description: "1024-dim, top-ranked on MTEB. Great retrieval quality.",
-      min_ram_gb: 2,
-    },
-    {
-      name: "bge-large-en-v1.5",
-      file_name: "bge-large-en-v1.5-q4_k_m.gguf",
-      url: "https://huggingface.co/second-state/BGE-large-EN-v1.5-GGUF/resolve/main/bge-large-en-v1.5-q4_k_m.gguf",
-      size_estimate: "~330 MB",
-      ram_minimum: "4 GB",
-      description: "1024-dim, strong semantic search performance.",
-      min_ram_gb: 2,
-    },
-    {
-      name: "snowflake-arctic-embed-m-v1.5",
-      file_name: "snowflake-arctic-embed-m-v1.5.Q4_K_M.gguf",
-      url: "https://huggingface.co/Snowflake/snowflake-arctic-embed-m-v1.5-GGUF/resolve/main/snowflake-arctic-embed-m-v1.5.Q4_K_M.gguf",
-      size_estimate: "~120 MB",
-      ram_minimum: "4 GB",
-      description: "768-dim, compact and accurate for document retrieval.",
+      description: "Purpose-built retrieval model with last-token pooling. Best default choice for atlas and search.",
       min_ram_gb: 2,
     },
   ];
 
   const RECOMMENDED_MODELS: RecommendedModel[] = [
+    // ── Tiny — any device ──────────────────────────────────────────
+    // {
+    //   name: "Qwen3-0.6B",
+    //   file_name: "Qwen3-0.6B-Q8_0.gguf",
+    //   url: "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf",
+    //   size_estimate: "~760 MB",
+    //   ram_minimum: "4 GB",
+    //   description: "Smallest Qwen3. 200+ t/s on any machine. Good for lightweight tasks and getting started.",
+    //   min_ram_gb: 2,
+    // },
     {
-      name: "Qwen 2.5 0.5B",
-      file_name: "qwen2.5-0.5b-instruct-q8_0.gguf",
-      url: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q8_0.gguf",
-      size_estimate: "~600 MB",
-      ram_minimum: "8 GB",
-      description: "Fast and lightweight. Great for getting started.",
+      name: "Qwen3.5-2B",
+      file_name: "Qwen3-2B-Q6_K.gguf",
+      url: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q6_K.gguf",
+      size_estimate: "~1.1 GB",
+      ram_minimum: "4 GB",
+      description: "Step up in quality with still-tiny size. Runs on any device.",
       min_ram_gb: 4,
     },
+    // ── Universal daily drivers — fast on every platform ───────────
+    // {
+    //   name: "SmolLM3-3B",
+    //   file_name: "SmolLM3-3B-Q4_K_M.gguf",
+    //   url: "https://huggingface.co/unsloth/SmolLM3-3B-GGUF/resolve/main/SmolLM3-3B-Q4_K_M.gguf",
+    //   size_estimate: "~1.8 GB",
+    //   ram_minimum: "6 GB",
+    //   description: "Best 3B available. Maximum throughput at this size class — 180+ t/s everywhere.",
+    //   min_ram_gb: 4,
+    // },
+    // {
+    //   name: "Phi-4 Mini",
+    //   file_name: "Phi-4-mini-instruct-Q4_K_M.gguf",
+    //   url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf",
+    //   size_estimate: "~2.7 GB",
+    //   ram_minimum: "6 GB",
+    //   description: "MIT license. Optimized for structured output and pipelines. No thinking overhead.",
+    //   min_ram_gb: 6,
+    // },
     {
-      name: "Qwen 2.5 3B",
-      file_name: "qwen2.5-3b-instruct-q4_k_m.gguf",
-      url: "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf",
-      size_estimate: "~2 GB",
-      ram_minimum: "8 GB",
-      description: "Good balance of speed and quality.",
-      min_ram_gb: 8,
+      name: "Qwen3-4B",
+      file_name: "Qwen3-4B-Q4_K_M.gguf",
+      url: "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+      size_estimate: "~2.5 GB",
+      ram_minimum: "6 GB",
+      description: "Text-only with /no_think mode. Excellent speed-to-quality ratio across all platforms.",
+      min_ram_gb: 6,
     },
     {
-      name: "Qwen 2.5 7B",
-      file_name: "qwen2.5-7b-instruct-q4_k_m.gguf",
-      url: "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
-      size_estimate: "~4.7 GB",
-      ram_minimum: "16 GB",
-      description: "Strong general-purpose quality.",
-      min_ram_gb: 16,
+      name: "Gemma 4 E4B",
+      file_name: "gemma-4-E4B-it-Q4_K_M.gguf",
+      url: "https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF/resolve/main/gemma-4-E4B-it-Q4_K_M.gguf",
+      size_estimate: "~3 GB",
+      ram_minimum: "6 GB",
+      description: "MoE: 8B total, 4B active. Near Qwen3-8B quality at half the size. 110+ t/s on any GPU.",
+      min_ram_gb: 6,
+    },
+    // ── Standard — best universal choice ──────────────────────────
+    {
+      name: "Qwen3-8B",
+      file_name: "Qwen3-8B-Q4_K_M.gguf",
+      url: "https://huggingface.co/Qwen/Qwen3-8B-GGUF/resolve/main/Qwen3-8B-Q4_K_M.gguf",
+      size_estimate: "~5 GB",
+      ram_minimum: "12 GB",
+      description: "Best cross-platform daily driver. Fits in 8GB VRAM. /no_think for structured tasks. 131K context.",
+      min_ram_gb: 12,
     },
     {
-      name: "Qwen 2.5 14B",
-      file_name: "qwen2.5-14b-instruct-q4_k_m.gguf",
-      url: "https://huggingface.co/Qwen/Qwen2.5-14B-Instruct-GGUF/resolve/main/qwen2.5-14b-instruct-q4_k_m.gguf",
-      size_estimate: "~9 GB",
-      ram_minimum: "32 GB",
-      description: "Higher quality. Better at reasoning and coding.",
+      name: "Qwen3-14B",
+      file_name: "Qwen3-14B-Q4_K_M.gguf",
+      url: "https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/main/Qwen3-14B-Q4_K_M.gguf",
+      size_estimate: "~8.4 GB",
+      ram_minimum: "20 GB",
+      description: "Dense 14B. Stronger reasoning and coding than 8B. Best option for RTX 4060 users needing higher quality.",
+      min_ram_gb: 20,
+    },
+    // ── Workstation — unified-memory systems (Apple Silicon, Strix Halo) ──
+    {
+      name: "Qwen3-30B-A3B",
+      file_name: "Qwen3-30B-A3B-Q4_K_M.gguf",
+      url: "https://huggingface.co/Qwen/Qwen3-30B-A3B-GGUF/resolve/main/Qwen3-30B-A3B-Q4_K_M.gguf",
+      size_estimate: "~17 GB",
+      ram_minimum: "24 GB",
+      description: "MoE: 3B active, 30B knowledge. 86 t/s on Strix Halo, ~100 t/s on Apple Silicon. Avoid on 8GB VRAM GPUs.",
       min_ram_gb: 24,
     },
     {
-      name: "Qwen 2.5 32B",
-      file_name: "qwen2.5-32b-instruct-q4_k_m.gguf",
-      url: "https://huggingface.co/Qwen/Qwen2.5-32B-Instruct-GGUF/resolve/main/qwen2.5-32b-instruct-q4_k_m.gguf",
-      size_estimate: "~20 GB",
-      ram_minimum: "48 GB",
-      description: "Excellent quality for deep reasoning workloads.",
-      min_ram_gb: 40,
+      name: "Gemma 4 26B-A4B",
+      file_name: "gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+      url: "https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
+      size_estimate: "~15 GB",
+      ram_minimum: "24 GB",
+      description: "Arena-tier MoE quality. 4B active params. Fast on unified-memory systems. Slow on 8GB VRAM GPUs.",
+      min_ram_gb: 24,
     },
     {
-      name: "Qwen 2.5 72B",
-      file_name: "qwen2.5-72b-instruct-q4_k_m.gguf",
-      url: "https://huggingface.co/Qwen/Qwen2.5-72B-Instruct-GGUF/resolve/main/qwen2.5-72b-instruct-q4_k_m.gguf",
-      size_estimate: "~42 GB",
-      ram_minimum: "96 GB",
-      description: "Frontier-class local model. Requires a workstation.",
-      min_ram_gb: 80,
+      name: "Qwen3.6-35B-A3B",
+      file_name: "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+      url: "https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+      size_estimate: "~20 GB",
+      ram_minimum: "32 GB",
+      description: "Best coding MoE. 3B active, 35B knowledge. 64 t/s on Strix Halo, ~90 t/s on Apple Silicon. Avoid on 8GB VRAM GPUs.",
+      min_ram_gb: 32,
     },
   ];
 
@@ -137,17 +159,22 @@
   // Active model list — embed models are all small enough to always show.
   let activeModels = $derived(embedMode ? EMBED_MODELS : RECOMMENDED_MODELS);
 
-  // Models that fit in this system's RAM (with a 2 GB headroom).
+  // Models that fit in this system's RAM (with a 2 GB headroom),
+  // with the recommended pick sorted to the front.
   let visibleModels = $derived.by(() => {
     if (!hardware) return activeModels.slice(0, 3);
     const ram = hardware.system_ram_gb;
-    return activeModels.filter((m) => m.min_ram_gb + 2 <= ram);
+    const fits = activeModels.filter((m) => m.min_ram_gb + 2 <= ram);
+    if (fits.length === 0) return fits;
+    // Recommended = largest that fits. Move it to position 0.
+    const recommended = fits[fits.length - 1];
+    return [recommended, ...fits.slice(0, fits.length - 1)];
   });
 
-  // Largest model that fits — flagged as the recommendation.
+  // First entry is always the recommended pick (after the sort above).
   let recommendedFileName = $derived.by(() => {
     if (!hardware || visibleModels.length === 0) return null;
-    return visibleModels[visibleModels.length - 1].file_name;
+    return visibleModels[0].file_name;
   });
 
   onMount(async () => {
@@ -161,18 +188,6 @@
         downloadTotalBytes = p.total_bytes;
 
         if (p.status === "complete") {
-          // Add to discovered list and auto-select.
-          const home = "~/.sovereign/models/";
-          const newModel: DiscoveredModel = {
-            path:
-              p.file_name.includes("/")
-                ? p.file_name
-                : home + p.file_name,
-            file_name: p.file_name,
-            size_bytes: p.downloaded_bytes,
-            location_label: "Sovereign Models",
-          };
-          // Re-scan to get the real path.
           rescan(p.file_name);
           downloading = null;
         } else if (p.status === "error") {
@@ -450,7 +465,7 @@
     <div class="selected-indicator">
       <code>{selectedPath}</code>
       <span class="selected-role">
-        chat · search · atlas enrichment
+        {embedMode ? "embedding · retrieval · atlas" : "chat · search · atlas enrichment"}
       </span>
     </div>
   {/if}

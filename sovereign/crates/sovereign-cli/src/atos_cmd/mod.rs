@@ -44,6 +44,7 @@ pub(crate) mod feature;
 pub(crate) mod milestone;
 pub(crate) mod plugin;
 pub(crate) mod provision;
+pub(crate) mod run;
 pub(crate) mod spec;
 pub(crate) mod status;
 mod stores;
@@ -86,6 +87,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
             provision::cmd_provision(rest).await
         }
         "next" => milestone::cmd_next(rest).await,
+        "run" => run::cmd_run(rest).await,
         "start-milestone" => {
             announce(
                 "sovereign atos start-milestone",
@@ -166,6 +168,12 @@ fn print_help() {
          \x20   provision <id>        --charter <path>   (structured charter: parses ## Milestones)\n\
          \x20   provision <id>        --title <t> --charter <path> [--sovereign-md <path>] [--stop-cmd <shell>]\n\
          \x20   next [<feature-id>]   [--yes] [--driver claude|opencode]\n\
+         \x20   run                   --workdir <path> [--design <p>] [--charter <p>] [--plan <p>]\n\
+         \x20                         [--feature-id <id>] [--driver opencode|claude]\n\
+         \x20                         [--max-iters N] [--reviewer-model <id>] [--dry-run]\n\
+         \x20                         Ralph-wiggum-style loop: spawn driver, wait for DONE.md,\n\
+         \x20                         have a reviewer judge it against the charter, repeat.\n\
+         \x20                         See sovereign/docs/ATOS_RUNNER.md.\n\
          \x20   start-milestone <id>  --brief <path> [--driver claude|opencode]\n\
          \x20   end-milestone <id>    [--ordinal N]\n\
          \x20   archive <id>          --reason <text>\n\

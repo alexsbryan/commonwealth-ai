@@ -306,7 +306,9 @@ impl ConversationStore for PostgresStateStore {
 
         let rows = client
             .query(
-                "SELECT id, title, created_at, updated_at FROM conversations \
+                "SELECT id, title, created_at, updated_at, skill_id FROM conversations \
+                 WHERE deleted_at IS NULL \
+                   AND (skill_id IS NULL OR skill_id != 'inner-work') \
                  ORDER BY updated_at DESC LIMIT $1 OFFSET $2",
                 &[&(limit as i64), &(offset as i64)],
             )
@@ -323,7 +325,7 @@ impl ConversationStore for PostgresStateStore {
                 updated_at: r.get("updated_at"),
                 version: 0,
                 deleted_at: None,
-                skill_id: None,
+                skill_id: r.get("skill_id"),
             })
             .collect())
     }

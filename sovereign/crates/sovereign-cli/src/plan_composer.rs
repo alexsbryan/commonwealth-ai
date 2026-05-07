@@ -249,6 +249,17 @@ fn derive_section_body_summary(body: &str) -> String {
 
 // ─── Markdown rendering ────────────────────────────────────────────
 
+/// Render the plan markdown given a (possibly post-composition-mutated)
+/// item list. `cmd_plan` calls this directly after the inference
+/// enrichment pass mutates `body` / `stop_hint` on each item.
+pub fn render(
+    input: &ComposeInputs<'_>,
+    items: &[ComposedPlanItem],
+    design_hash: &str,
+) -> String {
+    render_markdown(input, items, design_hash)
+}
+
 fn render_markdown(
     input: &ComposeInputs<'_>,
     items: &[ComposedPlanItem],

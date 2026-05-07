@@ -21,6 +21,7 @@ pub(super) const BOOLEAN_FLAGS: &[&str] = &[
     "red-team",
     "auto",
     "dry-run",
+    "fresh-plan",
 ];
 
 /// Split `args` into `(positional, flag_pairs)`. Value-taking flags

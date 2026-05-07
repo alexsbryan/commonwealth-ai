@@ -70,6 +70,64 @@ fn translate_stream_usage(u: CoreStreamUsage) -> wire::StreamUsage {
     }
 }
 
+/// Convert a fully-buffered `ChatCompletionResponse` into a sequence
+/// of stream frames that, when serialised as OpenAI SSE chunks,
+/// honour the streaming-with-tools wire shape clients (opencode,
+/// `openai-python`) expect:
+///
+/// 1. Optional `Token(content)` — only when the assistant message has
+///    non-empty prose alongside the tool calls. Most tool-only turns
+///    skip this entirely.
+/// 2. `ToolCalls(...)` — the full set of parsed tool calls in one
+///    frame. `routes_inference::serve_local_stream` renders this with
+///    `delta.role = "assistant"` and `delta.tool_calls = [...]` per
+///    OpenAI's chunk schema.
+/// 3. `Finish { reason, usage }` — terminal frame, reason is whatever
+///    the non-streaming path settled on (`tool_calls` when calls were
+///    parsed, `stop` otherwise).
+///
+/// Trade-off: this loses token-by-token streaming for tool turns
+/// (the parser only finds `<tool_call>` markup once generation
+/// completes). For ATOS-style agentic workflows that's acceptable —
+/// tool turns are short bursts, and the round-trip clients care about
+/// is the structured tool_call payload, not the keystroke cadence.
+fn synthesize_tool_stream(
+    resp: ChatCompletionResponse,
+) -> Vec<wire::StreamFrame> {
+    let mut frames: Vec<wire::StreamFrame> = Vec::with_capacity(3);
+
+    let choice = resp.choices.into_iter().next();
+    let (content, tool_calls, finish_reason_str) = match choice {
+        Some(c) => (
+            c.message.content,
+            c.message.tool_calls.unwrap_or_default(),
+            c.finish_reason.unwrap_or_else(|| "stop".into()),
+        ),
+        None => (String::new(), Vec::new(), "stop".into()),
+    };
+
+    if !content.trim().is_empty() {
+        frames.push(wire::StreamFrame::Token(content));
+    }
+    if !tool_calls.is_empty() {
+        frames.push(wire::StreamFrame::ToolCalls(tool_calls));
+    }
+    let reason = match finish_reason_str.as_str() {
+        "tool_calls" => wire::FinishReason::ToolCalls,
+        "length" => wire::FinishReason::Length,
+        "content_filter" => wire::FinishReason::ContentFilter,
+        "cancelled" => wire::FinishReason::Cancelled,
+        _ => wire::FinishReason::Stop,
+    };
+    let usage = resp.usage.map(|u| wire::StreamUsage {
+        prompt_tokens: u.prompt_tokens,
+        completion_tokens: u.completion_tokens,
+        total_tokens: u.total_tokens,
+    });
+    frames.push(wire::StreamFrame::Finish { reason, usage });
+    frames
+}
+
 /// Wraps a sovereign-core `InferenceProvider` so it can answer
 /// Commonwealth-flavoured `/v1/chat/completions` requests from
 /// peers on the mesh. Held inside an `Arc` — cheap to clone,
@@ -486,22 +544,27 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         Pin<Box<dyn Stream<Item = commonwealth_api::openai_types::StreamFrame> + Send>>,
         String,
     > {
-        // Streaming + tool_calls is not supported in M2. OpenAI's
-        // streaming tool-call frames (delta.tool_calls[i].function.
-        // arguments partial JSON) add enough complexity that we'd
-        // rather land the non-streaming tool path first and revisit.
-        // Fail loud so clients can downgrade rather than silently
-        // getting tool-less text.
-        if request.tools.as_ref().is_some_and(|t| !t.is_empty()) {
-            tracing::warn!(
-                tools_count = request.tools.as_ref().map(|t| t.len()).unwrap_or(0),
-                "inference adapter: streaming+tools is unsupported in M2"
+        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+
+        // Streaming + tool_calls path. Local backends parse the
+        // `<tool_call>` markup AFTER the model finishes generating, so
+        // genuine token-by-token streaming for tool turns isn't
+        // possible without re-architecting the parser. Instead we
+        // route through the non-streaming `chat_completion` (which
+        // already handles tool extraction, content cleanup, and
+        // finish_reason logic) and synthesize an OpenAI-shaped stream
+        // from the response. opencode and other clients that always
+        // request `stream=true` once tools are bound now succeed
+        // instead of getting a 503.
+        if tools_present {
+            let resp = self.chat_completion(request).await?;
+            let frames = synthesize_tool_stream(resp);
+            tracing::info!(
+                "sovereign inference adapter: tools-streaming served via synthetic SSE \
+                 ({} synthetic frame(s))",
+                frames.len()
             );
-            return Err(
-                "streaming with tools is not supported yet; re-send with stream=false \
-                 (non-streaming tool round-trip is available)"
-                    .to_string(),
-            );
+            return Ok(Box::pin(futures::stream::iter(frames)));
         }
 
         let req = self.build_completion_request(&request);

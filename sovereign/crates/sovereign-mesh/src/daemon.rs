@@ -1640,6 +1640,9 @@ fn register_local_model_slots(
         ("fast".into(), cfg.models.fast.as_path()),
         ("embed".into(), cfg.models.embed.as_path()),
     ];
+    if let Some(code_path) = cfg.models.code.as_ref() {
+        slots.push(("code".into(), code_path.as_path()));
+    }
     // Operator-declared additional chat slots from `[models.extra]`
     // also need to land in `inference_store` so `/v1/models`
     // advertises them. Without this entry, clients sending
@@ -1648,6 +1651,17 @@ fn register_local_model_slots(
     for (slot_name, path) in cfg.models.extra.iter() {
         slots.push((format!("extras:{slot_name}"), path.as_path()));
     }
+
+    // Build a slot-name → model_id map so OpenAI-shape clients can
+    // address slots by role (`primary`, `fast`, `code`) instead of
+    // GGUF stem. The same stem is registered under both the bare
+    // alias (`primary`) and a `commonwealth/`-namespaced form so
+    // opencode's provider/model addressing convention works without
+    // the operator hand-curating their `provider.commonwealth.models`
+    // map. Code-slot also gets a `coder` synonym since OICP's hint
+    // vocabulary calls the capability `code` while operators
+    // colloquially say "coder".
+    let mut slot_aliases: HashMap<String, String> = HashMap::new();
 
     for (role, path) in &slots {
         let role: &str = role.as_str();
@@ -1699,6 +1713,37 @@ fn register_local_model_slots(
             name = %info.name,
             "registered local model in inference_store"
         );
+
+        // Add the slot alias entries. Skip extras: they're routed by
+        // their slot key directly (the `[models.extra]` map already
+        // gives the operator a stable name); only the canonical four
+        // (primary/fast/embed/code) need alias indirection because
+        // their backing GGUF can swap freely.
+        match role {
+            "primary" | "fast" | "embed" | "code" => {
+                slot_aliases.insert(role.to_string(), info.name.clone());
+                slot_aliases.insert(
+                    format!("commonwealth/{role}"),
+                    info.name.clone(),
+                );
+                if role == "code" {
+                    slot_aliases.insert("coder".into(), info.name.clone());
+                    slot_aliases.insert(
+                        "commonwealth/coder".into(),
+                        info.name.clone(),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if !slot_aliases.is_empty() {
+        info!(
+            count = slot_aliases.len(),
+            "installing slot alias map for chat_completions / list_models"
+        );
+        app_state.install_slot_aliases(slot_aliases);
     }
 }
 

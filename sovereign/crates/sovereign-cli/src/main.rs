@@ -35,6 +35,7 @@ mod observation;
 mod phases;
 mod plan_cmd;
 mod plan_composer;
+mod plan_enricher;
 mod project_cmd;
 mod project_toml;
 mod reading_diag_cmd;

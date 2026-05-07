@@ -3858,6 +3858,43 @@ pub struct ParsedToolCall {
 /// Observability: the parser stays pure (no I/O); the caller is
 /// responsible for logging. This keeps the function unit-testable
 /// without a tracing subscriber.
+/// Find the byte length of a balanced JSON object starting at the
+/// first `{` in `s`. String-aware (won't trip on `}` inside `"..."`
+/// values). Returns None when the input doesn't contain a complete
+/// `{...}` (depth never returns to zero) — which is also the
+/// "model truncated mid-emission" signal we use to abandon parsing.
+///
+/// Used by the lenient tool-call extractor when `</tool_call>` is
+/// missing. Some quantized models reliably emit `<tool_call>{...}`
+/// with a valid JSON object but never close the XML tag; falling
+/// back to brace-balancing recovers the call instead of dropping it.
+fn find_balanced_json_end(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let start = bytes.iter().position(|&b| b == b'{')?;
+    let mut depth: i32 = 0;
+    let mut in_str = false;
+    let mut esc = false;
+    for (i, &b) in bytes.iter().enumerate().skip(start) {
+        if esc {
+            esc = false;
+            continue;
+        }
+        match b {
+            b'\\' if in_str => esc = true,
+            b'"' => in_str = !in_str,
+            b'{' if !in_str => depth += 1,
+            b'}' if !in_str => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 pub fn parse_tool_calls_from_text(text: &str) -> Vec<ParsedToolCall> {
     let mut out = Vec::new();
     let mut cursor = 0usize;
@@ -3866,19 +3903,32 @@ pub fn parse_tool_calls_from_text(text: &str) -> Vec<ParsedToolCall> {
         // Find the matching closer. Use the literal `</tool_call>`
         // marker — we intentionally do NOT allow nested `<tool_call>`
         // blocks (Qwen3.5 never emits them).
-        let Some(rel_end) = text[start..].find("</tool_call>") else {
-            // Unterminated tag: stop scanning. Anything after this point
-            // can't be a valid tool call even if further `<tool_call>`
-            // markers exist, because nesting isn't allowed.
-            break;
+        //
+        // Lenient mode: some quantized models emit `<tool_call>` then
+        // the JSON body but forget the closing `</tool_call>` tag
+        // (FINAL-Bench at Q6_K_M shows this consistently). When the
+        // closer is missing, fall back to brace-balancing inside the
+        // remaining text — if we find a complete JSON object, use
+        // its end as the implicit closer and continue scanning.
+        let (body, advance) = match text[start..].find("</tool_call>") {
+            Some(rel_end) => (
+                text[start..start + rel_end].trim().to_string(),
+                start + rel_end + "</tool_call>".len(),
+            ),
+            None => match find_balanced_json_end(&text[start..]) {
+                Some(json_len) => {
+                    let body = text[start..start + json_len].trim().to_string();
+                    (body, start + json_len)
+                }
+                None => break, // can't recover; stop scanning
+            },
         };
-        let body = text[start..start + rel_end].trim();
-        cursor = start + rel_end + "</tool_call>".len();
+        cursor = advance;
 
         // Parse the body. Accept either:
         //   {"name": "...", "arguments": {...}}
         //   {"name": "...", "arguments": "<string>"}
-        match serde_json::from_str::<serde_json::Value>(body) {
+        match serde_json::from_str::<serde_json::Value>(&body) {
             Ok(obj) => {
                 let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
                     continue; // malformed — skip (caller may log via diagnostic API below)
@@ -3911,12 +3961,29 @@ pub fn parse_tool_calls_with_errors(text: &str) -> (Vec<ParsedToolCall>, Vec<Str
     let mut cursor = 0usize;
     while let Some(rel_start) = text[cursor..].find("<tool_call>") {
         let start = cursor + rel_start + "<tool_call>".len();
-        let Some(rel_end) = text[start..].find("</tool_call>") else {
-            errors.push(text[start..].to_string());
-            break;
+        // Same lenient closer behaviour as `parse_tool_calls_from_text`:
+        // accept missing `</tool_call>` when the body parses as a
+        // balanced JSON object. Models with damaged closing-tag
+        // emission (FINAL-Bench Q6_K_M) emit valid call payloads
+        // surrounded by half-broken markup.
+        let (body, advance) = match text[start..].find("</tool_call>") {
+            Some(rel_end) => (
+                text[start..start + rel_end].trim().to_string(),
+                start + rel_end + "</tool_call>".len(),
+            ),
+            None => match find_balanced_json_end(&text[start..]) {
+                Some(json_len) => {
+                    let body = text[start..start + json_len].trim().to_string();
+                    (body, start + json_len)
+                }
+                None => {
+                    errors.push(text[start..].to_string());
+                    break;
+                }
+            },
         };
-        let body = text[start..start + rel_end].trim();
-        cursor = start + rel_end + "</tool_call>".len();
+        cursor = advance;
+        let body = body.as_str();
 
         match serde_json::from_str::<serde_json::Value>(body) {
             Ok(obj) => {
@@ -4035,6 +4102,69 @@ fn prop_type_rule(schema: &serde_json::Value) -> &'static str {
         Some("number") => "number",
         Some("boolean") => "boolean",
         _ => "string", // default to string for unknown types
+    }
+}
+
+#[cfg(test)]
+mod parse_tool_calls_tests {
+    //! Lock the parser's behaviour against the two real-world model
+    //! emission failure modes:
+    //!   1. **Closed tags** — happy path, both `<tool_call>` and
+    //!      `</tool_call>` present (Qwen3.5 baseline).
+    //!   2. **Missing closing tag** — quantized models (FINAL-Bench
+    //!      Q6_K_M observed) emit `<tool_call>{...JSON...}` and
+    //!      stop without `</tool_call>`. The lenient brace-balancer
+    //!      recovers the call instead of dropping it.
+    use super::{parse_tool_calls_from_text, parse_tool_calls_with_errors};
+
+    #[test]
+    fn closed_tag_extracts_one_call() {
+        let text = r#"prelude <tool_call>{"name":"write","arguments":{"path":"a.rs"}}</tool_call> tail"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "write");
+        assert!(calls[0].arguments.contains("a.rs"));
+    }
+
+    #[test]
+    fn missing_closing_tag_with_balanced_json_recovers() {
+        // FINAL-Bench Q6_K_M reliably truncates the closing tag.
+        // We accept the body when the JSON balances cleanly.
+        let text = r#"<tool_call>{"name":"write","arguments":{"filePath":"Cargo.toml","content":"[package]\nname = \"x\"\n"}}"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1, "lenient mode should recover the call");
+        assert_eq!(calls[0].name, "write");
+        assert!(calls[0].arguments.contains("Cargo.toml"));
+    }
+
+    #[test]
+    fn missing_closing_tag_with_truncated_json_returns_no_calls() {
+        // Body never balances — model truncated mid-string. Drop it
+        // rather than emit a corrupt call. `_with_errors` should also
+        // surface the leftover so telemetry catches it.
+        let text = r#"<tool_call>{"name":"write","arguments":{"content":"unterminated string"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert!(calls.is_empty());
+        let (out, errors) = parse_tool_calls_with_errors(text);
+        assert!(out.is_empty());
+        assert_eq!(errors.len(), 1);
+    }
+
+    #[test]
+    fn brace_inside_string_does_not_close_early() {
+        // A string value containing `}` shouldn't close the JSON.
+        let text = r#"<tool_call>{"name":"write","arguments":{"content":"loop { x += 1; }"}}"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 1);
+    }
+
+    #[test]
+    fn multiple_calls_extract_in_order_even_with_mixed_closers() {
+        let text = r#"<tool_call>{"name":"a","arguments":{}}</tool_call>some text<tool_call>{"name":"b","arguments":{"x":1}}"#;
+        let calls = parse_tool_calls_from_text(text);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].name, "a");
+        assert_eq!(calls[1].name, "b");
     }
 }
 

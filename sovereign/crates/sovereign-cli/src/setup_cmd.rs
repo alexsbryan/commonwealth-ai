@@ -14,9 +14,21 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use futures::StreamExt as _;
-use sovereign_core::models_manifest::{DEFAULT_MANIFEST, SlotConfig};
-use sovereign_inference::hardware::{self, HardwareProfile, ProfileName};
+use sovereign_core::models_manifest::SlotConfig;
+use sovereign_inference::hardware::{self, HardwareProfile};
+use sovereign_inference::setup_planner::{
+    build_primary_catalog, download_gguf, hf_download_url, resolve_slot,
+    PrimaryOption, SlotKind,
+};
+
+// Imports used only by the in-file test modules. Kept behind
+// `#[cfg(test)]` so a non-test `cargo check` doesn't warn.
+#[cfg(test)]
+use sovereign_core::models_manifest::DEFAULT_MANIFEST;
+#[cfg(test)]
+use sovereign_inference::hardware::ProfileName;
+#[cfg(test)]
+use sovereign_inference::setup_planner::{hf_token, tier_rank};
 
 use crate::service_install;
 use crate::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
@@ -317,108 +329,16 @@ fn print_usage() {
 }
 
 // ─── Model catalog + picker ───────────────────────────────────────
-
-#[derive(Clone)]
-struct PrimaryOption {
-    /// Profile this slot was drawn from — `Some("high")` etc. `None`
-    /// means "recommended for your hardware" (the pick-by-default row).
-    #[allow(dead_code)]
-    profile: &'static str,
-    slot: SlotConfig,
-    recommended: bool,
-}
-
-impl std::ops::Deref for PrimaryOption {
-    type Target = SlotConfig;
-    fn deref(&self) -> &Self::Target { &self.slot }
-}
+//
+// Catalog construction (`build_primary_catalog`, `tier_rank`,
+// `resolve_slot`, `SlotKind`, `PrimaryOption`) lives in
+// `sovereign_inference::setup_planner` so the desktop's
+// `complete_setup_auto` flow shares the same logic. Imported above.
 
 enum Pick {
     Slot(SlotConfig),
     Byom,
     Abort,
-}
-
-enum SlotKind {
-    Fast,
-    Embed,
-}
-
-/// Build the curated list of primary-model options for the user's
-/// profile tier: the profile's own `thoughtful` slot (marked
-/// recommended), plus each smaller profile's thoughtful slot so the
-/// user can opt into a faster / smaller model if they prefer.
-fn build_primary_catalog(profile: &ProfileName) -> Vec<PrimaryOption> {
-    // Walk from very_high down to cpu_only; include a tier iff it's
-    // at-or-below the user's tier (so a "default" machine doesn't see
-    // the 27B or 35B-A3B thoughtful slots).
-    let order = [
-        ("very_high", ProfileName::VeryHigh),
-        ("high", ProfileName::High),
-        ("default", ProfileName::Default),
-        ("low_mem", ProfileName::LowMem),
-        ("cpu_only", ProfileName::CpuOnly),
-    ];
-    let max_tier_rank = tier_rank(profile);
-
-    let mut out = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    for (name, p) in order {
-        if tier_rank(&p) > max_tier_rank {
-            continue; // too big for this hardware
-        }
-        let Some(prof_cfg) = DEFAULT_MANIFEST.profiles.get(name) else {
-            continue;
-        };
-        let Some(slot) = prof_cfg.thoughtful.clone() else {
-            continue;
-        };
-        // Dedupe by base_name (or filename fallback) so the list is
-        // compact when neighbouring tiers share a model.
-        let key = if slot.base_name.is_empty() { slot.file.clone() } else { slot.base_name.clone() };
-        if !seen.insert(key) {
-            continue;
-        }
-        out.push(PrimaryOption {
-            profile: name,
-            recommended: &p == profile,
-            slot,
-        });
-    }
-    out
-}
-
-fn tier_rank(p: &ProfileName) -> u8 {
-    match p {
-        ProfileName::CpuOnly => 0,
-        ProfileName::LowMem => 1,
-        ProfileName::Default => 2,
-        ProfileName::High => 3,
-        ProfileName::VeryHigh => 4,
-    }
-}
-
-fn resolve_slot(profile: &ProfileName, kind: SlotKind) -> Option<SlotConfig> {
-    let profile_name = match *profile {
-        ProfileName::CpuOnly => "cpu_only",
-        ProfileName::LowMem => "low_mem",
-        ProfileName::Default => "default",
-        ProfileName::High => "high",
-        ProfileName::VeryHigh => "very_high",
-    };
-    let prof_cfg = DEFAULT_MANIFEST.profiles.get(profile_name)?;
-    let slot = match kind {
-        SlotKind::Fast => prof_cfg.fast.clone(),
-        SlotKind::Embed => prof_cfg.embed.clone(),
-    };
-    slot.or_else(|| {
-        // Fallback: the `default` profile always has all three slots.
-        let default = DEFAULT_MANIFEST.profiles.get("default")?;
-        match kind {
-            SlotKind::Fast => default.fast.clone(),
-            SlotKind::Embed => default.embed.clone(),
-        }
-    })
 }
 
 /// Render the numbered picker, handle the `[b]` BYOM branch, and return
@@ -546,35 +466,20 @@ fn prompt_path(label: &str) -> Result<Option<PathBuf>, String> {
 }
 
 // ─── Downloaders ───────────────────────────────────────────────────
+//
+// URL building, resume-aware streaming, GGUF validation, and the
+// HF_TOKEN env helper all live in
+// `sovereign_inference::setup_planner` so the desktop's
+// `complete_setup_auto` flow can call the same code. The two
+// thin wrappers below adapt that downloader to the CLI's
+// stderr-renderer style — the CLI prints a ╲ progress bar with
+// `print_progress`, the desktop emits Tauri events.
 
-/// Build the direct GGUF download URL from a manifest slot. The
-/// `hf_url` field in `models.toml` is the *repo* URL
-/// (`https://huggingface.co/Qwen/Qwen3-1.7B-GGUF`), not the file URL,
-/// so we append `/resolve/main/<file>` to land on the raw LFS blob.
-///
-/// This matches the canonical path `huggingface-cli download` would
-/// resolve; it handles the LFS redirect server-side and supports HTTP
-/// Range (crucial for resume).
-fn hf_download_url(slot: &SlotConfig) -> String {
-    let repo = slot
-        .hf_url
-        .trim_end_matches('/')
-        .strip_prefix("https://huggingface.co/")
-        .unwrap_or(&slot.hf_url);
-    // If the URL is already a /resolve/ URL (e.g. someone wrote the
-    // direct form), don't double-append.
-    if slot.hf_url.contains("/resolve/") {
-        slot.hf_url.clone()
-    } else {
-        format!("https://huggingface.co/{repo}/resolve/main/{}", slot.file)
-    }
-}
-
-
-/// Download `url` to `dest`, resuming a partial `.part` sibling if one
-/// exists. Streams bytes through a pretty progress bar showing the
-/// filename and percentage. Overwrite semantics: if `dest` already
-/// exists and has non-zero length, treat it as complete (skip).
+/// Download `url` to `dest`, streaming a percentage bar to stderr.
+/// Resumes from a `.part` sibling if one exists; rejects HTML
+/// error pages before they hit disk; validates the result against
+/// the slot's advertised `size_gb`. If `dest` already exists and
+/// validates, prints a "(already present)" line and returns Ok.
 pub(crate) async fn download_with_progress(
     url: &str,
     dest: &Path,
@@ -583,187 +488,42 @@ pub(crate) async fn download_with_progress(
 ) -> Result<(), String> {
     let expected = sovereign_inference::GgufExpectation::from_size_gb(size_gb);
 
-    if has_content(dest) {
-        // Don't blindly trust a pre-existing file — a prior setup
-        // run may have left an HTML error page at this path. If
-        // it's not a plausible GGUF, remove and re-download.
-        match sovereign_inference::validate_gguf(dest, &expected) {
-            Ok(()) => {
-                println!("    \u{2713} {display} (already present)");
-                return Ok(());
-            }
-            Err(e) => {
-                eprintln!("    \u{26a0} {display} exists but is invalid: {e}");
-                eprintln!("      re-downloading");
-                let _ = std::fs::remove_file(dest);
-            }
-        }
-    }
-    let part = dest.with_extension("part");
-    let resume_from = part.metadata().map(|m| m.len()).unwrap_or(0);
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(60 * 60))
-        .build()
-        .map_err(|e| format!("build http client: {e}"))?;
-    let mut req = client.get(url);
-    if resume_from > 0 {
-        req = req.header("Range", format!("bytes={resume_from}-"));
-    }
-    if let Some(tok) = hf_token() {
-        req = req.bearer_auth(tok);
-    }
-    let resp = req.send().await.map_err(|e| format!("GET {url}: {e}"))?;
-    if !resp.status().is_success() && resp.status().as_u16() != 206 {
-        return Err(format!("GET {url}: {}", resp.status()));
+    // The shared downloader doesn't print "(already present)" on
+    // its own — surface that here for parity with the prior CLI
+    // behavior. (`download_gguf` *does* still skip the work; we
+    // just want the line to print.)
+    if dest.metadata().map(|m| m.len() > 0).unwrap_or(false)
+        && sovereign_inference::validate_gguf(dest, &expected).is_ok()
+    {
+        println!("    \u{2713} {display} (already present)");
+        return Ok(());
     }
 
-    // Pre-stream sniff: HuggingFace's CDN sometimes returns a 200
-    // OK with `content-type: text/html` when it thinks we're a
-    // bot, and the body is an error page. Surface that before we
-    // stream MB of HTML to disk.
-    if let Err(e) = reject_non_binary_content_type(&resp, url) {
-        return Err(e);
-    }
-
-    let total = resp.content_length().map(|c| c + resume_from);
-
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(resume_from > 0)
-        .write(true)
-        .truncate(resume_from == 0)
-        .open(&part)
-        .map_err(|e| format!("open {}: {e}", part.display()))?;
-
-    let mut stream = resp.bytes_stream();
-    let mut downloaded = resume_from;
-    let mut last_print = std::time::Instant::now();
     eprint!("    {display}  ");
     io::stderr().flush().ok();
-    while let Some(chunk) = stream.next().await {
-        let bytes = chunk.map_err(|e| format!("stream: {e}"))?;
-        std::io::Write::write_all(&mut file, &bytes)
-            .map_err(|e| format!("write {}: {e}", part.display()))?;
-        downloaded += bytes.len() as u64;
-        if last_print.elapsed() > Duration::from_millis(250) {
-            print_progress(display, downloaded, total);
-            last_print = std::time::Instant::now();
+
+    let display_owned = display.to_string();
+    let last_print = std::sync::Mutex::new(std::time::Instant::now() - Duration::from_secs(1));
+    let result = download_gguf(url, dest, &expected, &|done, total| {
+        let mut lp = last_print.lock().unwrap();
+        if lp.elapsed() > Duration::from_millis(250)
+            || total.map(|t| done >= t).unwrap_or(false)
+        {
+            print_progress(&display_owned, done, total);
+            *lp = std::time::Instant::now();
         }
-    }
-    print_progress(display, downloaded, total);
+    })
+    .await;
     eprintln!();
-    drop(file);
-
-    // Post-stream validation: catches cases the content-type
-    // sniff missed (some CDN paths return `application/octet-
-    // stream` on the error page) AND truncated real downloads
-    // where the first few MB are a valid GGUF header but the
-    // rest is cut off. On failure delete `.part` so a retry
-    // starts from zero rather than resuming a partial bogus file.
-    if let Err(e) = sovereign_inference::validate_gguf(&part, &expected) {
-        let _ = std::fs::remove_file(&part);
-        return Err(format!("download validation failed: {e}"));
-    }
-
-    std::fs::rename(&part, dest)
-        .map_err(|e| format!("rename {} -> {}: {e}", part.display(), dest.display()))?;
-    Ok(())
+    result
 }
 
-/// Return `Err` if the HTTP response advertises a non-binary
-/// content type. The GGUF endpoint on HuggingFace serves
-/// `application/octet-stream` (or sometimes no content-type at
-/// all). Anything starting with `text/` or `application/json` is
-/// an error page — surface the first 200 chars so the operator
-/// can see "rate-limited" / "requires authentication" / etc.
-/// without having to curl manually.
-fn reject_non_binary_content_type(resp: &reqwest::Response, url: &str) -> Result<(), String> {
-    let Some(ct) = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-    else {
-        return Ok(());
-    };
-    let lower = ct.to_ascii_lowercase();
-    if lower.starts_with("text/") || lower.starts_with("application/json") {
-        // The body isn't captured here (that would consume the
-        // stream before we get to download); we quote just the
-        // header. `validate_gguf` after streaming catches the
-        // actual bytes if the body surprises us.
-        return Err(format!(
-            "HuggingFace returned content-type={ct} for {url} — likely \
-             bot-detection, rate limiting, or a gated-repo login page. \
-             Try setting `HF_TOKEN` before `sovereign setup` to use \
-             authenticated downloads."
-        ));
-    }
-    Ok(())
-}
-
-/// Read `HF_TOKEN` from the environment for HuggingFace bearer
-/// auth. Authenticated requests bypass the anonymous rate-limit
-/// and bot-detection paths that return HTML error pages; leaving
-/// `HF_TOKEN` unset is still fine for public models on a fresh
-/// IP, just less robust at scale.
-fn hf_token() -> Option<String> {
-    std::env::var("HF_TOKEN").ok().filter(|s| !s.is_empty())
-}
-
-/// Same as `download_with_progress` but doesn't print per-chunk
-/// progress. Used for fast + embed (we show a single ✓ when done).
+/// Same as `download_with_progress` but with no per-chunk
+/// rendering. Used for fast + embed where the CLI shows only a
+/// final ✓ line; the shared downloader does all the work.
 async fn download_silent(url: &str, dest: &Path, size_gb: f64) -> Result<(), String> {
     let expected = sovereign_inference::GgufExpectation::from_size_gb(size_gb);
-
-    if has_content(dest) {
-        if sovereign_inference::validate_gguf(dest, &expected).is_ok() {
-            return Ok(());
-        }
-        let _ = std::fs::remove_file(dest);
-    }
-    let part = dest.with_extension("part");
-    let resume_from = part.metadata().map(|m| m.len()).unwrap_or(0);
-
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(60 * 60))
-        .build()
-        .map_err(|e| format!("build http client: {e}"))?;
-    let mut req = client.get(url);
-    if resume_from > 0 {
-        req = req.header("Range", format!("bytes={resume_from}-"));
-    }
-    if let Some(tok) = hf_token() {
-        req = req.bearer_auth(tok);
-    }
-    let resp = req.send().await.map_err(|e| format!("GET {url}: {e}"))?;
-    if !resp.status().is_success() && resp.status().as_u16() != 206 {
-        return Err(format!("GET {url}: {}", resp.status()));
-    }
-    if let Err(e) = reject_non_binary_content_type(&resp, url) {
-        return Err(e);
-    }
-
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(resume_from > 0)
-        .write(true)
-        .truncate(resume_from == 0)
-        .open(&part)
-        .map_err(|e| format!("open {}: {e}", part.display()))?;
-    let mut stream = resp.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let bytes = chunk.map_err(|e| format!("stream: {e}"))?;
-        std::io::Write::write_all(&mut file, &bytes)
-            .map_err(|e| format!("write: {e}"))?;
-    }
-    drop(file);
-    if let Err(e) = sovereign_inference::validate_gguf(&part, &expected) {
-        let _ = std::fs::remove_file(&part);
-        return Err(format!("download validation failed: {e}"));
-    }
-    std::fs::rename(&part, dest).map_err(|e| format!("rename: {e}"))?;
-    Ok(())
+    download_gguf(url, dest, &expected, &|_, _| {}).await
 }
 
 /// Scan the three models referenced by `SetupConfig`, validate
@@ -865,6 +625,10 @@ fn lookup_slot_size_gb(
     None
 }
 
+// Used by the test module's `has_content_distinguishes_*` cases;
+// production paths now go through `setup_planner::download_gguf`,
+// which checks file size internally.
+#[cfg(test)]
 fn has_content(p: &Path) -> bool {
     p.metadata().map(|m| m.len() > 0).unwrap_or(false)
 }

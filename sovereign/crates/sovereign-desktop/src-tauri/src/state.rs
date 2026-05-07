@@ -560,9 +560,53 @@ impl AppState {
     }
 }
 
-/// Bootstrap the Runtime from the current config. Loads the model if not
-/// already loaded, opens the database, wires up skills/tools/routing.
+/// Per-phase progress signal for callers that want to narrate
+/// bootstrap as it advances. The desktop's `complete_setup_auto`
+/// flow maps these into its `setup-progress` Tauri events; the CLI
+/// daemon's first-boot path ignores them.
+///
+/// Variants are intentionally coarse — bootstrap is a long
+/// monolithic chain and finer-grained signals would be noise. The
+/// three points below are the user-perceptible "I've started doing
+/// X" moments.
+#[derive(Debug, Clone, Copy)]
+pub enum BootstrapPhase {
+    /// About to spawn the smoke-test subprocess (a 1-token decode
+    /// in an isolated child to detect Metal/CUDA backend crashes
+    /// before we load the model in-process).
+    SmokeTesting,
+    /// About to call `EmbeddedLlamaCpp::load_full_with_families`,
+    /// which mmaps the GGUF and brings the model online.
+    LoadingModel,
+    /// About to open the SQLite store and run migrations.
+    OpeningDatabase,
+}
+
+/// Optional progress callback for `bootstrap_with_progress`. The
+/// callback is invoked once per phase, in the order the phases
+/// occur (smoke test → model load → DB open).
+pub type BootstrapProgressCb =
+    Box<dyn Fn(BootstrapPhase) + Send + Sync + 'static>;
+
+/// Bootstrap the Runtime from the current config. Thin wrapper
+/// over `bootstrap_with_progress` for callers that don't need
+/// progress narration (legacy `complete_setup`, internal restarts).
 pub async fn bootstrap(state: &AppState) -> Result<(), String> {
+    bootstrap_with_progress(state, None).await
+}
+
+/// Bootstrap the Runtime, optionally narrating phase transitions
+/// via `on_progress`. See `BootstrapPhase` for the emission points.
+pub async fn bootstrap_with_progress(
+    state: &AppState,
+    on_progress: Option<BootstrapProgressCb>,
+) -> Result<(), String> {
+    let emit = |phase: BootstrapPhase| {
+        if let Some(ref cb) = on_progress {
+            cb(phase);
+        }
+    };
+
     let config = state.config.read().await.clone();
 
     if !config.model_path.exists() {
@@ -626,6 +670,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                 let smoke_gpu_layers = sovereign_inference::hardware::HardwareProfile::detect()
                     .recommended_gpu_layers;
                 if smoke_gpu_layers > 0 {
+                    emit(BootstrapPhase::SmokeTesting);
                     let smoke_ctx = config.context_size.min(2048);
                     tracing::info!(
                         model = %config.model_path.display(),
@@ -668,6 +713,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
                 }
             }
 
+            emit(BootstrapPhase::LoadingModel);
             let loaded = Arc::new(
                 EmbeddedLlamaCpp::load_full_with_families(
                     &config.model_path,
@@ -727,6 +773,7 @@ pub async fn bootstrap(state: &AppState) -> Result<(), String> {
             Arc::clone(s)
         } else {
             drop(existing);
+            emit(BootstrapPhase::OpeningDatabase);
             let db_path = config.data_dir.join("sovereign.db");
             if let Some(parent) = db_path.parent() {
                 std::fs::create_dir_all(parent)

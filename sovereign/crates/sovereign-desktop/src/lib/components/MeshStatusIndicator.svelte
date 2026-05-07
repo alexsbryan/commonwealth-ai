@@ -5,13 +5,6 @@
 
   const POLL_INTERVAL_MS = 10_000;
 
-  interface Props {
-    /** Called when the user clicks the indicator. Opens settings to the mesh section. */
-    onOpen: () => void;
-  }
-
-  let { onOpen }: Props = $props();
-
   let mesh: MeshStateResponse | null = $state(null);
 
   onMount(() => {
@@ -27,97 +20,49 @@
       mesh = null;
     }
   }
+
+  let label = $derived(
+    mesh
+      ? mesh.status.members_online === 1
+        ? "1 connected"
+        : `${mesh.status.members_online} connected`
+      : null
+  );
 </script>
 
-{#if mesh}
-  <button class="indicator" onclick={onOpen} title="Open mesh settings">
-    <span class="dot online" aria-hidden="true"></span>
-    <span class="net-info">
-      <span class="net-name">{mesh.status.name}</span>
-      <span class="net-count">{mesh.status.members_online} / {mesh.status.members_total} nodes</span>
-    </span>
-    <svg class="arrow" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-      <path d="M3.5 2l3 3-3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </button>
+{#if label}
+  <div class="mesh-status" aria-live="polite">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="count">{label}</span>
+  </div>
 {/if}
 
 <style>
-  .indicator {
+  .mesh-status {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-mid);
-    border-radius: var(--radius);
-    width: 100%;
-    text-align: left;
-    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
-  }
-
-  .indicator:hover {
-    background: var(--bg-elevated);
-    border-color: var(--growth);
-    box-shadow: 0 0 10px var(--growth-glow);
+    gap: 7px;
+    padding: 10px 14px;
   }
 
   .dot {
-    width: 8px;
-    height: 8px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
-    background: var(--text-muted);
-    flex-shrink: 0;
-  }
-
-  .dot.online {
     background: var(--growth);
-    box-shadow: 0 0 5px var(--growth);
+    flex-shrink: 0;
     animation: node-pulse 2.4s ease-in-out infinite;
   }
 
   @keyframes node-pulse {
-    0%, 100% {
-      box-shadow: 0 0 4px var(--growth);
-      opacity: 1;
-    }
-    50% {
-      box-shadow: 0 0 12px var(--growth), 0 0 20px var(--growth-glow);
-      opacity: 0.8;
-    }
+    0%, 100% { opacity: 1; box-shadow: 0 0 3px var(--growth); }
+    50%       { opacity: 0.7; box-shadow: 0 0 8px var(--growth); }
   }
 
-  .net-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .net-name {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .net-count {
-    font-size: 0.67rem;
-    color: var(--growth);
+  .count {
     font-family: var(--font-mono);
-    letter-spacing: 0.03em;
-  }
-
-  .arrow {
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
     color: var(--text-muted);
-    flex-shrink: 0;
-    transition: color 0.2s;
-  }
-
-  .indicator:hover .arrow {
-    color: var(--growth);
   }
 </style>

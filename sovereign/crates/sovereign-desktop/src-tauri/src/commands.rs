@@ -1391,6 +1391,37 @@ pub async fn is_setup_complete(state: State<'_, Arc<AppState>>) -> Result<bool, 
     Ok(state.config.read().await.setup_complete)
 }
 
+/// Auto-config first-launch flow. Takes no input — runs hardware
+/// probe → catalog selection → 3-model download → DB open → model
+/// load → smoke test, narrating progress on the `setup-progress`
+/// Tauri event channel. Returns when the backend is ready to serve
+/// chat. Drives the desktop's `SetupFlow.svelte` (the *lazy
+/// sunbeam* onboarding flow); the legacy `complete_setup` stays
+/// available for tests/scripts that hand-build a `SetupConfig`.
+#[tauri::command]
+pub async fn complete_setup_auto(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    crate::setup_flow::run(app_handle, state.inner().clone()).await
+}
+
+/// Fire-and-forget background install of the default
+/// `wikipedia-simple` corpus (Layer 0, ~2–3 min). Idempotent —
+/// `install_corpus` short-circuits when the daemon is already
+/// ingesting it. The desktop's `App.svelte` calls this on the
+/// transition into chat after first-launch setup completes; the
+/// install runs silently with no setup-flow UI surface, surfacing
+/// only on the regular `corpus-progress` channel that
+/// `Settings → Knowledge` already listens to.
+#[tauri::command]
+pub async fn start_default_corpus_install(
+    app_handle: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    install_corpus(app_handle, state, "wikipedia-simple".into()).await
+}
+
 #[tauri::command]
 pub async fn complete_setup(
     app_handle: tauri::AppHandle,
