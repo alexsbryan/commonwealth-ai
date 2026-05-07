@@ -18,6 +18,7 @@ Schema (strict JSON, one object):
     "aliases": ["..."],
     "entity_type": "person|concept|institution|work|place",
     "description": "<one sentence>",
+    "defining_quote": "<verbatim ≤200-char defining sentence; concept entities only; omit if no single defining sentence>",
     "anchor": "<3-8 word keyphrase>"
   }],
   "entities_developed": [{"entity_name":"...","label":"...","anchor":"..."}],
@@ -29,11 +30,25 @@ Schema (strict JSON, one object):
     "discourse_act":"argue|assert|define|hypothesize|object|retract|distinguish|interpret|imply",
     "epistemic_status":"confident|tentative|contested|retracted|attributed",
     "attributed_to":"<entity name or omit>",
+    "quotable_excerpt":"<verbatim ≤200-char sentence carrying the claim; only when attributed AND a single sentence carries it; omit if paraphrase needed>",
     "anchor":"..."
   }],
-  "questions_raised": [{"content":"...","anchor":"..."}]
+  "questions_raised": [{"content":"...","anchor":"..."}],
+  "argument_reconstructions": [{
+    "name":"<named argument, e.g. Knowledge Argument>",
+    "proponent":"<philosopher canonical name or omit>",
+    "premises":["P1...","P2...","..."],
+    "conclusion":"...",
+    "objections":[{"name":"<label>","content":"<one-sentence challenge, or \"\" for listed-names case>"}],
+    "anchor":"..."
+  }]
 }
 ```
+
+`argument_reconstructions` is **optional and sparse** — only emit
+when the section both names a philosophical argument and lays out
+its premises. Passing mentions don't qualify. Most sections produce
+no entry here.
 
 `questions_raised` is **required** (≥1 entry). For an expository
 section that explains a single view rather than framing a debate,
@@ -68,6 +83,12 @@ over the philosopher (Person) when both apply. Reserve omission for
 true article-voice statements that don't pin a commitment on a named
 entity. Attribution is the join key downstream — claims that name a
 position but lack attribution are invisible to the dialectic.
+
+**Verbatim fields.** `defining_quote` (concept entities) and
+`quotable_excerpt` (claims) are optional. When you set them, copy
+**a whole sentence** — first word to terminal punctuation, exact
+text from the section, ≤200 chars. No partial sentences, no
+paraphrase, no splices. When you can't, omit the field.
 
 Other top-level keys are optional — omit any you cannot populate.
 Never emit empty strings, `null`, `"..."`, or `"TODO"` placeholders.

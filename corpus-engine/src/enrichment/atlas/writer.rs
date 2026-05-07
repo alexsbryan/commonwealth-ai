@@ -74,6 +74,7 @@ pub fn write_atlas(
         &[],
         &[],
         &[],
+        &[],
         edges,
         &std::collections::BTreeMap::new(),
     )
@@ -101,6 +102,7 @@ pub fn write_atlas_full(
     claims: &[Claim],
     questions: &[Question],
     configurations: &[Configuration],
+    argument_reconstructions: &[crate::enrichment::atlas::atoms::ArgumentReconstruction],
     edges: &[Edge],
     trajectories: &std::collections::BTreeMap<String, Trajectory>,
 ) -> io::Result<AtlasWritten> {
@@ -123,6 +125,12 @@ pub fn write_atlas_full(
                 .iter()
                 .cloned()
                 .map(AtomEnvelope::Configuration),
+        )
+        .chain(
+            argument_reconstructions
+                .iter()
+                .cloned()
+                .map(AtomEnvelope::ArgumentReconstruction),
         )
         .collect();
     let atoms_file = AtomsFile::new(atoms);
@@ -377,6 +385,7 @@ mod tests {
             entity_type: EntityType::Person,
             first_appearance: ChunkRef::new("sec_0001", None),
             description: "x".into(),
+            defining_quote: None,
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
             affiliation: None,
@@ -432,6 +441,7 @@ mod tests {
             entity_type: EntityType::Person,
             first_appearance: ChunkRef::new("sec_0001", None),
             description: "x".into(),
+            defining_quote: None,
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
             affiliation: None,

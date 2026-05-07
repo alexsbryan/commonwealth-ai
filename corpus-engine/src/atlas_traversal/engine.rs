@@ -424,6 +424,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 
@@ -477,6 +478,7 @@ mod tests {
             attributed_to: attrib.map(AtomId::entity),
             confidence: Some(0.9),
             enrichment_depth: EnrichmentDepth::Extracted,
+            quotable_excerpt: None,
         }
     }
 

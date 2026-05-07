@@ -168,7 +168,8 @@ impl Pipeline for ReferentialAtlasPipeline {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
             ChatPrompt::new(PHASE1B_ENTITY_COVERAGE, user)
-                .with_phase_id("phase1b_entity"),
+                .with_phase_id("phase1b_entity")
+                .with_max_output_tokens(512),
         )
     }
 
@@ -180,7 +181,8 @@ impl Pipeline for ReferentialAtlasPipeline {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
             ChatPrompt::new(PHASE1B_CONCEPT_COVERAGE, user)
-                .with_phase_id("phase1b_concept"),
+                .with_phase_id("phase1b_concept")
+                .with_max_output_tokens(512),
         )
     }
 
@@ -310,7 +312,8 @@ impl Pipeline for ReferentialAtlasPipeline {
         Some(
             ChatPrompt::new(system, user)
                 .with_response_schema(schema_name, schema)
-                .with_phase_id("phase3_facet"),
+                .with_phase_id("phase3_facet")
+                .with_max_output_tokens(512),
         )
     }
 

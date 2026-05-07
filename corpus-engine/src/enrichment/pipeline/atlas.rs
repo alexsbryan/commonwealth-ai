@@ -327,6 +327,11 @@ pub struct EntitySketch {
     /// §1.2, Wittgenstein note).
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub description: String,
+    /// Verbatim ≤200-char defining sentence from the source for
+    /// `concept` entities — only populated when the section lifts a
+    /// distinct "X is..." style definition. Empty otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defining_quote: Option<String>,
     /// 3–8 word keyphrase from the source text that introduces or
     /// establishes the atom. Used by a reviewer to grep back to the
     /// passage; replaced by a `ChunkRef` during Phase 5 resolution.
@@ -408,6 +413,11 @@ pub struct ClaimSketch {
     /// structure).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attributed_to: Option<String>,
+    /// Verbatim ≤200-char excerpt from the source supporting this
+    /// claim — only populated when a single quotable sentence in
+    /// the section carries the claim. Empty otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quotable_excerpt: Option<String>,
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
 }
@@ -420,6 +430,44 @@ pub struct ClaimSketch {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct QuestionSketch {
     pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+/// A reconstruction of a named philosophical argument as it appears
+/// in the section — the explicit premise→conclusion structure the
+/// article gives. Targets the essay-judge axis "argument_depth"
+/// where the binding constraint is the article presenting *the
+/// reconstructed argument as text* even though the constituent
+/// premises are scattered across paragraphs.
+///
+/// Optional, sparse — most sections do not contain a named argument.
+/// Phase 1 extracts only when (a) the section names an argument and
+/// (b) the article reconstructs its premise structure visibly.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ArgumentReconstructionSketch {
+    /// Named argument as the article uses it ("Knowledge Argument",
+    /// "Consequence Argument", "Function Argument", etc.).
+    pub name: String,
+    /// Philosopher/figure who originated the argument, by canonical
+    /// name. Empty when the argument is article-voice or anonymous.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub proponent: String,
+    /// Premises in order. Each step is a propositional-form
+    /// statement of one premise (a paraphrase is acceptable —
+    /// argument structure is the load-bearing axis here, not exact
+    /// wording). 1-6 entries typical.
+    pub premises: Vec<String>,
+    /// Conclusion the premises support.
+    pub conclusion: String,
+    /// Named objections to this argument as the section presents
+    /// them. Each entry pairs the objection's name with one
+    /// expanded sentence of substance — the judge needs the latter
+    /// for dialectical_breadth credit, not a bare name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objections: Vec<crate::enrichment::atlas::atoms::Objection>,
+    /// 3-8 word keyphrase from the section text — same pattern as
+    /// other sketches. Replaced by `ChunkRef`s during resolution.
     #[serde(default, skip_serializing_if = "is_empty_str")]
     pub anchor: String,
 }
@@ -558,6 +606,12 @@ pub struct SectionExtraction {
     pub claims: Vec<ClaimSketch>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub questions_raised: Vec<QuestionSketch>,
+    /// Reconstructed named arguments — sparse, optional. Each entry
+    /// names an argument, its premises, conclusion, and objections.
+    /// See `ArgumentReconstructionSketch` for the shape and the
+    /// extraction discipline.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub argument_reconstructions: Vec<ArgumentReconstructionSketch>,
 }
 
 impl SectionExtraction {
@@ -661,6 +715,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 description: "Youngest Karamazov brother; novice at the monastery.".into(),
                 anchor: "Alyosha knelt at the elder's feet".into(),
+                defining_quote: None,
             }],
             entities_developed: vec![EntityStateSketch {
                 entity_name: "Alyosha".into(),
@@ -688,11 +743,13 @@ mod tests {
                 epistemic_status: EpistemicStatus::Confident,
                 attributed_to: Some("Zosima".into()),
                 anchor: "love in dreams is greedy".into(),
+                quotable_excerpt: None,
             }],
             questions_raised: vec![QuestionSketch {
                 content: "Can a faith shaped in the cell survive the world outside?".into(),
                 anchor: "faith in the cell".into(),
             }],
+            argument_reconstructions: Vec::new(),
         };
 
         let json = serde_json::to_string_pretty(&extraction).unwrap();

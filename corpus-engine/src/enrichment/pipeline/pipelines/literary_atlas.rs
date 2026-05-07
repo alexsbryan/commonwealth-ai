@@ -211,7 +211,8 @@ impl Pipeline for LiteraryAtlasPipeline {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
             ChatPrompt::new(PHASE1B_ENTITY_COVERAGE, user)
-                .with_phase_id("phase1b_entity"),
+                .with_phase_id("phase1b_entity")
+                .with_max_output_tokens(512),
         )
     }
 
@@ -223,7 +224,8 @@ impl Pipeline for LiteraryAtlasPipeline {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
             ChatPrompt::new(PHASE1B_CONCEPT_COVERAGE, user)
-                .with_phase_id("phase1b_concept"),
+                .with_phase_id("phase1b_concept")
+                .with_max_output_tokens(512),
         )
     }
 
@@ -465,6 +467,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         self.inner
             .compose_phase3(cluster, chapter_excerpts, exemplars)
             .with_phase_id("phase3")
+            .with_max_output_tokens(1024)
     }
 
     fn parse_phase3(&self, response: &str) -> Result<Phase3ParseResult> {
@@ -516,7 +519,11 @@ impl Pipeline for LiteraryAtlasPipeline {
             "\n---\n\nRespond with a single JSON object per the schema in the system message.",
         );
 
-        Some(ChatPrompt::new(system, user).with_phase_id("phase3_facet"))
+        Some(
+            ChatPrompt::new(system, user)
+                .with_phase_id("phase3_facet")
+                .with_max_output_tokens(512),
+        )
     }
 
     fn parse_phase3_facet(
@@ -579,6 +586,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         self.inner
             .compose_phase5(concern, cluster, cluster_chunk_texts, exemplars)
             .with_phase_id("phase5")
+            .with_max_output_tokens(1024)
     }
 
     fn parse_phase5(&self, response: &str) -> Result<Phase5ParseResult> {
@@ -596,6 +604,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         self.inner
             .compose_phase6(pos_a, pos_b, exemplars)
             .with_phase_id("phase6")
+            .with_max_output_tokens(512)
     }
 
     fn parse_phase6(&self, response: &str) -> Result<Option<Phase6ParseResult>> {
@@ -762,7 +771,8 @@ impl Pipeline for LiteraryAtlasPipeline {
                     "phase6_classifier_response",
                     crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
                 )
-                .with_phase_id("phase6_classifier"),
+                .with_phase_id("phase6_classifier")
+                .with_max_output_tokens(256),
         )
     }
 }
@@ -1140,6 +1150,7 @@ pub(super) fn parse_phase1b_coverage_response(
             aliases: Vec::new(),
             entity_type,
             description: item.description.trim().to_string(),
+            defining_quote: None,
             anchor: item.anchor.trim().to_string(),
         });
     }
@@ -1153,6 +1164,7 @@ pub(super) fn parse_phase1b_coverage_response(
             aliases: Vec::new(),
             entity_type: EntityType::Concept,
             description: item.description.trim().to_string(),
+            defining_quote: None,
             anchor: item.anchor.trim().to_string(),
         });
     }
@@ -1212,6 +1224,8 @@ struct RawSectionExtraction {
     claims: Vec<Option<RawClaimSketch>>,
     #[serde(deserialize_with = "null_or_empty_vec")]
     questions_raised: Vec<Option<RawQuestionSketch>>,
+    #[serde(deserialize_with = "null_or_empty_vec")]
+    argument_reconstructions: Vec<Option<RawArgumentReconstructionSketch>>,
 }
 
 impl RawSectionExtraction {
@@ -1252,6 +1266,10 @@ impl RawSectionExtraction {
                 .into_iter()
                 .filter_map(RawQuestionSketch::into_sketch)
                 .collect(),
+            argument_reconstructions: vec_of_some(self.argument_reconstructions)
+                .into_iter()
+                .filter_map(RawArgumentReconstructionSketch::into_sketch)
+                .collect(),
         }
     }
 }
@@ -1264,6 +1282,7 @@ struct RawEntitySketch {
     aliases: Vec<Option<String>>,
     entity_type: Option<EntityType>,
     description: String,
+    defining_quote: Option<String>,
     anchor: String,
 }
 
@@ -1322,11 +1341,24 @@ impl RawEntitySketch {
         } else {
             entity_type
         };
+        // Only keep `defining_quote` on `concept` entities. Models
+        // occasionally lift a person's quoted line into the field;
+        // it's not what the field is for and it confuses downstream
+        // retrieval. Person/work/institution/place atoms drop the
+        // value silently — the description carries the gloss.
+        let defining_quote = if matches!(entity_type, EntityType::Concept) {
+            self.defining_quote
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            None
+        };
         Some(EntitySketch {
             canonical_name: name,
             aliases: vec_of_some(self.aliases),
             entity_type,
             description: self.description,
+            defining_quote,
             anchor: self.anchor,
         })
     }
@@ -1475,6 +1507,7 @@ struct RawClaimSketch {
     // arrays via `phase3_metadata_value_to_string` so the same
     // adapter that hardened Phase 3 metadata also works here.
     attributed_to: Option<serde_json::Value>,
+    quotable_excerpt: Option<String>,
     anchor: String,
 }
 
@@ -1505,11 +1538,16 @@ impl RawClaimSketch {
             .and_then(phase3_metadata_value_to_string)
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
+        let quotable_excerpt = self
+            .quotable_excerpt
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         Some(ClaimSketch {
             content,
             discourse_act,
             epistemic_status,
             attributed_to,
+            quotable_excerpt,
             anchor: self.anchor,
         })
     }
@@ -1532,6 +1570,100 @@ impl RawQuestionSketch {
             content,
             anchor: self.anchor,
         })
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct RawArgumentReconstructionSketch {
+    name: String,
+    proponent: Option<String>,
+    #[serde(deserialize_with = "null_or_empty_vec")]
+    premises: Vec<Option<String>>,
+    conclusion: String,
+    #[serde(deserialize_with = "null_or_empty_vec")]
+    objections: Vec<Option<RawObjection>>,
+    anchor: String,
+}
+
+/// Phase 1 objection shape. Accepts both the legacy bare-string
+/// shape (so old prompts and any cached partial output still parse)
+/// and the new `{ name, content }` object — the schema instructs
+/// the new shape, the parser tolerates either.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RawObjection {
+    Str(String),
+    Obj {
+        name: String,
+        #[serde(default)]
+        content: String,
+    },
+}
+
+impl RawArgumentReconstructionSketch {
+    fn into_sketch(
+        self,
+    ) -> Option<crate::enrichment::pipeline::atlas::ArgumentReconstructionSketch> {
+        let name = self.name.trim().to_string();
+        if name.is_empty() {
+            debug!("literary_atlas: dropping argument sketch — name missing");
+            return None;
+        }
+        let conclusion = self.conclusion.trim().to_string();
+        let premises: Vec<String> = self
+            .premises
+            .into_iter()
+            .flatten()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        // An argument with neither premises nor a conclusion is
+        // structurally empty — drop it. A premise list without a
+        // conclusion (or vice versa) is preserved on the assumption
+        // that the model captured part of the structure; downstream
+        // consumers can decide what to render.
+        if premises.is_empty() && conclusion.is_empty() {
+            debug!(
+                "literary_atlas: dropping argument sketch '{name}' — no premises or conclusion"
+            );
+            return None;
+        }
+        use crate::enrichment::atlas::atoms::Objection;
+        let objections: Vec<Objection> = self
+            .objections
+            .into_iter()
+            .flatten()
+            .filter_map(|raw| {
+                let (name, content) = match raw {
+                    RawObjection::Str(s) => (s.trim().to_string(), String::new()),
+                    RawObjection::Obj { name, content } => (
+                        name.trim().to_string(),
+                        content.trim().to_string(),
+                    ),
+                };
+                if name.is_empty() {
+                    None
+                } else {
+                    Some(Objection { name, content })
+                }
+            })
+            .collect();
+        let proponent = self
+            .proponent
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_default();
+        Some(
+            crate::enrichment::pipeline::atlas::ArgumentReconstructionSketch {
+                name,
+                proponent,
+                premises,
+                conclusion,
+                objections,
+                anchor: self.anchor,
+            },
+        )
     }
 }
 
@@ -1693,6 +1825,11 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
       "minItems": 1,
       "maxItems": 25,
       "items": { "$ref": "#/$defs/question_sketch" }
+    },
+    "argument_reconstructions": {
+      "type": "array",
+      "maxItems": 6,
+      "items": { "$ref": "#/$defs/argument_reconstruction_sketch" }
     }
   },
   "required": ["section_id", "questions_raised"],
@@ -1708,6 +1845,12 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
           "enum": ["person", "concept", "institution", "work", "place", "initiative"]
         },
         "description": { "type": "string", "maxLength": 600 },
+        "defining_quote": {
+          "anyOf": [
+            { "type": "string", "maxLength": 220 },
+            { "type": "null" }
+          ]
+        },
         "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["canonical_name", "entity_type"]
@@ -1766,6 +1909,12 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
             { "type": "null" }
           ]
         },
+        "quotable_excerpt": {
+          "anyOf": [
+            { "type": "string", "maxLength": 220 },
+            { "type": "null" }
+          ]
+        },
         "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["content", "discourse_act"]
@@ -1778,6 +1927,40 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
         "anchor": { "type": "string", "maxLength": 800 }
       },
       "required": ["content"]
+    },
+    "argument_reconstruction_sketch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "maxLength": 200 },
+        "proponent": {
+          "anyOf": [
+            { "type": "string", "maxLength": 200 },
+            { "type": "null" }
+          ]
+        },
+        "premises": {
+          "type": "array",
+          "maxItems": 8,
+          "items": { "type": "string", "maxLength": 400 }
+        },
+        "conclusion": { "type": "string", "maxLength": 400 },
+        "objections": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string", "maxLength": 120 },
+              "content": { "type": "string", "maxLength": 400 }
+            },
+            "required": ["name"]
+          }
+        },
+        "anchor": { "type": "string", "maxLength": 800 }
+      },
+      "required": ["name", "premises", "conclusion"]
     }
   }
 }"##;
@@ -1793,6 +1976,87 @@ const PHASE1_SECTION_EXTRACTION_SCHEMA: &str = r##"{
 pub fn phase1_section_extraction_schema() -> serde_json::Value {
     serde_json::from_str(PHASE1_SECTION_EXTRACTION_SCHEMA)
         .expect("PHASE1_SECTION_EXTRACTION_SCHEMA must be valid JSON")
+}
+
+/// Phase 1b coverage-pass schema. Used by both the entity-coverage and
+/// the concept-coverage passes (the concept variant uses
+/// `missed_concepts` instead of `missed_entities`, but the parser
+/// accepts either, so a permissive union schema works for both). Both
+/// arrays are optional and default to empty — the prompt instructs
+/// "omit the key entirely if nothing was missed", and the parser
+/// honours that.
+const PHASE1B_COVERAGE_SCHEMA: &str = r##"{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "missed_entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "canonical_name": {"type": "string"},
+          "entity_type": {"type": "string"},
+          "description": {"type": "string"},
+          "anchor": {"type": "string"}
+        },
+        "required": ["canonical_name", "entity_type", "description", "anchor"]
+      }
+    },
+    "missed_concepts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "canonical_name": {"type": "string"},
+          "description": {"type": "string"},
+          "anchor": {"type": "string"}
+        },
+        "required": ["canonical_name", "description", "anchor"]
+      }
+    }
+  }
+}"##;
+
+pub fn phase1b_coverage_schema() -> serde_json::Value {
+    serde_json::from_str(PHASE1B_COVERAGE_SCHEMA)
+        .expect("PHASE1B_COVERAGE_SCHEMA must be valid JSON")
+}
+
+/// Phase 1a (seed) JSON schema. Same shape as `SeedEntity` —
+/// downstream parser is `parse_seed_response`. The seed prompt asked
+/// the model for "Entities only" but with no schema constraint,
+/// dense first-sections (e.g. SEP `freewill` opening with one
+/// 3000-word paragraph) caused the model to truncate prose-prefixed
+/// JSON or emit unparseable output. Grammar-constrained generation
+/// fixes the failure mode.
+const PHASE1A_SEED_SCHEMA: &str = r##"{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "canonical_name": {"type": "string"},
+          "aliases": {"type": "array", "items": {"type": "string"}},
+          "entity_type": {"type": "string"},
+          "description": {"type": "string"}
+        },
+        "required": ["canonical_name", "entity_type", "description"]
+      }
+    }
+  },
+  "required": ["entries"]
+}"##;
+
+pub fn phase1a_seed_schema() -> serde_json::Value {
+    serde_json::from_str(PHASE1A_SEED_SCHEMA)
+        .expect("PHASE1A_SEED_SCHEMA must be valid JSON")
 }
 
 #[cfg(test)]

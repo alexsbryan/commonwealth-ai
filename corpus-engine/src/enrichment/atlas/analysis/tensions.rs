@@ -675,6 +675,7 @@ mod tests {
                 .map(|e| AtomId::from_raw(format!("entity-{e:04}"))),
             confidence: Some(1.0),
             enrichment_depth: EnrichmentDepth::Extracted,
+            quotable_excerpt: None,
         }
     }
 
@@ -816,6 +817,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 

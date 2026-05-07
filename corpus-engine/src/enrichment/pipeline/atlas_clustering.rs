@@ -650,6 +650,7 @@ mod tests {
             epistemic_status: EpistemicStatus::Confident,
             attributed_to: attributed_to.map(String::from),
             anchor: String::new(),
+            quotable_excerpt: None,
         }
     }
 

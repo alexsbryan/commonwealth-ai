@@ -47,6 +47,9 @@ impl AtomId {
     pub fn configuration(index: usize) -> Self {
         Self(format!("config-{index:04}"))
     }
+    pub fn argument_reconstruction(index: usize) -> Self {
+        Self(format!("argument-{index:04}"))
+    }
 
     /// Build from a raw string. Callers are responsible for honouring
     /// the `<type>-<index>` convention; use the typed constructors
@@ -137,6 +140,15 @@ pub struct Entity {
     /// One-sentence characterisation derived from the corpus, not from
     /// external knowledge (spec §2.1, Wittgenstein note).
     pub description: String,
+    /// Verbatim defining sentence from the source for `concept`
+    /// entities — the article's canonical "X is defined as..."
+    /// passage, ≤200 chars. Differs from `description` (which is a
+    /// gloss): `defining_quote` is exact text that retrieval can
+    /// surface to a downstream judge or reader. `None` for non-
+    /// concept entity types or when the article does not lift a
+    /// distinct definitional sentence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defining_quote: Option<String>,
     /// Corpus-relative importance (0.0–1.0), derived from frequency,
     /// narrative weight, and cross-reference density.
     pub salience: f32,
@@ -240,6 +252,16 @@ pub struct Claim {
     pub scope: ClaimScope,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub evidence: Vec<ChunkRef>,
+    /// Verbatim ≤200-char excerpt from the source supporting this
+    /// claim — populated when the claim states a position or argument
+    /// for which a single quotable sentence exists in the article.
+    /// Distinct from `content` (which is a propositional-form
+    /// paraphrase): retrieval can surface this directly so a judge
+    /// or downstream reader sees the article's own words. `None`
+    /// when no clean quotable sentence exists or when the claim is
+    /// derived rather than extracted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quotable_excerpt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attributed_to: Option<AtomId>,
     /// Extraction confidence — how clearly the system identified this
@@ -252,6 +274,80 @@ pub struct Claim {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f32>,
     pub enrichment_depth: EnrichmentDepth,
+}
+
+// ── ArgumentReconstruction ───────────────────────────────────
+
+/// A named philosophical argument as the article reconstructs it —
+/// premise list, conclusion, objections. Targets the essay-judge
+/// axis "argument_depth", which under-credits passages that contain
+/// the argument's pieces scattered across paragraphs without an
+/// explicit reconstruction.
+///
+/// Optional and sparse — most sections do not contain a named
+/// argument. Phase 1 emits this only when the section both names
+/// the argument and presents its premise structure.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArgumentReconstruction {
+    pub id: AtomId,
+    /// Article-level name ("Knowledge Argument", "Consequence
+    /// Argument", "Function Argument").
+    pub name: String,
+    /// Originating philosopher resolved to an Entity atom. `None`
+    /// when the section presents the argument without naming a
+    /// specific proponent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proponent: Option<AtomId>,
+    /// Premises in order — one propositional-form statement each.
+    pub premises: Vec<String>,
+    /// Conclusion the premises support.
+    pub conclusion: String,
+    /// Named objections as the section presents them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objections: Vec<Objection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<ChunkRef>,
+    pub section_position: SectionPosition,
+    pub enrichment_depth: EnrichmentDepth,
+}
+
+/// One objection an article presents against an argument.
+///
+/// Deserialises permissively: accepts either a bare string (legacy
+/// shape — `name` only) or a `{ name, content }` object so older
+/// atoms.json keeps loading after the schema migration. New
+/// extractions populate `content` with one-sentence prose so the
+/// dialectical_breadth axis sees the substance, not just the name.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Objection {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub content: String,
+}
+
+impl<'de> Deserialize<'de> for Objection {
+    fn deserialize<D>(d: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Str(String),
+            Obj {
+                name: String,
+                #[serde(default)]
+                content: String,
+            },
+        }
+        match Repr::deserialize(d)? {
+            Repr::Str(name) => Ok(Objection {
+                name,
+                content: String::new(),
+            }),
+            Repr::Obj { name, content } => Ok(Objection { name, content }),
+        }
+    }
 }
 
 // ── Question ─────────────────────────────────────────────────
@@ -321,6 +417,7 @@ pub enum AtomType {
     Claim,
     Question,
     Configuration,
+    ArgumentReconstruction,
 }
 
 /// On-disk representation of a single atom. Untagged body per
@@ -352,6 +449,7 @@ pub enum AtomEnvelope {
     Claim(Claim),
     Question(Question),
     Configuration(Configuration),
+    ArgumentReconstruction(ArgumentReconstruction),
 }
 
 impl AtomEnvelope {
@@ -364,6 +462,7 @@ impl AtomEnvelope {
             AtomEnvelope::Claim(a) => &a.id,
             AtomEnvelope::Question(a) => &a.id,
             AtomEnvelope::Configuration(a) => &a.id,
+            AtomEnvelope::ArgumentReconstruction(a) => &a.id,
         }
     }
 
@@ -376,6 +475,7 @@ impl AtomEnvelope {
             AtomEnvelope::Claim(a) => a.enrichment_depth,
             AtomEnvelope::Question(a) => a.enrichment_depth,
             AtomEnvelope::Configuration(a) => a.enrichment_depth,
+            AtomEnvelope::ArgumentReconstruction(a) => a.enrichment_depth,
         }
     }
 }
@@ -421,6 +521,7 @@ mod tests {
             entity_type: EntityType::Person,
             first_appearance: ChunkRef::new("sec_0004", Some("the third son".into())),
             description: "Youngest Karamazov brother; novice at the monastery.".into(),
+            defining_quote: None,
             salience: 0.92,
             enrichment_depth: EnrichmentDepth::Extracted,
             affiliation: None,
@@ -535,6 +636,7 @@ mod tests {
             epistemic_status: EpistemicStatus::Confident,
             scope: ClaimScope::Universal,
             evidence: vec![ChunkRef::new("ch_5_p3", Some("love in dreams is greedy".into()))],
+            quotable_excerpt: None,
             attributed_to: Some(AtomId::entity(7)),
             confidence: Some(0.91),
             enrichment_depth: EnrichmentDepth::Extracted,
@@ -629,6 +731,7 @@ mod tests {
             entity_type: EntityType::Concept,
             first_appearance: ChunkRef::new("sec_0001", None),
             description: "x".into(),
+            defining_quote: None,
             salience: 0.1,
             enrichment_depth: EnrichmentDepth::Structural,
             affiliation: None,

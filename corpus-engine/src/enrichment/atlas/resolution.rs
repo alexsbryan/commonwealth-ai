@@ -256,6 +256,7 @@ fn synthesize_entities_from_unresolved_event_participants(
                         },
                     ),
                     description: String::new(),
+                    defining_quote: None,
                     salience: SYNTHESIZED_ENTITY_SALIENCE,
                     enrichment_depth: section.enrichment_depth,
                     affiliation: None,
@@ -497,6 +498,7 @@ pub struct Step3bOutput {
     pub relations: Vec<super::atoms::Relation>,
     pub claims: Vec<super::atoms::Claim>,
     pub questions: Vec<super::atoms::Question>,
+    pub argument_reconstructions: Vec<super::atoms::ArgumentReconstruction>,
     /// New edges this pass emits — Transition chains, Grounds edges
     /// on claims + states, Involves edges on claims / states /
     /// relations / questions. Does NOT include the Step 3a Involves
@@ -618,6 +620,7 @@ async fn resolve_entities(
                             },
                         ),
                         description: sketch.description.trim().to_string(),
+                        defining_quote: sketch.defining_quote.clone(),
                         // Salience is filled in after all sections
                         // are processed.
                         salience: 0.0,
@@ -680,6 +683,7 @@ fn entity_sketches_from_developed<'a>(
         // hedge" failures from Other(_) were systemic.
         entity_type: EntityType::Person,
         description: String::new(),
+        defining_quote: None,
         anchor: s.anchor.clone(),
     })
 }
@@ -856,6 +860,18 @@ fn merge_into_existing(
     // is a routing aid; a fuller one is strictly more useful.
     if sketch.description.trim().len() > entity.description.len() {
         entity.description = sketch.description.trim().to_string();
+    }
+    // First non-empty defining_quote wins. Later sections sometimes
+    // re-introduce a concept with a thinner gloss; we keep the
+    // first definitional sentence we extracted rather than overwrite
+    // it with secondary mentions.
+    if entity.defining_quote.is_none() {
+        if let Some(q) = sketch.defining_quote.as_ref() {
+            let trimmed = q.trim();
+            if !trimmed.is_empty() {
+                entity.defining_quote = Some(trimmed.to_string());
+            }
+        }
     }
 }
 
@@ -1417,6 +1433,7 @@ pub fn resolve_step_3b(
                 // the slim schema). Fictional is the literary default.
                 scope: crate::enrichment::pipeline::atlas::ClaimScope::Fictional,
                 evidence: evidence.clone(),
+                quotable_excerpt: sketch.quotable_excerpt.clone(),
                 attributed_to: attributed_to.clone(),
                 // Derived — Phase 5 will replace with LLM score.
                 confidence: None,
@@ -1468,6 +1485,62 @@ pub fn resolve_step_3b(
                 resolution_status: super::atoms::ResolutionStatus::Open,
                 enrichment_depth: section.enrichment_depth,
             });
+        }
+    }
+
+    // 5b. ArgumentReconstruction — one atom per
+    //     ArgumentReconstructionSketch. Resolves `proponent` to an
+    //     Entity AtomId by name, drops it (atom keeps but proponent
+    //     becomes None) when the philosopher isn't in the entity
+    //     set. Premises/conclusion/objections are propagated as-is;
+    //     they don't need cross-section resolution because the
+    //     model produces them as self-contained propositions.
+    let mut argument_reconstructions: Vec<super::atoms::ArgumentReconstruction> =
+        Vec::new();
+    for section in sections {
+        for sketch in &section.argument_reconstructions {
+            let arg_id = super::atoms::AtomId::argument_reconstruction(
+                argument_reconstructions.len() + 1,
+            );
+            let proponent_id = if sketch.proponent.is_empty() {
+                None
+            } else {
+                resolve_entity_id_with_salience(
+                    &sketch.proponent,
+                    entities,
+                    &name_index,
+                    &token_index,
+                )
+            };
+            let evidence = sketch_anchor_evidence(&section.section_id, &sketch.anchor);
+            argument_reconstructions.push(super::atoms::ArgumentReconstruction {
+                id: arg_id.clone(),
+                name: sketch.name.trim().to_string(),
+                proponent: proponent_id.clone(),
+                premises: sketch.premises.clone(),
+                conclusion: sketch.conclusion.clone(),
+                objections: sketch.objections.clone(),
+                evidence,
+                section_position: super::atoms::SectionPosition::section(
+                    section.section_id.clone(),
+                ),
+                enrichment_depth: section.enrichment_depth,
+            });
+            // Wire an Involves edge to the proponent so navigation
+            // surfaces the argument when seeded on the philosopher.
+            if let Some(prop_id) = proponent_id {
+                edges.push(Edge {
+                    id: EdgeId::new(edges.len() + 1),
+                    edge_type: EdgeType::Involves,
+                    source: arg_id,
+                    target: prop_id,
+                    evidence: Vec::new(),
+                    trigger_event: None,
+                    sub_question: None,
+                    confidence: 1.0,
+                    provenance: EdgeProvenance::Derived,
+                });
+            }
         }
     }
 
@@ -1536,6 +1609,7 @@ pub fn resolve_step_3b(
         relations,
         claims,
         questions,
+        argument_reconstructions,
         edges,
         trajectories,
         failures,
@@ -2095,7 +2169,12 @@ fn has_whole_word(haystack: &str, needle: &str) -> bool {
         if before_ok && after_ok {
             return true;
         }
-        start = pos + 1;
+        start = pos
+            + haystack[pos..]
+                .chars()
+                .next()
+                .map(char::len_utf8)
+                .unwrap_or(1);
     }
     false
 }
@@ -2304,6 +2383,7 @@ mod tests {
             events,
             claims: Vec::new(),
             questions_raised: Vec::new(),
+            argument_reconstructions: Vec::new(),
         }
     }
 
@@ -2314,6 +2394,7 @@ mod tests {
             entity_type: EntityType::Person,
             description: description.into(),
             anchor: String::new(),
+            defining_quote: None,
         }
     }
 
@@ -2921,6 +3002,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "Youngest Karamazov.".into(),
+                defining_quote: None,
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -2934,6 +3016,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "Monastery elder.".into(),
+                defining_quote: None,
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -2955,6 +3038,7 @@ mod tests {
                         aliases: vec![],
                         entity_type: EntityType::Person,
                         description: "".into(),
+                        defining_quote: None,
                         anchor: String::new(),
                     },
                 ],
@@ -2980,11 +3064,13 @@ mod tests {
                     epistemic_status: EpistemicStatus::Confident,
                     attributed_to: Some("Zossima".into()),
                     anchor: "love in dreams is greedy".into(),
+                    quotable_excerpt: None,
                 }],
                 questions_raised: vec![QuestionSketch {
                     content: "Can a faith formed in the cell survive the world?".into(),
                     anchor: "faith in the cell".into(),
                 }],
+                argument_reconstructions: Vec::new(),
             },
             SectionExtraction {
                 section_id: "sec_0002".into(),
@@ -3063,6 +3149,7 @@ mod tests {
                 crate::enrichment::pipeline::atlas::EntityType::Person,
             first_appearance: super::super::atoms::ChunkRef::new("sec_0001", None),
             description: "x".into(),
+            defining_quote: None,
             salience: 1.0,
             enrichment_depth: EnrichmentDepth::Extracted,
             affiliation: None,
@@ -3285,6 +3372,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "Patriarch.".into(),
+                defining_quote: None,
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3298,6 +3386,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "Youngest son.".into(),
+                defining_quote: None,
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3311,6 +3400,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0003", None),
                 description: "Second wife.".into(),
+                defining_quote: None,
                 salience: 0.5,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3392,6 +3482,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "".into(),
+                defining_quote: None,
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3405,6 +3496,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "".into(),
+                defining_quote: None,
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3446,6 +3538,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }];
         let name_index = build_name_index(&entities);
         let token_index = build_token_index(&entities);
@@ -3479,6 +3572,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 
@@ -3496,6 +3590,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 
@@ -3508,6 +3603,7 @@ mod tests {
             entity_type: EntityType::Person,
             first_appearance: ChunkRef::new("sec_0001", None),
             description: "Brother.".into(),
+            defining_quote: None,
             salience: 0.8,
             enrichment_depth: EnrichmentDepth::Extracted,
             affiliation: None,
@@ -3521,6 +3617,7 @@ mod tests {
             entity_type: EntityType::Person,
             first_appearance: ChunkRef::new("sec_0002", None),
             description: "Different Ivan.".into(),
+            defining_quote: None,
             salience: 0.7,
             enrichment_depth: EnrichmentDepth::Extracted,
             affiliation: None,
@@ -3569,6 +3666,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "".into(),
+                defining_quote: None,
                 salience: 0.8,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3582,6 +3680,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "".into(),
+                defining_quote: None,
                 salience: 0.7,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3668,6 +3767,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "".into(),
+                defining_quote: None,
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3681,6 +3781,7 @@ mod tests {
                 entity_type: EntityType::Person,
                 first_appearance: ChunkRef::new("sec_0001", None),
                 description: "".into(),
+                defining_quote: None,
                 salience: 1.0,
                 enrichment_depth: EnrichmentDepth::Extracted,
                 affiliation: None,
@@ -3745,6 +3846,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 
@@ -3923,6 +4025,7 @@ mod tests {
                 epistemic_status: EpistemicStatus::Confident,
                 attributed_to: Some("Someone Else".into()), // (4) unknown attribution
                 anchor: String::new(),
+                quotable_excerpt: None,
             }],
             ..Default::default()
         }];
@@ -4006,6 +4109,7 @@ mod tests {
                 epistemic_status: EpistemicStatus::Confident,
                 attributed_to: Some("Alyosha".into()),
                 anchor: String::new(),
+                quotable_excerpt: None,
             }],
             ..Default::default()
         }];
@@ -4179,6 +4283,7 @@ mod tests {
             entity_type: ty,
             description: String::new(),
             anchor: String::new(),
+            defining_quote: None,
         }
     }
 
@@ -4349,6 +4454,7 @@ mod tests {
             entity_type: EntityType::Person,
             first_appearance: ChunkRef::new("sec_0001", None),
             description: String::new(),
+            defining_quote: None,
             salience: 0.5,
             enrichment_depth: EnrichmentDepth::Extracted,
             affiliation: None,

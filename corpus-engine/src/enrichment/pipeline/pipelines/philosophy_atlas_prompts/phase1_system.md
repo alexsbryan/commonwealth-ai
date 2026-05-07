@@ -39,6 +39,11 @@ entering the frame for the first time.
   — reserve for genuinely important sites).
 - `description` — one sentence drawn from this section. A routing
   aid for clustering, not an encyclopedia definition.
+- `defining_quote` — *concept entities only, optional.* If the
+  section contains one sentence ≤200 chars that defines the concept
+  ("X is the view that…", "by X we mean…"), copy it **whole** —
+  first word through terminal punctuation, exact text. Otherwise
+  omit. No partial sentences, no paraphrase.
 - `anchor` — 3–8 word keyphrase from the text that introduces or
   establishes the entity. Not a 25-word quote; just enough to grep
   for.
@@ -153,6 +158,11 @@ is invisible to the dialectic.
 - `epistemic_status` — one of `confident`, `tentative`, `contested`,
   `retracted`, `attributed`.
 - `attributed_to` — entity name, or omit for article-voice claims.
+- `quotable_excerpt` — *optional.* If one sentence ≤200 chars in
+  the section carries the claim in the article's own words and
+  contains argumentative content (a premise, thesis, or definition),
+  copy it **whole** — first word through terminal punctuation, exact
+  text. Otherwise omit. No partial sentences, no paraphrase.
 - `anchor` — 3–8 word keyphrase.
 
 **Prefer position over philosopher.** When a section presents the
@@ -163,7 +173,43 @@ remarks. Form: "section presenting *existentialism*" → attribute
 claims to *existentialism*; "X said Y in a 1956 letter" → attribute
 to X.
 
-### 7. `questions_raised` — **REQUIRED, ≥1 entry**
+### 7. `argument_reconstructions` — *optional, sparse*
+
+Named philosophical arguments the section reconstructs in premise→
+conclusion form (e.g., the Knowledge Argument, the Consequence
+Argument, the Function Argument). Most sections do *not* contain a
+named argument; emit nothing here when there isn't one. Only emit
+when the section both **names** the argument and **lays out its
+premises**. A passing mention isn't enough.
+
+- `name` — the argument's name as the article uses it.
+- `proponent` — originating philosopher (canonical name). Omit
+  when the argument is article-voice or anonymous.
+- `premises` — list of propositional-form premises in order, ≤6.
+  Each ≤200 chars. Paraphrase is fine; structure is what matters.
+- `conclusion` — what the premises support.
+- `objections` — objections the section presents (≤6). Each entry
+  is `{"name": "<short label>", "content": "<one-sentence prose>"}`.
+  `name` is the objection's handle ("Lewis's Ability Hypothesis",
+  "Frankfurt counterexample"). `content` is one substantive sentence
+  paraphrasing the objection's challenge — not a re-statement of
+  the name.
+
+  Always extract objections when the section critiques the argument.
+  Two patterns to recognize:
+  (a) Section names AND elaborates the critique ("Lewis argues that
+  knowing-what-it's-like is a know-how, not a new fact") → emit both
+  `name` and `content`.
+  (b) Section only lists names without elaboration ("This argument is
+  criticized by Strawson, Prinz, and Balog") → emit each name with
+  `content: ""` so the dialectical context isn't lost. Bare-name
+  entries are permitted only for this case.
+
+  Empty array only when the section truly does not present any
+  objections.
+- `anchor` — 3–8 word keyphrase from the section.
+
+### 8. `questions_raised` — **REQUIRED, ≥1 entry**
 
 Questions this section first poses or makes salient. Philosophy
 articles do a lot of this — the distinction between a question that
@@ -225,6 +271,7 @@ atoms from the text in the user message.
       "aliases": ["logical empiricism"],
       "entity_type": "concept",
       "description": "An early 20th-century movement holding that meaningful statements are either analytic or empirically verifiable.",
+      "defining_quote": "Logical positivism holds that a statement is meaningful only if it is either analytic or empirically verifiable.",
       "anchor": "early logical positivists held"
     },
     {
@@ -247,6 +294,7 @@ atoms from the text in the user message.
       "discourse_act": "define",
       "epistemic_status": "attributed",
       "attributed_to": "Logical positivism",
+      "quotable_excerpt": "Statements that admit of neither empirical verification nor analytic demonstration are, on the positivist view, cognitively meaningless.",
       "anchor": "cognitively meaningless"
     }
   ],

@@ -436,6 +436,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 
@@ -470,6 +471,7 @@ mod tests {
             epistemic_status: crate::enrichment::pipeline::atlas::EpistemicStatus::Tentative,
             scope: crate::enrichment::pipeline::atlas::ClaimScope::Universal,
             evidence: vec![],
+            quotable_excerpt: None,
             attributed_to: Some(e.id.clone()),
             confidence: Some(0.4), // below the hedge threshold
             enrichment_depth: EnrichmentDepth::Extracted,

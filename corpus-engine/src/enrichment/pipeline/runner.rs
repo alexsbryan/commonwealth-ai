@@ -2829,6 +2829,7 @@ mod tests {
                     discourse_act: DiscourseAct::Enact,
                     epistemic_status: EpistemicStatus::Confident,
                     attributed_to: None,
+                    quotable_excerpt: None,
                     anchor: String::new(),
                 },
                 ClaimSketch {
@@ -2836,6 +2837,7 @@ mod tests {
                     discourse_act: DiscourseAct::Enact,
                     epistemic_status: EpistemicStatus::Confident,
                     attributed_to: None,
+                    quotable_excerpt: None,
                     anchor: String::new(),
                 },
             ],

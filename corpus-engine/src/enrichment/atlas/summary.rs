@@ -192,6 +192,7 @@ mod tests {
                     entity_type: EntityType::Concept,
                     first_appearance: ChunkRef::new("sec_0001", None),
                     description: "x".into(),
+                    defining_quote: None,
                     salience: 1.0,
                     enrichment_depth: *d,
                     affiliation: None,

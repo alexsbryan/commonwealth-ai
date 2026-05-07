@@ -26,6 +26,7 @@ use super::super::trait_def::Pipeline;
 use super::super::types::*;
 use super::literary_atlas::{
     parse_phase1b_coverage_response, phase1_section_extraction_schema,
+    phase1a_seed_schema, phase1b_coverage_schema,
     render_generic_phase3_exemplar, render_phase1_user_body,
     render_phase1b_user_body, LiteraryAtlasPipeline,
 };
@@ -179,7 +180,16 @@ impl Pipeline for PhilosophyAtlasPipeline {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
             ChatPrompt::new(PHASE1B_ENTITY_COVERAGE, user)
-                .with_phase_id("phase1b_entity"),
+                .with_phase_id("phase1b_entity")
+                // Grammar-constrained JSON output. Without it the
+                // model hits the token cap producing prose-then-
+                // truncated-JSON, which the parser rejects. Same
+                // pattern as Phase 1.
+                .with_response_schema("phase1b_coverage", phase1b_coverage_schema())
+                // Bumped from 512 — small models on dense
+                // philosophy sections produce 5-15 missed-entity
+                // entries; 512 was hitting the cap mid-array.
+                .with_max_output_tokens(2048),
         )
     }
 
@@ -191,7 +201,9 @@ impl Pipeline for PhilosophyAtlasPipeline {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
             ChatPrompt::new(PHASE1B_CONCEPT_COVERAGE, user)
-                .with_phase_id("phase1b_concept"),
+                .with_phase_id("phase1b_concept")
+                .with_response_schema("phase1b_coverage", phase1b_coverage_schema())
+                .with_max_output_tokens(2048),
         )
     }
 
@@ -249,7 +261,19 @@ impl Pipeline for PhilosophyAtlasPipeline {
             "Respond with a single JSON object per the schema in the system \
              message. Entities only. No prose, no <think> block.",
         );
-        Some(ChatPrompt::new(PHASE1A_SEED_SYSTEM, user).with_phase_id("phase1_seed"))
+        Some(
+            ChatPrompt::new(PHASE1A_SEED_SYSTEM, user)
+                .with_phase_id("phase1_seed")
+                // Grammar-constrain to JSON. Dense first-sections
+                // (e.g. SEP `freewill` opening with a single
+                // 3000-word paragraph) without a schema produce
+                // prose-prefixed or truncated JSON that fails to
+                // parse. Same fix pattern as phase1b.
+                .with_response_schema("phase1a_seed", phase1a_seed_schema())
+                // Bumped from default — the seed list can run 30+
+                // entities on dense intros; need headroom.
+                .with_max_output_tokens(4096),
+        )
     }
 
     fn parse_seed_response(&self, response: &str) -> Result<Vec<SeedEntity>> {
@@ -320,7 +344,11 @@ impl Pipeline for PhilosophyAtlasPipeline {
             "\n---\n\nRespond with a single JSON object per the schema in the system message.",
         );
 
-        Some(ChatPrompt::new(system, user).with_phase_id("phase3_facet"))
+        Some(
+            ChatPrompt::new(system, user)
+                .with_phase_id("phase3_facet")
+                .with_max_output_tokens(512),
+        )
     }
 
     fn parse_phase3_facet(

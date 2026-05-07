@@ -1485,6 +1485,7 @@ fn upsert_entity(
         entity_type: kind,
         first_appearance: ChunkRef::new(first_chunk, None),
         description: description.unwrap_or_default(),
+        defining_quote: None,
         salience: DEFAULT_SALIENCE,
         enrichment_depth: EnrichmentDepth::extracted_default(),
         affiliation,

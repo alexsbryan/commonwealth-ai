@@ -446,6 +446,15 @@ fn partition_atoms(
             AtomEnvelope::Claim(x) => claims.push(x),
             AtomEnvelope::Question(x) => questions.push(x),
             AtomEnvelope::Configuration(x) => configurations.push(x),
+            AtomEnvelope::ArgumentReconstruction(_) => {
+                // Schema validation §3 doesn't yet score argument
+                // reconstruction atoms — they're additive and don't
+                // contribute to the existing AtomTypeCount/utilisation
+                // histogram. Skipped here so the partition stays
+                // complete without churning every downstream
+                // function. Add coverage when the validator gets a
+                // dedicated bucket for arguments.
+            }
         }
     }
     (entities, events, states, relations, claims, questions, configurations)
@@ -677,6 +686,7 @@ fn build_orphan_analysis(atoms: &[AtomEnvelope], edges: &[Edge]) -> OrphanAnalys
             AtomEnvelope::Claim(c) => (c.id.as_str(), Some(4)),
             AtomEnvelope::Question(q) => (q.id.as_str(), Some(5)),
             AtomEnvelope::Configuration(_) => ("", None),
+            AtomEnvelope::ArgumentReconstruction(_) => ("", None),
         };
         let Some(idx) = bucket_idx else {
             continue;
@@ -957,6 +967,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 
@@ -971,6 +982,7 @@ mod tests {
             attributed_to: None,
             confidence: Some(confidence),
             enrichment_depth: EnrichmentDepth::Extracted,
+            quotable_excerpt: None,
         }
     }
 

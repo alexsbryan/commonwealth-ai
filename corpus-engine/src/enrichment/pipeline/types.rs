@@ -229,6 +229,17 @@ pub struct ChatPrompt {
     /// invents one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase_id: Option<String>,
+    /// Output-token budget for this prompt. When set, the chat client
+    /// forwards it as `InferenceRequirements.max_output_tokens` so the
+    /// OICP scheduler can hard-gate against each candidate claim's
+    /// `max_output` (per OICP-v0.3 §2.4). Used to route short-call
+    /// phases (phase1b coverage, phase3 cluster naming, phase5
+    /// positions, phase6 tensions) to a high-throughput batched
+    /// FastShort claim and keep long-output Phase 1 on FastLong.
+    /// `None` leaves the budget unconstrained — the client falls back
+    /// to its model-default cap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u32>,
 }
 
 impl ChatPrompt {
@@ -239,6 +250,7 @@ impl ChatPrompt {
             response_schema: None,
             response_schema_name: None,
             phase_id: None,
+            max_output_tokens: None,
         }
     }
 
@@ -259,6 +271,17 @@ impl ChatPrompt {
     /// [`ChatPrompt::phase_id`] for the schema of the id strings.
     pub fn with_phase_id(mut self, phase_id: impl Into<String>) -> Self {
         self.phase_id = Some(phase_id.into());
+        self
+    }
+
+    /// Cap the output-token budget for this prompt. The chat client
+    /// forwards the value as `InferenceRequirements.max_output_tokens`
+    /// so OICP scheduling can hard-gate (per v0.3 §2.4) against each
+    /// candidate claim's `max_output`. Short-call phases set a small
+    /// value (e.g. 512) to opt into the high-throughput FastShort
+    /// claim; long-output phases either omit it or set it large.
+    pub fn with_max_output_tokens(mut self, tokens: u32) -> Self {
+        self.max_output_tokens = Some(tokens);
         self
     }
 }
@@ -1516,6 +1539,32 @@ mod tests {
         assert_eq!(parsed.questions_by_chapter[0].plot.as_deref(), Some("A letter arrives and is read aloud."));
         assert_eq!(parsed.failures.len(), 1);
         assert_eq!(parsed.failures[0].raw_response_head.as_deref(), Some("I cannot help with that."));
+    }
+
+    #[test]
+    fn chat_prompt_roundtrips_max_output_tokens() {
+        // Regression marker for the OICP-routing wire-up: short-call
+        // composers (phase1b/3/5/6) attach max_output_tokens so the
+        // chat client can opt into FastShort/FastLong claim selection.
+        // If this field is dropped from the struct or its serde
+        // attributes change, the daemon's hard-gate routing falls
+        // back to model-name routing and the speedup disappears.
+        let p = ChatPrompt::new("sys", "user")
+            .with_phase_id("phase1b_entity")
+            .with_max_output_tokens(512);
+        assert_eq!(p.max_output_tokens, Some(512));
+
+        let json = serde_json::to_string(&p).unwrap();
+        assert!(json.contains("\"max_output_tokens\":512"), "got {json}");
+
+        let back: ChatPrompt = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.max_output_tokens, Some(512));
+        assert_eq!(back.phase_id.as_deref(), Some("phase1b_entity"));
+
+        // Absent field round-trips as None, not 0.
+        let no_cap = ChatPrompt::new("s", "u");
+        let no_cap_json = serde_json::to_string(&no_cap).unwrap();
+        assert!(!no_cap_json.contains("max_output_tokens"));
     }
 
     #[test]

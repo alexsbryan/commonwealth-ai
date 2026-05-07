@@ -156,6 +156,7 @@ fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
         AtomEnvelope::Claim(_) => "claim",
         AtomEnvelope::Question(_) => "question",
         AtomEnvelope::Configuration(_) => "configuration",
+        AtomEnvelope::ArgumentReconstruction(_) => "argument",
     }
 }
 
@@ -178,6 +179,10 @@ fn atom_anchored_at(atom: &AtomEnvelope, section: &str) -> bool {
         AtomEnvelope::Question(q) => q.raised_at.iter().any(|c| c.chunk_id == section),
         AtomEnvelope::Configuration(c) => {
             c.evidence.iter().any(|cr| cr.chunk_id == section)
+        }
+        AtomEnvelope::ArgumentReconstruction(a) => {
+            a.section_position.section_id == section
+                || a.evidence.iter().any(|c| c.chunk_id == section)
         }
     }
 }
@@ -215,6 +220,15 @@ fn atom_surface_forms(atom: &AtomEnvelope) -> Vec<String> {
             // describes.
             if s.label.len() >= 3 {
                 vec![s.label.clone()]
+            } else {
+                Vec::new()
+            }
+        }
+        AtomEnvelope::ArgumentReconstruction(a) => {
+            // The argument's name ("Knowledge Argument") is the
+            // span-matchable handle.
+            if a.name.len() >= 3 {
+                vec![a.name.clone()]
             } else {
                 Vec::new()
             }
@@ -280,6 +294,7 @@ mod tests {
             entity_type: EntityType::Person,
             first_appearance: ChunkRef::new(section, None),
             description: "test".into(),
+            defining_quote: None,
             salience: 0.5,
             enrichment_depth: EnrichmentDepth::Extracted,
             affiliation: None,

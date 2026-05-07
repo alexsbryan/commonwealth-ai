@@ -308,6 +308,7 @@ impl AtlasIngestion for StructureFirstIngestion {
                         Some(preview(lead_text, 120)),
                     ),
                     description,
+                    defining_quote: None,
                     salience: 0.5, // structural pass has no centrality input yet
                     enrichment_depth: EnrichmentDepth::Structural,
                     affiliation: None,
@@ -352,6 +353,7 @@ impl AtlasIngestion for StructureFirstIngestion {
                     entity_type: structural_entity_type(),
                     first_appearance: ChunkRef::new(chunk_id.to_string(), None),
                     description: String::new(),
+                    defining_quote: None,
                     salience: 0.0, // off-corpus, no in-corpus signal
                     enrichment_depth: EnrichmentDepth::Structural,
                     affiliation: None,

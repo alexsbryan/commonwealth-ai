@@ -253,6 +253,7 @@ mod tests {
             attributed_to: None,
             confidence: Some(0.9),
             enrichment_depth: EnrichmentDepth::Extracted,
+            quotable_excerpt: None,
         }
     }
 
