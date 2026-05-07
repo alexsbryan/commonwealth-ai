@@ -1167,6 +1167,7 @@ mod tests {
             affiliation: Some("Acme Corp".into()),
             role: Some("VP Eng".into()),
             participants: Vec::new(),
+            defining_quote: None,
         };
         let api_migration = Entity {
             id: AtomId::entity(2),
@@ -1180,6 +1181,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![AtomId::entity(1)],
+            defining_quote: None,
         };
 
         let edge_sarah = Edge {

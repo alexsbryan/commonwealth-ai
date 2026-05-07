@@ -31,8 +31,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use corpus_engine::enrichment::atlas::{
-    atoms_content_hash, read_atlas_atoms, read_atlas_embeddings, write_atlas_embeddings,
-    AtomEnvelope, CachedAtlasEntry, ATLAS_DIRNAME,
+    atoms_content_hash, read_atlas_atoms, read_atlas_edges, read_atlas_embeddings,
+    write_atlas_embeddings, AtomEnvelope, CachedAtlasEntry, EdgeType, ATLAS_DIRNAME,
 };
 use sovereign_core::atlas_context::{AtlasContext, AtlasContextProvider, AtlasEntry};
 use sovereign_core::traits::InferenceProvider;
@@ -52,6 +52,35 @@ pub const TRIAGE_BUMPS_FILE: &str = "triage_bumps.json";
 /// keeps headroom while still covering the strongest signals.
 const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
 
+/// Render a tension-edge endpoint as a single line for the virtual
+/// chunk's embed text. Mirrors the eval-CLI helper of the same name —
+/// keep them in sync so the shared embed-cache produces identical
+/// payloads on either side.
+fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> String {
+    use AtomEnvelope::*;
+    match atom {
+        Some(Entity(e)) => format!("{}: {}", e.canonical_name, e.description),
+        Some(Claim(c)) => {
+            let act = serde_json::to_string(&c.discourse_act)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            let status = serde_json::to_string(&c.epistemic_status)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            format!("[Claim: {act}, {status}] {}", c.content)
+        }
+        Some(Question(q)) => format!("Question: {}", q.content),
+        Some(State(s)) => format!("State: {}", s.label),
+        Some(Relation(r)) => format!("Relation: {}", r.label),
+        Some(Event(ev)) => format!("Event: {}", ev.description),
+        Some(Configuration(cfg)) => format!("{}: {}", cfg.label, cfg.description),
+        Some(ArgumentReconstruction(a)) => format!("Argument: {}", a.name),
+        None => format!("{atom_id} (missing)"),
+    }
+}
+
 /// Filter applied during atlas-context loading. Mirrors the shape
 /// of the eval CLI's `AtlasLoadFilter` so the cache key derived
 /// here is comparable to what the CLI writes / reads.
@@ -61,6 +90,33 @@ pub struct AtlasContextFilter {
     pub depth_allowlist: Vec<String>,
     pub max_entries: Option<usize>,
     pub top_k: usize,
+    /// Path 2 (Phase A) — when true, the loader also emits virtual
+    /// entries for `Claim` atoms in addition to `Entity` atoms. Each
+    /// claim becomes one `AtlasEntry` whose `canonical_name` is the
+    /// article slug (so retrieval-time `score_sources` matching by
+    /// title still credits the source) and whose `embed_text`
+    /// encodes the discourse_act + epistemic_status + content as
+    /// `[Claim: <act>] <content>`. Default `false` for backwards
+    /// compatibility with the entity-only cache. Cache key
+    /// invalidates automatically via `signature()`.
+    pub include_claims: bool,
+    /// Path 2 (Phase B) — when true, the loader also emits virtual
+    /// entries for `Tension` edges in `edges.json`. Each tension fuses
+    /// its `sub_question` with both endpoint atoms into one embed text;
+    /// `canonical_name` is the article slug. Default `false`. Cache
+    /// key invalidates automatically via `signature()`. This is the
+    /// only Path 2 surface that can move the `dialectical_breadth`
+    /// essay axis — the substance lives on the edge, not on either
+    /// endpoint atom by itself.
+    pub include_tensions: bool,
+    /// Path 2 (Phase C) — when true, the loader also emits virtual
+    /// entries for `Configuration` atoms (spec §2.7). Each
+    /// configuration becomes one `AtlasEntry` with `canonical_name`
+    /// set to the article slug and embed text
+    /// `[Configuration: <label>] <description>`. Default `false`.
+    /// Should lift `argument_depth` on essay-readiness — Configurations
+    /// articulate the interpretive shape the article enacts as a whole.
+    pub include_configurations: bool,
 }
 
 impl Default for AtlasContextFilter {
@@ -74,6 +130,9 @@ impl Default for AtlasContextFilter {
             depth_allowlist: vec!["extracted".to_string()],
             max_entries: None,
             top_k: 3,
+            include_claims: false,
+            include_tensions: false,
+            include_configurations: false,
         }
     }
 }
@@ -86,12 +145,15 @@ impl AtlasContextFilter {
         let mut depths = self.depth_allowlist.clone();
         depths.sort();
         format!(
-            "min_chars={};depth=[{}];max={}",
+            "min_chars={};depth=[{}];max={};claims={};tensions={};configs={}",
             self.min_description_chars,
             depths.join(","),
             self.max_entries
                 .map(|n| n.to_string())
                 .unwrap_or_else(|| "none".to_string()),
+            self.include_claims,
+            self.include_tensions,
+            self.include_configurations,
         )
     }
 }
@@ -103,6 +165,11 @@ pub struct AtlasContextManager {
     embed_model: String,
     filter: AtlasContextFilter,
     contexts: Arc<RwLock<HashMap<String, Arc<AtlasContext>>>>,
+    /// Structural graph layer per atlas (atom-by-id + edge adjacency).
+    /// Used by [`crate::atlas_context::atlas_navigate`] for graph BFS;
+    /// without it the runtime falls back to bag-of-atoms cosine
+    /// (`atlas_top_k_as_chunks`). Loaded alongside `contexts` at init.
+    graphs: Arc<RwLock<HashMap<String, Arc<sovereign_core::atlas_context::AtlasGraph>>>>,
     /// Per-corpus query-bump map, in-memory mirror of each atlas's
     /// `triage_bumps.json`. Loaded at init time, mutated on every
     /// `record_match`, persisted by [`flush_bumps`] (debounced via
@@ -136,6 +203,7 @@ impl AtlasContextManager {
             embed_model,
             filter: AtlasContextFilter::default(),
             contexts: Arc::new(RwLock::new(HashMap::new())),
+            graphs: Arc::new(RwLock::new(HashMap::new())),
             bumps: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -241,9 +309,43 @@ impl AtlasContextManager {
                     );
                 }
             }
+            // Load the structural graph layer alongside. Independent
+            // of embedding load — even if the cache-miss-deferred
+            // path skipped the embeddings, the graph itself is cheap
+            // to parse and we want it available for graph-walk
+            // navigation regardless.
+            match sovereign_core::atlas_context::AtlasGraph::load_from_disk(&corpus_id, &atlas_dir) {
+                Ok(graph) => {
+                    let atom_count = graph.atoms_by_id.len();
+                    let edge_out_count: usize =
+                        graph.edges_by_source.values().map(|v| v.len()).sum();
+                    self.graphs
+                        .write()
+                        .await
+                        .insert(corpus_id.clone(), Arc::new(graph));
+                    tracing::info!(
+                        corpus = corpus_id,
+                        atoms = atom_count,
+                        edges = edge_out_count,
+                        "atlas-graph: loaded"
+                    );
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        corpus = corpus_id,
+                        error = %e,
+                        "atlas-graph: load skipped"
+                    );
+                }
+            }
         }
         let loaded = self.contexts.read().await.len();
-        tracing::info!(loaded, "atlas-context: init complete");
+        let graphs_loaded = self.graphs.read().await.len();
+        tracing::info!(
+            contexts = loaded,
+            graphs = graphs_loaded,
+            "atlas-context: init complete"
+        );
     }
 
     /// `spawn_init` mirrors `KnowledgeViewManager::spawn_init` —
@@ -376,49 +478,227 @@ impl AtlasContextManager {
 
         let atoms = read_atlas_atoms(atlas_dir).map_err(|e| format!("read atoms.json: {e}"))?;
 
+        // The article-slug used as `canonical_name` for non-Entity
+        // atoms (Claims, Tensions, etc.). For per-article SEP atlases
+        // the corpus_id is `sep-<slug>`; strip the prefix so
+        // `score_sources` (rigid title match) credits the right slug
+        // when a virtual chunk surfaces. For other atlases the prefix
+        // strip is a no-op and the corpus_id itself flows through.
+        let article_slug: String = corpus_id
+            .strip_prefix("sep-")
+            .unwrap_or(corpus_id)
+            .to_string();
+
         let mut payloads: Vec<(String, String)> = Vec::new();
         for atom in &atoms.atoms {
-            let AtomEnvelope::Entity(e) = atom else {
-                continue;
-            };
-            let is_placeholder = e.description.is_empty() && e.salience == 0.0;
-            if is_placeholder {
-                continue;
+            match atom {
+                AtomEnvelope::Entity(e) => {
+                    let is_placeholder = e.description.is_empty() && e.salience == 0.0;
+                    if is_placeholder {
+                        continue;
+                    }
+                    if e.description.len() < self.filter.min_description_chars {
+                        continue;
+                    }
+                    if !self.filter.depth_allowlist.is_empty() {
+                        let depth_label = serde_json::to_string(&e.enrichment_depth)
+                            .unwrap_or_default()
+                            .trim_matches('"')
+                            .to_string();
+                        if !self
+                            .filter
+                            .depth_allowlist
+                            .iter()
+                            .any(|d| d.eq_ignore_ascii_case(&depth_label))
+                        {
+                            continue;
+                        }
+                    }
+                    if let Some(cap) = self.filter.max_entries {
+                        if payloads.len() >= cap {
+                            break;
+                        }
+                    }
+                    let mut text = String::new();
+                    text.push_str(&e.canonical_name);
+                    text.push('\n');
+                    if !e.aliases.is_empty() {
+                        text.push_str(&e.aliases.join(", "));
+                        text.push('\n');
+                    }
+                    text.push_str(&e.description);
+                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                    }
+                    payloads.push((e.canonical_name.clone(), text));
+                }
+                AtomEnvelope::Claim(c) if self.filter.include_claims => {
+                    // Path 2 Phase A: surface Claim atoms as virtual
+                    // chunks. `canonical_name = article_slug` so
+                    // `score_sources` rigid title-match credits the
+                    // article when a claim is in top-K. The embed
+                    // text encodes discourse_act + epistemic_status
+                    // alongside the proposition itself so cosine
+                    // similarity reflects the substantive content,
+                    // not the meta-tags.
+                    if !self.filter.depth_allowlist.is_empty() {
+                        let depth_label = serde_json::to_string(&c.enrichment_depth)
+                            .unwrap_or_default()
+                            .trim_matches('"')
+                            .to_string();
+                        if !self
+                            .filter
+                            .depth_allowlist
+                            .iter()
+                            .any(|d| d.eq_ignore_ascii_case(&depth_label))
+                        {
+                            continue;
+                        }
+                    }
+                    if let Some(cap) = self.filter.max_entries {
+                        if payloads.len() >= cap {
+                            break;
+                        }
+                    }
+                    let act = serde_json::to_string(&c.discourse_act)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                        .to_string();
+                    let status = serde_json::to_string(&c.epistemic_status)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                        .to_string();
+                    let mut text =
+                        format!("[Claim: {act}, {status}] {content}", content = c.content);
+                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                    }
+                    payloads.push((article_slug.clone(), text));
+                }
+                AtomEnvelope::Configuration(cfg) if self.filter.include_configurations => {
+                    if !self.filter.depth_allowlist.is_empty() {
+                        let depth_label = serde_json::to_string(&cfg.enrichment_depth)
+                            .unwrap_or_default()
+                            .trim_matches('"')
+                            .to_string();
+                        if !self
+                            .filter
+                            .depth_allowlist
+                            .iter()
+                            .any(|d| d.eq_ignore_ascii_case(&depth_label))
+                        {
+                            continue;
+                        }
+                    }
+                    if let Some(cap) = self.filter.max_entries {
+                        if payloads.len() >= cap {
+                            break;
+                        }
+                    }
+                    let mut text =
+                        format!("[Configuration: {}] {}", cfg.label, cfg.description);
+                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                    }
+                    payloads.push((article_slug.clone(), text));
+                }
+                AtomEnvelope::ArgumentReconstruction(a) => {
+                    // Always include — these are the named-argument
+                    // reconstructions Phase 1 extracted. Embed text
+                    // is name + premises + conclusion so a question
+                    // mentioning the argument name OR matching its
+                    // content can seed the navigation onto this atom.
+                    if !self.filter.depth_allowlist.is_empty() {
+                        let depth_label = serde_json::to_string(&a.enrichment_depth)
+                            .unwrap_or_default()
+                            .trim_matches('"')
+                            .to_string();
+                        if !self
+                            .filter
+                            .depth_allowlist
+                            .iter()
+                            .any(|d| d.eq_ignore_ascii_case(&depth_label))
+                        {
+                            continue;
+                        }
+                    }
+                    if let Some(cap) = self.filter.max_entries {
+                        if payloads.len() >= cap {
+                            break;
+                        }
+                    }
+                    let mut text = String::with_capacity(256);
+                    text.push_str("[Argument: ");
+                    text.push_str(&a.name);
+                    text.push_str("] ");
+                    for p in &a.premises {
+                        text.push_str(p);
+                        text.push(' ');
+                    }
+                    text.push_str(&a.conclusion);
+                    for o in &a.objections {
+                        if !o.content.trim().is_empty() {
+                            text.push(' ');
+                            text.push_str(o.content.trim());
+                        } else if !o.name.trim().is_empty() {
+                            text.push(' ');
+                            text.push_str(o.name.trim());
+                        }
+                    }
+                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                    }
+                    payloads.push((article_slug.clone(), text));
+                }
+                _ => continue,
             }
-            if e.description.len() < self.filter.min_description_chars {
-                continue;
-            }
-            if !self.filter.depth_allowlist.is_empty() {
-                let depth_label = serde_json::to_string(&e.enrichment_depth)
-                    .unwrap_or_default()
-                    .trim_matches('"')
-                    .to_string();
-                if !self
-                    .filter
-                    .depth_allowlist
-                    .iter()
-                    .any(|d| d.eq_ignore_ascii_case(&depth_label))
-                {
-                    continue;
+        }
+
+        // Path 2 Phase B — surface Tension edges as virtual chunks.
+        // Mirrors the eval-CLI loader; same embed-text shape so the
+        // shared cache key is symmetric. Missing edges.json (older
+        // atlases without Phase 6) is non-fatal — log and skip.
+        if self.filter.include_tensions {
+            let atoms_by_id: HashMap<&str, &AtomEnvelope> = atoms
+                .atoms
+                .iter()
+                .map(|a| (a.id().as_str(), a))
+                .collect();
+            match read_atlas_edges(atlas_dir) {
+                Ok(edges_file) => {
+                    for edge in &edges_file.edges {
+                        if edge.edge_type != EdgeType::Tension {
+                            continue;
+                        }
+                        if let Some(cap) = self.filter.max_entries {
+                            if payloads.len() >= cap {
+                                break;
+                            }
+                        }
+                        let src = atoms_by_id.get(edge.source.as_str()).copied();
+                        let tgt = atoms_by_id.get(edge.target.as_str()).copied();
+                        let sub = edge
+                            .sub_question
+                            .as_deref()
+                            .unwrap_or("(no sub_question recorded)");
+                        let mut text = format!("[Tension] {sub}\n");
+                        text.push_str(&endpoint_text(src, edge.source.as_str()));
+                        text.push_str("\n↔\n");
+                        text.push_str(&endpoint_text(tgt, edge.target.as_str()));
+                        if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                            text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                        }
+                        payloads.push((article_slug.clone(), text));
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        corpus = corpus_id,
+                        error = %e,
+                        "atlas-context: include_tensions set but edges.json unreadable; skipping"
+                    );
                 }
             }
-            if let Some(cap) = self.filter.max_entries {
-                if payloads.len() >= cap {
-                    break;
-                }
-            }
-            let mut text = String::new();
-            text.push_str(&e.canonical_name);
-            text.push('\n');
-            if !e.aliases.is_empty() {
-                text.push_str(&e.aliases.join(", "));
-                text.push('\n');
-            }
-            text.push_str(&e.description);
-            if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
-                text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
-            }
-            payloads.push((e.canonical_name.clone(), text));
         }
 
         if payloads.is_empty() {
@@ -513,7 +793,20 @@ impl AtlasContextProvider for AtlasContextManager {
         *entry = entry.saturating_add(1);
         state.dirty = true;
     }
+
+    fn graph(
+        &self,
+        atlas_corpus_id: &str,
+    ) -> Option<Arc<sovereign_core::atlas_context::AtlasGraph>> {
+        self.graphs
+            .try_read()
+            .ok()
+            .and_then(|m| m.get(atlas_corpus_id).cloned())
+    }
 }
+
+// Graph loader lives in `sovereign_core::atlas_context::AtlasGraph::load_from_disk`
+// — single canonical implementation shared with the eval CLI.
 
 /// Persisted shape of `triage_bumps.json`. `schema_version` lets a
 /// future change to the bump weighting cleanly invalidate cached
@@ -566,18 +859,28 @@ mod tests {
     #[test]
     fn filter_signature_is_stable_across_depth_orderings() {
         let a = AtlasContextFilter {
-            min_description_chars: 200,
             depth_allowlist: vec!["extracted".into(), "structural_classified".into()],
-            max_entries: None,
-            top_k: 3,
+            ..Default::default()
         };
         let b = AtlasContextFilter {
-            min_description_chars: 200,
             depth_allowlist: vec!["structural_classified".into(), "extracted".into()],
-            max_entries: None,
-            top_k: 3,
+            ..Default::default()
         };
         assert_eq!(a.signature(), b.signature());
+    }
+
+    #[test]
+    fn filter_signature_changes_when_tensions_toggled() {
+        let off = AtlasContextFilter::default();
+        let on = AtlasContextFilter {
+            include_tensions: true,
+            ..Default::default()
+        };
+        assert_ne!(
+            off.signature(),
+            on.signature(),
+            "embed cache must invalidate when --atlas-include tension changes"
+        );
     }
 
     #[test]

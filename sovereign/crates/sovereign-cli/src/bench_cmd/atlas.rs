@@ -643,12 +643,12 @@ async fn run_chat(
     max_tokens: u32,
 ) -> Result<ChatResponse, String> {
     let url = format!("{}/v1/chat/completions", base_url);
-    // `model` is informational — the daemon's Priority-0 local-inference
-    // path ignores it and serves whichever primary slot is loaded.
-    // Keep an honest default so the request body looks like real
-    // production traffic if anyone tails the journal.
+    // Empty `model` lets the daemon route to whichever primary slot is
+    // loaded; the response carries the actual model_id back. Sending
+    // a literal "primary" sentinel was rejected after the mesh router
+    // started requiring a real advertised name (2026-05-04).
     let mut body = serde_json::json!({
-        "model": "primary",
+        "model": "",
         "messages": [
             { "role": "system", "content": prompt.system },
             { "role": "user", "content": prompt.user },

@@ -1,0 +1,31 @@
+loaded bank `sep-core-v1.1` — 21 questions, target corpus `sep`
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-36B-Opus-Q6_K
+Embed model: Qwen3-Embedding-0.6B-Q8_0
+Database:    /home/alexbryan/.sovereign/sovereign.db
+Indexes:     /home/alexbryan/.sovereign/indexes
+Corpora:     sep (187967 chunks), wikipedia (1845857 chunks), wikipedia-catalog (2048 chunks), wikipedia-fetched (1757 chunks)
+Tools:       10 registered
+Temperature: 0 (override)
+Wiki graph:  51280 articles, 7293818 edges
+[2m2026-05-05T13:15:09.585693Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m20
+[2m2026-05-05T13:15:10.647708Z[0m [32m INFO[0m atlas-context: init complete [3mloaded[0m[2m=[0m0
+Atlas: 0 corpus context(s) loaded from cache
+atlas-context: cache MISS — kept 55 of 57 entities (+ 0 of 0 claims, + 0 of 0 tensions, + 0 of 0 configurations) from `sep-qualia-knowledge` (placeholder: 0, short_desc<30: 2, depth: 0, over_cap: 0); top-K per question = 3
+atlas-context: embedded 55 entries in 1.2s
+atlas-context: cache WROTE 55 entries to /home/alexbryan/.sovereign/indexes/sep-qualia-knowledge/atlas/atoms.embeddings.bin
+atlas-context: cache MISS — kept 88 of 101 entities (+ 0 of 0 claims, + 0 of 0 tensions, + 0 of 0 configurations) from `sep-consciousness` (placeholder: 0, short_desc<30: 13, depth: 0, over_cap: 0); top-K per question = 3
+atlas-context: embedded 88 entries in 1.9s
+atlas-context: cache WROTE 88 entries to /home/alexbryan/.sovereign/indexes/sep-consciousness/atlas/atoms.embeddings.bin
+atlas-context: cache MISS — kept 66 of 77 entities (+ 0 of 0 claims, + 0 of 0 tensions, + 0 of 0 configurations) from `sep-physicalism` (placeholder: 0, short_desc<30: 11, depth: 0, over_cap: 0); top-K per question = 3
+atlas-context: embedded 66 entries in 1.5s
+atlas-context: cache WROTE 66 entries to /home/alexbryan/.sovereign/indexes/sep-physicalism/atlas/atoms.embeddings.bin
+atlas-context: cache MISS — kept 69 of 72 entities (+ 0 of 0 claims, + 0 of 0 tensions, + 0 of 0 configurations) from `sep-knowledge-analysis` (placeholder: 0, short_desc<30: 3, depth: 0, over_cap: 0); top-K per question = 3
+atlas-context: embedded 69 entries in 1.5s
+atlas-context: cache WROTE 69 entries to /home/alexbryan/.sovereign/indexes/sep-knowledge-analysis/atlas/atoms.embeddings.bin
+atlas-context: cache MISS — kept 69 of 78 entities (+ 0 of 0 claims, + 0 of 0 tensions, + 0 of 0 configurations) from `sep-rigid-designators` (placeholder: 0, short_desc<30: 9, depth: 0, over_cap: 0); top-K per question = 3
+atlas-context: embedded 69 entries in 1.5s
+atlas-context: cache WROTE 69 entries to /home/alexbryan/.sovereign/indexes/sep-rigid-designators/atlas/atoms.embeddings.bin
+atlas-context: cache MISS — kept 52 of 56 entities (+ 0 of 0 claims, + 0 of 0 tensions, + 0 of 0 configurations) from `sep-reliabilism` (placeholder: 0, short_desc<30: 4, depth: 0, over_cap: 0); top-K per question = 3
+atlas-context: embedded 52 entries in 1.1s
+atlas-context: cache WROTE 52 entries to /home/alexbryan/.sovereign/indexes/sep-reliabilism/atlas/atoms.embeddings.bin

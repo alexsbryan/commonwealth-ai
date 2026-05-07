@@ -596,6 +596,7 @@ fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
         AtomEnvelope::Claim(_) => "claim",
         AtomEnvelope::Question(_) => "question",
         AtomEnvelope::Configuration(_) => "configuration",
+        AtomEnvelope::ArgumentReconstruction(_) => "argument",
     }
 }
 
@@ -664,6 +665,26 @@ fn atom_surface_fields(
             c.description.clone(),
             Some(c.confidence),
         ),
+        AtomEnvelope::ArgumentReconstruction(a) => (
+            a.name.clone(),
+            Vec::new(),
+            format!(
+                "{}{}{}",
+                a.premises
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| format!("P{}. {}", i + 1, p))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                if !a.premises.is_empty() { " " } else { "" },
+                if !a.conclusion.is_empty() {
+                    format!("C. {}", a.conclusion)
+                } else {
+                    String::new()
+                }
+            ),
+            None,
+        ),
     }
 }
 
@@ -718,6 +739,13 @@ fn atom_evidence_section_refs(atom: &AtomEnvelope) -> Vec<(String, Option<String
             .iter()
             .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
             .collect(),
+        AtomEnvelope::ArgumentReconstruction(a) => {
+            let mut out = vec![(a.section_position.section_id.clone(), None)];
+            for c in &a.evidence {
+                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
+            }
+            out
+        }
     }
 }
 

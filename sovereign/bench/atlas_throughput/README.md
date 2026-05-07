@@ -157,10 +157,14 @@ A proper `bench atlas compare` subcommand can land later if the
 |---|---|---|---|---|---|
 | Qwopus3.5-27B-v3.5-Q6_K | 3/3 | ~15 | ~28–50 | ~64 d | production-ready |
 | Qwopus-GLM-18B-Healed-Q6_K | 2/3 (long fails) | 22–38 | 32 | ~14 d if you fix long | conditional |
-| FINAL-Bench_Darwin-35B-A3B-Opus-Q8_0 | 2/3 (short fails) | 161–180 | 12 | ~3.2 d | leading candidate, atom-count needs spot-check |
+| FINAL-Bench_Darwin-35B-A3B-Opus-Q8_0 (pre-fix, pre-token-bug-fix) | 2/3 (short fails) | 161–180 (inflated) | 12 | ~3.2 d | superseded — tok/s was prompt+completion summed, not honest decode |
+| FINAL-Bench_Darwin-35B-A3B-Opus-Q8_0 (post-masker-fix 2026-05-04) | **3/3** | 24–26 | 15–28 | **~7.0 d** | **rich extraction** (23/15/28 atoms across short/med/long), masker fix transferred cleanly |
+| FINAL-Bench_Darwin-36B-Opus-Q6_K (dense, 2026-05-04) | **3/3** | 23–27 | 11–20 | **~4.7 d** | balanced (20/15/11 atoms), faster per chapter than 35B-A3B-Q8, richer on long than Nemotron |
 | Darwin-9B-Opus.Q8_0 | 0/1 | 42.7 | — | n/a | rejected |
 | gemma-4-31B-it-Q5_K_M | 3/3 | 25–31 | 14 | ~20 d | viable; most reliable phase1 yet (no failures) |
 | Bonsai-8B-Q1_0 | 1/1 structural | 399 | 9 (empty filler) | 1.2 d | rejected for extraction |
+| Nemotron-Cascade-2-30B-A3B.Q6_K (pre-fix) | 2/3 (short truncated, long early-stop) | 12–30 | 16 | ~2.6 d *if* short retried | A3B early-EOS family; **superseded by post-fix row** |
+| Nemotron-Cascade-2-30B-A3B.Q6_K (post-masker-fix 2026-05-04) | **3/3** | 12–31 | 16 | **~2.8 d** | A3B early-EOS root-caused as masker `,` bug, fixed in `json_constraint.rs:step_object`; production-viable |
 
 ### Failure-mode notes
 
@@ -211,4 +215,62 @@ A proper `bench atlas compare` subcommand can land later if the
   via the Jinja2 oaicompat path which handles Gemma's macro
   template. If you're re-benching another macro-template model,
   you need a sovereign-cli build at or after that commit.
+- **A3B-MoE early-EOS RESOLVED 2026-05-04 — verified on Darwin too**
+  (was thought to be a family-wide model failure mode; turned out
+  to be a constraint-masker bug). Post-fix re-bench on
+  Darwin-35B-A3B confirms the fix transfers: Phase 1 success 2/3
+  → 3/3 with rich extraction (23 / 15 / 28 atoms on short / medium
+  / long, vs 12 atoms on medium pre-fix). Honest tok/s after the
+  prompt-token bookkeeping is correct: ~25 tok/s steady-state, NOT
+  the ~170 tok/s the pre-fix bench claimed (that number was
+  inflated by ~7× because `completion_tokens` carried prompt +
+  generated). Real SEP projection: Nemotron-A3B ~2.8 d (sparse
+  output), Darwin-A3B ~7.0 d (rich output, ~2× atom density). Root cause: in `sovereign-inference/src/json_constraint.rs`,
+  `step_object`'s `AwaitCommaOrClose → b','` arm accepted `,`
+  unconditionally. The recursive validator at `parse_object` line
+  437/448 correctly rejects `,` after the last typed property when
+  `additionalProperties: false` (no more pairs possible). The
+  disagreement triggered the diagnostic latch (`emitted_invalid =
+  true`) which forces EOS-only mode on the next mask call,
+  truncating the JSON document. Dense-attention models tokenize
+  structural separators (`],\n`) into smaller tokens that don't
+  trigger the disagreement at the same state-machine boundary; A3B
+  models tokenize them into single multi-byte tokens that do.
+  Fix: mirror the validator's `more_pairs_possible = next_idx <
+  properties.len() || additional` check inside `step_object`.
+  Locked in by three regression tests
+  (`comma_after_last_typed_property_is_invalid_in_both_paths` and
+  variants). Post-fix Nemotron-Cascade-2-30B-A3B Phase 1 success
+  jumped 66.7% → 100% with no other changes.
+- **Nemotron-Cascade-2-30B-A3B.Q6_K** (benched 2026-05-04, pre-fix):
+  same A3B early-EOS failure family as Darwin-35B-A3B, but at much
+  lower throughput (~30 tok/s on the medium task vs Darwin-A3B's
+  ~170).
+  phase1_short produced a rich, well-formed JSON body for sec_0003
+  of al-farabi (al-Farabi entity, Muhsin Mahdi, Reisman, Parens —
+  good extraction quality at the body level) but cut off after 979
+  completion tokens mid-`claims` array, leaving the six-facet
+  document unclosed → strict parser rejects. phase1_long stopped
+  after 102 completion tokens (atoms_extracted=2, naturally — not
+  budget-truncated), suggesting the model bails entirely on the
+  longest input. cluster_name_synth also stopped early at 52
+  tokens, mid-object. Pattern: A3B-class MoE models on Strix Halo
+  ROCm appear to early-exit on long structured outputs regardless
+  of remaining budget — same root cause as Darwin-A3B's
+  short-chapter failure. The 16 atoms on the medium chapter is on
+  par with Darwin-A3B (12) but well below GLM-18B's 32, so atom
+  density is also coarser. Verdict: **rejected for primary** at
+  current weights — falls in the same risk basket as Darwin-A3B,
+  with worse throughput. Not worth pursuing further unless either
+  the early-stop can be addressed (sampler config, EOS-token
+  inspection) or atom density turns out to be acceptable on a
+  spot-check across more chapters.
+- **NOTE — bench harness fix 2026-05-04**: the bench was sending
+  `model: "primary"` as a sentinel; after a daemon-side mesh-router
+  change this returns 503 ("no node in this mesh advertises model
+  'primary'"). Fix in `bench_cmd/atlas.rs:651` switches to empty
+  string, which routes to the loaded local primary and lets the
+  daemon report back the actual model_id. Any pre-fix bench run
+  against the current daemon will look like a 0/3 wipeout — that's
+  the harness, not the model.
 

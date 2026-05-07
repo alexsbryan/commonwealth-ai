@@ -329,6 +329,7 @@ mod tests {
             affiliation: affiliation.map(|s| s.into()),
             role: role.map(|s| s.into()),
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 
@@ -345,6 +346,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         }
     }
 
@@ -361,6 +363,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: participant_ids.to_vec(),
+            defining_quote: None,
         }
     }
 

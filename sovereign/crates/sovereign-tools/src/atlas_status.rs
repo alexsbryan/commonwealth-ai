@@ -232,6 +232,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         })]);
         std::fs::write(
             atlas_dir.join("atoms.json"),

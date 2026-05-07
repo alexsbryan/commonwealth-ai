@@ -878,17 +878,51 @@ fn synthesize_slot_claims(
         )
     };
 
-    // Per-slot context/output envelopes: Fast is tuned for short
-    // requests (routing + classification), Slow carries the full
-    // 32K context advertised at the model level.
+    // Per-slot context/output envelopes:
+    //
+    // - Fast advertises **two** claims, per OICP-v0.3 §2.3 ("a node
+    //   running a single model may publish one fast-latency claim
+    //   with short context, higher affinity, and one … with longer
+    //   context, lower affinity"):
+    //
+    //     * **FastShort** — `max_context=2_048`, `max_output=512`.
+    //       Routes Phase 1b coverage / Phase 3 cluster naming /
+    //       Phase 5 / Phase 6 / interactive routing calls through the
+    //       continuous-batched companion context (`n_seq_max=8`),
+    //       worth a 2.1–2.8× wall-clock win measured in
+    //       `bench_decode_batch.rs`. Higher affinity so it wins when
+    //       both claims pass the gates.
+    //     * **FastLong** — `max_context=8_000`, `max_output=24_576`.
+    //       Catches Phase 1 chapter ingestion (which asks for the
+    //       full output budget) and any other call FastShort's hard
+    //       gates eliminate. Routes through the original `fast` slot
+    //       at `n_seq_max=1`. Slightly lower affinity so the
+    //       scheduler prefers FastShort whenever both gates pass.
+    //
+    //   Hard gates do all the routing work — composers that attach
+    //   `max_output_tokens=512` (Phase 1b/3/5/6) automatically land
+    //   on FastShort; Phase 1 with `max_output_tokens` unset (or
+    //   ≥513) falls through to FastLong.
+    //
+    // - Slow carries a single Normal-latency claim with the full
+    //   advertised context — unchanged from the prior advertisement.
     match speed {
-        Speed::Fast => vec![CapabilityClaim::new(
-            hint,
-            LatencyClass::Fast,
-            8_000,
-            1_000,
-            affinity,
-        )],
+        Speed::Fast => vec![
+            CapabilityClaim::new(
+                hint.clone(),
+                LatencyClass::Fast,
+                2_048,
+                512,
+                (affinity + 0.05).clamp(0.0, 1.0),
+            ),
+            CapabilityClaim::new(
+                hint,
+                LatencyClass::Fast,
+                8_000,
+                24_576,
+                affinity,
+            ),
+        ],
         Speed::Medium | Speed::Slow => vec![CapabilityClaim::new(
             hint,
             LatencyClass::Normal,

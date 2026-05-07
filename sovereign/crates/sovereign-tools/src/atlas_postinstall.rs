@@ -1024,6 +1024,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         };
         // Off-list noise: 5 entities with massive centrality (each
         // sourcing 100 edges into earth or each other).
@@ -1041,6 +1042,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                defining_quote: None,
             }));
         }
 
@@ -1165,6 +1167,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                defining_quote: None,
             })
         };
         atoms.push(mk(1, "Earth")); // L1 seed
@@ -1314,6 +1317,7 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
+                defining_quote: None,
             }));
         }
         // Equal centrality: each gets one inbound from the other.

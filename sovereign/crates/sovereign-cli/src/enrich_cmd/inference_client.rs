@@ -232,12 +232,15 @@ impl DaemonInferenceClient {
     }
 
     /// Call `/v1/chat/completions` with a single system + user
-    /// message. Uses the per-phase cap if `prompt.phase_id` matches
-    /// one configured via `with_max_tokens_by_phase`, otherwise the
-    /// client-level `max_output_tokens` configured via
-    /// `with_max_output_tokens`.
+    /// message. Output-token cap precedence:
+    ///   1. `prompt.max_output_tokens` (composer-attached, opts the
+    ///      request into OICP-routed FastShort/FastLong selection)
+    ///   2. per-phase config (`with_max_tokens_by_phase`)
+    ///   3. client default (`with_max_output_tokens`)
     pub async fn complete(&self, prompt: &ChatPrompt) -> Result<String> {
-        let cap = self.resolve_max_tokens_for_phase(prompt.phase_id.as_deref());
+        let cap = prompt
+            .max_output_tokens
+            .or_else(|| self.resolve_max_tokens_for_phase(prompt.phase_id.as_deref()));
         self.complete_inner(prompt, cap).await
     }
 
@@ -285,6 +288,33 @@ impl DaemonInferenceClient {
         if let Some(n) = max_tokens {
             if let Some(obj) = body.as_object_mut() {
                 obj.insert("max_tokens".into(), serde_json::json!(n));
+            }
+        }
+        // OICP-v0.3 routing: when the composer attached an explicit
+        // `prompt.max_output_tokens` it has opted into hard-gated
+        // claim selection (per spec §2.4). Surface the budget — and
+        // pin latency to Fast so the request lands on a FastShort/
+        // FastLong claim rather than getting deprioritized to a
+        // Normal-latency Slow slot. Composers without an explicit
+        // budget keep the existing model-name routing path.
+        if let Some(mo) = prompt.max_output_tokens {
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert(
+                    "oicp".into(),
+                    serde_json::json!({
+                        // Required by the daemon's request validator
+                        // (oicp-types §1). Without it the request
+                        // 422s before reaching the model — silently
+                        // killing phase1b entity/concept coverage
+                        // passes, which is how MacIntyre / Sandel /
+                        // Walzer leaked through Phase 1 extraction
+                        // even though the coverage prompt was
+                        // designed to catch them.
+                        "oicp_version": "0.3.0",
+                        "max_output_tokens": mo,
+                        "latency_class": "fast",
+                    }),
+                );
             }
         }
         // OpenAI-style structured-output declaration. When the

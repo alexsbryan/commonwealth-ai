@@ -70,11 +70,14 @@ const RUN_HELP: Help = Help {
             ("--no-judge",     "Skip the LLM-as-judge \"instructor mode\" pass under --synth. Default: judge runs alongside the strict scorer to catch paraphrased coverage."),
             ("--format text|json", "Stdout format (default: text)."),
             ("--output <path>", "Also write the full run as pretty JSON to this path."),
-            ("--with-atlas <id>", "Atlas corpus id whose Entity records are embedded once and fused into per-question retrieval (atlas-grounded retrieval). Off by default."),
+            ("--with-atlas <ids>", "Comma-separated list of atlas corpus ids; each is embedded once and the per-question retrieval pools their entries via global cosine top-K (the multi-article SEP pilot path). One id is the single-atlas case. Off by default."),
             ("--atlas-top-k <N>", "Top-K atlas matches injected per question (default 3). Only used with --with-atlas."),
             ("--atlas-min-description-chars <N>", "Skip entities whose description is shorter than N chars (default 200 — keeps actually-enriched entities; pass 0 to embed every non-placeholder which can mean ~40min on wiki-scale atlases)."),
             ("--atlas-depth <list>", "Comma-separated enrichment_depth allowlist (e.g. `extracted` or `extracted,structural_classified`). Empty = accept any depth."),
             ("--atlas-max-entries <N>", "Hard cap on the number of entities embedded. Useful as a safety net on misconfigured runs."),
+            ("--atlas-include <list>", "Comma-separated atom/edge kinds to surface from the atlas in addition to entities. `claim` (Path 2 Phase A) surfaces Claim atoms as virtual chunks framed as `[Claim: act, status] content`. `tension` (Phase B) surfaces Tension edges as virtual chunks framed as `[Tension] sub_question` followed by both endpoint atoms — feeds the dialectical_breadth axis. `configuration` (Phase C) surfaces Configuration atoms (the interpretive shape of the article as a whole) framed as `[Configuration: label] description` — feeds the argument_depth axis."),
+            ("--loose-source-judge", "After rigid scoring, ask a fast-slot LLM whether each *missing* expected_source is materially covered by the retrieved chunks (paraphrase / canonical-sibling / indirect coverage all count). Strict superset of the rigid score — never lowers it. ~one fast-slot call per question."),
+            ("--essay-judge", "Multi-axis 0–3 LLM scorer over the retrieved set: topical_coverage, position_attribution, dialectical_breadth, argument_depth (total 0–12). Answers \"does the bag have essay-worthy substance?\" rather than \"are the right articles in it?\". ~one fast-slot call per question."),
             ("--help, -h",     "Show this message."),
         ]),
         HelpSection::Notes(
@@ -148,6 +151,30 @@ struct RunArgs {
     atlas_depth: Vec<String>,
     /// Hard cap on number of entities to embed. None = unlimited.
     atlas_max_entries: Option<usize>,
+    /// Path 2 — comma-separated atom kinds to surface from the atlas.
+    /// `entity` is always included implicitly. Additional values:
+    /// `claim` (Phase A — substantive proposition atoms with
+    /// discourse_act + epistemic_status). Future Phase B/C will add
+    /// `tension` and `configuration`. Default empty = entities only.
+    atlas_include_kinds: Vec<String>,
+    /// Run an LLM-as-judge "loose source-credit" pass after rigid
+    /// scoring. For each question's *missing* expected_sources (titles
+    /// that didn't match retrieved chunks under `normalize_title`
+    /// folding), ask the fast slot whether the topic IS materially
+    /// covered by the retrieved chunks — paraphrase / canonical-sibling
+    /// / indirect coverage all count. Strict superset of the rigid
+    /// score, never lowers it. Costs ~one fast-slot call per question.
+    /// Off by default. See `score::score_sources_loose`.
+    loose_source_judge: bool,
+    /// Run a multi-axis essay-readiness judge over the retrieved set.
+    /// Scores 0–3 on each of four axes (topical_coverage,
+    /// position_attribution, dialectical_breadth, argument_depth),
+    /// total 0–12. Where loose-source-judge answers "are the right
+    /// articles in the bag?", this answers "does the bag have what an
+    /// undergraduate essay needs?" — substance, not just recall.
+    /// Costs ~one fast-slot call per question. Off by default. See
+    /// `score::score_essay_readiness`.
+    essay_judge: bool,
 }
 
 impl Default for RunArgs {
@@ -166,6 +193,9 @@ impl Default for RunArgs {
             atlas_min_description_chars: 200,
             atlas_depth: Vec::new(),
             atlas_max_entries: None,
+            atlas_include_kinds: Vec::new(),
+            loose_source_judge: false,
+            essay_judge: false,
         }
     }
 }
@@ -289,6 +319,24 @@ async fn cmd_run(args: &[String]) -> i32 {
                 i += 1;
                 a.atlas_max_entries = rest.get(i).and_then(|s| s.parse().ok());
             }
+            "--atlas-include" => {
+                i += 1;
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: --atlas-include needs a comma-separated value (e.g. `claim`)");
+                    return 2;
+                };
+                a.atlas_include_kinds = v
+                    .split(',')
+                    .map(|s| s.trim().to_lowercase())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+            }
+            "--loose-source-judge" => {
+                a.loose_source_judge = true;
+            }
+            "--essay-judge" => {
+                a.essay_judge = true;
+            }
             extra => {
                 eprintln!("error: unexpected argument `{extra}`");
                 return 2;
@@ -358,29 +406,91 @@ async fn cmd_run(args: &[String]) -> i32 {
         return 0;
     }
 
-    let atlas_ctx = if let Some(id) = a.with_atlas.as_deref() {
+    let atlas_ctxs: Vec<sovereign_core::atlas_context::AtlasContext> = if let Some(id_list) =
+        a.with_atlas.as_deref()
+    {
+        let include_claims = a
+            .atlas_include_kinds
+            .iter()
+            .any(|k| k == "claim");
+        let include_tensions = a
+            .atlas_include_kinds
+            .iter()
+            .any(|k| k == "tension");
+        let include_configurations = a
+            .atlas_include_kinds
+            .iter()
+            .any(|k| k == "configuration");
+        // Surface unknown kinds as a warning so typos don't silently
+        // produce an entities-only run.
+        for k in &a.atlas_include_kinds {
+            if !matches!(
+                k.as_str(),
+                "claim" | "entity" | "tension" | "configuration"
+            ) {
+                eprintln!(
+                    "warn: --atlas-include `{k}` is not yet recognised; \
+                     accepted today: entity, claim, tension, configuration."
+                );
+            }
+        }
         let filter = runner::AtlasLoadFilter {
             min_description_chars: a.atlas_min_description_chars,
             depth_allowlist: a.atlas_depth.clone(),
             max_entries: a.atlas_max_entries,
+            include_claims,
+            include_tensions,
+            include_configurations,
         };
-        match runner::load_atlas_context(&session, id, a.atlas_top_k, &filter).await {
-            Ok(ctx) => Some(ctx),
-            Err(e) => {
-                eprintln!("error: --with-atlas {id}: {e}");
-                return 1;
+        // `--with-atlas` accepts a comma-separated list of atlas
+        // corpus ids. Each loads independently (with its own
+        // canonical_name = article_slug derivation) and the per-question
+        // retrieval pools their entries via `atlas_top_k_across`. This
+        // is the multi-article SEP-pilot path: enrich N per-article
+        // atlases, point one --with-atlas at all of them, let the
+        // global cosine pick the topically-aligned surfaces.
+        let mut out = Vec::new();
+        for id in id_list.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+            match runner::load_atlas_context(&session, id, a.atlas_top_k, &filter).await {
+                Ok(ctx) => out.push(ctx),
+                Err(e) => {
+                    eprintln!("error: --with-atlas {id}: {e}");
+                    return 1;
+                }
             }
         }
+        out
     } else {
-        None
+        Vec::new()
     };
+
+    // Load the structural graph layer for each atlas (atoms-by-id,
+    // edge adjacency). Used by `atlas_navigate` for graph BFS — the
+    // substantive layer of the atlas that bag-of-atoms cosine
+    // retrieval ignores. Cheap: just parses atoms.json + edges.json
+    // already on disk from build time.
+    let atlas_graphs: Vec<runner::AtlasGraph> = atlas_ctxs
+        .iter()
+        .filter_map(|ctx| {
+            let atlas_dir =
+                crate::enrich_cmd::paths::index_root(&ctx.atlas_corpus_id)
+                    .join(corpus_engine::enrichment::atlas::ATLAS_DIRNAME);
+            match runner::AtlasGraph::load_from_disk(&ctx.atlas_corpus_id, &atlas_dir) {
+                Ok(g) => Some(g),
+                Err(e) => {
+                    eprintln!("warn: atlas-graph load `{}`: {e}", ctx.atlas_corpus_id);
+                    None
+                }
+            }
+        })
+        .collect();
 
     let run = if a.synth {
         eprintln!(
             "synth mode — driving full chat pipeline. This will take ~one chat-completion \
              per question; sit tight."
         );
-        if atlas_ctx.is_some() {
+        if !atlas_ctxs.is_empty() {
             eprintln!(
                 "note: --with-atlas is ignored under --synth (synth path uses runtime \
                  retrieval, not the eval runner's chunk search)."
@@ -394,7 +504,17 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
         }
     } else {
-        match runner::run_bank(&session, &bank, a.limit, atlas_ctx.as_ref()).await {
+        match runner::run_bank(
+            &session,
+            &bank,
+            a.limit,
+            &atlas_ctxs,
+            &atlas_graphs,
+            a.loose_source_judge,
+            a.essay_judge,
+        )
+        .await
+        {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("error: {e}");

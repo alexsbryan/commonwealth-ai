@@ -127,6 +127,7 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
     let mut relations = Vec::new();
     let mut claims = Vec::new();
     let mut questions = Vec::new();
+    let mut argument_reconstructions = Vec::new();
     for a in atoms_file.atoms {
         match a {
             AtomEnvelope::Entity(x) => entities.push(x),
@@ -138,6 +139,7 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
             AtomEnvelope::Configuration(_) => {
                 // Drop previous Phase 8 output; this pass replaces it.
             }
+            AtomEnvelope::ArgumentReconstruction(x) => argument_reconstructions.push(x),
         }
     }
 
@@ -295,6 +297,7 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
         &claims,
         &questions,
         &configurations,
+        &argument_reconstructions,
         &edges_file.edges,
         &trajectories,
     ) {

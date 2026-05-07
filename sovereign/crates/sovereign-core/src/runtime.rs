@@ -623,6 +623,14 @@ fn now() -> i64 {
         .as_secs() as i64
 }
 
+/// UTF-8-safe truncate by character count. Used by the atlas-navigate
+/// dedupe key in `prepare_knowledge_query_plan` — slicing by byte
+/// offset can panic mid-codepoint on prose containing curly quotes /
+/// dashes / accented chars (real SEP content is full of them).
+fn truncate_chars(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
 /// Truncate `content` to at most `max_bytes`, breaking on a word
 /// boundary when possible and appending `"..."`.
 ///
@@ -3456,6 +3464,174 @@ impl Runtime {
     ///
     /// Used by both `handle_knowledge_query` and `handle_simple` so that
     /// installed corpora enrich all intent types, not just KnowledgeQuery.
+    /// Apply atlas grounding to a chunk pool: graph-walk navigation
+    /// when the provider exposes the graph layer, falling back to
+    /// bag-of-atoms top-K otherwise. Idempotent — appends to `chunks`
+    /// in place; no-op when atlas grounding is disabled, no provider
+    /// is registered, or the embedding is empty.
+    ///
+    /// `label` is the call-site identifier surfaced to logs and
+    /// downstream search-corpus-indexes traces (e.g. "KnowledgeQuery"
+    /// vs "DeepQuery") so operators can track which retrieval path
+    /// generated which atlas additions.
+    ///
+    /// Single canonical implementation; both intent paths
+    /// (KnowledgeQuery + DeepQuery) call this rather than inlining
+    /// the ~80-line graph-walk + fallback block.
+    async fn apply_atlas_grounding(
+        &self,
+        query_text: &str,
+        embedding: &[f32],
+        chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        label: &str,
+    ) {
+        if !atlas_grounding_enabled() {
+            return;
+        }
+        let Some(provider) = self.atlas_context_provider.as_ref() else {
+            return;
+        };
+        if embedding.is_empty() {
+            return;
+        }
+
+        let corpus_ids = provider.loaded_corpus_ids();
+        let ctxs: Vec<Arc<crate::atlas_context::AtlasContext>> =
+            corpus_ids.iter().filter_map(|id| provider.get(id)).collect();
+        let graphs: Vec<Arc<crate::atlas_context::AtlasGraph>> =
+            corpus_ids.iter().filter_map(|id| provider.graph(id)).collect();
+
+        if !graphs.is_empty() {
+            // Graph-walk: cosine seeds → BFS expand 1-2 hops over
+            // typed edges (Tension / Grounds / Configures /
+            // Involves) → aggregate evidence ChunkRefs across the
+            // neighborhood → FTS-fetch each preview against the
+            // source corpus filtered to the atom's article. Output
+            // is real source chunks scored by atlas evidence
+            // density. Validated +3 essay over baseline at 6-atlas
+            // scale on the SEP eval.
+            let ctx_refs: Vec<&crate::atlas_context::AtlasContext> =
+                ctxs.iter().map(|c| c.as_ref()).collect();
+            let graph_refs: Vec<&crate::atlas_context::AtlasGraph> =
+                graphs.iter().map(|g| g.as_ref()).collect();
+            let max_seeds = ctxs.first().map(|c| c.top_k).unwrap_or(3).max(12);
+            let requests = crate::atlas_context::atlas_navigate(
+                query_text,
+                embedding,
+                &ctx_refs,
+                &graph_refs,
+                max_seeds,
+                /*max_hops=*/ 2,
+            );
+            // Production budget mirrors the eval-CLI's calibrated
+            // value (limit * 0.6, where limit is `KQ_PER_CORPUS_LIMIT
+            // = 20`). Calibrated against the SEP bank: budget=6 gave
+            // +22 sources / +6 essay / +6 dialectical_breadth vs
+            // baseline; budget=4 left ~10 bank-required articles
+            // unfetched even when their atlas was loaded.
+            let fetch_budget = ((KQ_PER_CORPUS_LIMIT as f32) * 0.6).ceil() as usize;
+            let mut graph_added = 0usize;
+            let mut seen: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for req in requests.iter().take(fetch_budget * 2) {
+                if graph_added >= fetch_budget {
+                    break;
+                }
+                let fts_hits = self
+                    // Article slug + passage preview as FTS query
+                    // (see eval-side runner.rs comment). Title-bias
+                    // pulls intended-article chunks into the pool.
+                    .search_corpus_indexes(
+                        &[],
+                        &format!("{} {}", req.article_slug, req.passage_preview),
+                        30,
+                        "AtlasNavigate",
+                    )
+                    .await;
+                for hit in fts_hits {
+                    let title_match = hit
+                        .title
+                        .as_deref()
+                        .map(|t| t == req.article_slug)
+                        .unwrap_or(false);
+                    if !title_match {
+                        continue;
+                    }
+                    let key = format!(
+                        "{}|{}",
+                        hit.title.clone().unwrap_or_default(),
+                        truncate_chars(&hit.content, 80)
+                    );
+                    if !seen.insert(key) {
+                        continue;
+                    }
+                    let mut boosted = hit;
+                    boosted.score = req.score * 0.05;
+                    // Prepend atlas verbatim excerpts harvested from
+                    // the atoms that motivated this fetch — concept
+                    // defining_quotes and claim quotable_excerpts.
+                    // Format `[Atlas highlights] …\n\n<chunk text>`
+                    // makes the article's exact words for the
+                    // grounded position visible at the head of the
+                    // passage. Skips when no excerpts carried (most
+                    // atoms have neither field set).
+                    if !req.verbatim_excerpts.is_empty() {
+                        let mut head = String::from("[Atlas highlights]\n");
+                        for ex in &req.verbatim_excerpts {
+                            head.push_str(ex);
+                            head.push('\n');
+                        }
+                        head.push('\n');
+                        head.push_str(&boosted.content);
+                        boosted.content = head;
+                    }
+                    chunks.push(boosted);
+                    graph_added += 1;
+                    if graph_added >= fetch_budget {
+                        break;
+                    }
+                }
+            }
+            // Adaptive triage: bump article slug per atlas to climb
+            // the Tier-2 enrichment queue.
+            for ctx in &ctxs {
+                provider.record_match(&ctx.atlas_corpus_id, &ctx.atlas_corpus_id);
+            }
+            if graph_added > 0 {
+                tracing::info!(
+                    label,
+                    graph_added,
+                    "atlas-grounding: graph-walk fused"
+                );
+            }
+        } else {
+            // Fallback: bag-of-atoms (no graph layer loaded by this
+            // provider). Kept for older deployments + as a safety
+            // net during graph-layer rollout.
+            let mut bag_added = 0usize;
+            for corpus_id in &corpus_ids {
+                if let Some(ctx) = provider.get(corpus_id) {
+                    let virt =
+                        crate::atlas_context::atlas_top_k_as_chunks(embedding, &ctx);
+                    for chunk in &virt {
+                        if let Some(name) = chunk.title.as_deref() {
+                            provider.record_match(corpus_id, name);
+                        }
+                    }
+                    bag_added += virt.len();
+                    chunks.extend(virt);
+                }
+            }
+            if bag_added > 0 {
+                tracing::info!(
+                    label,
+                    bag_added,
+                    "atlas-grounding: bag-of-atoms fused (graph layer absent)"
+                );
+            }
+        }
+    }
+
     async fn search_corpus_indexes(
         &self,
         embedding: &[f32],
@@ -4263,31 +4439,8 @@ impl Runtime {
             // route and benefit equally from atlas grounding.
             // Same env override (`SOVEREIGN_ATLAS_GROUNDING=0`)
             // applies here.
-            if atlas_grounding_enabled() {
-                if let Some(provider) = self.atlas_context_provider.as_ref() {
-                    if !corpus_embedding.is_empty() {
-                        for corpus_id in provider.loaded_corpus_ids() {
-                            if let Some(ctx) = provider.get(&corpus_id) {
-                                let virt = crate::atlas_context::atlas_top_k_as_chunks(
-                                    &corpus_embedding, &ctx,
-                                );
-                                // Record a triage bump for every match
-                                // surfaced — adaptive prior so user-
-                                // queried entities climb the Tier-2
-                                // queue (Phase B2). Best-effort sync
-                                // call; the manager owns rate-limit /
-                                // persistence behind the trait.
-                                for chunk in &virt {
-                                    if let Some(name) = chunk.title.as_deref() {
-                                        provider.record_match(&corpus_id, name);
-                                    }
-                                }
-                                all_chunks.extend(virt);
-                            }
-                        }
-                    }
-                }
-            }
+            self.apply_atlas_grounding(message, &corpus_embedding, &mut all_chunks, "DeepQuery")
+                .await;
 
             // Also search StateStore for corpus-type documents (used by test
             // harness and for corpora ingested directly into the store).
@@ -7733,48 +7886,14 @@ impl Runtime {
             );
         }
 
-        // 2d. Atlas grounding — fuse pre-embedded Entity matches from
-        //     every installed atlas as virtual ScoredChunks. Each
-        //     fused chunk has `corpus_id = "atlas:<corpus>"` so the
-        //     downstream prompt-assembly + provenance layers can tell
-        //     atlas-derived context from raw chunk hits. The
-        //     pre-embedded contexts are loaded once per process by
-        //     the `AtlasContextManager`; per-question cost here is
-        //     just N cosines (microseconds).
-        //
-        //     Env override `SOVEREIGN_ATLAS_GROUNDING=0` disables
-        //     fusion entirely — the production safety valve for
-        //     "atlas grounding is hurting more than helping on this
-        //     workload, fall back to chunks-only without rebuilding."
-        if atlas_grounding_enabled() {
-            if let Some(provider) = self.atlas_context_provider.as_ref() {
-                if !embedding.is_empty() {
-                    let mut atlas_added = 0usize;
-                    for corpus_id in provider.loaded_corpus_ids() {
-                        if let Some(ctx) = provider.get(&corpus_id) {
-                            let virt = crate::atlas_context::atlas_top_k_as_chunks(
-                                &embedding, &ctx,
-                            );
-                            // Adaptive triage bump (Phase B2) — see
-                            // the DeepQuery site above for rationale.
-                            for chunk in &virt {
-                                if let Some(name) = chunk.title.as_deref() {
-                                    provider.record_match(&corpus_id, name);
-                                }
-                            }
-                            atlas_added += virt.len();
-                            chunks.extend(virt);
-                        }
-                    }
-                    if atlas_added > 0 {
-                        tracing::info!(
-                            atlas_added,
-                            "KnowledgeQuery: atlas-grounding fused"
-                        );
-                    }
-                }
-            }
-        }
+        // 2d. Atlas grounding — graph-walk navigation when the
+        //     provider exposes the graph layer; bag-of-atoms top-K
+        //     fallback otherwise. See `apply_atlas_grounding` for
+        //     the full design rationale (cosine seeds → BFS expand
+        //     over typed edges → FTS-fetch source chunks via atom
+        //     evidence previews).
+        self.apply_atlas_grounding(message, &embedding, &mut chunks, "KnowledgeQuery")
+            .await;
 
         // 3. Reweight by query relevance (mirrors prepare_knowledge_context),
         //    then sort by score, cap chunks-per-article for breadth, and

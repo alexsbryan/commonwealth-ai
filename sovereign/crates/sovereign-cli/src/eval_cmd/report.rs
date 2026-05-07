@@ -69,11 +69,41 @@ fn print_question_row(r: &EvalResult, inspect: bool) {
         );
     } else {
         let vec_tag = if r.vector_eligible { "vec+fts" } else { "fts-only" };
+        // When `--loose-source-judge` was on, render the loose score
+        // as a parenthetical delta next to the rigid one so a glance
+        // tells you "rigid X / Y; loose Z / Y" — never lower than X.
+        let loose_tag = r
+            .loose_source_score
+            .as_ref()
+            .map(|l| {
+                let label = score_label(&l.matched.len(), l.total_expected);
+                format!(" (loose {label:>7})")
+            })
+            .unwrap_or_default();
+        // When `--essay-judge` was on, render the four-axis total +
+        // per-axis breakdown after facts. Format: "essay 9/12 [t3/p2/d1/a3]"
+        // — total first for at-a-glance scanning, axes for detail.
+        let essay_tag = r
+            .essay_readiness
+            .as_ref()
+            .map(|e| {
+                format!(
+                    "  essay {total}/12 [t{t}/p{p}/d{d}/a{a}]",
+                    total = e.total,
+                    t = e.topical_coverage,
+                    p = e.position_attribution,
+                    d = e.dialectical_breadth,
+                    a = e.argument_depth,
+                )
+            })
+            .unwrap_or_default();
         println!(
-            "  [{id:30}] sources {src:>7}  facts {fact:>7}  {vec_tag:>8}  ({embed_ms}ms embed, {search_ms}ms search)",
+            "  [{id:30}] sources {src:>7}{loose_tag}  facts {fact:>7}{essay_tag}  {vec_tag:>8}  ({embed_ms}ms embed, {search_ms}ms search)",
             id = r.question_id,
             src = src,
+            loose_tag = loose_tag,
             fact = fact,
+            essay_tag = essay_tag,
             vec_tag = vec_tag,
             embed_ms = r.embed_ms,
             search_ms = r.search_ms,
@@ -146,14 +176,15 @@ fn print_question_row(r: &EvalResult, inspect: bool) {
 fn print_category_rollup(run: &EvalRun) {
     println!("─── per category ───");
     // (sources_m, sources_t, strict_m, strict_t, judge_m, judge_t,
-    //  judge_present_count) — `judge_present_count` lets us skip the
-    //  judge column for categories where every row was --no-judge.
-    let mut by_cat: BTreeMap<&str, (usize, usize, usize, usize, usize, usize, usize)> =
+    //  judge_present_count, loose_source_m, loose_source_present_count)
+    //  — the `*_present_count`s let us skip a column for categories
+    //  where every row was --no-judge or had no loose pass.
+    let mut by_cat: BTreeMap<&str, (usize, usize, usize, usize, usize, usize, usize, usize, usize)> =
         BTreeMap::new();
     for r in &run.results {
         let entry = by_cat
             .entry(r.category.as_str())
-            .or_insert((0, 0, 0, 0, 0, 0, 0));
+            .or_insert((0, 0, 0, 0, 0, 0, 0, 0, 0));
         entry.0 += r.source_score.matched.len();
         entry.1 += r.source_score.total_expected;
         entry.2 += r.fact_score.matched.len();
@@ -165,14 +196,23 @@ fn print_category_rollup(run: &EvalRun) {
                 entry.6 += 1;
             }
         }
+        if let Some(l) = r.loose_source_score.as_ref() {
+            entry.7 += l.matched.len();
+            entry.8 += 1;
+        }
     }
-    for (cat, (sm, st, fm, ft, jm, jt, jc)) in by_cat {
+    for (cat, (sm, st, fm, ft, jm, jt, jc, lm, lc)) in by_cat {
+        let loose_seg = if lc > 0 {
+            format!(" / loose {lm}/{st}")
+        } else {
+            String::new()
+        };
         if jc > 0 {
             println!(
-                "  {cat:30} sources {sm}/{st}  facts strict {fm}/{ft}  judge {jm}/{jt}",
+                "  {cat:30} sources {sm}/{st}{loose_seg}  facts strict {fm}/{ft}  judge {jm}/{jt}",
             );
         } else {
-            println!("  {cat:30} sources {sm}/{st}  facts {fm}/{ft}");
+            println!("  {cat:30} sources {sm}/{st}{loose_seg}  facts {fm}/{ft}");
         }
     }
 }
@@ -198,8 +238,48 @@ fn print_overall(run: &EvalRun) {
         }
         acc
     });
+    let (lm, lc) = run.results.iter().fold((0usize, 0usize), |acc, r| {
+        if let Some(l) = r.loose_source_score.as_ref() {
+            (acc.0 + l.matched.len(), acc.1 + 1)
+        } else {
+            acc
+        }
+    });
+    // Essay-readiness rollup: per-axis sums + total. Only meaningful
+    // when at least one row had the judge enabled.
+    let (et, ep, ed, ea, etot, ec) =
+        run.results
+            .iter()
+            .fold((0u32, 0u32, 0u32, 0u32, 0u32, 0u32), |acc, r| {
+                if let Some(e) = r.essay_readiness.as_ref() {
+                    (
+                        acc.0 + e.topical_coverage as u32,
+                        acc.1 + e.position_attribution as u32,
+                        acc.2 + e.dialectical_breadth as u32,
+                        acc.3 + e.argument_depth as u32,
+                        acc.4 + e.total as u32,
+                        acc.5 + 1,
+                    )
+                } else {
+                    acc
+                }
+            });
     println!("─── overall ───");
     println!("  sources {sm}/{st}  ({:.0}%)", percent(sm, st));
+    if lc > 0 {
+        println!(
+            "  loose   {lm}/{st}  ({:.0}%)  ← LLM-judge loose source-credit",
+            percent(lm, st)
+        );
+    }
+    if ec > 0 {
+        let max = ec * 12;
+        println!(
+            "  essay   {etot}/{max}  ({:.0}%)  axes: t={et}/{ax3} p={ep}/{ax3} d={ed}/{ax3} a={ea}/{ax3}  ← essay-readiness",
+            percent(etot as usize, max as usize),
+            ax3 = ec * 3,
+        );
+    }
     if jc > 0 {
         println!("  facts strict {fm}/{ft}  ({:.0}%)", percent(fm, ft));
         println!(
@@ -501,6 +581,9 @@ mod tests {
             corpora_hit: Vec::new(),
             vector_eligible: true,
             synth: None,
+            loose_source_score: None,
+            loose_source_evidence: Vec::new(),
+            essay_readiness: None,
         }
     }
 

@@ -665,6 +665,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            defining_quote: None,
         };
         let file = AtomsFile::new(vec![AtomEnvelope::Entity(entity)]);
         let body = serde_json::to_string(&file).unwrap();

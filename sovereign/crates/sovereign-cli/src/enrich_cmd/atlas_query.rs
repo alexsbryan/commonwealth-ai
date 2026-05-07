@@ -125,6 +125,12 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
             AtomEnvelope::Claim(x) => claims.push(x),
             AtomEnvelope::Question(x) => questions.push(x),
             AtomEnvelope::Configuration(x) => configurations.push(x),
+            AtomEnvelope::ArgumentReconstruction(_) => {
+                // atlas-query view doesn't yet expose argument
+                // reconstructions in its surface — skip for now.
+                // Brief assembler picks them up via atoms.json
+                // directly.
+            }
         }
     }
 

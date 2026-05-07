@@ -352,6 +352,469 @@ fn parse_judge(raw: &str) -> Option<(bool, String)> {
     }
 }
 
+// ─── Loose source-credit judge (Option A) ──────────────────────
+
+/// One audit record per missing expected_source the loose judge
+/// considered. `loose_match=true` means the judge decided the topic
+/// is materially covered by at least one retrieved chunk even though
+/// no chunk's title matched the slug literally. Pairs with the
+/// rigid [`SourceScore`] so a reviewer can see both numbers and
+/// audit each loose-credit decision.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct JudgeSourceDetail {
+    pub source: String,
+    pub loose_match: bool,
+    /// Short rationale from the judge (≤30 words).
+    pub evidence: String,
+}
+
+/// Loose-judge source scorer — Option A in the SEP atlas-grounding
+/// post-mortem. The rigid [`score_sources`] requires retrieved-chunk
+/// titles to match `expected_sources` slugs exactly (after
+/// `normalize_title` folding). That breaks when an `extraction_first`
+/// atlas surfaces semantically-relevant content under a different
+/// title (e.g. atlas entity `Knowledge Argument` covers the
+/// `qualia-knowledge` topic; `Frank Jackson` is one of the canonical
+/// authors, etc.). This function only judges the **missing**
+/// expected_sources from the rigid pass — already-matched ones stay
+/// credited verbatim — so the work is bounded and the loose score
+/// is a strict superset of the rigid score.
+///
+/// One LLM call per question (multi-label classification over the
+/// missing slug set) keeps cost bounded: 21-question bank ≈ 21 calls
+/// ≈ <1 minute on Darwin-36B fast slot.
+///
+/// Schema:
+///   `{"loose_credit": ["slug1", "slug2"], "rationale": "..."}`
+///
+/// Returns the loose [`SourceScore`] (rigid_matched ∪ loose_matched
+/// vs total_expected) plus per-source audit details. Caller is
+/// responsible for keeping the rigid score available alongside —
+/// the loose pass is additive, not a replacement.
+pub async fn score_sources_loose(
+    question: &str,
+    rigid: &SourceScore,
+    retrieved: &[ScoredChunk],
+    inference: &dyn sovereign_core::traits::InferenceProvider,
+) -> (SourceScore, Vec<JudgeSourceDetail>) {
+    // Nothing to judge — every expected_source already matched.
+    if rigid.missing.is_empty() {
+        let details = rigid
+            .matched
+            .iter()
+            .map(|m| JudgeSourceDetail {
+                source: m.clone(),
+                loose_match: true,
+                evidence: "(rigid match)".into(),
+            })
+            .collect();
+        return (rigid.clone(), details);
+    }
+
+    // Build the chunk excerpt list. Cap each snippet to ~400 chars
+    // so the prompt stays under ~5k tokens even with a large top-K.
+    let chunks_block: String = retrieved
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let title = c.title.as_deref().unwrap_or("(untitled)");
+            let snippet = truncate(&c.content.replace('\n', " "), 400);
+            format!("  [{}] {title} — {snippet}", i + 1)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let missing_block: String = rigid
+        .missing
+        .iter()
+        .map(|s| format!("  - {s}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // The prompt is intentionally generic. The bank's
+    // expected_sources are SEP slugs — which the model knows about
+    // from pretraining well enough to judge topical coverage. We
+    // describe the *shape* of the judgment (paraphrase / canonical
+    // siblings / indirect coverage all count) without naming any
+    // specific bank — see `feedback_no_teaching_to_test.md`.
+    let prompt = format!(
+        "You are evaluating whether a question's expected source articles are \
+         materially covered by a list of retrieved passages — even when the passage \
+         titles don't match the article slugs literally. A source counts as covered \
+         if a reasonable instructor would say the retrieved passages contain \
+         substantive content about that source's topic — direct mention, paraphrase, \
+         a canonical sub-topic of it, or named figures / arguments / concepts that \
+         are central to it.\n\n\
+         Be generous on topical relevance, strict on substance: don't credit a \
+         source if the passages only mention it in passing or as one item in a long \
+         list of unrelated references.\n\n\
+         Question:\n{question}\n\n\
+         Sources whose exact titles did NOT appear in retrieval — judge each:\n{missing_block}\n\n\
+         Retrieved passages (numbered):\n{chunks_block}\n\n\
+         Reply with a JSON object listing only the sources that ARE materially \
+         covered, plus a short rationale. Example: \
+         {{\"loose_credit\": [\"slug-a\", \"slug-c\"], \"rationale\": \"...\"}}\n\n\
+         Respond with JSON only."
+    );
+
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "loose_credit": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 50
+            },
+            "rationale": {"type": "string", "maxLength": 800}
+        },
+        "required": ["loose_credit", "rationale"],
+    });
+
+    let request = sovereign_core::types::CompletionRequest {
+        prompt,
+        system_message: Some(
+            "You evaluate whether source articles are topically covered by retrieved \
+             passages. Be generous on paraphrase / canonical-sibling matches, strict \
+             on substance. Respond with JSON only."
+                .to_string(),
+        ),
+        preferred_speed: sovereign_core::types::Speed::Fast,
+        max_tokens: Some(800),
+        temperature: Some(0.0),
+        structured_output: Some(schema),
+        think_budget: Some(0),
+        top_k: None,
+        top_p: None,
+        oicp: None,
+        tools: None,
+        tool_choice: None,
+        model_id: None,
+        enable_thinking: None,
+    };
+
+    let mut all_matched = rigid.matched.clone();
+    let mut details: Vec<JudgeSourceDetail> = rigid
+        .matched
+        .iter()
+        .map(|m| JudgeSourceDetail {
+            source: m.clone(),
+            loose_match: true,
+            evidence: "(rigid match)".into(),
+        })
+        .collect();
+
+    match inference.complete(&request).await {
+        Ok(resp) => match parse_loose_credit(&resp.text) {
+            Some((credited, rationale)) => {
+                let credit_set: std::collections::HashSet<String> = credited
+                    .iter()
+                    .map(|s| s.to_lowercase())
+                    .collect();
+                let mut new_missing = Vec::new();
+                for src in &rigid.missing {
+                    let loose = credit_set.contains(&src.to_lowercase());
+                    if loose {
+                        all_matched.push(src.clone());
+                    } else {
+                        new_missing.push(src.clone());
+                    }
+                    details.push(JudgeSourceDetail {
+                        source: src.clone(),
+                        loose_match: loose,
+                        evidence: rationale.clone(),
+                    });
+                }
+                let loose_score = SourceScore {
+                    matched: all_matched,
+                    missing: new_missing,
+                    total_expected: rigid.total_expected,
+                };
+                (loose_score, details)
+            }
+            None => {
+                eprintln!(
+                    "  [loose-judge] parse failed; raw={raw:?}",
+                    raw = &resp.text[..resp.text.len().min(180)]
+                );
+                for src in &rigid.missing {
+                    details.push(JudgeSourceDetail {
+                        source: src.clone(),
+                        loose_match: false,
+                        evidence: "(parse failed)".into(),
+                    });
+                }
+                (rigid.clone(), details)
+            }
+        },
+        Err(e) => {
+            eprintln!("  [loose-judge] inference failed: {e}");
+            for src in &rigid.missing {
+                details.push(JudgeSourceDetail {
+                    source: src.clone(),
+                    loose_match: false,
+                    evidence: format!("(inference failed: {e})"),
+                });
+            }
+            (rigid.clone(), details)
+        }
+    }
+}
+
+fn parse_loose_credit(raw: &str) -> Option<(Vec<String>, String)> {
+    let trimmed = raw
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+    let v: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+    let credited: Vec<String> = v
+        .get("loose_credit")?
+        .as_array()?
+        .iter()
+        .filter_map(|s| s.as_str().map(str::to_string))
+        .collect();
+    let rationale = v
+        .get("rationale")
+        .and_then(|s| s.as_str())
+        .unwrap_or("")
+        .to_string();
+    Some((credited, rationale))
+}
+
+fn truncate(s: &str, n: usize) -> String {
+    if s.len() <= n {
+        s.to_string()
+    } else {
+        let mut t: String = s.chars().take(n).collect();
+        t.push('…');
+        t
+    }
+}
+
+// ─── Essay-readiness judge (Option C) ──────────────────────────
+
+/// Multi-axis 0–3 evaluation of whether the retrieved chunks
+/// constitute enough material for a sophisticated essay answering
+/// the question. Mirrors voice-bench's
+/// [`sovereign_core::pipeline::judge::JudgeScore`] shape: per-axis
+/// integers + a free-text rationale.
+///
+/// The four axes capture distinct kinds of substance an essay needs:
+/// - **topical_coverage**: breadth across the question's territory.
+/// - **position_attribution**: are the named thinkers / arguments /
+///   positions actually represented (not just topic-adjacent)?
+/// - **dialectical_breadth**: are multiple competing perspectives
+///   present, or only one side?
+/// - **argument_depth**: specific reasoning detail vs surface-level gloss.
+///
+/// Total 0–12. Different question categories naturally weight axes
+/// differently (e.g. `contested` cares more about dialectical_breadth;
+/// `argument_reconstruction` cares more about position_attribution +
+/// argument_depth) — the eval keeps all four scores so consumers can
+/// re-weight downstream.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EssayReadinessScore {
+    pub topical_coverage: u8,
+    pub position_attribution: u8,
+    pub dialectical_breadth: u8,
+    pub argument_depth: u8,
+    /// Total = sum of the four axes. 0–12.
+    pub total: u8,
+    /// Short rationale (≤120 words) explaining the per-axis calls.
+    pub rationale: String,
+}
+
+impl EssayReadinessScore {
+    pub fn ratio(&self) -> f32 {
+        self.total as f32 / 12.0
+    }
+}
+
+/// LLM-judge essay-readiness scorer — Option C. Where
+/// [`score_sources_loose`] answers "are the right articles in the
+/// bag?" (multiple-choice recall), this answers "does the bag have
+/// what an undergraduate philosophy student would need to write a
+/// defensible nuanced essay?" (substance).
+///
+/// One LLM call per question (multi-axis structured output). At
+/// ~2–3s per call on a fast 30B-class slot, a 21-question bank costs
+/// under a minute. The output is intentionally axis-decomposed so
+/// consumers can read where the retrieval is weak (e.g. high topical
+/// coverage but low dialectical_breadth = "found the topic, missed
+/// the debate"); a single scalar would hide that.
+pub async fn score_essay_readiness(
+    question: &str,
+    category: &str,
+    retrieved: &[ScoredChunk],
+    // `atlas_navigation` is captured upstream for diagnostic /
+    // audit purposes (the JSON output preserves it so a reviewer can
+    // see which atlas surfaces matched the question). Deliberately
+    // NOT injected into the judge prompt: a small model adding a
+    // "navigation, not evidence" section to a 5–7k-char prompt pays a
+    // distraction tax that exceeds atlas's contribution at this scope.
+    // Atlas's job is to route attention to the right passages — it
+    // does that via retrieval reordering (see runner.rs), not by
+    // appearing as parallel content here.
+    _atlas_navigation: &[ScoredChunk],
+    inference: &dyn sovereign_core::traits::InferenceProvider,
+) -> Option<EssayReadinessScore> {
+    if retrieved.is_empty() {
+        return Some(EssayReadinessScore {
+            topical_coverage: 0,
+            position_attribution: 0,
+            dialectical_breadth: 0,
+            argument_depth: 0,
+            total: 0,
+            rationale: "no retrieved chunks".into(),
+        });
+    }
+
+    // Cap each snippet to ~500 chars; total prompt budget for a
+    // top-10 retrieval set lands around 6k chars + question + rubric,
+    // well under the fast slot's prompt budget.
+    let chunks_block: String = retrieved
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let title = c.title.as_deref().unwrap_or("(untitled)");
+            let snippet = truncate(&c.content.replace('\n', " "), 500);
+            format!("  [{}] {title} — {snippet}", i + 1)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // The rubric is generic — describes the kind of judgment, never
+    // names a specific bank or expected answer. See
+    // `feedback_no_teaching_to_test.md`. Category is passed as a hint
+    // (`contested` should weight dialectical_breadth; `argument_reconstruction`
+    // should weight position_attribution etc.) but the judge owns the
+    // final per-axis call.
+    let prompt = format!(
+        "You are evaluating whether a set of retrieved passages contains enough \
+         RAW MATERIAL for an undergraduate philosophy student to write a defensible \
+         nuanced essay answering the question. The passages are inputs to writing, \
+         not the essay itself — the student will synthesize across passages, restate \
+         arguments in their own words, and connect quotes. Do not penalise the set \
+         for failing to pre-assemble the essay; only penalise when the raw material \
+         is missing or wrong. Score four axes from 0 (worst) to 3 (best):\n\n\
+         1. topical_coverage — Do the passages span the topic the question raises, \
+         not just one corner of it? 0 = off-topic, 3 = thorough breadth.\n\n\
+         2. position_attribution — Are the named thinkers, arguments, positions, or \
+         technical terms in the question REPRESENTED in the passages with enough \
+         content for an undergraduate to write about them? 0 = absent or wrong; \
+         1 = mentioned only by name; 2 = named with substantive content (key \
+         claims/concepts attributed to them); 3 = named with substantive content \
+         AND specific textual material (quotes, premises, examples) that an \
+         undergraduate could cite. Award 3 when raw-material adequacy is achieved \
+         even if the passages do not pre-assemble the argument step-by-step — \
+         that's the student's job.\n\n\
+         3. dialectical_breadth — Are multiple competing perspectives, objections, \
+         or counter-positions present? An essay on a contested question needs more \
+         than one side. 0 = one-sided; 1 = main position + brief mention of an \
+         objection; 2 = main position + at least one substantive counter-position; \
+         3 = multiple rival positions each with substantive content. \"Substantive\" \
+         means content suitable for the student to engage with, not pre-written \
+         dialectic.\n\n\
+         4. argument_depth — Do the passages contain enough specific reasoning \
+         detail (premises, distinctions, examples, technical vocabulary) for an \
+         undergraduate to reconstruct the argument? 0 = surface gloss only; \
+         1 = some specific content but missing key pieces; 2 = solid raw material \
+         (key concepts, core moves, examples present); 3 = rich detail (multiple \
+         premises, technical vocabulary, examples — the student has everything \
+         needed to write the reconstruction). Don't require the passages to \
+         pre-format the reconstruction in P1/P2 logical-steps form.\n\n\
+         Question category: {category}\n\
+         Question: {question}\n\n\
+         Retrieved passages:\n{chunks_block}\n\n\
+         Reply with a JSON object: \
+         {{\"topical_coverage\": int 0-3, \"position_attribution\": int 0-3, \
+         \"dialectical_breadth\": int 0-3, \"argument_depth\": int 0-3, \
+         \"rationale\": \"≤120 word per-axis explanation\"}}\n\n\
+         Respond with JSON only."
+    );
+
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "topical_coverage":     {"type": "integer", "minimum": 0, "maximum": 3},
+            "position_attribution": {"type": "integer", "minimum": 0, "maximum": 3},
+            "dialectical_breadth":  {"type": "integer", "minimum": 0, "maximum": 3},
+            "argument_depth":       {"type": "integer", "minimum": 0, "maximum": 3},
+            "rationale":            {"type": "string", "maxLength": 1200},
+        },
+        "required": ["topical_coverage", "position_attribution",
+                     "dialectical_breadth", "argument_depth", "rationale"],
+    });
+
+    let request = sovereign_core::types::CompletionRequest {
+        prompt,
+        system_message: Some(
+            "You evaluate retrieval-set sufficiency for essay writing across four \
+             axes. Be calibrated: 3 means genuinely strong, 2 is solid, 1 is thin, \
+             0 is absent or wrong. Respond with JSON only."
+                .to_string(),
+        ),
+        preferred_speed: sovereign_core::types::Speed::Fast,
+        max_tokens: Some(1200),
+        temperature: Some(0.0),
+        structured_output: Some(schema),
+        think_budget: Some(0),
+        top_k: None,
+        top_p: None,
+        oicp: None,
+        tools: None,
+        tool_choice: None,
+        model_id: None,
+        enable_thinking: None,
+    };
+
+    match inference.complete(&request).await {
+        Ok(resp) => parse_essay_readiness(&resp.text).or_else(|| {
+            eprintln!(
+                "  [essay-judge] parse failed; raw={raw:?}",
+                raw = &resp.text[..resp.text.len().min(180)]
+            );
+            None
+        }),
+        Err(e) => {
+            eprintln!("  [essay-judge] inference failed: {e}");
+            None
+        }
+    }
+}
+
+fn parse_essay_readiness(raw: &str) -> Option<EssayReadinessScore> {
+    let trimmed = raw
+        .trim()
+        .trim_start_matches("```json")
+        .trim_start_matches("```")
+        .trim_end_matches("```")
+        .trim();
+    let v: serde_json::Value = serde_json::from_str(trimmed).ok()?;
+    let topical_coverage = v.get("topical_coverage")?.as_u64()? as u8;
+    let position_attribution = v.get("position_attribution")?.as_u64()? as u8;
+    let dialectical_breadth = v.get("dialectical_breadth")?.as_u64()? as u8;
+    let argument_depth = v.get("argument_depth")?.as_u64()? as u8;
+    let rationale = v
+        .get("rationale")
+        .and_then(|s| s.as_str())
+        .unwrap_or("")
+        .to_string();
+    let total = topical_coverage
+        .saturating_add(position_attribution)
+        .saturating_add(dialectical_breadth)
+        .saturating_add(argument_depth);
+    Some(EssayReadinessScore {
+        topical_coverage,
+        position_attribution,
+        dialectical_breadth,
+        argument_depth,
+        total,
+        rationale,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

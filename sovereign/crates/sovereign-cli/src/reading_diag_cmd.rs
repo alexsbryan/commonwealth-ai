@@ -862,6 +862,16 @@ fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
         AtomEnvelope::Configuration(c) => {
             ("configuration", c.label.clone(), c.description.clone())
         }
+        AtomEnvelope::ArgumentReconstruction(a) => (
+            "argument",
+            a.name.clone(),
+            format!(
+                "{} (P1..P{}, conclusion present: {})",
+                a.name,
+                a.premises.len(),
+                !a.conclusion.is_empty()
+            ),
+        ),
     }
 }
 
@@ -879,6 +889,11 @@ fn atom_evidence_section_ids(atom: &AtomEnvelope) -> Vec<String> {
         AtomEnvelope::Question(q) => q.raised_at.iter().map(|c| c.chunk_id.clone()).collect(),
         AtomEnvelope::Configuration(c) => {
             c.evidence.iter().map(|cr| cr.chunk_id.clone()).collect()
+        }
+        AtomEnvelope::ArgumentReconstruction(a) => {
+            let mut out = vec![a.section_position.section_id.clone()];
+            out.extend(a.evidence.iter().map(|c| c.chunk_id.clone()));
+            out
         }
     }
 }

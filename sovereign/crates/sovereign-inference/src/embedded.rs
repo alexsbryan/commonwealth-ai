@@ -293,6 +293,107 @@ impl ModelSlot {
         })
     }
 
+    /// Build a sibling slot that shares another slot's loaded model
+    /// but stands up its own `LlamaContext` with different sequence
+    /// parameters. Used for the FastShort companion to the Fast slot
+    /// — same weights, but `n_seq_max=8 / n_ctx=16384 / n_ubatch=2048`
+    /// so continuous-batched short calls (Phase 1b coverage, Phase 3
+    /// cluster naming, Phase 5 positions, Phase 6 tensions) get the
+    /// 2.1–2.8× wall-clock speedup measured in
+    /// `bench_decode_batch.rs`. The original Fast slot keeps
+    /// `n_seq_max=1` so long-context Phase 1 chapter ingestion still
+    /// has the full window per call.
+    ///
+    /// Each FastShort sequence's KV cache slice is `n_ctx /
+    /// n_seq_max` tokens (i.e. 2048 for the default config). 97.4%
+    /// of wiki-tier2-500 sections fit inside that budget after
+    /// Phase 1b prompt overhead; the overflow tail falls through to
+    /// the FastLong claim via OICP-v0.3 §2.4 hard gates.
+    fn from_existing_model(
+        backend: &Arc<LlamaBackend>,
+        model: Arc<LlamaModel>,
+        model_id: String,
+        size_bytes: u64,
+        context_size: u32,
+        n_seq_max: u32,
+        n_ubatch: u32,
+    ) -> Result<Self> {
+        let force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let wants_gpu = !force_cpu && cfg!(any(target_os = "macos", target_os = "linux"));
+
+        let n_threads = llama_threads_for_host();
+
+        let build_ctx_params = |gpu: bool| {
+            LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(context_size))
+                .with_n_seq_max(n_seq_max)
+                .with_n_batch(context_size)
+                .with_n_ubatch(n_ubatch)
+                .with_n_threads(n_threads as i32)
+                .with_n_threads_batch(n_threads as i32)
+                .with_offload_kqv(gpu)
+                .with_op_offload(gpu)
+        };
+
+        let (ctx, used_gpu) = match if wants_gpu {
+            unsafe {
+                let model_ref: &'static LlamaModel =
+                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                model_ref
+                    .new_context(backend, build_ctx_params(true))
+                    .map(|c| (c, true))
+            }
+        } else {
+            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+        } {
+            Ok(pair) => pair,
+            Err(e) => {
+                if wants_gpu {
+                    tracing::warn!(
+                        error = ?e,
+                        model_id = %model_id,
+                        "FastShort GPU context failed, falling back to CPU"
+                    );
+                }
+                let ctx = unsafe {
+                    let model_ref: &'static LlamaModel =
+                        &*(Arc::as_ptr(&model) as *const LlamaModel);
+                    model_ref
+                        .new_context(backend, build_ctx_params(false))
+                        .map_err(|e| {
+                            Error::Inference(format!(
+                                "FastShort context creation failed: {e}"
+                            ))
+                        })?
+                };
+                (ctx, false)
+            }
+        };
+
+        tracing::info!(
+            model_id = %model_id,
+            n_seq_max,
+            n_ctx = context_size,
+            n_ubatch,
+            used_gpu,
+            "FastShort slot ready — continuous-batched short-call companion to Fast"
+        );
+
+        Ok(Self {
+            model: Arc::clone(&model),
+            context: Mutex::new(SlotContext {
+                ctx,
+                _model: model,
+            }),
+            model_id,
+            size_bytes,
+            last_used: std::sync::atomic::AtomicU64::new(now_millis()),
+            inflight: Arc::new(tokio::sync::Semaphore::new(1)),
+        })
+    }
+
     fn generate_sync(
         model: &LlamaModel,
         model_id: &str,
@@ -472,6 +573,194 @@ impl ModelSlot {
         }
 
         Ok((output, tokens.len(), n_generated))
+    }
+
+    /// Multi-sequence batched autoregressive decode for short-call
+    /// enrichment phases routed to the FastShort slot. Caller supplies
+    /// up to the slot's `n_seq_max` requests; we run one packed
+    /// prefill + N autoregressive decode steps (each step decodes one
+    /// new token per still-active seq), retiring seqs on EOS or per-
+    /// request `max_tokens`. Returns one `(text, prompt_tok,
+    /// decoded_tok)` tuple per request, in the same order as input.
+    ///
+    /// Methodology mirrors `bench_decode_batch.rs::run_k_calls` —
+    /// proven to deliver 2.1–2.8× wall-clock speedup vs sequential
+    /// `generate_sync` calls on the same shape (Strix Halo / ROCm /
+    /// Qwen3.5-2B Q6_K, 900 in / 128 out).
+    ///
+    /// **Scope (intentionally narrower than `generate_sync`):**
+    /// - No thinking-block tracking. Phase 1b/3/5/6 composers don't
+    ///   enable thinking (chat closure passes `think_budget=0`); the
+    ///   thinking-detection state machine in `generate_sync` would
+    ///   cost per-token UTF-8 work × N seqs without ever firing.
+    /// - No in-loop deadline enforcement. Outer Tokio cancellation is
+    ///   sufficient for enrichment, and the loop's tail is bounded by
+    ///   the smallest per-request `max_output_tokens` (typically 512).
+    /// - Per-seq `ConstrainedSampler` (so per-seq JSON-schema masks
+    ///   are supported just like single-seq decode).
+    fn generate_sync_batched(
+        model: &LlamaModel,
+        model_id: &str,
+        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        requests: &[&CompletionRequest],
+        quirks: &ModelQuirks,
+    ) -> Result<Vec<(String, usize, usize)>> {
+        if requests.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        ctx.clear_kv_cache();
+
+        // Tokenize every request up-front. `format_prompt` runs the
+        // production chat-template renderer (system + user + thinking
+        // injection per `quirks`).
+        let tokenized: Vec<Vec<LlamaToken>> = requests
+            .iter()
+            .map(|r| {
+                let prompt = format_prompt(model, model_id, r, quirks)?;
+                model
+                    .str_to_token(&prompt, AddBos::Always)
+                    .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let n_batch = ctx.n_batch() as usize;
+        let n_ctx = ctx.n_ctx() as usize;
+        // Per-seq KV slice when the context has n_seq_max > 1.
+        let n_seq_max = std::cmp::max(1, requests.len());
+        let n_ctx_per_seq = n_ctx / n_seq_max;
+
+        // Per-seq output cap. Each request's prompt + cap must fit
+        // its own KV slice — refuse cleanly rather than overflow mid-
+        // decode.
+        let max_outputs: Vec<usize> = requests
+            .iter()
+            .zip(tokenized.iter())
+            .map(|(r, toks)| {
+                clamp_max_tokens(r.max_tokens, toks.len(), n_ctx_per_seq)
+            })
+            .collect::<Result<_>>()?;
+
+        // ── Prefill: pack every prompt into one batch ───────────────
+        let mut batch = LlamaBatch::new(n_batch, requests.len() as i32);
+        let mut current_logit_idx: Vec<i32> = Vec::with_capacity(requests.len());
+        let mut batch_pos: i32 = 0;
+        for (seq, tokens) in tokenized.iter().enumerate() {
+            let last = tokens.len() - 1;
+            for (pos, &tok) in tokens.iter().enumerate() {
+                let need_logits = pos == last;
+                batch
+                    .add(tok, pos as i32, &[seq as i32], need_logits)
+                    .map_err(|e| {
+                        Error::Inference(format!("Batched prefill add failed: {e}"))
+                    })?;
+                if need_logits {
+                    current_logit_idx.push(batch_pos);
+                }
+                batch_pos += 1;
+            }
+        }
+        ctx.decode(&mut batch).map_err(|e| {
+            Error::Inference(format!("Batched prefill decode failed: {e}"))
+        })?;
+
+        // ── Per-seq decode state ────────────────────────────────────
+        let mut samplers: Vec<ConstrainedSampler> = requests
+            .iter()
+            .map(|r| build_sampler(model, r, quirks))
+            .collect();
+        let mut decoders: Vec<encoding_rs::Decoder> = (0..requests.len())
+            .map(|_| encoding_rs::UTF_8.new_decoder())
+            .collect();
+        let mut outputs: Vec<String> = vec![String::new(); requests.len()];
+        let mut n_generated: Vec<usize> = vec![0; requests.len()];
+        let mut next_pos: Vec<i32> = tokenized
+            .iter()
+            .map(|t| t.len() as i32)
+            .collect();
+        let mut active = vec![true; requests.len()];
+
+        // ── Autoregressive decode loop ──────────────────────────────
+        loop {
+            // Sample one token per still-active seq. Track the next
+            // tokens we need to feed in the following decode step;
+            // a seq that hits EOS or the per-request cap retires
+            // and contributes no further tokens to subsequent batches.
+            let mut next_tokens: Vec<Option<LlamaToken>> = vec![None; requests.len()];
+            for seq in 0..requests.len() {
+                if !active[seq] {
+                    continue;
+                }
+                let token = samplers[seq].sample(ctx, current_logit_idx[seq]);
+                samplers[seq].accept(token);
+
+                if model.is_eog_token(token) {
+                    active[seq] = false;
+                    continue;
+                }
+
+                if let Ok(piece) =
+                    model.token_to_piece(token, &mut decoders[seq], true, None)
+                {
+                    outputs[seq].push_str(&piece);
+                }
+                n_generated[seq] += 1;
+
+                if n_generated[seq] >= max_outputs[seq] {
+                    active[seq] = false;
+                    continue;
+                }
+
+                next_tokens[seq] = Some(token);
+            }
+
+            if !active.iter().any(|&a| a) {
+                break;
+            }
+
+            // Build the next decode batch: one token per still-active
+            // seq. Preserve seq_id so each seq's KV cache slice keeps
+            // accumulating against its own positions; track the new
+            // batch index so the next sample call reads the right
+            // logits.
+            batch.clear();
+            let mut new_logit_idx = vec![-1i32; requests.len()];
+            let mut bi: i32 = 0;
+            for seq in 0..requests.len() {
+                if !active[seq] {
+                    continue;
+                }
+                let Some(tok) = next_tokens[seq] else {
+                    // Active seq must have a token to feed unless it
+                    // retired this round (handled above) — defensive
+                    // skip.
+                    continue;
+                };
+                batch
+                    .add(tok, next_pos[seq], &[seq as i32], true)
+                    .map_err(|e| {
+                        Error::Inference(format!("Batched decode add failed: {e}"))
+                    })?;
+                new_logit_idx[seq] = bi;
+                next_pos[seq] += 1;
+                bi += 1;
+            }
+            current_logit_idx = new_logit_idx;
+
+            ctx.decode(&mut batch).map_err(|e| {
+                Error::Inference(format!("Batched decode step failed: {e}"))
+            })?;
+        }
+
+        // Cleanup — leave the KV cache empty so the next caller (or a
+        // partial-batch retry) doesn't pick up stale positions.
+        ctx.clear_kv_cache();
+
+        let mut results = Vec::with_capacity(requests.len());
+        for (seq, output) in outputs.into_iter().enumerate() {
+            results.push((output, tokenized[seq].len(), n_generated[seq]));
+        }
+        Ok(results)
     }
 
     fn generate_stream_sync(
@@ -1437,10 +1726,236 @@ impl Default for InferenceConfig {
 ///   When absent, `embed()` returns a clear "no embed model configured" error so
 ///   callers can guide the user to configure one rather than silently producing
 ///   garbage vectors.
+/// Default sequence-batch parameters for the FastShort companion slot.
+/// Total `n_ctx` divided across `n_seq_max` gives 2048 tokens per
+/// sequence, which fits 97.4% of wiki-tier2-500 Phase 1b calls. Set
+/// `SOVEREIGN_FAST_SHORT_DISABLE=1` to skip building this slot (saves
+/// ~750MB KV cache on 2B Q6_K models — useful on low-memory hosts).
+pub(crate) const FAST_SHORT_N_SEQ_MAX: u32 = 8;
+pub(crate) const FAST_SHORT_N_CTX: u32 = 16_384;
+pub(crate) const FAST_SHORT_N_UBATCH: u32 = 2_048;
+
+/// Time the coalescer waits between accepting the first request and
+/// firing the batched decode. Concurrent enrichment-phase callers
+/// (Phase 1b/3/5/6 dispatched via `buffer_unordered` or `try_join_all`)
+/// arrive within microseconds of each other; 5ms is generous enough
+/// to fill an 8-seq batch in practice while staying inside the OICP
+/// v0.3 §2.2 "fast = hundreds of ms" TTFT envelope. A solo caller
+/// pays at most this 5ms latency tax — then decodes immediately
+/// (proven zero-overhead at K=1 in `bench_decode_batch.rs`).
+const FAST_SHORT_COALESCE_WINDOW_MS: u64 = 5;
+
+// ─── FastShort coalescer ───────────────────────────────────────
+//
+// Continuous-batched dispatch in front of the FastShort `LlamaContext`
+// (`n_seq_max=8`). Concurrent callers each enqueue a request via
+// `complete()` and `await` a `oneshot::Receiver`; a long-lived
+// background task drains the queue, coalesces up to `n_seq_max` jobs
+// inside `FAST_SHORT_COALESCE_WINDOW_MS`, then dispatches one
+// `generate_sync_batched` call. The bench (`bench_decode_batch.rs`)
+// proves the per-call wall-clock at K=8 lands at ~46% of the K=1
+// wall-clock for the 900-tok/128-tok shape — a 2.1× speedup which
+// projects to ~15min savings per wiki-tier2-500 Phase 1b pass.
+
+struct CoalescerJob {
+    request: CompletionRequest,
+    response: tokio::sync::oneshot::Sender<Result<CompletionResponse>>,
+}
+
+struct FastShortCoalescer {
+    enqueue: tokio::sync::mpsc::UnboundedSender<CoalescerJob>,
+}
+
+impl FastShortCoalescer {
+    /// Spawn the long-lived drainer task and return a handle that
+    /// callers use to enqueue requests via `complete`. The slot is
+    /// `Arc`-shared with the caller so the existing `Arc::strong_count`
+    /// idle-eviction logic keeps working unchanged.
+    fn spawn(slot: Arc<ModelSlot>, quirks: ModelQuirks, n_seq_max: usize) -> Self {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<CoalescerJob>();
+        tokio::spawn(async move {
+            loop {
+                let Some(first) = rx.recv().await else {
+                    tracing::debug!(
+                        slot = "fast_short",
+                        "coalescer drainer exiting (channel closed)"
+                    );
+                    return;
+                };
+                let mut batch = vec![first];
+
+                // Coalesce window: try to fill the batch within the
+                // latency budget. A solo caller (no concurrent demand)
+                // exits this loop immediately on the first timeout.
+                let deadline = tokio::time::Instant::now()
+                    + tokio::time::Duration::from_millis(FAST_SHORT_COALESCE_WINDOW_MS);
+                while batch.len() < n_seq_max {
+                    let remaining = deadline
+                        .saturating_duration_since(tokio::time::Instant::now());
+                    if remaining.is_zero() {
+                        break;
+                    }
+                    match tokio::time::timeout(remaining, rx.recv()).await {
+                        Ok(Some(job)) => batch.push(job),
+                        Ok(None) => break, // channel closed mid-coalesce
+                        Err(_) => break,   // timeout → fire what we have
+                    }
+                }
+
+                Self::dispatch_batch(Arc::clone(&slot), quirks.clone(), batch).await;
+            }
+        });
+        Self { enqueue: tx }
+    }
+
+    /// Acquire the slot's inflight permit, then run
+    /// `generate_sync_batched` against the collected jobs on a
+    /// blocking thread. Each job's `oneshot::Sender` resolves with
+    /// its individual `(text, tokens)` slice.
+    async fn dispatch_batch(
+        slot: Arc<ModelSlot>,
+        quirks: ModelQuirks,
+        batch: Vec<CoalescerJob>,
+    ) {
+        let permit = match slot.inflight.clone().acquire_owned().await {
+            Ok(p) => p,
+            Err(_) => {
+                for job in batch {
+                    let _ = job
+                        .response
+                        .send(Err(Error::Inference(
+                            "FastShort slot permit closed".into(),
+                        )));
+                }
+                return;
+            }
+        };
+        let batch_size = batch.len();
+        let join = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            let start = Instant::now();
+            slot.last_used
+                .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+            let mut ctx_lock = slot.context.blocking_lock();
+
+            let model_id = slot.model_id.clone();
+            let requests_refs: Vec<&CompletionRequest> =
+                batch.iter().map(|j| &j.request).collect();
+
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                ModelSlot::generate_sync_batched(
+                    &slot.model,
+                    &model_id,
+                    &mut ctx_lock.ctx,
+                    &requests_refs,
+                    &quirks,
+                )
+            }));
+            drop(requests_refs);
+
+            match result {
+                Ok(Ok(per_seq_results)) => {
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    tracing::debug!(
+                        slot = "fast_short",
+                        batch_size,
+                        latency_ms,
+                        "FastShort batched inference complete"
+                    );
+                    for (job, (text, prompt_tokens, completion_tokens)) in
+                        batch.into_iter().zip(per_seq_results)
+                    {
+                        let resp = CompletionResponse {
+                            text,
+                            tokens_used: prompt_tokens + completion_tokens,
+                            prompt_tokens,
+                            model_id: model_id.clone(),
+                            latency_ms,
+                            oicp_meta: None,
+                        };
+                        let _ = job.response.send(Ok(resp));
+                    }
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!(
+                        slot = "fast_short",
+                        error = %e,
+                        batch_size,
+                        "FastShort batched inference returned error — failing all batch members"
+                    );
+                    let msg = e.to_string();
+                    for job in batch {
+                        let _ = job
+                            .response
+                            .send(Err(Error::Inference(msg.clone())));
+                    }
+                }
+                Err(_) => {
+                    tracing::error!(
+                        slot = "fast_short",
+                        batch_size,
+                        "FastShort batched inference panicked — likely context overflow"
+                    );
+                    for job in batch {
+                        let _ = job.response.send(Err(Error::Inference(
+                            "FastShort batched inference panicked — \
+                             a batch member likely exceeded the per-seq context window"
+                                .to_string(),
+                        )));
+                    }
+                }
+            }
+        });
+        if let Err(e) = join.await {
+            tracing::error!(error = %e, "FastShort dispatch task join failed");
+        }
+    }
+
+    async fn complete(&self, request: CompletionRequest) -> Result<CompletionResponse> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        self.enqueue
+            .send(CoalescerJob {
+                request,
+                response: tx,
+            })
+            .map_err(|_| {
+                Error::Inference("FastShort coalescer is shut down".into())
+            })?;
+        rx.await.map_err(|_| {
+            Error::Inference("FastShort coalescer dropped response".into())
+        })?
+    }
+}
+
 pub struct EmbeddedLlamaCpp {
     #[allow(dead_code)]
     backend: Arc<LlamaBackend>,
     fast: Arc<ModelSlot>,
+    /// Continuous-batched companion to `fast`, sharing the same loaded
+    /// `LlamaModel` via `Arc` but standing up its own `LlamaContext`
+    /// with `n_seq_max=8`. Short-call enrichment phases (Phase 1b
+    /// coverage, Phase 3 cluster naming, Phase 5/6) route here when
+    /// the request's OICP `max_output_tokens` is small enough to fit
+    /// the FastShort claim's hard gate (per OICP-v0.3 §2.4).
+    ///
+    /// `None` when:
+    ///   - `SOVEREIGN_FAST_SHORT_DISABLE=1` opts out (memory escape
+    ///     hatch),
+    ///   - the second `new_context` call failed (logged at warn-level;
+    ///     the daemon stays operational by routing all callers to
+    ///     `fast` as before).
+    ///
+    /// The coalescer routes solo-vs-batched dispatch (see
+    /// `fast_short_coalescer`). Held as `Arc` so the inflight
+    /// semaphore + KV cache stay shared across in-flight requests.
+    fast_short: Option<Arc<ModelSlot>>,
+    /// Continuous-batching dispatcher in front of `fast_short`. Receives
+    /// `complete` requests, drains them in batches of up to
+    /// `n_seq_max` jobs inside a 5ms coalesce window, and delivers each
+    /// caller its own `CompletionResponse`. `None` whenever
+    /// `fast_short` is `None` — the two fields are constructed and
+    /// discarded as a unit.
+    fast_short_coalescer: Option<Arc<FastShortCoalescer>>,
     /// The lazy chat slot. When `code_path` is set, this slot
     /// hot-swaps between the Main responder and the Code specialist
     /// based on the incoming request's `capability_hint`. Keeping
@@ -1544,6 +2059,13 @@ impl ExtrasState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum SlotTarget {
     Fast,
+    /// Continuous-batched companion to the Fast slot. Selected for
+    /// short-call enrichment phases (Phase 1b/3/5/6) and any other
+    /// request whose `max_tokens` fits the FastShort claim's hard
+    /// gate. Routed through `fast_short_coalescer` which collects
+    /// concurrent arrivals into a single `generate_sync_batched`
+    /// call against the n_seq_max=8 context.
+    FastShort,
     Primary,
     Code,
     /// Operator-declared additional eagerly-loaded chat slot. The
@@ -1574,6 +2096,7 @@ fn pick_slot(
     request: &CompletionRequest,
     has_primary: bool,
     has_code: bool,
+    has_fast_short: bool,
     extras_match: Option<String>,
 ) -> SlotTarget {
     if let Some(name) = extras_match {
@@ -1588,6 +2111,27 @@ fn pick_slot(
     if wants_code && has_code {
         return SlotTarget::Code;
     }
+
+    // FastShort routing: when the FastShort companion slot is built
+    // and the request fits its envelope (small output budget, fast
+    // latency), route there. The OICP scheduler at the daemon edge
+    // already does the analogous selection between FastShort /
+    // FastLong claims; this is the local-dispatch mirror so a
+    // sovereign daemon serving its own request can also benefit
+    // without the round-trip through the mesh router.
+    //
+    // Threshold is the FastShort claim's `max_output` (512 — see
+    // `synthesize_slot_claims`). Phase 1b/3/5/6 composers set their
+    // `max_output_tokens` to ≤512 (some at 256 / 1024 — note: 1024
+    // would overflow this gate and fall through to Fast, which is
+    // correct: those phases prefer per-call window over batching).
+    let max_out = request.max_tokens.unwrap_or(usize::MAX);
+    let fits_fast_short = max_out <= 512
+        && request.preferred_speed == Speed::Fast;
+    if has_fast_short && fits_fast_short {
+        return SlotTarget::FastShort;
+    }
+
     match request.preferred_speed {
         Speed::Fast => SlotTarget::Fast,
         Speed::Medium | Speed::Slow => {
@@ -1703,6 +2247,53 @@ impl EmbeddedLlamaCpp {
         )?);
         tracing::info!(slot = "fast", family = ?fast_family, "slot loaded");
 
+        // FastShort companion: a second LlamaContext on the same Fast
+        // model with n_seq_max=8 for continuous-batched short calls.
+        // Sharing weights via Arc<LlamaModel> means the only marginal
+        // cost is ~750MB KV cache (Strix Halo unified memory makes
+        // this a non-issue; tighter hosts can opt out). Failure is
+        // logged but non-fatal — the daemon still serves all callers
+        // through `fast` as before.
+        let fast_short_disabled = std::env::var("SOVEREIGN_FAST_SHORT_DISABLE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let (fast_short, fast_short_coalescer) = if fast_short_disabled {
+            tracing::info!(
+                slot = "fast_short",
+                "skipped (SOVEREIGN_FAST_SHORT_DISABLE=1)"
+            );
+            (None, None)
+        } else {
+            match ModelSlot::from_existing_model(
+                &backend,
+                Arc::clone(&fast.model),
+                fast.model_id.clone(),
+                fast.size_bytes,
+                FAST_SHORT_N_CTX,
+                FAST_SHORT_N_SEQ_MAX,
+                FAST_SHORT_N_UBATCH,
+            ) {
+                Ok(slot) => {
+                    let slot = Arc::new(slot);
+                    let coalescer = Arc::new(FastShortCoalescer::spawn(
+                        Arc::clone(&slot),
+                        fast_quirks.clone(),
+                        FAST_SHORT_N_SEQ_MAX as usize,
+                    ));
+                    (Some(slot), Some(coalescer))
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        slot = "fast_short",
+                        error = %e,
+                        "failed to build continuous-batched companion; \
+                         all callers will route to `fast` as before"
+                    );
+                    (None, None)
+                }
+            }
+        };
+
         // Embedding models are usually small (~100-500 MB) and we want
         // them resident any time corpus ingestion or search runs, so we
         // load eagerly rather than lazily. Failure to load is logged
@@ -1752,6 +2343,8 @@ impl EmbeddedLlamaCpp {
         Ok(Self {
             backend: Arc::clone(&backend),
             fast,
+            fast_short,
+            fast_short_coalescer,
             primary: Arc::new(Mutex::new(None)),
             primary_path: primary_model_path.map(|p| p.to_path_buf()),
             primary_ctx_size: context_size,
@@ -2276,6 +2869,7 @@ impl EmbeddedLlamaCpp {
             request,
             self.primary_path.is_some(),
             self.code_path.is_some(),
+            self.fast_short.is_some(),
             extras_match,
         )
     }
@@ -2446,6 +3040,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let target = self.select_slot_for_request(request);
         let slot_name: String = match &target {
             SlotTarget::Fast => "fast".into(),
+            SlotTarget::FastShort => "fast_short".into(),
             SlotTarget::Primary => "primary".into(),
             SlotTarget::Code => "code".into(),
             SlotTarget::Extra(name) => format!("extras:{name}"),
@@ -2546,11 +3141,40 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             return result;
         }
 
+        // FastShort: continuous-batched dispatch via the coalescer.
+        // The coalescer batches concurrent arrivals into a single
+        // `generate_sync_batched` call against the n_seq_max=8 ctx;
+        // a solo caller pays at most a 5ms coalesce-window wait then
+        // decodes immediately. `pick_slot` only selects FastShort
+        // when both `fast_short` slot and `fast_short_coalescer` are
+        // present, so the unwraps below match construction in
+        // `load_full_with_families`.
+        if matches!(target, SlotTarget::FastShort) {
+            let coalescer = self
+                .fast_short_coalescer
+                .as_ref()
+                .expect("FastShort selected without coalescer present")
+                .clone();
+            let result = coalescer.complete(request.clone()).await;
+            if let Ok(ref resp) = result {
+                tracing::info!(
+                    slot = "fast_short",
+                    model = %resp.model_id,
+                    latency_ms = resp.latency_ms,
+                    tokens_used = resp.tokens_used,
+                    response_chars = resp.text.len(),
+                    "inference.complete: done"
+                );
+            }
+            return result;
+        }
+
         // Primary + Code share the lazy slot (hot-swap). Fast uses
         // the always-resident slot. Pick path + quirks up front so
         // the blocking task has a single load-or-reuse code path.
         let lazy_target = match target {
             SlotTarget::Fast => None,
+            SlotTarget::FastShort => unreachable!("handled above"),
             SlotTarget::Primary => Some((
                 self.primary_path.clone().unwrap(),
                 self.primary_quirks.clone(),
@@ -2744,9 +3368,25 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         &self,
         request: &CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
-        let target = self.select_slot_for_request(request);
+        // FastShort doesn't support streaming yet — the coalescer
+        // returns whole responses, not token-by-token chunks. Coerce
+        // streaming requests that would route to FastShort back onto
+        // the Fast slot. Phase 1b/3/5/6 enrichment never streams (they
+        // call `complete`), so this fallback only fires for callers
+        // misconfigured to ask for streaming with a small max_output.
+        let raw_target = self.select_slot_for_request(request);
+        let target = if matches!(raw_target, SlotTarget::FastShort) {
+            tracing::debug!(
+                "FastShort selected for streaming request; falling back to Fast \
+                 (FastShort doesn't expose a streaming API)"
+            );
+            SlotTarget::Fast
+        } else {
+            raw_target
+        };
         let slot_name: String = match &target {
             SlotTarget::Fast => "fast".into(),
+            SlotTarget::FastShort => "fast_short".into(),
             SlotTarget::Primary => "primary".into(),
             SlotTarget::Code => "code".into(),
             SlotTarget::Extra(name) => format!("extras:{name}"),
@@ -2814,6 +3454,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         // front so the blocking task has one code path.
         let lazy_target: Option<(PathBuf, ModelQuirks, &'static str)> = match target {
             SlotTarget::Fast => None,
+            // FastShort is handled before this match (or coerced to
+            // Fast in the streaming path), so this arm never fires.
+            SlotTarget::FastShort => unreachable!("FastShort handled above"),
             SlotTarget::Primary => Some((
                 self.primary_path.clone().unwrap(),
                 self.primary_quirks.clone(),
@@ -2944,6 +3587,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
         let target = self.select_slot_for_request(request);
         let slot_name: String = match &target {
             SlotTarget::Fast => "fast".into(),
+            SlotTarget::FastShort => "fast_short".into(),
             SlotTarget::Primary => "primary".into(),
             SlotTarget::Code => "code".into(),
             SlotTarget::Extra(name) => format!("extras:{name}"),
@@ -3008,6 +3652,9 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
         let lazy_target: Option<(PathBuf, ModelQuirks, &'static str)> = match target {
             SlotTarget::Fast => None,
+            // FastShort is handled before this match (or coerced to
+            // Fast in the streaming path), so this arm never fires.
+            SlotTarget::FastShort => unreachable!("FastShort handled above"),
             SlotTarget::Primary => Some((
                 self.primary_path.clone().unwrap(),
                 self.primary_quirks.clone(),
@@ -4191,15 +4838,76 @@ mod pick_slot_tests {
     #[test]
     fn fast_speed_without_code_hint_goes_to_fast() {
         let r = req(Speed::Fast, None);
-        assert_eq!(pick_slot(&r, true, true, None), SlotTarget::Fast);
-        assert_eq!(pick_slot(&r, false, false, None), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r, true, true, false, None), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r, false, false, false, None), SlotTarget::Fast);
+    }
+
+    #[test]
+    fn fast_short_routing_picks_fast_short_for_small_max_tokens() {
+        // Phase 1b/3/5/6 composers attach max_output_tokens ≤512.
+        // When the FastShort companion is built, those calls route to
+        // the continuous-batched path — that's where the 2.1× wall-
+        // clock speedup lives.
+        let mut r = req(Speed::Fast, None);
+        r.max_tokens = Some(512);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::FastShort
+        );
+        // Smaller budgets pass too.
+        r.max_tokens = Some(256);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::FastShort
+        );
+    }
+
+    #[test]
+    fn fast_short_not_selected_when_companion_absent() {
+        // SOVEREIGN_FAST_SHORT_DISABLE=1 (or load failure) leaves
+        // has_fast_short=false. Every short call falls through to
+        // the original Fast slot — no regression vs pre-rework.
+        let mut r = req(Speed::Fast, None);
+        r.max_tokens = Some(256);
+        assert_eq!(
+            pick_slot(&r, true, false, false, None),
+            SlotTarget::Fast
+        );
+    }
+
+    #[test]
+    fn fast_short_skipped_for_large_output_budget() {
+        // Phase 1 chapter ingestion asks for the full output budget
+        // (24576 via PHASE1_SEED_OUTPUT_BUDGET). It must route to Fast
+        // (which keeps `n_seq_max=1` for the full per-call window),
+        // not FastShort — whose 2048-per-seq slice would mid-decode
+        // overflow on a long chapter.
+        let mut r = req(Speed::Fast, None);
+        r.max_tokens = Some(8192);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::Fast
+        );
+    }
+
+    #[test]
+    fn fast_short_skipped_when_speed_is_not_fast() {
+        // Slow-speed callers (chat synthesis on the primary) ignore
+        // FastShort entirely even if their max_output is small.
+        // FastShort is for the Fast-slot model only.
+        let mut r = req(Speed::Slow, None);
+        r.max_tokens = Some(256);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::Primary
+        );
     }
 
     #[test]
     fn slow_speed_without_code_hint_picks_primary_when_available() {
         let r = req(Speed::Slow, None);
-        assert_eq!(pick_slot(&r, true, false, None), SlotTarget::Primary);
-        assert_eq!(pick_slot(&r, true, true, None), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r, true, false, false, None), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r, true, true, false, None), SlotTarget::Primary);
     }
 
     #[test]
@@ -4208,7 +4916,7 @@ mod pick_slot_tests {
         // behaviour that must not regress — a Medium/Slow request
         // still runs instead of erroring out.
         let r = req(Speed::Slow, None);
-        assert_eq!(pick_slot(&r, false, false, None), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r, false, false, false, None), SlotTarget::Fast);
     }
 
     #[test]
@@ -4217,7 +4925,7 @@ mod pick_slot_tests {
         // semantics are "this work needs code reasoning"; Fast-slot
         // generals can't do that well.
         let r = req(Speed::Fast, Some(CapabilityHint::code()));
-        assert_eq!(pick_slot(&r, true, true, None), SlotTarget::Code);
+        assert_eq!(pick_slot(&r, true, true, false, None), SlotTarget::Code);
     }
 
     #[test]
@@ -4227,10 +4935,10 @@ mod pick_slot_tests {
         // mesh scheduler is responsible for routing the hint to a
         // better-matched peer; locally we do what we can.
         let r_fast = req(Speed::Fast, Some(CapabilityHint::code()));
-        assert_eq!(pick_slot(&r_fast, true, false, None), SlotTarget::Fast);
+        assert_eq!(pick_slot(&r_fast, true, false, false, None), SlotTarget::Fast);
 
         let r_slow = req(Speed::Slow, Some(CapabilityHint::code()));
-        assert_eq!(pick_slot(&r_slow, true, false, None), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r_slow, true, false, false, None), SlotTarget::Primary);
     }
 
     #[test]
@@ -4240,7 +4948,7 @@ mod pick_slot_tests {
         // should.
         let hint = CapabilityHint::extension("prose").unwrap();
         let r = req(Speed::Slow, Some(hint));
-        assert_eq!(pick_slot(&r, true, true, None), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r, true, true, false, None), SlotTarget::Primary);
     }
 
     #[test]
@@ -4251,7 +4959,7 @@ mod pick_slot_tests {
         // slot, NOT on the fast slot.
         let r = req(Speed::Fast, None);
         assert_eq!(
-            pick_slot(&r, true, false, Some("reasoning".into())),
+            pick_slot(&r, true, false, false, Some("reasoning".into())),
             SlotTarget::Extra("reasoning".into())
         );
     }
@@ -4263,7 +4971,7 @@ mod pick_slot_tests {
         // higher-precedence than any heuristic.
         let r = req(Speed::Fast, Some(CapabilityHint::code()));
         assert_eq!(
-            pick_slot(&r, true, true, Some("bulk".into())),
+            pick_slot(&r, true, true, false, Some("bulk".into())),
             SlotTarget::Extra("bulk".into())
         );
     }
@@ -4274,7 +4982,7 @@ mod pick_slot_tests {
         // the extras lookup → existing Speed/code rules apply
         // unchanged. Locks the back-compat invariant.
         let r = req(Speed::Slow, None);
-        assert_eq!(pick_slot(&r, true, false, None), SlotTarget::Primary);
+        assert_eq!(pick_slot(&r, true, false, false, None), SlotTarget::Primary);
     }
 }
 

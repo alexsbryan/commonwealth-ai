@@ -331,6 +331,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
             AtomEnvelope::Claim(_) => "Claim",
             AtomEnvelope::Question(_) => "Question",
             AtomEnvelope::Configuration(_) => "Configuration",
+            AtomEnvelope::ArgumentReconstruction(_) => "ArgumentReconstruction",
         };
         *counts.entry(key).or_insert(0) += 1;
     }

@@ -1654,6 +1654,22 @@ impl Frame {
                         }
                     }
                     b',' => {
+                        // Mirror the recursive validator's `more_pairs_possible`
+                        // check (parse_object near line 437): a `,` after a
+                        // value is only valid if there's still room for
+                        // another property — either an unfilled typed slot
+                        // or `additionalProperties: true`. Without this
+                        // check, the masker accepts `,` after the last
+                        // typed property has been consumed; the post-accept
+                        // validator (full-buffer recursive parse) correctly
+                        // sees Invalid; the diagnostic latch fires and
+                        // forces EOS-only mode, truncating the document.
+                        // This was the A3B-MoE "early-EOS" failure mode
+                        // (memory: project_a3b_early_eos.md).
+                        let more_pairs_possible = *next_idx < properties.len() || additional;
+                        if !more_pairs_possible {
+                            return StepResult::Invalid;
+                        }
                         *sub = ObjectSub::AwaitNextKey;
                         StepResult::Consumed
                     }
@@ -2818,5 +2834,82 @@ mod tests {
             validate(&s, br#"{"section_id":"x","questions_raised":[{"content":"q1"},{"content":"q2"},"#),
             ParseStatus::Invalid
         );
+    }
+
+    /// Regression: A3B-MoE early-EOS failure family.
+    ///
+    /// Live evidence (2026-05-04 daemon log under
+    /// Nemotron-Cascade-2-30B-A3B running atlas Phase 1 on al-Farabi):
+    /// the masker accepted a multi-byte token `b" ],\n"` after the
+    /// last typed property (claims) had been consumed. The full-buffer
+    /// validator correctly rejected the resulting prefix as Invalid
+    /// (no more properties allowed under `additionalProperties: false`),
+    /// the JsonConstraint::accept diagnostic latched to EOS-only mode,
+    /// and the model was forced to emit EOS — truncating the JSON
+    /// document mid-write. The fix added a `more_pairs_possible` check
+    /// in `step_object`'s `AwaitCommaOrClose → b','` arm so the masker
+    /// matches `parse_object`'s comma rule (line 437/448).
+    #[test]
+    fn comma_after_last_typed_property_is_invalid_in_both_paths() {
+        // Two-property closed schema: `a` then `b`. A `,` after the
+        // value of `b` has no more pairs to fill — both validator
+        // paths must agree this is Invalid.
+        let s = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "a": {"type": "string"},
+                "b": {"type": "string"}
+            }
+        }))
+        .unwrap();
+        let prefix = br#"{"a":"x","b":"y","#;
+        // Pre-fix: validate() returned Invalid but validate_incremental
+        // returned Incomplete — the disagreement triggered the latch.
+        assert_eq!(validate(&s, prefix), ParseStatus::Invalid);
+        assert_eq!(validate_incremental(&s, prefix), ParseStatus::Invalid);
+    }
+
+    /// Mirror of the live failure: required+optional mix with a Phase
+    /// 1-shaped property compilation order. After the last optional
+    /// has been picked, a trailing comma must be Invalid in both paths.
+    #[test]
+    fn comma_after_last_optional_property_invalid_in_both_paths() {
+        let s = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "section_id": {"type": "string"},
+                "questions_raised": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                "claims": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["section_id", "questions_raised"]
+        }))
+        .unwrap();
+        // Required pair, required pair, then the LAST optional (claims) —
+        // post-compile order: [section_id, questions_raised, claims].
+        // After `claims:[]` the typed cursor is past end; `,` is Invalid.
+        let prefix = br#"{"section_id":"x","questions_raised":["q"],"claims":[],"#;
+        assert_eq!(validate(&s, prefix), ParseStatus::Invalid);
+        assert_eq!(validate_incremental(&s, prefix), ParseStatus::Invalid);
+    }
+
+    /// Negative control: same shape but with `additionalProperties: true`
+    /// — a trailing comma is still permitted because more pairs ARE
+    /// possible (any additional key can follow).
+    #[test]
+    fn comma_after_last_typed_property_valid_when_additional_true() {
+        let s = compile_schema(&json!({
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "a": {"type": "string"},
+                "b": {"type": "string"}
+            }
+        }))
+        .unwrap();
+        let prefix = br#"{"a":"x","b":"y","#;
+        assert_eq!(validate(&s, prefix), ParseStatus::Incomplete);
+        assert_eq!(validate_incremental(&s, prefix), ParseStatus::Incomplete);
     }
 }

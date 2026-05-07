@@ -216,6 +216,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
             &step_3b.claims,
             &step_3b.questions,
             &[], // configurations — Phase 8 territory
+            &step_3b.argument_reconstructions,
             &edges,
             &step_3b.trajectories,
         );
@@ -227,6 +228,10 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
                 println!("  ✓ {} relation atom(s)", step_3b.relations.len());
                 println!("  ✓ {} claim atom(s)", step_3b.claims.len());
                 println!("  ✓ {} question atom(s)", step_3b.questions.len());
+                println!(
+                    "  ✓ {} argument-reconstruction atom(s)",
+                    step_3b.argument_reconstructions.len()
+                );
                 println!("  ✓ {} edge(s) total", edges.len());
                 println!(
                     "  ✓ {} trajectory chain(s)",
