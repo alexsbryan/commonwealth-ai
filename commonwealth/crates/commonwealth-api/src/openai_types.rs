@@ -66,6 +66,10 @@ pub struct ChatCompletionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
+    /// Accepts both `"text"` (string) and `[{"type":"text","text":"..."}]`
+    /// (array) formats. Opencode sends the array form for tool-result
+    /// messages; the deserializer extracts text parts and joins them.
+    #[serde(deserialize_with = "deserialize_message_content")]
     pub content: String,
     /// Set on `role="tool"` messages to associate an execution result with
     /// the assistant `tool_calls[].id` that requested it.
@@ -76,6 +80,54 @@ pub struct ChatMessage {
     /// output; supplied by the caller when replaying prior turns.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
+}
+
+/// Custom deserializer for `ChatMessage.content`: accepts either a plain
+/// string or an array of `{"type":"text","text":"..."}` parts (OpenAI
+/// multimodal format). Opencode sends the array form for tool-result
+/// messages.
+///
+/// Non-text parts (`image_url`, `input_audio`, etc.) are dropped: this
+/// adapter only forwards text content downstream. We *do* match on
+/// `type == "text"` rather than just extracting any field named `text`
+/// so an `image_url` part with an `alt`-style `text` field can't be
+/// mislabelled as message content.
+///
+/// Parts whose `type` field is missing entirely are also accepted as
+/// text — opencode's tool-result wire format omits the discriminator
+/// in some versions.
+fn deserialize_message_content<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrParts {
+        String(String),
+        Parts(Vec<ContentPart>),
+    }
+    #[derive(Deserialize)]
+    struct ContentPart {
+        #[serde(rename = "type", default)]
+        kind: Option<String>,
+        #[serde(default)]
+        text: Option<String>,
+    }
+    match StringOrParts::deserialize(deserializer)? {
+        StringOrParts::String(s) => Ok(s),
+        StringOrParts::Parts(parts) => {
+            let texts: Vec<String> = parts
+                .into_iter()
+                .filter(|p| match p.kind.as_deref() {
+                    None | Some("text") => true,
+                    _ => false,
+                })
+                .filter_map(|p| p.text)
+                .collect();
+            Ok(texts.join("\n"))
+        }
+    }
 }
 
 /// OpenAI-compatible tool schema entry. Only `type="function"` is
@@ -460,6 +512,79 @@ mod tests {
         assert_eq!(msg.role, "user");
         assert!(msg.tool_call_id.is_none());
         assert!(msg.tool_calls.is_none());
+    }
+
+    #[test]
+    fn message_content_accepts_array_of_text_parts() {
+        // Opencode sends tool-result messages in this form.
+        let json = r#"{
+            "role": "tool",
+            "content": [
+                {"type": "text", "text": "first chunk"},
+                {"type": "text", "text": "second chunk"}
+            ],
+            "tool_call_id": "call_42"
+        }"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, "first chunk\nsecond chunk");
+        assert_eq!(msg.tool_call_id.as_deref(), Some("call_42"));
+    }
+
+    #[test]
+    fn message_content_drops_non_text_parts() {
+        // image_url / input_audio / similar parts are silently dropped:
+        // this adapter doesn't forward multimodal content downstream.
+        let json = r#"{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "look at this"},
+                {"type": "image_url", "image_url": {"url": "data:..."}},
+                {"type": "text", "text": "what is it?"}
+            ]
+        }"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, "look at this\nwhat is it?");
+    }
+
+    #[test]
+    fn message_content_does_not_extract_text_from_non_text_part() {
+        // Defensive: a part with type=image_url + a `text` field
+        // (e.g. alt text) must NOT be promoted to message content.
+        let json = r#"{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "text": "ALT-TEXT-LEAK", "image_url": {"url": "x"}}
+            ]
+        }"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, "");
+    }
+
+    #[test]
+    fn message_content_accepts_part_with_missing_type() {
+        // Some opencode versions omit the discriminator. A bare
+        // `{"text": "..."}` part is treated as text.
+        let json = r#"{
+            "role": "user",
+            "content": [{"text": "no type field here"}]
+        }"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, "no type field here");
+    }
+
+    #[test]
+    fn message_content_string_form_unchanged() {
+        // Regression: the existing string-content path must not change.
+        let json = r#"{"role":"user","content":"plain text"}"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, "plain text");
+    }
+
+    #[test]
+    fn message_content_empty_array_yields_empty_string() {
+        let json = r#"{"role":"user","content":[]}"#;
+        let msg: ChatMessage = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.content, "");
     }
 
     #[test]
