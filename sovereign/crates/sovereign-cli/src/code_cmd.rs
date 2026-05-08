@@ -21,7 +21,7 @@
 //! with the same model, so `embedding_dimensions` is consistent
 //! across the installation.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn};
@@ -44,6 +44,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "watch" => cmd_watch(&args[1..]).await,
         "mcp-status" => cmd_mcp_status(&args[1..]).await,
         "search" => cmd_search(&args[1..]).await,
+        "brief" => cmd_brief(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
             crate::util::help::print(&HELP);
@@ -51,6 +52,268 @@ pub async fn run_code(args: &[String]) -> i32 {
         }
     }
 }
+
+// ─── brief ────────────────────────────────────────────────────
+// `sovereign code brief` — assemble a working-set brief for the
+// current session. Uses the same machinery the daemon's
+// /v1/brief/working_set endpoint will use; this command exists
+// for direct testing without going through the HTTP boundary,
+// and as the offline fallback when the daemon isn't reachable.
+
+async fn cmd_brief(args: &[String]) -> i32 {
+    use sovereign_tools::code::brief::{assemble_brief, BriefInputs};
+    use sovereign_tools::code::working_set::{detect_working_set, Strategy};
+
+    if matches!(args.first().map(String::as_str), Some("--help" | "-h" | "help")) {
+        crate::util::help::print(&BRIEF_HELP);
+        return 0;
+    }
+
+    // ── Parse args ────────────────────────────────────────────
+    let mut strategy_kind = "branch".to_string();
+    let mut hours: u64 = 24;
+    let mut budget_tokens: usize = 1500;
+    let mut repo_root: Option<PathBuf> = None;
+    let mut atlas_id: Option<String> = None;
+    let mut feature_id: Option<String> = None;
+    let mut output: Option<PathBuf> = None;
+    let mut explicit_files: Vec<PathBuf> = Vec::new();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--strategy" => {
+                strategy_kind = args.get(i + 1).cloned().unwrap_or_default();
+                i += 2;
+            }
+            "--hours" => {
+                hours = args
+                    .get(i + 1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(24);
+                i += 2;
+            }
+            "--budget" => {
+                budget_tokens = args
+                    .get(i + 1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(1500);
+                i += 2;
+            }
+            "--repo-root" => {
+                repo_root = args.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
+            "--atlas-id" => {
+                atlas_id = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--feature-id" => {
+                feature_id = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--output" => {
+                output = args.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
+            "--file" => {
+                if let Some(v) = args.get(i + 1) {
+                    explicit_files.push(PathBuf::from(v));
+                }
+                i += 2;
+            }
+            other => {
+                eprintln!("error: unrecognised flag {other}");
+                return 2;
+            }
+        }
+    }
+
+    // ── Resolve repo root (CWD's toplevel by default) ────────
+    let repo_root = match repo_root {
+        Some(p) => p,
+        None => match resolve_cwd_repo_root() {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("error: cannot resolve repo root: {e}");
+                return 1;
+            }
+        },
+    };
+
+    // ── Working set ───────────────────────────────────────────
+    let strategy = match strategy_kind.as_str() {
+        "branch" => Strategy::default_branch_diff(),
+        "recent" => Strategy::RecentCommits { hours },
+        "explicit" => Strategy::Explicit(explicit_files),
+        other => {
+            eprintln!(
+                "error: --strategy must be one of: branch, recent, explicit (got `{other}`)"
+            );
+            return 2;
+        }
+    };
+    let working_set = match detect_working_set(&repo_root, strategy) {
+        Ok(ws) => ws,
+        Err(e) => {
+            eprintln!("error: working-set detection failed: {e}");
+            return 1;
+        }
+    };
+
+    // ── Notes store ───────────────────────────────────────────
+    let notes_path = home_dir().join(".sovereign").join("notes.db");
+    let notes = match corpus_engine::NoteStore::open(&notes_path) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!(
+                "error: cannot open NoteStore at {}: {e}",
+                notes_path.display()
+            );
+            return 1;
+        }
+    };
+
+    // ── Atlas dir ─────────────────────────────────────────────
+    // Convention: <atlas-id>-self-atlas under ~/.sovereign/indexes,
+    // or just <atlas-id> if explicitly named with the suffix already.
+    let atlas_dir = atlas_id.as_ref().and_then(|id| {
+        let name = if id.ends_with("-self-atlas") {
+            id.clone()
+        } else {
+            format!("{id}-self-atlas")
+        };
+        let candidate = home_dir()
+            .join(".sovereign")
+            .join("indexes")
+            .join(&name)
+            .join("atlas");
+        if candidate.join("atoms.json").exists() {
+            Some(candidate)
+        } else {
+            None
+        }
+    });
+
+    // ── Repo + branch labels ──────────────────────────────────
+    let repo_name = repo_root
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("repo")
+        .to_string();
+    let branch_name = current_branch(&repo_root).unwrap_or_else(|| "HEAD".into());
+
+    // ── Assemble ──────────────────────────────────────────────
+    let inputs = BriefInputs {
+        working_set: &working_set,
+        repo_root: Some(&repo_root),
+        atlas_dir: atlas_dir.as_deref(),
+        repo_name: &repo_name,
+        branch_name: &branch_name,
+        budget_tokens,
+        feature_id: feature_id.as_deref(),
+    };
+    let brief = match assemble_brief(inputs, &notes).await {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: brief assembly failed: {e}");
+            return 1;
+        }
+    };
+
+    match output {
+        Some(p) => {
+            if let Err(e) = std::fs::write(&p, &brief) {
+                eprintln!("error: write {}: {e}", p.display());
+                return 1;
+            }
+            eprintln!("✓ wrote {}", p.display());
+        }
+        None => {
+            print!("{brief}");
+        }
+    }
+    0
+}
+
+fn resolve_cwd_repo_root() -> Result<PathBuf, String> {
+    let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "--show-toplevel"])
+        .current_dir(&cwd)
+        .output()
+        .map_err(|e| format!("git: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("{} is not a git repository", cwd.display()));
+    }
+    Ok(PathBuf::from(
+        String::from_utf8_lossy(&out.stdout).trim().to_string(),
+    ))
+}
+
+fn current_branch(repo_root: &Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(repo_root)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() { None } else { Some(s) }
+}
+
+fn home_dir() -> PathBuf {
+    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+}
+
+const BRIEF_HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign code brief",
+    summary: "Assemble a working-set brief (markdown) for the current session.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign code brief [--strategy {branch|recent|explicit}] [--hours N] \
+             [--budget N] [--repo-root <path>] [--atlas-id <id>] [--feature-id <id>] \
+             [--output <md>] [--file <path>]...",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            (
+                "--strategy",
+                "branch (default; diff vs default branch), recent (last N hours), or explicit",
+            ),
+            ("--hours N", "Window for `recent` strategy. Default 24."),
+            ("--budget N", "Token budget for the brief. Default 1500."),
+            (
+                "--repo-root <path>",
+                "Override the git repo root. Default: cwd's toplevel.",
+            ),
+            (
+                "--atlas-id <id>",
+                "Structural-atlas corpus id (e.g. `sovereign`). The brief reads atoms from \
+                 ~/.sovereign/indexes/<id>-self-atlas/atlas/. If absent, the structural section \
+                 is skipped.",
+            ),
+            (
+                "--feature-id <id>",
+                "ATOS feature id, used to scope notes. Mirrors SOVEREIGN_FEATURE_ID env var.",
+            ),
+            (
+                "--output <md>",
+                "Write to this path instead of stdout.",
+            ),
+            (
+                "--file <path>",
+                "(For --strategy explicit) Add a file to the working set. Repeat for multiple.",
+            ),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Reads notes from ~/.sovereign/notes.db. Reads atoms + archaeology sidecar from \
+             ~/.sovereign/indexes/<id>-self-atlas/atlas/ when --atlas-id is given. Walks git \
+             history for the recent-activity section.",
+        ),
+    ],
+};
+
 
 const HELP: crate::util::help::Help = crate::util::help::Help {
     command: "sovereign code",

@@ -12,7 +12,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh .claude/hooks/inject-notes.sh"
+            "command": "sh .claude/hooks/inject-brief.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh .claude/hooks/capture-reflection.sh"
           }
         ]
       }

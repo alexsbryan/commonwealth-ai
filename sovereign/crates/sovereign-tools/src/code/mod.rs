@@ -24,9 +24,11 @@
 //! querying on the typed code columns — rows where `symbol_name IS NULL`
 //! don't match the predicates these tools build.
 
+pub mod brief;
 pub mod code_search;
 pub mod recent_changes;
 pub mod symbol_lookup;
+pub mod working_set;
 
 #[cfg(feature = "treesitter")]
 pub mod callees;
