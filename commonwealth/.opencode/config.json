@@ -9,18 +9,18 @@
   },
   "provider": {
     "commonwealth": {
-      "models": {
-        "Qwen3-Coder-Next-Opus-Distilled-Q4_K_M": {
-          "name": "Qwen3-Coder-Next-Opus-Distilled-Q4_K_M"
-        },
-        "Qwen3.5-9B.Q8_0.1": {
-          "name": "Qwen3.5-9B.Q8_0.1"
-        }
-      },
-      "name": "Commonwealth Mesh",
       "npm": "@ai-sdk/openai-compatible",
+      "name": "Commonwealth Mesh",
       "options": {
         "baseURL": "http://localhost:9741/v1"
+      },
+      "models": {
+        "Qwen3.5-9B-vOP.Q5_K_S": {
+          "name": "Qwen3.5-9B-vOP.Q5_K_S"
+        },
+        "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L": {
+          "name": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L"
+        }
       }
     }
   }
