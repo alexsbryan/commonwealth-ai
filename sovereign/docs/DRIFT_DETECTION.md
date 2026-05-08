@@ -127,6 +127,22 @@ Comma-separated paragraph of components confirmed in both streams.
 **These are the architectural foundations both the docs and the code
 agree on.** A new dev can trust these as canonical when reading code.
 
+### Provenance & Evolution
+
+Folded in by [git archaeology](./GIT_ARCHAEOLOGY.md) when its JSON
+sidecar is present. Four sub-blocks: stability highlights (oldest
+unchanged code), recent volatility (most-recently-touched), co-
+evolution clusters (files that change together), and the
+staleness queue (atoms anchored to code that has shifted since
+the atlas was built). The orchestrator runs archaeology
+automatically as Step 3.5 — failure logs a warning and the drift
+report renders without the section.
+
+To verify archaeology output is itself correct, run
+[`sovereign archaeology-eval`](./ARCHAEOLOGY_EVAL.md). It
+re-checks every cited commit against git and surfaces fabrication
+or regression vs. a saved baseline.
+
 ### Investigation queue
 
 Bucketed counts of unmatched narrative entities, classified
@@ -260,6 +276,12 @@ the full per-marker list lives in the rough-edges JSON sidecar at
 
 ## See also
 
+- [`docs/GIT_ARCHAEOLOGY.md`](./GIT_ARCHAEOLOGY.md) — temporal
+  grounding pass that produces the Provenance & Evolution
+  section.
+- [`docs/ARCHAEOLOGY_EVAL.md`](./ARCHAEOLOGY_EVAL.md) — witness
+  checks + baseline diff + curated inquiries that gate trust in
+  archaeology output.
 - `corpus-engine/src/extractors/markdown.rs` — section-aware markdown
   extractor.
 - `sovereign-cli/src/enrich_cmd/atlas_drift_report.rs` — digest

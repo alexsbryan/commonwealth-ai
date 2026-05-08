@@ -179,10 +179,20 @@ The pattern:
 
 ### 3.3 Files we haven't split *yet* are flagged, not hidden
 
-`sovereign-cli/src/atos_cmd.rs` is 2673 lines; `sovereign-atos/src/local.rs`
-is 1183 lines. Both are noted in `SYSTEM_OVERVIEW.md` §10 Architecture
-Roadmap. Big files without a roadmap entry are *bugs*. Big files with one
-are work that's intentionally sequenced.
+Current outliers (all > 5000 lines):
+
+- `sovereign-core/src/runtime.rs` (~10800 lines) — the runtime hub.
+- `sovereign-cli/src/project_cmd.rs` (~7000 lines) — the project subcommand surface.
+- `sovereign-inference/src/embedded.rs` (~5300 lines) — embedded daemon glue.
+- `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) — Tauri command surface.
+
+All are listed in `SYSTEM_OVERVIEW.md` §10 Architecture Roadmap with
+their deferral rationale. Big files without a roadmap entry are
+*bugs*. Big files with one are work that's intentionally sequenced.
+
+History: `atos_cmd.rs` (2673 lines) and `local.rs` (1183 lines) were
+split into folders in the spring 2026 refactor pass — they were the
+prior occupants of this list.
 
 ---
 

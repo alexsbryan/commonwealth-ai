@@ -1750,8 +1750,13 @@ file or gap with an entry is sequenced work.
 
 | Item | Location | Why deferred |
 |------|----------|--------------|
-| `atos_cmd.rs` split | `sovereign-cli/src/atos_cmd.rs` (2673 lines) | One concern per submodule already; splitting needs a façade-preserving sequence to avoid breaking the CLI surface. |
-| `local.rs` split | `sovereign-atos/src/local.rs` (1183 lines) | The orchestrator and helpers cohere as a single unit today. Split when the local-vs-remote orchestrator divergence forces the seam. |
+| `runtime.rs` split | `sovereign-core/src/runtime.rs` (~10800 lines) | The runtime hub mixes routing, planner integration, witness assembly, and channel plumbing. Concern boundaries are visible but the seam choice is load-bearing — the wrong split pessimises the dispatch hot path. |
+| `project_cmd.rs` split | `sovereign-cli/src/project_cmd.rs` (~7000 lines) | Subcommand-per-file is the obvious shape; gated on the post-found project lifecycle settling so we know which subcommands are genuinely sticky vs. exploratory. |
+| `embedded.rs` split | `sovereign-inference/src/embedded.rs` (~5300 lines) | Embedded daemon glue — slot management, lifecycle, and HTTP handlers cohere today; split when an alternate embedding mode forces the seam. |
+| `commands.rs` (Tauri) split | `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) | Tauri's command-registration surface; splitting requires re-grouping by feature without breaking the IPC name registry. Coordination cost > current pain. |
+
+(`atos_cmd.rs` and `local.rs` were the prior tenants of this list; both
+were split into folders in the spring 2026 refactor pass.)
 
 ### 10.2 Commonwealth deferrals
 
