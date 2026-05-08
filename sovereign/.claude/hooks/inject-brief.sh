@@ -40,8 +40,14 @@ else
     TIMEOUT=""
 fi
 
+# Telemetry: one JSONL line per fire under
+# ~/.sovereign/brief-log/<YYYY-MM-DD>.jsonl. Lets us measure fire
+# rate, latency, and output size across many sessions.
+TELEMETRY_LOG="$HOME/.sovereign/brief-log/$(date -u +%Y-%m-%d).jsonl"
+
 $TIMEOUT "$SOVEREIGN_BIN" code brief \
     --strategy branch \
     --atlas-id "$ATLAS_ID" \
     --budget 1500 \
+    --telemetry-log "$TELEMETRY_LOG" \
     $FEATURE_ARG 2>/dev/null || exit 0

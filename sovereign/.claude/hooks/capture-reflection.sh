@@ -1,60 +1,38 @@
 #!/bin/sh
 # sovereign capture-reflection — Stop hook for Claude Code.
 #
-# Triggered when a session ends. Prompts the engineer for a one-line
-# decision/invariant/todo. If they enter content, the hook writes it
-# to NoteStore via the daemon's MCP `note` tool so it surfaces in
-# the next session's brief.
+# Auto-records a session-end reflection note describing what changed
+# during the session (uncommitted diff + recent commits + branch).
+# Runs non-interactively — no TTY needed — so it actually fires
+# inside Claude Code's Stop event (the previous interactive version
+# was silently dead because Stop runs in a non-TTY context).
 #
-# Skip: hit Enter at the prompt, or set SOVEREIGN_NO_REFLECTION=1.
+# The Rust binary does the work; the hook is just a tee-up:
+#   - Resolves repo root from cwd.
+#   - Writes via NoteStore::write_reflection_scoped at
+#     ~/.sovereign/notes.db.
+#   - Bails silently if nothing changed (no diff, no recent commits).
 #
-# This runs in a non-interactive shell when Claude Code fires Stop;
-# the prompt + read pair only works if stdin is a TTY. We detect that
-# and short-circuit otherwise — the hook becomes a no-op outside an
-# interactive context (e.g. CI runs of `claude`).
+# Opt-out: SOVEREIGN_NO_REFLECTION=1.
 
 [ "${SOVEREIGN_NO_REFLECTION:-0}" = "1" ] && exit 0
-[ -t 0 ] || exit 0
 
-PORT="${SOVEREIGN_PORT:-9741}"
+SOVEREIGN_BIN="${SOVEREIGN_BIN:-$HOME/.local/bin/sovereign}"
+[ -x "$SOVEREIGN_BIN" ] || exit 0
 
-printf '\n--- session reflection (sovereign) ---\n' >&2
-printf 'Record? [d=decision i=invariant t=todo / Enter to skip]: ' >&2
-IFS= read -r KIND_CHAR || exit 0
-case "$KIND_CHAR" in
-    d|D) KIND="decision" ;;
-    i|I) KIND="invariant" ;;
-    t|T) KIND="todo" ;;
-    *) exit 0 ;;
-esac
-printf 'Content (one line): ' >&2
-IFS= read -r CONTENT || exit 0
-[ -z "$CONTENT" ] && exit 0
+# Stop hook receives a JSON payload on stdin (session_id,
+# transcript_path, hook_event_name). We don't need any of it for v0
+# — the reflection captures git state, not transcript content. Drain
+# stdin to avoid SIGPIPE on the parent.
+cat >/dev/null 2>&1
 
-# Escape the content for embedding in JSON. python3 handles tricky
-# chars (quotes, backslashes, unicode) without us hand-rolling.
-PAYLOAD=$(python3 - "$KIND" "$CONTENT" <<'EOF'
-import json, os, sys
-kind, content = sys.argv[1], sys.argv[2]
-args = {"kind": kind, "content": content, "scope": "global"}
-fid = os.environ.get("SOVEREIGN_FEATURE_ID")
-if fid:
-    args["scope"] = "feature"
-    args["feature_id"] = fid
-print(json.dumps({
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/call",
-    "params": {"name": "note", "arguments": args},
-}))
-EOF
-)
+# Forward the active feature id when set so the reflection is scoped
+# to the same feature its sibling notes will be.
+FEATURE_ARG=""
+if [ -n "${SOVEREIGN_FEATURE_ID:-}" ]; then
+    FEATURE_ARG="--feature-id $SOVEREIGN_FEATURE_ID"
+fi
 
-curl -sf --max-time 2 \
-    -X POST "http://localhost:${PORT}/mcp" \
-    -H "Content-Type: application/json" \
-    -d "$PAYLOAD" >/dev/null 2>&1 \
-    && printf '✓ recorded as %s\n' "$KIND" >&2 \
-    || printf '⚠ daemon unreachable; reflection not saved\n' >&2
+"$SOVEREIGN_BIN" code reflect --quiet --hours 4 $FEATURE_ARG 2>/dev/null
 
 exit 0

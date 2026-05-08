@@ -207,7 +207,14 @@ async fn render_notes(
     remaining: usize,
 ) -> Result<String, BriefError> {
     use corpus_engine::{NoteScope, ScopeFilter};
-    let kinds: Vec<String> = vec!["decision".into(), "invariant".into()];
+    // `reflection` joins decision + invariant so session-end captures
+    // (written by `sovereign code reflect`) surface in the next
+    // session's brief automatically — closing the feedback loop.
+    let kinds: Vec<String> = vec![
+        "decision".into(),
+        "invariant".into(),
+        "reflection".into(),
+    ];
     let scope_filter = match feature_id {
         Some(f) => ScopeFilter {
             scopes: vec![NoteScope::Global, NoteScope::Feature],

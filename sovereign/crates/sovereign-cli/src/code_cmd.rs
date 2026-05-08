@@ -45,6 +45,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "mcp-status" => cmd_mcp_status(&args[1..]).await,
         "search" => cmd_search(&args[1..]).await,
         "brief" => cmd_brief(&args[1..]).await,
+        "reflect" => cmd_reflect(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
             crate::util::help::print(&HELP);
@@ -52,6 +53,257 @@ pub async fn run_code(args: &[String]) -> i32 {
         }
     }
 }
+
+// ─── reflect ──────────────────────────────────────────────────
+// `sovereign code reflect` — write a session-end reflection note
+// describing what changed during the session. Triggered by Claude
+// Code's Stop hook (`.claude/hooks/capture-reflection.sh`).
+//
+// Captures:
+//   - current branch
+//   - uncommitted modifications (`git diff HEAD --name-only`)
+//   - recent commits in last `--hours` hours (default 4)
+// If nothing meaningful changed, exits silently — no point recording
+// "the engineer opened a session and did nothing."
+//
+// Writes via NoteStore::write_reflection_scoped. The brief queries
+// `reflection` kind alongside decision/invariant, so a session's
+// reflection shows up in the next session's brief automatically.
+
+async fn cmd_reflect(args: &[String]) -> i32 {
+    if std::env::var("SOVEREIGN_NO_REFLECTION").as_deref() == Ok("1") {
+        return 0;
+    }
+    if matches!(args.first().map(String::as_str), Some("--help" | "-h" | "help")) {
+        crate::util::help::print(&REFLECT_HELP);
+        return 0;
+    }
+
+    // ── Args ──────────────────────────────────────────────────
+    let mut hours: u64 = 4;
+    let mut repo_root_arg: Option<PathBuf> = None;
+    let mut feature_id: Option<String> = None;
+    let mut content_override: Option<String> = None;
+    let mut quiet: bool = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--hours" => {
+                hours = args
+                    .get(i + 1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(4);
+                i += 2;
+            }
+            "--repo-root" => {
+                repo_root_arg = args.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
+            "--feature-id" => {
+                feature_id = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--content" => {
+                content_override = args.get(i + 1).cloned();
+                i += 2;
+            }
+            "--quiet" => {
+                quiet = true;
+                i += 1;
+            }
+            other => {
+                eprintln!("error: unrecognised flag {other}");
+                return 2;
+            }
+        }
+    }
+
+    // ── Resolve repo + collect session state ─────────────────
+    let repo_root = match repo_root_arg.or_else(|| resolve_cwd_repo_root().ok()) {
+        Some(p) => p,
+        None => return 0, // not in a git repo — silent no-op
+    };
+    let branch = current_branch(&repo_root).unwrap_or_else(|| "HEAD".into());
+    let uncommitted = git_diff_head_names(&repo_root);
+    let recent = git_recent_commit_files(&repo_root, hours);
+
+    let session_files: Vec<String> = {
+        let mut s: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for f in &uncommitted {
+            s.insert(f.clone());
+        }
+        for f in &recent {
+            s.insert(f.clone());
+        }
+        s.into_iter().collect()
+    };
+
+    // ── Bail if nothing meaningful changed ───────────────────
+    if content_override.is_none() && session_files.is_empty() {
+        if !quiet {
+            eprintln!("(reflection: nothing to record — no diff and no recent commits)");
+        }
+        return 0;
+    }
+
+    let content = match content_override {
+        Some(c) => c,
+        None => format_reflection(
+            &repo_root,
+            &branch,
+            uncommitted.len(),
+            recent.len(),
+            &session_files,
+        ),
+    };
+
+    // ── Open NoteStore + write ───────────────────────────────
+    let notes_path = home_dir().join(".sovereign").join("notes.db");
+    let notes = match corpus_engine::NoteStore::open(&notes_path) {
+        Ok(n) => n,
+        Err(e) => {
+            if !quiet {
+                eprintln!(
+                    "error: cannot open NoteStore at {}: {e}",
+                    notes_path.display()
+                );
+            }
+            return 1;
+        }
+    };
+    let session_id = format!("reflect-{}", chrono::Utc::now().timestamp());
+    let scope = if feature_id.is_some() {
+        corpus_engine::NoteScope::Feature
+    } else {
+        corpus_engine::NoteScope::Global
+    };
+    match notes
+        .write_reflection_scoped(
+            &content,
+            Some("code:reflect"),
+            &session_id,
+            scope,
+            feature_id.as_deref(),
+        )
+        .await
+    {
+        Ok(id) => {
+            if !quiet {
+                eprintln!("✓ reflection saved as {id}");
+            }
+            0
+        }
+        Err(e) => {
+            if !quiet {
+                eprintln!("error: write_reflection failed: {e}");
+            }
+            1
+        }
+    }
+}
+
+fn format_reflection(
+    repo_root: &Path,
+    branch: &str,
+    uncommitted_count: usize,
+    recent_count: usize,
+    files: &[String],
+) -> String {
+    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let repo_name = repo_root
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("repo");
+    let mut out = format!(
+        "Session {date} on {repo_name} @ {branch}: {uncommitted_count} uncommitted, \
+         {recent_count} recent commits. Files touched:\n"
+    );
+    for f in files.iter().take(15) {
+        out.push_str(&format!("  - {f}\n"));
+    }
+    if files.len() > 15 {
+        out.push_str(&format!("  - …+{} more\n", files.len() - 15));
+    }
+    out
+}
+
+fn git_diff_head_names(repo_root: &Path) -> Vec<String> {
+    let out = std::process::Command::new("git")
+        .args(["diff", "HEAD", "--name-only"])
+        .current_dir(repo_root)
+        .output();
+    let Ok(o) = out else { return Vec::new() };
+    if !o.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&o.stdout)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.trim().to_string())
+        .collect()
+}
+
+fn git_recent_commit_files(repo_root: &Path, hours: u64) -> Vec<String> {
+    let since = format!("{hours} hours ago");
+    let out = std::process::Command::new("git")
+        .args([
+            "log",
+            "--since",
+            &since,
+            "--name-only",
+            "--pretty=format:",
+        ])
+        .current_dir(repo_root)
+        .output();
+    let Ok(o) = out else { return Vec::new() };
+    if !o.status.success() {
+        return Vec::new();
+    }
+    let mut set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for line in String::from_utf8_lossy(&o.stdout).lines() {
+        let l = line.trim();
+        if !l.is_empty() {
+            set.insert(l.to_string());
+        }
+    }
+    set.into_iter().collect()
+}
+
+const REFLECT_HELP: crate::util::help::Help = crate::util::help::Help {
+    command: "sovereign code reflect",
+    summary: "Write a session-end reflection note describing what changed during the session.",
+    sections: &[
+        crate::util::help::HelpSection::Usage(
+            "sovereign code reflect [--hours N] [--repo-root <path>] [--feature-id <id>] \
+             [--content <text>] [--quiet]",
+        ),
+        crate::util::help::HelpSection::Flags(&[
+            (
+                "--hours N",
+                "How far back to scan for recent commits. Default 4.",
+            ),
+            (
+                "--repo-root <path>",
+                "Override repo root. Default: cwd's git toplevel.",
+            ),
+            (
+                "--feature-id <id>",
+                "Scope the reflection to this ATOS feature. Mirrors SOVEREIGN_FEATURE_ID.",
+            ),
+            (
+                "--content <text>",
+                "Use this verbatim instead of the auto-generated session summary.",
+            ),
+            ("--quiet", "Suppress info output (used by hooks)."),
+        ]),
+        crate::util::help::HelpSection::Notes(
+            "Writes a `reflection` kind note to ~/.sovereign/notes.db via \
+             NoteStore::write_reflection_scoped. The next session's brief queries \
+             reflection alongside decision/invariant so this surfaces automatically. \
+             Honors SOVEREIGN_NO_REFLECTION=1 (hard opt-out).",
+        ),
+    ],
+};
 
 // ─── brief ────────────────────────────────────────────────────
 // `sovereign code brief` — assemble a working-set brief for the
@@ -78,9 +330,15 @@ async fn cmd_brief(args: &[String]) -> i32 {
     let mut feature_id: Option<String> = None;
     let mut output: Option<PathBuf> = None;
     let mut explicit_files: Vec<PathBuf> = Vec::new();
+    let mut telemetry_log: Option<PathBuf> = None;
+    let started_at = std::time::Instant::now();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--telemetry-log" => {
+                telemetry_log = args.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
             "--strategy" => {
                 strategy_kind = args.get(i + 1).cloned().unwrap_or_default();
                 i += 2;
@@ -224,6 +482,13 @@ async fn cmd_brief(args: &[String]) -> i32 {
         Some(p) => {
             if let Err(e) = std::fs::write(&p, &brief) {
                 eprintln!("error: write {}: {e}", p.display());
+                emit_brief_telemetry(
+                    &telemetry_log,
+                    started_at,
+                    &working_set,
+                    &brief,
+                    Some(&format!("write_failed: {e}")),
+                );
                 return 1;
             }
             eprintln!("✓ wrote {}", p.display());
@@ -232,7 +497,47 @@ async fn cmd_brief(args: &[String]) -> i32 {
             print!("{brief}");
         }
     }
+    emit_brief_telemetry(&telemetry_log, started_at, &working_set, &brief, None);
     0
+}
+
+/// Append one JSONL line per brief invocation. Empty when no
+/// `--telemetry-log` flag is set; never fatal — telemetry must not
+/// break the brief.
+fn emit_brief_telemetry(
+    log_path: &Option<PathBuf>,
+    started_at: std::time::Instant,
+    working_set: &[PathBuf],
+    brief: &str,
+    error: Option<&str>,
+) {
+    let Some(path) = log_path else { return };
+    let elapsed_ms = started_at.elapsed().as_millis();
+    // Count `^## ` headings — that's the canonical section marker.
+    let sections_rendered = brief.lines().filter(|l| l.starts_with("## ")).count();
+    let output_lines = brief.lines().count();
+    // Cheap byte-count proxy for tokens; we don't need precision.
+    // Real estimator lives in sovereign_tools::knowledge_view::tokens
+    // but importing it here is a circular-dep risk; this approximation
+    // is fine for log-trend purposes.
+    let output_tokens = brief.split_whitespace().count() * 13 / 10;
+    let ts = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+    let line = format!(
+        "{{\"ts\":\"{ts}\",\"elapsed_ms\":{elapsed_ms},\"output_lines\":{output_lines},\"output_tokens\":{output_tokens},\"working_set_size\":{},\"sections_rendered\":{sections_rendered},\"error\":{}}}\n",
+        working_set.len(),
+        error.map(|e| format!("\"{}\"", e.replace('\\', "\\\\").replace('"', "\\\""))).unwrap_or_else(|| "null".into()),
+    );
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let _ = f.write_all(line.as_bytes());
+    }
 }
 
 fn resolve_cwd_repo_root() -> Result<PathBuf, String> {
