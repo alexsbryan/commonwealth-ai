@@ -41,7 +41,15 @@ use crate::error::{Error, Result};
 /// delete-and-replace operations to a single source. v1 had only
 /// `id INTEGER PRIMARY KEY`, which meant `import_from_path` could
 /// only ever append — causing unbounded merged-graph growth.
-pub const SCHEMA_VERSION: u32 = 2;
+///
+/// v3: adds `qualified_name` to `symbols` and `caller_qualified` /
+/// `callee_qualified` to `refs`. Stores the full SCIP descriptor
+/// alongside the bare display `name`, giving consumers (notably the
+/// atlas code-walk) an unambiguous cross-crate identifier without
+/// changing the existing `name`-based UX of the tools surface. v2
+/// graphs that haven't been rebuilt return `OpenError::SchemaMismatch`
+/// — caller (Reindexer) triggers a full re-export.
+pub const SCHEMA_VERSION: u32 = 3;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -87,6 +95,38 @@ pub struct ScipGraphStats {
     pub stale_file_count: usize,
     /// Hours since last successful SCIP export. `None` if never exported.
     pub export_age_hours: Option<u64>,
+}
+
+/// A row from the `symbols` table — a symbol definition recorded by
+/// the SCIP exporter. Returned by [`ScipGraph::symbols_in_file`],
+/// [`ScipGraph::symbols_in_crate`], and [`ScipGraph::symbol_definition`].
+/// Distinct from [`Callee`] / [`Caller`] which describe call-site
+/// references.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SymbolRow {
+    pub name: String,
+    /// Full SCIP descriptor; empty for legacy or non-rust-analyzer
+    /// rows. Use this axis for cross-crate disambiguation.
+    pub qualified_name: String,
+    pub kind: String,
+    pub file_path: String,
+    pub line_start: i32,
+    pub line_end: i32,
+    pub language: String,
+}
+
+/// A callee returned by [`ScipGraph::find_callees_qualified`] —
+/// carries both the qualified SCIP descriptor (for unambiguous
+/// resolution) and the bare display name (for human-readable
+/// output). Distinct from [`Callee`], which is the bare-name shape
+/// the legacy tools surface (kept stable for back-compat).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct QualifiedCallee {
+    pub callee_qualified: String,
+    pub callee_name: String,
+    pub file_path: String,
+    pub line: i32,
+    pub call_kind: CallKind,
 }
 
 /// A function or method that is called by the queried symbol.
@@ -219,7 +259,18 @@ impl StalenessCaution {
 /// A symbol record for bulk ingestion.
 #[derive(Debug, Clone)]
 pub struct ScipSymbolRecord {
+    /// Bare display name, e.g. `CorpusEngine`. Used by the human-
+    /// facing tools (`callees`, `callers`, `blast`, `symbols`) for
+    /// readable output and by `resolve_symbol` for ergonomic
+    /// suffix-match lookups.
     pub name: String,
+    /// Full SCIP descriptor, e.g. `rust-analyzer cargo corpus_engine 0.1.0 src/engine/mod.rs/CorpusEngine#`.
+    /// This is the unambiguous identity the SCIP exporter assigns to
+    /// the symbol and is what callers should use for cross-crate
+    /// disambiguation. Empty string when the exporter has nothing
+    /// better than the bare name (legacy / non-rust-analyzer
+    /// languages); resolution falls back to `name` in that case.
+    pub qualified_name: String,
     pub kind: String,
     pub file_path: String,
     pub line_start: i32,
@@ -232,6 +283,11 @@ pub struct ScipSymbolRecord {
 pub struct ScipRefRecord {
     pub caller_symbol: String,
     pub callee_symbol: String,
+    /// Full SCIP descriptor for the caller. See
+    /// [`ScipSymbolRecord::qualified_name`].
+    pub caller_qualified: String,
+    /// Full SCIP descriptor for the callee.
+    pub callee_qualified: String,
     pub file_path: String,
     pub line: i32,
     pub ref_kind: String,
@@ -500,6 +556,7 @@ impl ScipGraph {
                 id INTEGER PRIMARY KEY,
                 corpus_id TEXT NOT NULL DEFAULT '',
                 name TEXT NOT NULL,
+                qualified_name TEXT NOT NULL DEFAULT '',
                 kind TEXT NOT NULL,
                 file_path TEXT NOT NULL,
                 line_start INTEGER NOT NULL,
@@ -507,6 +564,7 @@ impl ScipGraph {
                 language TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
+            CREATE INDEX IF NOT EXISTS idx_symbols_qualified ON symbols(qualified_name);
             CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_path);
             CREATE INDEX IF NOT EXISTS idx_symbols_corpus ON symbols(corpus_id);
 
@@ -515,6 +573,8 @@ impl ScipGraph {
                 corpus_id TEXT NOT NULL DEFAULT '',
                 caller_symbol TEXT NOT NULL,
                 callee_symbol TEXT NOT NULL,
+                caller_qualified TEXT NOT NULL DEFAULT '',
+                callee_qualified TEXT NOT NULL DEFAULT '',
                 file_path TEXT NOT NULL,
                 line INTEGER NOT NULL,
                 ref_kind TEXT NOT NULL DEFAULT 'direct'
@@ -810,6 +870,187 @@ impl ScipGraph {
         Ok((all_callers, caution))
     }
 
+    /// All symbols defined in `file_path`, scoped to this graph's
+    /// corpus_id. Ordered by `(line_start, name)` for deterministic
+    /// downstream consumption (e.g., the atlas code-walk's module
+    /// aggregation). Returns an empty Vec if no rows match — a missing
+    /// file is not an error.
+    pub async fn symbols_in_file(&self, file_path: &str) -> Result<Vec<SymbolRow>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                 FROM symbols
+                 WHERE corpus_id = ? AND file_path = ?
+                 ORDER BY line_start, name",
+            )
+            .map_err(|e| Error::Database(format!("symbols_in_file prepare: {e}")))?;
+        let rows: Vec<SymbolRow> = stmt
+            .query_map(params![self.corpus_id, file_path], |row| {
+                Ok(SymbolRow {
+                    name: row.get(0)?,
+                    qualified_name: row.get(1)?,
+                    kind: row.get(2)?,
+                    file_path: row.get(3)?,
+                    line_start: row.get(4)?,
+                    line_end: row.get(5)?,
+                    language: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::Database(format!("symbols_in_file query: {e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
+    /// All symbols whose name starts with `<crate>::` or whose
+    /// file_path begins with the supplied path prefix. The two-axis
+    /// match is needed because the SCIP exporter writes the symbol's
+    /// fully-qualified path in `name` (e.g., `corpus_engine::engine::CorpusEngine`)
+    /// but some references arrive with only the file_path scoped. The
+    /// caller picks whichever axis is appropriate (typically the
+    /// crate-name path-prefix for workspace traversal).
+    pub async fn symbols_in_crate(
+        &self,
+        crate_name_prefix: &str,
+        file_path_prefix: &str,
+    ) -> Result<Vec<SymbolRow>> {
+        let conn = self.conn.lock().await;
+        let name_pattern = format!("{}::%", crate_name_prefix);
+        let file_pattern = format!("{}%", file_path_prefix);
+        let mut stmt = conn
+            .prepare(
+                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                 FROM symbols
+                 WHERE corpus_id = ?
+                   AND (name LIKE ? OR file_path LIKE ?)
+                 ORDER BY file_path, line_start, name",
+            )
+            .map_err(|e| Error::Database(format!("symbols_in_crate prepare: {e}")))?;
+        let rows: Vec<SymbolRow> = stmt
+            .query_map(
+                params![self.corpus_id, name_pattern, file_pattern],
+                |row| {
+                    Ok(SymbolRow {
+                        name: row.get(0)?,
+                        qualified_name: row.get(1)?,
+                        kind: row.get(2)?,
+                        file_path: row.get(3)?,
+                        line_start: row.get(4)?,
+                        line_end: row.get(5)?,
+                        language: row.get(6)?,
+                    })
+                },
+            )
+            .map_err(|e| Error::Database(format!("symbols_in_crate query: {e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
+    /// Direct lookup of a symbol's definition row by exact name.
+    /// Returns `None` when nothing matches in this corpus. Use
+    /// [`resolve_symbol`](Self::resolve_symbol) when the caller has an
+    /// unqualified name and wants suffix matching; this method is the
+    /// strict variant for callers that already hold the canonical
+    /// path (e.g., the atlas code-walk receiving a name from
+    /// [`find_callees`](Self::find_callees)).
+    pub async fn symbol_definition(&self, name: &str) -> Result<Option<SymbolRow>> {
+        let conn = self.conn.lock().await;
+        let row = conn
+            .query_row(
+                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                 FROM symbols
+                 WHERE corpus_id = ? AND name = ?
+                 LIMIT 1",
+                params![self.corpus_id, name],
+                |row| {
+                    Ok(SymbolRow {
+                        name: row.get(0)?,
+                        qualified_name: row.get(1)?,
+                        kind: row.get(2)?,
+                        file_path: row.get(3)?,
+                        line_start: row.get(4)?,
+                        line_end: row.get(5)?,
+                        language: row.get(6)?,
+                    })
+                },
+            )
+            .ok();
+        Ok(row)
+    }
+
+    /// Direct lookup of a symbol's definition row by exact
+    /// `qualified_name` (full SCIP descriptor). Use this when the
+    /// caller already holds the unambiguous identifier — e.g., the
+    /// atlas walker receiving a `callee_qualified` field from
+    /// [`find_callees_qualified`](Self::find_callees_qualified).
+    pub async fn symbol_definition_qualified(
+        &self,
+        qualified_name: &str,
+    ) -> Result<Option<SymbolRow>> {
+        let conn = self.conn.lock().await;
+        let row = conn
+            .query_row(
+                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                 FROM symbols
+                 WHERE corpus_id = ? AND qualified_name = ?
+                 LIMIT 1",
+                params![self.corpus_id, qualified_name],
+                |row| {
+                    Ok(SymbolRow {
+                        name: row.get(0)?,
+                        qualified_name: row.get(1)?,
+                        kind: row.get(2)?,
+                        file_path: row.get(3)?,
+                        line_start: row.get(4)?,
+                        line_end: row.get(5)?,
+                        language: row.get(6)?,
+                    })
+                },
+            )
+            .ok();
+        Ok(row)
+    }
+
+    /// Find all qualified callees of a symbol identified by its
+    /// `qualified_name`. Returns each call-site's
+    /// `(callee_qualified, callee_name, file_path, line, ref_kind)`
+    /// so the caller can disambiguate cross-crate links. Like
+    /// [`find_callees`](Self::find_callees), but without the
+    /// staleness wrapper — the atlas walker doesn't surface that
+    /// caution to humans (it's a one-shot batch run).
+    pub async fn find_callees_qualified(
+        &self,
+        caller_qualified: &str,
+    ) -> Result<Vec<QualifiedCallee>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT r.callee_qualified, r.callee_symbol, r.file_path, r.line, r.ref_kind
+                 FROM refs r
+                 WHERE r.corpus_id = ? AND r.caller_qualified = ?
+                 ORDER BY r.file_path, r.line",
+            )
+            .map_err(|e| Error::Database(format!("find_callees_qualified prepare: {e}")))?;
+        let rows: Vec<QualifiedCallee> = stmt
+            .query_map(params![self.corpus_id, caller_qualified], |row| {
+                Ok(QualifiedCallee {
+                    callee_qualified: row.get(0)?,
+                    callee_name: row.get(1)?,
+                    file_path: row.get(2)?,
+                    line: row.get(3)?,
+                    call_kind: CallKind::from_ref_kind(
+                        &row.get::<_, String>(4).unwrap_or_default(),
+                    ),
+                })
+            })
+            .map_err(|e| Error::Database(format!("find_callees_qualified query: {e}")))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(rows)
+    }
+
     /// Bulk insert symbols and references for `self.corpus_id`.
     /// Append-only — multiple calls accumulate rows under the same
     /// corpus_id, which is what the per-language exporter loop
@@ -832,11 +1073,12 @@ impl ScipGraph {
 
         for sym in &symbols {
             conn.execute(
-                "INSERT INTO symbols (corpus_id, name, kind, file_path, line_start, line_end, language)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     corpus,
                     sym.name,
+                    sym.qualified_name,
                     sym.kind,
                     sym.file_path,
                     sym.line_start,
@@ -849,12 +1091,14 @@ impl ScipGraph {
 
         for r in &refs {
             conn.execute(
-                "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, file_path, line, ref_kind)
-                 VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     corpus,
                     r.caller_symbol,
                     r.callee_symbol,
+                    r.caller_qualified,
+                    r.callee_qualified,
                     r.file_path,
                     r.line,
                     r.ref_kind,
@@ -995,17 +1239,20 @@ impl ScipGraph {
         let mut symbols = Vec::new();
         {
             let mut stmt = other_conn
-                .prepare("SELECT name, kind, file_path, line_start, line_end, language FROM symbols")
+                .prepare(
+                    "SELECT name, qualified_name, kind, file_path, line_start, line_end, language FROM symbols",
+                )
                 .map_err(|e| Error::Database(format!("import read symbols: {e}")))?;
             let rows = stmt
                 .query_map([], |row| {
                     Ok(ScipSymbolRecord {
                         name: row.get(0)?,
-                        kind: row.get(1)?,
-                        file_path: row.get(2)?,
-                        line_start: row.get(3)?,
-                        line_end: row.get(4)?,
-                        language: row.get(5)?,
+                        qualified_name: row.get(1)?,
+                        kind: row.get(2)?,
+                        file_path: row.get(3)?,
+                        line_start: row.get(4)?,
+                        line_end: row.get(5)?,
+                        language: row.get(6)?,
                     })
                 })
                 .map_err(|e| Error::Database(format!("import query symbols: {e}")))?;
@@ -1018,7 +1265,7 @@ impl ScipGraph {
         {
             let mut stmt = other_conn
                 .prepare(
-                    "SELECT caller_symbol, callee_symbol, file_path, line, ref_kind FROM refs",
+                    "SELECT caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind FROM refs",
                 )
                 .map_err(|e| Error::Database(format!("import read refs: {e}")))?;
             let rows = stmt
@@ -1026,9 +1273,11 @@ impl ScipGraph {
                     Ok(ScipRefRecord {
                         caller_symbol: row.get(0)?,
                         callee_symbol: row.get(1)?,
-                        file_path: row.get(2)?,
-                        line: row.get(3)?,
-                        ref_kind: row.get(4)?,
+                        caller_qualified: row.get(2)?,
+                        callee_qualified: row.get(3)?,
+                        file_path: row.get(4)?,
+                        line: row.get(5)?,
+                        ref_kind: row.get(6)?,
                     })
                 })
                 .map_err(|e| Error::Database(format!("import query refs: {e}")))?;
@@ -1071,11 +1320,12 @@ impl ScipGraph {
 
         for sym in &symbols {
             conn.execute(
-                "INSERT INTO symbols (corpus_id, name, kind, file_path, line_start, line_end, language)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO symbols (corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     source_corpus_id,
                     sym.name,
+                    sym.qualified_name,
                     sym.kind,
                     sym.file_path,
                     sym.line_start,
@@ -1088,12 +1338,14 @@ impl ScipGraph {
 
         for r in &refs {
             conn.execute(
-                "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, file_path, line, ref_kind)
-                 VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO refs (corpus_id, caller_symbol, callee_symbol, caller_qualified, callee_qualified, file_path, line, ref_kind)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     source_corpus_id,
                     r.caller_symbol,
                     r.callee_symbol,
+                    r.caller_qualified,
+                    r.callee_qualified,
                     r.file_path,
                     r.line,
                     r.ref_kind,
@@ -1430,6 +1682,7 @@ mod integrity_tests {
         src.ingest_symbols_and_refs(
             vec![ScipSymbolRecord {
                 name: "hello".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "src/lib.rs".into(),
                 line_start: 1,
@@ -1477,6 +1730,7 @@ mod integrity_tests {
         a.ingest_symbols_and_refs(
             vec![ScipSymbolRecord {
                 name: "alpha_sym".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "a/lib.rs".into(),
                 line_start: 1,
@@ -1495,6 +1749,7 @@ mod integrity_tests {
         b.ingest_symbols_and_refs(
             vec![ScipSymbolRecord {
                 name: "beta_sym".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "b/lib.rs".into(),
                 line_start: 1,
@@ -1557,6 +1812,7 @@ mod tests {
         vec![
             ScipSymbolRecord {
                 name: "auth_middleware".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "src/middleware/auth.rs".into(),
                 line_start: 1,
@@ -1565,6 +1821,7 @@ mod tests {
             },
             ScipSymbolRecord {
                 name: "validate_access_token".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "src/auth/tokens.rs".into(),
                 line_start: 1,
@@ -1573,6 +1830,7 @@ mod tests {
             },
             ScipSymbolRecord {
                 name: "extract_bearer_token".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "src/middleware/auth.rs".into(),
                 line_start: 17,
@@ -1581,6 +1839,7 @@ mod tests {
             },
             ScipSymbolRecord {
                 name: "login_handler".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "src/routes/auth.rs".into(),
                 line_start: 1,
@@ -1589,6 +1848,7 @@ mod tests {
             },
             ScipSymbolRecord {
                 name: "refresh_handler".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "src/routes/auth.rs".into(),
                 line_start: 12,
@@ -1597,6 +1857,7 @@ mod tests {
             },
             ScipSymbolRecord {
                 name: "issue_token_pair".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "src/auth/tokens.rs".into(),
                 line_start: 12,
@@ -1612,6 +1873,8 @@ mod tests {
             ScipRefRecord {
                 caller_symbol: "auth_middleware".into(),
                 callee_symbol: "extract_bearer_token".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: "src/middleware/auth.rs".into(),
                 line: 5,
                 ref_kind: "direct".into(),
@@ -1619,6 +1882,8 @@ mod tests {
             ScipRefRecord {
                 caller_symbol: "auth_middleware".into(),
                 callee_symbol: "validate_access_token".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: "src/middleware/auth.rs".into(),
                 line: 6,
                 ref_kind: "direct".into(),
@@ -1627,6 +1892,8 @@ mod tests {
             ScipRefRecord {
                 caller_symbol: "login_handler".into(),
                 callee_symbol: "issue_token_pair".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: "src/routes/auth.rs".into(),
                 line: 5,
                 ref_kind: "direct".into(),
@@ -1634,6 +1901,8 @@ mod tests {
             ScipRefRecord {
                 caller_symbol: "refresh_handler".into(),
                 callee_symbol: "issue_token_pair".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: "src/routes/auth.rs".into(),
                 line: 15,
                 ref_kind: "direct".into(),
@@ -1748,6 +2017,7 @@ mod tests {
         let symbols = vec![
             ScipSymbolRecord {
                 name: "a".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "a.rs".into(),
                 line_start: 1,
@@ -1756,6 +2026,7 @@ mod tests {
             },
             ScipSymbolRecord {
                 name: "b".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "b.rs".into(),
                 line_start: 1,
@@ -1764,6 +2035,7 @@ mod tests {
             },
             ScipSymbolRecord {
                 name: "c".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "c.rs".into(),
                 line_start: 1,
@@ -1775,6 +2047,8 @@ mod tests {
             ScipRefRecord {
                 caller_symbol: "a".into(),
                 callee_symbol: "b".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: "a.rs".into(),
                 line: 3,
                 ref_kind: "direct".into(),
@@ -1782,6 +2056,8 @@ mod tests {
             ScipRefRecord {
                 caller_symbol: "b".into(),
                 callee_symbol: "c".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: "b.rs".into(),
                 line: 3,
                 ref_kind: "direct".into(),
@@ -1862,7 +2138,8 @@ mod tests {
             .ingest_symbols_and_refs(
                 vec![ScipSymbolRecord {
                     name: "my_crate::module::my_fn".into(),
-                    kind: "function".into(),
+                    qualified_name: String::new(),
+                kind: "function".into(),
                     file_path: "src/lib.rs".into(),
                     line_start: 1,
                     line_end: 10,
@@ -1944,6 +2221,7 @@ mod tests {
         let symbols = vec![
             ScipSymbolRecord {
                 name: "a".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "a.rs".into(),
                 line_start: 1,
@@ -1952,6 +2230,7 @@ mod tests {
             },
             ScipSymbolRecord {
                 name: "b".into(),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: "b.rs".into(),
                 line_start: 1,
@@ -1963,6 +2242,8 @@ mod tests {
             ScipRefRecord {
                 caller_symbol: "a".into(),
                 callee_symbol: "b".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: "a.rs".into(),
                 line: 3,
                 ref_kind: "direct".into(),
@@ -1970,6 +2251,8 @@ mod tests {
             ScipRefRecord {
                 caller_symbol: "b".into(),
                 callee_symbol: "a".into(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: "b.rs".into(),
                 line: 3,
                 ref_kind: "direct".into(),
@@ -1994,6 +2277,7 @@ mod tests {
         let n = 25usize;
         let mut symbols = vec![ScipSymbolRecord {
             name: "root".into(),
+            qualified_name: String::new(),
             kind: "function".into(),
             file_path: "root.rs".into(),
             line_start: 1,
@@ -2004,6 +2288,7 @@ mod tests {
         for i in 1..=n {
             symbols.push(ScipSymbolRecord {
                 name: format!("caller{i}"),
+                qualified_name: String::new(),
                 kind: "function".into(),
                 file_path: format!("caller{i}.rs"),
                 line_start: 1,
@@ -2013,6 +2298,8 @@ mod tests {
             refs.push(ScipRefRecord {
                 caller_symbol: format!("caller{i}"),
                 callee_symbol: "root".to_string(),
+                caller_qualified: String::new(),
+                callee_qualified: String::new(),
                 file_path: format!("caller{i}.rs"),
                 line: 3,
                 ref_kind: "direct".into(),
@@ -2023,6 +2310,56 @@ mod tests {
         let result = graph.blast_radius("root", 1, 10).await.unwrap();
         assert!(result.capped, "should be capped");
         assert_eq!(result.entries.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn symbols_in_file_returns_definitions() {
+        let graph = ScipGraph::open_in_memory("test").unwrap();
+        graph
+            .ingest_symbols_and_refs(test_symbols(), test_refs())
+            .await
+            .unwrap();
+
+        let rows = graph.symbols_in_file("src/middleware/auth.rs").await.unwrap();
+        let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, vec!["auth_middleware", "extract_bearer_token"]);
+
+        let empty = graph.symbols_in_file("src/nope.rs").await.unwrap();
+        assert!(empty.is_empty());
+    }
+
+    #[tokio::test]
+    async fn symbols_in_crate_matches_path_prefix() {
+        let graph = ScipGraph::open_in_memory("test").unwrap();
+        graph
+            .ingest_symbols_and_refs(test_symbols(), test_refs())
+            .await
+            .unwrap();
+
+        // No name match (test fixtures use unqualified names), so the
+        // file_path prefix is what carries this query.
+        let rows = graph.symbols_in_crate("auth", "src/auth/").await.unwrap();
+        let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+        assert!(names.contains(&"validate_access_token"));
+        assert!(names.contains(&"issue_token_pair"));
+        assert!(!names.contains(&"login_handler"));
+    }
+
+    #[tokio::test]
+    async fn symbol_definition_strict_match() {
+        let graph = ScipGraph::open_in_memory("test").unwrap();
+        graph
+            .ingest_symbols_and_refs(test_symbols(), test_refs())
+            .await
+            .unwrap();
+
+        let row = graph.symbol_definition("auth_middleware").await.unwrap();
+        let row = row.expect("auth_middleware should resolve");
+        assert_eq!(row.file_path, "src/middleware/auth.rs");
+        assert_eq!(row.kind, "function");
+
+        let missing = graph.symbol_definition("not_real").await.unwrap();
+        assert!(missing.is_none());
     }
 
     #[tokio::test]

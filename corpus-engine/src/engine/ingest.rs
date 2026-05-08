@@ -1802,6 +1802,18 @@ impl CorpusEngine {
                      the `code` extractor"
                 );
             }
+            #[cfg(feature = "markdown")]
+            ExtractorConfig::Markdown {} => {
+                Box::new(extractors::markdown::MarkdownExtractor::new())
+            }
+            #[cfg(not(feature = "markdown"))]
+            ExtractorConfig::Markdown {} => {
+                panic!(
+                    "corpus-engine was built without the `markdown` feature — \
+                     rebuild with `cargo build --features markdown` to enable \
+                     the section-aware markdown extractor"
+                );
+            }
         }
     }
 

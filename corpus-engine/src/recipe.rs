@@ -1333,6 +1333,16 @@ pub enum ExtractorConfig {
         #[serde(default = "default_code_max_lines")]
         max_lines_per_chunk: usize,
     },
+    /// Section-aware markdown extractor. Walks a single `.md` file (or
+    /// a directory of them) and yields one `ExtractedDoc` per
+    /// heading-bounded section. Each chunk carries
+    /// [`crate::extractors::markdown_types::MarkdownChunkMetadata`]
+    /// (section_path, section_depth, heading_anchor, outgoing_links,
+    /// inline_code_spans). Used by the narrative-stream branch of the
+    /// two-stream atlas pipeline (CHARTER, ARCH_PRINCIPLES, ADRs,
+    /// accepted spec.md files). Requires the `markdown` Cargo feature.
+    #[serde(rename = "markdown")]
+    Markdown {},
 }
 
 fn default_code_context_lines() -> usize {
@@ -1714,7 +1724,7 @@ fn rewrite_missing_field(field: &str, raw: &str) -> String {
              json | jsonl | csv | parquet | mediawiki_xml | \
              stackexchange_xml | wikipedia_jsonl | wikipedia_structured | \
              wikipedia_catalog | wikipedia_api_article | gutenberg_catalog \
-             | code). Underlying parser error: {raw}"
+             | code | markdown). Underlying parser error: {raw}"
         ),
         "chunk" => format!(
             "Recipe is missing the `[chunk]` section. Add it with \

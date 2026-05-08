@@ -132,7 +132,8 @@ pulldown-cmark         = { version = "0.12", default-features = false, features 
 fs4                    = { version = "0.12", optional = true }
 
 [features]
-default = []
+default = ["markdown"]
+markdown = ["dep:pulldown-cmark"]
 treesitter = [
     "dep:tree-sitter",
     "dep:tree-sitter-language",

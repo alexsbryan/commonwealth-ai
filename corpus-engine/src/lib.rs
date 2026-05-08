@@ -11,6 +11,7 @@
 //! It has zero dependency on Sovereign or Commonwealth crates.
 
 pub mod acquirers;
+pub mod archaeology_eval;
 pub mod atlas_traversal;
 pub mod canonical_sync;
 pub mod chunkers;
@@ -19,10 +20,12 @@ pub mod enrichment;
 pub mod error;
 pub mod extractors;
 pub mod filters;
+pub mod git_archaeology;
 pub mod index;
 pub mod progress;
 pub mod recipe;
 pub mod registry;
+pub mod rough_edges;
 pub mod safety;
 pub mod sharding;
 pub mod sovereign_config;

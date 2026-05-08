@@ -13,6 +13,11 @@ pub mod wikipedia_structured;
 pub mod wikipedia_jsonl;
 pub mod wikipedia_types;
 
+#[cfg(feature = "markdown")]
+pub mod markdown;
+#[cfg(feature = "markdown")]
+pub mod markdown_types;
+
 #[cfg(feature = "treesitter")]
 pub mod code;
 

@@ -60,7 +60,9 @@ use crate::types::{EmbedFn, InferenceFn};
 
 /// Per-strategy config deserialised from
 /// [`AtlasIngestionConfig::strategy_config`]. Operator-supplied;
-/// CLI surfaces `--source-corpus` and `--limit-articles` flags.
+/// CLI surfaces `--source-corpus`, `--limit-articles`,
+/// `--include-functions`, and `--include-private` flags. The latter
+/// two are honoured only on the code-corpus branch.
 #[derive(Debug, Clone, Deserialize, Default)]
 struct StructureFirstConfig {
     /// Corpus id to read chunks from (e.g. `"wikipedia"`). Required.
@@ -74,6 +76,16 @@ struct StructureFirstConfig {
     /// full lead.
     #[serde(default = "default_lead_chars")]
     pub lead_description_chars: usize,
+    /// Code-corpus branch: emit Entity atoms for `pub fn` / `pub
+    /// method` items as well. Off by default — function-tier atoms
+    /// inflate the demo atlas without paying back.
+    #[serde(default)]
+    pub include_functions: bool,
+    /// Code-corpus branch: include non-`pub` items. Off by default —
+    /// public surface is the architectural shape; private internals
+    /// are implementation detail.
+    #[serde(default)]
+    pub include_private: bool,
 }
 
 fn default_lead_chars() -> usize {
@@ -154,6 +166,33 @@ impl AtlasIngestion for StructureFirstIngestion {
             (progress)(IngestProgress::Extracting {
                 documents_processed: total_chunks as u64,
             });
+
+            // ── Dispatch on corpus kind ─────────────────────────
+            // Sniff the first chunk's metadata. Code chunks carry
+            // `symbol_name` + `file_path` + `language`; Wikipedia
+            // chunks carry `section_path` + `section_type` +
+            // `outgoing_links`. Cheap O(1) signal; avoids a
+            // separate recipe round-trip.
+            #[cfg(feature = "treesitter")]
+            {
+                let is_code_corpus = chunks
+                    .iter()
+                    .find_map(|c| c.metadata_raw.as_deref())
+                    .map(crate::enrichment::atlas::strategies::code_walk::metadata_looks_like_code)
+                    .unwrap_or(false);
+                if is_code_corpus {
+                    drop(chunks); // free before code_walk re-streams.
+                    let walk_cfg = crate::enrichment::atlas::strategies::code_walk::CodeWalkConfig {
+                        source_corpus_id: cfg.source_corpus_id.clone(),
+                        include_functions: cfg.include_functions,
+                        include_private: cfg.include_private,
+                    };
+                    return crate::enrichment::atlas::strategies::code_walk::extract_code_corpus(
+                        corpus, &walk_cfg, progress,
+                    )
+                    .await;
+                }
+            }
 
             // ── Aggregate per article ───────────────────────────
             // BTreeMap so output is stable across runs.

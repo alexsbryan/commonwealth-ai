@@ -544,6 +544,7 @@ pub fn parse_scip_file(
 
             symbols.push(ScipSymbolRecord {
                 name: display_name,
+                qualified_name: sym_str.clone(),
                 kind: scip_proto::kind_to_str(sym_info.kind).to_string(),
                 file_path: file_path.clone(),
                 line_start,
@@ -556,7 +557,11 @@ pub fn parse_scip_file(
         // Strategy: For each non-definition occurrence, determine which
         // enclosing definition scope it falls within. That scope is the
         // "caller", and the occurrence's symbol is the "callee".
-        let mut def_scopes: Vec<(&str, i32, i32, String)> = Vec::new(); // (scip_symbol, start_line, end_line, display_name)
+        //
+        // Each scope carries BOTH the bare display name (for human-
+        // readable `caller_symbol` output) and the full SCIP descriptor
+        // (for unambiguous cross-crate `caller_qualified`).
+        let mut def_scopes: Vec<(String, i32, i32, String)> = Vec::new(); // (qualified_caller, start, end, display_caller)
         for occ in &doc.occurrences {
             if (occ.symbol_roles & scip_proto::SymbolRole::DEFINITION) != 0 {
                 let start = occ.range.first().copied().unwrap_or(0);
@@ -579,12 +584,12 @@ pub fn parse_scip_file(
                         }
                     })
                     .unwrap_or_else(|| scip_proto::extract_symbol_name(&occ.symbol));
-                def_scopes.push((&occ.symbol, start, end, display));
+                def_scopes.push((occ.symbol.clone(), start, end, display));
             }
         }
 
         // Sort scopes by start line for binary search.
-        def_scopes.sort_by_key(|&(_, start, _, _)| start);
+        def_scopes.sort_by_key(|(_, start, _, _)| *start);
 
         for occ in &doc.occurrences {
             // Skip definitions — they're not "calls".
@@ -601,9 +606,9 @@ pub fn parse_scip_file(
             let caller = def_scopes
                 .iter()
                 .rev()
-                .find(|&&(_, start, end, _)| occ_line >= start && occ_line <= end);
+                .find(|(_, start, end, _)| occ_line >= *start && occ_line <= *end);
 
-            if let Some(&(_, _, _, ref caller_name)) = caller {
+            if let Some((caller_qualified, _, _, caller_name)) = caller {
                 let callee_name = doc
                     .symbols
                     .iter()
@@ -629,6 +634,8 @@ pub fn parse_scip_file(
                 refs.push(ScipRefRecord {
                     caller_symbol: caller_name.clone(),
                     callee_symbol: callee_name,
+                    caller_qualified: caller_qualified.clone(),
+                    callee_qualified: occ.symbol.clone(),
                     file_path: file_path.clone(),
                     line: occ_line,
                     ref_kind: "direct".to_string(),

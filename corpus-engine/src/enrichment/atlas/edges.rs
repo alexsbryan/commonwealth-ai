@@ -81,6 +81,26 @@ pub enum EdgeProvenance {
     /// structure (e.g. Wikipedia wikilinks). Reserved for the future
     /// structure-first ingestion strategy.
     WikilinkStructural,
+    /// Code-corpus containment edge: Crate → Module, Module → Item.
+    /// Derived deterministically from file paths and the tree-sitter
+    /// chunk index — the item is _located inside_ the parent in the
+    /// source tree. No LLM involvement; same trust class as
+    /// `WikilinkStructural`.
+    ContainmentStructural,
+    /// Code-corpus cross-reference edge sourced from the SCIP index:
+    /// one item uses, calls, implements, or references another.
+    /// Confidence is 1.0 because SCIP is a compiler-resolved fact.
+    /// Trait impls emit two edges (Self→Trait and Trait→Self) to
+    /// keep the graph traversable in either direction.
+    ScipStructural,
+    /// Code-corpus dependency edge derived from `Cargo.toml`: the
+    /// owning crate declares a dependency on the target. Used for
+    /// `Crate → ExternalCrate` placeholder edges.
+    CargoStructural,
+    /// Code-corpus tree-sitter fallback for items that SCIP didn't
+    /// resolve (uncovered language, partial index). The walker
+    /// recovers the edge from a `use` statement or import textually.
+    TreeSitterStructural,
 }
 
 // ── Edge record ──────────────────────────────────────────────
