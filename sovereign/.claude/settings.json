@@ -26,6 +26,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh .claude/hooks/validate-plan.sh"
+          }
+        ]
+      }
     ]
   }
 }
