@@ -1,0 +1,57 @@
+[corpus]
+# REQUIRED: replace with a stable, repo-scoped id.
+# Convention: "<project>-<doc-slug>", e.g. "myproject-arch-principles".
+id = "REPLACE_ME"
+
+# REQUIRED: human-readable name. Often the doc filename.
+# Examples: "ARCH_PRINCIPLES.md", "Charter — accepted version".
+name = "REPLACE_ME"
+
+# OPTIONAL: short description of what this narrative covers.
+# Examples: "Architectural principles — normative rules + rationale."
+#           "Component map and dataflow overview."
+description = ""
+
+license = "private"
+mesh_sharing = false
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+# LocalFileAcquirer reads the file directly; the Markdown extractor
+# below chunks at heading boundaries.
+[acquire]
+type = "local_file"
+# REQUIRED: absolute path to the .md file. `~` is expanded; relative
+# paths are resolved against the repo root if you've registered one
+# via `sovereign project init`.
+path = "REPLACE_ME"
+
+# Section-aware markdown extractor. Emits one chunk per heading-bounded
+# section with `section_path[]`, `section_depth`, `heading_anchor`,
+# `outgoing_links[]`, and `inline_code_spans[]` metadata.
+[extract]
+type = "markdown"
+
+# The extractor already chunks at section boundaries; passthrough keeps
+# the ingest pipeline generic.
+[chunk]
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+
+# Atlas enrichment. `extraction_first` (literary_atlas pipeline) runs
+# the LLM extraction passes that produce Claim, Configuration, Entity,
+# and ArgumentReconstruction atoms. Cost: roughly one LLM call per
+# H2/H3 section, plus ~10-15 constant calls for resolution + clustering.
+# A 50-section doc → ~25-30 min serial wall time.
+#
+# Use `structure_first` instead if you only need section-as-Entity
+# atoms (no LLM, deterministic, runs in seconds — but loses the
+# Claim/Configuration richness that drives principle-level drift
+# detection).
+[enrichment]
+enabled = true
+type = "atlas"
+pipeline = "literary_atlas"
