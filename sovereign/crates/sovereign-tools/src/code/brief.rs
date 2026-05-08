@@ -44,6 +44,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use corpus_engine::archaeology_eval::{inquiries_matching_files, load_inquiries_from_dir};
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
 use corpus_engine::git_archaeology::{batch_harvest_all_commits, CommitRecord};
 use corpus_engine::{NoteRow, NoteStore};
@@ -84,6 +85,10 @@ pub struct BriefInputs<'a> {
     /// `~/.sovereign/indexes/<id>-self-atlas/atlas`). `None` ⇒
     /// skip the "Structurally observed" section.
     pub atlas_dir: Option<&'a Path>,
+    /// Directory of `inquiries/*.toml`. When provided and any
+    /// inquiry's globs match a working-set file, a "Principles for
+    /// this area" section is rendered. `None` ⇒ skip the section.
+    pub inquiries_dir: Option<&'a Path>,
     /// Repo display name for the brief header.
     pub repo_name: &'a str,
     /// Branch name for the brief header.
@@ -125,6 +130,17 @@ pub async fn assemble_brief(
     // Section 1: Working set — always present.
     let s1 = render_working_set(inputs.working_set);
     push_if_fits(&mut out, &mut remaining, &s1);
+
+    // Section 1.5: Principles for this area.
+    // Slotted between working-set and notes so the model sees
+    // architectural commitments before any narrative claims.
+    if let Some(inquiries_dir) = inputs.inquiries_dir {
+        let s_principles =
+            render_principles(inquiries_dir, inputs.working_set, remaining);
+        if !s_principles.is_empty() {
+            push_if_fits(&mut out, &mut remaining, &s_principles);
+        }
+    }
 
     // Section 2: Active notes (decisions + invariants).
     let s2 = render_notes(notes, inputs.feature_id, inputs.working_set, remaining)
@@ -195,6 +211,40 @@ fn render_working_set(files: &[PathBuf]) -> String {
     }
     if files.len() > 20 {
         out.push_str(&format!("- _+{} more_\n", files.len() - 20));
+    }
+    out.push('\n');
+    out
+}
+
+/// Surface architectural commitments (inquiries) that target a file
+/// in the working set. Reuses the eval framework's inquiry loader +
+/// glob matcher so principles-as-inquiries stays one source of truth.
+fn render_principles(
+    inquiries_dir: &Path,
+    working_set: &[PathBuf],
+    remaining: usize,
+) -> String {
+    let inquiries = match load_inquiries_from_dir(inquiries_dir) {
+        Ok(i) => i,
+        Err(_) => return String::new(),
+    };
+    if inquiries.is_empty() {
+        return String::new();
+    }
+    let matching = inquiries_matching_files(&inquiries, working_set);
+    if matching.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("## Principles for this area\n\n");
+    let mut spent = estimate_tokens(&out);
+    for inq in matching.iter().take(8) {
+        let line = format!("- **{}** (`{}`)\n", inq.title, inq.id);
+        let cost = estimate_tokens(&line);
+        if spent + cost > remaining {
+            break;
+        }
+        out.push_str(&line);
+        spent += cost;
     }
     out.push('\n');
     out
@@ -457,6 +507,7 @@ mod tests {
             working_set: &working_set,
             repo_root: None,
             atlas_dir: None,
+            inquiries_dir: None,
             repo_name: "test",
             branch_name: "main",
             budget_tokens: 1500,
@@ -480,6 +531,7 @@ mod tests {
             working_set: &working_set,
             repo_root: None,
             atlas_dir: None,
+            inquiries_dir: None,
             repo_name: "test",
             branch_name: "main",
             budget_tokens: 4000,
@@ -514,6 +566,7 @@ mod tests {
             working_set: &working_set,
             repo_root: Some(repo),
             atlas_dir: None,
+            inquiries_dir: None,
             repo_name: "test",
             branch_name: "main",
             budget_tokens: 4000,
@@ -537,6 +590,7 @@ mod tests {
             working_set: &working_set,
             repo_root: None,
             atlas_dir: None,
+            inquiries_dir: None,
             repo_name: "test",
             branch_name: "main",
             budget_tokens: 50,

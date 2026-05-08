@@ -331,10 +331,15 @@ async fn cmd_brief(args: &[String]) -> i32 {
     let mut output: Option<PathBuf> = None;
     let mut explicit_files: Vec<PathBuf> = Vec::new();
     let mut telemetry_log: Option<PathBuf> = None;
+    let mut inquiries_dir_arg: Option<PathBuf> = None;
     let started_at = std::time::Instant::now();
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--inquiries-dir" => {
+                inquiries_dir_arg = args.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
             "--telemetry-log" => {
                 telemetry_log = args.get(i + 1).map(PathBuf::from);
                 i += 2;
@@ -460,11 +465,23 @@ async fn cmd_brief(args: &[String]) -> i32 {
         .to_string();
     let branch_name = current_branch(&repo_root).unwrap_or_else(|| "HEAD".into());
 
+    // ── Inquiries dir ────────────────────────────────────────
+    // Default: <repo_root>/inquiries/. Falls through to None when
+    // the directory doesn't exist (the brief just skips the
+    // "Principles for this area" section).
+    let inquiries_dir = inquiries_dir_arg.unwrap_or_else(|| repo_root.join("inquiries"));
+    let inquiries_dir_opt: Option<&Path> = if inquiries_dir.is_dir() {
+        Some(inquiries_dir.as_path())
+    } else {
+        None
+    };
+
     // ── Assemble ──────────────────────────────────────────────
     let inputs = BriefInputs {
         working_set: &working_set,
         repo_root: Some(&repo_root),
         atlas_dir: atlas_dir.as_deref(),
+        inquiries_dir: inquiries_dir_opt,
         repo_name: &repo_name,
         branch_name: &branch_name,
         budget_tokens,

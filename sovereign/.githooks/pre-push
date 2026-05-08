@@ -1,0 +1,40 @@
+#!/bin/sh
+# Pre-push ratchet — block pushes that drop the inquiry-passing
+# count or introduce fabricated atoms.
+#
+# Install: `git config core.hooksPath .githooks` (one-time, per
+# checkout). Documented in docs/ARCHAEOLOGY_EVAL.md.
+#
+# Exits 0 (allow push) when:
+#   - The daemon / CLI is unavailable (offline-friendly).
+#   - No baseline exists yet (`--save-baseline` hasn't run).
+#   - Current run matches or improves on the baseline.
+#
+# Exits 1 (block push) only when this run is *worse* than the
+# baseline — fewer passing inquiries OR more fabricated atoms.
+# Pre-existing absolute failures are tolerated.
+#
+# Override path (use sparingly): `git push --no-verify` plus a
+# memory note explaining why.
+#
+# Customise: SOVEREIGN_PREPUSH_ATLAS overrides the atlas id
+# (default: <basename of repo root>-self-atlas).
+
+set -e
+
+SOVEREIGN_BIN="${SOVEREIGN_BIN:-$HOME/.local/bin/sovereign}"
+[ -x "$SOVEREIGN_BIN" ] || exit 0
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+INQUIRIES_DIR="$REPO_ROOT/inquiries"
+[ -d "$INQUIRIES_DIR" ] || exit 0
+
+REPO_NAME=$(basename "$REPO_ROOT")
+ATLAS_ID="${SOVEREIGN_PREPUSH_ATLAS:-${REPO_NAME}-self-atlas}"
+
+# Run the gated eval. stderr leaks the regression details when
+# blocking. stdout lands in the operator's terminal so they see
+# the full report.
+exec "$SOVEREIGN_BIN" archaeology-eval "$ATLAS_ID" \
+    --inquiries-dir "$INQUIRIES_DIR" \
+    --gate-on-baseline

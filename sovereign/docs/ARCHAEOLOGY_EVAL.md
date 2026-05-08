@@ -164,6 +164,46 @@ The columns to watch over iterations:
 (mechanically derived). The metric earns its keep with v2 atoms
 where the LLM is in the loop.
 
+## Pre-push ratchet
+
+The gated eval can run as a pre-push hook so commits that *don't
+introduce a regression* sail through, but commits that drop the
+inquiry-passing count or introduce fabricated atoms are blocked
+before they leave the laptop.
+
+```bash
+# One-time setup (per checkout):
+git config core.hooksPath .githooks
+```
+
+The hook at `.githooks/pre-push` runs:
+
+```
+sovereign archaeology-eval <repo>-self-atlas \
+    --inquiries-dir inquiries \
+    --gate-on-baseline
+```
+
+The `--gate-on-baseline` flag changes the exit-code semantics:
+
+| Comparison vs baseline | Exit | Effect |
+|---|---|---|
+| Same passing-inquiry count, same fabricated count | 0 | Push allowed |
+| More passing OR fewer fabricated | 0 | Push allowed (improvement) |
+| Fewer passing OR more fabricated | 1 | Push blocked, regression report on stderr |
+| No baseline saved yet | 0 | Push allowed (fresh repo) |
+| Daemon / CLI / inquiries dir missing | 0 | Push allowed (offline-friendly) |
+
+**Override path:** `git push --no-verify`. Use sparingly; pair
+with a memory note (`sovereign code reflect --content "bypassed
+pre-push because …"`) so the next session's brief sees the
+context.
+
+**When to update the baseline:** after an intentional improvement
+(`--save-baseline` once the eval shows the new state is better),
+or after a deliberate regression with documented rationale (e.g.
+a doc was retired without a replacement principle yet).
+
 ## Workflow
 
 The intended **run-measure-iterate** loop:

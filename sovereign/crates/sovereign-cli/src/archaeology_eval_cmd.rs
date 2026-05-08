@@ -70,15 +70,31 @@ pub async fn run(args: &[String]) -> i32 {
     );
 
     // ── Load inquiries ────────────────────────────────────────
-    let inquiries = match load_inquiries(&parsed.inquiry_paths) {
+    let mut inquiries = match load_inquiries(&parsed.inquiry_paths) {
         Ok(i) => i,
         Err(e) => {
             eprintln!("✗ {e}");
             return 1;
         }
     };
+    if let Some(dir) = &parsed.inquiries_dir {
+        match corpus_engine::archaeology_eval::load_inquiries_from_dir(dir) {
+            Ok(mut from_dir) => {
+                println!(
+                    "  · loaded {} inquiries from {}",
+                    from_dir.len(),
+                    dir.display()
+                );
+                inquiries.append(&mut from_dir);
+            }
+            Err(e) => {
+                eprintln!("✗ {}: {e}", dir.display());
+                return 1;
+            }
+        }
+    }
     if !inquiries.is_empty() {
-        println!("  · loaded {} inquiries", inquiries.len());
+        println!("  · {} inquiries total", inquiries.len());
     }
 
     // ── Run eval ──────────────────────────────────────────────
@@ -166,13 +182,62 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     // ── Exit code ────────────────────────────────────────────
-    // Non-zero when an inquiry failed OR fabrication was detected,
-    // so this command is CI-friendly.
-    let any_inquiry_failed = report.inquiry_verdicts.iter().any(|v| !v.passing);
-    if report.fabricated_atoms > 0 || any_inquiry_failed {
+    // Two modes:
+    //   - Default (no flag): non-zero on absolute failure (any
+    //     inquiry failing OR any fabricated atom). Suitable when
+    //     you want a hard floor.
+    //   - `--gate-on-baseline`: non-zero only when this run is
+    //     *worse* than the baseline (fewer passing inquiries OR
+    //     more fabricated atoms). Pre-existing failures are
+    //     tolerated. Used by the pre-push ratchet so commits that
+    //     don't introduce new regressions can still land.
+    let curr_passing = report.inquiry_verdicts.iter().filter(|v| v.passing).count();
+    let curr_fab = report.fabricated_atoms;
+    let any_inquiry_failed = curr_passing < report.inquiry_verdicts.len();
+    let baseline_loaded = load_baseline(&baseline_path);
+
+    if parsed.gate_on_baseline {
+        let Some(b) = &baseline_loaded else {
+            // No baseline yet — treat as a fresh seed; pass.
+            return 0;
+        };
+        let prev_passing = b.inquiry_verdicts.iter().filter(|v| v.passing).count();
+        let prev_fab = b.fabricated_atoms;
+        let mut regressed = false;
+        if curr_passing < prev_passing {
+            eprintln!(
+                "\n✗ regression: {} → {} inquiries passing (Δ {})",
+                prev_passing,
+                curr_passing,
+                curr_passing as i64 - prev_passing as i64,
+            );
+            for v in &report.inquiry_verdicts {
+                if !v.passing
+                    && b.inquiry_verdicts
+                        .iter()
+                        .any(|pv| pv.inquiry_id == v.inquiry_id && pv.passing)
+                {
+                    eprintln!("    newly failing: `{}`", v.inquiry_id);
+                }
+            }
+            regressed = true;
+        }
+        if curr_fab > prev_fab {
+            eprintln!(
+                "\n✗ regression: {} → {} fabricated atoms (Δ +{})",
+                prev_fab,
+                curr_fab,
+                curr_fab - prev_fab,
+            );
+            regressed = true;
+        }
+        return if regressed { 1 } else { 0 };
+    }
+
+    if curr_fab > 0 || any_inquiry_failed {
         eprintln!();
-        if report.fabricated_atoms > 0 {
-            eprintln!("✗ {} fabricated atoms detected", report.fabricated_atoms);
+        if curr_fab > 0 {
+            eprintln!("✗ {curr_fab} fabricated atoms detected");
         }
         for v in &report.inquiry_verdicts {
             if !v.passing {
@@ -190,9 +255,18 @@ pub async fn run(args: &[String]) -> i32 {
 struct Args {
     atlas_corpus_id: String,
     inquiry_paths: Vec<PathBuf>,
+    /// When set, every `*.toml` under the directory is loaded as an
+    /// inquiry alongside any `--inquiry` paths. Lets the pre-push
+    /// ratchet hook be a one-liner.
+    inquiries_dir: Option<PathBuf>,
     baseline: Option<PathBuf>,
     output: Option<PathBuf>,
     save_baseline: bool,
+    /// Pre-push-style ratchet: exit 0 even when some inquiries fail,
+    /// so long as the count of *passing* inquiries hasn't decreased
+    /// vs baseline AND fabricated_atoms hasn't increased. Without
+    /// this flag the command exits non-zero on any absolute failure.
+    gate_on_baseline: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
@@ -204,6 +278,15 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                 let v = args.get(i + 1).ok_or("--inquiry requires a value")?;
                 out.inquiry_paths.push(PathBuf::from(v));
                 i += 2;
+            }
+            "--inquiries-dir" => {
+                let v = args.get(i + 1).ok_or("--inquiries-dir requires a value")?;
+                out.inquiries_dir = Some(PathBuf::from(v));
+                i += 2;
+            }
+            "--gate-on-baseline" => {
+                out.gate_on_baseline = true;
+                i += 1;
             }
             "--baseline" => {
                 let v = args.get(i + 1).ok_or("--baseline requires a value")?;

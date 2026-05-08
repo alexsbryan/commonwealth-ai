@@ -176,6 +176,7 @@ async fn snapshot_clean_main() {
         working_set: &working_set,
         repo_root: None,
         atlas_dir: None,
+        inquiries_dir: None,
         repo_name: "fixture",
         branch_name: "main",
         budget_tokens: 1500,
@@ -206,6 +207,7 @@ async fn snapshot_small_feature_branch_with_notes() {
         working_set: &working_set,
         repo_root: None,
         atlas_dir: None,
+        inquiries_dir: None,
         repo_name: "fixture",
         branch_name: "feature/auth-rate-limiting",
         budget_tokens: 1500,
@@ -227,6 +229,7 @@ async fn snapshot_large_refactor_caps_working_set_at_20() {
         working_set: &working_set,
         repo_root: None,
         atlas_dir: None,
+        inquiries_dir: None,
         repo_name: "fixture",
         branch_name: "refactor/big-cleanup",
         budget_tokens: 4000,
@@ -266,6 +269,7 @@ async fn snapshot_with_atlas_and_archaeology() {
         working_set: &working_set,
         repo_root: None,
         atlas_dir: Some(&atlas_dir),
+        inquiries_dir: None,
         repo_name: "fixture",
         branch_name: "feature/auth-cleanup",
         budget_tokens: 2000,
@@ -273,6 +277,57 @@ async fn snapshot_with_atlas_and_archaeology() {
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("04_with_atlas_and_archaeology", &brief);
+}
+
+#[tokio::test]
+async fn snapshot_principles_for_this_area() {
+    // 2 working-set files, 2 inquiry TOMLs in a tempdir — only one
+    // should match (file_globs targeting one of the two files). The
+    // brief surfaces a "Principles for this area" section listing
+    // the matched inquiry only, between Working set and Stated.
+    let tmp = tempfile::tempdir().unwrap();
+    let inquiries_dir = tmp.path().join("inquiries");
+    std::fs::create_dir_all(&inquiries_dir).unwrap();
+    std::fs::write(
+        inquiries_dir.join("matching.toml"),
+        r#"
+[inquiry]
+id = "principle_auth_proxy"
+title = "All auth flows route through loopback_guard"
+file_globs = ["**/auth/proxy.rs"]
+min_score = 0.5
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        inquiries_dir.join("non_matching.toml"),
+        r#"
+[inquiry]
+id = "principle_unrelated"
+title = "Unrelated principle that shouldn't surface here"
+file_globs = ["**/storage/sqlite.rs"]
+min_score = 0.5
+"#,
+    )
+    .unwrap();
+
+    let (_notes_tmp, notes) = make_notes_with(&[]).await;
+    let working_set = vec![
+        PathBuf::from("src/auth/proxy.rs"),
+        PathBuf::from("src/auth/middleware.rs"),
+    ];
+    let inputs = BriefInputs {
+        working_set: &working_set,
+        repo_root: None,
+        atlas_dir: None,
+        inquiries_dir: Some(inquiries_dir.as_path()),
+        repo_name: "fixture",
+        branch_name: "feature/auth-rate-limiting",
+        budget_tokens: 1500,
+        feature_id: None,
+    };
+    let brief = assemble_brief(inputs, &notes).await.unwrap();
+    assert_snapshot("05_principles_for_this_area", &brief);
 }
 
 #[tokio::test]
@@ -304,6 +359,7 @@ async fn snapshot_recent_activity_with_backdated_commits() {
         working_set: &working_set,
         repo_root: Some(repo),
         atlas_dir: None,
+        inquiries_dir: None,
         repo_name: "fixture",
         branch_name: "main",
         budget_tokens: 2000,
