@@ -19,9 +19,12 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     // `sovereign drift accept <id> [--reason ...]` → spec accept.
+    // `sovereign drift detect --code <path> --narrative <doc>...` →
+    //   narrative-vs-code drift orchestrator (this session's work).
     // Anything else routes to spec diff.
     match args.first().map(String::as_str) {
         Some("accept") => crate::atos_cmd::spec::cmd_spec_accept(&args[1..]).await,
+        Some("detect") => crate::drift_cmd_orchestrator::cmd_detect(&args[1..]).await,
         Some(_) => crate::atos_cmd::spec::cmd_spec_diff(args).await,
         None => {
             // Phase 1: no-feature form is unimplemented — the

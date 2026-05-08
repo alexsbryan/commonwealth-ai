@@ -31,7 +31,7 @@ const HELP: Help = Help {
         HelpSection::Flags(&[
             (
                 "--source-corpus <id>",
-                "Already-ingested corpus to read chunks from (required). Typically `wikipedia`.",
+                "Already-ingested corpus to read chunks from (required). Typically `wikipedia` or a code-corpus id like `commonwealth-ai`.",
             ),
             (
                 "--strategy <id>",
@@ -39,7 +39,15 @@ const HELP: Help = Help {
             ),
             (
                 "--limit-articles <N>",
-                "Cap on the number of articles processed. Useful for fast-iteration validation before scaling. Sorted by article title for stable ordering.",
+                "Wikipedia branch only: cap on the number of articles processed. Useful for fast-iteration validation. Sorted by article title for stable ordering.",
+            ),
+            (
+                "--include-functions",
+                "Code branch only: emit Entity atoms for `pub fn` / methods. Off by default — function-tier atoms inflate the demo atlas without paying back.",
+            ),
+            (
+                "--include-private",
+                "Code branch only: include non-`pub` items. Off by default — public surface is the architectural shape; private internals are implementation detail.",
             ),
             (
                 "--list-strategies",
@@ -54,6 +62,10 @@ const HELP: Help = Help {
             (
                 "sovereign enrich ingest wikipedia --source-corpus wikipedia",
                 "Build the structural atlas over the full installed corpus.",
+            ),
+            (
+                "sovereign enrich ingest sovereign-self-atlas --source-corpus commonwealth-ai",
+                "Build the structural code atlas over the workspace's indexed source.",
             ),
         ]),
         HelpSection::Notes(
@@ -156,6 +168,16 @@ pub async fn cmd_ingest(args: &[String]) -> i32 {
             obj.insert("limit_articles".into(), serde_json::json!(n));
         }
     }
+    if parsed.include_functions {
+        if let Some(obj) = strategy_config.as_object_mut() {
+            obj.insert("include_functions".into(), serde_json::json!(true));
+        }
+    }
+    if parsed.include_private {
+        if let Some(obj) = strategy_config.as_object_mut() {
+            obj.insert("include_private".into(), serde_json::json!(true));
+        }
+    }
     let cfg = AtlasIngestionConfig {
         strategy_id: strategy_id.to_string(),
         strategy_config,
@@ -246,6 +268,11 @@ struct ParsedIngest {
     strategy: Option<String>,
     limit_articles: Option<usize>,
     list_strategies: bool,
+    /// Code-corpus branch only: emit Entity atoms for `pub fn` /
+    /// methods. Off by default to keep demo atlases tractable.
+    include_functions: bool,
+    /// Code-corpus branch only: include non-`pub` items.
+    include_private: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedIngest, String> {
@@ -284,6 +311,14 @@ fn parse_args(args: &[String]) -> Result<ParsedIngest, String> {
             }
             "--list-strategies" => {
                 out.list_strategies = true;
+                i += 1;
+            }
+            "--include-functions" => {
+                out.include_functions = true;
+                i += 1;
+            }
+            "--include-private" => {
+                out.include_private = true;
                 i += 1;
             }
             other if other.starts_with("--") => {

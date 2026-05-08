@@ -805,6 +805,7 @@ fn auth_demo_symbols() -> Vec<ScipSymbolRecord> {
 fn sym(name: &str, kind: &str, file: &str, start: i32, end: i32) -> ScipSymbolRecord {
     ScipSymbolRecord {
         name: name.to_string(),
+        qualified_name: String::new(),
         kind: kind.to_string(),
         file_path: file.to_string(),
         line_start: start,
@@ -844,6 +845,8 @@ fn refr(caller: &str, callee: &str, file: &str, line: i32) -> ScipRefRecord {
     ScipRefRecord {
         caller_symbol: caller.to_string(),
         callee_symbol: callee.to_string(),
+        caller_qualified: String::new(),
+        callee_qualified: String::new(),
         file_path: file.to_string(),
         line,
         ref_kind: "direct".to_string(),

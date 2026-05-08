@@ -5,6 +5,24 @@ MCP server: http://localhost:9741/mcp
 Corpus: sovereign
 Languages: rust
 
+## Two ways to reach the tools
+
+**MCP (preferred when the daemon is running).** Clients like Claude Code
+auto-discover the full tool set via `tools/list` against the server above.
+Structured, fast, native.
+
+**CLI fallback.** The same 24 tools are callable as shell commands:
+
+```
+sovereign tools list                           # manifest, grouped by Effect × Scope
+sovereign tools describe <id>                  # full descriptor + parameters + output keys + examples
+sovereign tools call <id> [--key=value ...]    # invoke, plain text or --format json output
+```
+
+`sovereign tools call symbol_lookup --name=Foo` runs the same
+`Tool::execute()` as the MCP path — pick whichever is in front of you. Use
+the CLI when the daemon isn't up, when scripting, or to see `--help`.
+
 ## Tools
 
 | Tool | When to use | Notes |
@@ -175,8 +193,10 @@ If something seems stale, check `~/.sovereign/hooks.log` and run
 
 ## Call graph
 
-Call graph tools are not available (no SCIP exporter found).
-Install a SCIP exporter and run `sovereign project refresh` to enable.
+`find_callers` and `find_callees` use the SCIP graph.
+New symbols have no graph entries until the next git commit
+(the post-commit hook keeps this current automatically).
+To refresh manually: `sovereign project refresh`
 
 ## Project-specific invariants
 

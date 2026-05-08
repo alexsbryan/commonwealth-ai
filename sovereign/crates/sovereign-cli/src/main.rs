@@ -16,7 +16,10 @@ mod daemon_cmd;
 mod design_cmd;
 mod design_onboarding;
 mod design_session;
+mod archaeology_eval_cmd;
 mod drift_cmd;
+mod drift_cmd_orchestrator;
+mod git_archaeology_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod corpus_catalog_cmd;
@@ -44,6 +47,7 @@ mod recipe_agent_live_trial;
 mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;
+mod rough_edges_cmd;
 mod serve_cmd;
 mod service_install;
 mod setup_cmd;
@@ -438,6 +442,18 @@ async fn main() {
             }
             "drift" => {
                 let code = drift_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "rough-edges" => {
+                let code = rough_edges_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "git-archaeology" => {
+                let code = git_archaeology_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "archaeology-eval" => {
+                let code = archaeology_eval_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "charter" => {

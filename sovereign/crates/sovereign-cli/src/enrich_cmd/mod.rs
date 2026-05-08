@@ -14,6 +14,7 @@
 
 pub mod atlas_configuration;
 pub mod atlas_cross_corpus;
+pub mod atlas_drift_report;
 pub mod atlas_eval;
 pub mod atlas_gaps;
 pub mod atlas_phase_cmd;
@@ -168,6 +169,9 @@ pub async fn run_enrich(args: &[String]) -> i32 {
         "query" | "atlas-query" => atlas_query::cmd_atlas_query(rest).await,
         "report" | "schema-report" => schema_review::cmd_schema_report(rest).await,
         "review" | "schema-review" => schema_review::cmd_schema_review(rest).await,
+        "atlas-drift-report" => {
+            atlas_drift_report::cmd_atlas_drift_report(rest).await
+        }
         "bridge" | "atlas-cross-corpus" => {
             atlas_cross_corpus::cmd_atlas_cross_corpus(rest).await
         }

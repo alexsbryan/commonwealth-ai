@@ -58,6 +58,30 @@
 
 use commonwealth_api::state::AppState;
 
+/// How recent a partition's `_corpus_meta.json` mtime must be for
+/// auto-resume to consider it possibly-active and skip resuming. The
+/// CLI ingest checkpoints meta every few seconds during embedding
+/// and on every FTS phase boundary — 60s is comfortably longer than
+/// any single inter-checkpoint gap.
+const RECENT_ACTIVITY_WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// True iff the partition's `_corpus_meta.json` was last modified
+/// within [`RECENT_ACTIVITY_WINDOW`]. Tolerates missing files
+/// (returns false) and clock skew (returns false on negative durations).
+fn partition_recently_active(partition_dir: &std::path::Path) -> bool {
+    let meta_path = partition_dir.join("_corpus_meta.json");
+    let Ok(meta) = std::fs::metadata(&meta_path) else {
+        return false;
+    };
+    let Ok(modified) = meta.modified() else {
+        return false;
+    };
+    let Ok(elapsed) = modified.elapsed() else {
+        return false;
+    };
+    elapsed < RECENT_ACTIVITY_WINDOW
+}
+
 /// Fire the resume scan in the background. Returns immediately;
 /// per-corpus work is offloaded to `spawn_corpus_install`'s own
 /// internal `tokio::spawn`. Logged at `info` so the operator can
@@ -117,6 +141,24 @@ async fn resume_in_progress_ingests(state: AppState) {
             tracing::info!(
                 corpus = %corpus_id,
                 "auto_resume: skipping peer-pulled partition — coordinator owns the schedule"
+            );
+            continue;
+        }
+
+        // Activity gate. If the partition's `_corpus_meta.json` was
+        // mtime'd within `RECENT_ACTIVITY_WINDOW`, an in-process CLI
+        // ingest (e.g. `sovereign code index`) is plausibly still
+        // writing to it — and resuming via the daemon would race the
+        // CLI's chunks.lance writes and meta updates, leaving the
+        // canonical with a half-built meta state (gap A from the
+        // 2026-05-07 stress test). The CLI ingest checkpoints every
+        // few seconds, so a partition genuinely abandoned > 60s ago
+        // is safe to resume; one being actively written is not.
+        if partition_recently_active(&engine.partition_path(&corpus_id)) {
+            tracing::info!(
+                corpus = %corpus_id,
+                "auto_resume: skipping recently-active partition — \
+                 in-process CLI ingest likely still writing"
             );
             continue;
         }

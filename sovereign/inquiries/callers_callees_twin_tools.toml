@@ -1,0 +1,41 @@
+# Curated regression case for archaeology-eval.
+#
+# The callers / callees code-intel tools were introduced together and
+# co-evolve (v1 archaeology already shows them at 100% jaccard with
+# 7 joint commits). Any archaeology iteration that loses this lineage
+# — e.g. by misattributing the authorship, missing the keyword
+# anchors in commit subjects, or producing atoms whose first_seen
+# commit hash isn't actually in the repo — will fail this inquiry.
+#
+# Run: sovereign archaeology-eval sovereign-self-atlas \
+#        --inquiry inquiries/callers_callees_twin_tools.toml
+
+[inquiry]
+id = "callers_callees_twin_tools"
+title = "callers/callees code-intel tools share a lineage"
+
+# Both tools live under sovereign-tools/src/code. The atlas indexes
+# entity atoms anchored to each file; this inquiry's witness checks
+# fire across all of them.
+file_globs = [
+    "**/sovereign-tools/src/code/callers.rs",
+    "**/sovereign-tools/src/code/callees.rs",
+]
+
+# At least one commit subject in each file's history should mention
+# one of these. Conservative match — substring, case-insensitive.
+keywords = ["callers", "callees", "scip", "graph"]
+
+# v1 archaeology surfaced both alexbryan01@ and alexsbryan@ as
+# primary authors of the surrounding code; either should appear in
+# `primary_authors` for an atom from these files.
+authors = [
+    "alexbryan01@gmail.com",
+    "alexsbryan@gmail.com",
+]
+
+# Per-atom witness score must be at least 0.75 (3 of 4 always-on
+# checks pass + most inquiry-specific checks). Loose enough that a
+# transient git oddity doesn't fail the case; tight enough that real
+# regressions in archaeology output trip it.
+min_score = 0.75
