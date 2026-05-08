@@ -147,15 +147,15 @@ impl Tool for LintStatusTool {
     }
 
     async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
-        let watcher_active = self
+        let explicit_active = self
             .watcher_active
             .as_ref()
-            .map(|f| f.load(Ordering::Relaxed))
-            .unwrap_or(false);
+            .map(|f| f.load(Ordering::Relaxed));
 
         let is_running = self.store.run_in_progress().await.unwrap_or(false);
 
         if is_running {
+            // Run in progress = watcher is doing real work right now.
             return Ok(StepOutput::Json(json!({
                 "status": "running",
                 "summary": null,
@@ -164,7 +164,7 @@ impl Tool for LintStatusTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": watcher_active,
+                "watcher_active": derive_watcher_active(explicit_active, None, true),
             })));
         }
 
@@ -182,7 +182,7 @@ impl Tool for LintStatusTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": watcher_active,
+                "watcher_active": derive_watcher_active(explicit_active, None, false),
             })));
         };
 
@@ -258,7 +258,40 @@ impl Tool for LintStatusTool {
             "stale_since": stale_paths,
             "age_seconds": age_seconds,
             "watched_scope": self.watched_scope,
-            "watcher_active": watcher_active,
+            "watcher_active": derive_watcher_active(explicit_active, Some(age_seconds), false),
         })))
     }
+}
+
+/// How recently a run must have completed for the CLI-mode
+/// fallback to consider the watcher "live" (no explicit flag wired).
+/// 10 minutes is comfortably longer than any single watcher
+/// idle-poll cycle but short enough that a daemon that crashed
+/// hours ago doesn't quietly look healthy.
+const WATCHER_FRESH_SECS: u64 = 600;
+
+/// Derive `watcher_active` for the response.
+///
+/// - **Daemon mode** (explicit flag wired by `with_watcher_active`):
+///   trust the flag.
+/// - **CLI mode** (no flag — the CLI process isn't running a
+///   watcher; it's reading the daemon's shared store):
+///   - `running` branch (`run_in_progress = true`) → true (a run
+///     is happening *now*).
+///   - run exists and `age < WATCHER_FRESH_SECS` → true.
+///   - run exists but `age >= WATCHER_FRESH_SECS` → false (data
+///     is stale-ish; treat as not-actively-watched).
+///   - no run yet (`never_run`) → false.
+fn derive_watcher_active(
+    explicit: Option<bool>,
+    last_run_age_secs: Option<u64>,
+    run_in_progress: bool,
+) -> bool {
+    if let Some(flag) = explicit {
+        return flag;
+    }
+    if run_in_progress {
+        return true;
+    }
+    matches!(last_run_age_secs, Some(age) if age < WATCHER_FRESH_SECS)
 }

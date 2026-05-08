@@ -173,11 +173,10 @@ impl Tool for BuildTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let watcher_active = self
+        let explicit_active = self
             .watcher_active
             .as_ref()
-            .map(|f| f.load(Ordering::Relaxed))
-            .unwrap_or(true);
+            .map(|f| f.load(Ordering::Relaxed));
 
         // In-progress short-circuit. Same shape as LintStatusTool.
         if self.store.run_in_progress().await.unwrap_or(false) {
@@ -189,7 +188,7 @@ impl Tool for BuildTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": watcher_active,
+                "watcher_active": derive_watcher_active(explicit_active, None, true),
             })));
         }
 
@@ -207,7 +206,7 @@ impl Tool for BuildTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": watcher_active,
+                "watcher_active": derive_watcher_active(explicit_active, None, false),
             })));
         };
 
@@ -295,9 +294,28 @@ impl Tool for BuildTool {
             "stale_since":   stale_paths,
             "age_seconds":   age_seconds,
             "watched_scope": self.watched_scope,
-            "watcher_active": watcher_active,
+            "watcher_active": derive_watcher_active(explicit_active, Some(age_seconds), false),
         })))
     }
+}
+
+/// Same shape as the helper in `lint_status.rs` / `test_status.rs`.
+/// See `lint_status::derive_watcher_active` for the daemon-vs-CLI
+/// fallback rationale.
+const WATCHER_FRESH_SECS: u64 = 600;
+
+fn derive_watcher_active(
+    explicit: Option<bool>,
+    last_run_age_secs: Option<u64>,
+    run_in_progress: bool,
+) -> bool {
+    if let Some(flag) = explicit {
+        return flag;
+    }
+    if run_in_progress {
+        return true;
+    }
+    matches!(last_run_age_secs, Some(age) if age < WATCHER_FRESH_SECS)
 }
 
 /// Truncate a string to at most `max_bytes` while landing on a

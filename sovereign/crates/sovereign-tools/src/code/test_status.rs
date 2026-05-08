@@ -147,11 +147,10 @@ impl Tool for TestStatusTool {
     }
 
     async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
-        let watcher_active = self
+        let explicit_active = self
             .watcher_active
             .as_ref()
-            .map(|f| f.load(Ordering::Relaxed))
-            .unwrap_or(false);
+            .map(|f| f.load(Ordering::Relaxed));
 
         // Check running flag.
         let is_running = if let Some(ref flag) = self.running_flag {
@@ -172,7 +171,7 @@ impl Tool for TestStatusTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": watcher_active,
+                "watcher_active": derive_watcher_active(explicit_active, None, true),
             })));
         }
 
@@ -189,7 +188,7 @@ impl Tool for TestStatusTool {
                 "stale_since": [],
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
-                "watcher_active": watcher_active,
+                "watcher_active": derive_watcher_active(explicit_active, None, false),
             })));
         };
 
@@ -245,7 +244,26 @@ impl Tool for TestStatusTool {
             "stale_since": stale_paths,
             "age_seconds": age_seconds,
             "watched_scope": self.watched_scope,
-            "watcher_active": watcher_active,
+            "watcher_active": derive_watcher_active(explicit_active, Some(age_seconds), false),
         })))
     }
+}
+
+/// Same shape and rationale as the helper in `lint_status.rs`. See
+/// that module's doc-comment on `derive_watcher_active` for the
+/// daemon-vs-CLI fallback logic.
+const WATCHER_FRESH_SECS: u64 = 600;
+
+fn derive_watcher_active(
+    explicit: Option<bool>,
+    last_run_age_secs: Option<u64>,
+    run_in_progress: bool,
+) -> bool {
+    if let Some(flag) = explicit {
+        return flag;
+    }
+    if run_in_progress {
+        return true;
+    }
+    matches!(last_run_age_secs, Some(age) if age < WATCHER_FRESH_SECS)
 }

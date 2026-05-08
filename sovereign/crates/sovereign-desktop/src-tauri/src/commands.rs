@@ -4575,6 +4575,13 @@ fn atom_surface_dto(
             c.description.clone(),
             Some(c.confidence),
         ),
+        AtomEnvelope::ArgumentReconstruction(a) => (
+            "argument_reconstruction",
+            a.name.clone(),
+            Vec::new(),
+            a.conclusion.clone(),
+            None,
+        ),
     }
 }
 
@@ -4644,6 +4651,13 @@ fn atom_evidence_section_refs_dto(
             .iter()
             .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
             .collect(),
+        AtomEnvelope::ArgumentReconstruction(a) => {
+            let mut out = vec![(a.section_position.section_id.clone(), None)];
+            for c in &a.evidence {
+                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
+            }
+            out
+        }
     }
 }
 

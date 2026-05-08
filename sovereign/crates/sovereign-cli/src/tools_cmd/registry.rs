@@ -39,7 +39,6 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 use arc_swap::ArcSwap;
 
@@ -127,10 +126,13 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         Arc::clone(&merged_graph),
     ));
 
-    // Shared watcher_active flag — always false here: this binary
-    // isn't running a watcher. Tools that read this flag will report
-    // "watcher not running" which is accurate.
-    let watcher_active_flag = Arc::new(AtomicBool::new(false));
+    // No `watcher_active` flag wired here: the CLI binary isn't
+    // running a watcher of its own — it's a thin reader over the
+    // daemon's shared lint_results.db / test_results.db. The
+    // watcher tools fall back to a freshness heuristic (data
+    // updated within the last ~10 minutes → presumed live) when
+    // no explicit flag is supplied. See `derive_watcher_active`
+    // in `sovereign-tools/src/code/lint_status.rs`.
 
     let mut tools = ToolRegistry::new();
 
@@ -159,13 +161,12 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
             .with_health_checker(Arc::clone(&health_checker)),
     ));
 
-    // Watcher tools — register without a live watcher; they'll report
-    // `never_run` when called from the bare CLI path.
-    {
-        let tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag));
-        tools.register(Box::new(tool));
-    }
+    // Watcher tools — no `with_watcher_active` here. The CLI is a
+    // reader over the daemon's shared store; the tools' built-in
+    // freshness heuristic decides `watcher_active` from data age.
+    tools.register(Box::new(sovereign_tools::LintStatusTool::new(Arc::clone(
+        &lint_store,
+    ))));
     tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
         Arc::clone(&lint_store),
     )));
@@ -173,16 +174,12 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // the same lint store as `lint_status`; the agent sees one
     // canonical tool while the legacy ids stay reachable during
     // the alias window.
-    {
-        let tool = sovereign_tools::BuildTool::new(Arc::clone(&lint_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag));
-        tools.register(Box::new(tool));
-    }
-    {
-        let tool = sovereign_tools::TestStatusTool::new(Arc::clone(&test_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag));
-        tools.register(Box::new(tool));
-    }
+    tools.register(Box::new(sovereign_tools::BuildTool::new(Arc::clone(
+        &lint_store,
+    ))));
+    tools.register(Box::new(sovereign_tools::TestStatusTool::new(Arc::clone(
+        &test_store,
+    ))));
     tools.register(Box::new(sovereign_tools::GetRunOutputTool::new(
         Arc::clone(&test_store),
     )));
