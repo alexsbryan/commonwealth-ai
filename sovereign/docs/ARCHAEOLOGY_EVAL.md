@@ -256,6 +256,10 @@ GitHub Action or local pre-commit and your ratchet stays bound.
 
 ## See also
 
+- [`docs/PLAN_ALIGNMENT.md`](./PLAN_ALIGNMENT.md) — the
+  plan-time analogue of the pre-push ratchet. Forces the four
+  alignment questions before any code is generated; this doc
+  catches the regressions that slip through.
 - [`docs/GIT_ARCHAEOLOGY.md`](./GIT_ARCHAEOLOGY.md) — what eval
   evaluates.
 - [`docs/DRIFT_DETECTION.md`](./DRIFT_DETECTION.md) — eval is the

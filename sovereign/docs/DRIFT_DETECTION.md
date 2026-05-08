@@ -282,6 +282,9 @@ the full per-marker list lives in the rough-edges JSON sidecar at
 - [`docs/ARCHAEOLOGY_EVAL.md`](./ARCHAEOLOGY_EVAL.md) — witness
   checks + baseline diff + curated inquiries that gate trust in
   archaeology output.
+- [`docs/PLAN_ALIGNMENT.md`](./PLAN_ALIGNMENT.md) — plan-time
+  alignment-questions discipline that produces the inquiries the
+  drift detector checks.
 - `corpus-engine/src/extractors/markdown.rs` — section-aware markdown
   extractor.
 - `sovereign-cli/src/enrich_cmd/atlas_drift_report.rs` — digest
