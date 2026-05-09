@@ -199,7 +199,10 @@ pub struct Vocabulary {
 /// ... }` request. Used by Phase 1 to force the model into valid
 /// JSON shape, eliminating the "missing comma / unclosed bracket"
 /// failure mode observed on Gemma-31B for long structured outputs.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+// `Eq` was dropped from the derive list when `temperature: Option<f32>`
+// was added — `f32` doesn't implement `Eq` (NaN is not reflexive).
+// `PartialEq` is sufficient for every test that compares ChatPrompts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChatPrompt {
     pub system: String,
     pub user: String,
@@ -240,6 +243,26 @@ pub struct ChatPrompt {
     /// to its model-default cap.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_output_tokens: Option<u32>,
+    /// Sampling temperature (0.0–2.0). When set, the chat client
+    /// forwards it as the request `temperature` field instead of the
+    /// dispatcher / provider default. Phase composers attach this when
+    /// the atlas operator has a per-phase override (e.g. `0.0` for
+    /// classifier phases, `0.3` for interpretive Phase 8). `None`
+    /// falls through to the provider's `default_temperature` and
+    /// finally the dispatcher's hardcoded fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    /// Reasoning / extended-thinking budget in tokens. Anthropic
+    /// thinking models, OpenAI o1-class, and DeepSeek-reasoner consume
+    /// this differently, but all interpret it as "spend up to N tokens
+    /// in a hidden reasoning block before emitting the visible
+    /// response". `Some(0)` disables thinking explicitly; `None`
+    /// inherits the provider default. Per-phase overrides matter for
+    /// Phase 1 (which benefits from reasoning when the article is
+    /// dense or dialectical) versus the judge / classifier phases
+    /// (which don't).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<u32>,
 }
 
 impl ChatPrompt {
@@ -251,6 +274,8 @@ impl ChatPrompt {
             response_schema_name: None,
             phase_id: None,
             max_output_tokens: None,
+            temperature: None,
+            thinking_tokens: None,
         }
     }
 
@@ -282,6 +307,20 @@ impl ChatPrompt {
     /// claim; long-output phases either omit it or set it large.
     pub fn with_max_output_tokens(mut self, tokens: u32) -> Self {
         self.max_output_tokens = Some(tokens);
+        self
+    }
+
+    /// Override the sampling temperature for this prompt. See
+    /// [`ChatPrompt::temperature`] for semantics.
+    pub fn with_temperature(mut self, t: f32) -> Self {
+        self.temperature = Some(t);
+        self
+    }
+
+    /// Override the thinking-token budget for this prompt. See
+    /// [`ChatPrompt::thinking_tokens`] for semantics.
+    pub fn with_thinking_tokens(mut self, n: u32) -> Self {
+        self.thinking_tokens = Some(n);
         self
     }
 }

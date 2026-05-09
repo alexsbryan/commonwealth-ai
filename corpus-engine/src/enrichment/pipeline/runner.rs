@@ -851,15 +851,28 @@ impl PhaseRunner {
             let mut section_extraction = parsed.section_extraction;
             if let Some(ref mut sx) = section_extraction {
                 sx.section_id = chapter.chapter_id.clone();
-                // Phase 1b coverage check — opt-in audit pass that
-                // asks the model "what did you miss?" against its
-                // own extraction. Best-effort: a chat or parse
-                // failure logs a warning and the chapter proceeds
-                // with its original Phase 1 atoms unchanged. Skipped
-                // on retry runs because the original failure is the
-                // signal we care about — adding a coverage pass on
-                // top of a retry obscures whether the retry recovered.
-                if retry_mode.is_none() {
+                // Phase 1b coverage check — an audit pass that asks
+                // the model "what did you miss?" against its own
+                // extraction. Disabled by default because the SEP
+                // 2026-05-07 ablation found it a net-negative for
+                // bench: it recovers ~55% additional Entity atoms
+                // that never seed into the retriever's cosine top-12,
+                // and slightly suppresses ArgumentReconstruction
+                // richness (because each Phase 1 call has less budget
+                // when shadowed by a downstream coverage pass). Costs
+                // ~7-8 min per atlas of LLM time for ≤+1 essay point.
+                //
+                // Re-enable with `SOVEREIGN_RUN_PHASE1B=1` for
+                // domains where coverage recall matters more than
+                // arg richness (e.g., entity-dense reference works
+                // where the bench credits broad-name attribution).
+                // Skipped on retry runs because the original failure
+                // is the signal we care about.
+                let run_1b = std::env::var("SOVEREIGN_RUN_PHASE1B")
+                    .ok()
+                    .filter(|v| !v.trim().is_empty() && v != "0")
+                    .is_some();
+                if retry_mode.is_none() && run_1b {
                     run_phase1b_coverage(
                         self.pipeline.as_ref(),
                         chapter,
