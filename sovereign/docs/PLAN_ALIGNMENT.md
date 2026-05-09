@@ -222,6 +222,55 @@ git push --no-verify          # for the related ratchet
 cat docs/examples/plan_v0_brief_aligned.md
 ```
 
+## Mesh-replicated alignment workspace
+
+Plans (`~/.claude/plans/`), auto-memory entries (`~/.claude/projects/-*/memory/`), and the ATOS NoteStore (`~/.sovereign/notes.db`) ride a built-in `alignment` corpus that mesh-replicates between the user's own daemons. Newest mtime wins per logical key, so two machines that edit the same plan converge on the newer copy after a mesh tick. The post-merge projector materializes received chunks back to disk on the receiving daemon — fresh machines reach parity in one ingest.
+
+### Operator flow (run on both machines)
+
+```bash
+# Optional: preview what's in scope (no writes, no daemon traffic).
+sovereign alignment migrate --dry-run
+
+# Real run: tar a backup to ~/.sovereign/backups/, then submit a
+# corpus install for the alignment recipe. The daemon completes the
+# ingest and any peer pulls in the background.
+sovereign alignment migrate
+
+# At any time:
+sovereign alignment status
+```
+
+Order doesn't matter — each machine's `alignment migrate` lands its current state on the corpus, and the existing daemon hooks (`auto_recover` after a stranded-partition merge, `index_transfer` after a peer pull) fire the projector automatically once the OTHER side has caught up.
+
+### Recovery
+
+The backup tar at `~/.sovereign/backups/alignment-pre-migrate-<ts>.tar` restores the original state with `tar -xf <path> -C $HOME` (the archive uses `~/`-relative paths). The migration is idempotent: re-running converges, doesn't compound.
+
+## Replicating drift atlases between mesh peers
+
+`drift_cmd_orchestrator.rs::ensure_recipe` now stamps narrative recipes with `mesh_sharing = true`. The auth boundary is Tailscale-IP — a corpus only reaches peers already in the mesh — so the flip exposes drift output to the user's own machines and nobody else.
+
+**Future drift runs** ride the new flag automatically. No action required.
+
+**Existing on-disk corpora** — recipes already stamped before the flip, plus `*-self-atlas` and source-code corpora produced before mesh sharing was wired — need a one-time `_corpus_meta.json` edit. Pick one of:
+
+```bash
+# Selective flip — review each corpus, skip license-restricted ones (e.g. SEP).
+for f in ~/.sovereign/indexes/*/_corpus_meta.json; do
+  echo "--- $f ---"
+  jq '{id, license, mesh_sharing}' "$f"
+done
+
+# Bulk flip — only after confirming none of your installed corpora are
+# under restrictive licenses (SEP, anything copyrighted). Skips already-true.
+for f in ~/.sovereign/indexes/*/_corpus_meta.json; do
+  jq '.mesh_sharing = true' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+done
+```
+
+Once flipped, `sovereign mesh status` on a peer should list the corpus in the gossiped catalog within a tick or two. `sovereign corpus install <id>` on the peer pulls the partition tar — atlas sidecars (`atoms.json`, `edges.json`, `git_archaeology.json`) are inside the tar, so the receiving daemon gets the full drift output without re-running the LLM.
+
 ## See also
 
 - [`feedback_plan_alignment_sections.md`](../../.claude/projects/-Users-alexsbryan-dev-commonwealth-ai/memory/feedback_plan_alignment_sections.md)

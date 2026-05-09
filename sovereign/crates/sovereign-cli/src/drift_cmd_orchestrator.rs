@@ -418,7 +418,12 @@ id = "{corpus_id}"
 name = "{display}"
 description = "Stamped by `sovereign drift detect` from {tmpl}."
 license = "private"
-mesh_sharing = false
+# mesh_sharing = true: the auth boundary is Tailscale-IP, so this only
+# exposes the corpus to mesh peers the user themselves trust. Replication
+# of the atlas sidecar (atoms.json, edges.json, git_archaeology.json)
+# rides the partition tar served by GET /internal/index/serve, which lets
+# a second machine read the same drift output without re-running the LLM.
+mesh_sharing = true
 
 [acquire]
 type = "local_file"

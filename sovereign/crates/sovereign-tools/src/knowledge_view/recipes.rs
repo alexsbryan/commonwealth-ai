@@ -53,6 +53,7 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
             kind: Default::default(),
             on_demand: false,
             parent_corpus_id: None,
+            mutable_merge: None,
         },
         acquire: AcquirerConfig::Custom {
             kind: "sqlite".into(),
@@ -135,6 +136,7 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
             kind: Default::default(),
             on_demand: false,
             parent_corpus_id: None,
+            mutable_merge: None,
         },
         acquire: AcquirerConfig::Custom {
             kind: "sqlite".into(),
@@ -238,6 +240,7 @@ pub fn conversation_history_recipe(
             kind: Default::default(),
             on_demand: false,
             parent_corpus_id: None,
+            mutable_merge: None,
         },
         acquire: AcquirerConfig::Custom {
             kind: "sqlite".into(),

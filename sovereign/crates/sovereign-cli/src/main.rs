@@ -25,6 +25,7 @@ mod eval_cmd;
 mod corpus_catalog_cmd;
 mod corpus_watch_cmd;
 mod doc_fetcher;
+mod alignment_cmd;
 mod doctor_cmd;
 mod found;
 mod honesty;
@@ -190,6 +191,7 @@ const HELP: Help = Help {
             ("chat",    "CLI mirror of the desktop chat flow (ask / session / inspect)"),
             ("project", "Per-project code intelligence (init / serve / status / refresh)"),
             ("mesh",    "Mesh management (create / join / rotate / status)"),
+            ("alignment", "Mesh-replicated workspace migrate / status (~/.claude + notes.db)"),
             ("corpus",  "Knowledge corpus install / remove / status"),
             ("code",    "Code intelligence tooling (index / watch / mcp-status)"),
             ("doctor",  "Diagnose setup and daemon health"),
@@ -390,6 +392,10 @@ async fn main() {
                      commonwealth_api=info",
                 );
                 let code = mesh_cmd::run_mesh(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "alignment" => {
+                let code = alignment_cmd::run_alignment(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "corpus" => {

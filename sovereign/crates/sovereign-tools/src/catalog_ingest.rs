@@ -884,6 +884,7 @@ mod tests {
                 kind: corpus_engine::types::CorpusKind::Knowledge,
                 on_demand: true,
                 parent_corpus_id: None,
+                mutable_merge: None,
             },
             acquire: AcquirerConfig::BulkDownload {
                 url: Some("https://example.com/PLACEHOLDER".into()),
