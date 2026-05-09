@@ -384,7 +384,44 @@ pub async fn merge_shards(
     )
     .await?;
 
+    // Propagate the mutable-merge policy from the first shard onto the
+    // merged canonical so subsequent merges of this canonical against
+    // newer partitions take the same dedupe branch. `None` is the
+    // classic content-hash dedupe; the alignment recipe sets
+    // `SourceDocIdNewestMtime`.
+    if let Some(policy) = first_info.mutable_merge {
+        merged.set_mutable_merge(Some(policy))?;
+    }
+
     let dim = first_info.embedding_dimensions;
+
+    // Mutable-merge branch (alignment-style corpora). Reconciles
+    // divergent rows for the same `source_doc_id` by keeping the
+    // newest `mtime` across all input shards, then renumbers.
+    if matches!(
+        first_info.mutable_merge,
+        Some(crate::recipe::MutableMergePolicy::SourceDocIdNewestMtime)
+    ) {
+        let dedup_count = merge_shards_source_doc_id_newest_mtime(
+            &merged,
+            shard_paths,
+            dim,
+            output_path,
+        )
+        .await?;
+        let result = merged.info().await?;
+        tracing::info!(
+            corpus_id = %result.corpus_id,
+            chunks_merged = result.chunk_count,
+            chunks_deduped = dedup_count,
+            output = %output_path.display(),
+            "merge_shards: complete (mutable/source_doc_id_newest_mtime) — \
+             {} chunks written ({} input, {} deduped)",
+            result.chunk_count, total_input_chunks, dedup_count,
+        );
+        return Ok(result);
+    }
+
     let mut next_id: i64 = 1;
     // Track seen content_hashes (primary key) and (unit_id, source_doc_id)
     // pairs (secondary key for rows with NULL content_hash).
@@ -559,6 +596,234 @@ pub async fn merge_shards(
         result.chunk_count, total_input_chunks, dedup_count,
     );
     Ok(result)
+}
+
+/// Mutable-merge dedupe used by `alignment` and any future corpus
+/// whose `_corpus_meta.json` carries
+/// `mutable_merge = "source_doc_id_newest_mtime"`. Two-pass:
+///
+///   - Pass 1 walks every shard and records, per `source_doc_id`,
+///     the `(shard_idx, batch_idx, row_idx)` of the row with the
+///     highest `mtime`. Ties prefer the earliest shard (stable).
+///   - Pass 2 walks the shards again and emits exactly the winning
+///     rows into the merged canonical, renumbering ids contiguously.
+///
+/// Rows whose `source_doc_id` is null fall back to content-hash
+/// dedupe so a stray non-alignment shard never silently doubles up.
+/// The function returns the dedup count for logging.
+async fn merge_shards_source_doc_id_newest_mtime(
+    merged: &CorpusIndex,
+    shard_paths: &[PathBuf],
+    embedding_dim: usize,
+    output_path: &Path,
+) -> Result<u64> {
+    use std::collections::{HashMap, HashSet};
+
+    #[derive(Clone, Copy)]
+    struct WinnerKey {
+        shard_idx: usize,
+        batch_idx: usize,
+        row_idx: usize,
+        mtime: i64,
+    }
+
+    // Read every shard once into memory. Alignment corpora are small
+    // (markdown files + notes JSON) so this is bounded; the API
+    // doesn't promise mutable-merge for huge corpora.
+    let mut all_batches: Vec<Vec<RecordBatch>> = Vec::with_capacity(shard_paths.len());
+    for shard_path in shard_paths {
+        let shard = CorpusIndex::open(shard_path).await?;
+        let batches: Vec<RecordBatch> = shard
+            .table()
+            .query()
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("mutable shard read: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("mutable shard collect: {e}")))?;
+        drop(shard);
+        all_batches.push(batches);
+    }
+
+    // Pass 1 — find per-source_doc_id winners and collect the
+    // null-source_doc_id rows under content-hash dedupe.
+    let mut winners: HashMap<String, WinnerKey> = HashMap::new();
+    let mut seen_hashes: HashSet<String> = HashSet::new();
+    // Null-source_doc_id rows are addressed by their (shard, batch, row)
+    // triple in pass 2; populate this set with the triples that should
+    // be kept.
+    let mut keep_null_docid: HashSet<(usize, usize, usize)> = HashSet::new();
+    let mut dedup_count: u64 = 0;
+
+    for (shard_idx, batches) in all_batches.iter().enumerate() {
+        for (batch_idx, batch) in batches.iter().enumerate() {
+            let source_doc_col = batch
+                .column_by_name("source_doc_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let mtime_col = batch
+                .column_by_name("mtime")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>());
+            let hash_col = batch
+                .column_by_name("content_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+
+            for row_idx in 0..batch.num_rows() {
+                let doc_id_opt = source_doc_col.and_then(|c| {
+                    if c.is_null(row_idx) {
+                        None
+                    } else {
+                        Some(c.value(row_idx).to_string())
+                    }
+                });
+
+                if let Some(doc_id) = doc_id_opt {
+                    let row_mtime = mtime_col
+                        .and_then(|c| if c.is_null(row_idx) { None } else { Some(c.value(row_idx)) })
+                        .unwrap_or(0);
+                    let candidate = WinnerKey {
+                        shard_idx,
+                        batch_idx,
+                        row_idx,
+                        mtime: row_mtime,
+                    };
+                    match winners.get(&doc_id) {
+                        Some(existing) if existing.mtime >= row_mtime => {
+                            dedup_count += 1;
+                        }
+                        Some(_) => {
+                            winners.insert(doc_id, candidate);
+                            dedup_count += 1;
+                        }
+                        None => {
+                            winners.insert(doc_id, candidate);
+                        }
+                    }
+                } else if let Some(col) = hash_col {
+                    if col.is_null(row_idx) {
+                        // Neither key — keep (cannot dedupe) for parity
+                        // with the classic branch.
+                        keep_null_docid.insert((shard_idx, batch_idx, row_idx));
+                    } else {
+                        let h = col.value(row_idx);
+                        if seen_hashes.contains(h) {
+                            dedup_count += 1;
+                        } else {
+                            seen_hashes.insert(h.to_string());
+                            keep_null_docid.insert((shard_idx, batch_idx, row_idx));
+                        }
+                    }
+                } else {
+                    keep_null_docid.insert((shard_idx, batch_idx, row_idx));
+                }
+            }
+        }
+    }
+
+    // Build the inverse index: (shard, batch, row) → "is winner" for
+    // O(1) keep_mask construction in pass 2.
+    let mut winning_triples: HashSet<(usize, usize, usize)> = HashSet::new();
+    for w in winners.values() {
+        winning_triples.insert((w.shard_idx, w.batch_idx, w.row_idx));
+    }
+    for triple in &keep_null_docid {
+        winning_triples.insert(*triple);
+    }
+
+    // Pass 2 — emit winners with renumbered ids. Reuses the same
+    // column-or-null fallback shape as the classic branch so legacy
+    // shards without code-intel columns merge cleanly.
+    let schema = crate::index::corpus_schema(embedding_dim);
+    let mut next_id: i64 = 1;
+
+    for (shard_idx, batches) in all_batches.iter().enumerate() {
+        for (batch_idx, batch) in batches.iter().enumerate() {
+            let num_rows = batch.num_rows();
+            if num_rows == 0 {
+                continue;
+            }
+            let keep_mask: BooleanArray = (0..num_rows)
+                .map(|row_idx| winning_triples.contains(&(shard_idx, batch_idx, row_idx)))
+                .collect();
+            let filtered = filter_record_batch(batch, &keep_mask)
+                .map_err(|e| Error::Serialization(format!("mutable dedup filter: {e}")))?;
+            let keep_count = filtered.num_rows();
+            if keep_count == 0 {
+                continue;
+            }
+            let new_ids: Vec<i64> = (0..keep_count).map(|i| next_id + i as i64).collect();
+            next_id += keep_count as i64;
+
+            let null_str_col: ArrayRef = Arc::new(
+                StringArray::from(vec![Option::<String>::None; keep_count]),
+            );
+            let null_i32_col: ArrayRef = Arc::new(
+                arrow_array::Int32Array::from(vec![Option::<i32>::None; keep_count]),
+            );
+            let null_i64_col: ArrayRef = Arc::new(
+                Int64Array::from(vec![Option::<i64>::None; keep_count]),
+            );
+            let col_or_null_str = |name: &str| {
+                filtered
+                    .column_by_name(name)
+                    .cloned()
+                    .unwrap_or_else(|| null_str_col.clone())
+            };
+            let col_or_null_i32 = |name: &str| {
+                filtered
+                    .column_by_name(name)
+                    .cloned()
+                    .unwrap_or_else(|| null_i32_col.clone())
+            };
+            let col_or_null_i64 = |name: &str| {
+                filtered
+                    .column_by_name(name)
+                    .cloned()
+                    .unwrap_or_else(|| null_i64_col.clone())
+            };
+
+            let new_batch = RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int64Array::from(new_ids)),
+                    filtered.column_by_name("content").unwrap().clone(),
+                    filtered.column_by_name("title").unwrap().clone(),
+                    filtered.column_by_name("url").unwrap().clone(),
+                    filtered.column_by_name("embedding").unwrap().clone(),
+                    filtered.column_by_name("metadata").unwrap().clone(),
+                    col_or_null_str("content_hash"),
+                    col_or_null_str("source_doc_id"),
+                    col_or_null_str("symbol_name"),
+                    col_or_null_str("symbol_kind"),
+                    col_or_null_str("file_path"),
+                    col_or_null_i32("line_start"),
+                    col_or_null_i32("line_end"),
+                    col_or_null_str("language"),
+                    col_or_null_i64("mtime"),
+                    col_or_null_i32("unit_id"),
+                ],
+            )
+            .map_err(|e| Error::Serialization(format!("mutable merge batch: {e}")))?;
+
+            merged
+                .table()
+                .add(vec![new_batch])
+                .execute()
+                .await
+                .map_err(|e| Error::Database(format!("mutable merge insert: {e}")))?;
+        }
+    }
+
+    if dedup_count > 0 {
+        tracing::info!(
+            dedup_count,
+            output = %output_path.display(),
+            "merge_shards (mutable): kept newest-mtime per source_doc_id; dropped {} older row(s)",
+            dedup_count,
+        );
+    }
+
+    Ok(dedup_count)
 }
 
 /// Phase signals emitted by `merge_partitions_into_canonical` for
@@ -1500,5 +1765,169 @@ mod tests {
         let emb = make_test_embedding(5.0);
         let results = merged.search(&emb, "", 5).await.unwrap();
         assert!(!results.is_empty());
+    }
+
+    /// Build a one-chunk shard at `path`, stamped with the given
+    /// mutable-merge policy. Returns the shard path.
+    async fn make_mutable_shard(
+        dir: &Path,
+        name: &str,
+        rows: &[(&str, i64, &str)], // (source_doc_id, mtime, content)
+        policy: Option<crate::recipe::MutableMergePolicy>,
+    ) -> PathBuf {
+        let path = dir.join(name);
+        let index = CorpusIndex::create(
+            &path, "alignment", "Alignment", "test-model", 8, true, "private",
+        )
+        .await
+        .unwrap();
+        let chunks: Vec<_> = rows
+            .iter()
+            .map(|(doc_id, mtime, content)| {
+                (
+                    InsertChunk {
+                        content: (*content).into(),
+                        title: Some((*doc_id).into()),
+                        url: None,
+                        metadata: None,
+                        content_hash: Some(format!("hash-{doc_id}-{mtime}")),
+                        source_doc_id: Some((*doc_id).into()),
+                        source_file: None,
+                        code: crate::index::InsertCodeMeta {
+                            mtime: Some(*mtime),
+                            ..Default::default()
+                        },
+                        unit_id: None,
+                    },
+                    make_test_embedding(*mtime as f32),
+                )
+            })
+            .collect();
+        index.insert_batch(&chunks).await.unwrap();
+        index.set_mutable_merge(policy).unwrap();
+        path
+    }
+
+    #[tokio::test]
+    async fn mutable_merge_keeps_newest_mtime_per_source_doc_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = Some(crate::recipe::MutableMergePolicy::SourceDocIdNewestMtime);
+        // Two shards each carry a row for "plans/foo.md" with
+        // different mtimes. Mutable merge keeps the newer one.
+        let s1 = make_mutable_shard(
+            dir.path(),
+            "shard1",
+            &[("plans/foo.md", 100, "old body"), ("memory/keep.md", 50, "kept")],
+            policy,
+        )
+        .await;
+        let s2 = make_mutable_shard(
+            dir.path(),
+            "shard2",
+            &[("plans/foo.md", 200, "new body"), ("plans/bar.md", 75, "new file")],
+            policy,
+        )
+        .await;
+        let merged_path = dir.path().join("merged");
+        let info = merge_shards(&[s1, s2], &merged_path).await.unwrap();
+        assert_eq!(info.chunk_count, 3, "foo collapsed; keep + bar survive");
+        // Confirm policy persists onto the merged canonical so a
+        // subsequent merge against newer partitions takes the same
+        // dedupe branch.
+        let merged = CorpusIndex::open(&merged_path).await.unwrap();
+        assert_eq!(merged.mutable_merge(), policy);
+        // Search the foo content — only the newer body should be present.
+        let results = merged.search(&make_test_embedding(200.0), "new body", 5).await.unwrap();
+        assert!(
+            results.iter().any(|c| c.content.contains("new body")),
+            "newest-mtime body present"
+        );
+        assert!(
+            !results.iter().any(|c| c.content.contains("old body")),
+            "older body dropped"
+        );
+    }
+
+    #[tokio::test]
+    async fn default_dedupe_unchanged_for_existing_corpora() {
+        let dir = tempfile::tempdir().unwrap();
+        // Two shards with no policy stamped — the classic
+        // content-hash dedupe path runs, and rows whose content
+        // hashes differ both survive.
+        let s1 = make_mutable_shard(
+            dir.path(),
+            "shard1",
+            &[("plans/foo.md", 100, "version A")],
+            None,
+        )
+        .await;
+        let s2 = make_mutable_shard(
+            dir.path(),
+            "shard2",
+            &[("plans/foo.md", 200, "version B")],
+            None,
+        )
+        .await;
+        let merged_path = dir.path().join("merged");
+        let info = merge_shards(&[s1, s2], &merged_path).await.unwrap();
+        assert_eq!(
+            info.chunk_count, 2,
+            "without mutable_merge, divergent edits both survive — proves \
+             the new branch hasn't accidentally engaged for classic corpora"
+        );
+        let merged = CorpusIndex::open(&merged_path).await.unwrap();
+        assert_eq!(merged.mutable_merge(), None);
+    }
+
+    #[tokio::test]
+    async fn mutable_merge_falls_back_to_content_hash_when_doc_id_null() {
+        let dir = tempfile::tempdir().unwrap();
+        let policy = Some(crate::recipe::MutableMergePolicy::SourceDocIdNewestMtime);
+        // Two separate shards (so the single-shard rename fast path
+        // doesn't apply), each with one null-source_doc_id row. Both
+        // rows share a content_hash. Mutable-merge sends them down
+        // the content-hash fallback and the second one is dropped.
+        let mk = |i: usize| async move {
+            let dir2 = tempfile::tempdir().unwrap();
+            let path = dir2.path().join(format!("shard{i}"));
+            let index = CorpusIndex::create(
+                &path,
+                "alignment",
+                "Alignment",
+                "test-model",
+                8,
+                true,
+                "private",
+            )
+            .await
+            .unwrap();
+            index
+                .insert_batch(&[(
+                    InsertChunk {
+                        content: "hashed body".into(),
+                        title: None,
+                        url: None,
+                        metadata: None,
+                        content_hash: Some("shared-hash".into()),
+                        source_doc_id: None,
+                        source_file: None,
+                        code: crate::index::InsertCodeMeta::default(),
+                        unit_id: None,
+                    },
+                    make_test_embedding(1.0),
+                )])
+                .await
+                .unwrap();
+            index.set_mutable_merge(policy).unwrap();
+            (dir2, path)
+        };
+        let (_keep1, s1) = mk(1).await;
+        let (_keep2, s2) = mk(2).await;
+        let merged_path = dir.path().join("merged");
+        let info = merge_shards(&[s1, s2], &merged_path).await.unwrap();
+        assert_eq!(
+            info.chunk_count, 1,
+            "null source_doc_id rows fall back to content-hash dedupe"
+        );
     }
 }

@@ -230,6 +230,10 @@ impl CorpusIndex {
             // complete. Leaving None during ingestion is correct —
             // the chunk set is still mutating.
             canonical_fingerprint: None,
+            // Set lazily via `set_mutable_merge` once the recipe's
+            // policy (or the first input shard's, in the merge path)
+            // is known. None preserves classic content-hash dedupe.
+            mutable_merge: None,
         };
         write_meta(path, &meta)?;
 

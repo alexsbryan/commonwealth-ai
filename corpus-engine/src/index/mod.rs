@@ -446,6 +446,14 @@ struct IndexMeta {
     /// next-read for legacy canonicals so the upgrade is silent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     canonical_fingerprint: Option<String>,
+
+    /// Reconciliation policy for `merge_shards`. Mirrors the recipe's
+    /// `[corpus] mutable_merge` field; `None` means classic
+    /// content-hash dedupe. Stamped at ingest time and propagated
+    /// from the first input shard to a merged canonical so the
+    /// policy survives shard→canonical→shard round-trips.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mutable_merge: Option<crate::recipe::MutableMergePolicy>,
 }
 
 /// Provenance of an on-disk index. See the `IndexMeta::provenance`
@@ -711,6 +719,7 @@ impl CorpusIndex {
             canonical_fingerprint: meta.canonical_fingerprint,
             total_shards: meta.total_shards,
             processed_shards: meta.processed_shards,
+            mutable_merge: meta.mutable_merge,
         })
     }
 
@@ -807,6 +816,29 @@ impl CorpusIndex {
             meta.parent_corpus_id = Some(p.to_string());
         }
         write_meta(index_dir, &meta)
+    }
+
+    /// Stamp the `mutable_merge` policy from the recipe (or the
+    /// first input shard, in the merge case) onto this index's
+    /// `_corpus_meta.json`. `None` clears the policy back to the
+    /// content-hash default; `Some(...)` opts the next merge into
+    /// the chosen reconciliation rule.
+    pub fn set_mutable_merge(
+        &self,
+        policy: Option<crate::recipe::MutableMergePolicy>,
+    ) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.mutable_merge = policy;
+        write_meta(index_dir, &meta)
+    }
+
+    /// Return the `mutable_merge` policy stamped on this index, if
+    /// any. Used by `merge_shards` to decide which dedupe branch to
+    /// run.
+    pub fn mutable_merge(&self) -> Option<crate::recipe::MutableMergePolicy> {
+        let index_dir = Path::new(self.db.uri());
+        read_meta(index_dir).ok().and_then(|m| m.mutable_merge)
     }
 
     /// The corpus ID this index belongs to.

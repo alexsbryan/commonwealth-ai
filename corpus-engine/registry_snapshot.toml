@@ -137,3 +137,15 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/crs_reports/recipe.toml"
 sha256 = ""
+
+[[recipes]]
+id = "alignment"
+name = "Alignment workspace"
+description = "Mutable-merge replication of the user's ~/.claude/ plans + auto-memory entries + plan template across the user's own mesh peers. Newest-mtime-wins per file. Pairs with the post-merge projector so a fresh machine reaches parity in one corpus install."
+license = "private"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/alignment/recipe.toml"
+sha256 = ""

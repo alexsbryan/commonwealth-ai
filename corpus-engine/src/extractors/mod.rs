@@ -1,3 +1,4 @@
+pub mod alignment_workspace;
 pub mod json;
 pub mod json_api;
 pub mod xml;

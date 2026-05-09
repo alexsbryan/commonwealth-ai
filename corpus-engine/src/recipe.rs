@@ -676,6 +676,30 @@ pub struct CorpusMeta {
     /// populated only via [`crate::types::CorpusSpec::Inline`].
     #[serde(default)]
     pub parent_corpus_id: Option<String>,
+
+    /// How `merge_shards` should reconcile rows that share a logical
+    /// key across two shards. `None` (the default) keeps the
+    /// content-hash-based dedupe used by every classic corpus —
+    /// divergent edits of the same source document survive as two
+    /// rows with different `content_hash`. The `alignment` corpus
+    /// opts into [`MutableMergePolicy::SourceDocIdNewestMtime`] so
+    /// that two daemons editing the same memory or plan file
+    /// converge on the newer copy after a mesh merge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutable_merge: Option<MutableMergePolicy>,
+}
+
+/// Reconciliation policy invoked by [`crate::sharding::merge_shards`]
+/// when the merged target's `_corpus_meta.json` carries a
+/// `mutable_merge` value. Default (`None`) preserves classic
+/// content-hash dedupe.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MutableMergePolicy {
+    /// Group rows by `source_doc_id`. When a logical key collides,
+    /// keep the row with the highest `mtime`. Rows whose
+    /// `source_doc_id` is null fall back to content-hash dedupe.
+    SourceDocIdNewestMtime,
 }
 
 // ---------------------------------------------------------------------------
@@ -1343,6 +1367,18 @@ pub enum ExtractorConfig {
     /// accepted spec.md files). Requires the `markdown` Cargo feature.
     #[serde(rename = "markdown")]
     Markdown {},
+    /// Walks the user's `~/.claude/plans/` and
+    /// `~/.claude/projects/-Users-*/memory/` trees plus
+    /// `~/.claude/plans/_TEMPLATE.md`, yielding one `ExtractedDoc` per
+    /// `.md` file with `source_id` set to the path relative to
+    /// `~/.claude/`. Pairs with `mutable_merge =
+    /// "source_doc_id_newest_mtime"` so two daemons editing the same
+    /// memory or plan file converge on the newer copy after a mesh
+    /// merge. The acquirer points at `~/.claude` (resolved by the
+    /// `local_file` path-shape); the extractor handles its own
+    /// directory walk for the canonical subset.
+    #[serde(rename = "alignment_workspace")]
+    AlignmentWorkspace {},
 }
 
 fn default_code_context_lines() -> usize {

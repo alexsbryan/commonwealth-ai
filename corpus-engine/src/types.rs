@@ -210,6 +210,13 @@ pub struct IndexInfo {
     /// `CorpusIndex` for one extra method call.
     #[serde(default)]
     pub processed_shards: Vec<usize>,
+    /// Reconciliation policy stamped on this index, mirroring
+    /// `IndexMeta.mutable_merge`. `None` means classic content-hash
+    /// dedupe; `Some(...)` opts a future merge into the chosen rule.
+    /// Surfaced here so `merge_shards` can read the policy off the
+    /// first input shard's `IndexInfo` without a second meta read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutable_merge: Option<crate::recipe::MutableMergePolicy>,
 }
 
 // ─── Scored Chunk (search result) ───────────────────────

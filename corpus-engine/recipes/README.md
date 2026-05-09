@@ -12,6 +12,7 @@ For pipeline mechanics, see the parent [`README.md`](../README.md). For the v2 e
 | **B — Available** | Works, but rarely exercised at full scale (large source, less recent validation). Smoke-tested via the same extractor used by a Tier A recipe. |
 | **C — On-demand only** | Templated recipe with `on_demand = true`. The id is overridden at runtime by `CatalogIngestService`; direct ingest is refused by the guard in `engine/ingest.rs`. Never installed on its own. |
 | **D — Beta** | Acquire/extract path works, but enrichment is wired to a domain that is currently `todo!()`. Recipe ships with `[enrichment] enabled = false` so ingestion succeeds; flipping enrichment on will panic until the prompt set lands. |
+| **E — Mutable transport** | New shape: rides the corpus rails as a sync transport for mutable text (memory, plans). Opts into `mutable_merge = "source_doc_id_newest_mtime"` so two daemons editing the same logical file converge on the newer copy after a mesh tick. Pairs with a daemon-side post-merge projector that materializes chunks back to disk. Distinct from A–D because the corpus is never browsed by a human; it is replication infrastructure. |
 
 ## Catalog
 
@@ -28,6 +29,7 @@ For pipeline mechanics, see the parent [`README.md`](../README.md). For the v2 e
 | [`stackexchange-knowledge`](stackexchange-knowledge/recipe.toml) | D | knowledge | archive.org `.7z` × 5 → `stackexchange_xml` (`question_with_answers`) | CC-BY-SA-4.0 | yes | off — `engineering` domain is a stub |
 | [`wikipedia-article`](wikipedia-article/recipe.toml) | C | knowledge (on_demand) | MediaWiki Action API → `wikipedia_api_article` | CC-BY-SA-4.0 | yes | atlas (encyclopedic) |
 | [`gutenberg-work`](gutenberg-work/recipe.toml) | C | knowledge (on_demand) | gutenberg.org plaintext → `plaintext` | Public Domain | yes | field model (literary) |
+| [`alignment`](alignment/recipe.toml) | E | knowledge (mutable transport) | `~/.claude/` walk → `alignment_workspace` | private | yes (own peers only) | off |
 
 ## Per-recipe notes
 

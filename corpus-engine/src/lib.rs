@@ -11,6 +11,7 @@
 //! It has zero dependency on Sovereign or Commonwealth crates.
 
 pub mod acquirers;
+pub mod alignment_projector;
 pub mod archaeology_eval;
 pub mod atlas_traversal;
 pub mod canonical_sync;
@@ -57,6 +58,10 @@ pub mod lint_results;
 // Working notes and project documentation stores.
 #[cfg(feature = "treesitter")]
 pub mod notes;
+// NoteStore ↔ alignment-corpus sync. Lives behind the same gate as
+// `notes` since it talks to the same SQLite schema.
+#[cfg(feature = "treesitter")]
+pub mod notes_sync;
 #[cfg(feature = "treesitter")]
 pub mod project_docs;
 // ATOS feature + milestone store.

@@ -555,6 +555,20 @@ impl CorpusEngine {
             );
         }
 
+        // Stamp the mutable-merge policy from the recipe so future
+        // merges of this index against peer partitions take the
+        // chosen reconciliation rule. None preserves classic
+        // content-hash dedupe; only `alignment`-style recipes opt in.
+        if let Err(e) = index.set_mutable_merge(recipe.corpus.mutable_merge) {
+            tracing::warn!(
+                corpus = %recipe.corpus.id,
+                path = %index_path.display(),
+                error = %e,
+                "ingest_inner: failed to stamp mutable_merge policy — \
+                 next merge will fall back to content-hash dedupe"
+            );
+        }
+
         // Stamp provenance immediately after the index handle (and
         // therefore the meta file) exists. We do this before any
         // long-running work so a daemon kill mid-ingest leaves the
@@ -1813,6 +1827,9 @@ impl CorpusEngine {
                      rebuild with `cargo build --features markdown` to enable \
                      the section-aware markdown extractor"
                 );
+            }
+            ExtractorConfig::AlignmentWorkspace {} => {
+                Box::new(extractors::alignment_workspace::AlignmentWorkspaceExtractor::default())
             }
         }
     }
