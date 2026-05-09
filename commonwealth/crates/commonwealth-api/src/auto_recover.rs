@@ -314,6 +314,41 @@ pub async fn try_recover_stranded_partitions(
                  will be picked up by installed_indexes() and re-advertised \
                  in hosted_corpora gossip"
             );
+            // Self-heal hook for the alignment recipe: when the
+            // merged canonical is a mutable_merge corpus, materialize
+            // its rows back to ~/.claude/. project() is a no-op for
+            // every other corpus (it re-checks the policy) so this is
+            // safe to call unconditionally.
+            if let Some(home) = dirs::home_dir() {
+                let canonical_path = index_dir.join(corpus_id);
+                match corpus_engine::alignment_projector::project(
+                    &canonical_path,
+                    &home,
+                )
+                .await
+                {
+                    Ok(p) => {
+                        if p.wrote > 0
+                            || p.skipped_local_newer > 0
+                            || p.swept_incoming > 0
+                        {
+                            tracing::info!(
+                                corpus = %corpus_id,
+                                wrote = p.wrote,
+                                skipped_local_newer = p.skipped_local_newer,
+                                skipped_unsafe_path = p.skipped_unsafe_path,
+                                swept_incoming = p.swept_incoming,
+                                "auto_recover: alignment projection complete"
+                            );
+                        }
+                    }
+                    Err(e) => tracing::warn!(
+                        corpus = %corpus_id,
+                        error = %e,
+                        "auto_recover: alignment projection failed; merge stands"
+                    ),
+                }
+            }
             RecoveryOutcome::Recovered {
                 chunks: report.chunks_merged,
                 shards_covered: report.shard_union.len(),

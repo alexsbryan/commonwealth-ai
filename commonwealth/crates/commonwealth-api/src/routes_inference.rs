@@ -42,6 +42,27 @@ pub async fn chat_completions(
     // from ingest itself; bumping there would prevent self-yield.
     state.bump_foreground_active();
 
+    // ── Tool-profile header → request field ──────────────────────────
+    //
+    // `X-Sovereign-Tool-Profile: <name>` lets per-request callers pick
+    // a daemon-configured tool profile (defined in
+    // `~/.sovereign/tool_profiles.toml`). The downstream inference
+    // adapter consults `sovereign_mesh::tool_profile::global()` and
+    // filters `request.tools[]` accordingly. We surface the value
+    // here, not deeper, because route handlers own header access; the
+    // service layer only sees the request body.
+    //
+    // Header values that aren't valid UTF-8 are dropped silently so a
+    // misbehaving client can't poison the request with header bytes.
+    if let Some(name) = headers
+        .get("x-sovereign-tool-profile")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        request.tool_profile = Some(name.to_string());
+    }
+
     // ── ATOS pipeline resolution ──────────────────────────────────────
     //
     // If the model name matches a pipeline alias (e.g.,

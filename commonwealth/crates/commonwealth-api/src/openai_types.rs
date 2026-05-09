@@ -67,6 +67,13 @@ pub struct ChatCompletionRequest {
     /// the `X-Commonwealth-Tool-Profile` request header; `None`
     /// resolves to the registry's default profile (allow-all when no
     /// `~/.sovereign/tool_profiles.toml` is present).
+    /// Commonwealth extension: tool-profile name. Set by the route
+    /// handler from the `X-Sovereign-Tool-Profile` HTTP header so
+    /// downstream code can look up the profile without re-reading
+    /// headers. `None` (default) means "use the registry default".
+    /// Profiles filter `tools[]` in place to cut prompt size for
+    /// tools-heavy clients (opencode, Aider) that ship every tool
+    /// every turn. See `sovereign_mesh::tool_profile` for semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_profile: Option<String>,
 }

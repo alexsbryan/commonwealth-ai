@@ -309,6 +309,35 @@ pub async fn index_transfer(
         "index_transfer: shard installed successfully"
     );
 
+    // Self-heal hook for `mutable_merge` corpora (the alignment
+    // recipe). project() rechecks the policy on the unpacked
+    // partition's `_corpus_meta.json` and is a no-op for every
+    // classic corpus, so this is safe to invoke unconditionally on
+    // the receive path. The transferred dir IS a partition (not the
+    // canonical), but it has the same _corpus_meta + chunks layout,
+    // so the projector reads it fine — this lets a peer's edits land
+    // on disk even before the canonical merge runs.
+    if let Some(home) = dirs::home_dir() {
+        match corpus_engine::alignment_projector::project(&final_path, &home).await {
+            Ok(p) => {
+                if p.wrote > 0 || p.skipped_local_newer > 0 {
+                    tracing::info!(
+                        corpus = %corpus_id,
+                        wrote = p.wrote,
+                        skipped_local_newer = p.skipped_local_newer,
+                        skipped_unsafe_path = p.skipped_unsafe_path,
+                        "index_transfer: alignment projection complete"
+                    );
+                }
+            }
+            Err(e) => tracing::warn!(
+                corpus = %corpus_id,
+                error = %e,
+                "index_transfer: alignment projection failed; transfer stands"
+            ),
+        }
+    }
+
     (
         StatusCode::OK,
         Json(serde_json::json!({

@@ -962,6 +962,7 @@ dependencies = [
  "commonwealth-knowledge",
  "commonwealth-state",
  "corpus-engine",
+ "dirs 5.0.1",
  "futures",
  "hex",
  "http-body-util",
