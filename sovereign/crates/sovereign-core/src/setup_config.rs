@@ -217,6 +217,25 @@ pub struct DaemonSection {
     /// "resume quickly between exchanges".
     #[serde(default = "default_yield_to_foreground_secs")]
     pub yield_to_foreground_secs: u64,
+
+    /// When true, the inference adapter treats every tools-using
+    /// request with `tool_choice: "auto"` (or unset) as if the caller
+    /// had sent `tool_choice: "required"`, so the JSON-Schema
+    /// tool-envelope grammar engages. Identical to setting the env var
+    /// `SOVEREIGN_FORCE_TOOL_CALLS=1` — env wins when both are set,
+    /// otherwise this config flag drives the same code path. Empirically
+    /// (2026-05-08 measurement) the grammar pass eliminates Qwopus and
+    /// FINAL-Bench native-markup parse failures (`<tool_call>{...}` with
+    /// arguments-as-string-of-json) at zero per-call cost — the
+    /// `JsonConstraint` path is already optimised for these short
+    /// envelopes.
+    ///
+    /// Defaults to `false` so the disabled-default keeps existing
+    /// non-tools-using callers unaffected. Set to `true` in
+    /// `setup_config.toml` for daemons that primarily host opencode /
+    /// Aider / autonomous-loop traffic.
+    #[serde(default = "default_force_tool_calls")]
+    pub force_tool_calls: bool,
 }
 
 /// Filesystem paths for mutable state.
@@ -237,6 +256,7 @@ impl Default for DaemonSection {
             primary_idle_secs: default_primary_idle_secs(),
             extras_idle_secs: default_extras_idle_secs(),
             yield_to_foreground_secs: default_yield_to_foreground_secs(),
+            force_tool_calls: default_force_tool_calls(),
         }
     }
 }
@@ -306,6 +326,8 @@ fn default_extras_idle_secs() -> u64 { 0 }
 /// resumes. Set to `0` in `config.toml` to disable on batch hosts
 /// where ingest throughput trumps interactive latency.
 fn default_yield_to_foreground_secs() -> u64 { 60 }
+
+fn default_force_tool_calls() -> bool { false }
 
 /// `~/.sovereign/`. Previously lived in `sovereign-cli::util::dirs`;
 /// inlined here so `sovereign-core` has no dependency on the CLI crate.

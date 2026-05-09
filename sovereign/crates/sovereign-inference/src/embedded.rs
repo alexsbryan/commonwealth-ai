@@ -4542,6 +4542,89 @@ fn find_balanced_json_end(s: &str) -> Option<usize> {
     None
 }
 
+/// Escape unescaped control characters (newline, CR, tab) that appear
+/// inside JSON string values. Intentionally narrow: only operates
+/// inside `"..."` runs and only on the three control chars known to
+/// trip serde — the rest of the body is passed through byte-for-byte.
+///
+/// Why this exists: some models (Qwen3-Coder-30B observed 2026-05-08)
+/// emit a syntactically-correct JSON envelope around their tool call
+/// but fail to escape literal `\n`/`\r`/`\t` inside the `content`
+/// string value. The result balances braces and parses up to the
+/// invalid-control-in-string error, so the daemon was rejecting the
+/// whole call. This pre-pass converts those raw bytes to their
+/// `\n`/`\r`/`\t` escape forms so `serde_json::from_str` accepts the
+/// body. Already-escaped sequences (preceded by an unescaped `\`)
+/// pass through untouched.
+///
+/// Returns the original string if nothing needed escaping (no
+/// allocation), otherwise a normalized copy.
+pub fn escape_unescaped_control_chars_in_string_values(
+    body: &str,
+) -> std::borrow::Cow<'_, str> {
+    let needs_fix = {
+        let mut in_string = false;
+        let mut escape = false;
+        let mut hit = false;
+        for c in body.chars() {
+            if in_string {
+                if escape {
+                    escape = false;
+                } else {
+                    match c {
+                        '"' => in_string = false,
+                        '\\' => escape = true,
+                        '\n' | '\r' | '\t' => {
+                            hit = true;
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            } else if c == '"' {
+                in_string = true;
+            }
+        }
+        hit
+    };
+    if !needs_fix {
+        return std::borrow::Cow::Borrowed(body);
+    }
+
+    let mut out = String::with_capacity(body.len() + 16);
+    let mut in_string = false;
+    let mut escape = false;
+    for c in body.chars() {
+        if in_string {
+            if escape {
+                out.push(c);
+                escape = false;
+                continue;
+            }
+            match c {
+                '"' => {
+                    in_string = false;
+                    out.push(c);
+                }
+                '\\' => {
+                    escape = true;
+                    out.push(c);
+                }
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                _ => out.push(c),
+            }
+        } else {
+            if c == '"' {
+                in_string = true;
+            }
+            out.push(c);
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 pub fn parse_tool_calls_from_text(text: &str) -> Vec<ParsedToolCall> {
     let mut out = Vec::new();
     let mut cursor = 0usize;
@@ -4575,7 +4658,15 @@ pub fn parse_tool_calls_from_text(text: &str) -> Vec<ParsedToolCall> {
         // Parse the body. Accept either:
         //   {"name": "...", "arguments": {...}}
         //   {"name": "...", "arguments": "<string>"}
-        match serde_json::from_str::<serde_json::Value>(&body) {
+        // If serde rejects the raw body (commonly: raw newlines inside
+        // a string value), retry on a control-char-normalized copy.
+        let parsed = serde_json::from_str::<serde_json::Value>(&body)
+            .or_else(|_| {
+                let fixed =
+                    escape_unescaped_control_chars_in_string_values(&body);
+                serde_json::from_str::<serde_json::Value>(&fixed)
+            });
+        match parsed {
             Ok(obj) => {
                 let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
                     continue; // malformed — skip (caller may log via diagnostic API below)
@@ -4632,7 +4723,15 @@ pub fn parse_tool_calls_with_errors(text: &str) -> (Vec<ParsedToolCall>, Vec<Str
         cursor = advance;
         let body = body.as_str();
 
-        match serde_json::from_str::<serde_json::Value>(body) {
+        // Same retry-on-normalized-body pattern as the non-with-errors
+        // variant (Qwen3-Coder emits raw \n inside a content string).
+        let parsed = serde_json::from_str::<serde_json::Value>(body)
+            .or_else(|_| {
+                let fixed =
+                    escape_unescaped_control_chars_in_string_values(body);
+                serde_json::from_str::<serde_json::Value>(&fixed)
+            });
+        match parsed {
             Ok(obj) => {
                 let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
                     errors.push(body.to_string());
@@ -4812,6 +4911,42 @@ mod parse_tool_calls_tests {
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[0].name, "a");
         assert_eq!(calls[1].name, "b");
+    }
+
+    #[test]
+    fn raw_newlines_inside_string_value_recover_via_normalization() {
+        // Qwen3-Coder-30B observed 2026-05-08: balanced JSON envelope
+        // but raw `\n` (0x0A) bytes inside the `content` string value
+        // instead of the `\\n` escape. Without normalization this
+        // fails serde with "control character in string". The pre-pass
+        // converts the raw bytes to escapes and re-parses.
+        let body = "{\"name\":\"write\",\"arguments\":{\"path\":\"a.rs\",\"content\":\"fn main() {\nprintln!(\\\"hi\\\");\n}\"}}";
+        let text = format!("<tool_call>{}</tool_call>", body);
+        let calls = parse_tool_calls_from_text(&text);
+        assert_eq!(calls.len(), 1, "normalization should recover the call");
+        assert_eq!(calls[0].name, "write");
+        assert!(calls[0].arguments.contains("println"));
+    }
+
+    #[test]
+    fn already_escaped_sequences_are_preserved_through_normalization() {
+        use super::escape_unescaped_control_chars_in_string_values;
+        // `\\n` (literal backslash + n) must stay `\\n` after the
+        // normalize pass — it's an already-correct escape sequence.
+        let input = r#"{"x":"a\nb"}"#;
+        let out = escape_unescaped_control_chars_in_string_values(input);
+        assert_eq!(out.as_ref(), input, "no raw control chars present");
+    }
+
+    #[test]
+    fn normalization_skips_control_chars_outside_strings() {
+        use super::escape_unescaped_control_chars_in_string_values;
+        // A newline between fields (outside any string value) must
+        // be left alone. JSON allows it as whitespace; serde already
+        // accepts it.
+        let input = "{\"x\":\"a\",\n\"y\":\"b\"}";
+        let out = escape_unescaped_control_chars_in_string_values(input);
+        assert_eq!(out.as_ref(), input);
     }
 }
 

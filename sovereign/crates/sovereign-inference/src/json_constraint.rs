@@ -2054,6 +2054,45 @@ pub struct JsonConstraint {
     /// returns whatever truncated bytes it has and Phase-3 falls into
     /// `parse_drift` (a fast-failure outcome — seconds, not 5 min).
     emitted_invalid: bool,
+    /// Optional cumulative timing telemetry. Built via `from_env()`
+    /// when `SOVEREIGN_GRAMMAR_TIMING=1` so production runs pay zero
+    /// extra cost. When present, each `mask()` and `accept()` call
+    /// adds its wall-clock duration to the running totals; the Drop
+    /// impl logs a summary so the operator can attribute per-turn
+    /// latency between mask cost (logits walk × vocab) and the
+    /// upstream prompt-eval that doesn't touch this struct at all.
+    timing: Option<Mutex<TimingState>>,
+}
+
+/// Cumulative wall-clock counters for one constraint instance.
+/// Reported once via `Drop`. All durations are in microseconds —
+/// summing across the whole generation gives the total mask cost,
+/// dividing by `mask_calls` gives the per-token mask latency.
+#[derive(Debug, Default)]
+struct TimingState {
+    mask_calls: u64,
+    mask_total_us: u64,
+    accept_calls: u64,
+    accept_total_us: u64,
+}
+
+/// Build the optional timing slot from a generic env-var lookup.
+/// Production calls go through `new()` which passes a `std::env`
+/// closure; unit tests pass a stub closure so they can pin every
+/// truthy/falsy/garbage shape without mutating process-global env
+/// (which races against parallel test execution).
+fn build_timing<F>(env_get: F) -> Option<Mutex<TimingState>>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let enabled = env_get("SOVEREIGN_GRAMMAR_TIMING")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if enabled {
+        Some(Mutex::new(TimingState::default()))
+    } else {
+        None
+    }
 }
 
 impl JsonConstraint {
@@ -2063,6 +2102,12 @@ impl JsonConstraint {
         let vocab_bytes = vocab_bytes_for(model);
         let eos_token = model.token_eos().0;
         let state = ValidatorState::new(compiled.clone());
+        // Timing instrumentation: opt-in via env. Read once per
+        // constructor call so the operator can flip the env at runtime
+        // and the next request picks it up; existing constraints stay
+        // on whatever decision was made when they were built (which
+        // matches the Drop-based summary's natural scope).
+        let timing = build_timing(|key| std::env::var(key).ok());
         Ok(Self {
             schema: compiled,
             emitted: Vec::new(),
@@ -2070,6 +2115,7 @@ impl JsonConstraint {
             vocab_bytes,
             eos_token,
             emitted_invalid: false,
+            timing,
         })
     }
 
@@ -2088,6 +2134,14 @@ impl JsonConstraint {
     /// (n_vocab ≈ 262K) the per-candidate validator is the dominant
     /// cost of a generation step.
     pub fn mask(&self, data: &mut LlamaTokenDataArray) {
+        // Wall-clock timing is opt-in (SOVEREIGN_GRAMMAR_TIMING).
+        // Held in an Option so the disabled-default path is one
+        // pointer-equality check + a no-op drop.
+        let timing_start = self
+            .timing
+            .as_ref()
+            .map(|_| std::time::Instant::now());
+
         let buffer_is_complete = matches!(self.state.eof_status(), ParseStatus::Complete);
         let vocab_bytes = &*self.vocab_bytes;
         let eos_token = self.eos_token;
@@ -2102,6 +2156,7 @@ impl JsonConstraint {
                     entry.set_logit(f32::NEG_INFINITY);
                 }
             });
+            self.record_mask_timing(timing_start);
             return;
         }
 
@@ -2143,6 +2198,34 @@ impl JsonConstraint {
                 }
             },
         );
+        self.record_mask_timing(timing_start);
+    }
+
+    /// Internal helper: when timing is enabled and `start` was
+    /// captured, fold the elapsed wall-clock into the cumulative
+    /// counter. No-op when timing is disabled, so the hot path stays
+    /// branch-prediction friendly.
+    fn record_mask_timing(&self, start: Option<std::time::Instant>) {
+        if let (Some(t), Some(s)) = (self.timing.as_ref(), start) {
+            let elapsed_us = s.elapsed().as_micros() as u64;
+            if let Ok(mut state) = t.lock() {
+                state.mask_calls += 1;
+                state.mask_total_us += elapsed_us;
+            }
+        }
+    }
+
+    /// Internal helper: same shape as `record_mask_timing` but for
+    /// the accept-bookkeeping path. Kept separate so the per-call
+    /// counter stays attributable.
+    fn record_accept_timing(&self, start: Option<std::time::Instant>) {
+        if let (Some(t), Some(s)) = (self.timing.as_ref(), start) {
+            let elapsed_us = s.elapsed().as_micros() as u64;
+            if let Ok(mut state) = t.lock() {
+                state.accept_calls += 1;
+                state.accept_total_us += elapsed_us;
+            }
+        }
     }
 
     /// Advance the emitted buffer with the bytes of the chosen token.
@@ -2156,7 +2239,12 @@ impl JsonConstraint {
     /// upgrade to `info`-level traces of every accept (verbose; only
     /// for triage).
     pub fn accept(&mut self, token: LlamaToken) {
+        let timing_start = self
+            .timing
+            .as_ref()
+            .map(|_| std::time::Instant::now());
         if token.0 == self.eos_token {
+            self.record_accept_timing(timing_start);
             return;
         }
         let Some(bytes) = self.vocab_bytes.get(token.0 as usize).cloned() else {
@@ -2164,6 +2252,7 @@ impl JsonConstraint {
                 token_id = token.0,
                 "JsonConstraint::accept: chosen token is out of vocab range — emitted buffer will desync from response"
             );
+            self.record_accept_timing(timing_start);
             return;
         };
         self.emitted.extend_from_slice(&bytes);
@@ -2244,12 +2333,57 @@ impl JsonConstraint {
                 "JsonConstraint::accept"
             );
         }
+        self.record_accept_timing(timing_start);
     }
 
     /// True once the emitted bytes form a complete schema-conforming
     /// document (only trailing whitespace / EOS would follow).
     pub fn is_root_complete(&self) -> bool {
         matches!(self.state.eof_status(), ParseStatus::Complete)
+    }
+}
+
+/// Drop-time summary: when the constraint goes out of scope (i.e.
+/// the generation finished — naturally or by deadline) and timing
+/// instrumentation is enabled, emit one tracing::info line with
+/// cumulative call counts and total/avg microseconds for both
+/// `mask()` and `accept()`. The line is greppable as
+/// `grammar_timing:` and every field is a discrete key=value pair so
+/// downstream log pipelines can extract it without regex.
+///
+/// This Drop is a no-op when `SOVEREIGN_GRAMMAR_TIMING` was unset
+/// at construction time (`self.timing.is_none()`), so production
+/// runs pay zero cost.
+impl Drop for JsonConstraint {
+    fn drop(&mut self) {
+        let Some(t) = self.timing.as_ref() else { return };
+        let state = match t.lock() {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        if state.mask_calls == 0 && state.accept_calls == 0 {
+            return;
+        }
+        let mask_avg_us = if state.mask_calls > 0 {
+            state.mask_total_us / state.mask_calls
+        } else {
+            0
+        };
+        let accept_avg_us = if state.accept_calls > 0 {
+            state.accept_total_us / state.accept_calls
+        } else {
+            0
+        };
+        tracing::info!(
+            mask_calls = state.mask_calls,
+            mask_total_us = state.mask_total_us,
+            mask_avg_us,
+            accept_calls = state.accept_calls,
+            accept_total_us = state.accept_total_us,
+            accept_avg_us,
+            emitted_len = self.emitted.len(),
+            "grammar_timing: per-constraint summary"
+        );
     }
 }
 
@@ -2911,5 +3045,35 @@ mod tests {
         let prefix = br#"{"a":"x","b":"y","#;
         assert_eq!(validate(&s, prefix), ParseStatus::Incomplete);
         assert_eq!(validate_incremental(&s, prefix), ParseStatus::Incomplete);
+    }
+
+    // ---- Timing instrumentation env parsing ----
+
+    fn fake_env(key: &'static str, value: Option<&'static str>) -> impl Fn(&str) -> Option<String> {
+        let v = value.map(|s| s.to_string());
+        move |k: &str| if k == key { v.clone() } else { None }
+    }
+
+    #[test]
+    fn timing_disabled_when_env_unset() {
+        assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", None)).is_none());
+    }
+
+    #[test]
+    fn timing_enabled_when_env_one() {
+        assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some("1"))).is_some());
+    }
+
+    #[test]
+    fn timing_enabled_when_env_true_case_insensitive() {
+        assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some("True"))).is_some());
+        assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some("TRUE"))).is_some());
+    }
+
+    #[test]
+    fn timing_disabled_when_env_zero_or_garbage() {
+        assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some("0"))).is_none());
+        assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some("yes"))).is_none());
+        assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some(""))).is_none());
     }
 }

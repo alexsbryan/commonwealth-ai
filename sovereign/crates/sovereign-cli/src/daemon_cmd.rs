@@ -212,6 +212,28 @@ async fn run_daemon(args: &[String]) -> i32 {
         }
     };
 
+    // ── Force-tool-calls config → process env ─────────────────────
+    //
+    // The inference adapter reads `SOVEREIGN_FORCE_TOOL_CALLS` per
+    // request to decide whether to upgrade `tool_choice="auto"` to
+    // `"required"` (which engages the JSON-Schema tool-envelope
+    // grammar). When the operator sets `[daemon] force_tool_calls =
+    // true` in setup_config.toml, we propagate that into the process
+    // env at boot so the existing per-request lookup picks it up.
+    // Caller-supplied env wins — `std::env::set_var` only overrides
+    // when nothing was set on the CLI invocation. Operators who want
+    // a one-shot test (`SOVEREIGN_FORCE_TOOL_CALLS=0 sovereign daemon
+    // run`) can still do so without editing the config file.
+    if config.daemon.force_tool_calls
+        && std::env::var("SOVEREIGN_FORCE_TOOL_CALLS").is_err()
+    {
+        std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
+        tracing::info!(
+            "daemon: force_tool_calls=true — grammar engaged on every \
+             tools-using request (set via setup_config.toml)"
+        );
+    }
+
     // ── Inference provider ────────────────────────────────────────
     // Build the embedded llama.cpp provider from the three GGUF slots.
     // Synchronous — load happens inline; model files are mmapped so
@@ -240,7 +262,15 @@ async fn run_daemon(args: &[String]) -> i32 {
         ModelFamily::Unknown,
         ModelFamily::Unknown,
         ModelFamily::Unknown,
-        ModelFamily::Unknown, // code slot — family detection deferred (see PR-E2)
+        // code slot is Qwen3-Coder-30B-A3B-Instruct (the only code
+        // GGUF we ship today). Pinning the family to Qwen3 picks up
+        // Qwen's recommended sampling defaults — top_k=20 (vs the
+        // Unknown fallback of 40), top_p=0.95, presence_penalty=1.5
+        // — and the SystemPromptToken thinking control. Empirically
+        // (2026-05-08 measurement) the Unknown defaults left the
+        // sampler too permissive on long Rust emissions, contributing
+        // to the character-drop pattern (`f3 2`, `Lat encyClass`).
+        ModelFamily::Qwen3,
     ) {
         Ok(p) => {
             let arc = Arc::new(p);
@@ -1762,7 +1792,15 @@ impl ProviderFactory for LlamaCppFactory {
             ModelFamily::Unknown,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
-            ModelFamily::Unknown, // code slot — family detection deferred (see PR-E2)
+            // code slot is Qwen3-Coder-30B-A3B-Instruct (the only code
+        // GGUF we ship today). Pinning the family to Qwen3 picks up
+        // Qwen's recommended sampling defaults — top_k=20 (vs the
+        // Unknown fallback of 40), top_p=0.95, presence_penalty=1.5
+        // — and the SystemPromptToken thinking control. Empirically
+        // (2026-05-08 measurement) the Unknown defaults left the
+        // sampler too permissive on long Rust emissions, contributing
+        // to the character-drop pattern (`f3 2`, `Lat encyClass`).
+        ModelFamily::Qwen3,
         )
         .map_err(|e| format!("reload: failed to load models: {e}"))?;
         // Keep a typed `Arc<EmbeddedLlamaCpp>` to fire

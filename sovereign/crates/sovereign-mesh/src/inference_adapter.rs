@@ -285,7 +285,7 @@ impl SovereignInferenceAdapter {
         // structured-output callers (atlas Phase 1) typically set
         // this so the model spends every output token on the JSON
         // payload rather than a chain-of-thought.
-        req.think_budget = request.think_budget.map(|n| n as usize);
+        req.think_budget = resolve_think_budget(request);
         if let Some(oicp) = &request.oicp {
             req = req.with_oicp(oicp.clone());
         }
@@ -308,6 +308,35 @@ impl SovereignInferenceAdapter {
         if let Some(rf) = request.response_format.as_ref() {
             req.structured_output = extract_response_format_schema(rf);
         }
+        // Tool-call grammar: when the caller sets `tool_choice =
+        // "required"` (OpenAI semantics: model MUST call a tool) and
+        // tools are present, install a JSON-Schema grammar over the
+        // tool envelope. The sampler then masks out any token that
+        // would lead to an invalid `{"name": <tool_name>, "arguments":
+        // <tool_params>}` body. Closes the three observed long-emit
+        // failure modes at the source: FINAL-Bench dropping the
+        // closing brace, Qwen-Coder emitting raw `\n` inside string
+        // values, and character-drop-in-Rust corruption of edits
+        // (because the grammar forbids any token that breaks the
+        // schema, including ones that would make `arguments`
+        // malformed). Caller-set response_format wins — we only
+        // populate when nothing else has.
+        //
+        // `SOVEREIGN_FORCE_TOOL_CALLS=1` env-var override:
+        // tools-using clients that don't pass tool_choice (opencode,
+        // Aider, the Anthropic SDK's openai-compat shim, …) can opt
+        // into the grammar by setting this env var on the daemon.
+        // When set, any request with non-empty tools is treated as
+        // if `tool_choice = "required"` for grammar-installation
+        // purposes. The original tool_choice is left intact on `req`
+        // so downstream tooling (chat-template selection,
+        // tools-on-fast-slot guard, telemetry) sees what the caller
+        // actually sent.
+        if req.structured_output.is_none() {
+            if let Some(envelope) = tool_envelope_schema_for_with_env(request) {
+                req.structured_output = Some(envelope);
+            }
+        }
         // Per-request `enable_thinking` toggle. The OpenAI extension
         // `chat_template_kwargs: { enable_thinking: <bool> }` is what
         // vLLM and llama-server both expose; we honour the same shape
@@ -323,6 +352,214 @@ impl SovereignInferenceAdapter {
         };
         req.with_speed(speed)
     }
+}
+
+/// Parse a model response that was generated under a tool-envelope
+/// grammar. The whole response is expected to be ONE balanced JSON
+/// object of shape `{"name": <tool>, "arguments": <params>}`. Used
+/// only on the grammar-constrained path — the free-form path still
+/// goes through `parse_tool_calls_with_errors` which expects
+/// `<tool_call>...</tool_call>` markup.
+///
+/// Returns an empty vec when the response doesn't parse as a tool
+/// envelope (caller falls back to the marker-based parser).
+pub(crate) fn parse_tool_envelope_direct(
+    text: &str,
+) -> Vec<sovereign_inference::embedded::ParsedToolCall> {
+    let trimmed = text.trim();
+    let parsed: Result<serde_json::Value, _> =
+        serde_json::from_str(trimmed).or_else(|_| {
+            // Mirror the parser-hardening pre-pass: unescaped raw
+            // newlines inside string values are common from
+            // Qwen-Coder. Re-try on a normalized copy.
+            let fixed = sovereign_inference::embedded::escape_unescaped_control_chars_in_string_values(trimmed);
+            serde_json::from_str(&fixed)
+        });
+    let Ok(obj) = parsed else { return Vec::new() };
+    let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
+        return Vec::new();
+    };
+    let args_str = match obj.get("arguments") {
+        Some(v) if v.is_string() => v.as_str().unwrap_or("").to_string(),
+        Some(v) => v.to_string(),
+        None => "{}".to_string(),
+    };
+    vec![sovereign_inference::embedded::ParsedToolCall {
+        name: name.to_string(),
+        arguments: args_str,
+    }]
+}
+
+/// True when the `SOVEREIGN_FORCE_TOOL_CALLS` env-var is set to a
+/// truthy value (`1` / `true`, case-insensitive). Tools-using
+/// clients that don't pass `tool_choice` (opencode, Aider, the
+/// Anthropic SDK's openai-compat shim, …) can opt into the
+/// tool-envelope grammar by exporting this on the daemon. Read
+/// per-call (not cached) so flipping it at runtime is enough — no
+/// daemon restart required for the env var to take effect on the
+/// next request.
+fn force_tool_calls_env() -> bool {
+    std::env::var("SOVEREIGN_FORCE_TOOL_CALLS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// `tool_envelope_schema_for` plus the `SOVEREIGN_FORCE_TOOL_CALLS`
+/// env-var override. When the env var is set and `tools` is
+/// non-empty but `tool_choice` was omitted, we synthesize a
+/// `"required"` tool_choice for the schema-builder. The original
+/// request is left untouched — only the schema decision sees the
+/// override. Used in both:
+///   - `build_completion_request` (decide whether to install the
+///     grammar in `structured_output`),
+///   - `chat_completion` parse-mode dispatch (decide between the
+///     direct-envelope parser and the marker-based parser).
+pub(crate) fn tool_envelope_schema_for_with_env(
+    request: &ChatCompletionRequest,
+) -> Option<serde_json::Value> {
+    if let Some(s) = tool_envelope_schema_for(request) {
+        return Some(s);
+    }
+    if !force_tool_calls_env() {
+        return None;
+    }
+    // The env-var path is opt-in by the daemon operator. We treat
+    // it as "every tools-using request gets the envelope grammar"
+    // and override the caller's `tool_choice` *unless* they
+    // explicitly said `"none"` (semantically: model must NOT call
+    // a tool — overriding that would be hostile). opencode and
+    // similar clients default to `"auto"`, which we DO override —
+    // the env var is the operator's signal that this daemon is
+    // dedicated to tool-driven autonomous loops where text-only
+    // turns kill the iteration.
+    if request.tool_choice.as_ref().and_then(|v| v.as_str()) == Some("none") {
+        return None;
+    }
+    if request.tools.as_ref().is_none_or(|t| t.is_empty()) {
+        return None;
+    }
+    let mut overridden = request.clone();
+    overridden.tool_choice = Some(serde_json::json!("required"));
+    tool_envelope_schema_for(&overridden)
+}
+
+/// When the request has `tool_choice = "required"` (OpenAI semantics
+/// "model MUST call a tool") and a non-empty `tools` array, build a
+/// JSON Schema describing the legal tool-envelope shape:
+///
+/// ```json
+/// {
+///   "oneOf": [
+///     { "type": "object",
+///       "properties": {
+///         "name": { "const": "<tool_1_name>" },
+///         "arguments": <tool_1.parameters schema>
+///       },
+///       "required": ["name", "arguments"],
+///       "additionalProperties": false
+///     },
+///     ... one entry per tool ...
+///   ]
+/// }
+/// ```
+///
+/// The sampler installs this as a logit mask via
+/// `sovereign_inference::json_constraint::JsonConstraint`. Tokens
+/// that would lead to a body that violates the schema (unbalanced
+/// braces, raw control chars in strings, an unknown `name` value,
+/// the wrong type for an `arguments.<field>`, etc.) are masked out
+/// at decode time — which closes the three observed failure modes
+/// (FINAL-Bench drop-closing-tag, Qwen-Coder raw-`\n`,
+/// character-drop-in-Rust) at the structural layer rather than via
+/// the lenient parser.
+///
+/// Returns `None` when:
+///   - `tools` is absent or empty,
+///   - `tool_choice` is not the literal string `"required"` (we
+///     intentionally don't engage on `"auto"` because the model
+///     legitimately needs to be able to emit text-only turns to
+///     end an opencode session),
+///   - any tool's `parameters` is missing or not a JSON object
+///     (the sampler can't enforce a schema we can't construct).
+///
+/// Note on the wrapper: the daemon's chat template emits
+/// `<tool_call>` markers around the model's JSON output. The
+/// constraint operates on the raw token stream, so the surrounding
+/// markers are untouched — the model writes them as part of the
+/// templated prefix/suffix, the constraint guards only the JSON in
+/// between.
+pub(crate) fn tool_envelope_schema_for(
+    request: &ChatCompletionRequest,
+) -> Option<serde_json::Value> {
+    let tools = request.tools.as_ref()?;
+    if tools.is_empty() {
+        return None;
+    }
+    // tool_choice is held as opaque `serde_json::Value` so forward-
+    // compat shapes pass through. We engage only on the literal
+    // `"required"` string variant — the structured form
+    // `{"type":"function","function":{"name":"x"}}` is a future
+    // refinement (would build a single-tool schema, no oneOf).
+    let tc = request.tool_choice.as_ref()?;
+    if tc.as_str() != Some("required") {
+        return None;
+    }
+    let mut variants: Vec<serde_json::Value> = Vec::with_capacity(tools.len());
+    for t in tools {
+        if !t.function.parameters.is_object() {
+            // Skip tools whose params we can't constrain. Better to
+            // disengage entirely than to install a permissive grammar
+            // that masks one tool but lets others through unguarded.
+            return None;
+        }
+        let mut props = serde_json::Map::new();
+        // `name` is a string with a single allowed value. The
+        // JsonConstraint compiler requires `type` alongside `const`
+        // (otherwise it can't pick a primitive validator); use
+        // `enum: ["x"]` since that maps cleanly onto its
+        // string-with-enum validator.
+        props.insert(
+            "name".to_string(),
+            serde_json::json!({ "type": "string", "enum": [t.function.name] }),
+        );
+        props.insert(
+            "arguments".to_string(),
+            t.function.parameters.clone(),
+        );
+        variants.push(serde_json::json!({
+            "type": "object",
+            "properties": props,
+            "required": ["name", "arguments"],
+            "additionalProperties": false,
+        }));
+    }
+    Some(serde_json::json!({ "oneOf": variants }))
+}
+
+/// Resolve the effective `think_budget` for a request.
+///
+/// - Caller-supplied value wins (any explicit `Some(n)`).
+/// - Otherwise, when tools are present and non-empty, default to
+///   `Some(0)`. Tool-using clients (opencode, Aider, MCP-driven
+///   agents) don't pass the Commonwealth extension and almost
+///   always want the model to spend its output budget on the tool
+///   call, not a `<think>` block. The dominant failure mode without
+///   this default: FINAL-Bench-35B / Qwen3.5 burns ~14.5K tokens
+///   reasoning, then runs out of budget mid-`<tool_call>{...`,
+///   yielding a parse error and a stop-finished response with no
+///   tool calls.
+/// - Otherwise (no tools, no explicit budget), return `None` and
+///   let the embedded provider's chat-template default decide.
+pub(crate) fn resolve_think_budget(
+    request: &ChatCompletionRequest,
+) -> Option<usize> {
+    if let Some(n) = request.think_budget {
+        return Some(n as usize);
+    }
+    if request.tools.as_ref().is_some_and(|t| !t.is_empty()) {
+        return Some(0);
+    }
+    None
 }
 
 /// Pull `enable_thinking: bool` out of the OpenAI extension
@@ -417,8 +654,38 @@ pub(crate) fn guard_tools_on_fast(
 impl LocalInferenceService for SovereignInferenceAdapter {
     async fn chat_completion(
         &self,
-        request: ChatCompletionRequest,
+        mut request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, String> {
+        // Glassbox prompt-size accounting + tool-profile trim +
+        // opt-in compaction BEFORE anything reads the request.
+        //
+        // Order: pre_compact log → tool-profile trim (drops tool
+        // entries by name from request.tools[]) → opt-in compactor
+        // (caps oversized tool-result bodies) → post-trim log.
+        // The tool-profile pass runs on every request; the registry
+        // is empty/Wildcard by default (zero work when unconfigured),
+        // and when a profile is active its filter() drops tools by
+        // name and logs the count.
+        let pre_report = crate::prompt_compactor::PromptSizeReport::measure(&request);
+        pre_report.log("pre_compact");
+        let _profile = crate::tool_profile::apply(
+            crate::tool_profile::global(),
+            &mut request,
+        );
+        let compactor = crate::prompt_compactor::PromptCompactor::from_env();
+        if compactor.is_active() {
+            compactor.compact(&mut request);
+        }
+        // Post-compact log fires when ANY transformation changed the
+        // request. The total-char check covers both profile drops
+        // and tool-result truncation; the explicit `is_active`
+        // covers the rare case where the compactor was active but
+        // produced no change (no oversized tool messages today).
+        let post_report = crate::prompt_compactor::PromptSizeReport::measure(&request);
+        if post_report.total_chars() != pre_report.total_chars() || compactor.is_active() {
+            post_report.log("post_compact");
+        }
+
         let req = self.build_completion_request(&request);
 
         // Slot-policy guard: fail loud when a tool-enabled request
@@ -449,8 +716,31 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         // produced stays in `content` untouched. `with_errors` variant
         // so parse failures are visible in telemetry instead of
         // silently collapsing to zero calls.
+        //
+        // Two parse modes:
+        //   • grammar_constrained — the daemon installed the
+        //     tool-envelope JSON-schema sampler (see
+        //     `tool_envelope_schema_for`). The model's output is one
+        //     balanced JSON object matching the schema, with no
+        //     `<tool_call>` wrapper. We try the direct-envelope path
+        //     first; if that fails for any reason, we fall through to
+        //     the marker-based parser so a degraded model emission
+        //     still has a chance.
+        //   • free-form — the legacy `<tool_call>{...}</tool_call>`
+        //     markup the chat template emits when no grammar is set.
+        let grammar_constrained = req.structured_output.is_some()
+            && tool_envelope_schema_for_with_env(&request).is_some();
         let (parsed_calls, parse_errors) = if tools_present {
-            sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
+            if grammar_constrained {
+                let direct = parse_tool_envelope_direct(&resp.text);
+                if !direct.is_empty() {
+                    (direct, Vec::new())
+                } else {
+                    sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
+                }
+            } else {
+                sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
+            }
         } else {
             (Vec::new(), Vec::new())
         };
@@ -459,6 +749,26 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                 payload = %raw,
                 "inference adapter: tool_call parse failed"
             );
+        }
+
+        // Source-content validation: walk each tool's parameter
+        // schema for `x-source-content` markers, look up the value
+        // in arguments, run any registered validators. Today the
+        // registry is empty (no language validators wired yet) so
+        // the call is a fast no-op; the wiring point is the win
+        // — concrete validators slot in here without changing
+        // chat_completion. See `source_content_validator` module.
+        if let Some(tools) = request.tools.as_ref() {
+            let registry = crate::source_content_validator::ValidatorRegistry::new();
+            let _findings = crate::source_content_validator::validate_tool_calls(
+                &parsed_calls,
+                tools,
+                &registry,
+            );
+            // Findings already logged inside validate_tool_calls.
+            // Discard the returned Vec — when concrete validators
+            // ship, callers may surface findings to the response;
+            // for now observability via tracing is the contract.
         }
 
         let tool_calls_out: Option<Vec<ToolCall>> = if parsed_calls.is_empty() {
@@ -539,7 +849,7 @@ impl LocalInferenceService for SovereignInferenceAdapter {
 
     async fn chat_completion_stream(
         &self,
-        request: ChatCompletionRequest,
+        mut request: ChatCompletionRequest,
     ) -> Result<
         Pin<Box<dyn Stream<Item = commonwealth_api::openai_types::StreamFrame> + Send>>,
         String,
@@ -557,6 +867,8 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         // request `stream=true` once tools are bound now succeed
         // instead of getting a 503.
         if tools_present {
+            // Tools path delegates to chat_completion; the compactor
+            // runs there. Don't compact twice.
             let resp = self.chat_completion(request).await?;
             let frames = synthesize_tool_stream(resp);
             tracing::info!(
@@ -565,6 +877,29 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                 frames.len()
             );
             return Ok(Box::pin(futures::stream::iter(frames)));
+        }
+
+        // Non-tools streaming: run the compactor + tool-profile pass
+        // here so the same glassbox/throughput surface applies
+        // regardless of tools. The tool-profile pass is a no-op
+        // when `request.tools` is None (the streaming-no-tools path
+        // by construction), but we still apply for consistency and
+        // future-proofing — a request with empty tools[] but a
+        // profile header would still get the empty allow-list path
+        // treated correctly.
+        let pre_report = crate::prompt_compactor::PromptSizeReport::measure(&request);
+        pre_report.log("pre_compact");
+        let _profile = crate::tool_profile::apply(
+            crate::tool_profile::global(),
+            &mut request,
+        );
+        let compactor = crate::prompt_compactor::PromptCompactor::from_env();
+        if compactor.is_active() {
+            compactor.compact(&mut request);
+        }
+        let post_report = crate::prompt_compactor::PromptSizeReport::measure(&request);
+        if post_report.total_chars() != pre_report.total_chars() || compactor.is_active() {
+            post_report.log("post_compact");
         }
 
         let req = self.build_completion_request(&request);
@@ -1069,6 +1404,7 @@ mod adapter_translation_tests {
                     response_format: None,
                     chat_template_kwargs: None,
             think_budget: None,
+            tool_profile: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -1100,6 +1436,7 @@ mod adapter_translation_tests {
                     response_format: None,
                     chat_template_kwargs: None,
             think_budget: None,
+            tool_profile: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -1126,6 +1463,7 @@ mod adapter_translation_tests {
                     response_format: None,
                     chat_template_kwargs: None,
             think_budget: None,
+            tool_profile: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
@@ -1155,6 +1493,243 @@ mod adapter_translation_tests {
         let text = "ok <tool_call>{\"name\":\"never_closed\"";
         let stripped = strip_tool_call_blocks(text);
         assert!(stripped.contains("never_closed"));
+    }
+
+    fn req_with(
+        tools: Option<Vec<ToolDefinition>>,
+        think_budget: Option<u32>,
+    ) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: None,
+            messages: vec![user("hi")],
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            tools,
+            tool_choice: None,
+            oicp: None,
+            response_format: None,
+            chat_template_kwargs: None,
+            think_budget,
+            tool_profile: None,
+        }
+    }
+
+    #[test]
+    fn think_budget_defaults_to_zero_when_tools_present() {
+        // Witnesses the FINAL-Bench-35B failure mode: 14.5K think
+        // tokens, then a truncated `<tool_call>`. opencode/Aider/MCP
+        // clients don't know about think_budget, so the daemon
+        // defaults to Some(0) when tools are present so the model
+        // emits the tool call without a chain-of-thought prelude.
+        let req = req_with(Some(vec![tool_def("write")]), None);
+        assert_eq!(super::resolve_think_budget(&req), Some(0));
+    }
+
+    #[test]
+    fn think_budget_respects_explicit_caller_value_with_tools() {
+        // If a caller did want thinking with tools (e.g. a debugging
+        // session), don't override their explicit choice.
+        let req = req_with(Some(vec![tool_def("write")]), Some(2048));
+        assert_eq!(super::resolve_think_budget(&req), Some(2048));
+    }
+
+    #[test]
+    fn think_budget_is_none_without_tools() {
+        // No tools and no explicit budget → fall through to the
+        // embedded provider's chat-template default.
+        let req = req_with(None, None);
+        assert_eq!(super::resolve_think_budget(&req), None);
+    }
+
+    #[test]
+    fn think_budget_is_none_when_tools_array_is_empty() {
+        // Empty tools array is semantically "no tools" — same as None.
+        let req = req_with(Some(vec![]), None);
+        assert_eq!(super::resolve_think_budget(&req), None);
+    }
+
+    fn req_with_tool_choice(
+        tools: Option<Vec<ToolDefinition>>,
+        tool_choice: Option<serde_json::Value>,
+    ) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: None,
+            messages: vec![user("hi")],
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            tools,
+            tool_choice,
+            oicp: None,
+            response_format: None,
+            chat_template_kwargs: None,
+            think_budget: None,
+            tool_profile: None,
+        }
+    }
+
+    #[test]
+    fn tool_envelope_schema_engages_on_required_with_tools() {
+        let req = req_with_tool_choice(
+            Some(vec![tool_def("write")]),
+            Some(serde_json::json!("required")),
+        );
+        let schema = super::tool_envelope_schema_for(&req)
+            .expect("schema should be built");
+        // oneOf with one variant for the single tool.
+        let variants = schema.get("oneOf").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(variants.len(), 1);
+        // The variant binds `name` to the tool's literal name via
+        // `enum: ["..."]` (the JsonConstraint compiler can't validate
+        // bare `const` without `type`, so we use enum-of-one instead).
+        let name_enum = variants[0]
+            .pointer("/properties/name/enum")
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(name_enum.len(), 1);
+        assert_eq!(name_enum[0].as_str(), Some("write"));
+        // additionalProperties is false so the model can't emit
+        // unrecognised top-level keys alongside `name`+`arguments`.
+        assert_eq!(
+            variants[0].pointer("/additionalProperties"),
+            Some(&serde_json::json!(false))
+        );
+    }
+
+    #[test]
+    fn tool_envelope_schema_skipped_on_auto_choice() {
+        // tool_choice="auto" must not engage — the model needs to be
+        // free to emit text-only turns to end an opencode session.
+        let req = req_with_tool_choice(
+            Some(vec![tool_def("write")]),
+            Some(serde_json::json!("auto")),
+        );
+        assert!(super::tool_envelope_schema_for(&req).is_none());
+    }
+
+    #[test]
+    fn tool_envelope_schema_skipped_when_no_tool_choice_set() {
+        // Caller didn't set tool_choice. Default behaviour is "auto"
+        // semantically, and we must not constrain.
+        let req = req_with_tool_choice(Some(vec![tool_def("write")]), None);
+        assert!(super::tool_envelope_schema_for(&req).is_none());
+    }
+
+    #[test]
+    fn tool_envelope_schema_skipped_when_tools_empty_under_required() {
+        // `required` with zero tools is malformed; refuse to constrain
+        // (empty oneOf would mask everything → model can never finish).
+        let req = req_with_tool_choice(
+            Some(vec![]),
+            Some(serde_json::json!("required")),
+        );
+        assert!(super::tool_envelope_schema_for(&req).is_none());
+    }
+
+    #[test]
+    fn force_tool_calls_env_engages_schema_when_choice_omitted() {
+        // SAFETY: tests modify process env. Each test that touches this
+        // var must restore. Cargo's default test harness runs tests in
+        // parallel within a file — explicit serialization via a mutex
+        // would be safer in a larger suite. For now, the env var name is
+        // unique to this codebase and these two tests run fast.
+        std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
+        let req = req_with_tool_choice(Some(vec![tool_def("write")]), None);
+        let schema = super::tool_envelope_schema_for_with_env(&req);
+        std::env::remove_var("SOVEREIGN_FORCE_TOOL_CALLS");
+        assert!(schema.is_some(), "env override should synthesize tool_choice=required");
+    }
+
+    #[test]
+    fn force_tool_calls_env_overrides_auto() {
+        // Operator opted in via env: even an explicit "auto" gets
+        // upgraded to "required" so the grammar engages. The opt-in
+        // is global to the daemon; clients that need text-only turns
+        // shouldn't run against a daemon with this var set.
+        std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
+        let req = req_with_tool_choice(
+            Some(vec![tool_def("write")]),
+            Some(serde_json::json!("auto")),
+        );
+        let schema = super::tool_envelope_schema_for_with_env(&req);
+        std::env::remove_var("SOVEREIGN_FORCE_TOOL_CALLS");
+        assert!(schema.is_some(), "env override should upgrade auto to required");
+    }
+
+    #[test]
+    fn force_tool_calls_env_respects_explicit_none() {
+        // tool_choice="none" semantically means "model must NOT call a
+        // tool". Even with the env var set, refuse to override that.
+        std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
+        let req = req_with_tool_choice(
+            Some(vec![tool_def("write")]),
+            Some(serde_json::json!("none")),
+        );
+        let schema = super::tool_envelope_schema_for_with_env(&req);
+        std::env::remove_var("SOVEREIGN_FORCE_TOOL_CALLS");
+        assert!(schema.is_none(), "explicit none must NOT be overridden");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_extracts_clean_json() {
+        // Grammar-constrained output is a single balanced JSON object
+        // with no `<tool_call>` wrapper.
+        let text = r#"{"name":"write","arguments":{"filePath":"a.rs","content":"fn main(){}"}}"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "write");
+        assert!(calls[0].arguments.contains("filePath"));
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_returns_empty_on_non_envelope() {
+        // Random text or malformed JSON returns empty so the caller
+        // can fall back to the marker-based parser.
+        assert!(super::parse_tool_envelope_direct("hello world").is_empty());
+        assert!(super::parse_tool_envelope_direct(r#"{"foo":"bar"}"#).is_empty());
+        assert!(super::parse_tool_envelope_direct("").is_empty());
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_normalizes_raw_newlines() {
+        // Same Qwen-Coder failure mode the marker-based parser
+        // already handles: raw \n inside content string.
+        let text = "{\"name\":\"write\",\"arguments\":{\"path\":\"x\",\"content\":\"line1\nline2\"}}";
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1, "normalization should recover");
+        assert_eq!(calls[0].name, "write");
+    }
+
+    #[test]
+    fn tool_envelope_schema_oneof_includes_each_tool() {
+        let req = req_with_tool_choice(
+            Some(vec![tool_def("a"), tool_def("b"), tool_def("c")]),
+            Some(serde_json::json!("required")),
+        );
+        let schema = super::tool_envelope_schema_for(&req).unwrap();
+        let variants = schema.get("oneOf").and_then(|v| v.as_array()).unwrap();
+        assert_eq!(variants.len(), 3);
+        let names: Vec<String> = variants
+            .iter()
+            .map(|v| {
+                v.pointer("/properties/name/enum")
+                    .and_then(|x| x.as_array())
+                    .and_then(|arr| arr.first())
+                    .and_then(|x| x.as_str())
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(names, vec!["a", "b", "c"]);
     }
 }
 
