@@ -606,9 +606,62 @@ fn inquiry_matches_atom(inquiry: &Inquiry, atom: &AtomProvenance) -> bool {
 /// Trivial glob — supports `**`, `*`, and literal segments. Powerful
 /// enough for "this file" / "everything under this dir" matchers
 /// without pulling in a glob crate.
-fn glob_match(pattern: &str, path: &Path) -> bool {
+///
+/// Public so consumers (e.g. the brief assembler) can match files
+/// against inquiry globs directly without reaching into eval-internal
+/// state.
+pub fn glob_match(pattern: &str, path: &Path) -> bool {
     let path_str = path.to_string_lossy();
     glob_match_str(pattern, &path_str)
+}
+
+/// Load every `*.toml` inquiry under `dir`. Files that fail to parse
+/// are skipped with a warn-level log so a single broken inquiry
+/// doesn't abort the whole load. Sorted by `id` for determinism.
+pub fn load_inquiries_from_dir(dir: &Path) -> std::io::Result<Vec<Inquiry>> {
+    let mut out = Vec::new();
+    if !dir.exists() {
+        return Ok(out);
+    }
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+            continue;
+        }
+        let body = match std::fs::read_to_string(&path) {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::warn!(file = %path.display(), error = %e, "load_inquiries_from_dir: read failed");
+                continue;
+            }
+        };
+        match parse_inquiry_toml(&body) {
+            Ok(inq) => out.push(inq),
+            Err(e) => {
+                tracing::warn!(file = %path.display(), error = %e, "load_inquiries_from_dir: parse failed");
+            }
+        }
+    }
+    out.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(out)
+}
+
+/// Return the subset of `inquiries` whose globs match at least one
+/// file in `files`. Used by the brief assembler to decide which
+/// principles to surface for a given working set.
+pub fn inquiries_matching_files<'a>(
+    inquiries: &'a [Inquiry],
+    files: &[PathBuf],
+) -> Vec<&'a Inquiry> {
+    inquiries
+        .iter()
+        .filter(|inq| {
+            inq.file_globs
+                .iter()
+                .any(|pat| files.iter().any(|f| glob_match(pat, f)))
+        })
+        .collect()
 }
 
 fn glob_match_str(pattern: &str, target: &str) -> bool {
