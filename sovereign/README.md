@@ -174,6 +174,7 @@ cargo run --release -p sovereign-server -- --config sovereign-server.toml
 | [`docs/FAQ.md`](docs/FAQ.md) | Quick answers to common questions |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Building, testing, adding tools/corpora/skills |
 | [`docs/TOOLBOX_SETUP.md`](docs/TOOLBOX_SETUP.md) | Running on AMD Strix Halo via kyuz0 ROCm/Vulkan toolboxes |
+| [`docs/CLOUD_PEER_DEPLOY.md`](docs/CLOUD_PEER_DEPLOY.md) | Spinning up an ad-hoc cloud-GPU mesh peer (RunPod MI300X / H100 / A100) |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Deep architectural design document |
 | [`SYSTEM_OVERVIEW.md`](SYSTEM_OVERVIEW.md) | Cross-project (sovereign + commonwealth + corpus-engine) map |
 

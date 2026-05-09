@@ -697,9 +697,33 @@ pub async fn score_essay_readiness(
          not the essay itself — the student will synthesize across passages, restate \
          arguments in their own words, and connect quotes. Do not penalise the set \
          for failing to pre-assemble the essay; only penalise when the raw material \
-         is missing or wrong. Score four axes from 0 (worst) to 3 (best):\n\n\
+         is missing or wrong.\n\n\
+         Some passages begin with `[Atlas highlights]` followed by structured \
+         analytic markers extracted from the article. Treat them as substantive \
+         evidence, not metadata, when scoring the axes:\n\
+         - `Argument: NAME [from <article>]` followed by `P1. … P2. … C. …` is a \
+           named-argument reconstruction. The premise-conclusion structure IS \
+           reconstruction-grade content for argument_depth (a student can cite the \
+           premises directly), and IS substantive content for position_attribution \
+           when the question names that argument.\n\
+           Indented `Objections:` lines under an Argument are counter-positions: \
+           each `- NAME: CONTENT` is a distinct objection with one-sentence \
+           substance. Multiple such lines = strong dialectical_breadth raw \
+           material; even bare `- NAME` lines count as registered counter-position \
+           pointers (1-2 on dialectical_breadth).\n\
+         - `[ATTRIBUTION (article) — contested]: \"...\"` is a Claim flagged as \
+           epistemically contested in the corpus — its presence signals that this \
+           position is itself counter-positioned elsewhere. Counts toward \
+           dialectical_breadth.\n\
+         - `Defining X (article): \"...\"` and `[X (article)]: \"...\"` are \
+           verbatim defining-quotes / quotable excerpts. Count as substantive \
+           content for position_attribution and argument_depth when the named \
+           term/figure is question-relevant.\n\n\
+         Score four axes from 0 (worst) to 3 (best):\n\n\
          1. topical_coverage — Do the passages span the topic the question raises, \
-         not just one corner of it? 0 = off-topic, 3 = thorough breadth.\n\n\
+         not just one corner of it? 0 = off-topic, 3 = thorough breadth. Coverage \
+         from multiple distinct articles in `[Atlas highlights]` blocks counts \
+         toward breadth.\n\n\
          2. position_attribution — Are the named thinkers, arguments, positions, or \
          technical terms in the question REPRESENTED in the passages with enough \
          content for an undergraduate to write about them? 0 = absent or wrong; \
@@ -708,22 +732,26 @@ pub async fn score_essay_readiness(
          AND specific textual material (quotes, premises, examples) that an \
          undergraduate could cite. Award 3 when raw-material adequacy is achieved \
          even if the passages do not pre-assemble the argument step-by-step — \
-         that's the student's job.\n\n\
+         that's the student's job. An `Argument: NAME ... P1./P2./C.` block whose \
+         NAME the question asks about is direct evidence for 3.\n\n\
          3. dialectical_breadth — Are multiple competing perspectives, objections, \
          or counter-positions present? An essay on a contested question needs more \
          than one side. 0 = one-sided; 1 = main position + brief mention of an \
          objection; 2 = main position + at least one substantive counter-position; \
          3 = multiple rival positions each with substantive content. \"Substantive\" \
          means content suitable for the student to engage with, not pre-written \
-         dialectic.\n\n\
+         dialectic. Indented `Objections: - NAME: CONTENT` lines are exactly this \
+         kind of substantive counter-position; 1 such line ≈ 2 on dialectical, \
+         2+ such lines or a mix with `[... — contested]` claims ≈ 3.\n\n\
          4. argument_depth — Do the passages contain enough specific reasoning \
          detail (premises, distinctions, examples, technical vocabulary) for an \
          undergraduate to reconstruct the argument? 0 = surface gloss only; \
          1 = some specific content but missing key pieces; 2 = solid raw material \
          (key concepts, core moves, examples present); 3 = rich detail (multiple \
          premises, technical vocabulary, examples — the student has everything \
-         needed to write the reconstruction). Don't require the passages to \
-         pre-format the reconstruction in P1/P2 logical-steps form.\n\n\
+         needed to write the reconstruction). An `Argument: NAME ... P1./P2./C.` \
+         block whose NAME matches the question is direct 3-grade evidence; do NOT \
+         require additional pre-format or extra paragraphs.\n\n\
          Question category: {category}\n\
          Question: {question}\n\n\
          Retrieved passages:\n{chunks_block}\n\n\
@@ -747,6 +775,20 @@ pub async fn score_essay_readiness(
                      "dialectical_breadth", "argument_depth", "rationale"],
     });
 
+    // Allow ablation experiments to swap the judge model via an env
+    // var without plumbing a new CLI flag through every entry point.
+    // When `SOVEREIGN_JUDGE_MODEL` is set, the request targets that
+    // exact model id (and downgrades the speed gate to Slow so the
+    // dispatcher doesn't second-guess our choice). Empty string or
+    // unset = default Fast-slot model.
+    let judge_model_override = std::env::var("SOVEREIGN_JUDGE_MODEL")
+        .ok()
+        .filter(|s| !s.trim().is_empty());
+    let preferred_speed = if judge_model_override.is_some() {
+        sovereign_core::types::Speed::Slow
+    } else {
+        sovereign_core::types::Speed::Fast
+    };
     let request = sovereign_core::types::CompletionRequest {
         prompt,
         system_message: Some(
@@ -755,7 +797,7 @@ pub async fn score_essay_readiness(
              0 is absent or wrong. Respond with JSON only."
                 .to_string(),
         ),
-        preferred_speed: sovereign_core::types::Speed::Fast,
+        preferred_speed,
         max_tokens: Some(1200),
         temperature: Some(0.0),
         structured_output: Some(schema),
@@ -765,7 +807,7 @@ pub async fn score_essay_readiness(
         oicp: None,
         tools: None,
         tool_choice: None,
-        model_id: None,
+        model_id: judge_model_override,
         enable_thinking: None,
     };
 

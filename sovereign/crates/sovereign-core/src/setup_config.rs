@@ -120,6 +120,41 @@ pub struct ModelsSection {
     /// upper bound on weights, not a strict OS-level limit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_extras_memory_gb: Option<f32>,
+
+    /// Multi-primary slot pool. When set, the daemon loads `copies`
+    /// independent instances of `path` as separate primary-class slots
+    /// at startup, in addition to the singleton `primary` field.
+    /// Inbound chat-completion requests targeting Speed::Slow /
+    /// Speed::Normal are dispatched round-robin across the pool, so a
+    /// host with sufficient VRAM (e.g. MI300X 192 GB) can serve N
+    /// concurrent Phase 1 extracts without queueing.
+    ///
+    /// `None` (the default) preserves single-primary behaviour. Use
+    /// case is bulk ingest workers that want horizontal parallelism on
+    /// one box; a 6-copy pool of Darwin-36B-Q6 (28 GB each) fits in
+    /// 168 GB and yields ~6× throughput vs. a single slot.
+    ///
+    /// TOML shape:
+    /// ```toml
+    /// [models.primary_pool]
+    /// copies = 6
+    /// path = "/workspace/models/Darwin-36B-Opus-Q6_K.gguf"
+    /// ```
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary_pool: Option<PrimaryPoolSection>,
+}
+
+/// Multi-primary slot pool config. See `ModelsSection::primary_pool`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrimaryPoolSection {
+    /// Number of additional primary-class slot copies to spawn at
+    /// daemon startup. The singleton `primary` (always loaded) counts
+    /// as one slot; `copies` of those plus the singleton total
+    /// `1 + copies` primary slots. `0` is treated as no pool.
+    pub copies: u32,
+    /// GGUF path for each pool member. Today every copy points at the
+    /// same file; future variants could carry per-slot model paths.
+    pub path: PathBuf,
 }
 
 fn default_context_size() -> u32 {
@@ -450,6 +485,7 @@ mod tests {
                 context_size: None,
                 extra: BTreeMap::new(),
                 max_extras_memory_gb: None,
+                primary_pool: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

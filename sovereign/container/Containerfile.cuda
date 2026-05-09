@@ -1,0 +1,162 @@
+# sovereign-mesh worker container, CUDA flavor.
+#
+# Sister image to `Containerfile` (ROCm). Same architecture: builds an
+# image that joins your tailnet, pulls Darwin GGUFs from R2, and runs
+# `sovereign-cli daemon run`. The only differences from the ROCm image:
+#
+#   1. NVIDIA CUDA base (devel for build, runtime for serving).
+#   2. llama-cpp-2 features patched from `"rocm"` to `"cuda"`.
+#   3. cuBLAS comes from the base image — no extra apt math-libs.
+#   4. CMAKE_CUDA_ARCHITECTURES env picks the SM list to compile for.
+#
+# Default arch list = "80;86;89;90" → covers Ampere (A100, RTX 30xx),
+# Ada (L40S, RTX 4090), and Hopper (H100/H200). Override at build time
+# for a single-target slim build:
+#     --build-arg CUDA_ARCHITECTURES=90       # H100 only
+#
+# ── build (from commonwealth-ai/ workspace root, NOT from sovereign/):
+#     cd ~/dev/commonwealth-ai
+#     podman build -t ghcr.io/<you>/sovereign-cuda:latest \
+#                  -f sovereign/container/Containerfile.cuda .
+#
+# ── run locally (rootful podman, NVIDIA GPU passthrough requires the
+#                 NVIDIA Container Toolkit):
+#     podman run --rm --device nvidia.com/gpu=all \
+#       -e TS_AUTHKEY=tskey-... \
+#       -e MESH_SEED_ADDR=100.x.y.z:9742 \
+#       -e R2_ENDPOINT=... -e R2_ACCESS_KEY=... -e R2_SECRET_KEY=... \
+#       -e PRIMARY_COPIES=1 \
+#       -p 9741:9741 -p 9742:9742 \
+#       ghcr.io/<you>/sovereign-cuda:latest
+#
+# (RunPod's runtime adds GPU device passthrough automatically.)
+
+# ─── Build stage ─────────────────────────────────────────────────────
+# CUDA 12.1.1 requires NVIDIA driver >= 530.30, which most cloud
+# providers ship today. Newer toolkits (12.4+ require 550+) fail on
+# RunPod's stock L40S/A100 hosts with
+# 'CUDA driver version is insufficient for CUDA runtime version'.
+# Performance for llama.cpp inference is identical 12.1 vs 12.4 —
+# the toolkit version only matters for compile-time features we're
+# not using.
+FROM docker.io/nvidia/cuda:12.1.1-devel-ubuntu22.04 AS build
+
+ENV DEBIAN_FRONTEND=noninteractive
+# Build-chain peer deps for the Cargo workspace. cuBLAS dev headers
+# come pre-installed in the CUDA devel image at /usr/local/cuda/.
+#
+# NCCL is required because recent llama.cpp's GGML_CUDA pulls in
+# NCCL all-reduce primitives even on single-GPU builds — the symbols
+# need to resolve at link time. `libnccl-dev` provides headers + the
+# static archive for the build stage; the runtime stage adds
+# `libnccl2` for the dlopen path.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      --allow-change-held-packages \
+      build-essential cmake git curl ca-certificates pkg-config libssl-dev \
+      protobuf-compiler libprotobuf-dev \
+      clang libclang-dev llvm-dev python3 \
+      libnccl-dev libnccl2 \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV PROTOC=/usr/bin/protoc
+ENV PROTOC_INCLUDE=/usr/include
+
+# Rust toolchain. `rustfmt` is required: llama-cpp-sys-2's bindgen
+# pipes its generated bindings through `rustfmt`; without it the build
+# errors with `'rustfmt' is not installed for the toolchain`.
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --default-toolchain stable \
+ && /root/.cargo/bin/rustup component add rustfmt
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# CUDA env. The nvidia/cuda:*-devel image installs the toolkit at
+# /usr/local/cuda and pre-sets PATH/LD_LIBRARY_PATH. CMake finds CUDA
+# automatically via standard FindCUDAToolkit logic.
+#
+# CMAKE_CUDA_ARCHITECTURES picks the SM gencodes baked into the image.
+# Listing more architectures = larger binary + slower compile, but a
+# single image deploys to any of those GPU classes.
+ARG CUDA_ARCHITECTURES="80;86;89;90"
+ENV CUDA_PATH=/usr/local/cuda
+ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
+
+# llama-cpp-sys-2's bundled llama.cpp has unconditional NCCL calls in
+# ggml-cuda.cu (single-GPU builds still reference the multi-GPU
+# all-reduce primitives). Its build.rs doesn't emit
+# `cargo:rustc-link-lib=nccl`, so the static archive's symbols stay
+# unresolved at the final binary link. Inject `-lnccl` here so rustc
+# appends it to the link command.
+ENV RUSTFLAGS="-C link-arg=-lnccl"
+
+# Build context = commonwealth-ai/ workspace root; sibling repos sit
+# at the same level as `sovereign/`. Path-dep targets in
+# sovereign/Cargo.toml expect this layout.
+WORKDIR /workspace
+COPY commonwealth/        ./commonwealth/
+COPY corpus-engine/       ./corpus-engine/
+COPY oicp-types/          ./oicp-types/
+COPY sovereign-recipes/wikipedia/data/   ./sovereign-recipes/wikipedia/data/
+# Only copy the parts of sovereign/ that cargo actually needs. Skipping
+# container/, scripts/, docs/, bench/, etc. means edits to those don't
+# invalidate the cargo-build layer (which is the slow one). Workspace
+# members all live under crates/.
+COPY sovereign/Cargo.toml sovereign/Cargo.lock ./sovereign/
+COPY sovereign/crates/    ./sovereign/crates/
+
+# Swap the linux llama-cpp-2 backend feature from "rocm" (repo default)
+# to "cuda" for this image. We do it in-image rather than via a Cargo
+# feature flag because the choice lives inside a target-conditional
+# dependency declaration, not in the workspace features table.
+#
+# Mirrors what scripts/bootstrap-linux.sh does for local Vulkan swaps.
+RUN python3 -c "import re,pathlib; \
+p=pathlib.Path('/workspace/sovereign/crates/sovereign-inference/Cargo.toml'); \
+src=p.read_text(); \
+header='[target.\\'cfg(target_os = \"linux\")\\'.dependencies]'; \
+m=re.search(re.escape(header)+r'\s*\nllama-cpp-2 = \{[^\n]*\}', src); \
+assert m, 'linux llama-cpp-2 line not found'; \
+new=re.sub(r'\"rocm\"','\"cuda\"',m.group(0),count=1); \
+p.write_text(src[:m.start()]+new+src[m.end():])"
+
+WORKDIR /workspace/sovereign
+RUN cargo build --release --bin sovereign-cli
+
+# ─── Runtime stage ───────────────────────────────────────────────────
+# `runtime` (not `devel`) image is ~3 GB smaller and ships cuBLAS +
+# CUDA driver shim libraries — everything the daemon needs to dlopen
+# at slot-load time. Match toolkit version to the build stage.
+FROM docker.io/nvidia/cuda:12.1.1-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+# Runtime libs the daemon needs to dlopen at startup:
+#   libnccl2  — matches the build-stage `libnccl-dev`. Without it the
+#               daemon segfaults the moment llama.cpp enumerates CUDA.
+#   libgomp1  — GNU OpenMP runtime. llama.cpp links against it
+#               (GGML_OPENMP=ON) but the cuda *-runtime image doesn't
+#               ship it, so sovereign-cli fails immediately with
+#               "error while loading shared libraries: libgomp.so.1".
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      --allow-change-held-packages \
+      curl ca-certificates iproute2 iptables unzip \
+      libnccl2 libgomp1 \
+ && curl -fsSL https://tailscale.com/install.sh | sh \
+ && curl -fsSL https://rclone.org/install.sh | bash \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /workspace/sovereign/target/release/sovereign-cli /usr/local/bin/sovereign-cli
+
+WORKDIR /workspace
+RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign /root/.config/rclone
+
+COPY sovereign/container/entrypoint.sh           /entrypoint.sh
+COPY sovereign/container/entrypoint-tailscale.sh /entrypoint-tailscale.sh
+RUN chmod +x /entrypoint.sh /entrypoint-tailscale.sh
+
+EXPOSE 9741 9742
+
+ENV SOVEREIGN_DATA_DIR=/workspace/data
+ENV SOVEREIGN_MODELS_DIR=/workspace/models
+ENV PRIMARY_COPIES=1
+ENV CONTEXT_SIZE=32768
+
+ENTRYPOINT ["/entrypoint.sh"]

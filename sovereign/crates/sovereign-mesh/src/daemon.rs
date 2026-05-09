@@ -1643,6 +1643,17 @@ fn register_local_model_slots(
     if let Some(code_path) = cfg.models.code.as_ref() {
         slots.push(("code".into(), code_path.as_path()));
     }
+    // Multi-primary pool: register N additional primary-class slots so
+    // a high-VRAM host (e.g. MI300X 192 GB) can serve concurrent
+    // chat-completion requests without queueing against a single slot.
+    // Each pool member is registered under `primary_<i>` and points at
+    // the same GGUF; the OICP capability advertiser surfaces them as
+    // distinct claims so the scheduler can dispatch round-robin.
+    if let Some(pool) = cfg.models.primary_pool.as_ref() {
+        for i in 0..pool.copies {
+            slots.push((format!("primary_{i}"), pool.path.as_path()));
+        }
+    }
     // Operator-declared additional chat slots from `[models.extra]`
     // also need to land in `inference_store` so `/v1/models`
     // advertises them. Without this entry, clients sending

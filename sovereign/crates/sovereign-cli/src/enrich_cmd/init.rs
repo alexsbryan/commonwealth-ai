@@ -359,6 +359,7 @@ pub async fn cmd_init(args: &[String]) -> i32 {
         // pipeline (Phase 1b is schema-free and will bloat without
         // a per-phase cap).
         phase1b_max_output_tokens: None,
+        phase_overrides: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {
@@ -535,6 +536,7 @@ async fn cmd_init_from_corpus(parsed: &ParsedInit, source_corpus: &str) -> i32 {
         // pipeline (Phase 1b is schema-free and will bloat without
         // a per-phase cap).
         phase1b_max_output_tokens: None,
+        phase_overrides: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     if let Err(e) = cfg.save() {

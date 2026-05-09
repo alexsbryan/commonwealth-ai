@@ -41,6 +41,7 @@ pub mod init;
 pub mod paths;
 pub mod phase_cmd;
 pub mod promote;
+pub mod providers;
 pub mod query;
 pub mod reset;
 pub mod schema_review;

@@ -82,7 +82,41 @@ pub struct EnrichConfig {
     /// haven't opted in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase1b_max_output_tokens: Option<u32>,
+    /// Per-phase request-shape overrides. Keys are pipeline phase ids
+    /// (`"phase1"`, `"phase1b_entity"`, `"phase1b_concept"`,
+    /// `"phase3"`, `"phase8_configuration"`, etc.); values are
+    /// `PhaseOverride` blocks carrying any combination of
+    /// `temperature`, `max_tokens`, and `thinking_tokens`. Phases not
+    /// listed inherit dispatcher / provider defaults.
+    ///
+    /// Example:
+    /// ```json
+    /// "phase_overrides": {
+    ///   "phase1":                 { "temperature": 0.0, "thinking_tokens": 4096 },
+    ///   "phase8_configuration":   { "temperature": 0.4 }
+    /// }
+    /// ```
+    /// `temperature: 0.0` for the schema-bound Phase 1 maximizes
+    /// reproducibility; `0.4` for Phase 8's interpretive
+    /// configurations gives controlled variation. `thinking_tokens`
+    /// only applies to providers / models that support extended
+    /// thinking (Anthropic Sonnet/Opus, OpenAI o-class,
+    /// DeepSeek-reasoner) — others ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase_overrides: Option<BTreeMap<String, PhaseOverride>>,
     pub created_at: String,
+}
+
+/// Per-phase override block. All fields optional; unset fields fall
+/// through to provider / dispatcher defaults.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PhaseOverride {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking_tokens: Option<u32>,
 }
 
 /// Paired start/end delimiters for an author-declared Table of
@@ -177,6 +211,14 @@ impl EnrichConfig {
     /// holding a borrow on the config.
     pub fn chat_models_by_phase_snapshot(&self) -> BTreeMap<String, String> {
         self.chat_models.clone().unwrap_or_default()
+    }
+
+    /// Snapshot of the operator's per-phase request-shape overrides
+    /// (temperature / max_tokens / thinking_tokens). Returns an empty
+    /// map when none are configured. The snapshot is owned so callers
+    /// can hand it to the inference client without holding a borrow.
+    pub fn phase_overrides_snapshot(&self) -> BTreeMap<String, PhaseOverride> {
+        self.phase_overrides.clone().unwrap_or_default()
     }
 }
 
