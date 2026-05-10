@@ -201,6 +201,12 @@ pub struct MeshInferenceProvider {
     /// observations accumulate fast.
     local_benchmark:
         Arc<RwLock<Option<sovereign_core::oicp::BenchmarkResult>>>,
+    /// Per-peer consecutive-failure tracker. Peers that fail
+    /// `FAILURE_THRESHOLD` requests in a row are quarantined for a
+    /// linearly-backed-off cooldown. Filtered out of routing
+    /// candidates while quarantined; one successful response clears
+    /// the state. See [`peer_health`] for the policy.
+    peer_health: Arc<crate::peer_health::PeerHealthTracker>,
 }
 
 impl MeshInferenceProvider {
@@ -250,7 +256,13 @@ impl MeshInferenceProvider {
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
             local_benchmark: Arc::new(RwLock::new(None)),
+            peer_health: Arc::new(crate::peer_health::PeerHealthTracker::new()),
         }
+    }
+
+    /// Snapshot of per-peer health for diagnostics surfaces.
+    pub fn peer_health_snapshot(&self) -> Vec<(String, bool, u32, u64)> {
+        self.peer_health.snapshot()
     }
 
     /// Replace the local-side benchmark result. Called once by the
@@ -592,6 +604,19 @@ impl MeshInferenceProvider {
         let peer_obs_snapshot = self.peer_observations.read().await.clone();
         let mut best_peer: Option<(PeerInferenceEndpoint, ModelCandidate)> = None;
         for peer in peers {
+            // Drop quarantined peers from the candidate set. They'll
+            // re-enter automatically once their cooldown expires.
+            // Returning None from select_peer (when this is the only
+            // candidate that would have won) falls back to local —
+            // which is the correct behaviour for the OICP path
+            // because OICP-driven calls don't pin a specific model.
+            if self.peer_health.is_quarantined(&peer.name) {
+                tracing::debug!(
+                    peer = %peer.name,
+                    "mesh-inference: skipping quarantined peer in scoring"
+                );
+                continue;
+            }
             let (manifest, rtt_ms) = match self.get_peer_manifest(&peer).await {
                 Some(m) => m,
                 None => continue,
@@ -737,9 +762,23 @@ impl MeshInferenceProvider {
         {
             return NamedModelLocation::Local;
         }
-        // Then peers, in the order the mesh hands them back.
+        // Then peers, in the order the mesh hands them back. Skip
+        // peers that are currently quarantined — they're presumed
+        // unhealthy and routing to them would waste a request budget
+        // before the cooldown elapses. A quarantined peer's recovery
+        // happens automatically: when the cooldown expires the peer
+        // re-enters this list and the next request either succeeds
+        // (clearing health state) or re-arms with a longer cooldown.
         let peers = self.mesh.peer_inference_endpoints().await;
         for peer in peers {
+            if self.peer_health.is_quarantined(&peer.name) {
+                tracing::debug!(
+                    peer = %peer.name,
+                    model = %model_id,
+                    "mesh-inference: skipping quarantined peer for explicit model"
+                );
+                continue;
+            }
             let (manifest, _rtt) = match self.get_peer_manifest(&peer).await {
                 Some(m) => m,
                 None => continue,
@@ -821,6 +860,7 @@ impl InferenceProvider for MeshInferenceProvider {
                         match rp.complete(request).await {
                             Ok(mut resp) => {
                                 resp.model_id = peer_cand.model_id.clone();
+                                self.peer_health.record_success(&peer.name);
                                 return Ok(Self::annotate(resp, &peer.name));
                             }
                             Err(e) => {
@@ -835,6 +875,15 @@ impl InferenceProvider for MeshInferenceProvider {
                             }
                         }
                     }
+                    // All addresses for this peer failed. Record one
+                    // failure (not one per address — a peer is
+                    // unreachable as a unit) and surface a routing
+                    // error. The next request for the same model
+                    // will see the peer drop from `locate_named_model`
+                    // once the threshold is crossed, returning
+                    // `Unknown` and failing fast instead of waiting
+                    // through another full address round.
+                    self.peer_health.record_failure(&peer.name);
                     return Err(sovereign_core::error::Error::Routing(format!(
                         "model '{}' is advertised by peer '{}' but all peer \
                          addresses failed: {}",
@@ -872,6 +921,7 @@ impl InferenceProvider for MeshInferenceProvider {
                         // backends the wire response echoes a
                         // request hint instead of the served model.)
                         resp.model_id = peer_cand.model_id.clone();
+                        self.peer_health.record_success(&peer.name);
                         return Ok(Self::annotate(resp, &peer.name));
                     }
                     Err(e) => {
@@ -884,6 +934,9 @@ impl InferenceProvider for MeshInferenceProvider {
                     }
                 }
             }
+            // All addresses failed for this peer — record one
+            // failure (not one per address) before falling back.
+            self.peer_health.record_failure(&peer.name);
             tracing::info!(
                 peer = %peer.name,
                 "mesh-inference: all peer addresses failed, falling back to local"
@@ -972,6 +1025,7 @@ impl InferenceProvider for MeshInferenceProvider {
                                 let observed: Pin<
                                     Box<dyn Stream<Item = Result<String>> + Send>,
                                 > = Box::pin(wrapper);
+                                self.peer_health.record_success(&peer.name);
                                 return Ok((observed, attribution));
                             }
                             Err(e) => {
@@ -986,6 +1040,7 @@ impl InferenceProvider for MeshInferenceProvider {
                             }
                         }
                     }
+                    self.peer_health.record_failure(&peer.name);
                     return Err(sovereign_core::error::Error::Routing(format!(
                         "model '{}' is advertised by peer '{}' but all peer \
                          addresses failed: {}",
@@ -1040,6 +1095,7 @@ impl InferenceProvider for MeshInferenceProvider {
                         let observed: Pin<
                             Box<dyn Stream<Item = Result<String>> + Send>,
                         > = Box::pin(wrapper);
+                        self.peer_health.record_success(&peer.name);
                         return Ok((observed, model_id));
                     }
                     Err(e) => {
@@ -1052,6 +1108,7 @@ impl InferenceProvider for MeshInferenceProvider {
                     }
                 }
             }
+            self.peer_health.record_failure(&peer.name);
             tracing::info!(
                 peer = %peer.name,
                 "mesh-inference: all peer addresses failed, falling back to local"
