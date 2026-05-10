@@ -59,9 +59,15 @@ for raw in sys.stdin:
 
     m = result_re.match(line)
     if m:
-        # result line is authoritative for overall counts; overwrite our own
-        pass_count = int(m.group(1))
-        fail_count = int(m.group(2))
+        # cargo test emits one 'test result:' line per test binary.
+        # The earlier version of this branch overwrote pass_count /
+        # fail_count from each match, which silently truncated the
+        # workspace total to whatever the LAST binary reported — a
+        # 9-test final binary made a 1900-test workspace look like 9.
+        # The per-test counters above (test_ok_re / test_fail_re)
+        # are authoritative; this line is informational. We still
+        # flush any in-flight failure output buffer here because a
+        # result line marks the end of a binary's test output.
         flush_fail()
         continue
 

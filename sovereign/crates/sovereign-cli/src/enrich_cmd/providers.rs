@@ -352,7 +352,12 @@ mod tests {
 
     #[test]
     fn registry_synthesizes_local_when_config_absent() {
-        std::env::set_var("HOME", "/nonexistent-test-home");
+        // HOME is process-wide; serialize via the shared lock so we
+        // don't race other tests that also redirect HOME for fixtures.
+        // Without this, a parallel `scoped_home()`-using test was
+        // observing a stomped HOME and producing
+        // `Invalid input: no enrichment config for corpus 'test-book'`.
+        let _home = crate::enrich_cmd::test_env::scoped_home();
         let reg = ProviderRegistry::load_default("http://localhost:9741");
         let local = reg.get("local").unwrap();
         assert_eq!(local.kind, ProviderKind::OpenaiCompatible);
@@ -365,7 +370,7 @@ mod tests {
 
     #[test]
     fn registry_does_not_double_append_v1() {
-        std::env::set_var("HOME", "/nonexistent-test-home-2");
+        let _home = crate::enrich_cmd::test_env::scoped_home();
         let reg = ProviderRegistry::load_default("http://localhost:9741/v1");
         let local = reg.get("local").unwrap();
         assert_eq!(local.base_url, "http://localhost:9741/v1");

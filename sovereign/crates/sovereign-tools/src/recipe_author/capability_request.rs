@@ -433,12 +433,26 @@ fn ce_err(e: corpus_engine::Error) -> Error {
 mod tests {
     use super::*;
 
+    /// Process-wide HOME lock. `RecipeProject::new` captures
+    /// `~/.sovereign/recipe-projects/...` at construction time and
+    /// every method that touches the project's filesystem layout
+    /// reads it back via `dirs::home_dir()`. Without serialising
+    /// HOME, two parallel async tests both call `fresh()`, the
+    /// second stomps the first's `HOME`, and the first's later
+    /// `submits_when_confirmed_writes_both_paths` looks for its
+    /// project_path under the *second* tempdir — file missing,
+    /// test fails. Pinned 2026-05-10 after a repo-wide
+    /// `sovereign-test.sh` run surfaced the flake.
+    static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     async fn fresh() -> (
         Arc<NoteStore>,
         Arc<FeatureStore>,
         RecipeProject,
         tempfile::TempDir,
+        std::sync::MutexGuard<'static, ()>,
     ) {
+        let guard = HOME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
         let features =
@@ -452,7 +466,7 @@ mod tests {
         )
         .await
         .unwrap();
-        (notes, features, project, dir)
+        (notes, features, project, dir, guard)
     }
 
     fn ctx() -> ToolContext {
@@ -466,7 +480,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_without_partner_confirmation() {
-        let (notes, features, project, _dir) = fresh().await;
+        let (notes, features, project, _dir, _home_lock) = fresh().await;
         let inbox = tempfile::tempdir().unwrap();
         let tool = CapabilityRequestTool::with_stores(
             Arc::clone(&notes),
@@ -490,7 +504,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_when_partner_confirmed_absent() {
-        let (notes, features, project, _dir) = fresh().await;
+        let (notes, features, project, _dir, _home_lock) = fresh().await;
         let inbox = tempfile::tempdir().unwrap();
         let tool = CapabilityRequestTool::with_stores(
             Arc::clone(&notes),
@@ -513,7 +527,7 @@ mod tests {
 
     #[tokio::test]
     async fn submits_when_confirmed_writes_both_paths() {
-        let (notes, features, project, _dir) = fresh().await;
+        let (notes, features, project, _dir, _home_lock) = fresh().await;
         let inbox = tempfile::tempdir().unwrap();
         let tool = CapabilityRequestTool::with_stores(
             Arc::clone(&notes),
