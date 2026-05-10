@@ -1,0 +1,115 @@
+[workspace]
+resolver = "2"
+members = [
+    # Wire-protocol types — bottom of the dep graph.
+    "oicp-types",
+
+    # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
+    "corpus-engine",
+    "corpus-engine/xtask",
+
+    # Sovereign — local agent runtime + CLI + desktop + server.
+    "sovereign/crates/sovereign-core",
+    "sovereign/crates/sovereign-inference",
+    "sovereign/crates/sovereign-store",
+    "sovereign/crates/sovereign-tools",
+    "sovereign/crates/sovereign-mesh",
+    "sovereign/crates/sovereign-server",
+    "sovereign/crates/sovereign-desktop/src-tauri",
+    "sovereign/crates/sovereign-cli",
+    "sovereign/crates/sovereign-atos",
+    "sovereign/crates/sovereign-eval",
+
+    # Commonwealth — symmetric mesh daemon.
+    "commonwealth/crates/commonwealth-core",
+    "commonwealth/crates/commonwealth-discovery",
+    "commonwealth/crates/commonwealth-inference",
+    "commonwealth/crates/commonwealth-api",
+    "commonwealth/crates/commonwealth-knowledge",
+    "commonwealth/crates/commonwealth-daemon",
+    "commonwealth/crates/commonwealth-test-harness",
+    "commonwealth/crates/commonwealth-app",
+    "commonwealth/crates/commonwealth-state",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# Pre-monorepo: corpus-engine + commonwealth shipped Apache-2.0;
+# sovereign shipped MIT. One license under one repo from now on —
+# Apache-2.0 was the majority and is what corpus-engine (the
+# foundational shared crate) used.
+license = "Apache-2.0"
+
+[workspace.dependencies]
+# ── Internal crates (paths are relative to the workspace root) ──────────
+oicp-types = { path = "oicp-types" }
+corpus-engine = { path = "corpus-engine" }
+sovereign-core = { path = "sovereign/crates/sovereign-core" }
+sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
+sovereign-store = { path = "sovereign/crates/sovereign-store" }
+sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
+sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
+sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
+commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
+commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
+commonwealth-inference = { path = "commonwealth/crates/commonwealth-inference" }
+commonwealth-api = { path = "commonwealth/crates/commonwealth-api" }
+commonwealth-knowledge = { path = "commonwealth/crates/commonwealth-knowledge" }
+commonwealth-app = { path = "commonwealth/crates/commonwealth-app" }
+commonwealth-state = { path = "commonwealth/crates/commonwealth-state" }
+
+# ── Shared external deps ────────────────────────────────────────────────
+# Versions match the strictest of the pre-monorepo sub-workspace
+# declarations; features are union'd across them so no consumer
+# loses a feature it relied on. Future bumps live here so all
+# consumers move together.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+thiserror = "2"
+anyhow = "1"
+
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt", "io", "io-util"] }
+async-trait = "0.1"
+futures = "0.3"
+bytes = "1"
+
+# HTTP — reqwest "rustls-tls" + "json" union; axum "ws" + "macros" union.
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+axum = { version = "0.8", features = ["ws", "macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Identity / time
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Concurrency
+dashmap = "6"
+arc-swap = "1.7"
+
+# Networking helpers
+hostname = "0.4"
+
+# Persistence
+rusqlite = { version = "0.35", features = ["bundled"] }
+
+# Markdown (sovereign-atos charter parsing)
+pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+
+# ── Build profile ────────────────────────────────────────────────────────
+# Skip debug symbols on dev builds — biggest single speedup for `cargo
+# check` per the prior sub-workspace settings; preserved here so
+# consolidating into one workspace doesn't slow incremental builds.
+[profile.dev]
+debug = 0
