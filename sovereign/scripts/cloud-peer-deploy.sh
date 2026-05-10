@@ -130,6 +130,17 @@ EOF
         --env "CONTEXT_SIZE=${context_size}"
     )
 
+    # Optional MESH_JOIN_LINK: when set, the pod's entrypoint runs
+    # `sovereign mesh join` after the daemon comes up so the pod
+    # participates in mesh gossip and the founder's scheduler can
+    # discover its slots automatically. Generate the link on the
+    # founder via `sovereign mesh create` (or `mesh rotate` if you've
+    # already created). When unset, the pod runs in a solo mesh and
+    # is only reachable via per-config `base_url`.
+    if [[ -n "${MESH_JOIN_LINK:-}" ]]; then
+        env_args+=(--env "MESH_JOIN_LINK=${MESH_JOIN_LINK}")
+    fi
+
     # CUDA-only: llama.cpp's bundled ggml-cuda.cu calls ncclCommInitAll
     # unconditionally even on single-GPU builds, and NCCL fails in
     # some container environments due to /dev/shm size or P2P checks.

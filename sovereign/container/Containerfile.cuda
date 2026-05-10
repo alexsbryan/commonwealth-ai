@@ -99,9 +99,15 @@ COPY sovereign-recipes/wikipedia/data/   ./sovereign-recipes/wikipedia/data/
 # Only copy the parts of sovereign/ that cargo actually needs. Skipping
 # container/, scripts/, docs/, bench/, etc. means edits to those don't
 # invalidate the cargo-build layer (which is the slow one). Workspace
-# members all live under crates/.
-COPY sovereign/Cargo.toml sovereign/Cargo.lock ./sovereign/
+# members all live under crates/, but a few workspace-root files are
+# pulled in via `include_str!` at compile time and must be present:
+#   - models.toml          → sovereign-core::models_manifest
+#   - contrib/{launchd,systemd}/ → sovereign-cli::service_install
+#   - .opencode/           → sovereign-cli::doctor_cmd
+COPY sovereign/Cargo.toml sovereign/Cargo.lock sovereign/models.toml ./sovereign/
 COPY sovereign/crates/    ./sovereign/crates/
+COPY sovereign/contrib/   ./sovereign/contrib/
+COPY sovereign/.opencode/ ./sovereign/.opencode/
 
 # Swap the linux llama-cpp-2 backend feature from "rocm" (repo default)
 # to "cuda" for this image. We do it in-image rather than via a Cargo

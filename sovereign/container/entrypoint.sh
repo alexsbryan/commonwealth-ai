@@ -28,6 +28,14 @@
 #   EMBED_GGUF           Filename of the embedding GGUF.
 #                        Default: Qwen3-Embedding-0.6B-Q8_0.gguf
 #   NODE_ROLE            Mesh node role tag. Default: ephemeral-worker.
+#   MESH_JOIN_LINK       Optional. `sovereign://join/cwth-...` (or bare key /
+#                        https URL) printed by `sovereign mesh create` /
+#                        `sovereign mesh rotate` on the founder. When set,
+#                        the entrypoint runs `sovereign mesh join` after the
+#                        daemon comes up so the pod participates in mesh
+#                        gossip and the founder's scheduler can route to it.
+#                        When unset, the pod boots into a solo mesh and is
+#                        only reachable via per-config `base_url`.
 set -euo pipefail
 
 : "${TS_AUTHKEY:?TS_AUTHKEY is required}"
@@ -35,6 +43,7 @@ set -euo pipefail
 : "${R2_ENDPOINT:?R2_ENDPOINT is required}"
 : "${R2_ACCESS_KEY:?R2_ACCESS_KEY is required}"
 : "${R2_SECRET_KEY:?R2_SECRET_KEY is required}"
+MESH_JOIN_LINK="${MESH_JOIN_LINK:-}"
 
 R2_BUCKET="${R2_BUCKET:-sovereign-models}"
 PRIMARY_COPIES="${PRIMARY_COPIES:-1}"
@@ -179,5 +188,38 @@ echo "[entrypoint] config written:"
 sed -E 's/(access_key|secret_key|authkey)([^=]*)=.*/\1\2 = <redacted>/' "$CONFIG"
 
 # ─── 4. Launch daemon ────────────────────────────────────────────────
-echo "[entrypoint] launching sovereign-cli daemon"
-exec sovereign-cli daemon run
+# When MESH_JOIN_LINK is set, we need the daemon up *before* we can run
+# `sovereign mesh join` (the CLI talks to the running daemon's data dir).
+# So: background the daemon, poll for readiness, fire join, then wait.
+# If unset, just exec — preserves the legacy "solo mesh + base_url" path.
+if [ -n "$MESH_JOIN_LINK" ]; then
+    echo "[entrypoint] launching sovereign-cli daemon (background, will join mesh)"
+    sovereign-cli daemon run &
+    DAEMON_PID=$!
+
+    # Poll the client port until the daemon answers /v1/models. 2 min cap
+    # — slot loads can be slow on cold-start but the HTTP server comes up
+    # well before the slots finish loading.
+    deadline=$(($(date +%s) + 120))
+    until curl -s -m 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:9741/v1/models | grep -q "^200$"; do
+        if [ $(date +%s) -ge $deadline ]; then
+            echo "[entrypoint] daemon failed to come up within 2 min — proceeding without mesh join"
+            break
+        fi
+        sleep 2
+    done
+
+    if curl -s -m 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:9741/v1/models | grep -q "^200$"; then
+        echo "[entrypoint] daemon up — joining mesh via invite link"
+        if sovereign-cli mesh join "$MESH_JOIN_LINK"; then
+            echo "[entrypoint] mesh join succeeded"
+        else
+            echo "[entrypoint] mesh join FAILED — pod will run in solo mesh; use per-config base_url to reach it"
+        fi
+    fi
+
+    wait "$DAEMON_PID"
+else
+    echo "[entrypoint] launching sovereign-cli daemon (no MESH_JOIN_LINK; solo mesh)"
+    exec sovereign-cli daemon run
+fi

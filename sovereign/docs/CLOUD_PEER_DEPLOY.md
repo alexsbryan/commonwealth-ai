@@ -224,6 +224,7 @@ Environment variables (RunPod "Secrets"):
 | `R2_ENDPOINT`    | `https://<account>.r2.cloudflarestorage.com`  | yes |
 | `R2_ACCESS_KEY`  | r2 access key id                              | yes |
 | `R2_SECRET_KEY`  | r2 secret access key                          | yes |
+| `MESH_JOIN_LINK` | `sovereign://join/cwth-...`                   | optional — see [Mesh routing](#mesh-routing) |
 | `R2_BUCKET`      | `sovereign-models`                            | no — defaults |
 | `PRIMARY_COPIES` | `1` (single primary), `6` on MI300X 192GB     | no — defaults to 1 |
 | `CONTEXT_SIZE`   | `32768`                                       | no — defaults |
@@ -288,6 +289,43 @@ Cold-start timeline:
 | 30s-2m  | tailscale up + rclone sync from R2 (~50 GB at ~500 MB/s) |
 | 2m-4m   | slot loads (`PRIMARY_COPIES * ~28 GB` weights → GPU) |
 | 4m-5m   | daemon advertising via mesh gossip; ready |
+
+## Mesh routing
+
+Without `MESH_JOIN_LINK`, the pod boots into a **solo mesh**. It's reachable
+over the tailnet for direct OICP calls, but the founder's scheduler doesn't
+discover its slots via gossip — so multi-peer load-balancing requires
+pinning each per-article `~/.sovereign/enrichment/<corpus>/config.json` to
+the pod's URL via `base_url`.
+
+With `MESH_JOIN_LINK`, the pod's `entrypoint.sh` runs `sovereign mesh join
+<link>` after the daemon comes up. The pod becomes a real mesh peer; the
+founder's scheduler discovers it via gossip and routes Phase 1 calls
+according to slot availability across all peers (laptop included). This is
+the right shape when you want the laptop to also pitch in on workload.
+
+Generating the link on the founder (run once, or after `mesh rotate`):
+
+```bash
+# If you've never created a joinable mesh:
+sovereign mesh create
+# → prints: sovereign://join/cwth-a1b2-c3d4-e5f6 (paste into MESH_JOIN_LINK)
+
+# If a joinable mesh already exists and you need a fresh key:
+sovereign mesh rotate
+# → invalidates the old key for *future* joins; existing members stay connected.
+# Restart the daemon afterward so it picks up the new key.
+```
+
+Pass the link through your shell env when you `up` the pod:
+
+```bash
+export MESH_JOIN_LINK='sovereign://join/cwth-a1b2-c3d4-e5f6'
+./scripts/cloud-peer-deploy.sh up
+```
+
+The same link can be reused across multiple concurrent pods — every peer
+joins the same mesh.
 
 ## Verify mesh connectivity
 

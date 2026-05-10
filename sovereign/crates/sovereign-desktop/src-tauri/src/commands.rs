@@ -1262,6 +1262,7 @@ async fn mirror_to_setup_config(
             context_size: None,
             extra: std::collections::BTreeMap::new(),
             max_extras_memory_gb: None,
+            primary_pool: None,
         },
         daemon: DaemonSection::default(),
         data: DataSection { dir: desktop.data_dir.clone() },
