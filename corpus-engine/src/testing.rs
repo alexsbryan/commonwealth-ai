@@ -1172,6 +1172,7 @@ fn chunker_max_chars(config: &ChunkerConfig) -> usize {
         // Passthrough has no bound — the upstream extractor (e.g. `code`)
         // is responsible for keeping pieces chunk-sized.
         ChunkerConfig::Passthrough => usize::MAX,
+        ChunkerConfig::PortalEventBullet { max_chars } => *max_chars,
     }
 }
 

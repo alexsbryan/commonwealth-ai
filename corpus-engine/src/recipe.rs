@@ -1423,6 +1423,19 @@ pub enum ChunkerConfig {
     /// already produces chunk-sized output (e.g. the `code` extractor).
     #[serde(rename = "passthrough")]
     Passthrough,
+    /// One chunk per `*`-prefixed bullet on a `Portal:Current_events`
+    /// page. Sub-bullets fold under their parent. Used by the
+    /// `wikipedia-newsworthy` recipe so each event is its own retrieval
+    /// unit.
+    #[serde(rename = "portal_event_bullet")]
+    PortalEventBullet {
+        #[serde(default = "default_portal_bullet_max_chars")]
+        max_chars: usize,
+    },
+}
+
+fn default_portal_bullet_max_chars() -> usize {
+    2048
 }
 
 // ---------------------------------------------------------------------------
@@ -1902,6 +1915,10 @@ pub fn bundled_recipe_toml(id: &str) -> Option<&'static str> {
         "gutenberg-work" => Some(include_str!("../recipes/gutenberg-work/recipe.toml")),
         "wikipedia-catalog" => Some(include_str!("../recipes/wikipedia-catalog/recipe.toml")),
         "wikipedia-article" => Some(include_str!("../recipes/wikipedia-article/recipe.toml")),
+        "wikipedia-newsworthy" => {
+            Some(include_str!("../recipes/wikipedia-newsworthy/recipe.toml"))
+        }
+        "alignment" => Some(include_str!("../recipes/alignment/recipe.toml")),
         "sep" => Some(include_str!("../recipes/sep/recipe.toml")),
         "crs_reports" => Some(include_str!("../recipes/crs_reports/recipe.toml")),
         _ => None,

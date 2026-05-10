@@ -10,13 +10,20 @@
 //! Batching is critical: one `embed` call per file, not one per symbol.
 //! A 300-symbol file takes one round-trip to the embed model, not 300.
 
+#[cfg(feature = "treesitter")]
 use std::path::Path;
-use std::time::{Instant, UNIX_EPOCH};
+#[cfg(feature = "treesitter")]
+use std::time::UNIX_EPOCH;
+use std::time::Instant;
 
 use crate::engine::CorpusEngine;
 use crate::error::{Error, Result};
+#[cfg(feature = "treesitter")]
 use crate::extractors::code::CodeExtractor;
-use crate::index::{CorpusIndex, InsertChunk, InsertCodeMeta};
+#[cfg(feature = "treesitter")]
+use crate::index::InsertCodeMeta;
+use crate::index::{code_meta_from_json, CorpusIndex, InsertChunk};
+use crate::recipe::{ChunkerConfig, ExtractorConfig};
 
 /// Outcome of a single `reindex_file` call. Carries enough information
 /// for the watcher to log useful events without the caller having to
@@ -36,6 +43,7 @@ pub enum ReindexResult {
     Skipped,
 }
 
+#[cfg(feature = "treesitter")]
 impl CorpusEngine {
     /// Incrementally re-index a single source file against an existing
     /// code corpus. Called by [`crate::update::watch::CodeWatcher`] on
@@ -166,6 +174,140 @@ impl CorpusEngine {
             elapsed_ms: t.elapsed().as_millis() as u64,
         })
     }
+}
+
+impl CorpusEngine {
+    /// Re-index a single logical document against an existing corpus by
+    /// `source_doc_id`. The freshness daemon's hot path: fetch a
+    /// MediaWiki article over HTTP, hand the response body to this
+    /// method, and the chunks for that article in `wikipedia` are
+    /// replaced atomically.
+    ///
+    /// One unified function instead of two — the underlying
+    /// `delete_chunks_by_source_doc` is idempotent on absent rows, so
+    /// "absent → present" (initial fetch) and "present → updated"
+    /// (revision refresh) collapse into the same call site. Callers
+    /// that care about the transition track it externally.
+    ///
+    /// Contract:
+    ///   - `extractor` runs against a temp file containing
+    ///     `raw_content` (the existing extractor trait is
+    ///     path-shaped, so we stage a temp file rather than refactor
+    ///     the trait for one new caller).
+    ///   - The extractor's per-doc metadata JSON is preserved on
+    ///     each chunk, with one transformation: when
+    ///     `chunker == PortalEventBullet`, the chunk's
+    ///     `outgoing_links` are replaced by the wikilinks that
+    ///     actually appear in *that bullet* — so the per-chunk
+    ///     `outbound_links` field is bullet-scoped, not section-scoped.
+    pub async fn reindex_by_source_doc_id(
+        &self,
+        corpus_id: &str,
+        source_doc_id: &str,
+        raw_content: &str,
+        extractor_config: &ExtractorConfig,
+        chunker_config: &ChunkerConfig,
+    ) -> Result<ReindexResult> {
+        let index_path = self.index_dir().join(corpus_id);
+        if !index_path.exists() {
+            return Err(Error::IndexNotFound(format!(
+                "No index for corpus '{corpus_id}' at {}",
+                index_path.display()
+            )));
+        }
+
+        // Stage the raw content as a temp file so the existing
+        // path-based Extractor trait can run unchanged. The temp file
+        // is dropped after extraction completes.
+        let tmp = tempfile::NamedTempFile::new().map_err(Error::Io)?;
+        tokio::fs::write(tmp.path(), raw_content)
+            .await
+            .map_err(Error::Io)?;
+
+        let extractor = self.make_extractor(extractor_config);
+        let docs: Vec<crate::extractors::ExtractedDoc> = extractor
+            .extract(tmp.path())?
+            .collect::<Result<Vec<_>>>()?;
+
+        let chunker = self.make_chunker(chunker_config);
+        let is_portal_bullet = matches!(chunker_config, ChunkerConfig::PortalEventBullet { .. });
+
+        let t = Instant::now();
+        let mut chunk_records: Vec<(String, Option<serde_json::Value>, Option<String>, Option<String>)> =
+            Vec::new();
+        // (content, per_chunk_metadata_json, doc_title, doc_url)
+
+        for doc in &docs {
+            let pieces = chunker.chunk(&doc.content);
+            for piece in pieces {
+                let metadata_json = if is_portal_bullet {
+                    // Replace section-scoped outgoing_links with the
+                    // links that actually appear in this bullet.
+                    rescope_outgoing_links_for_bullet(&doc.metadata, &piece.content)
+                } else {
+                    doc.metadata.clone()
+                };
+                chunk_records.push((
+                    piece.content,
+                    metadata_json,
+                    doc.title.clone(),
+                    doc.url.clone(),
+                ));
+            }
+        }
+
+        let index = CorpusIndex::open(&index_path).await?;
+        // Delete first — brief query gap is acceptable; duplicate
+        // chunks from a half-applied refresh are not.
+        index.delete_chunks_by_source_doc(source_doc_id).await?;
+
+        if chunk_records.is_empty() {
+            return Ok(ReindexResult::Updated {
+                chunks_written: 0,
+                elapsed_ms: t.elapsed().as_millis() as u64,
+            });
+        }
+
+        // Batched embed — one call per article.
+        let texts: Vec<&str> = chunk_records.iter().map(|(c, _, _, _)| c.as_str()).collect();
+        let embeddings = self.batch_embed_texts(&texts).await?;
+        if embeddings.len() != chunk_records.len() {
+            return Err(Error::Embed(format!(
+                "batch embed returned {} vectors for {} chunks",
+                embeddings.len(),
+                chunk_records.len()
+            )));
+        }
+
+        let insert_pairs: Vec<(InsertChunk, Vec<f32>)> = chunk_records
+            .into_iter()
+            .zip(embeddings)
+            .map(|((content, metadata, title, url), emb)| {
+                let content_hash = blake3::hash(content.as_bytes()).to_hex().to_string();
+                let code = code_meta_from_json(metadata.as_ref());
+                let insert = InsertChunk {
+                    content,
+                    title,
+                    url,
+                    metadata: metadata.as_ref().map(|m| m.to_string()),
+                    content_hash: Some(content_hash),
+                    source_doc_id: Some(source_doc_id.to_string()),
+                    source_file: None,
+                    code,
+                    unit_id: None,
+                };
+                (insert, emb)
+            })
+            .collect();
+
+        let written = insert_pairs.len();
+        index.insert_batch(&insert_pairs).await?;
+
+        Ok(ReindexResult::Updated {
+            chunks_written: written,
+            elapsed_ms: t.elapsed().as_millis() as u64,
+        })
+    }
 
     /// Batch-embed an owned slice of strings using the batch embed fn
     /// when available, falling back to sequential calls on the primary
@@ -185,6 +327,7 @@ impl CorpusEngine {
     }
 }
 
+#[cfg(feature = "treesitter")]
 fn file_mtime_secs(path: &Path) -> i64 {
     std::fs::metadata(path)
         .ok()
@@ -192,4 +335,205 @@ fn file_mtime_secs(path: &Path) -> i64 {
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+/// For a portal-event bullet chunk, narrow the `outgoing_links` array
+/// in the parent doc's metadata down to those whose `target_title`
+/// actually appears as a `[[…]]` wikilink inside this bullet.
+///
+/// The `wikipedia_api_article` extractor produces section-scoped
+/// `WikipediaChunkMetadata.outgoing_links`. For per-event retrieval
+/// we want bullet-scoped attribution — otherwise every bullet on the
+/// page carries the union of every wikilink on the page, which
+/// hollows out the freshness-daemon's per-bullet tracked-set
+/// extraction.
+fn rescope_outgoing_links_for_bullet(
+    section_metadata: &Option<serde_json::Value>,
+    bullet_text: &str,
+) -> Option<serde_json::Value> {
+    let mut meta = section_metadata.clone()?;
+    let bullet_targets =
+        crate::chunkers::portal_event_bullet::extract_bullet_links(bullet_text);
+
+    let object = meta.as_object_mut()?;
+    let bullet_target_set: std::collections::HashSet<&str> =
+        bullet_targets.iter().map(String::as_str).collect();
+
+    if let Some(serde_json::Value::Array(links)) = object.get("outgoing_links") {
+        let filtered: Vec<serde_json::Value> = links
+            .iter()
+            .filter(|link| {
+                let Some(target) = link.get("target_title").and_then(|v| v.as_str()) else {
+                    return false;
+                };
+                let normalised = target.replace(' ', "_");
+                bullet_target_set.contains(normalised.as_str())
+                    || bullet_target_set.contains(target)
+            })
+            .cloned()
+            .collect();
+        object.insert("outgoing_links".to_string(), serde_json::Value::Array(filtered));
+    }
+
+    // Always emit the bullet-scoped link list as a flat string array
+    // alongside, so MeshStore tracked-set extraction doesn't have to
+    // walk the structured WikiLink JSON.
+    object.insert(
+        "outbound_links".to_string(),
+        serde_json::Value::Array(
+            bullet_targets
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect(),
+        ),
+    );
+
+    Some(meta)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::index::CorpusIndex;
+    use crate::recipe::{ChunkerConfig, ExtractorConfig};
+    use std::path::Path;
+    use std::sync::Arc;
+
+    fn mock_embed_fn() -> crate::types::EmbedFn {
+        Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }))
+    }
+
+    async fn fixture_engine(
+        index_dir: &Path,
+    ) -> (
+        CorpusEngine,
+        CorpusIndex,
+    ) {
+        let recipes_dir = index_dir.parent().unwrap().join("recipes");
+        std::fs::create_dir_all(&recipes_dir).unwrap();
+        let engine = CorpusEngine::new(recipes_dir, index_dir.to_path_buf(), mock_embed_fn());
+
+        let idx_path = index_dir.join("test-corpus");
+        let index = CorpusIndex::create(
+            &idx_path,
+            "test-corpus",
+            "Test Corpus",
+            "test-model",
+            4,
+            false,
+            "MIT",
+        )
+        .await
+        .expect("create index");
+        (engine, index)
+    }
+
+    #[tokio::test]
+    async fn reindex_by_source_doc_id_inserts_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let (engine, _index) = fixture_engine(&idx_dir).await;
+
+        let result = engine
+            .reindex_by_source_doc_id(
+                "test-corpus",
+                "Donald_Trump",
+                "Body of the Donald Trump article. One paragraph.",
+                &ExtractorConfig::Plaintext {
+                    title_pattern: None,
+                    strip_boilerplate: None,
+                },
+                &ChunkerConfig::Passthrough,
+            )
+            .await
+            .expect("reindex absent doc");
+
+        match result {
+            ReindexResult::Updated {
+                chunks_written,
+                ..
+            } => assert_eq!(chunks_written, 1, "passthrough chunker → one chunk"),
+            other => panic!("expected Updated, got {other:?}"),
+        }
+
+        // Reopen the index and verify the chunk is queryable.
+        let reopened = CorpusIndex::open(&idx_dir.join("test-corpus")).await.unwrap();
+        assert_eq!(reopened.chunk_count().await.unwrap(), 1);
+        let ids = reopened.list_indexed_source_doc_ids().await.unwrap();
+        assert!(ids.contains("Donald_Trump"));
+    }
+
+    #[tokio::test]
+    async fn reindex_by_source_doc_id_replaces_when_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let (engine, _index) = fixture_engine(&idx_dir).await;
+
+        // First call — initial insert.
+        engine
+            .reindex_by_source_doc_id(
+                "test-corpus",
+                "Joe_Biden",
+                "Original revision of the Biden article.",
+                &ExtractorConfig::Plaintext {
+                    title_pattern: None,
+                    strip_boilerplate: None,
+                },
+                &ChunkerConfig::Passthrough,
+            )
+            .await
+            .expect("initial insert");
+
+        // Second call with new content — must replace, not append.
+        engine
+            .reindex_by_source_doc_id(
+                "test-corpus",
+                "Joe_Biden",
+                "Updated revision with substantially different content body.",
+                &ExtractorConfig::Plaintext {
+                    title_pattern: None,
+                    strip_boilerplate: None,
+                },
+                &ChunkerConfig::Passthrough,
+            )
+            .await
+            .expect("refresh");
+
+        let reopened = CorpusIndex::open(&idx_dir.join("test-corpus")).await.unwrap();
+        // Total chunk count is 1 — old must be replaced, not duplicated.
+        // (If the delete-by-source-doc step had been skipped, count
+        //  would be 2 with both revisions co-resident.)
+        assert_eq!(
+            reopened.chunk_count().await.unwrap(),
+            1,
+            "old chunk must be replaced, not duplicated",
+        );
+        let ids = reopened.list_indexed_source_doc_ids().await.unwrap();
+        assert!(ids.contains("Joe_Biden"));
+        assert_eq!(ids.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn reindex_by_source_doc_id_returns_error_when_corpus_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let idx_dir = dir.path().join("indexes");
+        std::fs::create_dir_all(&idx_dir).unwrap();
+        let (engine, _index) = fixture_engine(&idx_dir).await;
+
+        let err = engine
+            .reindex_by_source_doc_id(
+                "no-such-corpus",
+                "Anything",
+                "body",
+                &ExtractorConfig::Plaintext {
+                    title_pattern: None,
+                    strip_boilerplate: None,
+                },
+                &ChunkerConfig::Passthrough,
+            )
+            .await;
+        assert!(matches!(err, Err(Error::IndexNotFound(_))));
+    }
 }

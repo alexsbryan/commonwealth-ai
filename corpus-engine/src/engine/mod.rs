@@ -6,7 +6,6 @@ mod cancel;
 mod expand;
 mod ingest;
 
-#[cfg(feature = "treesitter")]
 pub mod reindex;
 
 pub use article_stats::ArticleStats;

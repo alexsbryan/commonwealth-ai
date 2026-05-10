@@ -1,4 +1,5 @@
 pub mod delta;
+pub mod newsworthy_watcher;
 
 #[cfg(feature = "treesitter")]
 pub mod watch;

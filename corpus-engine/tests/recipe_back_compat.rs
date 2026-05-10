@@ -157,6 +157,32 @@ prompt_version = "v1"
     assert!(enr.patterns.is_empty());
 }
 
+/// Wikipedia-newsworthy freshness-daemon recipe — exercises the new
+/// `portal_event_bullet` chunker variant + `http_api` acquirer with a
+/// single templated request shape. The watcher iterates dates and
+/// substitutes templating itself; the recipe pins request shape only.
+#[test]
+fn wikipedia_newsworthy_recipe_parses() {
+    let toml = std::fs::read_to_string(
+        std::env::current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("sovereign-recipes/wikipedia-newsworthy/recipe.toml"),
+    )
+    .expect("wikipedia-newsworthy/recipe.toml must exist");
+    let r = Recipe::from_toml(&toml).expect("wikipedia-newsworthy recipe must parse");
+    assert_eq!(r.corpus.id, "wikipedia-newsworthy");
+    assert!(r.corpus.mesh_sharing);
+    assert_eq!(r.corpus.scope.as_deref(), Some("newsworthy"));
+    assert!(matches!(r.acquire, AcquirerConfig::HttpApi { .. }));
+    assert!(matches!(r.extract, ExtractorConfig::WikipediaApiArticle {}));
+    assert!(matches!(
+        r.chunk,
+        ChunkerConfig::PortalEventBullet { max_chars: 2048 },
+    ));
+}
+
 /// StackExchange XML extractor with the older `mode` /
 /// `min_score` defaulting before `QuestionWithAnswers` shipped.
 #[test]

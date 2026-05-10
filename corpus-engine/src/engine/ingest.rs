@@ -1861,6 +1861,9 @@ impl CorpusEngine {
                 })
             }
             ChunkerConfig::Passthrough => Box::new(chunkers::passthrough::PassthroughChunker),
+            ChunkerConfig::PortalEventBullet { max_chars } => Box::new(
+                chunkers::portal_event_bullet::PortalEventBulletChunker::new(*max_chars),
+            ),
         }
     }
 

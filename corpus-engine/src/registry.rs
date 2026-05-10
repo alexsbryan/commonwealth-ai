@@ -446,12 +446,11 @@ mod tests {
     fn bundled_snapshot_parses() {
         let registry = RecipeRegistry::from_bundled(None);
         let entries = registry.list_entries();
-        // 11 entries — original 9 + the wikipedia-catalog /
-        // wikipedia-article pair (the catalog corpus + its
-        // on-demand single-article content recipe, mirroring the
-        // gutenberg/gutenberg-work shape but for Wikipedia's
-        // chat-with-everything surface).
-        assert_eq!(entries.len(), 11, "snapshot should have 11 entries");
+        // 13 entries — original 9 + wikipedia-catalog +
+        // wikipedia-article (chat-with-everything surface) +
+        // alignment (mesh-replicated workspace) +
+        // wikipedia-newsworthy (Portal:Current_events freshness daemon).
+        assert_eq!(entries.len(), 13, "snapshot should have 13 entries");
     }
 
     #[test]
@@ -549,11 +548,11 @@ sha256 = ""
     fn catalog_returns_all_entries() {
         let registry = RecipeRegistry::from_bundled(None);
         let catalog = registry.catalog();
-        // 9 → 11 with the addition of wikipedia-catalog +
-        // wikipedia-article (the catalog corpus + its on-demand
-        // content recipe — mirrors gutenberg/gutenberg-work for
-        // Wikipedia's chat-with-everything surface).
-        assert_eq!(catalog.len(), 11);
+        // 13 = 9 originals
+        //      + wikipedia-catalog / wikipedia-article (chat-with-everything)
+        //      + alignment (mesh-replicated workspace)
+        //      + wikipedia-newsworthy (Portal:Current_events daemon).
+        assert_eq!(catalog.len(), 13);
         assert!(catalog.iter().any(|c| c.id == "wikipedia"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia-simple"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia-catalog"));

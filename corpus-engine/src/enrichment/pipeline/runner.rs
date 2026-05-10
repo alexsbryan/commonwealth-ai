@@ -2466,19 +2466,17 @@ mod tests {
             });
 
         // The main Phase 1 branch must route through chat_with_tokens
-        // (verified below). Phase 1B coverage refinement, which the
-        // LiteraryAtlasPipeline opts into, runs after the main extraction
-        // and uses the default chat (no seed-budget bump needed for the
-        // small entity/concept coverage prompts). Track default_chat
-        // invocations so we can assert it was used for Phase 1B only,
-        // not for the main Phase 1 dispatch.
+        // (verified below). Phase 1B coverage refinement is opt-in via
+        // `SOVEREIGN_RUN_PHASE1B=1` (see `runner.rs:871`); the default
+        // skips it to save ~7-8 min/atlas. The default_chat closure is
+        // wired so the test would surface unexpected dispatch — but
+        // Phase 1B SHOULD NOT run under the default env, so the count
+        // assertion below is `0`.
         let default_calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let default_calls_c = default_calls.clone();
         let default_chat: ChatCompletionFn = Arc::new(move |_prompt: &ChatPrompt| {
             default_calls_c.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            // Empty Phase 1B coverage response — the parser accepts this
-            // as "no missed entities/concepts" and the runner proceeds
-            // with the original Phase 1 atoms unchanged.
+            // Stub body — only reached if Phase 1B is opted in.
             let body = r#"{"missed_entities": [], "missed_concepts": []}"#.to_string();
             Box::pin(async move { Ok(body) })
         });
@@ -2505,13 +2503,15 @@ mod tests {
             vec![PHASE1_SEED_OUTPUT_BUDGET],
             "expected one token-aware call at the seed output budget"
         );
-        // Phase 1B coverage runs after the main extraction (entity +
-        // concept passes) using the default chat. Two calls confirm
-        // both passes ran without affecting the seed-routing assertion.
+        // Phase 1B coverage is opt-in via `SOVEREIGN_RUN_PHASE1B=1`.
+        // Under the default env the secondary passes don't run, so
+        // `default_chat` is never dispatched. Asserting zero pins the
+        // current default while leaving room for an opt-in variant of
+        // this test if the env-gate is ever flipped back to on-by-default.
         let default_n = default_calls.load(std::sync::atomic::Ordering::SeqCst);
         assert_eq!(
-            default_n, 2,
-            "expected 2 default_chat calls (Phase 1B entity + concept coverage), got {default_n}"
+            default_n, 0,
+            "Phase 1B is opt-in; default_chat should not run, got {default_n}"
         );
     }
 

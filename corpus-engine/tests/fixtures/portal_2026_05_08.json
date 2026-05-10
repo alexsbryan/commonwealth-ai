@@ -1,0 +1,18 @@
+{
+  "parse": {
+    "title": "Portal:Current_events/2026_May_08",
+    "pageid": 999001,
+    "revid": 1297048221,
+    "wikitext": "; Armed conflicts and attacks\n* Russian invasion of Ukraine: At least 12 killed in [[Kyiv]] after overnight strikes.\n* Yemeni civil war: Statement issued by [[Houthi movement]].\n; Politics and elections\n* [[2026 Australian federal election]]: Update from [[Canberra]].\n",
+    "sections": [
+      { "toclevel": 2, "level": "3", "line": "Armed conflicts and attacks", "anchor": "Armed_conflicts_and_attacks" },
+      { "toclevel": 2, "level": "3", "line": "Politics and elections", "anchor": "Politics_and_elections" }
+    ],
+    "links": [
+      { "ns": 0, "title": "Kyiv", "exists": true },
+      { "ns": 0, "title": "Houthi movement", "exists": true },
+      { "ns": 0, "title": "2026 Australian federal election", "exists": true },
+      { "ns": 0, "title": "Canberra", "exists": true }
+    ]
+  }
+}

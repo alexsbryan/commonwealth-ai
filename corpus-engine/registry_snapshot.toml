@@ -149,3 +149,15 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/alignment/recipe.toml"
 sha256 = ""
+
+[[recipes]]
+id = "wikipedia-newsworthy"
+name = "Wikipedia — Newsworthy"
+description = "Daily ingest of Portal:Current_events, chunked at the event-bullet grain. Companion freshness daemon reconciles outbound wikilinks against the parent `wikipedia` corpus, refreshing in-place when revisions diverge. Mesh-shared — public derivative of public Wikipedia signals."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.05
+size_indexed_gb = 0.20
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-newsworthy/recipe.toml"
+sha256 = ""
