@@ -137,21 +137,23 @@ The watcher runs continuously. After you finish editing a file, `lint_status` of
 
 Before declaring a feature complete, **both** must be `fresh_passing`:
 
-1. `sovereign tools call lint_status` — repo-wide cargo check (corpus-engine + sovereign + commonwealth, parallel, ~90s)
-2. `sovereign tools call test_status` — repo-wide cargo test (same three workspaces, parallel, ~90-180s)
+1. `sovereign tools call lint_status` — `cargo check --workspace --features corpus-engine/treesitter`
+2. `sovereign tools call test_status` — `cargo test --workspace --features corpus-engine/treesitter` (~55s warm, ~4-5min cold)
+
+Both cover every member of the monorepo Cargo workspace (22 crates as of 2026-05-10).
 
 If the daemon's watcher isn't reachable (`never_run` / `stale` for too long), invoke directly:
 
 ```bash
-./scripts/sovereign-test.sh --human          # full repo, friendly summary
-./scripts/sovereign-test.sh --human --workspace commonwealth      # one workspace
-./scripts/sovereign-test.sh --human --filter <pattern>            # name filter, all workspaces
-./scripts/sovereign-test.sh                                       # raw Tier 2 JSONL (daemon mode)
+./scripts/sovereign-test.sh --human                            # full repo, friendly summary
+./scripts/sovereign-test.sh --human --package sovereign-cli    # one crate
+./scripts/sovereign-test.sh --human --filter <pattern>         # name filter
+./scripts/sovereign-test.sh                                    # raw Tier 2 JSONL (daemon mode)
 ```
 
-The script writes per-workspace adapter logs to `target/sovereign-test/latest/<workspace>.{jsonl,raw.log,exit}` so failure triage doesn't require re-running cargo. Each invocation runs in its own scratch dir under `target/sovereign-test/.runs/` to avoid colliding with the daemon's parallel watcher run.
+The script writes adapter logs to `target/sovereign-test/latest/cargo.{jsonl,raw.log,exit}` so failure triage doesn't require re-running cargo. Each invocation runs in its own scratch dir under `target/sovereign-test/.runs/` to avoid colliding with the daemon's watcher run.
 
-`sovereign-test.sh` and `sovereign-lint.sh` cover the same three workspaces in the same shape — when one passes and the other fails, the discrepancy is the bug, not the runner.
+`sovereign-test.sh` and `sovereign-lint.sh` exercise the same `cargo --workspace` invocation shape — when one passes and the other fails, the discrepancy is the bug, not the runner.
 
 ### Index freshness
 

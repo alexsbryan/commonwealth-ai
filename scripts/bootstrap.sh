@@ -1,39 +1,26 @@
 #!/usr/bin/env bash
 # bootstrap.sh — one-shot setup for a fresh commonwealth-ai workstation.
 #
-# Run from the workspace shell after cloning it. Verifies sub-repos
-# are present (or guides you to clone them), wires the sovereign
-# daemon's lint/test watcher to this workspace, and confirms the
-# regression gate works end-to-end.
+# Post-monorepo (2026-05-10) this is dramatically simpler than the
+# pre-merge multi-repo version: one git clone gets the whole tree, so
+# this script's job is just wiring the daemon's lint/test watcher to
+# the workspace and confirming the regression gate is green.
 #
-# Idempotent: safe to re-run after pulling new commits.
+# Idempotent — safe to re-run after pulls.
 
 set -euo pipefail
 
 WORKSPACE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$WORKSPACE_DIR"
 
-# ── Sub-repo presence check ───────────────────────────────────────────────
-REQUIRED_SUBREPOS=(sovereign commonwealth corpus-engine oicp-types sovereign-recipes)
-missing=()
-for sub in "${REQUIRED_SUBREPOS[@]}"; do
-    if [[ ! -d "$WORKSPACE_DIR/$sub/.git" ]]; then
-        missing+=("$sub")
-    fi
-done
-
-if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "✘ Missing sub-repos:"
-    for m in "${missing[@]}"; do
-        echo "    - $m"
-    done
-    echo
-    echo "Clone each into ${WORKSPACE_DIR}/<name>/, then re-run bootstrap.sh."
-    echo "If you already cloned but the .git dir is elsewhere (e.g. submodule"
-    echo "checkout), the test will pass once it's a normal clone."
+# ── Workspace shape check ─────────────────────────────────────────────────
+# Confirm the Cargo workspace is well-formed before we touch anything.
+if ! cargo metadata --no-deps --format-version 1 >/dev/null 2>&1; then
+    echo "✘ cargo metadata failed — workspace manifest is broken."
+    echo "   Investigate before re-running this script."
     exit 1
 fi
-echo "✓ All sub-repos present (${#REQUIRED_SUBREPOS[@]})."
+echo "✓ Cargo workspace resolves ($(cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "import sys,json; print(len(json.loads(sys.stdin.read())['packages']))") members)."
 
 # ── Daemon workspace pointer ──────────────────────────────────────────────
 # `sovereign daemon run` reads this file to find the lint/test runner
@@ -55,9 +42,6 @@ done
 echo "✓ Test/lint adapters executable."
 
 # ── Daemon restart (macOS launchd / Linux systemd) ────────────────────────
-# After bootstrapping the workspace pointer, the daemon needs to
-# re-read its config. The pre-flight check is whether the daemon is
-# even installed; we don't try to install it from here.
 case "$(uname -s)" in
     Darwin)
         if launchctl list 2>/dev/null | grep -q com.sovereign.daemon; then
@@ -98,7 +82,7 @@ esac
 # ── Smoke ────────────────────────────────────────────────────────────────
 echo
 echo "Bootstrap complete. Smoke-test the regression gate:"
-echo "  ${WORKSPACE_DIR}/scripts/sovereign-test.sh --human --workspace corpus-engine --filter chunkers::portal_event_bullet"
+echo "  ${WORKSPACE_DIR}/scripts/sovereign-test.sh --human --package commonwealth-api --filter auto_recover"
 echo
 echo "Definition-of-done before any feature push:"
 echo "  ${WORKSPACE_DIR}/scripts/sovereign-test.sh --human"
