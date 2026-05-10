@@ -61,6 +61,14 @@ pub struct ChatCompletionRequest {
     /// default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub think_budget: Option<u32>,
+    /// Commonwealth extension: name of a tool-profile to apply,
+    /// trimming `tools[]` to the profile's allowlist before the
+    /// request reaches the model. Set by the inference adapter from
+    /// the `X-Commonwealth-Tool-Profile` request header; `None`
+    /// resolves to the registry's default profile (allow-all when no
+    /// `~/.sovereign/tool_profiles.toml` is present).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
