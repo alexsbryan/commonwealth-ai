@@ -92,6 +92,28 @@ Manage knowledge corpora. See [KNOWLEDGE_BASES.md](KNOWLEDGE_BASES.md) for tier 
 | `status` | Show shard status for all corpora |
 | `reconstruct-manifest <id>` | Rebuild source-file manifest before collaborative ingestion |
 
+### `sovereign alignment`
+
+Mesh-replicate the user's `~/.claude/` workspace state (plans, auto-memory entries, plan template) and `~/.sovereign/notes.db` between the user's own daemons. Newest mtime wins per logical key, so two machines that edit the same plan or note converge on the newer copy after a mesh tick. The post-merge projector materializes received chunks back to disk on the receiving daemon, so a fresh machine reaches parity in one ingest. See [PLAN_ALIGNMENT.md](PLAN_ALIGNMENT.md) for the design rationale.
+
+| Subcommand | Description |
+|---|---|
+| `migrate` | Tar a backup to `~/.sovereign/backups/`, then submit the `alignment` corpus install. The daemon ingests in the background; peer convergence happens automatically via existing mesh hooks. |
+| `migrate --dry-run` | Walk the alignment scope and print what would be exported (files + notes rows) without writing a backup or touching the daemon. |
+| `status` | List paths in scope, count of files and notes that would be exported, and the local alignment corpus state if it has been ingested. |
+
+**Operator flow** (run on both machines, order doesn't matter — reconciliation is symmetric):
+
+```bash
+sovereign alignment migrate --dry-run    # preview scope
+sovereign alignment migrate              # backup + ingest
+sovereign alignment status               # check progress
+```
+
+**Recovery.** The backup tar at `~/.sovereign/backups/alignment-pre-migrate-<ts>.tar` restores the original state with `tar -xf <path> -C $HOME` (the archive uses `~/`-relative paths). The migration is idempotent — re-running converges, doesn't compound.
+
+**Sync mechanics.** This CLI lands the local state on the alignment corpus. The cross-machine merge happens via the daemon's existing hooks (`auto_recover` after a stranded-partition merge, `index_transfer` after a peer pull); the projector then writes received chunks back to `~/.claude/` and upserts `notes://...` rows into `~/.sovereign/notes.db` automatically.
+
 ### `sovereign code`
 
 Lower-level code-intelligence primitives. `project init` wraps these for the typical flow.

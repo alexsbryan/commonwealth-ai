@@ -34,6 +34,7 @@ mod install_service_cmd;
 mod mcp_cmd;
 mod mesh_cmd;
 mod milestone_cmd;
+mod newsworthy_cmd;
 mod notes_cmd;
 mod observation;
 mod phases;
@@ -580,6 +581,10 @@ async fn main() {
             }
             "doctor" => {
                 let code = doctor_cmd::run_doctor(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "newsworthy" => {
+                let code = newsworthy_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "setup" => {

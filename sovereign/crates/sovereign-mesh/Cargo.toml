@@ -99,6 +99,9 @@ arc-swap = { workspace = true }
 # Staging directory for per-language exporter output during a
 # rebuild. Also used by the integrity tests.
 tempfile = "3"
+# Wrapping Vec<u8> for MeshStore::set in MeshNewsworthyHost. One call
+# site; explicit dep keeps the host's API surface honest.
+bytes = "1"
 
 [dev-dependencies]
 tempfile = "3"

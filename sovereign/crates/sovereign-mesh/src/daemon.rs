@@ -1529,6 +1529,48 @@ impl EmbeddedDaemon {
         });
         info!("StorageSnapshot loop started");
 
+        // ── wikipedia-newsworthy freshness daemon ─────────────────
+        // Spawned only when a CorpusEngine handle is available — the
+        // watcher's whole point is reindexing into the parent
+        // `wikipedia` corpus, which requires the engine. Watcher reads
+        // mesh membership for leader/owner via `MeshNewsworthyHost`,
+        // shares the daemon's tokio runtime, and listens to the same
+        // shutdown channel pattern as RetentionGc/storage-snapshot so
+        // it terminates cleanly on `EmbeddedDaemon::stop`.
+        if let Some(engine) = corpus_engine.clone() {
+            let host: std::sync::Arc<
+                dyn corpus_engine::update::newsworthy_watcher::NewsworthyHost,
+            > = std::sync::Arc::new(crate::newsworthy_host::MeshNewsworthyHost::new(
+                app_state.clone(),
+            ));
+            let mw_client: std::sync::Arc<
+                dyn corpus_engine::update::newsworthy_watcher::MediaWikiClient,
+            > = std::sync::Arc::new(
+                corpus_engine::update::newsworthy_watcher::HttpMediaWikiClient {
+                    base_url: "https://en.wikipedia.org/w/api.php".to_string(),
+                    user_agent: "commonwealth-ai/0.1 (newsworthy)".to_string(),
+                    http: reqwest::Client::new(),
+                },
+            );
+            let watcher = std::sync::Arc::new(
+                corpus_engine::update::newsworthy_watcher::WikipediaNewsworthyWatcher::new(
+                    host,
+                    engine,
+                    mw_client,
+                    corpus_engine::update::newsworthy_watcher::NewsworthyConfig::default(),
+                ),
+            );
+            let (newsworthy_shutdown_tx, newsworthy_shutdown_rx) =
+                tokio::sync::watch::channel(false);
+            // Hold the sender on the task so it stays alive for the
+            // task's lifetime — same pattern as the storage-snapshot
+            // loop above. Process exit drops the task → drops the
+            // sender → loop sees `changed()` and exits.
+            let _hold = newsworthy_shutdown_tx;
+            let _newsworthy_handle = watcher.spawn(newsworthy_shutdown_rx);
+            info!("WikipediaNewsworthyWatcher started");
+        }
+
         let mut state = self.state.write().await;
         *state = DaemonState::Running {
             app_state,

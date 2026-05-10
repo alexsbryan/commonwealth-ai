@@ -239,6 +239,7 @@ wikipedia/recipe.toml                  # English Wikipedia (Layer 1 — Vital Ar
 wikipedia/data/vital_articles_l5.txt   # ~51K curated titles (consumed via corpus-engine/build.rs)
 wikipedia/scripts/                     # build_vital_articles.py, build_pageview_ranks.py
 wikipedia-simple/recipe.toml           # Layer 0 — Simple English (~230K articles, separate corpus_id)
+wikipedia-newsworthy/recipe.toml       # Layer 2 — Portal:Current_events freshness daemon (rolling 30-day window)
 sep/recipe.toml                        # Stanford Encyclopedia of Philosophy
 stackexchange/recipe.toml openalex/recipe.toml
 gutenberg/recipe.toml crs_reports/recipe.toml
@@ -267,7 +268,7 @@ Each stage is a trait. A **Recipe** TOML configures the whole pipeline.
 | Acquirer   | `bulk_download`, `huggingface_dataset`, `local_file`               |
 | Extractor  | `mediawiki_xml`, `stackexchange_xml`, `jsonl`, `wikipedia_jsonl`, `wikipedia_structured`, `html`, `csv`, `parquet`, `plaintext`, `code` |
 | Filter     | `pageview_rank`, `title_list`, composed via `[[filter]]` array (`Any` / `All`) |
-| Chunker    | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`        |
+| Chunker    | `paragraph`, `sentence`, `fixed`, `semantic`, `passthrough`, `portal_event_bullet` |
 | Index      | `CorpusIndex` over LanceDB (IVF-PQ) + Tantivy FTS                  |
 
 ### 3.2 Storage
@@ -994,11 +995,12 @@ Sovereign hands `corpus-engine` an `EmbedFn` that wraps its local Embed
 slot, plus an optional `InferenceFn` for enrichment. `data/corpora.toml` is
 the manifest the desktop uses for tier-driven install.
 
-**Layered Wikipedia** (recipe `wikipedia` + `wikipedia-simple`):
+**Layered Wikipedia** (recipe `wikipedia` + `wikipedia-simple` + `wikipedia-newsworthy`):
 
 - Layer 0 — `wikipedia-simple` (Simple English, ~230K articles, separate corpus_id). Hidden from the UI's main list; bundled with the main Wikipedia install.
 - Layer 1 — `wikipedia` Core scope. Single `[[filter]] type = "title_list"` against Vital Articles L5 (~51K curated titles). Indexes in 5–8 min on M-series.
 - Layer 1+ — Full Wikipedia. Same corpus_id; remove the filter via `expand_corpus`. Delta-ingests the additions; rebuilds IVF-PQ; search stays live.
+- Layer 2 — `wikipedia-newsworthy` (rolling 30-day Portal:Current_events). Searchable in its own right; doubles as a freshness daemon that reconciles outbound bullet wikilinks against the parent `wikipedia` corpus. The watcher (`corpus-engine/src/update/newsworthy_watcher.rs`) is wall-clock-driven (default 24h cadence with 0..15min first-tick jitter), runs on every node, and uses `commonwealth-core::partition::{is_leader, rendezvous_owner}` so leader-only daily portal ingest and partition-owned per-article refresh stay coordinated without consensus. Tracked-set state lives in `MeshStore` under `app_id = "wikipedia-newsworthy:tracked"` (gossip-replicated); article refreshes go via `CorpusEngine::reindex_by_source_doc_id` against the parent `wikipedia` index.
 
 The desktop `KnowledgeStatus` panel shows one row for "Wikipedia" — the
 two-layer setup is hidden behind elegant install / expand UX.

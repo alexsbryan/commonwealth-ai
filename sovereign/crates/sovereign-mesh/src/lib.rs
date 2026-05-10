@@ -33,6 +33,7 @@ pub mod tool_profile;
 pub mod knowledge_client;
 pub mod landscape_digest_client;
 pub mod landscape_digest_http;
+pub mod newsworthy_host;
 pub mod mcp_router;
 pub mod mesh_http;
 pub(crate) mod oicp_select;
