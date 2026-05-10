@@ -102,6 +102,7 @@ fn scaffold_corpus(corpus_id: &str, source_path: &std::path::Path) -> EnrichConf
         toc_markers: None,
         max_output_tokens: 4096,
         phase1b_max_output_tokens: None,
+        phase_overrides: None,
         created_at: "2026-04-22T00:00:00Z".into(),
     };
     // Create dirs

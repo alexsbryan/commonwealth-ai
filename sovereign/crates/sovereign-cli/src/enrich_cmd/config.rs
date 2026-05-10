@@ -241,6 +241,7 @@ mod tests {
             toc_markers: None,
             max_output_tokens: default_max_output_tokens(),
             phase1b_max_output_tokens: None,
+            phase_overrides: None,
             created_at: "2026-04-22T00:00:00Z".into(),
         }
     }

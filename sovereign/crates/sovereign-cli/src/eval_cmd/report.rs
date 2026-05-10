@@ -584,6 +584,7 @@ mod tests {
             loose_source_score: None,
             loose_source_evidence: Vec::new(),
             essay_readiness: None,
+            atlas_navigation: Vec::new(),
         }
     }
 

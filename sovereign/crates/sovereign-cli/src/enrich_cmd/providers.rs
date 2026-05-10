@@ -356,6 +356,18 @@ mod tests {
         let reg = ProviderRegistry::load_default("http://localhost:9741");
         let local = reg.get("local").unwrap();
         assert_eq!(local.kind, ProviderKind::OpenaiCompatible);
-        assert_eq!(local.base_url, "http://localhost:9741");
+        // The synthesizer auto-appends `/v1` when the caller passes a
+        // bare host so the dispatcher's `{base_url}/chat/completions`
+        // template lands at `/v1/chat/completions`. Pinned because
+        // shipping a bare host is the common atlas-config shape.
+        assert_eq!(local.base_url, "http://localhost:9741/v1");
+    }
+
+    #[test]
+    fn registry_does_not_double_append_v1() {
+        std::env::set_var("HOME", "/nonexistent-test-home-2");
+        let reg = ProviderRegistry::load_default("http://localhost:9741/v1");
+        let local = reg.get("local").unwrap();
+        assert_eq!(local.base_url, "http://localhost:9741/v1");
     }
 }

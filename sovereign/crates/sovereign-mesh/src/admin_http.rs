@@ -262,6 +262,7 @@ mod tests {
                 max_extras_memory_gb: None,
                 primary_pool: None,
                 extra: std::collections::BTreeMap::new(),
+                primary_pool: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),
