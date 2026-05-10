@@ -2933,12 +2933,17 @@ mod tests {
         assert_eq!(row.source, "agent", "default source for pre-v6 rows");
         assert_eq!(row.supersedes, None, "no supersedes default");
 
-        // user_version is now 6.
+        // user_version is at v6 or higher. Pinning the head version
+        // here would force this test to be edited every schema bump
+        // even though the v5→v6 invariants under test (source/
+        // supersedes columns + indexes) don't change. Lower-bound
+        // assertion captures the actual contract: opening a v5 db
+        // must run v6's migration successfully.
         let conn = Connection::open(&db_path).unwrap();
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 6);
+        assert!(v >= 6, "expected user_version >= 6 after migration, got {v}");
 
         // The two new indexes exist.
         let has_source_idx: i64 = conn
