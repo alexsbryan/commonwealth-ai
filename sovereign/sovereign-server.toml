@@ -1,0 +1,25 @@
+# Sovereign Server Configuration
+# Copy this file and adjust for your deployment.
+
+[server]
+bind = "0.0.0.0:8080"
+
+[auth]
+# "api_key" or "none"
+mode = "none"
+# API key → tenant ID mapping (when mode = "api_key")
+# keys = { "sk-your-key-here" = "tenant-1", "sk-another-key" = "tenant-2" }
+
+[inference]
+# Path to GGUF model file (required)
+model = "models/fast.gguf"
+# Optional: larger model for deep reasoning
+# primary_model = "models/primary.gguf"
+context_size = 2048
+
+[store]
+mode = "sqlite"
+path = "data/sovereign.db"
+
+[skills]
+# dir = "skills"

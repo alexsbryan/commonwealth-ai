@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# sovereign-cargo-test-adapter — translates `cargo test` output to Tier 2
+# test events.
+#
+# Usage: cargo test [flags] 2>&1 | sovereign-cargo-test-adapter [workspace]
+#
+# Reads cargo test output from stdin (with stderr merged via 2>&1) and writes
+# Tier 2 test events to stdout:
+#
+#   {"t":"pass","n":"<test_name>"}
+#   {"t":"fail","n":"<test_name>","out":"<captured output>"}
+#   {"t":"summary","pass":<N>,"fail":<N>,"warn":0,"ms":0}
+
+set -uo pipefail
+
+workspace="${1:-unknown}"
+
+python3 -c "
+import sys, json, re, time
+
+# Patterns
+test_ok_re   = re.compile(r'^test\s+(\S+)\s+\.\.\.\s+ok\s*$')
+test_fail_re = re.compile(r'^test\s+(\S+)\s+\.\.\.\s+FAILED\s*$')
+result_re    = re.compile(r'^test result:\s+\S+\.\s+(\d+) passed;\s+(\d+) failed')
+
+pass_count = 0
+fail_count = 0
+# Buffer for capturing failure output between 'FAILED' and next test line.
+current_fail = None
+fail_output_lines = []
+
+def flush_fail():
+    global current_fail, fail_output_lines
+    if current_fail is not None:
+        out = '\n'.join(fail_output_lines).strip()
+        event = {'t': 'fail', 'n': current_fail}
+        if out:
+            event['out'] = out[:4096]
+        print(json.dumps(event))
+        fail_output_lines = []
+        current_fail = None
+
+for raw in sys.stdin:
+    line = raw.rstrip()
+
+    m = test_ok_re.match(line)
+    if m:
+        flush_fail()
+        print(json.dumps({'t': 'pass', 'n': m.group(1)}))
+        pass_count += 1
+        continue
+
+    m = test_fail_re.match(line)
+    if m:
+        flush_fail()
+        current_fail = m.group(1)
+        fail_count += 1
+        continue
+
+    m = result_re.match(line)
+    if m:
+        # cargo test emits one 'test result:' line per test binary.
+        # The earlier version of this branch overwrote pass_count /
+        # fail_count from each match, which silently truncated the
+        # workspace total to whatever the LAST binary reported — a
+        # 9-test final binary made a 1900-test workspace look like 9.
+        # The per-test counters above (test_ok_re / test_fail_re)
+        # are authoritative; this line is informational. We still
+        # flush any in-flight failure output buffer here because a
+        # result line marks the end of a binary's test output.
+        flush_fail()
+        continue
+
+    if current_fail is not None:
+        fail_output_lines.append(line)
+
+flush_fail()
+
+print(json.dumps({'t': 'summary', 'pass': pass_count, 'fail': fail_count, 'warn': 0, 'ms': 0}))
+sys.exit(1 if fail_count > 0 else 0)
+"

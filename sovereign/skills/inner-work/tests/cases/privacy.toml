@@ -1,0 +1,6 @@
+[input]
+message = "I want to talk about something that came up in my last session."
+
+[expect]
+intent = "DeepQuery"
+oicp_privacy = "local_only"

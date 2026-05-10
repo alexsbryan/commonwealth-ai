@@ -1,0 +1,37 @@
+[package]
+name = "sovereign-atos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+
+[dependencies]
+# Stores the orchestrator operates over.
+corpus-engine = { workspace = true, features = ["treesitter"] }
+
+# Optional Fast-slot classification pass in teardown. The library
+# works without an InferenceProvider — the caller passes None.
+sovereign-core = { workspace = true }
+
+# Session-state backend. Cross-workspace path dep; sovereign-atos
+# reads and writes AtosSessionState / FeatureApproval rows into the
+# same gossip-replicated KV store Commonwealth uses for inference
+# state + mesh membership.
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
+bytes = "1"
+# SHA-256 for spec content hashing.
+sha2 = "0.10"
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+pulldown-cmark = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

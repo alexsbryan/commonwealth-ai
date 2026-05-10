@@ -1,0 +1,32 @@
+# ARCH_PRINCIPLES.md §7 — Privacy and critical invariants must be
+# *structural*.
+#
+# KnowledgeView promises three-map corpora never leave the user's
+# machine. The promise is encoded as three hardcoded fields on
+# every recipe builder in knowledge_view/recipes.rs:
+#
+#     scope: Some("local".into()),
+#     mesh_sharing: false,
+#     query_sharing: Some(false),
+#
+# These cannot be parameterised. A test pins the equivalence so a
+# refactor that flips them silently fails review.
+#
+# This inquiry verifies: recipes.rs is in the atlas, has live git
+# history, and the surrounding commits mention privacy-relevant
+# vocabulary.
+
+[inquiry]
+id = "principle_07_structural_privacy"
+title = "§7 Structural privacy — knowledge_view/recipes.rs hardcoded scope"
+file_globs = [
+    "**/sovereign-tools/src/knowledge_view/recipes.rs",
+]
+keywords = [
+    "scope",
+    "mesh_sharing",
+    "query_sharing",
+    "local",
+    "knowledge_view",
+]
+min_score = 0.5

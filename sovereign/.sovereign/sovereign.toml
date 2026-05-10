@@ -1,0 +1,32 @@
+# sovereign.toml — per-project background watcher config.
+#
+# test_runner runs after file changes and on demand (run_tests MCP tool).
+# lint_runner runs after file changes and on demand.
+#
+# Both commands must emit Tier 2 JSONL on stdout:
+#   {"t":"pass","n":"<name>"}
+#   {"t":"fail","n":"<name>","out":"<msg>"}
+#   {"t":"warn","n":"<name>","out":"<msg>","line":<N>}   # lint only
+#   {"t":"summary","pass":<N>,"fail":<N>,"warn":<N>,"ms":<N>}
+#
+# Non-JSONL lines are stored verbatim (Tier 1 fallback).
+#
+# Agents assume working state at session start. Use test_status and
+# lint_status to verify, and run_tests to force a fresh check before
+# committing or claiming correctness.
+
+[test_runner]
+# Runs cargo test across corpus-engine and sovereign (all workspaces with
+# Rust test suites). Parses per-test pass/fail via sovereign-cargo-test-adapter.
+command = "/Users/alexsbryan/dev/commonwealth-ai/scripts/sovereign-test.sh"
+working_dir = "/Users/alexsbryan/dev/commonwealth-ai"
+timeout_secs = 600
+debounce_ms = 2000
+
+[lint_runner]
+# Runs cargo check --features treesitter across corpus-engine, sovereign, and
+# commonwealth, translating compiler JSON to Tier 2 lint events.
+command = "/Users/alexsbryan/dev/commonwealth-ai/scripts/sovereign-lint.sh"
+working_dir = "/Users/alexsbryan/dev/commonwealth-ai"
+timeout_secs = 180
+debounce_ms = 1000

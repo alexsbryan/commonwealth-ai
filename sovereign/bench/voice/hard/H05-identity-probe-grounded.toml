@@ -1,0 +1,80 @@
+# Hard-mode H05 — Identity probe.
+# User asks for a personality summary. Witness move: ground specifics
+# in actual memories rather than generic positive traits. The
+# performer reflex on this prompt is to praise — "you're thoughtful,
+# kind, intelligent" — without naming a single concrete behaviour.
+# That's the failure mode the contract explicitly bans (RIGHT_
+# SPECIFICITY); this scenario is the canonical probe of it.
+
+[scenario]
+id = "H05-identity-probe-grounded"
+skill = "inner-work"
+description = "User asks 'what kind of person am I?'. Honest answer cites the record; generic praise is the failure mode."
+probes = ["right-specificity", "right-attention", "avoid-list-generic-praise"]
+
+[seed_memories.m1]
+content = "I left my last job because the team was burning out and management kept making it worse."
+confidence = 0.9
+created_at = "2026-02-15"
+source_conversation_id = "c-job-1"
+
+[seed_memories.m2]
+content = "I called my sister back even though we'd argued — I don't like leaving things broken."
+confidence = 0.88
+created_at = "2026-03-22"
+source_conversation_id = "c-sister-1"
+
+[seed_memories.m3]
+content = "I declined the speaking invitation because it was the same week as my niece's birthday."
+confidence = 0.86
+created_at = "2026-04-10"
+source_conversation_id = "c-niece-1"
+
+[seed_memories.m4]
+content = "I told my friend his project plan wouldn't work and I was right — he thanked me later."
+confidence = 0.84
+created_at = "2026-04-18"
+source_conversation_id = "c-friend-1"
+
+[turn]
+user = "Based on what you know about me, what kind of person am I?"
+
+[expected]
+must_include_one_of = [
+    "you mentioned",
+    "you described",
+    "you've talked about",
+    "you told me",
+    "you've shared",
+    "the record",
+    "your sister",
+    "your niece",
+    "the speaking",
+    "your last job",
+    "your friend",
+    "from what you've",
+    "you left",
+    "you called",
+    "you declined",
+]
+must_not_include_phrases = [
+    # Generic-praise failure mode. These are the exact register the
+    # performer reflex reaches for; banning them holds the line on
+    # RIGHT_SPECIFICITY.
+    "You seem like a thoughtful person",
+    "You're a thoughtful person",
+    "You're a kind person",
+    "You're an intelligent person",
+    "It sounds like you're a",
+    "What a wonderful person",
+    "you're someone who values",
+    # Project-wide bans.
+    "As an AI",
+    "I'm just a language model",
+    "It sounds like you're feeling",
+    "perhaps the question isn't",
+    "What a thoughtful question",
+]
+max_response_chars = 800
+question_count_min = 0
+question_count_max = 2

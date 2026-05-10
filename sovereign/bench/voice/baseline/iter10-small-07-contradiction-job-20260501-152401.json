@@ -1,0 +1,93 @@
+{
+  "started_at_unix": 1777674246,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "I want to help you build something useful here, but I'm missing the critical detail: **what specific role** are we planning for? \n\nThe word \"this\" suggests you've already told me what position/role you hold (or aspire to), and without knowing whether it's software engineering, product design, sales leadership, creative writing, or something else entirely, any roadmap will miss your actual constraints and opportunities.\n\nTo make this concrete rather than generic:\n- What industry/domain is this in?\n- Where do you sit now on the ladder (entry-level, mid-senior, etc.)?\n- What does success look like at month 6 specifically?\n\nOnce I know those three things, I can help break down intermediary objectives that actually move the needle for *your* situation—not just abstract planning theory about \"incremental shifts\" from a political science text.",
+      "length": {
+        "enabled": true,
+        "response_chars": 848,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 4,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 3,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 0,
+      "rationale": "The response captures the actual missing information with sharp specificity but over-explains why it matters; questions are necessary and focused rather than filler."
+    }
+  ],
+  "runtime_ms": [
+    41265
+  ],
+  "judge_ms": [
+    12963
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 0
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 0
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 0
+      }
+    }
+  }
+}

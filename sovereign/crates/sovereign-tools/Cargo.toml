@@ -1,0 +1,134 @@
+[package]
+name = "sovereign-tools"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+# Atlas peer-advice (Phase C3) consumes `CorpusShardInfo` from
+# commonwealth-core's gossip schema. One-way dep: sovereign-tools
+# never re-enters commonwealth-* (path break is enforced by
+# rustc, not just convention).
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+# `DriftTool` calls `sovereign_atos::approval::{find_approval,
+# detect_drift, current_spec_hash}` so its verdict matches the
+# daemon's approval_gate middleware exactly. The dep is one-way
+# (sovereign-atos depends on sovereign-core only); no cycle.
+sovereign-atos = { workspace = true }
+corpus-engine = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }
+glob = "0.3"
+quick-xml = "0.37"
+flate2 = "1"
+bzip2 = "0.5"
+parquet = { version = "57", default-features = false, features = ["arrow"] }
+arrow = { version = "57", default-features = false, features = ["json"] }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+arc-swap = { workspace = true }
+lettre = { version = "0.11", features = ["tokio1-rustls-tls", "smtp-transport"], optional = true }
+# Code Intelligence tools (symbol_lookup / code_search / recent_changes)
+chrono = { version = "0.4", features = ["clock"] }
+# Resolve `~` for `~/.sovereign/enrichment/<corpus>/config.json`
+# in the watched-folder enrichment driver. Same pattern the CLI's
+# enrich_cmd uses; pinning `dirs` here keeps the resolver
+# colocated with its only caller.
+dirs = "5"
+lancedb = "0.27"
+arrow-array = "57"
+# Document parsing (RAG pipeline)
+pdf-extract = "0.7"
+# HTML body-text extraction for `.html` / `.htm` / `.mhtml` watched
+# folders. Same version as `corpus-engine`'s recipe-driven HTML
+# extractor so the workspace resolves a single `scraper`.
+scraper = "0.20"
+# `scraper::Html.tree` is `ego_tree::Tree<Node>`; we walk it directly
+# in `html_body_text` to strip `<script>`/`<style>` subtrees. Already
+# a transitive dep via `scraper` — adding it explicitly so the
+# tree-walk types are nameable in the signatures.
+ego-tree = "0.6"
+# MIME parser for `.mhtml` (single-file web archive, e.g. SingleFile
+# output, Save Page As → Webpage Complete). We walk the multipart
+# body, take the first `text/html` part, and route it through the
+# same `html_body_text` routine as standalone HTML files.
+mail-parser = "0.10"
+# EPUB extractor. Apache-2.0 (workspace is MIT — compatible). Reads
+# zip + OPF in memory; no on-disk extraction, preserving the
+# watched-folder read-only-on-source invariant. We walk the spine,
+# pull each chapter's XHTML, and route it through `html_body_text`.
+# (`rbook` chosen over the GPL-3 `epub` crate for licence
+# compatibility, and over `lib-epub` for maintenance.)
+rbook = "0.7"
+# DOCX text extractor. Read-only, minimal-deps, MIT/Apache-2.0.
+# Chosen over `docx-rs` (writer-first, heavier surface) because v1
+# only needs paragraph text — header/footer/footnote handling is
+# deferred to v1.x.
+docx-lite = "0.2"
+# OCR pipeline for scanned PDFs in the folder-drop flow:
+#   pdfium-render rasterizes pages to images, the tesseract sidecar
+#   produces raw text, the daemon's fast slot cleans up via
+#   /v1/chat/completions. See `local_corpus::ocr` for the architecture.
+# pdfium-render binds to a runtime-loaded libpdfium.dylib; the desktop
+# bundles it as a Tauri resource and OcrCtx.pdfium_lib_path points at
+# it. `image_latest` matches the version of `image` we pull below.
+pdfium-render = { version = "0.9", features = ["thread_safe"] }
+image = "0.25"
+# Stable, cryptographic short-hash for deriving corpus IDs from a
+# canonicalised root path. Used by local_corpus::config and by the
+# splice-extension module's CHARTER.md drift detector (mirroring
+# sovereign-atos::approval::detect_drift without the cross-crate dep).
+sha2 = "0.10"
+# Recursive directory walking for the PreScanner; keeps hidden-dir
+# filtering (`.obsidian`, `.git`) a single-call predicate.
+walkdir = "2"
+# Atomic config-file writes (write-to-temp + rename) in
+# `local_corpus::manager`.
+tempfile = "3"
+# YAML parsing for Obsidian frontmatter merge (M5 write-back). Uses
+# `indexmap` internally so key order round-trips.
+serde_yaml = "0.9"
+# KnowledgeView acquirers (SqliteAcquirer dumps rows to JSONL for the
+# existing Jsonl extractor). Uses the same `bundled` feature as
+# sovereign-store so both crates link against one libsqlite3.
+rusqlite = { version = "0.35", features = ["bundled"] }
+# `notify` drives the SpecWatcher used to invalidate the
+# spec-presence cache + push MCP `notifications/tools/list_changed`
+# events when `.sovereign/features/*/spec.md` or `ARCHITECTURE.md`
+# changes. Same major version as sovereign-mesh's reindexer use to
+# keep the lockfile single-resolved.
+notify = "8"
+# Gitignore-syntax parser for the watched-folder `.sovereignignore`
+# file (spec §5.4 layer 2). Same version as sovereign-mesh so the
+# workspace resolves a single `ignore` across both crates.
+ignore = "0.4"
+
+[features]
+default = []
+email = ["lettre"]
+treesitter = ["corpus-engine/treesitter"]
+
+[dev-dependencies]
+# Zip writer for hand-building minimal DOCX fixtures in
+# `extract_stage` tests. Adding `docx-rs` here was rejected because
+# it activates the `encoding` feature on quick-xml 0.36, which
+# breaks corpus-engine's `Attribute::unescape_value()` call via
+# workspace feature unification.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+sovereign-store = { workspace = true }
+uuid = { workspace = true }
+futures = { workspace = true }
+tempfile = "3"
+tokio = { workspace = true, features = ["test-util"] }
+filetime = "0.2"
+# axum is the HTTP stub harness for `notes::diff_extract_backend`
+# tests — spins up `/v1/chat/completions` on an ephemeral port so
+# we can exercise `LocalLlmBackend` without a live daemon. Production
+# code does NOT depend on axum.
+axum = { workspace = true }

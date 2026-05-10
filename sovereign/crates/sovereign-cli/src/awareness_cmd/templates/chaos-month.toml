@@ -1,0 +1,339 @@
+# Chaos-monkey scenario template — same domain as the consulting
+# template, but every chunk is deliberately awkward in a way real
+# users actually produce. The expected_entities list is the *clean*
+# ground truth (Sarah Chen, Mike Torres, ...); the conversations
+# beat that ground truth up with:
+#
+#   * Typos / misspellings ("Sara Chen", "Achme Crop", "Stonwell")
+#   * Voice-to-text artifacts ("AP I" for API, "to month's" for
+#     "two months", "ducking" for fucking)
+#   * Auto-correct mistakes ("migragion plan", "duck the deadline")
+#   * Mid-sentence fragments and crisis tone ("ughhh Mike just—")
+#   * Code names later revealed ("Project Tiger" = API migration)
+#   * Mixed-language fragments ("OK saludos a Raj")
+#   * Pronoun chains with no nearby referent
+#   * Conflicting / corrected info ("scratch that, Mike is product
+#     not engineering")
+#   * Sarcasm and dark humor ("Sarah is killing it 💀")
+#   * Heavy emoji and shorthand
+#   * Email-thread paste artifacts ("On Mon, Sarah wrote: > ...")
+#   * Bullet shorthand ("- M.T. blocked - pricing 4 Acme stuck @
+#     procurement")
+#   * Hypothetical / negated mentions ("if we win Stonewell we'd...",
+#     "we lost Stonewell")
+#   * Long buried mentions inside off-topic rants
+#   * Org transitions ("Sarah's leaving Acme for Helios")
+#
+# Pipeline robustness on this fixture is the question, not absolute
+# F1. The clean consulting fixture sits ~0.89; this one is expected
+# to land lower. The interesting metric is *which* failure modes
+# survive the parser hardening, canonicalization, fuzzy fold, and
+# filter pass.
+
+[meta]
+name = "chaos-month"
+description = "Chaos-monkey: same domain, deliberately noisy chunks (typos, fragments, code names, sarcasm, emoji, mixed languages, pronoun chains) — measures pipeline robustness under realistic friction"
+days = 30
+
+# ── Expected entities (clean ground truth) ──────────────────────
+
+[[expected_entities]]
+name = "Sarah Chen"
+kind = "person"
+affiliation = "Acme Corp"
+role = "VP Engineering"
+
+[[expected_entities]]
+name = "Mike Torres"
+kind = "person"
+affiliation = "Acme Corp"
+role = "Engineering Lead"
+
+[[expected_entities]]
+name = "Dana Park"
+kind = "person"
+affiliation = "Meridian"
+role = "CTO"
+
+[[expected_entities]]
+name = "Raj Patel"
+kind = "person"
+affiliation = "Helios Health"
+role = "CEO"
+
+[[expected_entities]]
+name = "Tomas Lindqvist"
+kind = "person"
+affiliation = "Stonewell Industries"
+role = "CTO"
+
+[[expected_entities]]
+name = "Acme Corp"
+kind = "organization"
+
+[[expected_entities]]
+name = "Meridian"
+kind = "organization"
+
+[[expected_entities]]
+name = "Helios Health"
+kind = "organization"
+
+[[expected_entities]]
+name = "Stonewell Industries"
+kind = "organization"
+
+[[expected_entities]]
+name = "API migration"
+kind = "initiative"
+participants = ["Sarah Chen", "Mike Torres"]
+
+[[expected_entities]]
+name = "Q3 enterprise push"
+kind = "initiative"
+participants = ["Sarah Chen"]
+
+[[expected_entities]]
+name = "HIPAA compliance review"
+kind = "initiative"
+participants = ["Raj Patel"]
+
+[[expected_entities]]
+name = "Architecture refresh"
+kind = "initiative"
+participants = ["Dana Park"]
+
+# ── Conversations (chaos) ───────────────────────────────────────
+
+# Typo-heavy first contact. Tests typo fold + canonicalization.
+[[conversations]]
+id = "c1"
+day_offset = -29
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Just got off a call with Sara Chen at Achme Crop — they wanna start the API migrayion ASAP. She's the VP Engineering. Also met some guy Mike, he's the eng lead I think? Will follow up."
+
+# Voice-to-text mess. AP I = API, to month's = two months.
+[[conversations]]
+id = "c2"
+day_offset = -28
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "OK so Sarah wants the AP I migration done in to month's. Reasonable? Maybe. The team is solid. Mike Torres is leading the technical side. Acme Corp is procurement-heavy so the SOW will take forever."
+
+# Crisis fragment. Cut-off mid-sentence.
+[[conversations]]
+id = "c3"
+day_offset = -26
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "ughhhh Mike just— the friday deadline is going to slip AGAIN, third time. I told Sarah we'd hit it. duck the deadline. duck."
+[[conversations.messages]]
+role = "assistant"
+content = "Slip slow not fast — get ahead of it with Sarah today, not Friday morning."
+[[conversations.messages]]
+role = "user"
+content = "yeah ok yeah ok. emailing her."
+
+# Code name that gets revealed later. Tests context resolution.
+[[conversations]]
+id = "c4"
+day_offset = -24
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Project Tiger update: we're past phase 2, Mike is happy with the parallel-path strategy. Internal name only — Acme calls it just the migration. Ship date holds for now."
+
+# Mixed-language + ambiguous referent.
+[[conversations]]
+id = "c5"
+day_offset = -22
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "OK saludos a Raj, le dije que la HIPAA review está en buen camino. He's the CEO at Helios Health and they need the audit done before their Series B. He pinged me about the timeline so I should send him an update por la mañana."
+
+# Sarcasm and dark humor. Sarah is doing well.
+[[conversations]]
+id = "c6"
+day_offset = -20
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Sarah is KILLING it 💀💀💀 closed a $400k extension on Acme's Q3 enterprise push. Procurement signed in 4 days, that has to be a record."
+
+# Pronoun chain with mostly no nearby referent. Hard mode.
+[[conversations]]
+id = "c7"
+day_offset = -19
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "He told her that they'd handle it, but I think she's going to push back. Especially after what happened last quarter — they never followed through, and now we're stuck doing it ourselves. Frustrating."
+
+# Conflicting info — earlier said engineering, now says product.
+[[conversations]]
+id = "c8"
+day_offset = -18
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Wait scratch what I said before about Mike — he's Acme's Engineering Lead, not product. I had Mike Torres confused with Mike Patel for half a sec. There is no Mike Patel here. Mike Torres = engineering. Got it."
+
+# Stream of consciousness, multiple entities buried.
+[[conversations]]
+id = "c9"
+day_offset = -16
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "long week — Dana Park at Meridian wants the architecture refresh kicked off after their board meeting, Sarah is finally unblocked on the Acme API migration after Mike's parallel-path approval, Raj at Helios Health says HIPAA review is on track but Amelia (their director of eng) is slammed, and Tomas at Stonewell still hasn't gotten back to me about pricing — three weeks now. lol."
+
+# Shorthand bullets. M.T. = Mike Torres.
+[[conversations]]
+id = "c10"
+day_offset = -15
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = """Quick triage:
+- M.T. blocked on auth phase, needs decision by EOD
+- pricing 4 Acme stuck @ procurement (Lisa)
+- Raj wants HIPAA crosswalk Mon
+- Stonewell ghosting?
+- D.P. quiet, fine"""
+
+# Negation / dead deal. Stonewell entity should still extract.
+[[conversations]]
+id = "c11"
+day_offset = -13
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "Tomas at Stonewell Industries didn't show for the call. Third no-show. We lost Stonewell. Moving on. Marcus introduced them, I'll let him know it's dead."
+
+# Hypothetical mention. Helios HIPAA review, plus a what-if.
+[[conversations]]
+id = "c12"
+day_offset = -12
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "If we ever resurrect Stonewell, Tomas Lindqvist mentioned wanting platform overhaul work — could pair Mike on the technical lead. But that's all hypothetical. Real deals: Acme API migration on track, Helios HIPAA compliance review live."
+
+# Long buried mention. Tomas appears once at the end of an off-topic rant.
+[[conversations]]
+id = "c13"
+day_offset = -10
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "the kids are sick again. third time this month. trying to reschedule the standups around the pediatrician. also the dishwasher is broken which is its own saga, twelve hundred bucks for a part that supposedly takes ten minutes to install but the technician has to wait two weeks. anyway. only meaningful work signal today: Tomas wrote back. Stonewell board approved budget, deal might be alive after all."
+
+# Repetitive crisis. Same name 5 times.
+[[conversations]]
+id = "c14"
+day_offset = -9
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "deadline deadline deadline. Mike. Mike. focus on Mike. Mike Torres is the only blocker on API migration phase 3. Mike has to ship the auth piece by Tuesday or the whole Q3 enterprise push slips and Sarah has to reset expectations with the board. Mike Mike Mike."
+
+# Email-thread paste with quoted text. Tests structural noise.
+[[conversations]]
+id = "c15"
+day_offset = -8
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = """forwarded:
+
+---------- Forwarded message ---------
+From: Sarah Chen <sarah.chen@acmecorp.com>
+Date: Mon, 19 Apr 2026
+Subject: Re: Q3 enterprise push — pricing
+
+> Per your last note, we'd want the usage-based proposal aligned to
+> the Q3 push timeline. Procurement has flagged the per-seat tier
+> as a non-starter so let's not spend cycles there.
+
+Sarah Chen
+VP Engineering, Acme Corp
+---------- end forward ----------
+
+so usage-based it is. I'll have Mike review the auth flow this week."""
+
+# Mixed personal + work. Should still extract entities.
+[[conversations]]
+id = "c16"
+day_offset = -7
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "thinking about taking Friday off, also need to send Sarah the proposal AND Raj the HIPAA crosswalk before Monday. and order the cake for kid's birthday. priorities."
+
+# Org transition. Sarah moving from Acme to Helios.
+[[conversations]]
+id = "c17"
+day_offset = -5
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "huge news: Sarah Chen is leaving Acme Corp to join Helios Health as CTO next month. Raj recruited her over coffee apparently. This complicates things — Mike Torres is going to be the senior point of contact at Acme for the API migration handoff. Need a transition plan."
+
+# Sarcastic emoji rant about a deal that fell through then revived.
+[[conversations]]
+id = "c18"
+day_offset = -4
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "🎢🎢🎢 the Stonewell rollercoaster continues. dead → maybe → alive → 'Tomas needs more time' → ??? Three weeks of this. Marcus says trust the process 🤡"
+
+# Buried under unrelated fluff.
+[[conversations]]
+id = "c19"
+day_offset = -3
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "you ever just stare at a kanban board for 20 minutes and not move a single card? that was today. anyway, Dana sent over Meridian's architecture refresh charter, looks reasonable, will respond tomorrow. coffee was great today though."
+
+# Crisis-mode end-of-week rollup. Dense, fragmented.
+[[conversations]]
+id = "c20"
+day_offset = -1
+skill = "general"
+[[conversations.messages]]
+role = "user"
+content = "EOW: Acme API migration phase 3 IN, Q3 enterprise push contract signed!!, Helios HIPAA compliance review crosswalk delivered (Raj happy), Stonewell still TBD, Meridian architecture refresh kicks off Mon. Mike on PTO next week so Sarah covers the hand-off. Dana is the calmest of the bunch."
+
+# ── Expected suggestions (consumed by Phase 4 eval) ─────────────
+
+# These are deliberately a smaller set — chaos chunks make precise
+# suggestion extraction harder and we mostly want to see if the
+# pipeline can recover *any* of them.
+
+[[expected_suggestions]]
+conversation_id = "c3"
+turn = 2
+kind = "commitment"
+content_contains = "email"
+related_entity = "Sarah Chen"
+
+[[expected_suggestions]]
+conversation_id = "c5"
+turn = 0
+kind = "commitment"
+content_contains = "update"
+related_entity = "Raj Patel"
+
+[[expected_suggestions]]
+conversation_id = "c10"
+turn = 0
+kind = "follow_up"
+content_contains = "HIPAA"
+related_entity = "Raj Patel"

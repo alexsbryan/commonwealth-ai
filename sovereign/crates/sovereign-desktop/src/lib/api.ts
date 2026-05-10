@@ -1,0 +1,1229 @@
+import { invoke } from "@tauri-apps/api/core";
+import type {
+  MessageResponse,
+  ConversationEntry,
+  ConversationDetail,
+  CreateConversationResponse,
+  SearchResult,
+  SkillEntry,
+  DesktopConfig,
+  SetupConfig,
+  DiscoveredModel,
+  DownloadRequest,
+  CorpusEntry,
+  CorpusProgressPayload,
+  CorpusHealthDetail,
+  HardwareInfo,
+  StreamStartedResponse,
+  CreateMeshResponse,
+  JoinMeshResponse,
+  JoinConfirmation,
+  MeshStateResponse,
+  RecipeValidateResult,
+  RecipeTestResult,
+  InsightNodeDto,
+  SinkStatusDto,
+  DocumentAsset,
+  DocumentAskResponse,
+  LegacyDocumentEntry,
+  BootstrapSnapshot,
+} from "./types";
+
+export async function sendMessage(
+  message: string,
+  conversationId: string,
+  contextChunks?: FocusedPassageRef[],
+): Promise<MessageResponse> {
+  return invoke("send_message", {
+    message,
+    conversationId,
+    contextChunks,
+  });
+}
+
+/** Optional focused-passage context — when present, the desktop
+ *  prepends each chunk's text to the message as a labelled
+ *  "▸ passage from ..." block before the runtime sees it. Used by
+ *  the reading surface's "ask about this passage" handoff. */
+export interface FocusedPassageRef {
+  corpus_id: string;
+  chunk_id: number;
+}
+
+export async function sendMessageStream(
+  message: string,
+  conversationId: string,
+  contextChunks?: FocusedPassageRef[],
+): Promise<StreamStartedResponse> {
+  return invoke("send_message_stream", {
+    message,
+    conversationId,
+    contextChunks,
+  });
+}
+
+// ─── Antifragile-routing commands ────────────────────────────
+
+/** PR6 — cancel the current in-flight stream for a conversation.
+ *  The sampler breaks the decode loop on its next check, the
+ *  stream closes, and the existing `message-complete` listener
+ *  transitions chat.machine back to idle automatically. */
+export async function cancelStream(conversationId: string): Promise<void> {
+  return invoke("cancel_stream", { conversationId });
+}
+
+/** Eagerly load the primary chat slot. Fire-and-forget — the Tauri
+ *  command spawns the load and returns immediately, so callers get
+ *  a `Promise<void>` that resolves the moment the request is
+ *  queued, not when the model is ready.
+ *
+ *  Call sites: window-focus is wired in the Tauri builder (Rust
+ *  side, fires automatically); ChatView calls this on mount so the
+ *  slot warms while the user is reading the empty state / picking
+ *  a starter question. Idempotent — a warm slot returns
+ *  immediately on the backend. */
+export async function warmupPrimarySlot(): Promise<void> {
+  return invoke("warmup_primary_slot");
+}
+
+/** PR2c — cancel the in-flight sampler AND start a new stream
+ *  against the chosen alternative intent. Returns a
+ *  `StreamStartedResponse` just like `sendMessageStream`; the caller
+ *  listens for `message-chunk` / `message-complete` events keyed on
+ *  the new `message_id`. The original user message + conversation
+ *  are pulled from the SessionStore by the runtime — the frontend
+ *  only passes the session id + intent hint. */
+export async function redirectTurn(
+  sessionId: string,
+  intentHint: string,
+): Promise<StreamStartedResponse> {
+  return invoke("redirect_turn", { sessionId, intentHint });
+}
+
+/** Resume a prior session with an explicit intent. Skips router
+ *  classification and streams the follow-up through the hinted intent.
+ *  Used by ClarificationCard option clicks and (PR3) NextStepOffer
+ *  buttons. */
+export async function resumeSession(
+  message: string,
+  conversationId: string,
+  sessionId: string,
+  intentHint: string,
+): Promise<StreamStartedResponse> {
+  return invoke("resume_session", {
+    message,
+    conversationId,
+    sessionId,
+    intentHint,
+  });
+}
+
+export async function createConversation(): Promise<CreateConversationResponse> {
+  return invoke("create_conversation");
+}
+
+export async function listConversations(
+  limit?: number,
+  offset?: number,
+): Promise<ConversationEntry[]> {
+  return invoke("list_conversations", { limit, offset });
+}
+
+export async function getConversation(
+  conversationId: string,
+): Promise<ConversationDetail> {
+  return invoke("get_conversation", { conversationId });
+}
+
+export async function deleteConversation(
+  conversationId: string,
+): Promise<void> {
+  return invoke("delete_conversation", { conversationId });
+}
+
+export async function renameConversation(
+  conversationId: string,
+  title: string,
+): Promise<void> {
+  return invoke("rename_conversation", { conversationId, title });
+}
+
+export async function searchMessages(query: string): Promise<SearchResult[]> {
+  return invoke("search_messages", { query });
+}
+
+export async function submitApproval(
+  key: string,
+  approved: boolean,
+): Promise<boolean> {
+  return invoke("submit_approval", { key, approved });
+}
+
+export async function submitInput(
+  key: string,
+  response: string,
+): Promise<boolean> {
+  return invoke("submit_input", { key, response });
+}
+
+/** Resolve a pending information-request the agent surfaced via a
+ *  collaboration step. Pass `null` for content to skip; pass a string
+ *  to provide pasted content. */
+export async function submitInformationResponse(
+  key: string,
+  content: string | null,
+): Promise<boolean> {
+  return invoke("submit_information_response", { key, content });
+}
+
+export async function listSkills(): Promise<SkillEntry[]> {
+  return invoke("list_skills");
+}
+
+export async function toggleSkill(
+  skillId: string,
+  active: boolean,
+): Promise<void> {
+  return invoke("toggle_skill", { skillId, active });
+}
+
+// ─── Turn provenance (glassbox) ────────────────────────────
+//
+// Mirrors `sovereign_core::runtime::TurnProvenance`. The shape is
+// kept flat-ish so the inner-work surface can render sections
+// directly without intermediate transforms. `history_summary
+// .sent_to_model` will be empty under the current streaming witness
+// path — the runtime sends only the latest user message + system
+// prompt, no prior turns. That emptiness is intentional surface, not
+// a missing field.
+export interface RecalledMemoryProv {
+  id: string;
+  content: string;
+  created_at: number;
+}
+
+export interface HistoryEntryProv {
+  role: string;
+  content_preview: string;
+  full_chars: number;
+}
+
+export interface HistorySummaryProv {
+  total_messages: number;
+  user_count: number;
+  assistant_count: number;
+  sent_to_model: HistoryEntryProv[];
+}
+
+export interface ContradictionProv {
+  prior_evidence: string;
+  current_claim: string;
+}
+
+export interface TurnProvenance {
+  conversation_id: string;
+  message_id: string;
+  captured_at: number;
+  register: string;
+  user_message: string;
+  system_prompt: string;
+  system_prompt_chars: number;
+  recalled_memories: RecalledMemoryProv[];
+  history_summary: HistorySummaryProv;
+  temporal_tensions: string[];
+  contradiction: ContradictionProv | null;
+  current_goal: string | null;
+  recent_topic: string | null;
+  last_assistant_excerpt: string | null;
+  model_id: string | null;
+  max_tokens: number | null;
+  enable_thinking: boolean | null;
+  pass_a_ms: number | null;
+}
+
+export async function getLastTurnProvenance(
+  conversationId: string,
+): Promise<TurnProvenance | null> {
+  return invoke("get_last_turn_provenance", { conversationId });
+}
+
+// ─── Inner-work memory ─────────────────────────────────────
+//
+// `finalizeInnerWorkConversation` triggers memory extraction on the
+// given inner-work conversation. Called from the surface's onDestroy
+// so closing the page accumulates long-term memory for future
+// sessions. The runtime stamps `source_skill_id = "inner-work"` on
+// each extracted memory, walling them off from general recall.
+//
+// `forgetMemory` soft-deletes (tombstones) a memory — recall skips
+// it forever, but the row persists for audit. `weakenMemory` halves
+// its confidence — still recallable but at reduced weight, and the
+// standard confidence-decay floor will eventually prune it if the
+// user keeps weakening.
+export async function finalizeInnerWorkConversation(
+  conversationId: string,
+): Promise<void> {
+  return invoke("finalize_inner_work_conversation", { conversationId });
+}
+
+export async function forgetMemory(memoryId: string): Promise<void> {
+  return invoke("forget_memory", { memoryId });
+}
+
+export async function weakenMemory(memoryId: string): Promise<void> {
+  return invoke("weaken_memory", { memoryId });
+}
+
+export async function getConfig(): Promise<DesktopConfig> {
+  return invoke("get_config");
+}
+
+export async function saveConfig(config: DesktopConfig): Promise<void> {
+  return invoke("save_config", { config });
+}
+
+export async function isSetupComplete(): Promise<boolean> {
+  return invoke("is_setup_complete");
+}
+
+export async function completeSetup(setup: SetupConfig): Promise<void> {
+  return invoke("complete_setup", { setup });
+}
+
+/** Auto-config first-launch flow. No user input — runs hardware
+ *  probe, picks defaults from the bundled manifest, downloads the
+ *  three model slots, opens the database, loads the model. The
+ *  `setup-progress` Tauri event channel narrates progress; this
+ *  promise resolves when the backend is ready to serve chat. */
+export async function completeSetupAuto(): Promise<void> {
+  return invoke("complete_setup_auto");
+}
+
+/** Fire-and-forget background install of the default
+ *  `wikipedia-simple` corpus. Idempotent. The desktop kicks this
+ *  off once the user lands in chat after first-launch setup; it
+ *  runs silently with no setup-flow UI surface. */
+export async function startDefaultCorpusInstall(): Promise<void> {
+  return invoke("start_default_corpus_install");
+}
+
+export async function detectHardware(): Promise<HardwareInfo> {
+  return invoke("detect_hardware");
+}
+
+/** Ask the backend whether a CLI-started daemon is already running
+ *  and/or whether `~/.config/sovereign/config.toml` exists. The
+ *  setup wizard uses this to skip the model and knowledge-tier
+ *  screens when the user has already run `sovereign setup`. */
+export async function detectBootstrap(): Promise<BootstrapSnapshot> {
+  return invoke("detect_bootstrap");
+}
+
+export async function searchWeb(
+  query: string,
+  conversationId: string,
+): Promise<MessageResponse> {
+  return invoke("search_web", { query, conversationId });
+}
+
+export async function scanForModels(): Promise<DiscoveredModel[]> {
+  return invoke("scan_for_models");
+}
+
+export async function downloadModel(
+  request: DownloadRequest,
+): Promise<string> {
+  return invoke("download_model", { request });
+}
+
+// ─── Corpus Management ──────────────────────────────────────
+
+export async function listCorpora(): Promise<CorpusEntry[]> {
+  return invoke("list_corpora");
+}
+
+export async function installCorpus(corpusId: string): Promise<void> {
+  return invoke("install_corpus", { corpusId });
+}
+
+/// Expand an installed corpus to a relaxed scope (e.g. Wikipedia
+/// Core → Full). Progress streams on the same `corpus-progress` event
+/// channel as `installCorpus`.
+export async function expandCorpus(corpusId: string): Promise<void> {
+  return invoke("lc_expand_corpus", { corpusId });
+}
+
+/// Probe whether a corpus advertises an `expandable` scope in
+/// `_corpus_meta.json`. Returns `false` for corpora that aren't
+/// installed, have no filter, or have already been expanded to full.
+export async function canExpandCorpus(corpusId: string): Promise<boolean> {
+  return invoke("lc_can_expand", { corpusId });
+}
+
+/// Kick off the layered Wikipedia setup: Simple English first
+/// (Layer 0, ready in ~2-3 min), then Wikipedia Core (Layer 1, ~10-12
+/// min). Returns the list of corpus IDs that will be installed.
+export async function startLayeredSetup(): Promise<string[]> {
+  return invoke("lc_start_layered_setup");
+}
+
+export async function removeCorpus(corpusId: string): Promise<number> {
+  return invoke("remove_corpus", { corpusId });
+}
+
+export async function pauseCorpus(corpusId: string): Promise<void> {
+  return invoke("pause_corpus", { corpusId });
+}
+
+/// Per-batch ingest throttle. `throttle_factor` ∈ (0.0, 1.0]: 1.0 =
+/// full speed (the default), 0.5 ≈ duty-cycle 50% (sleep equal to
+/// each embed batch's wall time after it completes — halves
+/// effective throughput, leaves the GPU idle in between for chat /
+/// other work). 0.0 is rejected by the daemon — use `pauseCorpus`
+/// to fully stop a corpus.
+export interface IngestBudgetState {
+  throttle_factor: number;
+}
+
+export async function getIngestBudget(): Promise<IngestBudgetState> {
+  return invoke("get_ingest_budget");
+}
+
+export async function setIngestBudget(throttleFactor: number): Promise<IngestBudgetState> {
+  return invoke("set_ingest_budget", { throttleFactor });
+}
+
+/// Mesh-quiesce: when `true`, this node stops participating in
+/// shared ingests — neither pulls peer-assigned work nor dispatches
+/// its own queue to peers. Persists for the daemon's lifetime; flip
+/// back via the same call. The `SOVEREIGN_DISABLE_AUTO_COLLAB` env
+/// var seeds the same atomic at boot.
+export interface MeshQuiesceState {
+  quiesced: boolean;
+}
+
+export async function getMeshQuiesced(): Promise<MeshQuiesceState> {
+  return invoke("get_mesh_quiesced");
+}
+
+export async function setMeshQuiesced(quiesced: boolean): Promise<MeshQuiesceState> {
+  return invoke("set_mesh_quiesced", { quiesced });
+}
+
+/// Storage budget — ceiling on disk usage for corpus storage.
+/// `budget_bytes = null` means no budget configured (gossip reports
+/// raw free disk; nothing clamped). The daemon does the actual
+/// enforcement by clamping the gossiped `free_storage_gb` to budget
+/// remaining; the desktop's job is the UI surface.
+export interface StorageBudgetState {
+  budget_bytes: number | null;
+  used_bytes: number;
+  free_disk_bytes: number;
+  recommended_bytes: number;
+}
+
+export async function getStorageBudget(): Promise<StorageBudgetState> {
+  return invoke("get_storage_budget");
+}
+
+/// Pass `null` to clear the budget. The daemon rejects positive
+/// values below 1 GiB.
+export async function setStorageBudget(
+  budgetBytes: number | null,
+): Promise<StorageBudgetState> {
+  return invoke("set_storage_budget", { budgetBytes });
+}
+
+export async function buildCorpusIndex(corpusId: string): Promise<void> {
+  return invoke("build_corpus_index", { corpusId });
+}
+
+export async function diagnoseCorpus(): Promise<string> {
+  return invoke("diagnose_corpus");
+}
+
+export interface IngestDocumentResult {
+  source: string;
+  chunks_created: number;
+}
+
+export async function ingestDocument(
+  filePath: string,
+): Promise<IngestDocumentResult> {
+  return invoke("ingest_document", { filePath });
+}
+
+export async function getCorpusProgress(
+  corpusId: string,
+): Promise<CorpusProgressPayload | null> {
+  return invoke("get_corpus_progress", { corpusId });
+}
+
+export async function getCorpusHealth(
+  corpusId: string,
+): Promise<CorpusHealthDetail | null> {
+  return invoke("get_corpus_health", { corpusId });
+}
+
+export async function retryEnrichmentFailures(
+  corpusId: string,
+): Promise<number> {
+  return invoke("retry_enrichment_failures", { corpusId });
+}
+
+// ─── Community Mesh ─────────────────────────────────────────
+
+export async function meshCreate(meshName: string): Promise<CreateMeshResponse> {
+  return invoke("mesh_create", { meshName });
+}
+
+export async function meshJoin(link: string): Promise<JoinMeshResponse> {
+  return invoke("mesh_join", { link });
+}
+
+export async function meshPreviewJoinLink(
+  link: string,
+): Promise<JoinConfirmation> {
+  return invoke("mesh_preview_join_link", { link });
+}
+
+export async function meshGetState(): Promise<MeshStateResponse | null> {
+  return invoke("mesh_get_state");
+}
+
+export async function meshIsRunning(): Promise<boolean> {
+  return invoke("mesh_is_running");
+}
+
+export async function meshLeave(): Promise<void> {
+  return invoke("mesh_leave");
+}
+
+export interface RotateInviteResponse {
+  mesh_name: string;
+  join_key: string;
+}
+
+/** Rotate the active mesh's join key. Returns the new bare key.
+ *  Existing members stay connected — only future joins use the new
+ *  link. The next `meshGetState` reflects the new `join_key`/`join_link`. */
+export async function meshRotateInvite(): Promise<RotateInviteResponse> {
+  return invoke("mesh_rotate_invite");
+}
+
+export async function meshDiagnostics(): Promise<import("./types").MeshDiagnostics> {
+  return invoke("mesh_diagnostics");
+}
+
+/** Reachable interfaces (Tailscale / LAN / IPv6) the founder can
+ *  pick from when generating a remote-friendly invite. Empty list
+ *  means no detected interfaces — UI hides the relay picker. */
+export async function meshRelayCandidates(): Promise<
+  import("./types").RelayCandidate[]
+> {
+  return invoke("mesh_relay_candidates");
+}
+
+/** Roll a fresh memorable node-name suggestion (e.g. "BeefyMac").
+ *  The 🎲 button next to the node-name input calls this; the user
+ *  still has to press Save for the name to persist. */
+export async function suggestNodeName(): Promise<string> {
+  return invoke("suggest_node_name");
+}
+
+// ─── Mesh Health: dimensional contributions + peer preferences ──
+//
+// Local mode reads from the in-process daemon's contribution store.
+// Attach mode currently returns empty / errors — the CLI daemon
+// doesn't expose these over HTTP yet. The UI is honest about that
+// gap rather than faking a value.
+
+/** Per-peer dimensional contributions over the default 30-day window.
+ *  Empty in Attach mode and when no events have accumulated. */
+export async function meshGetContributions(): Promise<
+  import("./types").NodeContributionsDto[]
+> {
+  return invoke("mesh_get_contributions");
+}
+
+/** Set the operator-private affinity multiplier this node applies to
+ *  every claim it serves to `nodeId`. Multiplier must be in
+ *  `(0.0, 1.0]` — the constructor rejects anything outside that
+ *  range so there are no preferential lanes above neutral. */
+export async function meshSetPeerPreference(
+  nodeId: string,
+  multiplier: number,
+  reason: string | null,
+): Promise<void> {
+  return invoke("mesh_set_peer_preference", {
+    nodeId,
+    multiplier,
+    reason,
+  });
+}
+
+/** Clear the affinity multiplier for `nodeId`. Returns true if a
+ *  preference was actually present. */
+export async function meshClearPeerPreference(
+  nodeId: string,
+): Promise<boolean> {
+  return invoke("mesh_clear_peer_preference", { nodeId });
+}
+
+/** All currently-set peer preferences. Excluded from gossip — this
+ *  list never leaves the local node. */
+export async function meshListPeerPreferences(): Promise<
+  import("./types").PeerPreferenceDto[]
+> {
+  return invoke("mesh_list_peer_preferences");
+}
+
+export async function recipeValidate(
+  recipePath: string,
+  offline: boolean,
+): Promise<RecipeValidateResult> {
+  return invoke("recipe_validate", { recipePath, offline });
+}
+
+export async function recipeTest(
+  recipePath: string,
+  sampleSize: number,
+  offline: boolean,
+): Promise<RecipeTestResult> {
+  return invoke("recipe_test", { recipePath, sampleSize, offline });
+}
+
+// ─── Recipe authoring ("Add Knowledge Source") ─────────────
+
+/** Result of an `Import recipe` paste/drop. When `success` is
+ *  false, the recipe was NOT written and `errors` carries the
+ *  validator's complaints — render them inline in the import
+ *  dialog. */
+export type ImportRecipeResult = {
+  success: boolean;
+  corpus_id: string;
+  recipe_path: string;
+  errors: string[];
+  warnings: string[];
+};
+
+/** One declared `[parameters.<name>]` block from a recipe. Drives
+ *  the install-time form: `kind` selects the input control, `default`
+ *  pre-populates it, `required` flags it for validation. */
+export type RecipeParameter = {
+  name: string;
+  kind: "string" | "int" | "date" | "list";
+  description: string;
+  required: boolean;
+  default: unknown | null;
+};
+
+export type RecipeParameterSchema = {
+  corpus_id: string;
+  parameters: RecipeParameter[];
+};
+
+/** Import a recipe from a TOML string (paste or file drop). The
+ *  desktop validates it and, on success, writes it under
+ *  `~/.sovereign/recipes/<corpus_id>/recipe.toml` plus a registry
+ *  entry. The next `listCorpora()` round-trip surfaces it as a
+ *  local entry the user can install. */
+export async function corpusImportRecipe(
+  tomlText: string,
+): Promise<ImportRecipeResult> {
+  return invoke("corpus_import_recipe", { tomlText });
+}
+
+/** Read a recipe's `[parameters]` block so the UI can render an
+ *  install-time form. Works for any recipe the registry can
+ *  resolve — bundled, live, or locally-imported. */
+export async function corpusGetRecipeParameters(
+  corpusId: string,
+): Promise<RecipeParameterSchema> {
+  return invoke("corpus_get_recipe_parameters", { corpusId });
+}
+
+/** Same as `installCorpus`, but threads recipe parameters through
+ *  to the daemon. Use for parameterized recipes (SEC EDGAR entity
+ *  list, date ranges, etc.) — pass an empty `parameters` map for
+ *  recipes that declare no parameters. Progress streams on the
+ *  shared `corpus-progress` event. */
+export async function corpusInstallWithParameters(
+  corpusId: string,
+  parameters: Record<string, string | number | string[]>,
+): Promise<void> {
+  return invoke("corpus_install_with_parameters", {
+    request: { corpus_id: corpusId, parameters },
+  });
+}
+
+// ─── Insights ──────────────────────────────────────────────
+
+export async function clipInsight(
+  clippedText: string,
+  messageId: string,
+  paragraphIndex: number,
+  sourceJson: string,
+  positionJson?: string,
+): Promise<InsightNodeDto> {
+  return invoke("clip_insight", {
+    clippedText,
+    messageId,
+    paragraphIndex,
+    sourceJson,
+    positionJson: positionJson ?? null,
+  });
+}
+
+export async function listInsights(
+  limit?: number,
+): Promise<InsightNodeDto[]> {
+  return invoke("list_insights", { limit: limit ?? null });
+}
+
+export async function searchInsights(
+  query: string,
+): Promise<InsightNodeDto[]> {
+  return invoke("search_insights", { query });
+}
+
+export async function deleteInsight(id: string): Promise<void> {
+  return invoke("delete_insight", { id });
+}
+
+export async function getSinkStatus(): Promise<SinkStatusDto> {
+  return invoke("get_sink_status");
+}
+
+export async function exploreInsights(
+  nodeIds: string[],
+): Promise<string> {
+  return invoke("explore_insights", { nodeIds });
+}
+
+// ─── Document Assets ─────────────────────────────────────────
+
+export async function uploadDocumentAsset(
+  filePath: string,
+): Promise<{ asset: DocumentAsset }> {
+  return invoke("upload_document_asset", { filePath });
+}
+
+export async function askDocument(
+  assetId: string,
+  question: string,
+  conversationId: string,
+): Promise<DocumentAskResponse> {
+  return invoke("ask_document", { assetId, question, conversationId });
+}
+
+/** Fetch a single document asset by id. Used to pick up state changes
+ *  (e.g. after an auto-heal skeleton rebuild completes). */
+export async function getDocumentAsset(
+  assetId: string,
+): Promise<DocumentAsset | null> {
+  return invoke("get_document_asset", { assetId });
+}
+
+/** Rebuild the skeleton for an asset whose ingestion was interrupted.
+ *  Runs from stored chunks — no file re-upload needed. */
+export async function rebuildDocumentSkeleton(
+  assetId: string,
+): Promise<DocumentAsset> {
+  return invoke("rebuild_document_skeleton", { assetId });
+}
+
+export async function listDocumentAssets(): Promise<DocumentAsset[]> {
+  return invoke("list_document_assets");
+}
+
+export async function deleteDocumentAsset(
+  assetId: string,
+): Promise<void> {
+  return invoke("delete_document_asset", { assetId });
+}
+
+export async function listLegacyDocuments(): Promise<LegacyDocumentEntry[]> {
+  return invoke("list_legacy_documents");
+}
+
+export async function promoteLegacyDocument(
+  source: string,
+): Promise<{ asset: DocumentAsset }> {
+  return invoke("promote_legacy_document", { source });
+}
+
+// ─── Local corpus ──────────────────────────────────────────────
+
+import type {
+  LocalCorpusConfig,
+  PathValidation,
+  LcPreScanResponse,
+  IncompleteJob,
+} from "./types";
+
+export async function lcValidatePath(path: string): Promise<PathValidation> {
+  return invoke("lc_validate_path", { path });
+}
+
+export async function lcPreScan(
+  path: string,
+  sourceType: "folder" | "obsidian",
+  displayName?: string,
+): Promise<LcPreScanResponse> {
+  return invoke("lc_pre_scan", {
+    path,
+    sourceType,
+    displayName: displayName ?? null,
+  });
+}
+
+/** Begin ingestion for an already-registered corpus. Returns a job_id
+ *  to subscribe to `local-corpus://progress/{job_id}` on. When
+ *  `withOcr` is `true`, scanned PDFs flagged by the pre-scan get
+ *  rasterized + OCR'd + cleaned up via the daemon's fast slot before
+ *  they're indexed. The flag persists in the corpus config so a
+ *  subsequent re-ingest behaves the same way without re-prompting. */
+export async function lcIngest(
+  corpusId: string,
+  withOcr?: boolean,
+): Promise<string> {
+  return invoke("lc_ingest", {
+    corpusId,
+    withOcr: withOcr ?? null,
+  });
+}
+
+/** Whether the desktop has a working OCR pipeline (Tesseract sidecar
+ *  resolved at boot). Drives the visibility of the "Read them with
+ *  OCR" affordance on the pre-scan panel. */
+export async function lcOcrAvailable(): Promise<boolean> {
+  return invoke("lc_ocr_available");
+}
+
+export async function lcList(): Promise<LocalCorpusConfig[]> {
+  return invoke("lc_list");
+}
+
+export async function lcRemove(corpusId: string): Promise<void> {
+  return invoke("lc_remove", { corpusId });
+}
+
+export async function lcIncompleteJobs(): Promise<IncompleteJob[]> {
+  return invoke("lc_incomplete_jobs");
+}
+
+import type { ClusterConfig as LcClusterConfig, VaultPreview as LcVaultPreview } from "./types";
+
+export async function lcCluster(
+  corpusId: string,
+  config?: LcClusterConfig,
+): Promise<string> {
+  return invoke("lc_cluster", { corpusId, config: config ?? null });
+}
+
+export async function lcGetPreview(
+  corpusId: string,
+  config?: LcClusterConfig,
+): Promise<LcVaultPreview> {
+  return invoke("lc_get_preview", { corpusId, config: config ?? null });
+}
+
+import type {
+  GitStatus as LcGitStatus,
+  WriteBackResult as LcWriteBackResult,
+  SnapshotMeta as LcSnapshotMeta,
+  RollbackResult as LcRollbackResult,
+  CleanResult as LcCleanResult,
+} from "./types";
+
+export async function lcCheckGit(corpusId: string): Promise<LcGitStatus | null> {
+  return invoke("lc_check_git", { corpusId });
+}
+
+export async function lcWriteTags(
+  corpusId: string,
+  gitCommit: boolean,
+): Promise<LcWriteBackResult> {
+  return invoke("lc_write_tags", { corpusId, gitCommit });
+}
+
+export async function lcListSnapshots(corpusId: string): Promise<LcSnapshotMeta[]> {
+  return invoke("lc_list_snapshots", { corpusId });
+}
+
+export async function lcRollback(
+  corpusId: string,
+  snapshotPath: string,
+): Promise<LcRollbackResult> {
+  return invoke("lc_rollback", { corpusId, snapshotPath });
+}
+
+export async function lcClean(corpusId: string): Promise<LcCleanResult> {
+  return invoke("lc_clean", { corpusId });
+}
+
+export async function lcCancel(corpusId: string): Promise<boolean> {
+  return invoke("lc_cancel", { corpusId });
+}
+
+// ─── Watched-folder lifecycle ─────────────────────────────────────
+//
+// Mirrors the daemon's `/internal/corpus/watch/*` HTTP routes; the
+// Tauri commands HTTP-proxy to the running daemon (Attach mode) or
+// the desktop's embedded daemon (Local mode). Same router on both
+// sides, so the wire shape is identical.
+
+import type {
+  WatchedFolderConfig,
+  WatchedFolderRegisterResponse,
+  WatchedFolderListResponse,
+  WatchedFolderStatusResponse,
+  WatchedFolderStateResponse,
+  WatchedFolderAckResponse,
+  WatchedFolderDetailsResponse,
+  WatchedFolderDocumentResponse,
+  WatchedFolderIncompleteJobsResponse,
+} from "./types";
+
+export async function lcWatchRegister(
+  path: string,
+  displayName?: string,
+  config?: WatchedFolderConfig,
+  syncInitial?: boolean,
+): Promise<WatchedFolderRegisterResponse> {
+  return invoke("lc_watch_register", {
+    path,
+    displayName: displayName ?? null,
+    config: config ?? null,
+    syncInitial: syncInitial ?? false,
+  });
+}
+
+export async function lcWatchList(): Promise<WatchedFolderListResponse> {
+  return invoke("lc_watch_list");
+}
+
+export async function lcWatchStatus(
+  corpusId: string,
+): Promise<WatchedFolderStatusResponse> {
+  return invoke("lc_watch_status", { corpusId });
+}
+
+export async function lcWatchState(
+  corpusId: string,
+): Promise<WatchedFolderStateResponse> {
+  return invoke("lc_watch_state", { corpusId });
+}
+
+export async function lcWatchPause(
+  corpusId: string,
+  reason?: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_pause", { corpusId, reason: reason ?? null });
+}
+
+export async function lcWatchResume(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_resume", { corpusId });
+}
+
+export async function lcWatchConfirmDeletion(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_confirm_deletion", { corpusId });
+}
+
+/** Folder-ingest v1 §3.5: trigger a sweep on a Manual-mode watched
+ *  folder. The daemon returns 409 (surfaced as an error here) if the
+ *  corpus is in Continuous mode — the request would otherwise
+ *  silently no-op. */
+export async function lcWatchSyncNow(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_sync_now", { corpusId });
+}
+
+/** Folder-ingest v1 §3.7: per-folder glassbox digest for the
+ *  detail panel. Heavier than `lcWatchState`; fetch once when
+ *  the user opens the panel rather than on every poll tick. */
+export async function lcWatchDetails(
+  corpusId: string,
+): Promise<WatchedFolderDetailsResponse> {
+  return invoke("lc_watch_details", { corpusId });
+}
+
+/** Folder-ingest v1 §3.7: per-document inspection digest for the
+ *  document-inspector panel. `docId` is the relative-path key
+ *  the manager stores; the Tauri command percent-encodes it. */
+export async function lcWatchDocument(
+  corpusId: string,
+  docId: string,
+): Promise<WatchedFolderDocumentResponse> {
+  return invoke("lc_watch_document", { corpusId, docId });
+}
+
+/** Folder-ingest v1 §3.1: layer an additional root onto an
+ *  existing watched corpus. */
+export async function lcWatchAddRoot(
+  corpusId: string,
+  path: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_add_root", { corpusId, path });
+}
+
+/** Folder-ingest v1 §3.1: detach an additional root by 0-based
+ *  index into `additional_roots`. */
+export async function lcWatchRemoveRoot(
+  corpusId: string,
+  idx: number,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_remove_root", { corpusId, idx });
+}
+
+/** Folder-ingest v1 §3.3: enable atlas enrichment on a watched
+ *  folder. Returns `{ corpus_id, job_id, ok }`. The build runs
+ *  in a daemon-side subprocess; subscribe to
+ *  `enrich://progress/<job_id>` for events. */
+export async function lcWatchEnrichEnable(
+  corpusId: string,
+  pipelineId: string,
+): Promise<{ corpus_id: string; job_id: string; ok: boolean }> {
+  return invoke("lc_watch_enrich_enable", {
+    corpusId,
+    pipelineId,
+  });
+}
+
+/** Folder-ingest v1 §3.3: disable atlas enrichment. Idempotent. */
+export async function lcWatchEnrichDisable(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_enrich_disable", { corpusId });
+}
+
+/** Folder-ingest v1 §3.3: rebuild the atlas with the previously-
+ *  configured pipeline. */
+export async function lcWatchEnrichRebuild(
+  corpusId: string,
+): Promise<{ corpus_id: string; job_id: string; ok: boolean }> {
+  return invoke("lc_watch_enrich_rebuild", { corpusId });
+}
+
+export async function lcWatchRemove(
+  corpusId: string,
+): Promise<WatchedFolderAckResponse> {
+  return invoke("lc_watch_remove", { corpusId });
+}
+
+export async function lcWatchIncompleteJobs(): Promise<WatchedFolderIncompleteJobsResponse> {
+  return invoke("lc_watch_incomplete_jobs");
+}
+
+// ─── Atlas enrichment (Landing 3.C/3.D) ──────────────────────────────
+//
+// Wrappers for the enrichment Tauri command surface in
+// sovereign-desktop/src-tauri/src/enrich_commands.rs. One function
+// per command, typed end-to-end against the Rust signatures.
+
+import type {
+  EnrichBuildHandle,
+  EnrichedCorpusSummary,
+  PhaseFailure,
+  SepIngestResult,
+  EnrichEstimate,
+  ActiveEnrichJob,
+  StarterQuestion,
+  SampledDocuments,
+} from "./types";
+
+/** Kick off an async `enrich build` run. Returns immediately with
+ *  the channel name; the UI subscribes via
+ *  `listen<EnrichProgress>(handle.channel, ...)`.
+ *
+ *  - `chapters = null` runs `--full`
+ *  - `chapters = [ids]` runs `--chapters <csv>`
+ *  - `skipSteps` forwards `--skip <step>` flags
+ */
+export async function enrichBuildAsync(
+  corpusId: string,
+  chapters: string[] | null,
+  skipSteps: string[] | null,
+): Promise<EnrichBuildHandle> {
+  return invoke("enrich_build_async", {
+    corpusId,
+    chapters,
+    skipSteps,
+  });
+}
+
+/** Request cancellation of an in-flight build. Returns `true` if
+ *  the job was found and flagged, `false` if the job_id isn't
+ *  tracked (already finished or never started). Idempotent —
+ *  double-clicking Cancel is harmless.
+ *
+ *  Typical latency to actual subprocess kill is sub-second (the
+ *  CLI emits ≥ 1 stdout line per chapter). A terminal
+ *  `spawn_failed` event follows carrying "Build cancelled by user". */
+export async function enrichCancelBuild(jobId: string): Promise<boolean> {
+  return invoke("enrich_cancel_build", { jobId });
+}
+
+/** Read the structured-failure aggregate for one corpus. Returns
+ *  an array of `PhaseFailure` records the UI groups by kind. */
+export async function enrichErrors(corpusId: string): Promise<PhaseFailure[]> {
+  return invoke("enrich_errors", { corpusId });
+}
+
+/** Scaffold a per-article SEP enrichment corpus from the cached
+ *  parquet. `paragraphsPerSection = null` uses the recipe default
+ *  (5 paragraphs per section). */
+export async function enrichSepIngest(
+  slug: string,
+  paragraphsPerSection: number | null,
+): Promise<SepIngestResult> {
+  return invoke("enrich_sep_ingest", {
+    slug,
+    paragraphsPerSection,
+  });
+}
+
+/** Inventory of enrichment corpora on disk. Sorted newest-first
+ *  by `created_at`. */
+export async function enrichListCorpora(): Promise<EnrichedCorpusSummary[]> {
+  return invoke("enrich_list_corpora");
+}
+
+/** Idempotent bridge: wrap the local-corpus staged JSONL for a
+ *  folder/Obsidian ingest as a synthetic plaintext source and
+ *  invoke `sovereign enrich init` against it.
+ *
+ *  `pipelineId` must be `literary_atlas` or `philosophy_atlas` —
+ *  only atlas-producing pipelines are allowed through this path.
+ *
+ *  `sampleSize` optimises time-to-first-value. When set, only the
+ *  first N usable records from the staged JSONL are written to the
+ *  synthetic plaintext; the atlas covers that sample only. The
+ *  returned `SampledDocuments.total` always reflects every usable
+ *  record, so the UI can say "atlas covers 5 of your 47 documents".
+ *
+ *  Safe to call multiple times; if `config.json` already pins the
+ *  same pipeline AND the synthetic source already covers the
+ *  requested sample size, it's a no-op. */
+export async function enrichInitForLocalCorpus(
+  corpusId: string,
+  pipelineId: "literary_atlas" | "philosophy_atlas",
+  sampleSize: number | null = null,
+): Promise<SampledDocuments> {
+  return invoke("enrich_init_for_local_corpus", {
+    corpusId,
+    pipelineId,
+    sampleSize,
+  });
+}
+
+/** Pre-run estimate for an atlas build. Requires
+ *  `enrich_init_for_local_corpus` (or equivalent) to have written
+ *  `~/.sovereign/indexes/<corpus>/chapters.json`. The UI surfaces
+ *  `minutes_low`..`minutes_high` as a range; the point estimates
+ *  (`sections`, `est_tokens`) feed the transparency panel. */
+export async function enrichEstimate(
+  corpusId: string,
+): Promise<EnrichEstimate> {
+  return invoke("enrich_estimate", { corpusId });
+}
+
+/** If a build is currently in flight for this corpus, return the
+ *  job_id + progress channel. Lets the UI attach to an existing
+ *  subprocess from a different surface (e.g., the onboarding
+ *  flow finds a Settings-initiated build). */
+export async function enrichGetActiveJob(
+  corpusId: string,
+): Promise<ActiveEnrichJob | null> {
+  return invoke("enrich_get_active_job", { corpusId });
+}
+
+/** Mined starter questions for the chat empty state + onboarding
+ *  celebration screen. Returns an empty array when the atlas
+ *  hasn't been built yet (NOT an error — the UI branches on the
+ *  length to show excerpt-based fallbacks). */
+export async function enrichGetStarterQuestions(
+  corpusId: string,
+  limit: number,
+): Promise<StarterQuestion[]> {
+  return invoke("enrich_get_starter_questions", { corpusId, limit });
+}
+
+/** True when the user has never completed the onboarding corpus
+ *  flow. Checked alongside `enrichListCorpora().length === 0` in
+ *  App.svelte to decide whether to gate the first-corpus flow. */
+export async function isFirstRun(): Promise<boolean> {
+  return invoke("is_first_run");
+}
+
+/** Write the `~/.sovereign/first_run_complete` marker so subsequent
+ *  launches skip the first-corpus onboarding flow. */
+export async function markFirstRunComplete(): Promise<void> {
+  return invoke("mark_first_run_complete");
+}
+
+// ─── Recipe Author Workspace (M2) ────────────────────────────
+
+import type {
+  RecipeProjectListEntry,
+  RecipeAuthorDashboardState,
+  RestoreCheckpointOutcome,
+} from "./types";
+
+/** List recipe-author projects, newest first. Each entry carries a
+ *  charter excerpt for the sidebar tooltip + summary fields driving
+ *  the row state. */
+export async function recipeAuthorListProjects(): Promise<
+  RecipeProjectListEntry[]
+> {
+  return invoke("recipe_author_list_projects");
+}
+
+/** Create a new recipe-author project. Allocates a v4 UUID
+ *  feature_id, lays down the FeatureRow + sidecar dir, returns the
+ *  freshly-created list entry. */
+export async function recipeAuthorNewProject(
+  title: string,
+  charterMd: string,
+): Promise<RecipeProjectListEntry> {
+  return invoke("recipe_author_new_project", {
+    req: { title, charter_md: charterMd },
+  });
+}
+
+/** The single read powering the workspace dashboard. Coarse on
+ *  purpose — the cards are pure presentation over slices of this
+ *  struct. Polled at 2s while the workspace is open. */
+export async function recipeAuthorDashboardState(
+  featureId: string,
+): Promise<RecipeAuthorDashboardState> {
+  return invoke("recipe_author_dashboard_state", { featureId });
+}
+
+/** Restore a project to a prior checkpoint snapshot. Lays down a new
+ *  restore-anchor checkpoint and (when the project has a recipe id)
+ *  overwrites the live recipe.toml from the snapshot. */
+export async function recipeAuthorRestoreCheckpoint(
+  featureId: string,
+  checkpointId: string,
+): Promise<RestoreCheckpointOutcome> {
+  return invoke("recipe_author_restore_checkpoint", {
+    req: { feature_id: featureId, checkpoint_id: checkpointId },
+  });
+}
+
+/** Toggle the recipe-author skill in `active_skills`. Called on
+ *  workspace mount (active=true) so primary_skill_id_for_conversation
+ *  picks the recipe-author system prompt for new conversations
+ *  started while the workspace is open. */
+export async function recipeAuthorSetWorkspaceActive(
+  active: boolean,
+): Promise<boolean> {
+  return invoke("recipe_author_set_workspace_active", { active });
+}

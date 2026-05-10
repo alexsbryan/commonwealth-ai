@@ -1,0 +1,126 @@
+[skill]
+id = "research-analyst"
+name = "Research & Analysis"
+version = "0.2.0"
+description = "Deep multi-source research with citations and source evaluation. Searches local knowledge bases first, supplements with web when needed."
+
+[routing]
+trigger_phrases = [
+    "research", "investigate", "compare sources", "what do experts say",
+    "find evidence", "literature on", "what's the consensus",
+    "what has been published", "survey the field", "explain this concept"
+]
+default_intent = "ComplexTask"
+min_confidence = 0.75
+
+[[planner.templates]]
+name = "literature_survey"
+trigger = "User wants to know what has been published on a topic"
+steps = """
+1. Search local knowledge bases for the topic, focusing on
+   OpenAlex abstracts and Wikipedia context. [no_sampling]
+2. Assess coverage: does the local corpus show the landscape? [no_sampling]
+3. If sufficient, synthesize a survey with citations. [sample:3:llm_judge] [eval:synthesis, max_retries:1]
+4. If gaps exist, supplement with web search if available. [no_sampling]
+5. Present: key authors, central debates, methods, open questions. [sample:3:llm_judge] [eval:synthesis, max_retries:1]
+"""
+
+[[planner.templates]]
+name = "concept_explanation"
+trigger = "User wants to understand a concept, theory, or framework"
+steps = """
+1. Search local knowledge bases, prioritizing Stanford
+   Encyclopedia of Philosophy and Wikipedia. [no_sampling]
+2. Synthesize: what it is, who originated it, related concepts,
+   main critiques. [sample:3:llm_judge] [eval:synthesis, max_retries:1]
+3. Web search only if concept is very recent (post-2024). [no_sampling]
+"""
+
+[[planner.templates]]
+name = "methodology_help"
+trigger = "User needs help with research methodology or analysis approach"
+steps = """
+1. Search local knowledge bases for methodology references
+   and established frameworks. [no_sampling]
+2. Identify relevant textbooks, handbooks, or survey papers
+   from OpenAlex abstracts. [no_sampling]
+3. Synthesize practical guidance with citations to authoritative sources. [sample:3:llm_judge] [eval:synthesis, max_retries:1]
+4. Supplement with web search only for very specific or recent methods. [no_sampling]
+"""
+
+[[planner.templates]]
+name = "multi_source_research"
+trigger = "User wants information synthesized from multiple sources"
+steps = """
+1. Search local knowledge bases for the topic across all corpora. [no_sampling]
+2. Assess coverage: are the local results sufficient? [no_sampling]
+3. If gaps exist, decompose the question into 2-3 focused sub-queries
+   and supplement with web search. [no_sampling]
+4. Cross-reference findings: identify agreement, contradiction, and gaps. [sample:3:llm_judge]
+5. Synthesize into a cited response. Every claim cites its source.
+   If sources conflict, present both positions with credibility assessment. [sample:3:llm_judge] [eval:synthesis, max_retries:2]
+"""
+
+[[planner.templates]]
+name = "document_analysis"
+trigger = "User asks about content in their documents"
+steps = """
+1. Search the user's document corpus via the search tool. [no_sampling]
+2. If document results are insufficient, supplement with web search. [no_sampling]
+3. Synthesize with clear attribution: distinguish document-sourced
+   claims from web-sourced claims. [sample:3:llm_judge] [eval:synthesis, max_retries:1]
+"""
+
+[tools]
+required = ["search"]
+optional = ["document"]
+
+[tools.search]
+prefer_local = true
+
+[prompts]
+synthesis = """
+You are a research analyst. Your standards:
+- Every factual claim must cite its source by name using [Source: name].
+- If you make a claim that is NOT directly supported by the provided
+  sources, mark it with [unverified]. This is critical for user trust.
+  Only omit [unverified] when a specific provided source supports the claim.
+- When sources conflict, present both positions and assess
+  which has stronger evidence, explaining why.
+- Distinguish between well-established consensus and emerging findings.
+- If the evidence is insufficient to answer confidently, say so.
+  Do not hedge with vague qualifiers — be specific about what is
+  and isn't known.
+- Prefer local knowledge base sources (Wikipedia, OpenAlex, SEP)
+  over web results when both are available.
+"""
+
+[evaluation]
+synthesis = """
+Check this research synthesis for:
+1. Every factual claim cites a specific source from the inputs.
+2. Claims not supported by provided sources are marked [unverified].
+3. No claims are attributed to sources that don't support them.
+4. When sources conflict, both positions are presented.
+5. The synthesis answers the original question, not a tangent.
+If any of these fail, explain which one and why.
+"""
+
+[inference]
+privacy            = "mesh_allowed"
+capability_hint    = "general"
+latency_class      = "extended"
+min_context_tokens = 16384
+max_output_tokens  = 4000
+
+[memory]
+extract_prompt_addendum = """
+For research conversations, extract:
+- Specific topics the user has researched (for future context linkage).
+- Stated positions or conclusions the user has reached.
+- Sources the user found particularly credible or dismissed.
+Do NOT extract: intermediate search results, raw findings that
+weren't synthesized into a conclusion.
+"""
+confidence_decay_per_month = 0.05
+prune_threshold = 0.1

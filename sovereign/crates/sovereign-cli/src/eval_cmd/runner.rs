@@ -1,0 +1,1798 @@
+//! Per-question runner.
+//!
+//! Two modes share a result shape so a retrieval baseline and a synth
+//! baseline can be diffed against each other:
+//!
+//!   - **Retrieval** ([`run_bank`]) — embed → hybrid search → score
+//!     facts/sources against the retrieved chunk bag. Cheap, isolates
+//!     the index/embed/filter axis from the chat-model axis.
+//!   - **Synth** ([`run_bank_synth`]) — drive the full
+//!     `Runtime::handle_message_stream` path the desktop chat surface
+//!     uses (intent classifier → router → search tools → prompt
+//!     assembly → chat completion). Score `expected_facts` against the
+//!     synthesised answer text and `expected_sources` against the
+//!     `retrieved_chunks` provenance metadata. Exercises the routing
+//!     and aggregation layers (which are tunable knobs in their own
+//!     right), at the cost of one chat-model call per question.
+//!
+//! Both modes serialise into the same `EvalRun` so a single JSON file
+//! can be diffed against another regardless of which mode produced it;
+//! the synth-specific payload lives under the optional `synth` field
+//! on `EvalResult`.
+
+use std::time::Instant;
+
+use corpus_engine::enrichment::atlas::{
+    atoms_content_hash, read_atlas_atoms, read_atlas_edges, read_atlas_embeddings,
+    write_atlas_embeddings, AtomEnvelope, CachedAtlasEntry, ChunkRef, Edge, EdgeType,
+    ATLAS_DIRNAME,
+};
+use corpus_engine::ScoredChunk;
+use std::collections::{HashMap, HashSet};
+use futures::StreamExt;
+use serde::{Deserialize, Serialize};
+use sovereign_core::atlas_context::{
+    atlas_top_k_across, AtlasContext, AtlasEntry,
+};
+
+use crate::chat_cmd::bootstrap::ChatSession;
+use crate::chat_cmd::render::split_reasoning;
+use crate::enrich_cmd::paths;
+use crate::eval_cmd::bank::{EvalBank, Question};
+use crate::eval_cmd::score::{
+    score_essay_readiness, score_facts, score_facts_in_text, score_sources, score_sources_loose,
+    score_sources_titles, EssayReadinessScore, FactScore, JudgeSourceDetail, SourceScore,
+};
+
+/// One full run of a bank against a corpus. Serialisable so a run can
+/// be archived and diffed against a later run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalRun {
+    pub bank_name: String,
+    pub corpus: String,
+    pub limit: usize,
+    pub started_at_unix: i64,
+    pub results: Vec<EvalResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalResult {
+    pub question_id: String,
+    pub category: String,
+    pub question: String,
+    pub retrieved: Vec<RetrievedChunk>,
+    pub source_score: ScoreSnapshot,
+    /// In retrieval mode this is "facts present in the retrieved chunk
+    /// text"; in synth mode this is "facts present in the model's
+    /// answer". `synth.chunks_fact_score` carries the
+    /// retrieval-haystack version when synth mode is active, so the
+    /// answer-vs-retrieval delta is directly readable.
+    pub fact_score: ScoreSnapshot,
+    pub embed_ms: u64,
+    pub search_ms: u64,
+    /// Distinct corpora that contributed at least one chunk. Useful for
+    /// detecting cases where the bank's `corpus` filter and the
+    /// installed-index landscape disagreed.
+    pub corpora_hit: Vec<String>,
+    /// True iff the embed dim matched the index dim. False = FTS-only,
+    /// which is a meaningful signal for "your embed model and your
+    /// index are not the same vintage."
+    pub vector_eligible: bool,
+    /// Populated only by [`run_bank_synth`]. Carries the synthesised
+    /// answer + provenance signals so reports / diffs can show how the
+    /// chat-model and routing layers performed on top of retrieval.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synth: Option<SynthSnapshot>,
+    /// Loose-judge source score (Option A). Populated when `eval run`
+    /// is launched with `--loose-source-judge`. Treats the rigid
+    /// `source_score` as a floor and asks an LLM to additionally
+    /// credit any *missing* expected_sources whose topic IS materially
+    /// covered by the retrieved chunks (paraphrase / canonical-sibling
+    /// / indirect coverage all count). Lets atlas-grounded retrieval
+    /// be evaluated honestly on `extraction_first` corpora where
+    /// titles don't match slugs literally. `None` when the flag was
+    /// not set on the run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub loose_source_score: Option<ScoreSnapshot>,
+    /// Per-source audit trail for the loose judge — short rationale
+    /// per source so a reviewer can verify each loose-credit decision
+    /// without re-running. Empty when `--loose-source-judge` was not set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loose_source_evidence: Vec<JudgeSourceDetail>,
+    /// Essay-readiness multi-axis judge (Option C). Populated when
+    /// `eval run` is launched with `--essay-judge`. Where the loose
+    /// source judge answers "are the right articles in the bag?", this
+    /// answers "does the bag have what an undergraduate essay needs?"
+    /// — topical breadth, position attribution, dialectical breadth,
+    /// argument depth — each on 0-3 with a short rationale. `None`
+    /// when the flag was not set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub essay_readiness: Option<EssayReadinessScore>,
+    /// Atlas-derived virtual chunks that were surfaced for this
+    /// question — entity cards, claim atoms, tension edges,
+    /// configurations. Pulled separately from `retrieved` because they
+    /// don't compete for source-passage slots: the essay-judge prompt
+    /// renders them as a "navigation, not evidence" section. Captured
+    /// in the JSON output so a reviewer can audit *what* the navigation
+    /// section showed the model, distinct from what it claimed to
+    /// retrieve.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub atlas_navigation: Vec<RetrievedChunk>,
+}
+
+/// Synth-mode payload. Only populated when the eval drove the full
+/// chat pipeline (intent classifier → router → search → completion).
+/// All fields are best-effort: the metadata block on the persisted
+/// assistant message is the source of truth, and missing fields stay
+/// `None` rather than poisoning the row.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SynthSnapshot {
+    /// The visible portion of the model's answer (after `<think>` blocks
+    /// are stripped, mirroring the desktop's `parse-message.ts`).
+    pub answer: String,
+    /// Total chars across all `<think>` blocks. Cheap signal for "did
+    /// the model spend more time reasoning than answering?".
+    pub reasoning_chars: usize,
+    /// Wall-time around `handle_message_stream` until the stream
+    /// drained. Distinct from `provenance.total_latency_ms`, which the
+    /// runtime measures on its own clock.
+    pub stream_wall_ms: u64,
+    /// `provenance.total_latency_ms` from the persisted message
+    /// metadata, when present.
+    pub total_latency_ms: Option<u64>,
+    /// `provenance.intent` — what the classifier decided. Crucial for
+    /// debugging routing-layer regressions ("why is this question
+    /// routing to ChitChat instead of KnowledgeQuery?").
+    pub intent: Option<String>,
+    /// Origins of every retrieval source the runtime touched, e.g.
+    /// `corpus-wikipedia`, `web`, `conversation-history`. Empty when
+    /// the runtime answered without retrieval.
+    pub source_origins: Vec<String>,
+    /// Number of chunks the runtime ultimately surfaced for synthesis.
+    pub retrieved_chunk_count: usize,
+    /// Diagnostic: the same fact rule applied to the *snippets* in
+    /// `retrieved_chunks` rather than the answer. Lets the report
+    /// distinguish "retrieval missed the fact" from "retrieval had the
+    /// fact but the model didn't surface it." Snippets are truncated
+    /// to ~200 chars by the runtime, so this is a lower bound on what
+    /// retrieval actually saw — read alongside the retrieval-mode
+    /// baseline for the unbiased number.
+    pub chunks_fact_score: ScoreSnapshot,
+    /// Instructor-mode (LLM-as-judge) score: per fact, did a fast-slot
+    /// model decide the concept was conveyed by the answer? Catches
+    /// paraphrase coverage that the strict keyword-AND scorer misses.
+    /// `None` when the run was launched with `--no-judge`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub judge_fact_score: Option<ScoreSnapshot>,
+    /// Per-fact audit trail for the judge calls — verbatim evidence
+    /// quote (or `"(absent)"`) so a reviewer can verify yes/no
+    /// decisions without re-running. Empty when `--no-judge`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub judge_evidence: Vec<crate::eval_cmd::score::JudgeFactDetail>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetrievedChunk {
+    pub corpus_id: String,
+    pub title: Option<String>,
+    pub url: Option<String>,
+    pub score: f32,
+    /// Truncated to ~600 chars to keep run files readable; the full
+    /// chunk lives in the index if the developer wants to drill in.
+    pub snippet: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoreSnapshot {
+    pub matched: Vec<String>,
+    pub missing: Vec<String>,
+    pub total_expected: usize,
+    /// `None` when `total_expected == 0`. Lets the report distinguish
+    /// "passed perfectly" (1.0) from "nothing to measure" (None).
+    pub ratio: Option<f32>,
+}
+
+impl From<SourceScore> for ScoreSnapshot {
+    fn from(s: SourceScore) -> Self {
+        let ratio = s.ratio();
+        Self {
+            matched: s.matched,
+            missing: s.missing,
+            total_expected: s.total_expected,
+            ratio,
+        }
+    }
+}
+
+impl From<FactScore> for ScoreSnapshot {
+    fn from(s: FactScore) -> Self {
+        let ratio = s.ratio();
+        Self {
+            matched: s.matched,
+            missing: s.missing,
+            total_expected: s.total_expected,
+            ratio,
+        }
+    }
+}
+
+/// One classifier decision against the bank, scored against the
+/// per-question expected intent (or category default). Output of the
+/// `--routing-only` mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutingResult {
+    pub question_id: String,
+    pub category: String,
+    pub question: String,
+    pub expected: String,
+    pub actual_intent: String,
+    pub coarse_intent: Option<String>,
+    pub confidence: f32,
+    pub rationale: Option<String>,
+    pub correct: bool,
+    pub latency_ms: u64,
+}
+
+/// Roll-up of a routing-only run.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutingRun {
+    pub bank_name: String,
+    pub started_at_unix: i64,
+    pub results: Vec<RoutingResult>,
+}
+
+/// Drive every question through the router classifier ONLY — no
+/// retrieval, no synthesis. Scores the routing decision against each
+/// question's `expected_intent` (or, if absent, the category default
+/// from `Question::default_expected_intent`). Wall time is dominated
+/// by the classifier LLM call (~0.5-2s on the fast slot) so a 20-row
+/// bank finishes in ~30s. Used to tune the classifier prompt against
+/// a small fast-slot model without burning a full synth eval per
+/// iteration.
+pub async fn run_bank_routing(
+    session: &ChatSession,
+    bank: &EvalBank,
+) -> Result<RoutingRun, String> {
+    let started_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let mut results = Vec::with_capacity(bank.questions.len());
+    for q in &bank.questions {
+        let result = run_question_routing(session, q).await;
+        results.push(result);
+    }
+
+    Ok(RoutingRun {
+        bank_name: bank.bank.name.clone(),
+        started_at_unix,
+        results,
+    })
+}
+
+async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingResult {
+    use sovereign_core::types::{ConversationContext, Intent};
+
+    let expected = match &q.expected_intent {
+        Some(s) => crate::eval_cmd::bank::ExpectedIntent::Exact(
+            // Expected strings are stored as owned Strings on the
+            // bank. The `ExpectedIntent::Exact` variant takes a
+            // 'static str for the category-default path; for an
+            // operator-supplied override we leak the string into a
+            // `String` and compare via `matches` below. Cheaper to
+            // just match here directly.
+            Box::leak(s.clone().into_boxed_str()),
+        ),
+        None => q.default_expected_intent(),
+    };
+
+    // Build a near-empty context. The classifier prompt reads
+    // `installed_corpora` from this struct (it tells the model "we
+    // have wikipedia, sep loaded — prefer LOOKUP for factual
+    // questions"), so we mirror what `build_session` would have
+    // surfaced. Skill hints / corrections are intentionally absent:
+    // the eval scores BASE classifier behaviour, not the corrected
+    // behaviour.
+    let installed = session
+        .corpus_engine
+        .installed_indexes()
+        .await
+        .map(|ix| ix.into_iter().map(|i| i.corpus_id).collect::<Vec<_>>())
+        .unwrap_or_default();
+    let context = ConversationContext {
+        conversation: sovereign_core::types::Conversation {
+            id: "eval-routing".into(),
+            title: None,
+            messages: vec![],
+            created_at: 0,
+            updated_at: 0,
+            version: 0,
+            deleted_at: None,
+            skill_id: None,
+        },
+        memories: vec![],
+        working_memory: None,
+        installed_corpora: installed,
+        document_session: None,
+        topic_context: None,
+        knowledge_view_digests: None,
+        temporal_tensions: Vec::new(),
+    };
+
+    let t = Instant::now();
+    let classification = match session
+        .runtime
+        .router
+        .classify(&q.question, &context, &[])
+        .await
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return RoutingResult {
+                question_id: q.id.clone(),
+                category: q.category.clone(),
+                question: q.question.clone(),
+                expected: expected.label(),
+                actual_intent: format!("error: {e}"),
+                coarse_intent: None,
+                confidence: 0.0,
+                rationale: None,
+                correct: false,
+                latency_ms: t.elapsed().as_millis() as u64,
+            };
+        }
+    };
+    let latency_ms = t.elapsed().as_millis() as u64;
+
+    let actual_intent = intent_wire_label(&classification.primary.intent);
+    let correct = expected.matches(&actual_intent);
+
+    RoutingResult {
+        question_id: q.id.clone(),
+        category: q.category.clone(),
+        question: q.question.clone(),
+        expected: expected.label(),
+        actual_intent,
+        coarse_intent: classification.coarse_intent.clone(),
+        confidence: classification.primary.confidence,
+        rationale: classification.rationale.clone(),
+        correct,
+        latency_ms,
+    }
+}
+
+/// Lowercase wire form of an Intent — matches the strings used in
+/// the bank's `expected_intent` field and the category-default map.
+fn intent_wire_label(intent: &sovereign_core::types::Intent) -> String {
+    use sovereign_core::types::Intent;
+    match intent {
+        Intent::SimpleQuery => "simple_query".into(),
+        Intent::KnowledgeQuery => "knowledge_query".into(),
+        Intent::DeepQuery => "deep_query".into(),
+        Intent::ComparisonQuery => "comparison_query".into(),
+        Intent::MetalingualQuery => "metalingual_query".into(),
+        Intent::ConationQuery => "conation_query".into(),
+        Intent::CommissiveQuery => "commissive_query".into(),
+        Intent::ExpressiveQuery => "expressive_query".into(),
+        Intent::ComplexTask => "complex_task".into(),
+        Intent::SimpleAction { .. } => "simple_action".into(),
+        Intent::Continuation { .. } => "continuation".into(),
+    }
+}
+
+/// Resolve `chunk_id` (format `sec_NNNN`) to the corresponding
+/// section text in the article's source markdown
+/// (`/home/alexbryan/.sovereign/corpora/sep/articles/<slug>.md`).
+/// Sections are delimited by `## Section NNN` headings; we extract
+/// the body between heading N and heading N+1 (or EOF).
+///
+/// Returns `None` when the file is missing or the section can't be
+/// located. Best-effort — caller falls back gracefully.
+fn lookup_section_markdown(article_slug: &str, chunk_id: &str) -> Option<String> {
+    let path = format!(
+        "/home/alexbryan/.sovereign/corpora/sep/articles/{}.md",
+        article_slug
+    );
+    let body = std::fs::read_to_string(&path).ok()?;
+    // chunk_id format `sec_NNNN` → ordinal NNN (strip leading zeros).
+    let n: usize = chunk_id.strip_prefix("sec_")?.parse().ok()?;
+    let needle = format!("## Section {:03}", n);
+    let next = format!("## Section {:03}", n + 1);
+    let start = body.find(&needle)?;
+    let after_heading = start + needle.len();
+    let end = body[after_heading..]
+        .find(&next)
+        .map(|off| after_heading + off)
+        .unwrap_or(body.len());
+    Some(body[after_heading..end].trim().to_string())
+}
+
+/// Within a multi-paragraph section, return the paragraph that
+/// contains `preview` as a substring. Paragraphs are split on blank
+/// lines (markdown convention). Falls back to the whole section if
+/// no paragraph contains the preview, or the section itself is one
+/// paragraph. Truncates to a budget so the judge's snippet window
+/// (~500 chars) sees the most relevant part.
+fn pick_paragraph(section_text: &str, preview: &str) -> String {
+    let preview = preview.trim();
+    let paragraphs: Vec<&str> = section_text.split("\n\n").collect();
+    let chosen = if !preview.is_empty() {
+        paragraphs
+            .iter()
+            .find(|p| p.contains(preview))
+            .copied()
+            .unwrap_or(section_text)
+    } else {
+        section_text
+    };
+    // Trim to a reasonable single-chunk size (~1500 chars) so it
+    // doesn't dominate the prompt budget when judges render
+    // snippets at 500 chars truncate.
+    let trimmed = chosen.trim();
+    if trimmed.len() <= 1500 {
+        trimmed.to_string()
+    } else {
+        // Truncate at char boundary.
+        let mut end = 1500;
+        while end < trimmed.len() && !trimmed.is_char_boundary(end) {
+            end += 1;
+        }
+        trimmed[..end.min(trimmed.len())].to_string()
+    }
+}
+
+/// Truncate atlas-entity text for embedding. Embed models cap context
+/// somewhere around 8K tokens; entities with augmented descriptions
+/// (questions + anchors aggregated across many sections) routinely run
+/// 18KB chars. 3000 chars (~750 tokens) keeps headroom while still
+/// covering the description and the strongest section signals.
+const ATLAS_ENTRY_CHAR_LIMIT: usize = 3000;
+
+/// Render a tension-edge endpoint as a single line for the virtual
+/// chunk's embed text. Endpoint atoms are commonly Entities or
+/// Claims, but the spec permits any atom type, so we cover the
+/// natural-language fields each variant carries. Returns an
+/// "<id> (missing)" placeholder when the edge points at an id that
+/// doesn't resolve — better to keep the tension visible with a
+/// half-known endpoint than to drop it silently.
+pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> String {
+    use AtomEnvelope::*;
+    match atom {
+        Some(Entity(e)) => format!("{}: {}", e.canonical_name, e.description),
+        Some(Claim(c)) => {
+            let act = serde_json::to_string(&c.discourse_act)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            let status = serde_json::to_string(&c.epistemic_status)
+                .unwrap_or_default()
+                .trim_matches('"')
+                .to_string();
+            format!("[Claim: {act}, {status}] {}", c.content)
+        }
+        Some(Question(q)) => format!("Question: {}", q.content),
+        Some(State(s)) => format!("State: {}", s.label),
+        Some(Relation(r)) => format!("Relation: {}", r.label),
+        Some(Event(ev)) => format!("Event: {}", ev.description),
+        Some(Configuration(cfg)) => format!("{}: {}", cfg.label, cfg.description),
+        Some(ArgumentReconstruction(a)) => format!("Argument: {}", a.name),
+        None => format!("{atom_id} (missing)"),
+    }
+}
+
+// AtlasGraph + ChunkRequest + atlas_navigate + edge_weight live in
+// `sovereign_core::atlas_context` — single canonical implementation
+// shared by the eval CLI and the production daemon
+// (`AtlasContextManager`).
+pub use sovereign_core::atlas_context::{AtlasGraph, ChunkRequest};
+pub use sovereign_core::atlas_context::atlas_navigate;
+
+
+/// Filters applied during atlas-context loading. Used to keep the
+/// embed pass tractable on large atlases (e.g. wiki-l5-* has 50K+
+/// non-placeholder entities; without filtering, the pre-embed step
+/// dominates wall time).
+#[derive(Debug, Clone, Default)]
+pub struct AtlasLoadFilter {
+    /// Only embed entities whose `description` is at least this many
+    /// chars. Defaults to 200 — structural one-liners ("X is a Y born
+    /// in Z.") sit under that and would dilute retrieval; extracted /
+    /// augmented entities run hundreds-to-thousands of chars.
+    pub min_description_chars: usize,
+    /// Optional comma-separated `enrichment_depth` allowlist. Empty =
+    /// accept any depth. Useful for "only Tier-2 extracted" filters
+    /// (`--atlas-depth extracted`) without relying on the heuristic.
+    pub depth_allowlist: Vec<String>,
+    /// Hard cap on the number of entities embedded. `None` = no cap.
+    /// Set to bound the worst-case wall time on misconfigured runs.
+    pub max_entries: Option<usize>,
+    /// Path 2 Phase A — also surface Claim atoms as virtual chunks.
+    /// Each claim's `canonical_name` is the article slug derived from
+    /// the atlas corpus_id (so `score_sources` rigid title-match
+    /// credits the article when the claim ranks in top-K). The embed
+    /// text encodes discourse_act + epistemic_status + content. Off
+    /// by default — opt in via `--atlas-include claim`. Cache key
+    /// invalidates automatically via `filter_signature`.
+    pub include_claims: bool,
+    /// Path 2 Phase B — also surface Tension edges as virtual chunks.
+    /// Each tension fuses its `sub_question` with both endpoint atoms
+    /// into a single embed text, so cosine similarity for a question
+    /// like "is X reducible to Y?" can hit the dialectical pair the
+    /// atlas extracted around that very tension. Endpoint atoms are
+    /// commonly Entities or Claims; the surface text uses whichever
+    /// natural-language fields each variant carries. Off by default —
+    /// opt in via `--atlas-include tension`. This is the only Phase 2
+    /// surface that can move the `dialectical_breadth` essay axis,
+    /// because the substance lives on the edge, not on either atom.
+    pub include_tensions: bool,
+    /// Path 2 Phase C — also surface Configuration atoms as virtual
+    /// chunks. Configurations capture the interpretive shape the
+    /// article enacts as a whole (spec §2.7) — "the article structures
+    /// the debate around a tripartite classification of...". One
+    /// Configuration becomes one AtlasEntry with `canonical_name =
+    /// article_slug` and embed text `[Configuration: <label>]
+    /// <description>`. Off by default — opt in via
+    /// `--atlas-include configuration`. Should lift the
+    /// argument_depth axis on essay-readiness.
+    pub include_configurations: bool,
+}
+
+/// Stable string capturing the filter so the embeddings cache can
+/// invalidate when the operator changes the filter shape. Order is
+/// deterministic: depth allowlist is sorted before serialisation.
+fn filter_signature(filter: &AtlasLoadFilter) -> String {
+    let mut depths = filter.depth_allowlist.clone();
+    depths.sort();
+    format!(
+        "min_chars={};depth=[{}];max={};claims={};tensions={};configs={}",
+        filter.min_description_chars,
+        depths.join(","),
+        filter
+            .max_entries
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "none".to_string()),
+        filter.include_claims,
+        filter.include_tensions,
+        filter.include_configurations,
+    )
+}
+
+/// Read `atoms.json` for the named atlas corpus and embed each Entity's
+/// `name + aliases + description` once. Embeddings are persisted to
+/// `atoms.embeddings.bin` alongside `atoms.json` and reused when the
+/// `(atoms content, embed model, filter signature)` triple matches —
+/// re-runs against an unchanged atlas are sub-second on cache hit
+/// vs. multi-minute on cold load for wiki-scale atlases.
+pub async fn load_atlas_context(
+    session: &ChatSession,
+    atlas_corpus_id: &str,
+    top_k: usize,
+    filter: &AtlasLoadFilter,
+) -> Result<AtlasContext, String> {
+    let atlas_dir = paths::index_root(atlas_corpus_id).join(ATLAS_DIRNAME);
+    if !atlas_dir.exists() {
+        return Err(format!(
+            "no atlas at {} — `sovereign enrich ingest {atlas_corpus_id} \
+             --strategy structure_first --source-corpus <id>` first",
+            atlas_dir.display()
+        ));
+    }
+
+    let filter_sig = filter_signature(filter);
+
+    // Try the embeddings cache first. A hit returns a fully-populated
+    // entry list and skips both the atoms.json walk and the embed
+    // loop entirely.
+    let atoms_hash = atoms_content_hash(&atlas_dir)
+        .map_err(|e| format!("hash atoms.json for cache lookup: {e}"))?;
+    match read_atlas_embeddings(&atlas_dir, &session.embed_model, &atoms_hash, &filter_sig) {
+        Ok(Some(cached)) => {
+            eprintln!(
+                "atlas-context: cache HIT — {} entries from `{atlas_corpus_id}` \
+                 (model={}, filter_sig={filter_sig}); top-K per question = {top_k}",
+                cached.len(),
+                session.embed_model,
+            );
+            let entries = cached
+                .into_iter()
+                .map(|c| AtlasEntry {
+                    canonical_name: c.canonical_name,
+                    embed_text: c.embed_text,
+                    embedding: c.embedding,
+                })
+                .collect();
+            return Ok(AtlasContext {
+                atlas_corpus_id: atlas_corpus_id.to_string(),
+                entries,
+                top_k,
+            });
+        }
+        Ok(None) => {} // soft miss; fall through to embed
+        Err(e) => {
+            eprintln!(
+                "atlas-context: cache read error ({e}) — re-embedding from atoms.json"
+            );
+        }
+    }
+
+    let atoms = read_atlas_atoms(&atlas_dir)
+        .map_err(|e| format!("read atlas atoms.json: {e}"))?;
+
+    // Build embed-text per Entity, applying filters. Counters track
+    // why each entity was kept or dropped so the pre-embed log is
+    // diagnostic — operators tuning a Tier-2 atlas need to see "we
+    // dropped 51000 structural one-liners and kept the 52 extracted
+    // entries" rather than just a final total.
+    // Path 2 Phase A — Claim atoms ride alongside Entities in the
+    // virtual-chunk pool when `--atlas-include claim` is set. They
+    // surface with `canonical_name = article_slug` so rigid-source
+    // matching credits the article. For per-article SEP atlases the
+    // corpus_id is `sep-<slug>`; strip it. Other atlases pass
+    // through unchanged.
+    let article_slug: String = atlas_corpus_id
+        .strip_prefix("sep-")
+        .unwrap_or(atlas_corpus_id)
+        .to_string();
+
+    let mut payloads: Vec<(String, String)> = Vec::new();
+    let mut total_entities = 0usize;
+    let mut total_claims = 0usize;
+    let mut kept_claims = 0usize;
+    let mut total_configurations = 0usize;
+    let mut kept_configurations = 0usize;
+    let mut drop_placeholder = 0usize;
+    let mut drop_short_desc = 0usize;
+    let mut drop_depth = 0usize;
+    let mut drop_cap = 0usize;
+    for atom in &atoms.atoms {
+        match atom {
+            AtomEnvelope::Entity(e) => {
+                total_entities += 1;
+                let is_placeholder = e.description.is_empty() && e.salience == 0.0;
+                if is_placeholder {
+                    drop_placeholder += 1;
+                    continue;
+                }
+                if e.description.len() < filter.min_description_chars {
+                    drop_short_desc += 1;
+                    continue;
+                }
+                if !filter.depth_allowlist.is_empty() {
+                    // Match against the serialised form of EnrichmentDepth.
+                    // `serde_json` keeps it lowercase (snake_case) — same form
+                    // operators see in atoms.json.
+                    let depth_label = serde_json::to_string(&e.enrichment_depth)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                        .to_string();
+                    if !filter
+                        .depth_allowlist
+                        .iter()
+                        .any(|d| d.eq_ignore_ascii_case(&depth_label))
+                    {
+                        drop_depth += 1;
+                        continue;
+                    }
+                }
+                if let Some(cap) = filter.max_entries {
+                    if payloads.len() >= cap {
+                        drop_cap += 1;
+                        continue;
+                    }
+                }
+                let mut text = String::new();
+                text.push_str(&e.canonical_name);
+                text.push('\n');
+                if !e.aliases.is_empty() {
+                    text.push_str(&e.aliases.join(", "));
+                    text.push('\n');
+                }
+                text.push_str(&e.description);
+                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                }
+                payloads.push((e.canonical_name.clone(), text));
+            }
+            AtomEnvelope::Claim(c) if filter.include_claims => {
+                total_claims += 1;
+                if !filter.depth_allowlist.is_empty() {
+                    let depth_label = serde_json::to_string(&c.enrichment_depth)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                        .to_string();
+                    if !filter
+                        .depth_allowlist
+                        .iter()
+                        .any(|d| d.eq_ignore_ascii_case(&depth_label))
+                    {
+                        drop_depth += 1;
+                        continue;
+                    }
+                }
+                if let Some(cap) = filter.max_entries {
+                    if payloads.len() >= cap {
+                        drop_cap += 1;
+                        continue;
+                    }
+                }
+                let act = serde_json::to_string(&c.discourse_act)
+                    .unwrap_or_default()
+                    .trim_matches('"')
+                    .to_string();
+                let status = serde_json::to_string(&c.epistemic_status)
+                    .unwrap_or_default()
+                    .trim_matches('"')
+                    .to_string();
+                let mut text = format!("[Claim: {act}, {status}] {content}", content = c.content);
+                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                }
+                payloads.push((article_slug.clone(), text));
+                kept_claims += 1;
+            }
+            AtomEnvelope::Configuration(cfg) if filter.include_configurations => {
+                total_configurations += 1;
+                if !filter.depth_allowlist.is_empty() {
+                    let depth_label = serde_json::to_string(&cfg.enrichment_depth)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                        .to_string();
+                    if !filter
+                        .depth_allowlist
+                        .iter()
+                        .any(|d| d.eq_ignore_ascii_case(&depth_label))
+                    {
+                        drop_depth += 1;
+                        continue;
+                    }
+                }
+                if let Some(cap) = filter.max_entries {
+                    if payloads.len() >= cap {
+                        drop_cap += 1;
+                        continue;
+                    }
+                }
+                let mut text =
+                    format!("[Configuration: {}] {}", cfg.label, cfg.description);
+                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                }
+                payloads.push((article_slug.clone(), text));
+                kept_configurations += 1;
+            }
+            AtomEnvelope::ArgumentReconstruction(a) => {
+                // Always include — these are the named-argument
+                // reconstructions Phase 1 extracted. Embed text is
+                // name + premises + conclusion so a question
+                // mentioning the argument name OR matching its
+                // content can seed navigation onto this atom. The
+                // article-slug `canonical_name` lets `score_sources`
+                // credit the article when the atom is in top-K.
+                if !filter.depth_allowlist.is_empty() {
+                    let depth_label = serde_json::to_string(&a.enrichment_depth)
+                        .unwrap_or_default()
+                        .trim_matches('"')
+                        .to_string();
+                    if !filter
+                        .depth_allowlist
+                        .iter()
+                        .any(|d| d.eq_ignore_ascii_case(&depth_label))
+                    {
+                        drop_depth += 1;
+                        continue;
+                    }
+                }
+                if let Some(cap) = filter.max_entries {
+                    if payloads.len() >= cap {
+                        drop_cap += 1;
+                        continue;
+                    }
+                }
+                let mut text = String::with_capacity(256);
+                text.push_str("[Argument: ");
+                text.push_str(&a.name);
+                text.push_str("] ");
+                for p in &a.premises {
+                    text.push_str(p);
+                    text.push(' ');
+                }
+                text.push_str(&a.conclusion);
+                // Append objection content so cosine seeding picks
+                // this argument when the question vocabulary
+                // overlaps with an objection (e.g. "Frankfurt"
+                // mentioned ⇒ Consequence Argument seeds).
+                for o in &a.objections {
+                    if !o.content.trim().is_empty() {
+                        text.push(' ');
+                        text.push_str(o.content.trim());
+                    } else if !o.name.trim().is_empty() {
+                        text.push(' ');
+                        text.push_str(o.name.trim());
+                    }
+                }
+                if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                    text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                }
+                payloads.push((article_slug.clone(), text));
+            }
+            _ => continue,
+        }
+    }
+
+    // Path 2 Phase B — fold Tension edges into the virtual-chunk pool.
+    // Tensions live in `edges.json`, not `atoms.json`. Each edge points
+    // at two endpoint atoms (commonly Entities or Claims) and carries
+    // a `sub_question` summarising the dialectical question the pair
+    // turns on. Surfacing all three pieces in one embed text gives the
+    // retriever a hit for questions phrased around that very tension.
+    let mut kept_tensions = 0usize;
+    let mut total_tensions = 0usize;
+    if filter.include_tensions {
+        // Build a lookup over atoms keyed by id once, since each edge
+        // resolves two endpoints. Cheap — atlases are at most a few
+        // thousand atoms.
+        use std::collections::HashMap;
+        let atoms_by_id: HashMap<&str, &AtomEnvelope> = atoms
+            .atoms
+            .iter()
+            .map(|a| (a.id().as_str(), a))
+            .collect();
+        match read_atlas_edges(&atlas_dir) {
+            Ok(edges_file) => {
+                for edge in &edges_file.edges {
+                    if edge.edge_type != EdgeType::Tension {
+                        continue;
+                    }
+                    total_tensions += 1;
+                    if let Some(cap) = filter.max_entries {
+                        if payloads.len() >= cap {
+                            drop_cap += 1;
+                            continue;
+                        }
+                    }
+                    let src = atoms_by_id.get(edge.source.as_str()).copied();
+                    let tgt = atoms_by_id.get(edge.target.as_str()).copied();
+                    let sub = edge
+                        .sub_question
+                        .as_deref()
+                        .unwrap_or("(no sub_question recorded)");
+                    let mut text = format!("[Tension] {sub}");
+                    text.push_str("\n");
+                    text.push_str(&endpoint_text(src, edge.source.as_str()));
+                    text.push_str("\n↔\n");
+                    text.push_str(&endpoint_text(tgt, edge.target.as_str()));
+                    if text.len() > ATLAS_ENTRY_CHAR_LIMIT {
+                        text.truncate(ATLAS_ENTRY_CHAR_LIMIT);
+                    }
+                    payloads.push((article_slug.clone(), text));
+                    kept_tensions += 1;
+                }
+            }
+            Err(e) => {
+                // Missing edges.json is fine — older atlases may not
+                // have run Phase 6. Log and continue with whatever we
+                // already collected.
+                eprintln!(
+                    "atlas-context: --atlas-include tension requested but \
+                     edges.json unreadable for `{atlas_corpus_id}` ({e}); \
+                     skipping Tension surface."
+                );
+            }
+        }
+    }
+
+    eprintln!(
+        "atlas-context: cache MISS — kept {} of {} entities \
+         (+ {kept_claims} of {total_claims} claims, + {kept_tensions} of {total_tensions} tensions, \
+         + {kept_configurations} of {total_configurations} configurations) \
+         from `{atlas_corpus_id}` \
+         (placeholder: {}, short_desc<{}: {}, depth: {}, over_cap: {}); top-K per question = {top_k}",
+        payloads.len() - kept_claims - kept_tensions - kept_configurations,
+        total_entities,
+        drop_placeholder,
+        filter.min_description_chars,
+        drop_short_desc,
+        drop_depth,
+        drop_cap,
+    );
+    if payloads.is_empty() {
+        return Err(format!(
+            "atlas-context: filter excluded every atom in `{atlas_corpus_id}`. \
+             Lower --atlas-min-description-chars (currently {}) or check --atlas-depth, \
+             or pass --atlas-include claim,tension if the atlas only carries non-Entity surfaces.",
+            filter.min_description_chars
+        ));
+    }
+
+    let mut entries: Vec<AtlasEntry> = Vec::with_capacity(payloads.len());
+    let t0 = Instant::now();
+    for (name, text) in payloads {
+        match session.inference.embed_query(&text).await {
+            Ok(v) => entries.push(AtlasEntry {
+                canonical_name: name,
+                embed_text: text,
+                embedding: v,
+            }),
+            Err(e) => {
+                eprintln!("  embed atlas entity `{name}` failed: {e} (skipped)");
+            }
+        }
+    }
+    eprintln!(
+        "atlas-context: embedded {} entries in {:.1}s",
+        entries.len(),
+        t0.elapsed().as_secs_f32()
+    );
+
+    // Persist for next run. Persistence failure is non-fatal — log
+    // and continue so a write error (read-only volume, full disk)
+    // doesn't fail the eval that already produced its results.
+    if !entries.is_empty() {
+        let embed_dim = entries[0].embedding.len();
+        let cached: Vec<CachedAtlasEntry> = entries
+            .iter()
+            .map(|e| CachedAtlasEntry {
+                canonical_name: e.canonical_name.clone(),
+                embed_text: e.embed_text.clone(),
+                embedding: e.embedding.clone(),
+            })
+            .collect();
+        match write_atlas_embeddings(
+            &atlas_dir,
+            &session.embed_model,
+            embed_dim,
+            &atoms_hash,
+            &filter_sig,
+            &cached,
+        ) {
+            Ok(p) => eprintln!(
+                "atlas-context: cache WROTE {} entries to {}",
+                cached.len(),
+                p.display()
+            ),
+            Err(e) => eprintln!("atlas-context: cache write failed (non-fatal): {e}"),
+        }
+    }
+
+    Ok(AtlasContext {
+        atlas_corpus_id: atlas_corpus_id.to_string(),
+        entries,
+        top_k,
+    })
+}
+
+/// Run an entire bank, sequentially. Sequential is fine — the daemon's
+/// embed slot serialises anyway, and concurrent searches against the
+/// same Lance table contend on the same index pages.
+pub async fn run_bank(
+    session: &ChatSession,
+    bank: &EvalBank,
+    limit: usize,
+    atlases: &[AtlasContext],
+    graphs: &[AtlasGraph],
+    loose_source_judge: bool,
+    essay_judge: bool,
+) -> Result<EvalRun, String> {
+    let started_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let indexes = session
+        .corpus_engine
+        .installed_indexes()
+        .await
+        .map_err(|e| format!("installed_indexes(): {e}"))?;
+
+    if indexes.is_empty() {
+        return Err(format!(
+            "no corpora installed — `sovereign corpus install {}` before running this bank",
+            bank.bank.corpus
+        ));
+    }
+
+    let target_indexes: Vec<_> = indexes
+        .iter()
+        .filter(|info| info.corpus_id == bank.bank.corpus)
+        .collect();
+
+    if target_indexes.is_empty() {
+        let installed: Vec<&str> = indexes.iter().map(|i| i.corpus_id.as_str()).collect();
+        return Err(format!(
+            "bank corpus `{}` is not installed. Installed: {installed:?}",
+            bank.bank.corpus
+        ));
+    }
+
+    let mut results = Vec::with_capacity(bank.questions.len());
+    for q in &bank.questions {
+        let result = run_question(
+            session,
+            &target_indexes,
+            q,
+            limit,
+            atlases,
+            graphs,
+            loose_source_judge,
+            essay_judge,
+        )
+        .await;
+        results.push(result);
+    }
+
+    Ok(EvalRun {
+        bank_name: bank.bank.name.clone(),
+        corpus: bank.bank.corpus.clone(),
+        limit,
+        started_at_unix,
+        results,
+    })
+}
+
+async fn run_question(
+    session: &ChatSession,
+    target_indexes: &[&corpus_engine::IndexInfo],
+    q: &Question,
+    limit: usize,
+    atlases: &[AtlasContext],
+    graphs: &[AtlasGraph],
+    loose_source_judge: bool,
+    essay_judge: bool,
+) -> EvalResult {
+    // 1. Embed.
+    let t_embed = Instant::now();
+    let embedding = match session.inference.embed_query(&q.question).await {
+        Ok(v) => v,
+        Err(e) => {
+            // Bubble up as an empty-result row rather than aborting the
+            // whole run — one bad question shouldn't void the bank.
+            return EvalResult {
+                question_id: q.id.clone(),
+                category: q.category.clone(),
+                question: q.question.clone(),
+                retrieved: Vec::new(),
+                source_score: score_sources(&q.expected_sources, &[]).into(),
+                fact_score: score_facts(&q.expected_facts, &[]).into(),
+                embed_ms: t_embed.elapsed().as_millis() as u64,
+                search_ms: 0,
+                corpora_hit: Vec::new(),
+                vector_eligible: false,
+                synth: None,
+                loose_source_score: None,
+                loose_source_evidence: Vec::new(),
+                essay_readiness: None,
+                atlas_navigation: Vec::new(),
+                // Note: error message isn't carried in the result row
+                // today; the runner's stderr already logged it. Add a
+                // `note: Option<String>` field if this becomes annoying.
+            }
+            .with_error(format!("embed: {e}"));
+        }
+    };
+    let embed_ms = t_embed.elapsed().as_millis() as u64;
+
+    // 2. Search every matching corpus index.
+    let t_search = Instant::now();
+    let mut all_hits: Vec<ScoredChunk> = Vec::new();
+    let mut any_vector_eligible = false;
+    let mut corpora_hit: Vec<String> = Vec::new();
+
+    for info in target_indexes {
+        let dim_match = info.embedding_dimensions == embedding.len();
+        if dim_match {
+            any_vector_eligible = true;
+        }
+        let query_vec: &[f32] = if dim_match { &embedding } else { &[] };
+        let idx = match session.corpus_engine.open_index(&info.path).await {
+            Ok(i) => i,
+            Err(e) => {
+                eprintln!("  open_index({}): {e}", info.corpus_id);
+                continue;
+            }
+        };
+        // When atlas grounding is active, pull a wider candidate set
+        // from lance so atlas-boost has chunks-from-rank-11-30 to
+        // promote into the final top-K. Without this, the boost can
+        // only reorder *within* lance's top-K, which is mostly noise
+        // (same articles, different positions). With a wider pool,
+        // atlas can actually rescue topically-aligned chunks lance
+        // ranked just outside the limit.
+        let search_limit = if !atlases.is_empty() { limit * 3 } else { limit };
+        match idx.search(query_vec, &q.question, search_limit).await {
+            Ok(hits) => {
+                if !hits.is_empty() && !corpora_hit.contains(&info.corpus_id) {
+                    corpora_hit.push(info.corpus_id.clone());
+                }
+                all_hits.extend(hits);
+            }
+            Err(e) => {
+                eprintln!("  search({}): {e}", info.corpus_id);
+            }
+        }
+    }
+    let search_ms = t_search.elapsed().as_millis() as u64;
+
+    // Atlas-as-graph-navigation. The atlas is a typed knowledge graph
+    // (entities, claims, tensions, configurations + edges); cosine-
+    // matching individual atom embeddings ("bag-of-atoms") only
+    // exercises the most surface-level layer. Real navigation seeds
+    // via cosine, then BFS-expands across typed edges (Tension for
+    // dialectical pairs, Grounds for argument-depth chains, Involves
+    // for entity-event context, Configures for interpretive frame),
+    // and identifies the source-chunk neighborhood whose evidence
+    // density is highest in the question's atom-vicinity. Those
+    // chunks are then fetched via FTS-by-passage_preview against the
+    // SEP corpus, restricted to the atom's article.
+    let atlas_chunk_requests = if !atlases.is_empty() && !graphs.is_empty() && !embedding.is_empty() {
+        // Seeds: top-12 atom matches across all atlases (more than
+        // the operator's atlas-top-k since seeds drive expansion;
+        // many seeds → broader neighborhood).
+        let max_seeds = atlases.first().map(|c| c.top_k).unwrap_or(3).max(12);
+        let ctx_refs: Vec<&AtlasContext> = atlases.iter().collect();
+        let graph_refs: Vec<&AtlasGraph> = graphs.iter().collect();
+        atlas_navigate(&q.question, &embedding, &ctx_refs, &graph_refs, max_seeds, /*max_hops=*/ 2)
+    } else {
+        Vec::new()
+    };
+
+    // The audit-only "atlas_navigation" snapshot — top-K atom matches,
+    // unchanged from before, so the JSON output preserves a record of
+    // what atlas thinks was relevant. Doesn't enter the prompt.
+    let atlas_navigation: Vec<ScoredChunk> = if !atlases.is_empty() && !embedding.is_empty() {
+        let nav_k = atlases.first().map(|c| c.top_k).unwrap_or(3);
+        let refs: Vec<&AtlasContext> = atlases.iter().collect();
+        let nav = atlas_top_k_across(&embedding, &refs, nav_k);
+        for c in &nav {
+            if !corpora_hit.contains(&c.corpus_id) {
+                corpora_hit.push(c.corpus_id.clone());
+            }
+        }
+        nav
+    } else {
+        Vec::new()
+    };
+
+    // Resolve atlas chunk requests via FTS against the SEP corpus.
+    // Each ChunkRequest names an article slug + passage_preview; we
+    // FTS the preview text against each target index, filter to
+    // chunks whose title matches the article, and take the top hit.
+    // The atom's aggregated score becomes the chunk's score (boosted
+    // significantly to ensure atlas-curated chunks compete with
+    // lance vector matches — atlas relevance ~0.6-1.5 vs lance
+    // scores ~0.02-0.05). Capped at a budget proportional to limit.
+    // Atlas-fetch via question-vector + article-filter. Atlas
+    // tells us "this article matters for this question" (via the
+    // ChunkRequests' article_slug). Lance has 1024-char chunks for
+    // every article in SEP and ranks them by semantic match against
+    // the question — but the right article often ranks below top-K
+    // when the question only partially mentions it (e.g.
+    // communitarianism content for a virtue-ethics question that
+    // only names MacIntyre once). Solution: collect unique
+    // article-slugs from atlas, then for each do a wide lance
+    // search with the question embedding and post-filter to that
+    // article's chunks. Returns question-relevant chunks from
+    // atlas-aligned articles — lance's specificity meets atlas's
+    // article-targeting.
+    let atlas_fetch_budget = ((limit as f32) * 0.6).ceil() as usize;
+    let mut atlas_fetched: Vec<ScoredChunk> = Vec::new();
+    // Internal dedupe for the atlas-fetch loop only — separate from
+    // the merge-time dedupe. Using one shared set caused atlas
+    // chunks to get rejected at merge because their keys were
+    // already in the set from the fetch step.
+    let mut atlas_internal_seen: HashSet<String> = HashSet::new();
+    let debug_fetch = std::env::var("ATLAS_NAVIGATE_DEBUG").is_ok();
+
+    // Collect unique articles ordered by best (highest) atlas score.
+    // Cap article distinct-count at the budget — no point fetching
+    // from more articles than we can keep.
+    let mut article_score: std::collections::HashMap<String, f32> =
+        std::collections::HashMap::new();
+    // Aggregate atlas verbatim excerpts (concept defining_quotes,
+    // claim quotable_excerpts) per article. We dedupe so the same
+    // sentence isn't injected twice when several ChunkRequests for
+    // an article overlap in motivating atoms. Injected once per
+    // first-chunk-fetched per article in the loop below.
+    let mut article_excerpts: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for req in &atlas_chunk_requests {
+        let s = article_score
+            .entry(req.article_slug.clone())
+            .or_insert(0.0);
+        if req.score > *s {
+            *s = req.score;
+        }
+        if !req.verbatim_excerpts.is_empty() {
+            let bucket = article_excerpts
+                .entry(req.article_slug.clone())
+                .or_default();
+            // Three-tier priority for the dialectical_breadth axis:
+            //   1. ArgumentReconstructions (`Argument: …`) — densest
+            //      P/C structure, best for argument_depth.
+            //   2. Contested-tagged Claims (`[… — contested]: …`) —
+            //      explicitly counter-position content. Promoting
+            //      these into a guaranteed slot is the dialectical
+            //      lift this commit targets.
+            //   3. Everything else — defining_quotes + regular
+            //      quotable_excerpts.
+            // Cap raised from 6→8 so all three tiers can land
+            // typical entries without one starving another.
+            let is_contested = |s: &&String| s.contains("— contested]:");
+            let mut prioritised: Vec<&String> = req
+                .verbatim_excerpts
+                .iter()
+                .filter(|s| s.starts_with("Argument:"))
+                .collect();
+            prioritised.extend(req.verbatim_excerpts.iter().filter(is_contested));
+            prioritised.extend(req.verbatim_excerpts.iter().filter(|s| {
+                !s.starts_with("Argument:") && !is_contested(s)
+            }));
+            for ex in prioritised {
+                if bucket.len() >= 8 {
+                    break;
+                }
+                if !bucket.iter().any(|existing| existing == ex) {
+                    bucket.push(ex.clone());
+                }
+            }
+        }
+    }
+    let mut articles_ranked: Vec<(String, f32)> =
+        article_score.into_iter().collect();
+    articles_ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    articles_ranked.truncate(atlas_fetch_budget);
+
+    if debug_fetch {
+        eprintln!(
+            "  atlas-fetch: {} unique articles in atlas, fetching from top-{}: {:?}",
+            atlas_chunk_requests
+                .iter()
+                .map(|r| &r.article_slug)
+                .collect::<HashSet<_>>()
+                .len(),
+            articles_ranked.len(),
+            articles_ranked.iter().map(|(s, _)| s).collect::<Vec<_>>()
+        );
+    }
+
+    for info in target_indexes {
+        let idx = match session.corpus_engine.open_index(&info.path).await {
+            Ok(i) => i,
+            Err(_) => continue,
+        };
+        // One wide lance search reusable across all atlas articles.
+        let wide_hits = match idx.search(&embedding, &q.question, 200).await {
+            Ok(h) => h,
+            Err(_) => continue,
+        };
+        for (article_slug, atlas_score) in &articles_ranked {
+            // Take top 1-2 chunks from this article whose lance
+            // ranks against the question are best.
+            let mut found = 0usize;
+            for hit in &wide_hits {
+                if found >= 2 {
+                    break;
+                }
+                if hit.title.as_deref() != Some(article_slug.as_str()) {
+                    continue;
+                }
+                let dedupe_key = format!(
+                    "{}|{}",
+                    article_slug,
+                    truncate(&hit.content, 80)
+                );
+                if !atlas_internal_seen.insert(dedupe_key) {
+                    continue;
+                }
+                let mut boosted = hit.clone();
+                // Atlas's contribution: surface chunks lance ranked
+                // outside its top-K. Don't boost — let the chunk
+                // compete on lance's intrinsic question-relevance
+                // score. Atlas adds the chunk to the pool but lance's
+                // ranking arbitrates final position. Prevents
+                // displacement of specifically-relevant chunks (e.g.
+                // ethics-ancient with function-argument detail) by
+                // atlas-aligned chunks (communitarianism intro)
+                // with weaker question-direct relevance.
+                let _ = atlas_score;
+                // Inject verbatim atlas excerpts (concept defining
+                // sentences + claim quotable_excerpts) on the first
+                // chunk fetched for this article. The judge sees the
+                // article's exact words for the position the chunk
+                // grounds, addressing the 2026-05-06 calibration's
+                // "wants direct primary text" finding.
+                if found == 0 {
+                    if let Some(excerpts) = article_excerpts.get(article_slug) {
+                        if !excerpts.is_empty() {
+                            let mut head = String::from("[Atlas highlights]\n");
+                            for ex in excerpts {
+                                head.push_str(ex);
+                                head.push('\n');
+                            }
+                            head.push('\n');
+                            head.push_str(&boosted.content);
+                            boosted.content = head;
+                        }
+                    }
+                }
+                if debug_fetch {
+                    eprintln!(
+                        "  atlas-fetch: HIT article={} (atlas_score {:.2}, lance {:.4}) → {}",
+                        article_slug,
+                        atlas_score,
+                        hit.score,
+                        truncate(&hit.content, 80).replace('\n', " ")
+                    );
+                }
+                atlas_fetched.push(boosted);
+                found += 1;
+            }
+            if found == 0 && debug_fetch {
+                eprintln!(
+                    "  atlas-fetch: MISS article={} (no chunks with that title in lance top-200)",
+                    article_slug
+                );
+            }
+        }
+    }
+
+    // Additive atlas merge: lance keeps its full top-`limit` set;
+    // atlas-fetched chunks append. Final retrieved is `limit +
+    // up-to-atlas_slots` total. This is the "atlas augments,
+    // doesn't displace" design — bank-wide reserved-slots showed
+    // that swapping lance chunks for atlas chunks at fixed limit=10
+    // hurts essay axes (atlas chunks displace lance argument-detail
+    // for topical breadth). Additive lets the judge see both:
+    // lance's question-direct retrieval AND atlas's article-
+    // targeted supplement. Judge prompt grows by ~2K chars per
+    // question; well within the fast slot's budget.
+    all_hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    all_hits.truncate(limit);
+
+    // Dedup atlas chunks against lance's retained set.
+    let mut seen_chunks: HashSet<String> = HashSet::new();
+    for hit in &all_hits {
+        let dedupe_key = format!(
+            "{}|{}",
+            hit.title.clone().unwrap_or_default(),
+            truncate(&hit.content, 80)
+        );
+        seen_chunks.insert(dedupe_key);
+    }
+    let pre_atlas_count = all_hits.len();
+    let mut atlas_added_in = 0usize;
+    for af in atlas_fetched.iter() {
+        if atlas_added_in >= atlas_fetch_budget {
+            break;
+        }
+        let dedupe_key = format!(
+            "{}|{}",
+            af.title.clone().unwrap_or_default(),
+            truncate(&af.content, 80)
+        );
+        if seen_chunks.insert(dedupe_key) {
+            all_hits.push(af.clone());
+            atlas_added_in += 1;
+        }
+    }
+    if pre_atlas_count != all_hits.len() {
+        eprintln!(
+            "  atlas-navigate: BFS produced {} requests; {} fetched, \
+             {} appended (additive: {} lance + {} atlas = {} total)",
+            atlas_chunk_requests.len(),
+            atlas_fetched.len(),
+            all_hits.len() - pre_atlas_count,
+            limit,
+            atlas_added_in,
+            all_hits.len(),
+        );
+    }
+
+    // 3. Score. Rigid source/fact match runs against actual source
+    // passages only — atlas navigation does not credit
+    // `expected_sources` (a virtual entity card titled `physicalism`
+    // isn't a passage from the physicalism article, just a pointer to
+    // it).
+    let rigid_source = score_sources(&q.expected_sources, &all_hits);
+    let source_score: ScoreSnapshot = rigid_source.clone().into();
+    let fact_score: ScoreSnapshot = score_facts(&q.expected_facts, &all_hits).into();
+
+    // 3b. Loose-judge source scoring (Option A). Opt-in via
+    //     `--loose-source-judge`. Adds an LLM pass that looks at the
+    //     missing expected_sources and credits any whose topic IS
+    //     materially covered by the retrieved chunks (paraphrase /
+    //     canonical-sibling / indirect coverage). Pairs with the rigid
+    //     score as a strict superset — never lowers the matched count,
+    //     only lifts it. Audit detail per source lands in
+    //     `loose_source_evidence` so a reviewer can verify each
+    //     loose-credit decision without re-running.
+    let (loose_source_score, loose_source_evidence): (Option<ScoreSnapshot>, Vec<JudgeSourceDetail>) =
+        if loose_source_judge && !q.expected_sources.is_empty() {
+            let (loose, details) = score_sources_loose(
+                &q.question,
+                &rigid_source,
+                &all_hits,
+                session.inference.as_ref(),
+            )
+            .await;
+            (Some(loose.into()), details)
+        } else {
+            (None, Vec::new())
+        };
+
+    // 3c. Essay-readiness multi-axis judge (Option C). Opt-in via
+    //     `--essay-judge`. Asks the LLM whether the retrieved set is
+    //     enough material for an undergraduate essay, scoring on four
+    //     axes (topical_coverage, position_attribution,
+    //     dialectical_breadth, argument_depth), each 0–3. Decoupled
+    //     from loose source-credit because they answer different
+    //     questions: loose = "are the right articles in the bag?",
+    //     essay-readiness = "does the bag have essay-worthy substance?"
+    let essay_readiness: Option<EssayReadinessScore> = if essay_judge {
+        score_essay_readiness(
+            &q.question,
+            &q.category,
+            &all_hits,
+            &atlas_navigation,
+            session.inference.as_ref(),
+        )
+        .await
+    } else {
+        None
+    };
+
+    // 4. Pack.
+    let retrieved = all_hits
+        .iter()
+        .map(|c| RetrievedChunk {
+            corpus_id: c.corpus_id.clone(),
+            title: c.title.clone(),
+            url: c.url.clone(),
+            score: c.score,
+            snippet: truncate(&c.content.replace('\n', " "), 600),
+        })
+        .collect();
+    let atlas_navigation_packed = atlas_navigation
+        .iter()
+        .map(|c| RetrievedChunk {
+            corpus_id: c.corpus_id.clone(),
+            title: c.title.clone(),
+            url: c.url.clone(),
+            score: c.score,
+            snippet: truncate(&c.content.replace('\n', " "), 600),
+        })
+        .collect();
+
+    EvalResult {
+        question_id: q.id.clone(),
+        category: q.category.clone(),
+        question: q.question.clone(),
+        retrieved,
+        source_score,
+        fact_score,
+        embed_ms,
+        search_ms,
+        corpora_hit,
+        vector_eligible: any_vector_eligible,
+        synth: None,
+        loose_source_score,
+        loose_source_evidence,
+        essay_readiness,
+        atlas_navigation: atlas_navigation_packed,
+    }
+}
+
+impl EvalResult {
+    /// Used by the embed-failure branch above. Today this just returns
+    /// `self`; kept as a hook so a future revision can attach the
+    /// error string to a `note` field without changing call sites.
+    fn with_error(self, msg: String) -> Self {
+        eprintln!("  [{}] {msg}", self.question_id);
+        self
+    }
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max).collect();
+    out.push('…');
+    out
+}
+
+// ─── synth path ────────────────────────────────────────────────────
+//
+// The synth path is a separate top-level entry point because it shares
+// almost nothing with the retrieval path at the call-site: there's no
+// per-corpus search loop here (the runtime owns that), and the
+// per-question result is constructed from a `Conversation` row in the
+// state store rather than from `ScoredChunk`s the CLI got back
+// directly. The eval framework's `EvalResult` is the one
+// abstraction-boundary that they share.
+
+/// Drive every question through `Runtime::handle_message_stream` and
+/// score the persisted answer + provenance. Sequential — the chat
+/// model is a single GPU slot and concurrent turns would just queue.
+///
+/// `judge` toggles the LLM-as-judge "instructor mode" pass. When on,
+/// each question's answer is also scored by a fast-slot judge that
+/// asks per-fact whether the concept is conveyed; results land in
+/// `synth.judge_fact_score`. The strict keyword scorer always runs
+/// regardless. See `score::score_facts_judge`.
+pub async fn run_bank_synth(
+    session: &ChatSession,
+    bank: &EvalBank,
+    judge: bool,
+) -> Result<EvalRun, String> {
+    let started_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    // We don't gate synth on `installed_indexes()` the way `run_bank`
+    // does — the runtime will route to the corpus tools (or web, or
+    // none) on its own based on intent, and a question that ends up
+    // routed to web-only is a meaningful eval signal, not a precondition
+    // failure. Misconfigured (no corpus AND no chat model) bootstraps
+    // already failed in `build_session` upstream.
+
+    let mut results = Vec::with_capacity(bank.questions.len());
+    for q in &bank.questions {
+        let result = run_question_synth(session, q, judge).await;
+        results.push(result);
+    }
+
+    Ok(EvalRun {
+        bank_name: bank.bank.name.clone(),
+        corpus: bank.bank.corpus.clone(),
+        // `limit` is meaningless under synth — the runtime decides how
+        // many chunks to surface. Surface zero so the JSON makes that
+        // explicit rather than implying a bound that wasn't enforced.
+        limit: 0,
+        started_at_unix,
+        results,
+    })
+}
+
+async fn run_question_synth(session: &ChatSession, q: &Question, judge: bool) -> EvalResult {
+    let conversation_id = uuid::Uuid::new_v4().to_string();
+    let t_wall = Instant::now();
+
+    // 1. Drive the same path the desktop chat surface uses. Failures
+    //    here become an empty-row result so one model-side error
+    //    doesn't void the rest of the bank.
+    let handle = match session
+        .runtime
+        .handle_message_stream(&q.question, &conversation_id)
+        .await
+    {
+        Ok(h) => h,
+        Err(e) => {
+            return empty_synth_result(q, format!("stream start: {e}"), 0);
+        }
+    };
+    let message_id = handle.message_id.clone();
+    let mut stream = handle.stream;
+
+    // 2. Drain the token stream. Buffer raw — we'll split out the
+    //    `<think>` blocks once before scoring rather than streaming
+    //    deltas the way the chat CLI does (no human is watching).
+    let mut raw = String::new();
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(chunk) => raw.push_str(&chunk),
+            Err(e) => {
+                let elapsed = t_wall.elapsed().as_millis() as u64;
+                return empty_synth_result(q, format!("stream error: {e}"), elapsed);
+            }
+        }
+    }
+    let stream_wall_ms = t_wall.elapsed().as_millis() as u64;
+
+    // 3. Pull the persisted assistant row to recover the metadata
+    //    block. This is where `retrieved_chunks` and `provenance` live;
+    //    without them we can't score sources.
+    let metadata = session
+        .store
+        .get_conversation(&conversation_id)
+        .await
+        .ok()
+        .and_then(|c| {
+            c.messages
+                .iter()
+                .find(|m| m.id == message_id)
+                .and_then(|m| m.metadata.clone())
+        });
+
+    // 4. Split reasoning vs answer the same way the desktop client does.
+    let (reasoning_blocks, visible) = split_reasoning(&raw);
+    let reasoning_chars: usize = reasoning_blocks.iter().map(|b| b.chars().count()).sum();
+
+    // 5. Pull provenance signals out of the metadata. Anything missing
+    //    becomes None / empty rather than aborting — a model that
+    //    answered without retrieval is a valid (if pessimistic)
+    //    measurement.
+    let prov = metadata.as_ref().and_then(|m| m.get("provenance"));
+    let total_latency_ms = prov
+        .and_then(|p| p.get("total_latency_ms"))
+        .and_then(|v| v.as_u64());
+    let intent = prov
+        .and_then(|p| p.get("intent"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let source_origins: Vec<String> = prov
+        .and_then(|p| p.get("sources"))
+        .and_then(|s| s.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|s| s.get("origin").and_then(|o| o.as_str()))
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // 6. Walk `retrieved_chunks` for source-title matching + the
+    //    snippet-haystack diagnostic. We deliberately do NOT filter to
+    //    the bank's `corpus` field here: a chunk with a matching title
+    //    but a different `corpus_id` (e.g. a folder corpus the user
+    //    happens to have indexed alongside wikipedia) is still a
+    //    legitimate source hit, and filtering would create false
+    //    "missed" rows that mask a real win.
+    let retrieved_chunks_meta = metadata
+        .as_ref()
+        .and_then(|m| m.get("retrieved_chunks"))
+        .and_then(|c| c.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let titles: Vec<String> = retrieved_chunks_meta
+        .iter()
+        .filter_map(|c| c.get("title").and_then(|t| t.as_str()))
+        .map(str::to_string)
+        .collect();
+    let snippets: Vec<String> = retrieved_chunks_meta
+        .iter()
+        .filter_map(|c| c.get("snippet").and_then(|t| t.as_str()))
+        .map(str::to_string)
+        .collect();
+    let corpora_hit: Vec<String> = {
+        let mut seen: Vec<String> = Vec::new();
+        for c in &retrieved_chunks_meta {
+            if let Some(cid) = c.get("corpus_id").and_then(|v| v.as_str()) {
+                if !cid.is_empty() && !seen.iter().any(|s| s == cid) {
+                    seen.push(cid.to_string());
+                }
+            }
+        }
+        seen
+    };
+
+    // 7. Build the `RetrievedChunk` summaries the report renders.
+    //    Score field is `0.0` because the metadata doesn't carry it —
+    //    consumers that care about ranking can rerun in retrieval
+    //    mode where it does.
+    let retrieved: Vec<RetrievedChunk> = retrieved_chunks_meta
+        .iter()
+        .map(|c| RetrievedChunk {
+            corpus_id: c
+                .get("corpus_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            title: c
+                .get("title")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+            url: c
+                .get("url")
+                .and_then(|v| v.as_str())
+                .map(str::to_string),
+            score: 0.0,
+            snippet: c
+                .get("snippet")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        })
+        .collect();
+
+    // 8. Score: facts → answer text, sources → retrieved-chunk titles,
+    //    plus the snippet-fact diagnostic.
+    let snippet_haystack = snippets.join("\n");
+    let fact_score: ScoreSnapshot =
+        score_facts_in_text(&q.expected_facts, &visible).into();
+    let chunks_fact_score: ScoreSnapshot =
+        score_facts_in_text(&q.expected_facts, &snippet_haystack).into();
+    let source_score: ScoreSnapshot =
+        score_sources_titles(&q.expected_sources, &titles).into();
+
+    // 8b. Instructor-mode pass — LLM-as-judge concept-conveyed score.
+    //     Strict keyword score above is preserved unchanged; this
+    //     adds a parallel column in the report. Skipped under
+    //     `--no-judge`. The judge call also returns a per-fact
+    //     evidence trail (quote or "(absent)") for auditability.
+    let (judge_fact_score, judge_evidence): (Option<ScoreSnapshot>, _) = if judge {
+        let (score, details) = crate::eval_cmd::score::score_facts_judge(
+            &q.expected_facts,
+            &visible,
+            session.inference.as_ref(),
+        )
+        .await;
+        (Some(score.into()), details)
+    } else {
+        (None, Vec::new())
+    };
+
+    let synth = SynthSnapshot {
+        answer: visible,
+        reasoning_chars,
+        stream_wall_ms,
+        total_latency_ms,
+        intent,
+        source_origins,
+        retrieved_chunk_count: retrieved_chunks_meta.len(),
+        chunks_fact_score,
+        judge_fact_score,
+        judge_evidence,
+    };
+
+    EvalResult {
+        question_id: q.id.clone(),
+        category: q.category.clone(),
+        question: q.question.clone(),
+        retrieved,
+        source_score,
+        fact_score,
+        // Synth doesn't measure embed/search latency directly — those
+        // are folded into `total_latency_ms`. Zero here is "not
+        // applicable in this mode" and the report renders it as such.
+        embed_ms: 0,
+        search_ms: 0,
+        corpora_hit,
+        // Vector eligibility is a retrieval-mode concept (does the
+        // embed dim match the index dim?). True under synth means
+        // "the runtime did not fall back to FTS-only" — but the
+        // runtime doesn't expose that today, so we report `true` and
+        // let consumers consult the retrieval-mode baseline.
+        vector_eligible: true,
+        synth: Some(synth),
+        loose_source_score: None,
+        loose_source_evidence: Vec::new(),
+        essay_readiness: None,
+        atlas_navigation: Vec::new(),
+    }
+}
+
+fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalResult {
+    eprintln!("  [{}] {err}", q.id);
+    EvalResult {
+        question_id: q.id.clone(),
+        category: q.category.clone(),
+        question: q.question.clone(),
+        retrieved: Vec::new(),
+        source_score: score_sources(&q.expected_sources, &[]).into(),
+        fact_score: score_facts_in_text(&q.expected_facts, "").into(),
+        embed_ms: 0,
+        search_ms: 0,
+        corpora_hit: Vec::new(),
+        vector_eligible: false,
+        synth: Some(SynthSnapshot {
+            answer: String::new(),
+            reasoning_chars: 0,
+            stream_wall_ms,
+            total_latency_ms: None,
+            intent: None,
+            source_origins: Vec::new(),
+            retrieved_chunk_count: 0,
+            chunks_fact_score: score_facts_in_text(&q.expected_facts, "").into(),
+            judge_fact_score: None,
+            judge_evidence: Vec::new(),
+        }),
+        loose_source_score: None,
+        loose_source_evidence: Vec::new(),
+        essay_readiness: None,
+        atlas_navigation: Vec::new(),
+    }
+}

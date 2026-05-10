@@ -1,0 +1,264 @@
+# Golden set for the `bk-book-1` template (Brothers Karamazov, Book I).
+#
+# Match semantics:
+#
+#   * `canonical_name_contains_any` — case-insensitive substring of the
+#     candidate atom's display name; ANY listed substring satisfies.
+#   * `description_keywords_any` — case-insensitive substring of the
+#     atom's description / claim / crux text; informational only (a
+#     mismatch records a note, doesn't penalise the score).
+#   * `participants_any` (events / relations) — ANY listed name appears
+#     in the participants list (resolved through entity_name_by_id).
+#   * `forbidden_*` — anti-tests. A matching extraction counts as an FP.
+#
+# Authoring policy: forbid only failures we have *evidence* a literary
+# extractor in this class is prone to. Speculative anti-tests inflate
+# the false-positive count without measuring something the prompt can
+# act on. Concrete grounded forbidden entries:
+#
+#   * `forbidden_person_atoms` for "the narrator" — we know the
+#     literary phase 1 prompt does not yet say "the narrator is not a
+#     Person atom" and we expect models to introduce this Person atom
+#     unprompted (symmetric to the failure mode in awareness extraction
+#     where "the user" becomes a Person atom).
+#   * `forbidden_person_atoms` for Ophelia — Chapter I uses Ophelia
+#     only as a simile. Models often promote literary references to
+#     full Person atoms.
+#   * `forbidden_person_atoms` for "the young lady of the last
+#     romantic generation" / "the romantic-generation young lady" —
+#     extended digression in Chapter I, not a character of Book I.
+#   * `forbidden_concept_atoms` for "the Karamazov family" — should
+#     be either an Institution atom (with that exact label) or
+#     decomposed into individual Person atoms; not collapsed into a
+#     Concept.
+
+[meta]
+template = "bk-book-1"
+description = "Expected and forbidden outputs for the bk-book-1 template (Brothers Karamazov Book I), evaluated against the resolved literary atlas."
+
+# ── Phase 3a/3b atoms: persons (the cast of Book I) ────────────────
+#
+# Five chapters introduce ~10 named persons. Goldens use surname /
+# diminutive substring matches so the alias-collapse failure mode is
+# scored: if the extractor produces "Alyosha" AND "Alexey
+# Fyodorovitch" as two separate Person atoms, the matcher only
+# credits one (whichever it sees first), but the duplicate counts as
+# an extraction the human reviewer can check.
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Fyodor Pavlovitch", "Karamazov"]
+description_keywords_any = ["father", "landowner", "Fyodor", "patriarch"]
+note = "The patriarch. Chapter I title. Surname-collision check: 'Karamazov' alone is ambiguous (any of the four), so the canonical should be 'Fyodor Pavlovitch' or 'Fyodor Pavlovitch Karamazov'."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Dmitri", "Mitya"]
+description_keywords_any = ["eldest son", "Mitya", "first wife", "Adelaïda"]
+note = "Eldest son. Goes by both Dmitri and Mitya in Book I — alias resolution test."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Ivan"]
+description_keywords_any = ["second son", "scholar", "intellectual", "older brother"]
+note = "The middle son. Ivan Fyodorovitch. Established as the bookish, intellectual brother in Chapter IV."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Alyosha", "Alexey"]
+description_keywords_any = ["youngest", "third son", "novice", "monastery"]
+note = "The novice. Goes by Alyosha (diminutive) and Alexey Fyodorovitch (full). Chapter IV is dedicated to him."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Adelaïda", "Adelaïda Ivanovna", "Miüsov"]
+description_keywords_any = ["first wife", "noble family", "Miüsovs", "ran away"]
+note = "Fyodor's first wife, mother of Dmitri. Chapter I."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Sofya", "Sofya Ivanovna"]
+description_keywords_any = ["second wife", "orphan", "Ivan and Alexey", "general's widow"]
+note = "Fyodor's second wife, mother of Ivan and Alyosha. Chapter III."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Zossima", "Father Zossima", "the elder"]
+description_keywords_any = ["elder", "monk", "starets", "spiritual", "monastery"]
+note = "The monastic elder Alyosha attaches himself to. Introduced by name in Chapter V."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Pyotr Alexandrovitch", "Miüsov"]
+description_keywords_any = ["liberal", "Paris", "lived abroad", "cousin"]
+note = "Adelaïda's cousin, the Westernised liberal who arranges Mitya's affairs. Chapter II."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Grigory"]
+description_keywords_any = ["servant", "retainer", "old", "stern"]
+note = "The household servant who half-raises Mitya. Chapter II."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Yefim Petrovitch", "Polenov"]
+description_keywords_any = ["marshal of nobility", "guardian", "kindly"]
+note = "Ivan and Alyosha's guardian after Sofya's death and the general's widow's death. Chapter III."
+
+# Anti-tests for Person atoms — narrator, simile-targets, digression
+# subjects must NOT appear as Person atoms of Book I.
+
+[[forbidden_person_atoms]]
+name_contains_any = ["the narrator", "narrator"]
+reason = "Book I is narrated in the first person by an unnamed townsperson. The narrator is a *voice*, not an entity that exists in the diegesis. The symmetric error to extracting 'the user' as a Person atom in awareness extraction."
+
+[[forbidden_person_atoms]]
+name_contains_any = ["Ophelia", "Shakespeare"]
+reason = "Chapter I cites Ophelia and Shakespeare in a simile about the romantic-generation young lady's drowning. Literary references in similes are not Person atoms of Book I."
+
+[[forbidden_person_atoms]]
+name_contains_any = ["young lady of the last romantic", "romantic generation", "young lady who threw herself"]
+reason = "Chapter I tells an extended digressive story about a different young woman who drowned herself. She is an illustrative anecdote, not a character in Book I."
+
+# ── Concept atoms (cross-chapter recurring ideas) ──────────────────
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["elder", "starets", "eldership"]
+description_keywords_any = ["monastic", "spiritual", "obedience", "self-abnegation"]
+note = "Chapter V is structurally about the institution / role of the elder. Should be lifted as a Concept (or as an Institution — both score on the same canonical name)."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["sensual", "debauch", "depravity", "Karamazov"]
+description_keywords_any = ["lust", "passion", "sensual", "vicious", "depraved", "moral decay"]
+note = "Fyodor's defining trait — explicitly named as 'senseless' / 'sensual' / 'fantastical' across Chapter I. Soft-matched on common literary vocabulary (sensual / debauch) since 'sensualist' specifically may not be the model's term."
+
+# Anti-test: the family itself is not a Concept atom.
+
+[[forbidden_concept_atoms]]
+name_contains_any = ["Karamazov family", "the Karamazovs", "Karamazov household"]
+reason = "The family is either an Institution atom (entity_type='institution') or decomposed into individual Person atoms. It is not a *concept* — that's a category error."
+
+# ── Work atoms (texts referenced in Book I) ────────────────────────
+#
+# Book I is sparse on work citations. Only one substantive reference:
+# Schiller (Mitya's enthusiasm for Schiller in his university days).
+# The Bible is referenced only by allusion. No expected work atoms;
+# we leave this list empty rather than authoring weak positives.
+
+# ── Event atoms (load-bearing happenings of Book I) ────────────────
+#
+# Book I is "The History Of A Family" — a chronicle, dense with
+# events. Expected events test the extractor's ability to surface
+# narrated happenings (often described in past tense, often spanning
+# years rather than scenes).
+
+[[expected_event_atoms]]
+description_contains_any = ["ran away", "fled", "elopement", "flight", "left the house"]
+participants_any = ["Adelaïda"]
+note = "Chapter I climax: Adelaïda elopes to Petersburg with a divinity student, leaving Mitya behind. Match policy: any flight/elope/ran-away vocabulary in a description involving Adelaïda."
+
+[[expected_event_atoms]]
+description_contains_any = ["died", "death", "perished"]
+participants_any = ["Adelaïda"]
+note = "Adelaïda dies in Petersburg shortly after her flight. Chapter I."
+
+[[expected_event_atoms]]
+description_contains_any = ["marri", "wedding", "second marriage"]
+participants_any = ["Sofya"]
+note = "Chapter III opening event: Fyodor's second marriage to Sofya. Match 'marri' covers married/marries/marriage/marrying."
+
+[[expected_event_atoms]]
+description_contains_any = ["died", "death", "Sofya's death"]
+participants_any = ["Sofya"]
+note = "Chapter III: Sofya dies after eight years of marriage and two sons. Real test — extractor must produce this event, not just a State or implied detail."
+
+[[expected_event_atoms]]
+description_contains_any = ["monastery", "monk", "Zossima", "novice"]
+participants_any = ["Alyosha"]
+note = "Chapter IV-V: Alyosha attaches himself to Father Zossima / enters the monastery."
+
+# Anti-test: there is no event called "the trial" in Book I — the
+# trial happens later in the novel. Forbidden because we have evidence
+# extractors prone to anticipating later plot events.
+[[forbidden_event_atoms]]
+name_contains_any = ["the trial", "trial of Dmitri", "Mitya's trial"]
+reason = "The trial happens in Book XII. Book I makes no reference to it. Surfacing 'the trial' from Book I would mean the extractor leaked context from outside the section."
+
+# ── State atoms (interior states of named entities) ────────────────
+#
+# Literary states attach to entities. Three load-bearing examples:
+
+[[expected_state_atoms]]
+entity_name_contains_any = ["Alyosha", "Alexey"]
+label_contains_any = ["faith", "religion", "spiritual", "non-judg", "loved", "God", "miracle", "novice", "monastic"]
+note = "Chapter IV/V establishes Alyosha's religious disposition as his defining trait. The State atom should attribute this to Alyosha. Soft-matched: any of Alyosha's faith/God/non-judgmental dispositions count."
+
+[[expected_state_atoms]]
+entity_name_contains_any = ["Fyodor"]
+label_contains_any = ["debauch", "abandon", "moral decay", "depraved", "vicious", "senseless", "indifference", "effrontery"]
+note = "Chapter I establishes Fyodor's character. The State atom should bind to Fyodor as entity. Soft-matched: any of his depravity/abandonment/moral-decay states count."
+
+[[expected_state_atoms]]
+entity_name_contains_any = ["Ivan"]
+label_contains_any = ["intellectual", "scholar", "remote", "guarded", "proud", "moody", "bookish", "scholarly", "rationalist"]
+note = "Chapter IV: Ivan is the bookish, intellectually serious brother. Real test — Ivan currently has zero state atoms, so this is a real model miss to track across iterations."
+
+# ── Relation atoms (persistent dynamics with two participants) ─────
+
+[[expected_relation_atoms]]
+participants_a_any = ["Fyodor", "Fyodor Pavlovitch"]
+participants_b_any = ["Dmitri", "Mitya"]
+label_contains_any = ["father", "neglect", "estranged", "antagonist", "abandonment"]
+note = "Father–son relation between Fyodor and his eldest, marked by neglect/abandonment. Chapter II is structurally about this."
+
+[[expected_relation_atoms]]
+participants_a_any = ["Alyosha", "Alexey"]
+participants_b_any = ["Zossima"]
+label_contains_any = ["disciple", "spiritual", "novice", "mentor", "elder"]
+note = "Spiritual mentor-novice relation, established in Chapters IV-V."
+
+[[expected_relation_atoms]]
+participants_a_any = ["Fyodor", "Fyodor Pavlovitch"]
+participants_b_any = ["Adelaïda"]
+label_contains_any = ["husband", "wife", "marriage", "abusive", "ill-matched"]
+note = "Fyodor's first marriage — Chapter I dedicates substantial pages to this relation's failure."
+
+# Anti-test: there is no romantic relation between Alyosha and any
+# woman in Book I. (Lise, Grushenka, Katerina come later.)
+[[forbidden_relation_atoms]]
+name_contains_any = ["Alyosha and Lise", "Alyosha and Grushenka", "Alyosha and Katerina"]
+reason = "Book I introduces no female love interest for Alyosha. Surfacing one means the extractor anticipated later books."
+
+# ── Question atoms ─────────────────────────────────────────────────
+#
+# Book I is a chronicle, not an argument. Questions are mostly
+# implicit — what kind of family produces a Karamazov, why the sons
+# turn out so differently. The extractor should produce at least one
+# question per chapter capturing the chapter's thematic frame.
+
+[[expected_question_atoms]]
+content_contains_any = ["family", "father", "sons", "marry", "parental"]
+status_any = ["open", "addressed"]
+note = "The structural question(s) Book I addresses: family / parental / marital frame. Soft-matched on common chapter-question vocabulary."
+
+[[expected_question_atoms]]
+content_contains_any = ["Elder", "spiritual", "monastery", "submission", "monastic"]
+note = "Chapter IV/V's structural question: nature of eldership, monastic life, spiritual authority."
+
+# ── Claim atoms ────────────────────────────────────────────────────
+#
+# Book I's narrator-voice claims are the strongest atoms here — the
+# narrator is opinionated and reaches for general statements about
+# Russia, the family type, sensualists, and the institution of
+# eldership.
+
+[[expected_claim_atoms]]
+content_contains_any = ["senseless", "Karamazov", "sensual", "type"]
+note = "The narrator's framing claim about Fyodor as a national type — 'one of those senseless persons,' 'a peculiar national form of senselessness.'"
+
+[[expected_claim_atoms]]
+content_contains_any = ["elder", "obedience", "complete renunciation", "rule"]
+note = "Chapter V's claim about what eldership demands of the novice."
+
+# ── Phase 7 open questions ─────────────────────────────────────────
+#
+# Book I sets up the novel's questions; many are explicitly left open
+# at the end of Book I (the meeting at the monastery is upcoming).
+
+[[expected_open_questions]]
+content_contains_any = ["family", "father", "sons", "marry", "parental", "neglect"]
+note = "Open question(s) about the Karamazov family / parental / marital pattern. Soft-matched on common framings."
+
+[[expected_open_questions]]
+content_contains_any = ["Elder", "spiritual", "monastery", "submission", "monastic"]
+note = "Open question(s) about eldership / spiritual authority. Soft-matched on Chapter V vocabulary."

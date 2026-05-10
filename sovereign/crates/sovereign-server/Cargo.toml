@@ -1,0 +1,27 @@
+[package]
+name = "sovereign-server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-store = { workspace = true }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
+corpus-engine = { workspace = true, features = ["treesitter"] }
+dirs = "5"
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+toml = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+futures = { workspace = true }
+arc-swap = { workspace = true }
+reqwest = { workspace = true }
+chrono = { workspace = true }

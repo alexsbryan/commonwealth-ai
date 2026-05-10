@@ -1,0 +1,85 @@
+# Example scenario script — drives the consulting template through
+# seed → extract → assertions and reports per-assertion pass/fail.
+#
+# Run with:
+#   sovereign awareness scenario \
+#     crates/sovereign-cli/tests/awareness/scenarios/consulting-month.toml
+#
+# The runner builds a fresh sandbox under /tmp by default; pass
+# `sandbox = "<path>"` to pin a specific location.
+
+[scenario]
+name = "consulting-month"
+description = "Solo consultant, one month — relational + strategic awareness end to end"
+template = "consulting"
+
+[runner]
+inference = "real"        # "mock" | "dry_run" | "real" — mock reads
+                          # prompt examples and gives misleading
+                          # signal; real points at the running daemon.
+reset_before = true       # rm -rf the sandbox before seeding
+
+# ── Entity-shape assertions ─────────────────────────────────────
+
+# 25-conversation fixture: 10 people, 4 orgs, 4 initiatives. Floor
+# is set well below the expected count to allow for legitimate model
+# variance while still catching catastrophic regressions.
+
+[[assertions]]
+kind = "entity_count"
+min_people = 7
+min_organizations = 3
+min_initiatives = 3
+
+[[assertions]]
+kind = "entity_present"
+name = "Sarah Chen"
+
+[[assertions]]
+kind = "entity_present"
+name = "Mike Torres"
+
+[[assertions]]
+kind = "entity_present"
+name = "Dana Park"
+
+[[assertions]]
+kind = "entity_present"
+name = "Raj Patel"
+
+[[assertions]]
+kind = "entity_present"
+name = "API migration"
+
+[[assertions]]
+kind = "entity_present"
+name = "HIPAA compliance review"
+
+# ── Digest-shape assertions ─────────────────────────────────────
+
+[[assertions]]
+kind = "digest_contains"
+digest = "relational"
+substring = "Sarah Chen"
+
+[[assertions]]
+kind = "digest_contains"
+digest = "relational"
+substring = "Raj Patel"
+
+[[assertions]]
+kind = "digest_contains"
+digest = "strategic"
+substring = "API migration"
+
+[[assertions]]
+kind = "digest_contains"
+digest = "strategic"
+substring = "HIPAA"
+
+# ── Suggestion-quality (drives `awareness suggest` per conv) ────
+
+[[assertions]]
+kind = "suggestion_quality"
+f1_min = 0.4
+recall_min = 0.4

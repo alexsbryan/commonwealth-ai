@@ -1,0 +1,93 @@
+{
+  "started_at_unix": 1777670218,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You're looking for a six-month growth plan, but I don't have enough context about what you mean by \"this role.\" \n\nTo make this useful rather than generic: is this a technical engineering position (and if so, which stack/domain?), or management/leadership? What's your current level—junior individual contributor, senior architect, first-time manager—and what specifically do you want the roadmap to accomplish in those 180 days? Are we aiming for promotion readiness, skill acquisition, team scaling capability, or something else entirely?",
+      "length": {
+        "enabled": true,
+        "response_chars": 539,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 4,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 4,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 0,
+      "rationale": "The response scores high on attention and calibration for admitting what's missing without guessing; it loses specificity points by staying at the 'role' level rather than noticing particular constraints mentioned in prior turns; question count exceeds one focused inquiry into a single next step; silence is too long given minimal context required."
+    }
+  ],
+  "runtime_ms": [
+    40796
+  ],
+  "judge_ms": [
+    18078
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 0
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 0
+      }
+    }
+  }
+}

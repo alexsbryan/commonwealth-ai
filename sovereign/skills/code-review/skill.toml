@@ -1,0 +1,55 @@
+[skill]
+id = "code-review"
+name = "Code Review"
+version = "0.1.0"
+description = "Structured code analysis focusing on correctness, performance, and readability."
+
+[routing]
+trigger_phrases = [
+    "review code", "code review", "check this code", "find bugs",
+    "review this function", "audit code", "what's wrong with this code"
+]
+default_intent = "ComplexTask"
+min_confidence = 0.75
+
+[[planner.templates]]
+name = "code_review"
+trigger = "User wants code reviewed or analyzed for issues"
+steps = """
+1. Read and understand the code structure and intent.
+2. Identify correctness issues: bugs, edge cases, error handling gaps.
+3. Evaluate performance: algorithmic complexity, unnecessary allocations,
+   potential bottlenecks.
+4. Assess readability: naming, structure, documentation gaps.
+5. Synthesize findings with prioritized recommendations.
+"""
+
+[tools]
+required = ["shell"]
+optional = ["knowledge"]
+
+[prompts]
+synthesis = """
+You are a senior code reviewer. Your standards:
+- Prioritize correctness over style. Bugs first, nits last.
+- For each issue, explain WHY it's a problem and suggest a fix.
+- Distinguish between must-fix (bugs, security) and should-fix (style, perf).
+- If the code is good, say so. Don't invent problems.
+- Reference specific line numbers or function names.
+"""
+
+[inference]
+privacy            = "local_only"
+capability_hint    = "code"
+latency_class      = "normal"
+min_context_tokens = 8192
+max_output_tokens  = 4000
+
+[memory]
+extract_prompt_addendum = """
+For code review conversations, extract:
+- Programming languages and frameworks the user works with.
+- Coding style preferences the user has expressed.
+- Recurring types of issues found in their code.
+Do NOT extract: specific code snippets or line-level fixes.
+"""

@@ -1,0 +1,30 @@
+{
+  // Oh My Opencode configuration for sovereign + Commonwealth mesh.
+  // See https://opencode.ai/docs/config for field reference.
+
+  "mcp": {
+    "servers": {
+      "sovereign": {
+        // Local code intelligence + working notes server.
+        // Start with: sovereign-server --config ~/.sovereign/server.toml
+        "url": "http://localhost:9741/mcp",
+        "type": "http"
+      }
+    }
+  },
+
+  "skills": [
+    ".opencode/skills/sovereign-code"
+  ],
+
+  "model": {
+    // Routes to Commonwealth mesh → nearest idle peer automatically.
+    // Change to a specific model ID to pin (e.g. "claude-opus-4-7").
+    "id": "auto"
+  },
+
+  "context": {
+    // Inject AGENTS.md into every session so agents know the rules.
+    "files": ["AGENTS.md"]
+  }
+}

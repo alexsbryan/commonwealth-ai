@@ -1,0 +1,93 @@
+{
+  "started_at_unix": 1777676932,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "I want to help you build a solid 6-month roadmap, but I'm not seeing clear details in our conversation history about **which specific role** this refers to or your current situation with it. \n\nWithout knowing whether this is a new position, an existing one where you're looking to advance, or something else entirely, any advice would be too generic and likely miss the mark on what actually matters here.\n\nCould you clarify: What are the core responsibilities of this role right now? Are there immediate goals or constraints you've been given? And roughly how much autonomy do you have versus reporting structure that's fixed? Once I understand these specifics, we can map out milestones that feel actionable rather than theoretical.",
+      "length": {
+        "enabled": true,
+        "response_chars": 734,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 3,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 2,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": "The response notices what's missing (role details) and asks for specifics rather than generic advice. It correctly identifies the gap in conversation history without assuming or padding."
+    }
+  ],
+  "runtime_ms": [
+    34140
+  ],
+  "judge_ms": [
+    13420
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 0
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 0
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 0
+      }
+    }
+  }
+}

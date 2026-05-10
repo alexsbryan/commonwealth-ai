@@ -1,0 +1,199 @@
+# Golden set for the `dubliners-3` template (Joyce's *Dubliners* —
+# THE SISTERS, ARABY, EVELINE).
+#
+# Adversarial focus complementing bk-book-1: where Brothers Karamazov
+# Book I tests *quantity* of named persons + alias collapse, this set
+# tests *attribution* under stylistic complexity:
+#
+#   * unnamed first-person narrators (Sisters, Araby) — the boy
+#     narrator is a voice, not a Person atom
+#   * free indirect discourse (Eveline) — third-person sentences that
+#     report Eveline's interior should attach State atoms to *her*,
+#     not to the narrator
+#   * the cross-story concept "paralysis" appearing in The Sisters
+#     paragraph 1 — a single-word concept the extractor must lift
+#   * named secondary characters who appear once (Eveline's brothers
+#     Harry and Ernest, Miss Gavan, Frank, Mangan's sister)
+
+[meta]
+template = "dubliners-3"
+description = "Expected and forbidden outputs for Joyce's Dubliners 3-story fixture (The Sisters / Araby / Eveline)."
+
+# ── Person atoms ───────────────────────────────────────────────────
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Flynn"]
+description_keywords_any = ["priest", "paralysis", "stroke", "decline", "dying", "deceased"]
+note = "The Sisters: the dying priest. Goes by 'the priest', 'Father Flynn', 'James Flynn'. Surname-only match — alias collapse test: model should not produce three separate Person atoms."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Father O'Rourke", "O'Rourke"]
+description_keywords_any = ["priest", "rites", "clergyman"]
+note = "The Sisters: the priest who performs Father Flynn's last rites. Single-mention named character."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Eliza"]
+description_keywords_any = ["sister", "Flynn", "speaks", "manages"]
+note = "The Sisters: one of the two surviving sisters who speaks at length about Father Flynn's decline."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Nannie"]
+description_keywords_any = ["sister", "deaf", "silent"]
+note = "The Sisters: the other surviving sister. Real test: single-mention secondary character."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Cotter"]
+description_keywords_any = ["family friend", "old", "speaks", "tedious", "opinion"]
+note = "The Sisters: the old family friend. Surname-only reference; entity_type must remain Person despite the unusual canonical."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Mangan", "Mangan's sister", "Girl", "the girl"]
+description_keywords_any = ["sister", "neighbour", "love", "infatuation", "object"]
+note = "Araby: the boy's beloved, named only as Mangan's sister. The model often emits her as 'Girl (unnamed)' or 'Mangan's sister'; either canonicalization counts."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Eveline"]
+description_keywords_any = ["young woman", "Frank", "father", "paralysed", "dock"]
+note = "Eveline: the title character / protagonist."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Frank"]
+description_keywords_any = ["sailor", "Buenos Ayres", "lover", "fiancé"]
+note = "Eveline: her would-be lover, the sailor with the ticket to Buenos Ayres."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Harry", "Ernest"]
+description_keywords_any = ["brother", "Eveline", "dead", "decorating"]
+note = "Eveline's brothers — Ernest is dead, Harry is in the country church-decorating business. At least one of them must appear as a Person atom."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Miss Gavan"]
+description_keywords_any = ["Eveline", "Stores", "boss", "supervisor", "shop"]
+note = "Eveline: her boss at the Stores. Single-mention name, but a named character."
+
+# Anti-tests for Person atoms.
+
+[[forbidden_person_atoms]]
+name_contains_any = ["the narrator", "narrator", "the boy", "the protagonist"]
+reason = "The Sisters and Araby are narrated in the first person by an unnamed boy. He is a voice, not a Person atom. Same hard rule as bk-book-1 / awareness-extraction's narrator-suppression."
+
+[[forbidden_person_atoms]]
+name_contains_any = ["Joyce", "James Joyce", "the author"]
+reason = "The author of the text is not a character within it. Symmetric error to extracting a model as a Person in its own outputs."
+
+[[forbidden_person_atoms]]
+name_contains_any = ["Joe Dillon"]
+reason = "Joe Dillon is a character in 'An Encounter', not in our 3-story fixture. If 'Joe Dillon' appears as a Person atom, the model leaked content from outside the corpus."
+
+# ── Concept atoms ──────────────────────────────────────────────────
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["paralysis"]
+description_keywords_any = ["paralysis", "stuck", "frozen", "unable", "Joyce"]
+note = "The single most important concept in *Dubliners*, named in The Sisters paragraph 1: 'the word paralysis'. Cross-story: Eveline literally paralyses at the dock. The extractor MUST surface this — failing to do so is a load-bearing miss."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["epiphany", "moment of recognition", "revelation"]
+description_keywords_any = ["recognition", "moment", "Joyce", "Araby"]
+note = "Each story closes with an epiphany. The extractor *may* lift this as a concept (Joyce's term, often used in commentary). Soft expectation — score it if present, no penalty if absent."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["simony", "simoniacal"]
+description_keywords_any = ["sin", "buying", "spiritual", "Sisters"]
+note = "The Sisters paragraph 1 names 'simony' as one of the three words the boy ponders ('paralysis', 'gnomon', 'simony'). The extractor should lift this even though it appears only once."
+
+# ── Work atoms ─────────────────────────────────────────────────────
+#
+# Sparse: The Sisters mentions Father Flynn's "Maynooth Catechism".
+# Araby mentions "The Memoirs of Vidocq", "The Devout Communicant",
+# "The Abbot" by Walter Scott. These are substantive textual
+# references and should each be a Work atom.
+
+[[expected_work_atoms]]
+canonical_name_contains_any = ["Memoirs of Vidocq", "Vidocq"]
+note = "Araby: Vidocq's memoirs, found among the dead priest's books left at the boy's house."
+
+[[expected_work_atoms]]
+canonical_name_contains_any = ["The Abbot", "Walter Scott"]
+note = "Araby: Walter Scott's *The Abbot*, also from the priest's books."
+
+[[expected_work_atoms]]
+canonical_name_contains_any = ["Devout Communicant"]
+note = "Araby: third book from the priest's library."
+
+# ── Place atoms ────────────────────────────────────────────────────
+# Note: places score under person_atoms via entity_type filtering — we
+# don't have a separate scorer. Skip explicit Place expectations here;
+# the eval matrix doesn't yet score Place atoms.
+
+# ── Event atoms ────────────────────────────────────────────────────
+
+[[expected_event_atoms]]
+description_contains_any = ["died", "death", "stroke", "deceased", "passed"]
+participants_any = ["Flynn"]
+note = "The Sisters: the priest's death, the central event. Soft-matched on death vocabulary."
+
+[[expected_event_atoms]]
+description_contains_any = ["bazaar", "Araby", "fair"]
+note = "Araby: the boy's journey to the bazaar. Participants empty: the unnamed-narrator-as-participant is unstable. Match on description vocabulary alone."
+
+[[expected_event_atoms]]
+description_contains_any = ["station", "decision", "departure", "leaving", "leave"]
+participants_any = ["Eveline"]
+note = "Eveline: the closing event at the North Wall — paralysed at the railing. Soft-matched: any decision/departure event involving Eveline."
+
+[[expected_event_atoms]]
+description_contains_any = ["Frank", "Buenos Ayres", "marry", "leave"]
+participants_any = ["Eveline", "Frank"]
+note = "Eveline: the proposal / planned departure to Buenos Ayres."
+
+# Anti-test: there is no such event in our 3 stories.
+[[forbidden_event_atoms]]
+name_contains_any = ["the encounter with the strange man", "the perverse old man"]
+reason = "These describe events from 'An Encounter', not in our 3-story fixture."
+
+# ── State atoms ────────────────────────────────────────────────────
+
+[[expected_state_atoms]]
+entity_name_contains_any = ["Eveline"]
+label_contains_any = ["conflict", "hesitation", "duty", "longing", "doubt", "paralysed", "passive", "unable"]
+note = "Eveline's interior — conflict between domestic security and romantic possibility. Free-indirect-discourse test: the State must bind to Eveline as entity, not narrator-voice."
+
+[[expected_state_atoms]]
+entity_name_contains_any = ["Flynn"]
+label_contains_any = ["mortality", "decline", "dying", "infirm", "stroke", "paralysed", "decay"]
+note = "The Sisters: Flynn's bodily/spiritual decline."
+
+# ── Relation atoms ─────────────────────────────────────────────────
+
+[[expected_relation_atoms]]
+participants_a_any = ["Flynn"]
+label_contains_any = ["mentor", "instruction", "tutor", "lessons", "teaches", "teacher", "intellectual", "guidance"]
+note = "The Sisters: Flynn taught the boy. Tricky — if 'the narrator' is correctly suppressed as a Person atom, this relation may have only one resolved participant. Score generously on label alone."
+
+[[expected_relation_atoms]]
+participants_a_any = ["Eveline"]
+label_contains_any = ["paternal", "father", "authority", "constraint", "violent", "control", "fear"]
+note = "Eveline: her father relation. Often emitted with 'father' as a generic non-Person participant. Score on label-only Eveline-side."
+
+[[expected_relation_atoms]]
+participants_a_any = ["Eveline"]
+participants_b_any = ["Frank"]
+label_contains_any = ["lover", "fiancé", "courtship", "promise", "marital", "marriage", "partnership", "engagement"]
+note = "Eveline: her romantic relation with Frank is the source of the choice she fails to make."
+
+# ── Question atoms ─────────────────────────────────────────────────
+
+[[expected_question_atoms]]
+content_contains_any = ["Flynn", "death", "decline", "priest"]
+note = "The Sisters: structural question about Flynn's death and decline."
+
+[[expected_question_atoms]]
+content_contains_any = ["duty", "desire", "obligation", "longing", "leave", "stay", "departure"]
+note = "Eveline: structural question about duty vs. desire. Soft-matched on common framings of her dilemma."
+
+# ── Phase 7 open questions ─────────────────────────────────────────
+
+[[expected_open_questions]]
+content_contains_any = ["duty", "desire", "obligation", "departure", "leaving", "longing"]
+note = "Eveline's open question: duty/desire dilemma."

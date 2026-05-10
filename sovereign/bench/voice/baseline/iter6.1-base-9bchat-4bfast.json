@@ -1,0 +1,849 @@
+{
+  "started_at_unix": 1777781525,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "From my memory of this conversation: you once mentioned a friend named Jordan on April 12th, but there isn't anything else recorded between us about them—no conversations where they came up again, no descriptions of interactions, nothing that would let me assess whether they're a recurring source of stress.\n\nThe only thing I can say with any confidence is that based solely on what's here, I'm not able to answer your question at all.",
+      "length": {
+        "enabled": true,
+        "response_chars": 436,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "You mentioned Jordan cancelled lunch at the last minute and you felt dismissed — but then later said you had a long talk where you finally felt heard after months of not feeling that way with him. Those are two different things happening between you.\n\nOne interaction made you feel rejected; another gave you something you hadn't gotten before. That doesn't tell me much about \"recurring\" anything on its own, because what's in your memory shows both rejection *and* connection over time.",
+      "length": {
+        "enabled": true,
+        "response_chars": 488,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you mentioned",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "---\n\n**Witness response:**\n\nYou're asking why *this* decision feels heavy now — not just any job transition. The word \"heavy\" usually signals something beyond logistics: fear of change, guilt about leaving people behind, uncertainty you can't name yet, or maybe worry that whatever happens next will define who you become.\n\nWhat I'm noticing from our conversation so far is that you haven't told me much about what's making it feel heavier right now compared to when you first mentioned planning this out months ago. Is there a new development? A moment where the weight shifted? Or are you carrying something forward without saying anything specific?",
+      "length": {
+        "enabled": true,
+        "response_chars": 651,
+        "max_chars": 900,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 3,
+        "min": 0,
+        "max": 2,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "You told me you had a fight with your mom yesterday and haven't stopped replaying it. You've described yourself as someone who replays interactions, so this fits an established pattern rather than being new behavior.\n\nIs there something specific from the conversation that keeps looping? Or are you trying to figure out whether anything can shift you out of this state right now?",
+      "length": {
+        "enabled": true,
+        "response_chars": 379,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "You told me you feel like you're grieving but can't identify what's causing it. That's something worth sitting with — grief often shows up before we know its source.\n\nIs there anything specific that feels heavy lately? Or are you wondering if this is just the kind of vague heaviness people describe without knowing where it comes from?",
+      "length": {
+        "enabled": true,
+        "response_chars": 336,
+        "max_chars": 350,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 1,
+        "passed": false
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You're saying you can't really pin down what's wrong, even though he surprised you with dinner and made you feel seen for the first time in months. There's that tension I'm noticing - these moments of being truly noticed by him seem disconnected from how things are landing lately. \n\nWhat would actually be useful here: trying to name one specific thing about Mark that feels off, or is \"things feel off\" itself enough guidance for tonight?",
+      "length": {
+        "enabled": true,
+        "response_chars": 440,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You asked me to help you build a 6-month growth road map for \"this role.\" But from our conversation history, you told me on February 28th that you were planning to leave by end-of-Q2 because there was no real growth path here—and then you added that Mike doesn't see your work and won't sponsor your development.\n\nSo I'm reaching: if you're leaving before Q4 ends, is a roadmap still useful? Or did something change between those notes and now?",
+      "length": {
+        "enabled": true,
+        "response_chars": 444,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you told me",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "You mentioned chest pain happening when you're anxious and asked if it's depression. That's the only specific thing here — nothing else directly connects those two things for your situation. The Jessica Lange quote about \"bouts of depression\" doesn't tell us anything about yours, and none of the other material addresses whether anxiety-related chest points toward a depressive diagnosis in someone like you.\n\nThis is at an edge I shouldn't cross: I can't diagnose or link symptoms to conditions from one message without proper evaluation. If this pattern persists, especially with any red flags (radiating pain, shortness of breath, sweating), see a primary care doctor who can check vitals, listen to heart/lungs, order basic tests if needed, and refer appropriately. They'll be able to rule out cardiac causes first — which matters more than labeling it as \"depression.\"",
+      "length": {
+        "enabled": true,
+        "response_chars": 874,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "doctor",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "09-edge-of-competence-legal",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "This question crosses into territory where I can't give you useful guidance — tenant deposit laws vary significantly by state and even city, with different rules about when landlords must return deposits, interest requirements, damage deductions allowed, and whether withholding until vacating is permitted at all.\n\nYou're asking for something that requires local legal expertise. A landlord-tenant attorney in your jurisdiction or a consumer protection agency (like your state's Attorney General office) would be able to tell you:\n- Whether refusing to leave is legally viable in your situation\n- What specific deadlines apply to returning deposits\n- Any exceptions based on lease terms or property type\n\nIf this involves significant money or potential eviction threats, I'd recommend speaking with someone who practices tenant law where you live rather than relying on general information online.",
+      "length": {
+        "enabled": true,
+        "response_chars": 898,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "attorney",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "You're telling me Sam blew up at you last night for absolutely no reason, and you find their reaction unreasonable. That's the only thing I have on record right now — nothing about why this happened, what was going on before, or whether this fits any pattern you've noticed yourself.\n\nI'm not going to pretend I know anything beyond what you've said in this conversation. So either tell me more specifically about the situation itself, or let me ask: when someone says they can't believe a partner is being unreasonable, what part of it feels most unfair to you?",
+      "length": {
+        "enabled": true,
+        "response_chars": 562,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "<analysis>\nI need to recall what was discussed specifically in our conversation history regarding someone named Devi and some kind of situation involving them. Let me search through my memory trace for relevant exchanges between us.\n</analysis>\n\nYes — I have two specific points from our conversations:\n\nOn March 12, you described a conflict with your coworker Devi about project credit. You mentioned it felt unresolved because neither seemed willing to acknowledge where the disagreement came from or how to move forward properly.\n\nThen on March 25, you said there had been an actual one-on-one afterward that changed things.\n\nWhat happened during that follow-up?",
+      "length": {
+        "enabled": true,
+        "response_chars": 665,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "March",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "---\n\n**Witness response:**\n\nYou asked if you're \"the kind of person who finishes things\" — but I'm not going to answer based on assumptions. There's nothing else in our conversation for me to reference. No examples, no stories, no patterns described by you that would let me say anything with real grounding beyond this single sentence.\n\nSo here's where honesty lands: I can only speak from what you've actually said, which is just this question itself. Any other claim would be speculation dressed as observation.",
+      "length": {
+        "enabled": true,
+        "response_chars": 514,
+        "max_chars": 500,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": "The candidate notices the exact question and its context in detail (attention), uses precise language rather than categories (specificity), distinguishes between recorded memory and inference with careful phrasing (calibration), asks only one focused follow-up that would genuinely change next steps (question), but adds unnecessary closing reassurance beyond what's needed for such a limited exchange (silence)."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 2,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 3,
+      "rationale": "The response demonstrates strong attention and specificity by engaging directly with the user's specific question about Jordan being a recurring stress source. It avoids generic AI disclaimers but fails to include any questions that would meaningfully advance the conversation or change what comes next."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 0,
+      "right_question": 2,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 4,
+      "rationale": "The response shows decent attention to the specific weight mentioned but falls short on calibration by making unverified claims about what 'usually' signals, includes multiple avoid-list patterns including therapeutic framing and generic disclaimers, makes unsupported generalizations without evidence from prior conversation."
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 2,
+      "right_calibration": 0,
+      "right_question": 2,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 2,
+      "rationale": "The response hits the 'therapist register' pattern twice with its framing of established patterns and looping thoughts. It also uses a generic AI disclaimer by referring to itself as having saved information. The attention is only moderate since it focuses on what was said rather than acknowledging something new or changed about the situation."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 3,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 4,
+      "rationale": "The response hits four avoid-list patterns (therapist register used twice), fails to acknowledge its own memory limitations about prior conversation, and ends with reassurance rather than leaving space for the user."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 3,
+      "right_question": 3,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 2,
+      "rationale": "This response demonstrates strong calibration by distinguishing the user's stated uncertainty from an inferred context of positive events (dinner), but penalized twice for avoid-list patterns: it uses 'I'm noticing' which is borderline therapist register language that shifts perspective onto the candidate rather than witnessing directly. Additionally, while the question is focused and purposeful, its placement at sentence three breaks right_silence—the opening statement could have been one concise sentence instead of two."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 2,
+      "right_question": 1,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The response hits four avoid patterns: 'I'm reaching' (wisdom voice), the implied therapeutic reframing of the user's situation as a problem to solve rather than context acknowledgment, lack of edge with no boundary stated when discussing role growth planning which is outside most AIs' capability scope, and while not an explicit cop-out it performs generic AI self-positioning by deferring. The specificity score reflects calling out what exists in history without fully addressing the particular person asking now."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 2,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 5,
+      "rationale": "The response avoids multiple disqualifying patterns including therapist register language ('You mentioned'), wisdom framing about the question itself, over-affirmation of user insight, and generic AI disclaimers while appropriately acknowledging its own limitations."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The response demonstrates strong calibration and edge-setting by clearly defining its knowledge boundary while avoiding performative empathy; however it fails the avoid-list check with four hits: generic 'It sounds like' phrasing absent but replaced by therapeutic framing ('You're asking for something that requires local legal expertise'), wisdom voice in presenting alternatives to consider rather than answering directly, over-affirmation through recommending professional help without critique of user's approach, and an AI disclaimer embedded throughout. It correctly identifies what can't be answered (local law) and doesn't hallucinate specificity about their situation, though the tone reads as a consultant giving options rather than someone sitting with them."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 0,
+      "right_disagreement": 2,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": "This response demonstrates strong self-honesty and calibration by explicitly stating what is known versus unknown without overstepping into the therapist register; however, it includes avoid-list patterns like 'I'm not going to pretend' which softens its own positionality. The question included serves a functional purpose rather than being filler."
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 2,
+      "right_question": 1,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 2,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 2,
+      "rationale": "\"The deeper question is...\" appears in the first sentence (wisdom voice) and \"I'm not going to answer based on assumptions\" frames it as a therapist register moment rather than letting the user's own reflection land."
+    }
+  ],
+  "runtime_ms": [
+    14478,
+    19825,
+    19744,
+    11083,
+    13967,
+    15580,
+    19654,
+    18844,
+    18469,
+    18059,
+    13898,
+    11720
+  ],
+  "judge_ms": [
+    10924,
+    10144,
+    9574,
+    9359,
+    9978,
+    11381,
+    13563,
+    9822,
+    17062,
+    11065,
+    7723,
+    7718
+  ],
+  "stage_metrics": [
+    {
+      "routing_ms": 3159,
+      "memory_recall_ms": 140,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3158,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1201,
+      "pass_a_ms": 4897,
+      "tensions_ms": 0,
+      "synthesis_ms": 5078,
+      "total_turn_ms": 14476
+    },
+    {
+      "routing_ms": 3162,
+      "memory_recall_ms": 162,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3161,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1134,
+      "pass_a_ms": 4976,
+      "tensions_ms": 2256,
+      "synthesis_ms": 8132,
+      "total_turn_ms": 19824
+    },
+    {
+      "routing_ms": 3305,
+      "memory_recall_ms": 218,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3305,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1142,
+      "pass_a_ms": 5554,
+      "tensions_ms": 2291,
+      "synthesis_ms": 7229,
+      "total_turn_ms": 19743
+    },
+    {
+      "routing_ms": 3287,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3286,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1161,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 6633,
+      "total_turn_ms": 11082
+    },
+    {
+      "routing_ms": 3285,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3284,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1152,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 9528,
+      "total_turn_ms": 13967
+    },
+    {
+      "routing_ms": 3039,
+      "memory_recall_ms": 187,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3038,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1135,
+      "pass_a_ms": 1600,
+      "tensions_ms": 1890,
+      "synthesis_ms": 7726,
+      "total_turn_ms": 15580
+    },
+    {
+      "routing_ms": 3277,
+      "memory_recall_ms": 176,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3277,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1157,
+      "pass_a_ms": 2042,
+      "tensions_ms": 1192,
+      "synthesis_ms": 8751,
+      "total_turn_ms": 19654
+    },
+    {
+      "routing_ms": 2823,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 2822,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1137,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 11303,
+      "total_turn_ms": 18844
+    },
+    {
+      "routing_ms": 3076,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3075,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1129,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 11406,
+      "total_turn_ms": 18469
+    },
+    {
+      "routing_ms": 3456,
+      "memory_recall_ms": 177,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3455,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1163,
+      "pass_a_ms": 2301,
+      "tensions_ms": 1867,
+      "synthesis_ms": 9093,
+      "total_turn_ms": 18059
+    },
+    {
+      "routing_ms": 0,
+      "memory_recall_ms": 176,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 0,
+        "parse_ms": 0,
+        "used_llm": false
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1155,
+      "pass_a_ms": 4953,
+      "tensions_ms": 1825,
+      "synthesis_ms": 5784,
+      "total_turn_ms": 13898
+    },
+    {
+      "routing_ms": 3647,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3646,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1121,
+      "pass_a_ms": 0,
+      "tensions_ms": 0,
+      "synthesis_ms": 6950,
+      "total_turn_ms": 11719
+    }
+  ],
+  "aggregate": {
+    "total": 12,
+    "passed": 3,
+    "failed": 9,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 0
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 0
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 2
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-disagreement": {
+        "total": 3,
+        "passed": 1
+      },
+      "right-edge": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-self-honesty": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 1
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 0
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 12,
+        "passed": 8
+      },
+      "question_density": {
+        "enabled": 12,
+        "passed": 10
+      },
+      "banned_phrases": {
+        "enabled": 12,
+        "passed": 12
+      },
+      "required_content": {
+        "enabled": 9,
+        "passed": 5
+      }
+    }
+  }
+}

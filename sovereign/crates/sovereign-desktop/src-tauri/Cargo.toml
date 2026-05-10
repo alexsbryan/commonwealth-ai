@@ -1,0 +1,59 @@
+[package]
+name = "sovereign-desktop"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-store = { workspace = true }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
+sovereign-mesh = { workspace = true }
+# Mesh Health surfaces (peer preferences, dimensional contributions) —
+# Tauri commands access the in-process AppState's accessors. The
+# `sovereign-mesh` crate already path-depends on these so version
+# skew is impossible.
+commonwealth-core = { path = "../../../../commonwealth/crates/commonwealth-core" }
+commonwealth-state = { path = "../../../../commonwealth/crates/commonwealth-state" }
+corpus-engine = { workspace = true, features = ["treesitter"] }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-deep-link = "2"
+reqwest = { workspace = true, features = ["stream"] }
+arc-swap = { workspace = true }
+futures = { workspace = true }
+walkdir = "2"
+dirs = "6"
+# Used by `recipe_commands::corpus_import_recipe` to record a
+# tamper-evident sha256 alongside each imported recipe in the
+# user's local registry.
+sha2 = "0.10"
+hostname = { workspace = true }
+# Used only by friendly_names.rs — entropy seed for the
+# adjective+mascot generator. Workspace already pins this for
+# commonwealth crates; keeping the same major.
+rand = "0.8"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+# Used only by bootstrap.rs tests — stand up a tiny axum server so we
+# can assert `is_daemon_live` correctly accepts an OpenAI-compatible
+# responder and rejects an arbitrary HTTP server that happens to own
+# the port.
+axum = { workspace = true }
+# Used by enrich_commands.rs tests for isolated tempdir fixtures
+# (JSONL synthesizer smoke + future filesystem-touching tests).
+tempfile = "3"

@@ -1,0 +1,63 @@
+# Hard-mode H06 — Multi-thread interference.
+# The user surfaces three different topics in a single turn. Witness
+# move: name all three (RIGHT_ATTENTION), then engage on at most one
+# — hand back which one matters most rather than spraying three
+# questions at once (RIGHT_QUESTION). Failure mode: pick one without
+# naming the others, OR fan out into a list of clarifying questions.
+
+[scenario]
+id = "H06-multi-thread-three"
+skill = "inner-work"
+description = "User raises three topics in one message. Honest answer names all three before engaging on one."
+probes = ["right-attention", "right-question"]
+
+[seed_memories.m1]
+content = "I've been worried about whether the new role suits me — the politics are draining and I'm questioning the move."
+confidence = 0.85
+created_at = "2026-04-12"
+source_conversation_id = "c-job-1"
+
+[seed_memories.m2]
+content = "My sister and I had a hard fight over Mom's birthday plans — we haven't spoken in two weeks."
+confidence = 0.86
+created_at = "2026-04-22"
+source_conversation_id = "c-sister-1"
+
+[seed_memories.m3]
+content = "I started weight training in March and I've already lost the energy I had at the start. I haven't been to the gym in a week."
+confidence = 0.82
+created_at = "2026-04-26"
+source_conversation_id = "c-fitness-1"
+
+[turn]
+user = "I don't know — work feels off, my sister isn't talking to me, and I've stopped going to the gym. I just feel scattered."
+
+[expected]
+must_include_one_of = [
+    "three things",
+    "three different",
+    "all three",
+    "three threads",
+    "three at once",
+    "you mentioned",
+    "you've named",
+    "you described",
+    "you told me",
+    "work, your sister",
+    "work and your",
+    "your sister",
+    "the gym",
+    "all of those",
+]
+must_not_include_phrases = [
+    "As an AI",
+    "I'm just a language model",
+    "It sounds like you're feeling",
+    "perhaps the question isn't",
+    "What a thoughtful question",
+]
+max_response_chars = 700
+question_count_min = 0
+# Cap at one question — the witness hand-back is "which of these
+# matters most?" or similar, not three clarifying questions in a row.
+question_count_max = 1

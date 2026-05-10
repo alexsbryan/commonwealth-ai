@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# sovereign-cargo-check-adapter — translates `cargo check --message-format json`
+# output to Tier 2 lint events.
+#
+# Usage: cargo check --message-format json 2>&1 | sovereign-cargo-check-adapter [workspace]
+#
+# Reads JSON-per-line cargo compiler messages from stdin and writes Tier 2
+# lint events to stdout. Non-JSON lines (cargo progress output) are ignored.
+#
+# Tier 2 event schema:
+#   {"t":"fail","n":"<file>","out":"<message>","line":<N>,"col":<N>}
+#   {"t":"warn","n":"<file>","out":"<message>","line":<N>,"col":<N>}
+#   {"t":"pass","n":"<workspace>"}     (emitted once at the end on success)
+#   {"t":"summary","pass":0,"fail":<F>,"warn":<W>,"ms":0}
+
+set -uo pipefail
+
+workspace="${1:-unknown}"
+fail_count=0
+warn_count=0
+pass_count=0
+
+while IFS= read -r line; do
+    # Skip non-JSON lines (cargo build progress, etc.).
+    if [[ "${line:0:1}" != "{" ]]; then
+        continue
+    fi
+
+    reason=$(echo "$line" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('reason',''))" 2>/dev/null) || continue
+
+    if [[ "$reason" != "compiler-message" ]]; then
+        continue
+    fi
+
+    level=$(echo "$line" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+msg = d.get('message', {})
+print(msg.get('level', ''))
+" 2>/dev/null) || continue
+
+    if [[ "$level" != "error" && "$level" != "warning" ]]; then
+        continue
+    fi
+
+    # Extract file, line, col, and the human-readable message.
+    event=$(echo "$line" | python3 -c "
+import sys, json, re
+
+d = json.load(sys.stdin)
+msg = d.get('message', {})
+level = msg.get('level', '')
+text = msg.get('rendered', msg.get('message', ''))
+
+# Get first span for file location.
+spans = msg.get('spans', [])
+file_path = ''
+line_no = None
+col_no = None
+for span in spans:
+    if span.get('is_primary', False):
+        file_path = span.get('file_name', '')
+        line_no = span.get('line_start')
+        col_no = span.get('column_start')
+        break
+if not file_path and spans:
+    file_path = spans[0].get('file_name', '')
+    line_no = spans[0].get('line_start')
+    col_no = spans[0].get('column_start')
+
+t = 'fail' if level == 'error' else 'warn'
+out = {'t': t, 'n': file_path or 'unknown', 'out': text.strip()}
+if line_no is not None:
+    out['line'] = line_no
+if col_no is not None:
+    out['col'] = col_no
+print(json.dumps(out))
+" 2>/dev/null) || continue
+
+    echo "$event"
+
+    if [[ "$level" == "error" ]]; then
+        ((fail_count++)) || true
+    else
+        ((warn_count++)) || true
+    fi
+done
+
+# Emit summary.
+if [[ $fail_count -eq 0 ]]; then
+    echo "{\"t\":\"pass\",\"n\":\"${workspace}\"}"
+    ((pass_count++)) || true
+fi
+echo "{\"t\":\"summary\",\"pass\":${pass_count},\"fail\":${fail_count},\"warn\":${warn_count},\"ms\":0}"
+
+# Exit non-zero if there were errors.
+[[ $fail_count -eq 0 ]]

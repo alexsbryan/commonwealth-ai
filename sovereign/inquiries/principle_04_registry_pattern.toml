@@ -1,0 +1,17 @@
+# ARCH_PRINCIPLES.md §4 — Registry pattern for pluggable dispatch.
+#
+# Sovereign-core's ToolRegistry is one of three named reference
+# implementations (the others — corpus-engine domain_registry,
+# commonwealth-api MiddlewareRegistry — live in different atlases).
+# The principle's load-bearing claim: unknown-id handling must be
+# explicit and loud, not a silent skip.
+
+[inquiry]
+id = "principle_04_registry_pattern"
+title = "§4 Registry pattern — sovereign-core::registry::ToolRegistry"
+file_globs = [
+    "**/sovereign-core/src/registry.rs",
+    "**/sovereign-core/src/registry/**/*.rs",
+]
+keywords = ["registry", "Registry", "register", "factories"]
+min_score = 0.5

@@ -1,0 +1,174 @@
+schema_version = 2
+
+[project]
+name = "sovereign"
+
+[observation]
+observed_at = 1778187161
+has_git = true
+embed_model_available = true
+
+[[observation.language]]
+id = "rust"
+display = "Rust workspace (10 crates)"
+scip = "not_required"
+
+[[observation.dep]]
+name = "arc-swap"
+version = "1.7"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "async-trait"
+version = "0.1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "axum"
+version = "0.8"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "chrono"
+version = "0.4"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "corpus-engine"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "dashmap"
+version = "6"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "futures"
+version = "0.3"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "hostname"
+version = "0.4"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "pulldown-cmark"
+version = "0.12"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "reqwest"
+version = "0.12"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "serde"
+version = "1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "serde_json"
+version = "1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "sovereign-atos"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "sovereign-core"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "sovereign-inference"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "sovereign-mesh"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "sovereign-store"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "sovereign-tools"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "thiserror"
+version = "2"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tokio"
+version = "1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tokio-util"
+version = "0.7"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "toml"
+version = "0.8"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tower"
+version = "0.5"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tower-http"
+version = "0.6"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tracing"
+version = "0.1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tracing-subscriber"
+version = "0.3"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "uuid"
+version = "1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[lifecycle]
+founded = false
+charter_version = 0
+current_phase = 0

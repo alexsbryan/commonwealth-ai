@@ -1,0 +1,21 @@
+//! Tool-efficacy self-host harness.
+//!
+//! Reads what the daemon already records (`~/.sovereign/notes.db` and
+//! `~/.sovereign/features.db`), assembles a per-overnight manifest,
+//! grades the run mechanically (golden tests) + qualitatively
+//! (LLM-as-judge), checks scope compliance + test regressions, replays
+//! tool calls against a frozen oracle, and analyzes workflow +
+//! audit-trail dimensions across run pairs.
+//!
+//! Operator-driven — no daemon source changes.
+
+pub mod audit_trail;
+pub mod diff;
+pub mod finalize;
+pub mod judge;
+pub mod manifest;
+pub mod mechanical;
+pub mod regression;
+pub mod scope;
+pub mod tool_grader;
+pub mod workflow;

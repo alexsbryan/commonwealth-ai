@@ -1,0 +1,57 @@
+loaded bank `sep-core-v1.1` — 21 questions, target corpus `sep`
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-36B-Opus-Q6_K
+Embed model: Qwen3-Embedding-0.6B-Q8_0
+Database:    /home/alexbryan/.sovereign/sovereign.db
+Indexes:     /home/alexbryan/.sovereign/indexes
+Corpora:     sep (187967 chunks), wikipedia (1845857 chunks), wikipedia-catalog (2048 chunks), wikipedia-fetched (1757 chunks)
+Tools:       10 registered
+Temperature: 0 (override)
+Wiki graph:  51280 articles, 7293818 edges
+[2m2026-05-05T13:45:40.047040Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m20
+[2m2026-05-05T13:45:41.115144Z[0m [32m INFO[0m atlas-context: init complete [3mloaded[0m[2m=[0m0
+Atlas: 0 corpus context(s) loaded from cache
+atlas-context: cache HIT — 102 entries from `sep-qualia-knowledge` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 194 entries from `sep-consciousness` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 141 entries from `sep-physicalism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 135 entries from `sep-knowledge-analysis` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 133 entries from `sep-rigid-designators` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 91 entries from `sep-reliabilism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+═══ sep-core-v1.1 (corpus=sep) — 21 questions ═══
+
+  [argument_consequence_against_compatibilism] sources     1/3 (loose     3/3)  facts     5/7  essay 8/12 [t3/p2/d1/a2]   vec+fts  (24ms embed, 98ms search)
+  [concept_modality_necessary_aposteriori] sources     1/4 (loose     3/4)  facts     7/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (21ms embed, 95ms search)
+  [comparative_locke_reid_personal_identity] sources     3/5 (loose     5/5)  facts     7/7  essay 8/12 [t3/p2/d1/a2]   vec+fts  (21ms embed, 86ms search)
+  [dialectical_gettier_lottery   ] sources     2/3 (loose     3/3)  facts     6/7  essay 8/12 [t3/p2/d1/a2]   vec+fts  (25ms embed, 96ms search)
+  [argument_internalism_externalism_justification] sources     2/3 (loose     3/3)  facts     3/7  essay 10/12 [t3/p2/d3/a2]   vec+fts  (24ms embed, 89ms search)
+  [concept_qualia_physicalism    ] sources     1/3 (loose     3/3)  facts     5/7  essay 8/12 [t2/p3/d1/a2]   vec+fts  (27ms embed, 98ms search)
+  [position_summary_hard_problem_illusionism] sources     1/3 (loose     3/3)  facts     7/7  essay 8/12 [t2/p3/d1/a2]   vec+fts  (25ms embed, 95ms search)
+  [dialectical_content_narrow_wide_burge] sources     2/3 (loose     3/3)  facts     5/7  essay 10/12 [t3/p3/d2/a2]   vec+fts  (22ms embed, 96ms search)
+  [contested_trolley_doctrine_double_effect] sources     3/5 (loose     5/5)  facts     6/7  essay 8/12 [t3/p2/d1/a2]   vec+fts  (22ms embed, 91ms search)
+  [position_summary_virtue_ethics_function] sources     1/3 (loose     3/3)  facts     7/8  essay 4/12 [t2/p1/d0/a1]   vec+fts  (22ms embed, 91ms search)
+  [position_summary_kripke_reference_causal_historical] sources     3/3 (loose     3/3)  facts     6/7  essay 8/12 [t2/p3/d1/a2]   vec+fts  (21ms embed, 102ms search)
+  [dialectical_putnam_twin_earth_meaning] sources     2/3 (loose     3/3)  facts     7/7  essay 8/12 [t3/p2/d1/a2]   vec+fts  (22ms embed, 99ms search)
+  [argument_godel_incompleteness ] sources     3/4 (loose     4/4)  facts     7/8  essay 8/12 [t3/p2/d1/a2]   vec+fts  (21ms embed, 94ms search)
+  [argument_rawls_original_position] sources     3/4 (loose     4/4)  facts     7/8  essay 7/12 [t2/p3/d1/a1]   vec+fts  (22ms embed, 96ms search)
+  [comparative_berlin_liberty    ] sources     2/3 (loose     3/3)  facts     6/7  essay 8/12 [t3/p2/d1/a2]   vec+fts  (22ms embed, 92ms search)
+  [contested_no_miracles_scientific_realism] sources     1/2 (loose     2/2)  facts     9/9  essay 10/12 [t3/p2/d3/a2]   vec+fts  (22ms embed, 103ms search)
+  [comparative_kant_hume_causation] sources     1/3 (loose     3/3)  facts     6/8  essay 8/12 [t3/p2/d1/a2]   vec+fts  (21ms embed, 98ms search)
+  [argument_aristotle_hylomorphism] sources     3/3 (loose     3/3)  facts     8/8  essay 8/12 [t2/p3/d1/a2]   vec+fts  (23ms embed, 117ms search)
+  [position_summary_husserl_heidegger] sources     2/2 (loose     2/2)  facts     8/8  essay 8/12 [t3/p2/d1/a2]   vec+fts  (22ms embed, 101ms search)
+  [comparative_mencius_xunzi_human_nature] sources     2/2 (loose     2/2)  facts     8/9  essay 8/12 [t3/p2/d1/a2]   vec+fts  (22ms embed, 92ms search)
+  [contested_bioethics_principlism] sources     1/2 (loose     2/2)  facts     4/9  essay 8/12 [t3/p2/d2/a1]   vec+fts  (23ms embed, 90ms search)
+
+─── per category ───
+  argument_reconstruction        sources 12/17 / loose 17/17  facts 30/38
+  comparative                    sources 8/13 / loose 13/13  facts 27/31
+  concept_distinction            sources 2/7 / loose 6/7  facts 12/14
+  contested                      sources 5/9 / loose 9/9  facts 19/25
+  dialectical                    sources 6/9 / loose 9/9  facts 18/21
+  position_summary               sources 7/11 / loose 11/11  facts 28/30
+
+─── overall ───
+  sources 40/66  (61%)
+  loose   65/66  (98%)  ← LLM-judge loose source-credit
+  essay   172/252  (68%)  axes: t=57/63 p=48/63 d=27/63 a=40/63  ← essay-readiness
+  facts   134/159  (84%)
+wrote run JSON to bench/sep_eval/multi-atlas-6-prompt-clean.json

@@ -1,0 +1,19 @@
+# ARCH_PRINCIPLES.md §2 — Type-safe dispatch over stringly-typed.
+#
+# The principle's reference implementation is ViewKind in
+# knowledge_view/view_kind.rs. The string aliases (e.g.
+# VIEW_PERSONAL_KNOWLEDGE) live as `pub const &str` set to
+# const-fn calls so the enum stays the source of truth.
+#
+# What this inquiry verifies: an atom is anchored to view_kind.rs,
+# its commits reference the principle's distinctive vocabulary,
+# and the file still exists at HEAD.
+
+[inquiry]
+id = "principle_02_type_safe_dispatch"
+title = "§2 Type-safe dispatch — ViewKind enum + alias pattern"
+file_globs = [
+    "**/sovereign-tools/src/knowledge_view/view_kind.rs",
+]
+keywords = ["ViewKind", "knowledge_view", "view_kind", "enum"]
+min_score = 0.5

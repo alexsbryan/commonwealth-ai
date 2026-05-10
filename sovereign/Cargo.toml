@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sovereign-core",
+    "crates/sovereign-inference",
+    "crates/sovereign-store",
+    "crates/sovereign-tools",
+    "crates/sovereign-mesh",
+    "crates/sovereign-server",
+    "crates/sovereign-desktop/src-tauri",
+    "crates/sovereign-cli",
+    "crates/sovereign-atos",
+    "crates/sovereign-eval",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+sovereign-core = { path = "crates/sovereign-core" }
+sovereign-inference = { path = "crates/sovereign-inference" }
+sovereign-store = { path = "crates/sovereign-store" }
+sovereign-tools = { path = "crates/sovereign-tools" }
+sovereign-mesh = { path = "crates/sovereign-mesh" }
+sovereign-atos = { path = "crates/sovereign-atos" }
+corpus-engine = { path = "../corpus-engine" }
+
+# Shared dependencies
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+futures = "0.3"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+toml = "0.8"
+axum = { version = "0.8", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dashmap = "6"
+tokio-util = { version = "0.7", features = ["rt"] }
+chrono = { version = "0.4", features = ["serde"] }
+arc-swap = "1.7"
+# Portable `gethostname()` wrapper used as the default node name in
+# mesh create/join. Cheap, zero-runtime, no build-script dependencies.
+hostname = "0.4"
+# Markdown parsing for ATOS charter documents (sovereign-atos).
+pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+
+# Fast dev builds: skip debug symbols (biggest single speedup for cargo check).
+[profile.dev]
+debug = 0

@@ -1,0 +1,36 @@
+/target
+/models
+/data
+*.gguf
+*node_modules
+dist*
+
+# Desktop OCR binaries — populated by scripts/fetch-desktop-binaries.sh.
+# Large blobs, per-target, not source. README at the path explains how
+# to repopulate. The README itself stays tracked.
+crates/sovereign-desktop/src-tauri/binaries/tesseract-*
+crates/sovereign-desktop/src-tauri/binaries/pdfium/
+crates/sovereign-desktop/src-tauri/binaries/tessdata/
+
+# Sovereign code intelligence
+.sovereign/project.json
+.sovereign/scip/
+# SQLite notes database — personal session notes, binary, not for source control
+.sovereign/notes.db
+.sovereign/notes.db-shm
+.sovereign/notes.db-wal
+
+# Bench data artifacts — regenerable from scripts in the same dir, too
+# large or session-specific to source-control. Scripts (.py / .sh / .md)
+# stay tracked; only the produced data files are ignored.
+bench/atlas_retrieval/chunks-*.jsonl
+bench/sep_atlas/logs/
+
+# Playwright artifacts (chat surface e2e tests).
+crates/sovereign-desktop/test-results/
+crates/sovereign-desktop/playwright-report/
+crates/sovereign-desktop/playwright/.cache/
+
+# TTFI harness reports — local artifacts, regenerable via `npm run test:ttfi`.
+crates/sovereign-desktop/tests/e2e/.ttfi-report.json
+crates/sovereign-desktop/tests/e2e/.ttfi-baseline.json

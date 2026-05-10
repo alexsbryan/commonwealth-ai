@@ -1,0 +1,59 @@
+voice eval: skills from /Users/alexsbryan/dev/commonwealth-ai/sovereign/skills
+voice eval: chat model pinned to Qwen3.5-9B-vOP.Q5_K_S
+voice eval: judge model pinned to FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+voice eval: running 01-specific-uncertainty-thin (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  Qwen3.5-9B-vOP.Q5_K_S
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmp3LPXZ4/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmp3LPXZ4/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"REASONING\",\n  \"confidence\": 0.95,\n  \"rationale\": \"Open-ended analysis of personal patterns requiring synthesis across multiple life domains rather than a single factual lookup\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n"
+[router] "Is Jordan a recurring source of stress in my life?" → DeepQuery (coarse=REASONING, confidence=0.95)
+  judge: attn=3 spec=2 cal=3 q=1 sil=2 dis=0 edge=2 hon=3 avoid=0
+voice eval — 1 scenarios
+chat model:  Qwen3.5-9B-vOP.Q5_K_S
+judge model: FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+=========================
+FAIL  01-specific-uncertainty-thin  (inner-work)  42.8s
+      length: 3040 chars (max 600)
+      banned-phrase hits: ["I cannot", "The user is"]
+      required content: none of the must-include phrases matched
+
+Total: 0/1 passed (1 failed)
+
+By probe:
+  right-attention                0/1
+  right-self-honesty             0/1
+
+By check:
+  length             0/1
+  question_density   1/1
+  banned_phrases     0/1
+  required_content   0/1
+
+Latency (runtime turn):
+  median 42840 ms   p95 42840 ms   max 42840 ms   n=1
+Latency (judge):
+  median 18203 ms   p95 18203 ms   max 18203 ms   n=1
+
+Judge axes (mean over 1 scenarios):
+  right_attention      3.00
+  right_specificity    2.00
+  right_calibration    3.00
+  right_question       1.00
+  right_silence        2.00
+  right_disagreement   0.00
+  right_edge           2.00
+  right_self_honesty   3.00
+  avoid_list_penalty   0.00  (lower is better)

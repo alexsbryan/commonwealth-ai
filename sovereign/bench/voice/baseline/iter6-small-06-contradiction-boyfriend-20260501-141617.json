@@ -1,0 +1,93 @@
+{
+  "started_at_unix": 1777670183,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "You said last month he surprised you with dinner and made you feel seen — and now things feel off. I want to make sure I'm tracking right before we go further: was there a particular moment when you noticed the shift, or has it been creeping up on you?",
+      "length": {
+        "enabled": true,
+        "response_chars": 252,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "last month",
+        "passed": true
+      },
+      "passed": true
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 3,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 0,
+      "rationale": "The response anchors on a specific prior detail while avoiding generic framing and filler questions. It doesn't attempt to diagnose or validate the user's state; it simply tracks continuity by asking for clarification about timing without padding or reassurance."
+    }
+  ],
+  "runtime_ms": [
+    20695
+  ],
+  "judge_ms": [
+    14168
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 1
+      },
+      "right-disagreement": {
+        "total": 1,
+        "passed": 1
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 1
+      }
+    }
+  }
+}

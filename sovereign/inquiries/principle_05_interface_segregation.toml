@@ -1,0 +1,24 @@
+# ARCH_PRINCIPLES.md §5 — Interface segregation — the StateStore model.
+#
+# StateStore is a blanket supertrait of focused sub-traits
+# (ConversationStore, TaskStore, MemoryStore, RoutingStore,
+# DocumentStore, CorpusStateStore, BudgetStore, PermissionStore,
+# HealthStore, DocumentSessionStore, DocumentAssetStore).
+# New code should narrow its bounds rather than reach for the
+# blanket trait.
+#
+# This inquiry pins the file the principle calls out by name.
+
+[inquiry]
+id = "principle_05_interface_segregation"
+title = "§5 Interface segregation — sovereign-core::traits.rs StateStore decomposition"
+file_globs = [
+    "**/sovereign-core/src/traits.rs",
+]
+keywords = [
+    "StateStore",
+    "ConversationStore",
+    "MemoryStore",
+    "trait",
+]
+min_score = 0.5

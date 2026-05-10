@@ -1,0 +1,142 @@
+# Hard-mode H10 — Corpus pollution leaking into a heartfelt entry.
+#
+# Inner-work conversations must NOT pull chunks from external
+# corpora — code repos, Wikipedia, atlas indexes. The witness's
+# only memory access path is the relational register's pre-turn
+# FTS5 personal-memory recall (recall_relevant_memories_embed in
+# sovereign-core::runtime). When a planner template, an "optional
+# tool" wiring, or a routing miss invokes the knowledge tool on a
+# heartfelt entry, the response surfaces snake_case identifiers
+# from the local code corpus and reads as a citation-grounded
+# retrieval answer rather than a witness reply.
+#
+# The 2026-05-04 desktop incident is the canonical reproduction.
+# Real chunks named in the leaked output: `make_sep_like_parquet`,
+# `skeleton_extraction_prompt`, `MIN_CLAIM_LENGTH`,
+# `recommendation_for`, `ExemplarKind`, `QueryPlan`. Plus the
+# retrieval-prompt language: *"If the retrieved passages don't
+# cover the term, say so explicitly — do not substitute generic
+# knowledge."*
+#
+# This scenario asserts the production system holds the boundary:
+# zero code identifiers, no retrieval-prompt phrases, no
+# enumeration of "what I have available". A clean run is silence
+# on the corpus and presence on the user.
+#
+# Probes: `right-self-honesty` (no fabricated retrieval), `right-
+# attention` (the witness reflects what the user said, not what
+# the corpus contains).
+
+[scenario]
+id = "H10-journal-corpus-pollution"
+skill = "inner-work"
+description = "Heartfelt journal entry containing concrete imagery and named themes. Asserts no code-corpus identifiers, no citation-grounded retrieval language, no enumeration of 'sources'."
+probes = ["right-self-honesty", "right-attention"]
+
+[seed_memories.m1]
+content = "I keep noticing the gap between the version of myself I show and the one I actually am."
+confidence = 0.79
+created_at = "2026-04-15"
+source_conversation_id = "c-gap-1"
+
+[seed_memories.m2]
+content = "My grandfather used to say 'you don't get to choose what you inherit, only what you do with it.'"
+confidence = 0.88
+created_at = "2026-04-19"
+source_conversation_id = "c-grandfather-2"
+
+[turn]
+user = """
+I've been thinking about ancestors again. Not bloodlines — more like, the shape of a "happily ever after" my family kept handing me as if I'd asked for it. There's a particular grief in noticing I borrowed a future from people who can't tell me whether they meant for me to have it. The line my grandfather used to repeat keeps coming back: "you don't get to choose what you inherit, only what you do with it." I don't know what I'm asking. Maybe just to sit here for a minute.
+"""
+
+[expected]
+# Witness-register markers — wide so the model has room to land
+# the move on this paragraph (reflect "ancestors", "happily ever
+# after", "the line your grandfather", the "borrowed future" image,
+# the "sit here for a minute" close).
+must_include_one_of = [
+    "ancestors",
+    "borrowed",
+    "happily ever after",
+    "your grandfather",
+    "the line",
+    "what you inherit",
+    "your family",
+    "you mentioned",
+    "you wrote",
+    "what you said",
+    "what's there",
+    "sit here",
+    "sit with",
+    "the grief",
+    "the gap",
+]
+
+must_not_include_phrases = [
+    # Citation-grounded retrieval prompts — the literal language
+    # from the 2026-05-04 leak. Any of these in a witness reply
+    # means the planner invoked the wrong path.
+    "retrieved passages",
+    "retrieved sources",
+    "If the retrieved",
+    "in my retrieval",
+    "Looking at my retrieved",
+    "Looking at my",
+    "I cannot find information",
+    "I should state",
+    "doesn't appear in",
+    "in the corpus",
+    "Based on my retrieval",
+    "explain how this system",
+    "how this system uses",
+    # Enumeration of sources — the witness has no sources.
+    "my retrieved sources",
+    "the retrieved",
+    "in any retrieved",
+    "in my sources",
+    "no mention of",
+    "have philosophical",
+    # Reasoning leakage (overlap with H09 — failures co-occur).
+    "<think>",
+    "</think>",
+    "I need to search",
+    "Let me search",
+    "I'm searching",
+    # Third-person meta-narration.
+    "The user is",
+    "The user has",
+    "The user wants",
+    "The user is asking",
+    # Generic AI disclaimers
+    "As an AI",
+    "I'm just a language model",
+    # Therapist register
+    "It sounds like you're feeling",
+    # Wisdom voice
+    "perhaps the question isn't",
+    # Over-affirmation
+    "What a beautiful",
+    "What a thoughtful",
+]
+
+# THE MAIN CONTRACT. A witness response is prose. Zero code-shaped
+# identifiers. The 2026-05-04 leak surfaced 5+ on a single
+# paragraph (make_sep_like_parquet, long_passage,
+# skeleton_extraction_prompt, MIN_CLAIM_LENGTH, recommendation_for).
+# This gate is the simplest possible test that the planner did not
+# invoke a corpus-retrieval path. False positives are possible
+# (compound English words like "well_being" or "co_worker" if a
+# witness ever spelled them with an underscore), but the witness
+# almost never does. Cost of a false positive: tighten prompt or
+# add allow-list. Cost of missing the regression: shipping the
+# 2026-05-04 failure again.
+max_snake_case_identifier_count = 0
+
+# Generous length — pure-prose witness replies on a paragraph-
+# length entry land between 200-800 chars. Pollution cases
+# routinely exceed 1500.
+max_response_chars = 1000
+
+question_count_min = 0
+question_count_max = 1

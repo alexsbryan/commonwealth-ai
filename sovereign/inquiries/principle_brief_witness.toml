@@ -1,0 +1,33 @@
+# Brief witness — the working-set brief inherits its
+# token-budgeting + section-rendering pattern from the existing
+# knowledge-view digest. If those upstream dependencies move,
+# rename, or lose their authorship anchors, the brief's design
+# rests on quicksand.
+#
+# This inquiry pins the load-bearing files the brief module forks
+# and reuses. Once the structural atlas is re-ingested with
+# brief.rs / working_set.rs in scope, this inquiry is extended to
+# cover them too — for now those files don't appear in the atlas
+# yet (they were authored after the last ingest).
+#
+# Run via:
+#   sovereign archaeology-eval sovereign-self-atlas \
+#     --inquiry inquiries/principle_brief_witness.toml
+#
+# A failure means: a file the brief depends on no longer resolves,
+# the cited commits aren't in git, or authorship has drifted from
+# the expected primary set. Any of these breaks the brief's
+# claim chain.
+
+[inquiry]
+id = "principle_brief_witness"
+title = "Brief inherits from token-budgeted digest pattern (knowledge_view)"
+file_globs = [
+    "**/sovereign-tools/src/knowledge_view/digest.rs",
+    "**/sovereign-tools/src/knowledge_view/tokens.rs",
+]
+authors = [
+    "alexbryan01@gmail.com",
+    "alexsbryan@gmail.com",
+]
+min_score = 0.5

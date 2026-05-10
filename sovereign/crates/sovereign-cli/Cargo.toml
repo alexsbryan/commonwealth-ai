@@ -1,0 +1,63 @@
+[package]
+name = "sovereign-cli"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-store = { workspace = true }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
+sovereign-mesh = { workspace = true }
+sovereign-atos = { workspace = true }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
+corpus-engine = { workspace = true, features = ["treesitter"] }
+async-trait = { workspace = true }
+axum = { workspace = true }
+futures = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest = { workspace = true }
+uuid = { workspace = true }
+arc-swap = { workspace = true }
+dirs = "5"
+hostname = { workspace = true }
+# `oicp-types` intentionally NOT a direct dep — the sovereign-core
+# re-export (`sovereign_core::oicp`) is the canonical consumer path
+# per SYSTEM_OVERVIEW.md §4.8. Adding a direct dep here creates a
+# second version seam that serde round-trip can't catch.
+tempfile = "3"
+which = "7"
+sha2 = "0.10"
+chrono = { workspace = true }
+# Used by `awareness_cmd` (gated behind the `dev-tools` feature) for
+# direct SQLite reads — chunk-id → memory.body lookups for the
+# `awareness timeline --include-chunks` flag and selective row deletes
+# for `awareness reset --full`. Production CLI paths go through
+# StateStore; this dep is paid for only in dev-tools builds.
+rusqlite = { version = "0.35", features = ["bundled"] }
+# `libc` is used by `serve_cmd` to call `setsid()` in the spawned
+# child's `pre_exec` hook, fully detaching the background MCP server
+# from the parent's controlling terminal. Without setsid, closing the
+# launching terminal sends SIGHUP to the orphaned child and kills it.
+# Unix-only — gated below.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+# `dev-tools` gates the `sovereign awareness` development CLI — a
+# glassbox harness for inspecting the relational + strategic
+# awareness pipeline (entity extraction, timeline assembly, digest
+# rendering, decay simulation, golden-set scoring). Not a
+# user-facing surface; built only when explicitly requested with
+# `cargo build --features dev-tools`.
+dev-tools = []

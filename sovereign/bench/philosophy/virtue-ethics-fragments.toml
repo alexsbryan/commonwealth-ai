@@ -1,0 +1,117 @@
+# Golden set for the `virtue-ethics-fragments` template.
+
+[meta]
+template = "virtue-ethics-fragments"
+description = "Expected and forbidden outputs for the virtue-ethics-fragments template."
+
+# ── Phase 1 positions: removed (v1-pipeline legacy artifact) ───────
+#
+# v2 atlas surfaces named positions as concept-typed Entity atoms with
+# claims attributed to them; the dynamic query path traverses
+# atoms+edges to assemble position briefs at read time. Concept-atom
+# and claim-attribution scoring below cover the same ground.
+
+# ── Phase 3a/3b atoms: persons ─────────────────────────────────────
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Aristotle"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Foot"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["MacIntyre"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Hume"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Slote"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Harman"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Doris"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Gilligan"]
+
+# ── Phase 3a/3b atoms: concepts ────────────────────────────────────
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["eudaimonia", "flourishing"]
+description_keywords_any = ["activity", "complete life", "virtue"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["practical wisdom", "phronesis"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["character trait", "virtue"]
+description_keywords_any = ["disposition", "habit", "stable"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["fundamental attribution error"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["caring relationship", "care"]
+description_keywords_any = ["relational", "attentive", "particular"]
+
+# Anti-test: do not collapse Foot's "natural goodness" and MacIntyre's
+# "tradition" into a single concept atom.
+[[forbidden_concept_atoms]]
+canonical_name_contains_any = ["natural goodness and tradition"]
+reason = "Distinct concepts within neo-Aristotelianism — Foot's realism vs MacIntyre's traditionalism."
+
+# ── Phase 6 fault lines ────────────────────────────────────────────
+
+[[expected_fault_lines]]
+position_a_contains_any = ["situationism", "situationist"]
+position_b_contains_any = ["aristotelian", "virtue"]
+crux_keywords_any = ["stable", "trait", "cross-situational", "character"]
+note = "The empirical-vs-normative crux: are stable character traits real?"
+
+[[expected_fault_lines]]
+position_a_contains_any = ["sentimentalism", "sentimentalist"]
+position_b_contains_any = ["aristotelian"]
+crux_keywords_any = ["sentiment", "function", "ideal", "approb", "flourishing"]
+note = "What grounds the virtue/vice distinction — sentiment vs human function."
+
+[[expected_fault_lines]]
+position_a_contains_any = ["care ethics", "care ethic"]
+position_b_contains_any = ["aristotelian", "virtue"]
+crux_keywords_any = ["relation", "trait", "individual", "particular"]
+
+# Anti-test: do not produce a fault line between Foot and MacIntyre.
+[[forbidden_fault_lines]]
+position_a_contains_any = ["foot"]
+position_b_contains_any = ["macintyre"]
+reason = "Both within neo-Aristotelianism; intra-school disagreement is not a between-school fault line."
+
+# ── Phase 7 open questions ─────────────────────────────────────────
+
+[[expected_open_questions]]
+content_contains_any = ["situationism", "situationist", "stable trait"]
+note = "Whether responses to situationism succeed."
+
+[[expected_open_questions]]
+content_contains_any = ["care", "trait", "relation"]
+note = "Whether care ethics is properly classed as virtue ethics."
+
+# ── Phase 8 configurations ─────────────────────────────────────────
+
+[[expected_configurations]]
+label_contains_any = ["situationist", "challenge", "shape", "debate"]
+description_keywords_any = ["situationism", "shape", "field", "challenge"]
+note = "The whole arrangement implicitly argues that the field is shaped by the challenges it must answer."
+
+# ── Phase 3a/3b atoms: questions ───────────────────────────────────
+
+[[expected_question_atoms]]
+content_contains_any = ["live well", "good life", "flourish", "eudaimonia"]
+note = "Aristotle's framing question."
+
+[[expected_question_atoms]]
+content_contains_any = ["virtue", "stable", "trait", "exist"]
+status_any = ["open", "contested"]
+note = "Situationist challenge: do virtues exist?"

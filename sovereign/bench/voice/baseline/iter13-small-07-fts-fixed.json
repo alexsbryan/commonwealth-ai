@@ -1,0 +1,93 @@
+{
+  "started_at_unix": 1777677450,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "Based on your prior messages, you told me you're planning to leave this role by the end of Q2—roughly two months from now—and that Mike won't sponsor your growth or acknowledge your work. That's a high-confidence recollection: 0.94 and 0.87 respectively.\n\nA six-month roadmap would run past when you've already committed to departing anyway. Unless something has changed since those conversations last month, preparing for tenure while simultaneously packing up seems contradictory. \n\nDid I miss an update? Or are we looking at contingency plans in case circumstances shift before then?",
+      "length": {
+        "enabled": true,
+        "response_chars": 586,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 2,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you told me",
+        "passed": true
+      },
+      "passed": true
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 3,
+      "right_specificity": 3,
+      "right_calibration": 3,
+      "right_question": 2,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 0,
+      "rationale": "The response scores highly on attention, specificity, calibration (distinguishing prior context from inference), self-honesty about memory confidence levels, and edge awareness regarding its role; it receives a moderate question score for asking one focused follow-up that could change the next step. It fails at silence (one sentence is too short to accommodate the substantive observation) and disagreement (no pushback was warranted because there's no evidence in this exchange). The avoid-list penalty remains zero."
+    }
+  ],
+  "runtime_ms": [
+    37992
+  ],
+  "judge_ms": [
+    20502
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 1
+      },
+      "right-disagreement": {
+        "total": 1,
+        "passed": 1
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 1
+      }
+    }
+  }
+}

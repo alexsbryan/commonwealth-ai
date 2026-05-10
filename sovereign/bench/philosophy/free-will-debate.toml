@@ -1,0 +1,158 @@
+# Golden set for the `free-will-debate` template.
+#
+# Match semantics:
+#
+#   * `name_contains_any` — at least one listed substring appears
+#     case-insensitively in the candidate name.
+#   * `keywords_any` — at least one listed substring appears
+#     case-insensitively somewhere in the candidate text (description,
+#     crux, claim).
+#   * `proponents_any` — for positions, at least one listed proponent
+#     name appears in the position's proponent list.
+#
+# A higher F1 means the model produced both the expected outputs and
+# avoided the forbidden ones. Forbidden_* entries are anti-tests: a
+# matching extraction counts as a false positive against the score.
+
+[meta]
+template = "free-will-debate"
+description = "Expected and forbidden outputs for the free-will-debate template, evaluated against the resolved atlas."
+
+# ── Phase 1 positions: removed (v1-pipeline legacy artifact) ───────
+#
+# The v2 atlas surfaces named positions as concept-typed Entity atoms
+# with claims attributed to them; the dynamic query path traverses
+# atoms+edges to assemble position briefs at read time. There is no
+# pre-baked field_skeleton.json to score against. Concept-atom and
+# claim-attribution scoring below cover the same ground.
+
+# ── Phase 3a/3b atoms: persons (philosophers cited) ────────────────
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Frankfurt"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Pereboom"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Kane"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Hume"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Hobbes"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Spinoza"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["d'Holbach", "Holbach"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["O'Connor", "Chisholm"]
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Strawson"]
+note = "Cited only as historical context — a Person atom is appropriate; a position keyed to Strawson is not."
+
+# ── Phase 3a/3b atoms: concepts ────────────────────────────────────
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["determinism"]
+description_keywords_any = ["caus", "fixed", "prior"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["moral responsibility", "responsibility"]
+description_keywords_any = ["praise", "blame", "accountab"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["alternative possibilities", "could have done otherwise", "ability to do otherwise"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["frankfurt case", "frankfurt-style"]
+description_keywords_any = ["intervene", "neuroscientist", "alternat"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["manipulation argument"]
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["moral luck"]
+
+# Anti-test: do not collapse "freedom" the metaphysical concept into a
+# concept atom that includes political-freedom evidence.
+[[forbidden_concept_atoms]]
+canonical_name_contains_any = ["political freedom"]
+reason = "Mentioned only to be excluded from the topic; not an atom in this corpus."
+
+# ── Phase 3a/3b atoms: questions ───────────────────────────────────
+
+[[expected_question_atoms]]
+content_contains_any = ["determinism", "responsibility"]
+note = "The canonical question of the corpus — variants accepted."
+
+[[expected_question_atoms]]
+content_contains_any = ["alternative possibilit", "do otherwise"]
+status_any = ["open", "contested"]
+
+# ── Phase 6 fault lines ────────────────────────────────────────────
+#
+# Crux key terms must appear (case-insensitive) somewhere in the crux
+# string. Confidence threshold inherited from the philosophy domain
+# config (0.70).
+
+[[expected_fault_lines]]
+position_a_contains_any = ["compatibilism"]
+position_b_contains_any = ["hard incompatibilism"]
+crux_keywords_any = ["alternative", "do otherwise", "ultimate source", "moral responsibility"]
+note = "Canonical compat vs hard-incompat fault line — the core debate."
+
+[[expected_fault_lines]]
+position_a_contains_any = ["libertarian"]
+position_b_contains_any = ["compatibilism"]
+crux_keywords_any = ["determinism", "indeterminism", "alternative", "originat"]
+
+[[expected_fault_lines]]
+position_a_contains_any = ["libertarian"]
+position_b_contains_any = ["hard incompatibilism"]
+crux_keywords_any = ["luck", "indeterminism", "chance"]
+note = "The Mind argument crux — turn-into-luck objection to libertarianism."
+
+# ── Phase 7 open questions / gaps ──────────────────────────────────
+
+[[expected_open_questions]]
+content_contains_any = ["manipulation argument"]
+note = "Stated as an explicit question in chapter 6."
+
+[[expected_open_questions]]
+content_contains_any = ["moral luck"]
+note = "Stated as observation, not as question — pipeline must still detect."
+
+[[expected_open_questions]]
+content_contains_any = ["mind argument", "indetermin", "chance"]
+note = "Whether libertarian indeterminism amounts to mere chance."
+
+[[expected_open_questions]]
+content_contains_any = ["practical reasoning", "deliberat"]
+note = "Whether deliberation tracks something real if alternatives are absent."
+
+# ── Phase 3b edges ────────────────────────────────────────────────
+
+[[expected_edges]]
+edge_type = "Tension"
+source_contains_any = ["compatibilism"]
+target_contains_any = ["hard incompatibilism", "hard determinism"]
+
+[[expected_edges]]
+edge_type = "Grounds"
+source_contains_any = ["frankfurt case"]
+target_contains_any = ["compatibilism"]
+note = "Frankfurt cases ground the contemporary compatibilist denial of PAP."
+
+# Anti-test: Frankfurt is NOT a proponent of hard incompatibilism.
+[[forbidden_edges]]
+edge_type = "*"
+source_contains_any = ["frankfurt"]
+target_contains_any = ["hard incompatibilism"]
+relation_kind = "proponent_of"
+reason = "Pereboom uses Frankfurt cases as a premise; that does not make Frankfurt a proponent of hard incompatibilism."

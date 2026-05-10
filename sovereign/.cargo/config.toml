@@ -1,0 +1,21 @@
+# Workspace-level cargo config.
+#
+# These env vars automate the Linux/HIP build hygiene that
+# llama-cpp-sys-2's cmake configure otherwise wants fed by hand.
+# Harmless on macOS — the Metal build doesn't enable CMake's HIP
+# language, so HIP-scoped flags are read by nothing.
+#
+# Why -fPIC:
+#   Fedora's ld emits PIE binaries by default. CMake's HIP language
+#   doesn't inherit the -fPIC that the C / C++ flags set, so the
+#   hipcc-compiled ggml-cuda.cu.o fails the final rust link with
+#   `R_X86_64_32 ... can not be used when making a PIE object`.
+#   Pushing the flag through here avoids needing users to export
+#   CMAKE_HIP_FLAGS / HIPFLAGS in their shell.
+#
+# `force = false` is the cargo default: if the user already exported
+# these, their values win.
+
+[env]
+CMAKE_HIP_FLAGS = "-fPIC"
+HIPFLAGS = "-fPIC"

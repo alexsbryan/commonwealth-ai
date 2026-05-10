@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# sovereign-golangci-adapter — translates golangci-lint JSON output to Tier 2
+# lint events.
+#
+# Usage: golangci-lint run --out-format json | sovereign-golangci-adapter
+
+set -uo pipefail
+
+python3 -c "
+import sys, json
+
+try:
+    data = json.load(sys.stdin)
+except Exception as e:
+    print(json.dumps({'t': 'summary', 'pass': 0, 'fail': 1, 'warn': 0, 'ms': 0}))
+    sys.exit(1)
+
+fail_count = 0
+warn_count = 0
+
+issues = data.get('Issues', []) or []
+for issue in issues:
+    pos = issue.get('Pos', {})
+    file_path = pos.get('Filename', 'unknown')
+    line_no = pos.get('Line')
+    col_no = pos.get('Column')
+    text = issue.get('Text', '')
+    linter = issue.get('FromLinter', '')
+    severity = issue.get('Severity', 'error')
+
+    if linter:
+        text = f'[{linter}] {text}'
+
+    t = 'warn' if severity == 'warning' else 'fail'
+    event = {'t': t, 'n': file_path, 'out': text}
+    if line_no:
+        event['line'] = line_no
+    if col_no:
+        event['col'] = col_no
+    print(json.dumps(event))
+
+    if t == 'fail':
+        fail_count += 1
+    else:
+        warn_count += 1
+
+print(json.dumps({'t': 'summary', 'pass': 0, 'fail': fail_count, 'warn': warn_count, 'ms': 0}))
+sys.exit(1 if fail_count > 0 else 0)
+"

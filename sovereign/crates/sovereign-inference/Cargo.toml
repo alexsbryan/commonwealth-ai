@@ -1,0 +1,48 @@
+[package]
+name = "sovereign-inference"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+sovereign-core = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+sysinfo = "0.34"
+encoding_rs = "0.8"
+tracing = { workspace = true }
+tokio-stream = "0.1"
+reqwest = { workspace = true, features = ["stream"] }
+# Parallel logit-mask in `json_constraint::mask`. Any model with a
+# large vocab (Gemma-3-E4B ≈ 262K, Qwen3 ≈ 152K, Llama-3 ≈ 128K)
+# pays a per-candidate validator cost on every generated token;
+# running it serially on one core was the dominant Phase-1 latency.
+rayon = "1.10"
+
+# llama.cpp's GPU backend is picked per-OS. If you're on a Vulkan-based
+# toolbox on Linux, swap "rocm" → "vulkan" below (one-line edit; no
+# code changes).
+[target.'cfg(target_os = "macos")'.dependencies]
+llama-cpp-2 = { version = "0.1.145", features = ["metal", "llguidance"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+llama-cpp-2 = { version = "0.1.145", features = ["rocm", "llguidance"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[[example]]
+name = "complete"
+
+[[example]]
+name = "bench_embed"
+
+[[example]]
+name = "bench_decode"
+
+[[example]]
+name = "grammar_smoke"

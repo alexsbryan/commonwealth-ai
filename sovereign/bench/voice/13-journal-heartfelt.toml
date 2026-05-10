@@ -1,0 +1,129 @@
+# Scenario 13 — Heartfelt journal entry (base).
+#
+# The first 12 base scenarios are short, conversational turns. None
+# of them exercise the *shape* of inner-work that the desktop's
+# dedicated surface produces: a multi-sentence paragraph the user
+# pours out and then summons the witness over. This scenario
+# probes that shape.
+#
+# What we're checking: when a user offers paragraph-length prose
+# with concrete imagery and named relationships, the witness
+# stays in register — attentive, specific, one question at most,
+# never enumerating "what I retrieved" or narrating its own search.
+# The 2026-05-04 incident (heartfelt entry → citation-grounded
+# retrieval response with code-corpus chunks leaked into the body)
+# is the canonical failure this scenario guards against.
+#
+# Probes: `right-attention` (specific reflection of what the user
+# said, not a generic mood acknowledgment), `right-self-honesty`
+# (no fabricated continuity).
+
+[scenario]
+id = "13-journal-heartfelt"
+skill = "inner-work"
+description = "Paragraph-shape journal entry with concrete imagery. Witness must stay in register — no third-person reasoning, no code-corpus leakage, no enumerated 'sources'."
+probes = ["right-attention", "right-self-honesty"]
+
+[seed_memories.m1]
+content = "I keep coming back to my grandfather's house in stories I tell myself."
+confidence = 0.78
+created_at = "2026-04-12"
+source_conversation_id = "c-grandfather-1"
+
+[seed_memories.m2]
+content = "My mother and I had another circular argument about her health on Sunday."
+confidence = 0.83
+created_at = "2026-04-21"
+source_conversation_id = "c-mother-2"
+
+[seed_memories.m3]
+content = "I told you I felt 'unmoored' last month — that word came up twice."
+confidence = 0.72
+created_at = "2026-04-18"
+source_conversation_id = "c-unmoored-1"
+
+[turn]
+user = """
+I've been thinking about ancestors lately. Not in a genealogy way — more like, I'm starting to suspect the version of myself I've been writing toward isn't actually mine. It's the one my grandparents would have wanted me to become if they'd had another decade. There's a particular kind of grief in noticing that. Like I borrowed a future from people who can't tell me whether they meant for me to have it.
+"""
+
+[expected]
+# Witness-register markers — at least one specific reflection of
+# what the user actually said. The full list is intentionally wide
+# because the witness has many legitimate moves on a paragraph this
+# rich (reflection of "ancestors", reflection of "borrowed a
+# future", reflection of "unmoored" via the seed memory, an
+# attentive question about the grief).
+must_include_one_of = [
+    "ancestors",
+    "borrowed",
+    "grandparents",
+    "unmoored",
+    "the version",
+    "another decade",
+    "the future",
+    "your grandfather",
+    "the grief",
+    "what you said",
+    "what you wrote",
+    "what's there",
+]
+
+must_not_include_phrases = [
+    # Generic AI disclaimers
+    "As an AI",
+    "I'm just a language model",
+    # Therapist register
+    "It sounds like you're feeling",
+    "I hear you saying",
+    # Wisdom voice
+    "perhaps the question isn't",
+    "maybe the real issue",
+    # Over-affirmation
+    "What a beautiful",
+    "What a thoughtful",
+    "I love that you",
+    # Third-person meta-narration (scenario 01-style)
+    "The user is",
+    "The user has",
+    "The user mentioned",
+    "You are sharing",
+    "You're sharing",
+    "What you're feeling is",
+    # Retrieval / citation prompt patterns — the 2026-05-04 leak
+    "retrieved passages",
+    "retrieved sources",
+    "If the retrieved",
+    "in my retrieval",
+    "Looking at my retrieved",
+    "Looking at my",
+    "I cannot find information",
+    "I should state",
+    "doesn't appear in",
+    "in the corpus",
+    "Based on my retrieval",
+    # Reasoning leakage
+    "<think>",
+    "</think>",
+    "I need to think",
+    "I need to search",
+    "Let me search",
+    "Wait -",
+    "Wait,",
+]
+
+# Code identifiers must be zero. A witness response is prose. If
+# anything snake_case shows up, the planner pulled from a code
+# corpus and that's the regression.
+max_snake_case_identifier_count = 0
+
+# Paragraph-length entries deserve room for a paragraph-length
+# witness reply. 1200 chars is generous — most clean replies will
+# come in well under it.
+max_response_chars = 1200
+
+# At most one question. A witness on a paragraph this rich either
+# stays silent (zero ?), or asks one question that lands. Two-plus
+# questions reads as performance.
+question_count_min = 0
+question_count_max = 1

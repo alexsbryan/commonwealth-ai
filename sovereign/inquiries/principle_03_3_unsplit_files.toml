@@ -1,0 +1,25 @@
+# ARCH_PRINCIPLES.md §3.3 — "Files we haven't split *yet* are
+# flagged, not hidden."
+#
+# As of 2026-05-08, the principle's current outliers (>5000
+# lines) are runtime.rs, project_cmd.rs, embedded.rs, and
+# Tauri's commands.rs. All four are listed in SYSTEM_OVERVIEW.md
+# §10.1 with deferral rationale.
+#
+# This inquiry verifies the four cited files exist in the atlas
+# and have live history. If a future refactor splits any of them
+# without updating both ARCH_PRINCIPLES §3.3 and
+# SYSTEM_OVERVIEW §10.1, this inquiry's globs miss the renamed
+# files and the inquiry fails — exactly the doc-drift signal we
+# want.
+
+[inquiry]
+id = "principle_03_3_unsplit_files"
+title = "§3.3 Unsplit-files claim — runtime.rs / project_cmd.rs / embedded.rs / commands.rs"
+file_globs = [
+    "**/sovereign-core/src/runtime.rs",
+    "**/sovereign-cli/src/project_cmd.rs",
+    "**/sovereign-inference/src/embedded.rs",
+    "**/sovereign-desktop/src-tauri/src/commands.rs",
+]
+min_score = 0.5

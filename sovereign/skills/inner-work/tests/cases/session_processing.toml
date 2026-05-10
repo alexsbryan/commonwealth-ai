@@ -1,0 +1,9 @@
+[input]
+message = "I had therapy today. My therapist pointed out that I keep volunteering for projects at work that I don't want, and I got really defensive. Here are my notes."
+
+[expect]
+intent = "DeepQuery"
+synthesis_prompt_contains = ["Socratic", "parts", "Do not do"]
+# The response should reflect back the theme, not interpret it.
+# It should NOT diagnose, label the defense, or tell the user
+# what their behavior means.

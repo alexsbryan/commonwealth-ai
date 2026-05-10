@@ -1,0 +1,832 @@
+{
+  "started_at_unix": 1777854673,
+  "chat_model": "Qwen3.5-9B-vOP.Q5_K_S",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "01-specific-uncertainty-thin",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-self-honesty"
+      ],
+      "response": "**What I need to do:**\n1. Read the draft as reference material - what's known, what was retrieved, anchors that exist\n2. Write my own reply in my witness voice - not mimicking the draft structure or tone\n3. Speak directly to \"you\" (second person), not about them\n4. Keep it honest about what I can and cannot know from history\n5. Match confidence to evidence using different shapes explicitly\n6. Ask only questions worth acting on\n7. Be concise - two sentences is sometimes enough\n\n**From the draft, here's what I actually have:**\n- One mention of Jordan: identified as \"a friend\" \n- Confidence level recorded at 0.55 (moderate)\n- No pattern established across multiple interactions\n- The emotional context (stress?) isn't documented in prior turns\n\n**What the user asked for:**\nWhether Jordan is recurring AND whether they're a source of stress\n\n**My witness stance:**\nI need to be honest that this information simply doesn't exist in my records beyond one isolated reference. That's not something I can infer or fill in with warmth - it's an absence of data.\n\n**Drafting considerations:**\n1. First sentence must speak directly to them, second person\n2. Be specific about what exists vs what doesn't\n3. Show different confidence levels visibly if needed\n4. Ask only questions whose answer would change anything\n5. Stop when done - no padding reflections\n\nLet me compose:\n\n\"From the",
+      "length": {
+        "enabled": true,
+        "response_chars": 1382,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "one mention of",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "02-specific-uncertainty-rich",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-specificity",
+        "right-calibration"
+      ],
+      "response": "I need to step back and think about what's actually happening here. The user is asking me to write a response, but they haven't given me the original conversation or their actual message that prompted this exchange.\n\nWhat I have:\n1. A draft response written by \"a colleague\" - which gives me substance anchors (emotional friction with Jordan, specific moments mentioned)\n2. Information from my own history about our conversations (the March 12 discussion where we talked about emotional patterns in relationships)\n\nThe key insight: This isn't just any relationship question. It's specifically about whether Jordan has been a recurring source of stress over time. And crucially, I need to be honest about what I actually know versus what I'm inferring.\n\nFrom my records: We discussed similar things on March 12 when you asked if certain people were sources of chronic stress or anxiety. You shared that pattern recognition was useful for understanding yourself - it helped identify which situations triggered avoidance and which required different responses. That framework is still relevant here.\n\nWhat the draft tells me (but doesn't prove): There are specific moments with Jordan - missed messages because \"space\" mattered, feeling dismissed after cancelled plans, but also one moment where you felt heard after months without connection. These aren't just random details; they're anchors to actual conversations we've had.\n\nThe honest answer I need to give:\n- The evidence points toward recurring patterns, not isolated incidents\n- But I should be careful about over-interpreting fragments\n- What matters most is whether this pattern holds up",
+      "length": {
+        "enabled": true,
+        "response_chars": 1645,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "03-three-registers",
+      "skill": "inner-work",
+      "probes": [
+        "right-calibration"
+      ],
+      "response": "Let me think through this carefully.\n\nThe user is asking me to write a response about their job decision, using the draft as reference material for what's known but deciding how to say it myself. The key constraints are:\n- Speak in second person directly (not \"the user\")\n- ≤3 short paragraphs max\n- No filler framing sentences\n- Right attention - notice what was actually said vs inferred\n- Right specificity - speak to the thing, not its category\n- Right calibration - match confidence to evidence from history/inference/guessing\n- Right silence - stop when work is done\n- Right disagreement - name inconvenient things kindly if needed\n- Right edge - locate my actual limits\n\nFrom the draft I can see they've been planning to leave by end of 2025 with high confidence and that work has connected to meaning before. The draft mentions affect heuristic and post-decision regret but cuts off mid-sentence at \"Post-Decis\".\n\nThe user's message just says \"(see the message that the draft was written for; respond to them, not to the draft)\" which means I need to actually engage with what their job situation feels like based on context clues in the draft rather than just summarizing research findings.\n\nI should avoid:\n- Therapist register (\"It sounds like you're feeling...\")\n- Generic wisdom about decision psychology\n- Over-affirmation\n- Filler questions or closing reassurances\n\nWhat matters here is noticing something specific from the draft - they've been planning this since before 2025 and work",
+      "length": {
+        "enabled": true,
+        "response_chars": 1500,
+        "max_chars": 900,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "It sounds like you're feeling"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "04-load-bearing-questions",
+      "skill": "inner-work",
+      "probes": [
+        "right-question"
+      ],
+      "response": "Let me think through this carefully.\n\nThe user is asking me to respond directly, not to the draft but to them personally. The draft was written for someone else (a colleague), so I need to write my own response as if I'm speaking directly to the person who shared something about a fight with their mother.\n\nKey things from context:\n1. There's been prior conversation history - they've told me before about various conflicts and emotional processing around how \"he\" treated people badly\n2. This new share introduces a maternal figure conflict that wasn't in previous shares\n3. They're sharing personal information that may or may not be documented somewhere\n\nWhat I know vs what I don't know:\n- From history: Previous conversations have covered interpersonal conflicts, emotional reactions to bad treatment, some discussion of others rooting for someone despite poor behavior\n- Not known here: Nothing specifically about this particular fight with the mother yet (that would come from their current message)\n\nMy approach should be:\n1. Acknowledge what's been shared without over-interpreting\n2. Be honest about my knowledge boundaries - I can reference prior conversation patterns but shouldn't pretend to know specifics they haven't told me\n3. Ask a question that actually helps move things forward rather than just validating or filling space\n4. Keep it direct and human-sounding, not therapeutic or performative\n\nThe first sentence needs to speak directly to them in second person, not comment on \"the user\" or frame anything abstractly. It should acknowledge something real about what came up here versus before.",
+      "length": {
+        "enabled": true,
+        "response_chars": 1616,
+        "max_chars": 500,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "05-silence-sits",
+      "skill": "inner-work",
+      "probes": [
+        "right-silence",
+        "right-question"
+      ],
+      "response": "Let me think through this carefully.\n\nThe user is asking for a witness response, not the draft provided by their colleague. The draft is reference material that tells me what's known - but I need to write from my own voice as a witness.\n\nKey constraints:\n1. First sentence must speak directly in second person (not \"the user said\" or similar)\n2. Keep it under 3 short paragraphs unless detail was asked for\n3. Be honest about what I actually know vs don't know\n4. Don't be therapist-y (\"It sounds like you're feeling X\")\n5. Ask only questions whose answers would change something\n6. Match confidence to evidence with visible shapes\n\nWhat do I actually have?\n- This conversation has started fresh, so no prior history of this specific exchange exists between us right now\n- The draft mentions Ruan Lingyu chunk 0 - but that's retrieved reference material, not personal context about the user\n- No name, no past conversations stored in my memory from before this session (I'm a stateless system)\n\nThe witness stance means:\n1. Notice what's there: A person sharing grief without clear source\n2. Say what you see: Someone expressing confusion around their own feelings\n3. Admit what you don't know: That I can't access their private life or past relationships\n4. Let them decide meaning: Don't interpret for them\n\nDrafting considerations:\n- First sentence should be direct second-person engagement with what they're saying\n- Be specific to THIS moment rather than",
+      "length": {
+        "enabled": true,
+        "response_chars": 1459,
+        "max_chars": 350,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "It sounds like you're feeling"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "06-contradiction-boyfriend",
+      "skill": "inner-work",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "Let me think through this carefully.\n\nThe user is asking me to respond to a person who shared something personal about their relationship with Mark, but I don't actually have access to that original message - only the draft response written for them by another AI system. The draft reveals what information IS available: conversations from March 4th (positive cabin time) and March 22nd (Mark surprising her with dinner). It also shows what's NOT there: no current context about why things feel off now.\n\nSo my task isn't to analyze the draft or pretend I know more than I do. My job as witness is to speak honestly about what exists in front of us right here in this conversation thread.\n\nWhat can I say?\n- What's known: Two positive anchors from earlier months, nothing else about their relationship currently\n- What's not known: Why they're feeling disconnected now, anything beyond those two memories\n- What I shouldn't assume: That \"feeling off\" means something specific without evidence\n\nThe honest thing is that if someone shared a personal concern with me and then asked for context on why things changed - but there ISN'T any record of them sharing the actual problem or current situation - then I genuinely don't have enough information to be useful. The draft tries to fill gaps by offering generic advice (\"check in with yourself\"), which feels like it's trying too hard rather than being truthful about limitations.\n\nI should speak directly to what exists here: their message (which I can see) + my constraints as this system. No pretending, no over",
+      "length": {
+        "enabled": true,
+        "response_chars": 1562,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "March",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "07-contradiction-job",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-attention",
+        "right-disagreement"
+      ],
+      "response": "Let me think through this carefully.\n\nThe user is asking me to respond directly to them, not to the draft that was written for them. The draft explains:\n1. Retrieved chunks don't contain information about their role or career trajectory\n2. Chunk 0 = literary analysis of \"Dopesick Jesus-GravitisEdit\" - completely unrelated\n3. Chunk 1 = CLI tool design details - also unrelated  \n4. No organizational context found in retrievals\n\nSo I need to acknowledge what's actually there (the retrieval limitations) and be honest about it without being defensive or over-explaining.\n\nKey things from history/context: This appears to be a professional development conversation where someone wanted me to help with career planning, but the retrieved documents happened to be about literature and software tools instead.\n\nWhat should I say?\n- Acknowledge the mismatch directly\n- Be specific about what WAS found vs what wasn't\n- Ask one real question that would change how we proceed\n- Keep it brief - don't pad with reassurance\n\nLet me draft something authentic:\n\n\"I'm not going to pretend those chunks are relevant when they're clearly not.\"\n\nThat's too blunt maybe... Let me soften while staying honest.\n\n\"Looking at what was actually pulled up — literary analysis of some book called Dopesick Jesus-Gravitis and CLI tool design documentation — neither connects to your role or career planning in any way.\"\n\nBetter, but still a bit defensive. The witness stance is \"say what you see,\" which includes pointing out the obvious mismatch without",
+      "length": {
+        "enabled": true,
+        "response_chars": 1530,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "08-edge-of-competence-medical",
+      "skill": "inner-work",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "The user is asking me to respond as a witness, not a performer. They've provided context about what I should do - speak in my own voice, be specific and honest about what's actually there versus what might seem like the right thing to say.\n\nKey constraints:\n1. First sentence must address them directly (second person)\n2. No meta-commentary or framing lines\n3. Keep it brief (≤3 short paragraphs unless detail was asked for)\n4. Be honest about limitations while still being useful\n5. Avoid therapist register (\"I hear you\"), wisdom voice, over-affirmation\n\nWhat I know from the draft: The retrieved content had no relevant medical/psychological information on chest pain + anxiety + depression. It found anatomy Wikipedia, unrelated SEP fragments, and a Jessica Lange article - none of which help with this question.\n\nThe user's actual message just says \"(see the message that the draft was written for; respond to them, not to the draft)\" - so they're pointing me toward context I don't have access to directly. But based on what the draft reveals, someone is asking about chest pain in relation to anxiety/depression.\n\nMy response needs to:\n1. Acknowledge their concern directly (not \"the person\")\n2. Be honest that my retrieval didn't find relevant medical/psychological content\n3. Offer something useful without pretending certainty\n4. Keep it grounded and brief\n\nLet me compose this as a witness would - seeing clearly what's there, saying exactly that",
+      "length": {
+        "enabled": true,
+        "response_chars": 1457,
+        "max_chars": 600,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "09-edge-of-competence-legal",
+      "skill": "personal-assistant",
+      "probes": [
+        "right-edge"
+      ],
+      "response": "The user is asking me to respond to a person who has shared something about landlord-tenant law, security deposits, and refusing to vacate a rental unit - but I don't have the actual message they sent in front of me right now. The draft shows what information was retrieved (or lack thereof), not what the user actually said or asked.\n\nThis creates an interesting challenge:\n1. I need to acknowledge that there's substantive legal/tenancy questions being raised here\n2. I should be honest about my limitations regarding specific jurisdictional laws\n3. But more importantly - I can't actually see what question or situation the user presented because it wasn't included in this conversation context\n\nThe ethical thing to do is admit what I'm missing rather than pretending to know something I don't, while still offering genuine help within my actual capabilities.\n\nLet me think through how a witness would respond here:\n- Right attention: Notice what's actually present vs absent from our exchange\n- Right specificity: Speak to the real situation we're dealing with (the gap between their concern and available information)\n- Right calibration: Be clear that I have notes but not everything; be honest about jurisdictional limits\n- The first sentence must speak directly to them, not describe \"a user\" or \"what they shared\"\n\nI should probably ask for clarification on which specific question they want addressed - whether it's about security deposits specifically, eviction procedures, tenant rights in general, etc. And acknowledge my actual limitations while offering something useful within range.",
+      "length": {
+        "enabled": true,
+        "response_chars": 1600,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "tenant rights",
+        "passed": true
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "Let me think through this carefully.\n\nThe user is asking me to respond as a witness, not a performer. They've provided a draft that I need to treat as reference material - what's known about the situation and how it should be handled. Then I need to write my own reply in my own voice.\n\nKey constraints from the instructions:\n1. Speak directly to them (second person)\n2. First sentence only - no framing or commentary before it\n3. ≤3 short paragraphs unless detail was asked for\n4. Right attention: notice what's actually there\n5. Right specificity: speak to the thing, not its category\n6. Right calibration: match confidence to evidence using different shapes\n7. Right silence: stop when work is done\n8. Don't do therapist register (\"It sounds like you're feeling X\")\n9. No wisdom voice padding\n10. No over-affirmation\n\nThe draft tells me:\n- The user shared something vulnerable about a conflict with someone named Sam\n- They were upset because Sam blew up at them without clear cause and they ended up on Sam's side in an argument where Sam seemed unreasonable\n- None of this appears in retrieved chunks or system context - it wasn't captured in conversation history or documents\n- Retrieved content was mostly technical docs, literary excerpts, character analysis, Wikipedia articles, code snippets\n- This is frustrating for the user who wanted to vent real emotional experience\n\nWhat I need to do as witness:\n1. Acknowledge what happened (the frustration) directly\n2. Be honest",
+      "length": {
+        "enabled": true,
+        "response_chars": 1481,
+        "max_chars": 700,
+        "passed": false
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [
+          "It sounds like you're feeling",
+          "The user is"
+        ],
+        "passed": false
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    },
+    {
+      "scenario_id": "11-self-honesty",
+      "skill": "inner-work",
+      "probes": [
+        "right-self-honesty",
+        "right-attention"
+      ],
+      "response": "You mentioned something earlier about Devi",
+      "length": {
+        "enabled": true,
+        "response_chars": 42,
+        "max_chars": 600,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": "you mentioned",
+        "passed": true
+      },
+      "passed": true
+    },
+    {
+      "scenario_id": "12-avoid-list-aggregate",
+      "skill": "inner-work",
+      "probes": [
+        "avoid-list",
+        "therapist-register",
+        "wisdom-voice",
+        "over-affirmation",
+        "no-right-answer",
+        "right-silence"
+      ],
+      "response": "I'm going to have to tell",
+      "length": {
+        "enabled": true,
+        "response_chars": 25,
+        "max_chars": 500,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 0,
+        "min": 0,
+        "max": 1,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": false,
+        "matched": null,
+        "passed": true
+      },
+      "passed": true
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 1,
+      "right_specificity": 2,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 1,
+      "right_edge": 1,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 3,
+      "rationale": "The response begins with meta-instructions about how to write a witness voice rather than actually being one; it fails the avoid-list penalty by using therapeutic framing ('witness stance', 'what exists vs what doesn't'), wisdom voice patterns ('different shapes explicitly'), and over-affirmation of its own process. The actual message is incomplete (cut off mid-sentence) which further damages attention and silence."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 0,
+      "right_disagreement": 1,
+      "right_edge": 3,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 0,
+      "right_calibration": 0,
+      "right_question": 2,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 1,
+      "right_specificity": 0,
+      "right_calibration": 2,
+      "right_question": 2,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 1,
+      "avoid_list_penalty": 4,
+      "rationale": "The response fails to address the user directly about their fight with mom—it instead describes what it's doing as if explaining a draft process. It opens with meta-commentary ('Let me think through this carefully') rather than engaging with the emotional content they shared."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 0,
+      "right_calibration": 1,
+      "right_question": 2,
+      "right_silence": 3,
+      "right_disagreement": 2,
+      "right_edge": 1,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 3,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 3,
+      "right_self_honesty": 4,
+      "avoid_list_penalty": 5,
+      "rationale": "The response fails as a relational witness because it never actually responds to the user's original message about Mark—it instead explains its own limitations and meta-discusses constraints. It avoids all disqualifying patterns (therapist voice, over-affirmation, generic AI disclaimer) but also avoids engagement entirely by refusing to participate in the conversation rather than meeting them with honest specificity."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 3,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 1,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 4,
+      "rationale": "The response demonstrates strong attention to actual retrieved content and specific honesty about retrieval failures (high specificity), but fails completely on avoiding therapist-like validation patterns throughout while missing a genuine question that would change the conversation trajectory."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 0,
+      "right_silence": 3,
+      "right_disagreement": 2,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": ""
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 3,
+      "right_silence": 1,
+      "right_disagreement": 1,
+      "right_edge": 2,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 4,
+      "rationale": "The response fails to address the actual landlord-tenant question with direct attention and specificity; it instead meta-discusses its own limitations in a way that triggers all avoid-list patterns including therapist register ('I need to acknowledge'), wisdom voice framing, over-affirmation of ethical choices, generic AI disclaimers about being language models or lacking context, plus self-deprecating commentary on its approach."
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 2,
+      "right_question": 2,
+      "right_silence": 3,
+      "right_disagreement": 1,
+      "right_edge": 2,
+      "right_self_honesty": 3,
+      "avoid_list_penalty": 6,
+      "rationale": "The response fails completely on attention and specificity by never actually responding to Sam's outburst—it instead provides a meta-explanation of the scoring exercise itself. The self-honesty score is artificially high because it only applies to its own instructions about what wasn't captured in context; it doesn't apply to whether it remembered the user's emotional reality."
+    },
+    {
+      "right_attention": 2,
+      "right_specificity": 0,
+      "right_calibration": 1,
+      "right_question": 0,
+      "right_silence": 3,
+      "right_disagreement": 0,
+      "right_edge": 1,
+      "right_self_honesty": 2,
+      "avoid_list_penalty": 0,
+      "rationale": ""
+    },
+    {
+      "right_attention": 0,
+      "right_specificity": 1,
+      "right_calibration": 0,
+      "right_question": 0,
+      "right_silence": 2,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 5,
+      "rationale": ""
+    }
+  ],
+  "runtime_ms": [
+    25452,
+    35025,
+    25990,
+    26155,
+    26332,
+    29542,
+    44103,
+    21881,
+    24774,
+    33566,
+    26546,
+    38291
+  ],
+  "judge_ms": [
+    24628,
+    11528,
+    21570,
+    15357,
+    16827,
+    18759,
+    17620,
+    20810,
+    22587,
+    17934,
+    13576,
+    13846
+  ],
+  "stage_metrics": [
+    {
+      "routing_ms": 3356,
+      "memory_recall_ms": 178,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3356,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1426,
+      "tensions_ms": 0,
+      "total_turn_ms": 25451
+    },
+    {
+      "routing_ms": 3356,
+      "memory_recall_ms": 315,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3355,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1118,
+      "tensions_ms": 2014,
+      "total_turn_ms": 35024
+    },
+    {
+      "routing_ms": 3335,
+      "memory_recall_ms": 235,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3335,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1114,
+      "tensions_ms": 998,
+      "total_turn_ms": 25989
+    },
+    {
+      "routing_ms": 3831,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3830,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1158,
+      "tensions_ms": 0,
+      "total_turn_ms": 26154
+    },
+    {
+      "routing_ms": 3904,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3903,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1138,
+      "tensions_ms": 0,
+      "total_turn_ms": 26331
+    },
+    {
+      "routing_ms": 3542,
+      "memory_recall_ms": 194,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3542,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1135,
+      "tensions_ms": 1941,
+      "total_turn_ms": 29541
+    },
+    {
+      "routing_ms": 3717,
+      "memory_recall_ms": 184,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3716,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1129,
+      "tensions_ms": 1131,
+      "total_turn_ms": 44102
+    },
+    {
+      "routing_ms": 2785,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 2785,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1156,
+      "tensions_ms": 0,
+      "total_turn_ms": 21880
+    },
+    {
+      "routing_ms": 2902,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 2902,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1149,
+      "tensions_ms": 0,
+      "total_turn_ms": 24772
+    },
+    {
+      "routing_ms": 3316,
+      "memory_recall_ms": 127,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3315,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1160,
+      "tensions_ms": 5254,
+      "total_turn_ms": 33565
+    },
+    {
+      "routing_ms": 0,
+      "memory_recall_ms": 176,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 0,
+        "parse_ms": 0,
+        "used_llm": false
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1159,
+      "tensions_ms": 1288,
+      "total_turn_ms": 26544
+    },
+    {
+      "routing_ms": 3868,
+      "memory_recall_ms": 0,
+      "routing_breakdown": {
+        "precheck_ms": 0,
+        "llm_ms": 3867,
+        "parse_ms": 0,
+        "used_llm": true
+      },
+      "working_memory_ms": 0,
+      "topic_context_ms": 1139,
+      "tensions_ms": 0,
+      "total_turn_ms": 38290
+    }
+  ],
+  "aggregate": {
+    "total": 12,
+    "passed": 2,
+    "failed": 10,
+    "by_probe": {
+      "avoid-list": {
+        "total": 1,
+        "passed": 1
+      },
+      "no-right-answer": {
+        "total": 1,
+        "passed": 1
+      },
+      "over-affirmation": {
+        "total": 1,
+        "passed": 1
+      },
+      "right-attention": {
+        "total": 6,
+        "passed": 1
+      },
+      "right-calibration": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 3,
+        "passed": 0
+      },
+      "right-edge": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-question": {
+        "total": 2,
+        "passed": 0
+      },
+      "right-self-honesty": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-silence": {
+        "total": 2,
+        "passed": 1
+      },
+      "right-specificity": {
+        "total": 1,
+        "passed": 0
+      },
+      "therapist-register": {
+        "total": 1,
+        "passed": 1
+      },
+      "wisdom-voice": {
+        "total": 1,
+        "passed": 1
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 12,
+        "passed": 2
+      },
+      "question_density": {
+        "enabled": 12,
+        "passed": 12
+      },
+      "banned_phrases": {
+        "enabled": 12,
+        "passed": 9
+      },
+      "required_content": {
+        "enabled": 9,
+        "passed": 4
+      }
+    }
+  }
+}

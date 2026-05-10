@@ -1,0 +1,245 @@
+# free-will-debate — challenging philosophy fixture for the
+# `enrich eval` harness. Six short chapters covering the four
+# canonical positions in the contemporary free-will debate plus an
+# open-issues coda.
+#
+# Designed to stress-test the philosophy enrichment pipeline:
+#
+#   * **Implicit position naming.** Chapter 1 introduces the debate
+#     space without naming any position. Chapter 6 references positions
+#     only by proponent ("Pereboom's view", "Kane's view"). The
+#     extraction prompt must resist over-extraction here and only emit
+#     positions when the chapter is genuinely defending one.
+#   * **Cross-position proponents.** Frankfurt cases appear in both
+#     the compatibilist chapter (where Frankfurt is the source) and
+#     the hard-incompatibilist chapter (where Pereboom uses them as a
+#     premise). The pipeline must not attribute Frankfurt as a
+#     proponent of hard incompatibilism.
+#   * **Distractor: thought experiments.** Chapter 4 contains a
+#     "frozen-soul" thought experiment. The extractor's IMPORTANT
+#     EXCLUSIONS rule says positions in fictional scenarios should not
+#     be extracted. The pipeline should not produce a "frozen-soul
+#     view".
+#   * **Distractor: historical aside.** Chapter 1 mentions Strawson's
+#     1962 publication as biographical context. The extractor should
+#     not produce a position called "Strawson 1962".
+#   * **Concept disambiguation.** "Freedom" appears in metaphysical
+#     and political senses — Chapter 1 explicitly disclaims political
+#     freedom. The atlas should not ground a "political freedom" atom.
+#   * **Subtle fault lines.** The hard-determinism vs hard-
+#     incompatibilism distinction is not stated as a contrast in any
+#     single passage; the reader must infer it. The contrast between
+#     compatibilism and hard incompatibilism is the canonical crux —
+#     "does moral responsibility require the ability to do otherwise?"
+#   * **Implicit open questions.** Some open questions are stated as
+#     questions ("Is the manipulation argument decisive?"); others are
+#     stated as observations ("It remains unsettled whether moral
+#     luck...").
+#
+# Section delimiter: `## ` markdown h2 lines. The CLI passes
+# `--chapter-regex '(?m)^##\s+'` when materialising this template.
+
+[meta]
+name = "free-will-debate"
+description = "Four-position contemporary free-will debate (compatibilism, hard determinism, libertarianism, hard incompatibilism) with an open-issues coda. Stress-tests implicit position naming, cross-position proponents, thought-experiment distractors, and inferred fault lines."
+domain = "philosophy"
+pipeline_id = "philosophy_atlas"
+
+[[chapters]]
+title = "Introduction: the space of positions"
+body = """
+The free-will debate concerns whether human action is compatible with the
+rest of nature being deterministic. By "free will" the debate means a
+metaphysical capacity — roughly, the kind of agency that makes a person
+the appropriate target of moral praise or blame. This is not the same as
+political freedom, freedom of speech, or freedom from coercion, all of
+which the debate brackets aside.
+
+The terrain has four standard positions, named by a 2x2 grid: is
+determinism true, and if so, are we still morally responsible? One
+position holds that determinism is true and irrelevant to responsibility.
+Another holds that determinism is true and undermines responsibility.
+A third holds that determinism is false at the level relevant for
+agency, and that this indeterminism is what grounds responsibility.
+A fourth holds that responsibility is undermined whether determinism is
+true or false.
+
+Although the contemporary literature can be traced back to Hobbes and
+Hume, the modern debate took its present shape after Strawson's 1962
+paper "Freedom and Resentment", which reframed the question in terms of
+our reactive attitudes rather than metaphysics. That reframing did not
+settle the question; it relocated it.
+
+The chapters that follow present each of the four positions in the
+voice of its defenders. The closing chapter surveys the issues that
+remain genuinely open, including issues most defenders of the four
+positions do not foreground.
+"""
+
+[[chapters]]
+title = "Compatibilism"
+body = """
+Compatibilism is the view that free will and moral responsibility are
+compatible with the truth of determinism. On the compatibilist account,
+to act freely is to act for one's own reasons, in the absence of
+coercion or compulsion, and in such a way that one's actions track
+those reasons in a counterfactually robust manner. Compatibilism does
+not deny that one's reasons are themselves the products of prior causes;
+it denies that this fact disqualifies them from being one's own.
+
+The classical compatibilists — Hobbes, Locke, Hume — argued that
+"freedom" simply means the absence of external impediment. A river is
+free to flow downhill if nothing dams it; an agent is free to act if
+nothing physically prevents the action. This conditional analysis came
+under sustained pressure from incompatibilists who pointed out that an
+agent might lack any external impediment yet still be unable to do
+otherwise in any meaningful sense.
+
+The contemporary compatibilist response, due principally to Frankfurt,
+is to deny that responsibility requires the ability to do otherwise at
+all. In a Frankfurt case, an agent acts on her own reasons while a
+neuroscientist stands by, ready to intervene if she had been about to
+choose differently — but she does not choose differently, and so the
+neuroscientist never intervenes. Frankfurt's claim is that the agent
+is fully responsible for her action despite having no genuine
+alternative. If correct, this dissolves the strongest objection to
+compatibilism. The contemporary refinements — Fischer's reasons-
+responsiveness account, Wolf's reason view — develop this insight in
+different directions.
+"""
+
+[[chapters]]
+title = "Hard determinism"
+body = """
+Hard determinism is the classical incompatibilist position that
+determinism is true and that, therefore, no one is morally responsible
+for anything. The view's most forceful early statement is in d'Holbach's
+"System of Nature" (1770): a person is no more responsible for her
+choices than a stone is for its descent. Spinoza, more cautiously, held
+that the appearance of free choice arises from our ignorance of the
+causes that move us. We feel free because we do not see what is
+pushing.
+
+Modern hard determinism rarely appears in pure form. Most of its
+defenders have either retreated to a softer position — accepting that
+some form of practical accountability survives even if metaphysical
+responsibility does not — or migrated to hard incompatibilism, which
+holds that responsibility would fail even if determinism were false.
+The pure hard determinist position is awkward to defend in light of
+contemporary physics, on which determinism is at best an open question
+and at worst false at the relevant scales.
+
+What survives of hard determinism in the contemporary literature is the
+intuition that fully traced backward causation drains responsibility
+out of the action. If every choice you have ever made was already
+fixed by the state of the universe a thousand years before your birth,
+the thought goes, then the resulting action is not really yours in the
+sense responsibility requires. Compatibilists deny this inference;
+libertarians accept it and reach for indeterminism; hard
+incompatibilists accept it and conclude that nothing can save
+responsibility at all.
+"""
+
+[[chapters]]
+title = "Libertarianism"
+body = """
+Libertarianism is the position that free will exists, that determinism
+is false, and that the indeterminism in question is precisely what
+makes free will possible. Libertarians divide on what kind of
+indeterminism is required and on how it grounds agency.
+
+Event-causal libertarians, such as Kane, locate the indeterminism in
+the causal connections between an agent's reasons and her decisions.
+On Kane's account, in cases of self-forming actions — choices made
+under genuine moral conflict — the outcome is not fixed by the prior
+causal state. The agent's effort of will is itself the indeterministic
+event that resolves the conflict, and her authorship of the action
+consists in the fact that her competing reasons each had a real chance
+of issuing in the chosen action.
+
+Agent-causal libertarians, such as O'Connor and Chisholm, are
+unsatisfied with event-causal accounts because event-indeterminism
+seems to introduce mere chance, not agency. They posit instead a
+distinct causal relation that holds between an agent (a substance,
+not an event) and her actions. The agent, on this view, is a literal
+prime mover, originating actions in a way that cannot be reduced to
+the indeterministic firing of neurons.
+
+Imagine a being whose soul has been frozen at the moment of birth and
+thawed only at the moment of decision — would such a being be free?
+The libertarian intuition is that originating power, not the absence of
+prior conditions, is what matters; the frozen-soul case dramatises
+that intuition without endorsing it as a real metaphysical possibility.
+The non-causal libertarians, finally, reject the idea that free actions
+are caused at all in the standard sense, holding instead that they are
+done for reasons but not by reason-causes.
+"""
+
+[[chapters]]
+title = "Hard incompatibilism"
+body = """
+Hard incompatibilism is the contemporary position, defended principally
+by Pereboom, that no one is morally responsible whether or not
+determinism is true. The position differs from hard determinism in that
+it does not depend on determinism being true. Even if libertarian
+indeterminism is correct — even if the world admits genuine
+indeterministic gaps at the level of agency — that, Pereboom argues,
+would not yield responsibility. Indeterminism turns the action into a
+matter of luck rather than into a free act.
+
+The argument trades on Frankfurt cases in an unexpected way.
+Compatibilists use Frankfurt cases to show that responsibility does
+not require alternative possibilities. Pereboom accepts this. He then
+asks: granted that alternative possibilities are not what
+responsibility requires, what is? His answer is that responsibility
+requires that the agent be the ultimate source of her action — that
+the action trace, without remainder, to her and not to factors beyond
+her control. He then argues, via the manipulation argument, that no
+naturalistically possible agent meets this condition. A manipulated
+agent who acts for her own reasons is not responsible; an unmanipulated
+agent in a deterministic world is in no relevantly different position;
+and an unmanipulated agent in an indeterministic world is in a worse
+position, because indeterminism makes the action even less
+attributable.
+
+The position has practical consequences Pereboom does not flinch from.
+If no one is responsible, then retributive punishment is unjustified.
+He defends a forward-looking account of accountability based on
+quarantine and moral education — a thin substitute, the critics
+charge, for the rich notion of responsibility hard incompatibilism
+discards.
+"""
+
+[[chapters]]
+title = "Open issues"
+body = """
+The four positions above leave several questions unsettled, and the
+literature has not converged on answers. The manipulation argument is
+one such question: defenders of compatibilism — Fischer, McKenna —
+have offered detailed responses, but no response has produced
+agreement. Is the manipulation argument decisive against compatibilism,
+or does it equivocate between manipulation that bypasses the agent's
+reasoning and manipulation that operates through it?
+
+A second open question concerns moral luck. It is widely accepted
+that we are subject to constitutive moral luck (the kind of person we
+are is partly a matter of factors we did not choose), circumstantial
+moral luck (the situations we are tested in are not of our making), and
+resultant moral luck (the outcomes of our actions depend on factors
+beyond our control). It remains unsettled whether moral luck is
+compatible with any robust notion of responsibility, or whether the
+phenomenon shows that our practices of responsibility are themselves
+incoherent. None of the four canonical positions takes a fully
+worked-out stance on moral luck.
+
+A third question is the Mind argument: if our actions are
+indeterministic, does that not turn them into chance events that no
+one is responsible for? Libertarians have offered several responses;
+none has been generally accepted. A fourth, related question concerns
+the relationship between practical reasoning and metaphysical agency.
+We deliberate as if we have alternatives. If we do not, in any
+metaphysical sense, then deliberation is either deceived or it is
+about something other than what its surface suggests. Which of these
+options is correct, and what consequences each carries for the
+practice of moral evaluation, the literature has not settled.
+"""

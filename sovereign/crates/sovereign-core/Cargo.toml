@@ -1,0 +1,30 @@
+[package]
+name = "sovereign-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+oicp-types = { path = "../../../oicp-types" }
+corpus-engine = { workspace = true, features = ["treesitter"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = "0.1"
+tokio-util = { workspace = true }
+toml = { workspace = true }
+dashmap = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+# Platform-native paths for `SetupConfig::default_path()` and friends.
+# The setup_config module is the only consumer at the moment.
+dirs = "5"
+
+[dev-dependencies]
+tokio = { workspace = true }
+sovereign-store = { workspace = true }
+sovereign-tools = { workspace = true }
+tempfile = "3"

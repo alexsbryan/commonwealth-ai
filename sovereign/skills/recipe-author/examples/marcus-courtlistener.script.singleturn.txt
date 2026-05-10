@@ -1,0 +1,45 @@
+# Single-turn rapid-iter script — fires only the "go ahead and draft"
+# moment from the full Marcus script. Use this to iterate on the skill
+# prompt without waiting for the full 5-turn loop. Each run = ~90 sec.
+#
+# The agent should: probe_url the candidate API (with auth header),
+# react to the probe result (especially failures — try a sibling host
+# or ask for docs), draft the recipe via recipe_write_structured, then
+# log a research_finding for whatever it confirmed from the probe.
+#
+# Run with:
+#   sovereign recipe-agent live-trial \
+#     --charter sovereign/skills/recipe-author/examples/marcus-courtlistener.charter.md \
+#     --script  sovereign/skills/recipe-author/examples/marcus-courtlistener.script.singleturn.txt \
+#     --skills-dir sovereign/skills \
+#     --sample-size 5 \
+#     --param api_token=<TOKEN> --param court=ca9 --param start_date=2020-01-01
+
+Look at the charter and draft the recipe. Probe the API URL FIRST with
+auth — don't draft from training-data extrapolation. If the probe
+fails or you're unsure of the canonical API host, ASK me for the docs
+URL rather than guessing. Ninth Circuit only, 2020 forward, dissents
+and concurrences as separate documents.
+
+# Turn 2 — partner answers the clarifying question. Hand over the
+# docs URL + host + auth shape, but deliberately don't pre-spell
+# pagination / response shape — the agent should still probe to
+# confirm those before drafting.
+Good question. The CourtListener REST docs are at
+https://www.courtlistener.com/help/api/rest/ — the host is
+www.courtlistener.com (not the api. subdomain), and the current
+version is v4 mounted at /api/rest/v4/. Authentication is a header
+of the form `Authorization: Token <api_token>`; my token is already
+declared as a parameter. Use the `opinions` endpoint. Probe it with
+auth and the right query params before you draft, write down what
+you find via research_finding, then draft the recipe.
+
+# Turn 3 — partner gives a working example URL the agent can probe
+# directly. This is the realistic shape of the second exchange: the
+# partner doesn't know the docs site layout but does know one URL
+# that works. Tests the rest of the loop: corrected probe → 200 →
+# research_finding → draft → validate → test.
+Here's one of my working URLs:
+https://www.courtlistener.com/api/rest/v4/opinions/?cluster__docket__court=ca9&cluster__date_filed__gte=2020-01-01&page_size=2
+Probe that with auth, capture what you learn, then draft and run a
+small test.

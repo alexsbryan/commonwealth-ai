@@ -1,0 +1,60 @@
+voice eval: skills from /Users/alexsbryan/dev/commonwealth-ai/sovereign/skills
+voice eval: chat model pinned to Qwen3.5-9B-vOP.Q5_K_S
+voice eval: judge model pinned to FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+voice eval: running 10-disagreement-permission (inner-work)
+[skills] Loaded: Document Analyst v1.0.0 (unsigned)
+[skills] Loaded: Code Review v0.1.0 (unsigned)
+[skills] Loaded: Epistemic Research v0.1.0 (unsigned)
+[skills] Loaded: Research & Analysis v0.2.0 (unsigned)
+[skills] Loaded: Personal Assistant v0.1.0 (unsigned)
+[skills] Loaded: Codebase Navigator v0.2.0 (unsigned)
+[skills] Loaded: Inner Work v0.1.0 (unsigned)
+[skills] Loaded: Collaborative Research v0.1.0 (unsigned)
+Daemon: http://localhost:9741
+Chat model:  Qwen3.5-9B-vOP.Q5_K_S
+Embed model: qwen-embedding-0.6b
+Database:    /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmp0M9sAA/sovereign.db
+Indexes:     /var/folders/qf/4ntssn_10d598hw_5rjhx3740000gp/T/.tmp0M9sAA/indexes
+Corpora:     (none installed)
+Tools:       9 registered
+Temperature: 0.2 (override)
+[router] classify_json raw output: "{\n  \"intent\": \"EXPRESSIVE\",\n  \"confidence\": 0.95,\n  \"rationale\": \"User is venting frustration about a personal conflict with implicit help-seeking\"\n}\n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n \n \n\n"
+[router] "Sam blew up at me last night for absolutely no rea" → ExpressiveQuery (coarse=EXPRESSIVE, confidence=0.95)
+  judge: attn=0 spec=0 cal=0 q=0 sil=0 dis=0 edge=1 hon=2 avoid=6
+  rationale: The candidate failed to respond as a witness and instead provided meta-commentary about its own process while hitting multiple avoid-list patterns including therapist register and wisdom voice; the response is padded with internal monologue rather than being brief and substantive.
+voice eval — 1 scenarios
+chat model:  Qwen3.5-9B-vOP.Q5_K_S
+judge model: FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L
+=========================
+FAIL  10-disagreement-permission  (inner-work)  19.0s
+      length: 1219 chars (max 700)
+      banned-phrase hits: ["It sounds like you're feeling", "The user is"]
+      required content: none of the must-include phrases matched
+
+Total: 0/1 passed (1 failed)
+
+By probe:
+  right-attention                0/1
+  right-disagreement             0/1
+
+By check:
+  length             0/1
+  question_density   1/1
+  banned_phrases     0/1
+  required_content   0/1
+
+Latency (runtime turn):
+  median 18953 ms   p95 18953 ms   max 18953 ms   n=1
+Latency (judge):
+  median 12371 ms   p95 12371 ms   max 12371 ms   n=1
+
+Judge axes (mean over 1 scenarios):
+  right_attention      0.00
+  right_specificity    0.00
+  right_calibration    0.00
+  right_question       0.00
+  right_silence        0.00
+  right_disagreement   0.00
+  right_edge           1.00
+  right_self_honesty   2.00
+  avoid_list_penalty   6.00  (lower is better)

@@ -1,0 +1,23 @@
+# ARCH_PRINCIPLES.md §3 — Single-responsibility at the file level.
+#
+# The principle cites the knowledge_view manager.rs split as the
+# canonical example: a 1332-line file decomposed into manager.rs
+# (façade), debouncer.rs, digest.rs, tokens.rs, view_kind.rs.
+#
+# What this inquiry verifies: every named concern-file from the
+# split exists in the atlas, has live git history, and shares
+# authorship — i.e. the split actually happened and didn't get
+# silently re-merged.
+
+[inquiry]
+id = "principle_03_single_responsibility"
+title = "§3 Single-responsibility — knowledge_view split (5 files)"
+file_globs = [
+    "**/sovereign-tools/src/knowledge_view/manager.rs",
+    "**/sovereign-tools/src/knowledge_view/debouncer.rs",
+    "**/sovereign-tools/src/knowledge_view/digest.rs",
+    "**/sovereign-tools/src/knowledge_view/tokens.rs",
+    "**/sovereign-tools/src/knowledge_view/view_kind.rs",
+]
+keywords = ["knowledge_view", "split", "manager", "debouncer"]
+min_score = 0.5

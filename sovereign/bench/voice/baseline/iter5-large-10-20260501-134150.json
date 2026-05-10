@@ -1,0 +1,93 @@
+{
+  "started_at_unix": 1777668116,
+  "chat_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "judge_model": "FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L",
+  "results": [
+    {
+      "scenario_id": "10-disagreement-permission",
+      "skill": "inner-work",
+      "probes": [
+        "right-disagreement",
+        "right-attention"
+      ],
+      "response": "It makes sense to be frustrated — getting blindsided by someone who knows you well enough to care can leave you wondering where the disconnect is between how things actually went down and how they landed with them. \n\nWas there anything in particular happening right before last night that might have been a trigger for Sam, even something small?",
+      "length": {
+        "enabled": true,
+        "response_chars": 345,
+        "max_chars": 700,
+        "passed": true
+      },
+      "question_density": {
+        "enabled": true,
+        "question_count": 1,
+        "min": 0,
+        "max": 2,
+        "passed": true
+      },
+      "banned_phrases": {
+        "enabled": true,
+        "hits": [],
+        "passed": true
+      },
+      "required_content": {
+        "enabled": true,
+        "matched": null,
+        "passed": false
+      },
+      "passed": false
+    }
+  ],
+  "judge_scores": [
+    {
+      "right_attention": 1,
+      "right_specificity": 2,
+      "right_calibration": 1,
+      "right_question": 3,
+      "right_silence": 0,
+      "right_disagreement": 0,
+      "right_edge": 0,
+      "right_self_honesty": 0,
+      "avoid_list_penalty": 3,
+      "rationale": "The response opens with therapeutic framing language and generic validation that lacks specific attention to the user's stated situation"
+    }
+  ],
+  "runtime_ms": [
+    28000
+  ],
+  "judge_ms": [
+    9638
+  ],
+  "aggregate": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "by_probe": {
+      "right-attention": {
+        "total": 1,
+        "passed": 0
+      },
+      "right-disagreement": {
+        "total": 1,
+        "passed": 0
+      }
+    },
+    "by_check": {
+      "length": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "question_density": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "banned_phrases": {
+        "enabled": 1,
+        "passed": 1
+      },
+      "required_content": {
+        "enabled": 1,
+        "passed": 0
+      }
+    }
+  }
+}

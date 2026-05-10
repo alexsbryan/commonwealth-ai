@@ -1,0 +1,203 @@
+=== bench start at Thu May  7 13:27:29 PDT 2026 ===
+loaded bank `sep-core-v1.1` — 21 questions, target corpus `sep`
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-36B-Opus-Q6_K
+Embed model: Qwen3-Embedding-0.6B-Q8_0
+Database:    /home/alexbryan/.sovereign/sovereign.db
+Indexes:     /home/alexbryan/.sovereign/indexes
+Corpora:     sep (187967 chunks), wikipedia (1845857 chunks), wikipedia-catalog (2048 chunks), wikipedia-fetched (1757 chunks)
+Tools:       10 registered
+Temperature: 0 (override)
+Wiki graph:  51280 articles, 7293818 edges
+[2m2026-05-07T20:27:30.275893Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m71
+[2m2026-05-07T20:27:30.276283Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-al-farabi" [3matoms[0m[2m=[0m76 [3medges[0m[2m=[0m28
+[2m2026-05-07T20:27:30.276605Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"fwd-test" [3matoms[0m[2m=[0m113 [3medges[0m[2m=[0m97
+[2m2026-05-07T20:27:30.276835Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"vef-test" [3matoms[0m[2m=[0m95 [3medges[0m[2m=[0m83
+[2m2026-05-07T20:27:30.277047Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"stoic-test" [3matoms[0m[2m=[0m87 [3medges[0m[2m=[0m85
+[2m2026-05-07T20:27:30.277299Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"bk-test" [3matoms[0m[2m=[0m108 [3medges[0m[2m=[0m97
+[2m2026-05-07T20:27:30.277512Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"dubliners-test" [3matoms[0m[2m=[0m93 [3medges[0m[2m=[0m104
+[2m2026-05-07T20:27:38.438884Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"wikipedia" [3matoms[0m[2m=[0m1561031 [3medges[0m[2m=[0m6366085
+[2m2026-05-07T20:27:38.443480Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"wiki-rep-struct" [3matoms[0m[2m=[0m2774 [3medges[0m[2m=[0m2886
+[2m2026-05-07T20:27:46.357004Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"wiki-l5-struct" [3matoms[0m[2m=[0m1561031 [3medges[0m[2m=[0m6366085
+[2m2026-05-07T20:27:53.996849Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"wiki-l5-tier2-partial" [3matoms[0m[2m=[0m1561031 [3medges[0m[2m=[0m6366085
+[2m2026-05-07T20:28:01.749030Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"wiki-l5-tier2-full" [3matoms[0m[2m=[0m1561031 [3medges[0m[2m=[0m6366085
+[2m2026-05-07T20:28:07.285694Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"wiki-l5-tier2-aug-only" [3matoms[0m[2m=[0m52 [3medges[0m[2m=[0m6366085
+[2m2026-05-07T20:28:07.286447Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"wikipedia-fetched" [3matoms[0m[2m=[0m413 [3medges[0m[2m=[0m412
+[2m2026-05-07T20:28:07.294646Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"wiki-tier2-500" [3matoms[0m[2m=[0m5547 [3medges[0m[2m=[0m1114
+[2m2026-05-07T20:28:07.295033Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-qualia-knowledge" [3matoms[0m[2m=[0m200 [3medges[0m[2m=[0m116
+[2m2026-05-07T20:28:07.295624Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-consciousness" [3matoms[0m[2m=[0m383 [3medges[0m[2m=[0m192
+[2m2026-05-07T20:28:07.296124Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-physicalism" [3matoms[0m[2m=[0m309 [3medges[0m[2m=[0m162
+[2m2026-05-07T20:28:07.296566Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-knowledge-analysis" [3matoms[0m[2m=[0m246 [3medges[0m[2m=[0m150
+[2m2026-05-07T20:28:07.296993Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-rigid-designators" [3matoms[0m[2m=[0m253 [3medges[0m[2m=[0m156
+[2m2026-05-07T20:28:07.297390Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-reliabilism" [3matoms[0m[2m=[0m242 [3medges[0m[2m=[0m128
+[2m2026-05-07T20:28:07.297729Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-aristotle-ethics" [3matoms[0m[2m=[0m178 [3medges[0m[2m=[0m145
+[2m2026-05-07T20:28:07.298067Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-aristotle-metaphysics" [3matoms[0m[2m=[0m185 [3medges[0m[2m=[0m129
+[2m2026-05-07T20:28:07.298247Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-aristotle-psychology" [3matoms[0m[2m=[0m84 [3medges[0m[2m=[0m61
+[2m2026-05-07T20:28:07.298676Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-berlin" [3matoms[0m[2m=[0m240 [3medges[0m[2m=[0m121
+[2m2026-05-07T20:28:07.298974Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-communitarianism" [3matoms[0m[2m=[0m170 [3medges[0m[2m=[0m79
+[2m2026-05-07T20:28:07.299319Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-compatibilism" [3matoms[0m[2m=[0m182 [3medges[0m[2m=[0m114
+[2m2026-05-07T20:28:07.299649Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-consequentialism" [3matoms[0m[2m=[0m192 [3medges[0m[2m=[0m86
+[2m2026-05-07T20:28:07.299981Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-content-externalism" [3matoms[0m[2m=[0m193 [3medges[0m[2m=[0m97
+[2m2026-05-07T20:28:07.300502Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-content-narrow" [3matoms[0m[2m=[0m250 [3medges[0m[2m=[0m200
+[2m2026-05-07T20:28:07.301406Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-descriptions" [3matoms[0m[2m=[0m472 [3medges[0m[2m=[0m296
+[2m2026-05-07T20:28:07.301712Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-doing-allowing" [3matoms[0m[2m=[0m174 [3medges[0m[2m=[0m88
+[2m2026-05-07T20:28:07.301868Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-double-effect" [3matoms[0m[2m=[0m86 [3medges[0m[2m=[0m41
+[2m2026-05-07T20:28:07.302138Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-ethics-virtue" [3matoms[0m[2m=[0m145 [3medges[0m[2m=[0m66
+[2m2026-05-07T20:28:07.302438Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-philippa-foot" [3matoms[0m[2m=[0m161 [3medges[0m[2m=[0m117
+[2m2026-05-07T20:28:07.303075Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-incompatibilism-arguments" [3matoms[0m[2m=[0m344 [3medges[0m[2m=[0m208
+[2m2026-05-07T20:28:07.303533Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-original-position" [3matoms[0m[2m=[0m241 [3medges[0m[2m=[0m160
+[2m2026-05-07T20:28:07.303767Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-feminist-bioethics" [3matoms[0m[2m=[0m129 [3medges[0m[2m=[0m76
+[2m2026-05-07T20:28:07.304079Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-theory-bioethics" [3matoms[0m[2m=[0m178 [3medges[0m[2m=[0m93
+[2m2026-05-07T20:28:07.304664Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-epistemic-paradoxes" [3matoms[0m[2m=[0m330 [3medges[0m[2m=[0m156
+[2m2026-05-07T20:28:07.305141Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-epistemology" [3matoms[0m[2m=[0m259 [3medges[0m[2m=[0m130
+[2m2026-05-07T20:28:07.305441Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-ethics-deontological" [3matoms[0m[2m=[0m186 [3medges[0m[2m=[0m73
+[2m2026-05-07T20:28:07.305734Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-form-matter" [3matoms[0m[2m=[0m136 [3medges[0m[2m=[0m74
+[2m2026-05-07T20:28:07.306305Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-freewill" [3matoms[0m[2m=[0m338 [3medges[0m[2m=[0m151
+[2m2026-05-07T20:28:07.306498Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-frege-hilbert" [3matoms[0m[2m=[0m106 [3medges[0m[2m=[0m60
+[2m2026-05-07T20:28:07.307220Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-goedel" [3matoms[0m[2m=[0m395 [3medges[0m[2m=[0m238
+[2m2026-05-07T20:28:07.307808Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-goedel-incompleteness" [3matoms[0m[2m=[0m315 [3medges[0m[2m=[0m181
+[2m2026-05-07T20:28:07.308529Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-heidegger" [3matoms[0m[2m=[0m400 [3medges[0m[2m=[0m255
+[2m2026-05-07T20:28:07.308833Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-hilbert-program" [3matoms[0m[2m=[0m164 [3medges[0m[2m=[0m90
+[2m2026-05-07T20:28:07.309530Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-hume" [3matoms[0m[2m=[0m354 [3medges[0m[2m=[0m283
+[2m2026-05-07T20:28:07.309916Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-husserl" [3matoms[0m[2m=[0m221 [3medges[0m[2m=[0m122
+[2m2026-05-07T20:28:07.310236Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-identity-personal" [3matoms[0m[2m=[0m177 [3medges[0m[2m=[0m88
+[2m2026-05-07T20:28:07.310671Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-intentionality" [3matoms[0m[2m=[0m245 [3medges[0m[2m=[0m107
+[2m2026-05-07T20:28:07.310992Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-justice-distributive" [3matoms[0m[2m=[0m179 [3medges[0m[2m=[0m112
+[2m2026-05-07T20:28:07.311491Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-kant" [3matoms[0m[2m=[0m262 [3medges[0m[2m=[0m161
+[2m2026-05-07T20:28:07.312000Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-kant-hume-causality" [3matoms[0m[2m=[0m257 [3medges[0m[2m=[0m193
+[2m2026-05-07T20:28:07.312296Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-liberalism" [3matoms[0m[2m=[0m188 [3medges[0m[2m=[0m66
+[2m2026-05-07T20:28:07.312564Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-liberty-positive-negative" [3matoms[0m[2m=[0m143 [3medges[0m[2m=[0m74
+[2m2026-05-07T20:28:07.313180Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-locke" [3matoms[0m[2m=[0m362 [3medges[0m[2m=[0m202
+[2m2026-05-07T20:28:07.313597Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-locke-personal-identity" [3matoms[0m[2m=[0m211 [3medges[0m[2m=[0m168
+[2m2026-05-07T20:28:07.313900Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-mencius" [3matoms[0m[2m=[0m157 [3medges[0m[2m=[0m92
+[2m2026-05-07T20:28:07.314164Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-modality-varieties" [3matoms[0m[2m=[0m141 [3medges[0m[2m=[0m64
+[2m2026-05-07T20:28:07.314764Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-natural-kinds" [3matoms[0m[2m=[0m342 [3medges[0m[2m=[0m203
+[2m2026-05-07T20:28:07.315161Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-nozick-political" [3matoms[0m[2m=[0m212 [3medges[0m[2m=[0m130
+[2m2026-05-07T20:28:07.315635Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-possible-worlds" [3matoms[0m[2m=[0m227 [3medges[0m[2m=[0m176
+[2m2026-05-07T20:28:07.316220Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-rawls" [3matoms[0m[2m=[0m290 [3medges[0m[2m=[0m248
+[2m2026-05-07T20:28:07.316588Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-reference" [3matoms[0m[2m=[0m198 [3medges[0m[2m=[0m126
+[2m2026-05-07T20:28:07.317297Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-reid" [3matoms[0m[2m=[0m379 [3medges[0m[2m=[0m263
+[2m2026-05-07T20:28:07.317457Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-reid-memory-identity" [3matoms[0m[2m=[0m75 [3medges[0m[2m=[0m51
+[2m2026-05-07T20:28:07.317775Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-scientific-realism" [3matoms[0m[2m=[0m182 [3medges[0m[2m=[0m78
+[2m2026-05-07T20:28:07.317940Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-scientific-underdetermination" [3matoms[0m[2m=[0m90 [3medges[0m[2m=[0m43
+[2m2026-05-07T20:28:07.318197Z[0m [32m INFO[0m atlas-graph: loaded [3mcorpus[0m[2m=[0m"sep-xunzi" [3matoms[0m[2m=[0m139 [3medges[0m[2m=[0m68
+[2m2026-05-07T20:28:07.318210Z[0m [32m INFO[0m atlas-context: init complete [3mcontexts[0m[2m=[0m0 [3mgraphs[0m[2m=[0m71
+Atlas: 0 corpus context(s) loaded from cache
+atlas-context: cache HIT — 18 entries from `sep-aristotle-ethics` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 13 entries from `sep-aristotle-metaphysics` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 5 entries from `sep-aristotle-psychology` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 10 entries from `sep-berlin` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 12 entries from `sep-communitarianism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 13 entries from `sep-compatibilism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 18 entries from `sep-consciousness` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 10 entries from `sep-consequentialism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 5 entries from `sep-content-externalism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 19 entries from `sep-content-narrow` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 25 entries from `sep-descriptions` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 10 entries from `sep-doing-allowing` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 5 entries from `sep-double-effect` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 20 entries from `sep-epistemic-paradoxes` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 17 entries from `sep-epistemology` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 10 entries from `sep-ethics-deontological` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 6 entries from `sep-ethics-virtue` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 2 entries from `sep-feminist-bioethics` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 12 entries from `sep-form-matter` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 10 entries from `sep-freewill` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 6 entries from `sep-frege-hilbert` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 21 entries from `sep-goedel` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 16 entries from `sep-goedel-incompleteness` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 16 entries from `sep-heidegger` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 11 entries from `sep-hilbert-program` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 28 entries from `sep-hume` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 5 entries from `sep-husserl` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 8 entries from `sep-identity-personal` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 20 entries from `sep-incompatibilism-arguments` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 13 entries from `sep-intentionality` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 7 entries from `sep-justice-distributive` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 12 entries from `sep-kant` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 13 entries from `sep-kant-hume-causality` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 16 entries from `sep-knowledge-analysis` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 7 entries from `sep-liberalism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 6 entries from `sep-liberty-positive-negative` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 14 entries from `sep-locke` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 8 entries from `sep-locke-personal-identity` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 9 entries from `sep-mencius` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 9 entries from `sep-modality-varieties` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 10 entries from `sep-natural-kinds` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 12 entries from `sep-nozick-political` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 9 entries from `sep-original-position` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 4 entries from `sep-philippa-foot` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 19 entries from `sep-physicalism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 14 entries from `sep-possible-worlds` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 11 entries from `sep-qualia-knowledge` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 17 entries from `sep-rawls` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 7 entries from `sep-reference` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 28 entries from `sep-reid` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 5 entries from `sep-reid-memory-identity` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 10 entries from `sep-reliabilism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 14 entries from `sep-rigid-designators` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 10 entries from `sep-scientific-realism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 4 entries from `sep-scientific-underdetermination` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 5 entries from `sep-theory-bioethics` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+atlas-context: cache HIT — 6 entries from `sep-xunzi` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=200;depth=[];max=none;claims=false;tensions=true;configs=false); top-K per question = 3
+  atlas-navigate: BFS produced 23 requests; 6 fetched, 5 appended (additive: 10 lance + 5 atlas = 15 total)
+  atlas-navigate: BFS produced 21 requests; 4 fetched, 4 appended (additive: 10 lance + 4 atlas = 14 total)
+  atlas-navigate: BFS produced 47 requests; 10 fetched, 6 appended (additive: 10 lance + 6 atlas = 16 total)
+  atlas-navigate: BFS produced 18 requests; 8 fetched, 6 appended (additive: 10 lance + 6 atlas = 16 total)
+  atlas-navigate: BFS produced 16 requests; 5 fetched, 4 appended (additive: 10 lance + 4 atlas = 14 total)
+  atlas-navigate: BFS produced 136 requests; 6 fetched, 6 appended (additive: 10 lance + 6 atlas = 16 total)
+  atlas-navigate: BFS produced 29 requests; 4 fetched, 3 appended (additive: 10 lance + 3 atlas = 13 total)
+  atlas-navigate: BFS produced 20 requests; 4 fetched, 3 appended (additive: 10 lance + 3 atlas = 13 total)
+  atlas-navigate: BFS produced 13 requests; 5 fetched, 4 appended (additive: 10 lance + 4 atlas = 14 total)
+  atlas-navigate: BFS produced 82 requests; 3 fetched, 3 appended (additive: 10 lance + 3 atlas = 13 total)
+  atlas-navigate: BFS produced 20 requests; 6 fetched, 5 appended (additive: 10 lance + 5 atlas = 15 total)
+  atlas-navigate: BFS produced 17 requests; 6 fetched, 4 appended (additive: 10 lance + 4 atlas = 14 total)
+  atlas-navigate: BFS produced 29 requests; 7 fetched, 4 appended (additive: 10 lance + 4 atlas = 14 total)
+  atlas-navigate: BFS produced 96 requests; 4 fetched, 2 appended (additive: 10 lance + 2 atlas = 12 total)
+  atlas-navigate: BFS produced 18 requests; 6 fetched, 4 appended (additive: 10 lance + 4 atlas = 14 total)
+  atlas-navigate: BFS produced 84 requests; 4 fetched, 4 appended (additive: 10 lance + 4 atlas = 14 total)
+  [loose-judge] parse failed; raw="{\n  \"loose_credit\": [\"scientific-underdetermination\"],\n  \"rationale\": \"The retrieved passages extensively cover the 'no-miracles argument' (also called the miracle argument), expli"
+  atlas-navigate: BFS produced 46 requests; 8 fetched, 6 appended (additive: 10 lance + 6 atlas = 16 total)
+  atlas-navigate: BFS produced 32 requests; 6 fetched, 5 appended (additive: 10 lance + 5 atlas = 15 total)
+  atlas-navigate: BFS produced 32 requests; 4 fetched, 3 appended (additive: 10 lance + 3 atlas = 13 total)
+  atlas-navigate: BFS produced 14 requests; 4 fetched, 3 appended (additive: 10 lance + 3 atlas = 13 total)
+  atlas-navigate: BFS produced 14 requests; 2 fetched, 1 appended (additive: 10 lance + 1 atlas = 11 total)
+═══ sep-core-v1.1 (corpus=sep) — 21 questions ═══
+
+  [argument_consequence_against_compatibilism] sources     3/3 (loose     3/3)  facts     7/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (26ms embed, 87ms search)
+  [concept_modality_necessary_aposteriori] sources     2/4 (loose     4/4)  facts     7/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (26ms embed, 99ms search)
+  [comparative_locke_reid_personal_identity] sources     5/5 (loose     5/5)  facts     7/7  essay 12/12 [t3/p3/d3/a3]   vec+fts  (22ms embed, 89ms search)
+  [dialectical_gettier_lottery   ] sources     3/3 (loose     3/3)  facts     5/7  essay 10/12 [t3/p2/d2/a3]   vec+fts  (26ms embed, 100ms search)
+  [argument_internalism_externalism_justification] sources     3/3 (loose     3/3)  facts     4/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (23ms embed, 92ms search)
+  [concept_qualia_physicalism    ] sources     3/3 (loose     3/3)  facts     7/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (22ms embed, 93ms search)
+  [position_summary_hard_problem_illusionism] sources     1/3 (loose     3/3)  facts     7/7  essay 8/12 [t3/p2/d1/a2]   vec+fts  (22ms embed, 99ms search)
+  [dialectical_content_narrow_wide_burge] sources     2/3 (loose     3/3)  facts     7/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (21ms embed, 104ms search)
+  [contested_trolley_doctrine_double_effect] sources     3/5 (loose     5/5)  facts     4/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (23ms embed, 92ms search)
+  [position_summary_virtue_ethics_function] sources     2/3 (loose     3/3)  facts     7/8  essay 8/12 [t3/p2/d1/a2]   vec+fts  (21ms embed, 92ms search)
+  [position_summary_kripke_reference_causal_historical] sources     3/3 (loose     3/3)  facts     7/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (21ms embed, 101ms search)
+  [dialectical_putnam_twin_earth_meaning] sources     2/3 (loose     3/3)  facts     6/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (27ms embed, 95ms search)
+  [argument_godel_incompleteness ] sources     4/4 (loose     4/4)  facts     7/8  essay 11/12 [t3/p3/d2/a3]   vec+fts  (21ms embed, 100ms search)
+  [argument_rawls_original_position] sources     3/4 (loose     4/4)  facts     8/8  essay 11/12 [t3/p3/d2/a3]   vec+fts  (24ms embed, 98ms search)
+  [comparative_berlin_liberty    ] sources     3/3 (loose     3/3)  facts     7/7  essay 11/12 [t3/p3/d2/a3]   vec+fts  (22ms embed, 89ms search)
+  [contested_no_miracles_scientific_realism] sources     1/2 (loose     1/2)  facts     8/9  essay 11/12 [t3/p3/d2/a3]   vec+fts  (22ms embed, 98ms search)
+  [comparative_kant_hume_causation] sources     3/3 (loose     3/3)  facts     7/8  essay 8/12 [t3/p2/d1/a2]   vec+fts  (26ms embed, 90ms search)
+  [argument_aristotle_hylomorphism] sources     3/3 (loose     3/3)  facts     8/8  essay 11/12 [t3/p3/d2/a3]   vec+fts  (22ms embed, 95ms search)
+  [position_summary_husserl_heidegger] sources     2/2 (loose     2/2)  facts     8/8  essay 11/12 [t3/p3/d2/a3]   vec+fts  (22ms embed, 98ms search)
+  [comparative_mencius_xunzi_human_nature] sources     2/2 (loose     2/2)  facts     8/9  essay 11/12 [t3/p3/d2/a3]   vec+fts  (22ms embed, 93ms search)
+  [contested_bioethics_principlism] sources     1/2 (loose     1/2)  facts     4/9  essay 10/12 [t3/p2/d3/a2]   vec+fts  (23ms embed, 90ms search)
+
+─── per category ───
+  argument_reconstruction        sources 16/17 / loose 17/17  facts 34/38
+  comparative                    sources 13/13 / loose 13/13  facts 29/31
+  concept_distinction            sources 5/7 / loose 7/7  facts 14/14
+  contested                      sources 5/9 / loose 7/9  facts 16/25
+  dialectical                    sources 7/9 / loose 9/9  facts 18/21
+  position_summary               sources 8/11 / loose 11/11  facts 29/30
+
+─── overall ───
+  sources 54/66  (82%)
+  loose   64/66  (97%)  ← LLM-judge loose source-credit
+  essay   221/252  (88%)  axes: t=63/63 p=58/63 d=41/63 a=59/63  ← essay-readiness
+  facts   140/159  (88%)
+wrote run JSON to /home/alexbryan/dev/commonwealth-ai/sovereign/bench/sep_eval/multi-atlas-57-judge-darwin36b.json
+=== bench end at Thu May  7 13:34:07 PDT 2026 ===

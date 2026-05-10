@@ -1,0 +1,19 @@
+loaded bank `sep-core-v1.1` — 21 questions, target corpus `sep`
+Daemon: http://localhost:9741
+Chat model:  FINAL-Bench_Darwin-36B-Opus-Q6_K
+Embed model: Qwen3-Embedding-0.6B-Q8_0
+Database:    /home/alexbryan/.sovereign/sovereign.db
+Indexes:     /home/alexbryan/.sovereign/indexes
+Corpora:     sep (187967 chunks), wikipedia (1845857 chunks), wikipedia-catalog (2048 chunks), wikipedia-fetched (1757 chunks)
+Tools:       10 registered
+Temperature: 0 (override)
+Wiki graph:  51280 articles, 7293818 edges
+[2m2026-05-05T14:01:36.995293Z[0m [32m INFO[0m atlas-context: scanning indexes dir for atlases [3mcandidate_count[0m[2m=[0m20
+[2m2026-05-05T14:01:38.052760Z[0m [32m INFO[0m atlas-context: init complete [3mloaded[0m[2m=[0m0
+Atlas: 0 corpus context(s) loaded from cache
+atlas-context: cache HIT — 102 entries from `sep-qualia-knowledge` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 194 entries from `sep-consciousness` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 141 entries from `sep-physicalism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 135 entries from `sep-knowledge-analysis` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 133 entries from `sep-rigid-designators` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3
+atlas-context: cache HIT — 91 entries from `sep-reliabilism` (model=Qwen3-Embedding-0.6B-Q8_0, filter_sig=min_chars=30;depth=[];max=none;claims=true;tensions=true;configs=true); top-K per question = 3

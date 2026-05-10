@@ -1,0 +1,53 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicoverbruggen/tauri-v2-schema/main/src/tauri-conf.schema.json",
+  "productName": "Sovereign",
+  "version": "0.1.0",
+  "identifier": "com.sovereign.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": {
+      "script": "npm run dev",
+      "cwd": ".."
+    },
+    "beforeBuildCommand": {
+      "script": "npm run build",
+      "cwd": ".."
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Sovereign",
+        "width": 1024,
+        "height": 720,
+        "minWidth": 640,
+        "minHeight": 480,
+        "resizable": true,
+        "decorations": true,
+        "center": true
+      }
+    ],
+    "trayIcon": {
+      "iconPath": "icons/icon.png",
+      "tooltip": "Sovereign"
+    },
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.png"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["sovereign"]
+      }
+    }
+  }
+}
