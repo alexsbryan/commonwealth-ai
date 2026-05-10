@@ -1,0 +1,27 @@
+[corpus]
+id = "system-overview"
+name = "SYSTEM_OVERVIEW.md"
+description = "Sovereign system-overview — component inventory + dataflow narrative."
+license = "private"
+mesh_sharing = false
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+[acquire]
+type = "local_file"
+path = "/Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md"
+
+[extract]
+type = "markdown"
+
+[chunk]
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+
+[enrichment]
+enabled = true
+type = "atlas"
+pipeline = "literary_atlas"

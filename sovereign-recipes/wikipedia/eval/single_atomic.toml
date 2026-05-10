@@ -1,0 +1,25 @@
+[bank]
+name = "single-atomic-bombings"
+corpus = "wikipedia"
+description = "One question, fast iteration on contested_atomic_bombings_morality."
+
+[bank.latency_budget]
+default_p95_ms = 30000
+max_per_question_ms = 60000
+
+[[questions]]
+id = "contested_atomic_bombings_morality"
+category = "contested"
+question = "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?"
+expected_facts = [
+    "ended the war sooner",
+    "saved lives by avoiding invasion",
+    "civilian casualties",
+    "alternatives existed",
+    "demonstration",
+    "Soviet entry",
+]
+expected_sources = [
+    "Atomic bombings of Hiroshima and Nagasaki",
+]
+notes = "Atlas fault-line territory — should surface multiple positions, ideally with Wikipedia POV-flagged sections."

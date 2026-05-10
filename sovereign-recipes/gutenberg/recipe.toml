@@ -1,0 +1,44 @@
+[corpus]
+id = "gutenberg"
+name = "Project Gutenberg Catalog"
+description = """
+Catalog of 70K+ public-domain works. Lets the system know *of* every \
+Gutenberg book without having to read each one — when a query lands on a \
+catalog hit, retrieval surfaces an honest "I haven't read this yet — want \
+me to?" offer and on-demand single-work ingest is one click away.\
+"""
+license = "Public Domain"
+kind = "catalog"
+mesh_sharing = true
+size_compressed_gb = 0.05
+size_indexed_gb = 0.3
+
+# pg_catalog.csv is shipped gzipped at this URL. The bulk_download
+# acquirer transparently decompresses .gz before handing the path to
+# the extractor.
+[acquire]
+type = "bulk_download"
+url = "https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv.gz"
+
+[extract]
+type = "gutenberg_catalog"
+
+[chunk]
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+# embedding_model and embedding_dimensions auto-detected from loaded model.
+
+# Pairs the catalog corpus with the on-demand single-work content
+# recipe (`gutenberg-work`). When a catalog hit fires, the
+# CatalogIngestService takes the work id from id_field, formats
+# download_url_template, and runs the content recipe inline into
+# `gutenberg-<id>` (e.g. gutenberg-2701 for Moby Dick).
+[catalog]
+id_field = "gutenberg_id"
+download_url_template = "https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"
+content_recipe = "gutenberg-work"
+ingest_estimate_wpm = 8000
+enrich_estimate_wpm = 500

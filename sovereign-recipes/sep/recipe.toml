@@ -1,0 +1,101 @@
+[corpus]
+id = "sep"
+name = "Stanford Encyclopedia of Philosophy"
+description = """
+Peer-reviewed encyclopedia entries from the Stanford Encyclopedia of Philosophy. \
+Includes claim and relationship enrichment for the epistemic-research skill.\
+"""
+# SEP entries are authored under Stanford copyright. Use is permitted for
+# educational and research purposes. Do NOT redistribute raw text commercially.
+license = "Copyright Stanford University (educational/research use)"
+# mesh_sharing: Stanford's license forbids redistribution of SEP's text,
+# so the scheduler is NOT allowed to replicate this index across peers.
+mesh_sharing = false
+# query_sharing: answering a federated search with cited snippets back
+# to plato.stanford.edu is fair use (same thing a search engine does).
+# Lets peers on the same Commonwealth mesh run `/v1/knowledge/search`
+# against this node's local copy without the bytes ever leaving.
+query_sharing = true
+size_compressed_gb = 1.4
+size_indexed_gb = 6.0
+
+# Sourced from AiresPucrs/stanford-encyclopedia-philosophy on HuggingFace,
+# which mirrors SEP entries as a single parquet file. This avoids scraping
+# plato.stanford.edu directly (slow, fragile, and impolite to Stanford's servers).
+# The parquet has columns: title, text, url.
+[acquire]
+type = "bulk_download"
+url = "https://huggingface.co/datasets/AiresPucrs/stanford-encyclopedia-philosophy/resolve/main/data/train-00000-of-00001.parquet"
+resume = true
+
+[extract]
+type = "parquet"
+content_column = "text"
+label_column = "category"
+url_column = "metadata"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+# embedding_model and embedding_dimensions are auto-detected from the
+# loaded model at ingest time.
+
+# ── Atlas enrichment (v2, per-article) ───────────────────────────────
+#
+# The SEP parquet holds 1,770 articles across ~182k paragraphs;
+# enriching one article at a time keeps the per-run cost
+# predictable and the atlas output traversable. Each article
+# becomes its own enrichment corpus (`sep-<slug>`, e.g.
+# `sep-compatibilism`) that shares this recipe's enrichment config
+# but with an article-specific source file derived from the parquet.
+#
+# To enrich a specific article:
+#   sovereign enrich sep-ingest <category-slug>   # e.g. compatibilism
+#   sovereign enrich build sep-<category-slug>
+#
+# The `sep-ingest` helper reads the cached parquet, filters to rows
+# where `category == <slug>`, groups paragraphs into sections,
+# writes `~/.sovereign/corpora/sep/articles/<slug>.md` with
+# `## Section NNN` markers, then scaffolds the enrichment corpus
+# with `pipeline = "philosophy_atlas"`.
+[enrichment]
+enabled = true
+type = "atlas"
+pipeline = "philosophy_atlas"
+domain = "philosophy"
+prompt_version = "2.1.0"
+
+# Section granularity for per-article atlas enrichment. SEP
+# paragraphs are short (~300 words); grouping 10 per section keeps
+# Phase 1 LLM calls cheap (~10 sections per article) while
+# preserving enough internal structure for the trajectory +
+# configuration phases to have signal. Tuned after the
+# compatibilism smoke at 5/section yielded 19 sections = 19
+# LLM calls per article.
+# Override per-article via
+# `sovereign enrich sep-ingest --paragraphs-per-section N`.
+paragraphs_per_section = 10
+
+# HDBSCAN / alignment / fault-line parameters are retained at this
+# level for the legacy full-corpus `sovereign corpus build sep`
+# field-model flow, which clusters chunk-level embeddings across
+# every article for the epistemic-research skill. Atlas (v2,
+# per-article) and field-model (v1, full-corpus) coexist —
+# different surfaces, same source parquet.
+[enrichment.clustering]
+min_cluster_size = 50
+epsilon = 0.10
+label_sample_size = 5
+
+[enrichment.alignment]
+alignment_threshold = 0.65
+min_chunks_for_discovery = 80
+
+[enrichment.fault_lines]
+proximity_threshold = 0.60
+min_confidence = 0.70
