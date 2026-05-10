@@ -1,0 +1,51 @@
+[corpus]
+id = "wikipedia-newsworthy"
+name = "Wikipedia — Newsworthy (Portal:Current_events)"
+description = """
+Daily ingest of Wikipedia's `Portal:Current_events` page, chunked at the \
+event-bullet grain. Each chunk's outbound wikilinks drive a freshness \
+daemon that reconciles a rolling tracked set of articles against the \
+parent `wikipedia` corpus — present-but-stale articles get refreshed \
+in-place against the latest MediaWiki revision; titles falling out of \
+the rolling window stop receiving daily attention but stay indexed. \
+Mesh-shared by default — the tracked set is a public derivative of \
+public Wikipedia signals.\
+"""
+license = "CC-BY-SA-4.0"
+kind = "knowledge"
+on_demand = false
+mesh_sharing = true
+query_sharing = true
+scope = "newsworthy"
+size_compressed_gb = 0.05
+size_indexed_gb = 0.20
+
+# The watcher iterates dates and substitutes `{date_yyyy_month_dd}` /
+# `{date_iso}` itself; the recipe pins request *shape* only. Daemon
+# cadence (`window_days`, `tick_interval_secs`, `jitter_max_secs`,
+# `fetch_concurrency`) lives in `_corpus_meta.json` under a
+# top-level `"newsworthy"` block, not in this schema — it's runtime
+# config, not recipe data.
+[acquire]
+type = "http_api"
+base_url = "https://en.wikipedia.org/w/api.php"
+user_agent = "commonwealth-ai/0.1 (newsworthy)"
+rate_limit_per_second = 1.0
+
+[[acquire.requests]]
+url = "{base_url}?action=parse&page=Portal:Current_events/{date_yyyy_month_dd}&prop=wikitext%7Csections%7Clinks%7Cproperties&format=json&formatversion=2"
+
+[extract]
+type = "wikipedia_api_article"
+
+[chunk]
+type = "portal_event_bullet"
+max_chars = 2048
+
+[index]
+fts = true
+vector = true
+
+[update]
+manifest_url = "https://updates.sovereign.dev/manifests/wikipedia-newsworthy.json"
+auto_update = true
