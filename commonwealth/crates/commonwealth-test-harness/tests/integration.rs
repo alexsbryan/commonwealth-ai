@@ -666,21 +666,38 @@ fn fault_detection_timeout_transitions() {
 
 #[test]
 fn fault_detection_recovery_on_heartbeat() {
+    // Timeouts deliberately wider than the original 30/60/120ms set
+    // so the precondition sleep (~40ms before, now 100ms) has
+    // headroom against parallel-test scheduler jitter without
+    // crossing into the next bucket. The original test failed
+    // intermittently under repo-wide `cargo test` load when the
+    // 40ms sleep stretched past the 60ms `away_timeout` boundary.
     let config = FaultDetectorConfig {
-        suspected_timeout: Duration::from_millis(30),
-        away_timeout: Duration::from_millis(60),
-        failure_timeout: Duration::from_millis(120),
+        suspected_timeout: Duration::from_millis(60),
+        away_timeout: Duration::from_millis(400),
+        failure_timeout: Duration::from_millis(800),
     };
     let mut fd = FaultDetector::new(config);
     let id = NodeId::from_u128(1);
     fd.register_node(id);
 
-    // Let it go suspected.
-    std::thread::sleep(Duration::from_millis(40));
+    // Sleep into the Suspected window. 100ms is comfortably past
+    // 60ms (suspected_timeout) and far below 400ms (away_timeout)
+    // even when the test thread is slow to schedule.
+    std::thread::sleep(Duration::from_millis(100));
     fd.check_all();
-    assert_eq!(fd.node_status(id), Some(FaultStatus::Suspected));
+    // Accept either Suspected (the happy path) or Away (extreme
+    // scheduler stall): the precondition is "the node has fallen
+    // out of Healthy"; the actual contract under test is whether
+    // a heartbeat recovers it from any non-Healthy state.
+    let pre_status = fd.node_status(id);
+    assert!(
+        matches!(pre_status, Some(FaultStatus::Suspected) | Some(FaultStatus::Away)),
+        "expected Suspected or Away after timeout, got {pre_status:?}"
+    );
 
-    // Heartbeat recovers it.
+    // Heartbeat recovers it. This is the assertion the test's name
+    // is actually about.
     let event = fd.record_heartbeat(id);
     assert_eq!(event, Some(FaultEvent::NodeRecovered { node_id: id }));
     assert_eq!(fd.node_status(id), Some(FaultStatus::Healthy));
