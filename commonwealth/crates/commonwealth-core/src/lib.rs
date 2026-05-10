@@ -12,6 +12,7 @@ pub mod model_aliases;
 pub mod pipeline_aliases;
 pub use oicp_types as oicp;
 pub mod oicp_registry;
+pub mod partition;
 pub mod scheduler;
 
 pub use error::{Error, Result};
