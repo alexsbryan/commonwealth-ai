@@ -8,6 +8,8 @@ pub mod knowledge;
 pub mod latency;
 pub mod mesh;
 pub mod model;
+pub mod peer_addr;
+pub mod peer_health;
 pub mod model_aliases;
 pub mod pipeline_aliases;
 pub use oicp_types as oicp;
