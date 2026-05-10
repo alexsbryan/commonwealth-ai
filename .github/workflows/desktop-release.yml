@@ -1,0 +1,199 @@
+name: Desktop release
+
+# Tag-driven release workflow for the Sovereign desktop app.
+#
+# Trigger:
+#   git tag desktop-v0.1.0 && git push origin desktop-v0.1.0
+#
+# What it does:
+#   1. Build matrix across mac arm64 / mac x86_64 / linux x86_64 / windows x86_64.
+#   2. Run scripts/fetch-desktop-binaries.sh to stage Tesseract / PDFium / tessdata.
+#   3. `tauri build --config tauri.release.conf.json` — produces installers.
+#   4. Upload artifacts to a draft GitHub Release named after the tag.
+#
+# Code signing is intentionally OFF in v1 (see RELEASING.md §"Code signing").
+# Notarization / Authenticode are tracked as Phase 2.
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to attach the release to (e.g. desktop-v0.1.0). Leave blank to use the workflow ref."
+        required: false
+
+permissions:
+  contents: write  # needed to create / upload to a GitHub Release
+
+jobs:
+  build:
+    name: build / ${{ matrix.platform.name }}
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - name: macos-arm64
+            runner: macos-14
+            target: aarch64-apple-darwin
+          - name: macos-x86_64
+            runner: macos-13
+            target: x86_64-apple-darwin
+          - name: linux-x86_64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - name: windows-x86_64
+            runner: windows-2022
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            sovereign
+            corpus-engine
+            commonwealth
+          key: desktop-release-${{ matrix.platform.target }}
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2.0.0" --locked
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: sovereign/crates/sovereign-desktop/package-lock.json
+
+      - name: Install npm deps
+        working-directory: sovereign/crates/sovereign-desktop
+        run: npm ci
+
+      - name: Linux system deps (AppImage / .deb)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libfuse2 \
+            tesseract-ocr
+
+      - name: Stage Tesseract (macOS)
+        if: startsWith(matrix.platform.runner, 'macos')
+        shell: bash
+        run: |
+          # GitHub macOS runners ship Homebrew. Use brew's tesseract for v1.
+          # Phase 2 of RELEASING.md tracks moving to a static build.
+          brew install tesseract
+          mkdir -p sovereign/crates/sovereign-desktop/src-tauri/binaries
+          cp "$(brew --prefix tesseract)/bin/tesseract" \
+             "sovereign/crates/sovereign-desktop/src-tauri/binaries/tesseract-${{ matrix.platform.target }}"
+
+      - name: Stage Tesseract (Linux)
+        if: matrix.platform.runner == 'ubuntu-22.04'
+        run: |
+          mkdir -p sovereign/crates/sovereign-desktop/src-tauri/binaries
+          cp /usr/bin/tesseract \
+             sovereign/crates/sovereign-desktop/src-tauri/binaries/tesseract-${{ matrix.platform.target }}
+
+      - name: Stage Tesseract (Windows)
+        if: matrix.platform.runner == 'windows-2022'
+        shell: pwsh
+        run: |
+          # GitHub Windows runners ship a Tesseract install at C:\Program Files\Tesseract-OCR.
+          $bin = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+          if (-not (Test-Path $bin)) {
+            choco install tesseract -y --no-progress
+          }
+          New-Item -Path "sovereign/crates/sovereign-desktop/src-tauri/binaries" -ItemType Directory -Force | Out-Null
+          Copy-Item "C:\Program Files\Tesseract-OCR\tesseract.exe" `
+                    "sovereign/crates/sovereign-desktop/src-tauri/binaries/tesseract-${{ matrix.platform.target }}.exe"
+
+      - name: Stage PDFium + tessdata
+        shell: bash
+        run: scripts/fetch-desktop-binaries.sh ${{ matrix.platform.target }}
+
+      - name: Tauri build
+        working-directory: sovereign/crates/sovereign-desktop
+        shell: bash
+        run: |
+          cargo tauri build \
+            --target ${{ matrix.platform.target }} \
+            --config src-tauri/tauri.release.conf.json
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform.name }}
+          path: |
+            sovereign/target/${{ matrix.platform.target }}/release/bundle/dmg/*.dmg
+            sovereign/target/${{ matrix.platform.target }}/release/bundle/macos/*.app.tar.gz
+            sovereign/target/${{ matrix.platform.target }}/release/bundle/appimage/*.AppImage
+            sovereign/target/${{ matrix.platform.target }}/release/bundle/deb/*.deb
+            sovereign/target/${{ matrix.platform.target }}/release/bundle/msi/*.msi
+            sovereign/target/${{ matrix.platform.target }}/release/bundle/nsis/*.exe
+          if-no-files-found: warn
+
+  publish:
+    name: publish to GitHub Release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve tag
+        id: resolve
+        shell: bash
+        run: |
+          tag="${{ inputs.tag }}"
+          if [[ -z "$tag" ]]; then
+            tag="${GITHUB_REF##*/}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Flatten artifact tree
+        run: |
+          mkdir -p release-assets
+          # Each artifact dir is `desktop-<platform-name>/...`. Flatten
+          # everything into a single dir for upload.
+          find artifacts -type f \
+            \( -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \
+               -o -name "*.msi" -o -name "*.exe" -o -name "*.app.tar.gz" \) \
+            -exec cp {} release-assets/ \;
+          ls -la release-assets
+
+      - name: Publish draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.resolve.outputs.tag }}
+          name: Sovereign Desktop ${{ steps.resolve.outputs.tag }}
+          draft: true
+          generate_release_notes: true
+          files: release-assets/*
+          body: |
+            Unsigned MVP release. macOS users: right-click → Open the first time
+            (Gatekeeper will warn). Windows users: SmartScreen will warn — click
+            "More info" → "Run anyway".
+
+            Code signing and auto-updates are deferred (see
+            `sovereign/crates/sovereign-desktop/RELEASING.md`).

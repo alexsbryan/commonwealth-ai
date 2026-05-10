@@ -1,0 +1,50 @@
+# commonwealth-ai workspace shell — tracks the cross-cutting tooling
+# (lint/test scripts, watcher config, agent contract). Each sub-repo
+# below is a separate git remote and is cloned into place by
+# `bootstrap.sh` on a fresh workstation.
+
+# ── Sub-repos: tracked independently ──────────────────────────────────────
+/sovereign/
+/commonwealth/
+/corpus-engine/
+/oicp-types/
+/sovereign-recipes/
+/src-ta/
+/src-tauri/
+
+# ── Build artefacts ───────────────────────────────────────────────────────
+/target/
+
+# ── Per-host runtime state ────────────────────────────────────────────────
+# .sovereign/sovereign.toml is workspace config (tracked); every other
+# entry in .sovereign/ is per-host bookkeeping or alignment-corpus
+# territory and must NOT sync via this repo.
+.sovereign/notes.db
+.sovereign/notes.db-journal
+.sovereign/notes.db-wal
+.sovereign/notes.db-shm
+.sovereign/features.db
+.sovereign/features.db-journal
+.sovereign/features.db-wal
+.sovereign/features.db-shm
+.sovereign/features/
+.sovereign/atos-demo/
+.sovereign/project.json
+.sovereign/.lock
+
+# ── Agent runtime state ───────────────────────────────────────────────────
+# CLAUDE.md / settings.json / hooks/ are tracked. Everything below is
+# session-local: plans, scheduled-task locks, machine-specific overrides.
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+.claude/projects/
+.claude/plans/
+.claude/cache/
+
+# ── Opencode editor ───────────────────────────────────────────────────────
+# config + plugin manifest tracked; node_modules is per-host.
+.opencode/node_modules/
+
+# ── macOS noise ───────────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
