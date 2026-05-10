@@ -1,0 +1,17 @@
+{
+  "parse": {
+    "title": "Kyiv",
+    "pageid": 17321,
+    "revid": 1297999000,
+    "wikitext": "Kyiv is the capital and most populous city of [[Ukraine]]. It lies on the [[Dnieper]] river in north-central Ukraine.\n\n== History ==\n\nThe city has been a major political, cultural, and economic center for over a millennium. The city's modern boundaries were established after [[World War II]].\n\n== Geography ==\n\nKyiv lies on both banks of the [[Dnieper]] river, which flows south through the city.\n",
+    "sections": [
+      { "toclevel": 1, "level": "2", "line": "History", "anchor": "History" },
+      { "toclevel": 1, "level": "2", "line": "Geography", "anchor": "Geography" }
+    ],
+    "links": [
+      { "ns": 0, "title": "Ukraine", "exists": true },
+      { "ns": 0, "title": "Dnieper", "exists": true },
+      { "ns": 0, "title": "World War II", "exists": true }
+    ]
+  }
+}

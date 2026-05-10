@@ -1,0 +1,163 @@
+# Registry snapshot — bundled at compile time.
+# This file is the ONLY compile-time corpus catalog artifact.
+# Keep up to date by running: cargo xtask update-registry-snapshot
+#
+schema_version = 1
+generated_at = "2026-04-09T00:00:00Z"
+registry_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/registry.toml"
+
+[[recipes]]
+id = "wikipedia"
+name = "Wikipedia (English)"
+description = "Wikipedia Core scope: ~51K Vital Articles Level 5 (community-curated, ~2.5 GB indexed). Indexes in ~5–8 min on M-series MacBook. Expandable to the full 6.7M-article dump in-place via Settings → Knowledge."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 13.0
+size_indexed_gb = 2.5
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "wikipedia-simple"
+name = "Simple English Wikipedia"
+description = "Simple English Wikipedia — ~230K plain-language articles. Layer 0 of the layered Wikipedia stack; ready for chat in 2–3 min so grounded responses are available while Wikipedia Core indexes."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.4
+size_indexed_gb = 1.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-simple/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "sep"
+name = "Stanford Encyclopedia of Philosophy"
+description = "Comprehensive philosophical reference covering 1,800+ entries with claim-level epistemic enrichment and relationship extraction."
+license = "Copyright Stanford University (educational/research use)"
+size_compressed_gb = 1.4
+size_indexed_gb = 6.0
+enrichment_enabled = true
+mesh_sharing = false
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sep/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "stackexchange"
+name = "Stack Exchange Reference"
+description = "Single-canonical-answer Q&A for code-and-syntax reference lookup. Pre-composed question+answers from common-pile/stackexchange. Pair with `stackexchange-knowledge` for trade-off threads."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 39.0
+size_indexed_gb = 120.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "stackexchange-knowledge"
+name = "Stack Exchange Knowledge"
+description = "Multi-answer Q&A where the community has validated several approaches — Software Engineering, DBA, Security, DevOps, Skeptics SE. Installs in ~5 min; expand to Stack Overflow's architecture subset in-place via Settings → Knowledge. Pairs with the engineering enrichment domain."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.15
+size_indexed_gb = 0.6
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/stackexchange-knowledge/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "openalex"
+name = "OpenAlex"
+description = "330 GB scholarly paper metadata snapshot with abstract text from the OpenAlex S3 snapshot."
+license = "CC0-1.0"
+size_compressed_gb = 330.0
+size_indexed_gb = 500.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/openalex/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "gutenberg"
+name = "Project Gutenberg Catalog"
+description = "Catalog of 70K+ public-domain works (~50 MB indexed). Lets the system know *of* every Gutenberg book; on-demand single-work ingest pairs with `gutenberg-work` so any work can be fully read on request."
+license = "Public Domain"
+size_compressed_gb = 0.05
+size_indexed_gb = 0.3
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "gutenberg-work"
+name = "Project Gutenberg — Single Work"
+description = "On-demand single-work ingest. Triggered by the `gutenberg` catalog when the user accepts an ingest offer. Never installed directly."
+license = "Public Domain"
+size_compressed_gb = 0.002
+size_indexed_gb = 0.05
+enrichment_enabled = true
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/gutenberg-work/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "wikipedia-catalog"
+name = "Wikipedia Catalog"
+description = "Catalog of all ~6.8M English Wikipedia articles (titles + abstracts + section anchors). Pairs with the `wikipedia` chunk corpus and the `wikipedia-article` on-demand recipe — the chat-with-wikipedia surface that gracefully fetches any article on miss."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.07
+size_indexed_gb = 4.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-catalog/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "wikipedia-article"
+name = "Wikipedia — Single Article"
+description = "On-demand single-article ingest from the MediaWiki Action API. Triggered by a `wikipedia-catalog` hit; lands as part of the `wikipedia` corpus so retrieval and mesh sharing treat fetched articles uniformly with curated L5 content."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+enrichment_enabled = true
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-article/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "crs_reports"
+name = "CRS Reports"
+description = "Congressional Research Service reports from EveryCRSReport.com — non-partisan policy analysis in the public domain."
+license = "Public Domain"
+size_compressed_gb = 2.0
+size_indexed_gb = 5.0
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/crs_reports/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "alignment"
+name = "Alignment workspace"
+description = "Mutable-merge replication of the user's ~/.claude/ plans + auto-memory entries + plan template across the user's own mesh peers. Newest-mtime-wins per file. Pairs with the post-merge projector so a fresh machine reaches parity in one corpus install."
+license = "private"
+size_compressed_gb = 0.001
+size_indexed_gb = 0.005
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/alignment/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "wikipedia-newsworthy"
+name = "Wikipedia — Newsworthy"
+description = "Daily ingest of Portal:Current_events, chunked at the event-bullet grain. Companion freshness daemon reconciles outbound wikilinks against the parent `wikipedia` corpus, refreshing in-place when revisions diverge. Mesh-shared — public derivative of public Wikipedia signals."
+license = "CC-BY-SA-4.0"
+size_compressed_gb = 0.05
+size_indexed_gb = 0.20
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-newsworthy/recipe.toml"
+sha256 = ""

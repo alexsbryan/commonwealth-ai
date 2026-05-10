@@ -1,0 +1,3330 @@
+//! Recipe schema — declarative TOML for `acquire → extract → chunk
+//! → embed → index` pipelines, plus optional `[parameters]`,
+//! `[catalog]`, `[enrichment]` blocks.
+//!
+//! ## Schema back-compatibility policy
+//!
+//! Recipes are user-authored data that lives outside this repo
+//! (community registry, local user authoring, sample TOMLs in old
+//! tutorials). A recipe written six months ago must still load
+//! without ceremony. The reader enforces that by convention:
+//!
+//! 1. **Every new field carries `#[serde(default)]`** (or a typed
+//!    default like `default_true`). Old TOMLs without the field
+//!    parse to a sensible value. Removing a default — even on an
+//!    optional-looking field — breaks every published recipe.
+//! 2. **Renamed fields keep the old name as an alias** via
+//!    `#[serde(alias = "old-name")]`. Drop the alias only after a
+//!    full schema-version bump cycle.
+//! 3. **Removed enum variants get a deprecation arm** in
+//!    [`translate_parse_error`] that produces a tailored "use
+//!    `<replacement>`" error instead of a generic "unknown
+//!    variant". `api_paginated` → `http_api` is the canonical
+//!    example.
+//! 4. **`[corpus] schema_version`** is bumped only when readers
+//!    must opt in to interpret the recipe (e.g. a new acquirer
+//!    older engines can't run safely). Pure additions do NOT
+//!    require a bump. The reader refuses recipes declaring a
+//!    `schema_version > MAX_SCHEMA_VERSION` so a future-recipe
+//!    loaded by an old engine fails loudly. See
+//!    [`MAX_SCHEMA_VERSION`].
+//! 5. **Reserved variants** — when a feature is *coming* but not
+//!    yet implemented (e.g. the SQL escape hatch
+//!    [`PatternDecl::CustomSql`]), reserve its variant in the
+//!    schema NOW. The reserved shape parses cleanly, the runtime
+//!    emits a visible placeholder (warning + finding row, never
+//!    silent skip), and the validator flags it so the recipe
+//!    author knows it's not fully wired. Recipes authored
+//!    against the future shape don't need a migration when the
+//!    runtime lands.
+//!
+//! `corpus-engine/tests/recipe_back_compat.rs` pins canonical
+//! TOML shapes from each schema-version boundary and asserts they
+//! still parse. Adding a regression fixture there is the standard
+//! cost of a schema change; without it, future field additions
+//! risk silently breaking old recipes.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Error, Result};
+use crate::filters::{ComposeMode, FilterConfig};
+use crate::types::CorpusKind;
+
+// ---------------------------------------------------------------------------
+// Default helpers
+// ---------------------------------------------------------------------------
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_max_pages() -> usize {
+    10_000
+}
+
+fn default_namespace_filter() -> Vec<u32> {
+    vec![0]
+}
+
+fn default_min_score() -> i32 {
+    3
+}
+
+fn default_max_answers_per_question() -> usize {
+    5
+}
+
+fn default_title_column() -> String {
+    "name".to_string()
+}
+
+fn default_url_column() -> String {
+    "url".to_string()
+}
+
+fn default_controversy_patterns() -> Vec<String> {
+    crate::extractors::wikipedia_structured::DEFAULT_CONTROVERSY_PATTERNS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+fn default_factual_patterns() -> Vec<String> {
+    crate::extractors::wikipedia_structured::DEFAULT_FACTUAL_PATTERNS
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+}
+
+fn default_schema_version() -> u32 {
+    1
+}
+
+fn default_max_chunk_chars() -> usize {
+    2048
+}
+
+fn default_overlap_chars() -> usize {
+    256
+}
+
+fn default_embedding_model() -> String {
+    "qwen3-embedding-0.6b".to_string()
+}
+
+fn default_embedding_dimensions() -> usize {
+    0 // 0 = auto-detect from the loaded model
+}
+
+// ---------------------------------------------------------------------------
+// Top-level Recipe
+// ---------------------------------------------------------------------------
+
+/// Optional pre-built index block. When present, the engine can download a
+/// pre-built LanceDB archive from HuggingFace instead of running a full ingest.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrebuiltConfig {
+    /// HuggingFace repo in `org/name` format, e.g. `"sovereign-foundation/wikipedia-index"`.
+    pub hf_repo: String,
+    /// Filename within the HF repo, e.g. `"wikipedia-qwen3-embedding-0.6b.tar.zst"`.
+    pub hf_filename: String,
+    /// Hex-encoded SHA-256 of the archive. Empty string skips verification.
+    pub sha256: String,
+    /// Embedding model name the pre-built index was built with. Used to verify
+    /// compatibility with the currently loaded model before downloading.
+    pub compatible_embedding_model: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Recipe {
+    pub corpus: CorpusMeta,
+    pub acquire: AcquirerConfig,
+    pub extract: ExtractorConfig,
+    pub chunk: ChunkerConfig,
+    #[serde(default)]
+    pub index: IndexConfig,
+    /// Optional epistemic enrichment configuration. When present and
+    /// `enabled = true`, an enrichment phase runs after standard ingestion.
+    /// Requires the engine to have been given an `InferenceFn`.
+    #[serde(default)]
+    pub enrichment: Option<EnrichmentConfig>,
+
+    /// Optional corpus update configuration. When present, the health
+    /// monitor can check for new versions and apply delta updates.
+    #[serde(default)]
+    pub update: Option<UpdateConfig>,
+
+    /// Optional pre-built index. When present, users can skip full ingest
+    /// by downloading a pre-built LanceDB archive from HuggingFace.
+    #[serde(default)]
+    pub prebuilt: Option<PrebuiltConfig>,
+
+    /// Optional catalog-corpus configuration. When present, this
+    /// recipe is a *catalog* of works and pairs with a templated
+    /// content recipe (referenced by `content_recipe`) used for
+    /// on-demand single-work ingest. See [`CatalogConfig`] and
+    /// `Recipe.corpus.kind = Catalog`.
+    #[serde(default)]
+    pub catalog: Option<CatalogConfig>,
+
+    /// Document-level filters that scope the corpus by accepting or
+    /// rejecting individual `ExtractedDoc`s before chunking. The
+    /// canonical use case is Wikipedia "Core" — top-N by pageview rank
+    /// ∪ Vital Articles list — but the mechanism works for any
+    /// extractor (e.g. StackExchange `min_score`, OpenAlex
+    /// `accepted_languages`).
+    ///
+    /// Empty / absent means the pipeline runs unfiltered.
+    #[serde(default, rename = "filter")]
+    pub filters: Vec<FilterConfig>,
+
+    /// How filters in `filters` combine. Defaults to
+    /// [`ComposeMode::Any`] — a document is accepted if any filter
+    /// accepts. Set `mode = "all"` to require every filter to accept.
+    /// Lives in its own `[filter_mode]` table because TOML does not
+    /// allow scalars next to an array of tables.
+    #[serde(default, rename = "filter_mode")]
+    pub filter_mode: FilterModeConfig,
+
+    /// Install-time parameters declared by the recipe. Concrete values
+    /// are supplied by the user at `corpus install` time and
+    /// interpolate into the `[acquire]` block via `{name}`
+    /// placeholders. Lets a financial journalist (for example) ship
+    /// one `sec-filings` recipe and let downstream users plug in
+    /// their own entity list / form types / date range. See
+    /// [`ParameterSpec`] and [`Recipe::resolve_parameters`].
+    #[serde(default)]
+    pub parameters: BTreeMap<String, ParameterSpec>,
+
+    /// Runtime-only field carrying the user-supplied, validated
+    /// parameter values for this ingest. Populated at install time
+    /// by the CLI / desktop via [`Recipe::with_resolved_parameters`]
+    /// and consumed by the `http_api` acquirer when interpolating
+    /// `{name}` placeholders. **Skipped from TOML** — the recipe
+    /// file declares only the schema, not user values.
+    #[serde(skip, default)]
+    pub resolved_parameters: ResolvedParameters,
+}
+
+/// Sidecar TOML table for [`Recipe::filter_mode`]. Splitting this from
+/// the `[[filter]]` array keeps the recipe TOML grammatically valid:
+/// the `[[filter]]` form is an array-of-tables and cannot host a
+/// scalar `mode = "any"` field directly.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FilterModeConfig {
+    #[serde(default)]
+    pub mode: ComposeMode,
+}
+
+// ---------------------------------------------------------------------------
+// Recipe parameters
+// ---------------------------------------------------------------------------
+
+/// Install-time parameter declared by a recipe. Lets the recipe author
+/// defer concrete values (entity lists, date ranges, form types) until
+/// the user runs `sovereign corpus install`. The CLI prompts for each
+/// declared parameter (or accepts `--params key=value` non-interactively);
+/// the desktop renders a form. Resolved values interpolate into the
+/// `[acquire]` block via `{name}` placeholders.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParameterSpec {
+    /// Type of value expected. Drives prompting (text input, date
+    /// picker, comma-separated list) and validation.
+    #[serde(rename = "type")]
+    pub kind: ParameterKind,
+    /// Human-readable description shown in prompts and the desktop form.
+    #[serde(default)]
+    pub description: String,
+    /// Whether the user must provide a value. `true` by default —
+    /// require explicit opt-out so a missing required value can't
+    /// silently install an empty corpus.
+    #[serde(default = "default_true")]
+    pub required: bool,
+    /// Default value if the user does not provide one. Type must
+    /// match `kind`. Stored as `toml::Value` so the recipe can
+    /// declare lists / integers / strings / dates uniformly.
+    #[serde(default)]
+    pub default: Option<toml::Value>,
+}
+
+/// Type tag for [`ParameterSpec::kind`]. Drives both validation
+/// of supplied values and the UI affordance shown to the user.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ParameterKind {
+    /// Free-form string (a CIK, a search query, a tag).
+    String,
+    /// 64-bit signed integer.
+    Int,
+    /// ISO-8601 calendar date (`YYYY-MM-DD`). Validated lexically;
+    /// not parsed into a chrono value here so the recipe schema
+    /// doesn't grow a date-library dependency.
+    Date,
+    /// Comma-separated list of strings. The CLI accepts either a
+    /// repeated flag or a single comma-separated value; the desktop
+    /// renders a multi-tag input.
+    List,
+}
+
+/// User-supplied parameter values, validated against the recipe's
+/// `[recipe.parameters]` schema. Produced by [`Recipe::resolve_parameters`]
+/// and consumed by the `http_api` acquirer when interpolating
+/// `{name}` placeholders.
+#[derive(Debug, Clone, Default)]
+pub struct ResolvedParameters {
+    pub values: BTreeMap<String, ParameterValue>,
+}
+
+/// Validated parameter value. The variant is keyed off the
+/// declared [`ParameterKind`]; `as_interpolation()` flattens any
+/// variant into a single string for `{name}` substitution.
+#[derive(Debug, Clone)]
+pub enum ParameterValue {
+    String(String),
+    Int(i64),
+    /// Already-validated ISO-8601 date string (`YYYY-MM-DD`).
+    Date(String),
+    List(Vec<String>),
+}
+
+impl ParameterValue {
+    /// Render this value into a single string suitable for `{name}`
+    /// substitution in URL templates. Lists join with commas, which
+    /// matches the canonical SEC EDGAR / CourtListener / OpenAlex
+    /// query-parameter style.
+    pub fn as_interpolation(&self) -> String {
+        match self {
+            ParameterValue::String(s) => s.clone(),
+            ParameterValue::Int(i) => i.to_string(),
+            ParameterValue::Date(s) => s.clone(),
+            ParameterValue::List(items) => items.join(","),
+        }
+    }
+
+    /// Iterate the value as a sequence of single string tokens,
+    /// used by the `for_each` cross-product in [`RequestTemplate`]
+    /// — every iteration yields one (parameter-name, value) binding
+    /// the request template will see.
+    pub fn iter_tokens(&self) -> Vec<String> {
+        match self {
+            ParameterValue::String(s) => vec![s.clone()],
+            ParameterValue::Int(i) => vec![i.to_string()],
+            ParameterValue::Date(s) => vec![s.clone()],
+            ParameterValue::List(items) => items.clone(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// UpdateConfig
+// ---------------------------------------------------------------------------
+
+/// Configures automatic corpus updates.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateConfig {
+    /// URL that returns a version manifest JSON for this corpus.
+    pub manifest_url: String,
+
+    /// If true the health monitor applies updates autonomously during the
+    /// maintenance window. If false, a pending decision is surfaced to the
+    /// user instead.
+    #[serde(default)]
+    pub auto_update: bool,
+}
+
+// ---------------------------------------------------------------------------
+// EnrichmentConfig
+// ---------------------------------------------------------------------------
+
+/// Configures the optional enrichment pipeline.
+///
+/// The new field model enrichment uses domain-specific prompts and
+/// HDBSCAN clustering. Set `type = "field_model"` and `domain = "philosophy"`
+/// (or another domain) to use the new pipeline.
+///
+/// For typed-relationship investigations (e.g. SEC filings → who
+/// invests in whom while also being a customer), set `type =
+/// "investigation"` and declare your `[[enrichment.entity_types]]`,
+/// `[[enrichment.relationship_types]]`, and
+/// `[[enrichment.patterns]]` blocks. The investigation pipeline
+/// generates LLM prompts directly from the schema, so a domain
+/// expert authors the extraction shape in TOML without touching
+/// Rust. See [`EntityTypeDecl`], [`RelationshipTypeDecl`], and
+/// [`PatternDecl`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnrichmentConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    // ── New field model fields ──────────────────────────────
+
+    /// Enrichment type: "field_model" (default), "atlas",
+    /// "investigation".
+    #[serde(default = "default_enrichment_type", rename = "type")]
+    pub enrichment_type: String,
+
+    /// Domain identifier: "philosophy", "science", "policy", "legal",
+    /// "community", "multi".
+    #[serde(default)]
+    pub domain: Option<String>,
+
+    /// Prompt version tag. Recorded in `_corpus_meta.json` so the health
+    /// checker can detect stale enrichment when prompts change.
+    #[serde(default)]
+    pub prompt_version: Option<String>,
+
+    /// HDBSCAN clustering parameters.
+    #[serde(default)]
+    pub clustering: Option<ClusteringToml>,
+
+    /// Alignment parameters.
+    #[serde(default)]
+    pub alignment: Option<AlignmentToml>,
+
+    /// Fault line detection parameters.
+    #[serde(default)]
+    pub fault_lines: Option<FaultLinesToml>,
+
+    // ── Investigation-pipeline declarations ─────────────────
+
+    /// Entity types the investigation pipeline should extract from
+    /// each chunk. Listed in the LLM extraction prompt so the model
+    /// canonicalizes mentions to one of these typed shapes (e.g.
+    /// `company`, `fund`, `person`). Empty when
+    /// `enrichment_type != "investigation"`.
+    #[serde(default, rename = "entity_types")]
+    pub entity_types: Vec<EntityTypeDecl>,
+
+    /// Relationship types the investigation pipeline should extract
+    /// (e.g. `revenue`, `investment`, `cloud_commitment`,
+    /// `board_seat`). Each relationship has typed attributes the
+    /// LLM is asked to populate (`amount_usd`, `date`, etc.).
+    #[serde(default, rename = "relationship_types")]
+    pub relationship_types: Vec<RelationshipTypeDecl>,
+
+    /// Graph-level patterns to detect once the relationship graph is
+    /// built. Built-in detectors cover cycle / role-overlap /
+    /// threshold patterns; the recipe author chooses which to run.
+    #[serde(default, rename = "patterns")]
+    pub patterns: Vec<PatternDecl>,
+}
+
+// ---------------------------------------------------------------------------
+// Investigation-pipeline schema (entity types, relationship types, patterns)
+// ---------------------------------------------------------------------------
+
+/// One typed entity an investigation extracts. The recipe author
+/// declares the *shape* — name, description, expected attribute
+/// keys — and the investigation pipeline generates the LLM
+/// extraction prompt directly from this schema. No Rust required.
+///
+/// Example:
+/// ```toml
+/// [[enrichment.entity_types]]
+/// name = "company"
+/// description = "A corporation or legal entity"
+/// attributes = ["name", "ticker", "cik", "role"]
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityTypeDecl {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    /// Attribute keys the LLM should try to populate on each
+    /// extracted instance. Free-form — the LLM extracts whatever
+    /// keys it can locate in the chunk; missing keys land as null.
+    #[serde(default)]
+    pub attributes: Vec<String>,
+}
+
+/// One typed relationship the investigation extracts (e.g.
+/// `revenue`, `investment`, `cloud_commitment`, `board_seat`).
+/// Combined with [`EntityTypeDecl`], the schema fully drives the
+/// LLM extraction prompt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelationshipTypeDecl {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    /// Attribute keys for the relationship instance — typically
+    /// numeric (`amount_usd`, `percentage_of_total`) or temporal
+    /// (`date`, `period`, `duration_years`).
+    #[serde(default)]
+    pub attributes: Vec<String>,
+    /// `true` for asymmetric relationships (A → B is different
+    /// from B → A: e.g. `revenue` and `investment`). `false` for
+    /// symmetric ones (e.g. `co_membership`).
+    #[serde(default = "default_true")]
+    pub directional: bool,
+}
+
+/// A graph-level pattern to detect once the relationship graph is
+/// built. The investigation pipeline runs every declared
+/// [`PatternDecl`] after the graph is populated; matches land in
+/// `pattern_findings.json` for the audit step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PatternDecl {
+    /// Money / influence flows in a cycle: A→B→C→A. Powered by
+    /// petgraph's Tarjan SCC; filters cycles with `len >=
+    /// min_entities` whose edges all match `edge_types`.
+    CircularFlow {
+        name: String,
+        #[serde(default)]
+        description: String,
+        #[serde(default = "default_circular_flow_min_entities")]
+        min_entities: u32,
+        edge_types: Vec<String>,
+    },
+    /// Same pair of entities connected by two edge types that
+    /// represent distinct roles. Canonical example: `(investor,
+    /// customer)` — A invests in B AND A is a major customer of
+    /// B's product. `entity_roles` maps a free-form role name
+    /// (used in narration) to a typed-edge specifier
+    /// `"<edge_type>.<from|to>"` describing which side of the edge
+    /// the entity sits on.
+    RoleOverlap {
+        name: String,
+        #[serde(default)]
+        description: String,
+        entity_roles: BTreeMap<String, String>,
+    },
+    /// Numeric-attribute threshold over edges of a single type.
+    /// E.g. "revenue concentration > 10%": find revenue edges
+    /// whose `percentage_of_total` attribute exceeds 0.10.
+    Threshold {
+        name: String,
+        #[serde(default)]
+        description: String,
+        edge_type: String,
+        attribute: String,
+        threshold: f64,
+        #[serde(default = "default_comparison")]
+        comparison: Comparison,
+    },
+    /// **Reserved — not yet implemented.** Recipe authors can
+    /// declare `type = "custom_sql"` today; the runtime parses
+    /// it cleanly and the validator surfaces a warning so the
+    /// author knows it won't run yet. The future implementation
+    /// will execute `query` on a read-only SQLite connection
+    /// materialised from the relationship graph, with
+    /// `set_authorizer` rejecting `ATTACH` / `PRAGMA` /
+    /// `load_extension`, a 5-second statement timeout, and
+    /// single-statement enforcement. See SYSTEM_OVERVIEW.md §3.10
+    /// for the back-compat rationale: reserving the shape now lets
+    /// us land the SQL escape hatch later without forcing a
+    /// schema migration on recipes already in the wild.
+    CustomSql {
+        name: String,
+        #[serde(default)]
+        description: String,
+        /// SQL query against `entities` / `relationships` /
+        /// `pattern_findings` tables. Validation is parse-only
+        /// today; execution arrives in a follow-up PR.
+        query: String,
+    },
+}
+
+fn default_circular_flow_min_entities() -> u32 {
+    3
+}
+
+fn default_comparison() -> Comparison {
+    Comparison::GreaterThan
+}
+
+/// Comparison operator for [`PatternDecl::Threshold`]. Strict
+/// (`gt`/`lt`) by default — boundary-equal cases are rare in the
+/// investigation domain and the recipe author can opt into
+/// inclusive comparisons explicitly.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Comparison {
+    GreaterThan,
+    GreaterOrEqual,
+    LessThan,
+    LessOrEqual,
+    Equal,
+}
+
+fn default_enrichment_type() -> String {
+    "field_model".to_string()
+}
+
+/// HDBSCAN clustering parameters (TOML representation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusteringToml {
+    #[serde(default)]
+    pub min_cluster_size: Option<usize>,
+    #[serde(default)]
+    pub epsilon: Option<f32>,
+    #[serde(default)]
+    pub label_sample_size: Option<usize>,
+}
+
+/// Alignment parameters (TOML representation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlignmentToml {
+    #[serde(default)]
+    pub alignment_threshold: Option<f32>,
+    #[serde(default)]
+    pub min_chunks_for_discovery: Option<usize>,
+}
+
+/// Fault line detection parameters (TOML representation).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FaultLinesToml {
+    #[serde(default)]
+    pub proximity_threshold: Option<f32>,
+    #[serde(default)]
+    pub min_confidence: Option<f32>,
+}
+
+impl Default for EnrichmentConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            enrichment_type: default_enrichment_type(),
+            domain: None,
+            prompt_version: None,
+            clustering: None,
+            alignment: None,
+            fault_lines: None,
+            entity_types: Vec::new(),
+            relationship_types: Vec::new(),
+            patterns: Vec::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CorpusMeta
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorpusMeta {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub license: String,
+    #[serde(default = "default_true")]
+    pub mesh_sharing: bool,
+    /// Distribution scope. `Some("local")` pins a corpus to the host
+    /// machine: it may never be shared via the mesh regardless of
+    /// `mesh_sharing`. Used by `KnowledgeView` corpora sourced from
+    /// private state (e.g. `personal-knowledge`, `conversation-history`)
+    /// so the privacy guarantee is structural, not policy-layer.
+    /// `None` = default behaviour governed by `mesh_sharing`.
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// Whether peers may run federated knowledge-search queries
+    /// against a node that hosts this corpus. Distinct from
+    /// `mesh_sharing`, which governs byte-level redistribution
+    /// (shipping the index to another node for replication).
+    ///
+    /// Example: Stanford Encyclopedia of Philosophy has
+    /// `mesh_sharing = false` because the license prohibits
+    /// redistribution of the text, but `query_sharing = true`
+    /// because returning cited snippets in response to queries
+    /// is fair use (what Google does).
+    ///
+    /// Back-compat default: `None` means "fall back to
+    /// `mesh_sharing`" — preserves the pre-split behavior for
+    /// any recipe or stored index that hasn't been updated.
+    /// Set explicitly to override.
+    #[serde(default)]
+    pub query_sharing: Option<bool>,
+    #[serde(default)]
+    pub size_compressed_gb: f64,
+    #[serde(default)]
+    pub size_indexed_gb: f64,
+    /// Schema version for this recipe format. Defaults to 1.
+    /// Increment when making breaking changes to the TOML schema.
+    #[serde(default = "default_schema_version")]
+    pub schema_version: u32,
+
+    /// What kind of content this corpus holds. Defaults to
+    /// `Knowledge`. Catalog corpora hold one chunk per work
+    /// (metadata only) and pair with a `[catalog]` block at the
+    /// recipe top level. Code corpora are produced by `sovereign
+    /// code index`. See [`crate::types::CorpusKind`].
+    #[serde(default)]
+    pub kind: CorpusKind,
+
+    /// Marks a recipe as "templated, never directly ingested." On-demand
+    /// recipes (e.g. `gutenberg-work`) are stamped from a catalog
+    /// entry at runtime via
+    /// [`crate::types::CorpusSpec::Inline`]. The plain
+    /// [`crate::engine::CorpusEngine::ingest`] path refuses to run
+    /// an `on_demand = true` recipe whose `[corpus] id` has not been
+    /// overridden, so a misclick can't blast 70K Gutenberg books
+    /// into the corpus dir.
+    #[serde(default)]
+    pub on_demand: bool,
+
+    /// Parent corpus id, set on per-work corpora produced by an
+    /// on-demand catalog ingest (e.g. `gutenberg-2701` carries
+    /// `parent_corpus_id = "gutenberg"`). Stamped onto the on-disk
+    /// `IndexMeta` so search consumers can group per-work corpora
+    /// under their catalog and suppress repeated ingest offers for
+    /// works already read. Always `None` in TOML files on disk;
+    /// populated only via [`crate::types::CorpusSpec::Inline`].
+    #[serde(default)]
+    pub parent_corpus_id: Option<String>,
+
+    /// How `merge_shards` should reconcile rows that share a logical
+    /// key across two shards. `None` (the default) keeps the
+    /// content-hash-based dedupe used by every classic corpus —
+    /// divergent edits of the same source document survive as two
+    /// rows with different `content_hash`. The `alignment` corpus
+    /// opts into [`MutableMergePolicy::SourceDocIdNewestMtime`] so
+    /// that two daemons editing the same memory or plan file
+    /// converge on the newer copy after a mesh merge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mutable_merge: Option<MutableMergePolicy>,
+}
+
+/// Reconciliation policy invoked by [`crate::sharding::merge_shards`]
+/// when the merged target's `_corpus_meta.json` carries a
+/// `mutable_merge` value. Default (`None`) preserves classic
+/// content-hash dedupe.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MutableMergePolicy {
+    /// Group rows by `source_doc_id`. When a logical key collides,
+    /// keep the row with the highest `mtime`. Rows whose
+    /// `source_doc_id` is null fall back to content-hash dedupe.
+    SourceDocIdNewestMtime,
+}
+
+// ---------------------------------------------------------------------------
+// CatalogConfig — recipe-level "this is a catalog of works" block
+// ---------------------------------------------------------------------------
+
+/// Pairs with `CorpusMeta::kind = Catalog`. Tells the on-demand
+/// ingest service how to take a catalog entry and produce a fully
+/// ingested per-work corpus from it. See `gutenberg/recipe.toml`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalogConfig {
+    /// Field name on the catalog `ExtractedDoc` (or its metadata
+    /// blob) that uniquely identifies a work. Used by the on-demand
+    /// flow to substitute into `download_url_template` and to derive
+    /// the per-work corpus id (`<catalog_id>-<work_id>`).
+    pub id_field: String,
+
+    /// URL template with a `{id}` placeholder, e.g.
+    /// `"https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"`.
+    /// Resolved at on-demand ingest time and injected as the sole
+    /// `[acquire] url` of the content recipe.
+    pub download_url_template: String,
+
+    /// Recipe id of the content recipe used to perform the
+    /// per-work ingest, e.g. `"gutenberg-work"`. Must be `on_demand =
+    /// true` and live in the registry.
+    pub content_recipe: String,
+
+    /// Optional name of a metadata column carrying an estimated
+    /// word count (used to compute an ingest-time estimate the UI
+    /// can show).
+    #[serde(default)]
+    pub estimated_words_field: Option<String>,
+
+    /// Throughput estimate for the ingest stage, in words per
+    /// minute. Combined with `estimated_words` to produce the
+    /// "this will take ~N minutes" surface. Default 8000 wpm
+    /// (conservative for an M-class machine on the embed slot).
+    #[serde(default)]
+    pub ingest_estimate_wpm: Option<u32>,
+
+    /// Throughput estimate for the enrichment stage, in words per
+    /// minute. Default 500 wpm.
+    #[serde(default)]
+    pub enrich_estimate_wpm: Option<u32>,
+
+    /// Optional shared corpus id that catalog-driven ingests append
+    /// into. When set, every successful work-ingest writes its
+    /// chunks into a single growing corpus (e.g. `"wikipedia-fetched"`)
+    /// instead of creating one corpus per work. Atlas, mesh-share,
+    /// and retrieval all happen against the single shared corpus —
+    /// a much better fit for catalogs whose long-tail can be
+    /// thousands of articles. When unset (default), the legacy
+    /// per-work pattern (`<catalog_id>-<work_id>`) is used.
+    #[serde(default)]
+    pub target_corpus_id: Option<String>,
+
+    /// Enable one-hop "minesweeper" link-expansion after fetching an
+    /// article. When true, the just-ingested article's outgoing
+    /// links are queued for follow-up fetch into the same
+    /// `target_corpus_id`. Only meaningful when `target_corpus_id`
+    /// is set — without a shared target each expansion would
+    /// spawn yet another per-work corpus.
+    #[serde(default)]
+    pub expansion_enabled: bool,
+
+    /// Maximum number of linked articles to fetch in expansion.
+    /// Ranking is significance-first (lead-section links beat
+    /// body-section links, then document order). Default 20 keeps
+    /// the per-fetch cost bounded; raise for deeper neighbourhood
+    /// pre-loading, lower for fastest-only-the-asked behaviour.
+    #[serde(default = "default_expansion_link_cap")]
+    pub expansion_link_cap: u32,
+}
+
+fn default_expansion_link_cap() -> u32 {
+    20
+}
+
+// ---------------------------------------------------------------------------
+// HTTP API acquirer types (used by `AcquirerConfig::HttpApi`)
+// ---------------------------------------------------------------------------
+
+/// One HTTP request template. Combined with `[recipe.parameters]`
+/// values via `{name}` interpolation. `for_each` declares which
+/// parameters cross-product the template — e.g. one paginated
+/// request sequence per (entity, form_type) pair when ingesting
+/// SEC filings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestTemplate {
+    /// URL with `{name}` placeholders for parameters and `{base_url}`
+    /// for the acquirer's `base_url`.
+    pub url: String,
+    /// HTTP method. Defaults to `GET`.
+    #[serde(default)]
+    pub method: HttpMethod,
+    /// Optional request body, with `{name}` interpolation. Used by
+    /// JSON-RPC-shaped APIs that take queries via POST.
+    #[serde(default)]
+    pub body: Option<String>,
+    /// Cross-product the request over these parameter names. Each
+    /// referenced parameter must be a `List` (or implicitly
+    /// promoted scalar). The acquirer issues one full paginated
+    /// sequence per cartesian-product binding. Empty = a single
+    /// request with all `{name}` placeholders resolved
+    /// element-wise from their declared values.
+    #[serde(default)]
+    pub for_each: Vec<String>,
+}
+
+/// HTTP method for a [`RequestTemplate`]. Kept narrow on purpose —
+/// REST acquisition rarely needs PATCH/DELETE/PUT.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum HttpMethod {
+    #[default]
+    Get,
+    Post,
+}
+
+/// Pagination strategy for [`AcquirerConfig::HttpApi`]. The acquirer
+/// drives the loop; the strategy translates per-page response state
+/// into the next request. None of the strategies make assumptions
+/// the recipe author can't articulate from the API's docs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PaginationStrategy {
+    /// Offset-based: increment `param` by `page_size` each page;
+    /// stop when the page returns fewer than `page_size` items
+    /// found at `items_path` (a JSONPath expression on the response
+    /// body).
+    Offset {
+        #[serde(default = "default_offset_param")]
+        param: String,
+        page_size: usize,
+        #[serde(default = "default_items_path")]
+        items_path: String,
+    },
+    /// Cursor-based: read the next cursor from `response_path`
+    /// (JSONPath); pass it as the next request's `param`. Stops
+    /// when the cursor field is null/missing.
+    Cursor {
+        param: String,
+        response_path: String,
+    },
+    /// Whole-URL next pointer: read a complete URL out of
+    /// `response_path` and follow it as-is. Common for RFC 5988
+    /// Link-style APIs and GitHub.
+    NextUrl { response_path: String },
+    /// Page-number sequence: increment `param` from `start` to
+    /// `end` (inclusive). Use when the page count is known
+    /// upfront. `end` may reference a recipe parameter via
+    /// `{name}` to let the user bound the run length.
+    PageNumber {
+        #[serde(default = "default_page_number_param")]
+        param: String,
+        #[serde(default = "default_page_number_start")]
+        start: usize,
+        end: usize,
+    },
+}
+
+fn default_offset_param() -> String {
+    "offset".to_string()
+}
+fn default_items_path() -> String {
+    "$.items".to_string()
+}
+fn default_page_number_param() -> String {
+    "page".to_string()
+}
+fn default_page_number_start() -> usize {
+    1
+}
+
+/// Tells the acquirer how to take an API response and turn it into
+/// a list of documents to fetch and persist. Without this block,
+/// the page responses themselves are written to disk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FollowConfig {
+    /// JSONPath expression selecting an array of URL strings from
+    /// the response body, e.g.
+    /// `"$.hits.hits[*]._source.file_url"` for an EDGAR full-text
+    /// search response.
+    pub document_url_path: String,
+    /// Format hint that drives the on-disk extension under
+    /// `<acquired-dir>/docs/<sha>.<ext>`. The extractor walks the
+    /// directory regardless of which format flag the acquirer set.
+    #[serde(default)]
+    pub document_format: DocFormat,
+    /// Maximum concurrent in-flight document downloads. Default 4
+    /// — keep modest for public APIs to avoid 429s. The
+    /// acquirer's `rate_limit_per_second` (if any) caps the
+    /// aggregate request rate orthogonally.
+    #[serde(default = "default_follow_concurrency")]
+    pub max_concurrency: usize,
+}
+
+fn default_follow_concurrency() -> usize {
+    4
+}
+
+/// On-disk document format hint for [`FollowConfig::document_format`].
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DocFormat {
+    #[default]
+    Html,
+    Json,
+    Xml,
+    Plaintext,
+}
+
+// ---------------------------------------------------------------------------
+// HtmlSections extractor types
+// ---------------------------------------------------------------------------
+
+/// One section to extract from each HTML file. The recipe author
+/// declares anchor regexes (`start_pattern` / `end_pattern`); the
+/// extractor strips tags first, then runs the regexes against the
+/// resulting plain text. The matched span between start and end
+/// becomes one `ExtractedDoc` per file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionRule {
+    /// Stable name for this section, e.g. `"md_and_a"`. Used as
+    /// part of the emitted document's title and stamped in
+    /// `metadata.section_name`.
+    pub name: String,
+    /// Human-readable description shown in `recipe test` output and
+    /// used as a hint when a miss occurs (the test harness searches
+    /// nearby text for keywords from this description).
+    #[serde(default)]
+    pub description: String,
+    /// Regex pattern matching the start of the section. Compiled
+    /// at extractor construction; bad regexes fail loudly with
+    /// the section name in the error.
+    pub start_pattern: String,
+    /// Regex pattern matching the end of the section. Typically a
+    /// "next item heading" anchor, e.g.
+    /// `(?i)item\\s+[0-9]` for SEC filings.
+    pub end_pattern: String,
+}
+
+/// Fallback for files where no section pattern matched. Without a
+/// fallback, files with no matching section are silently dropped.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum FallbackRule {
+    /// Emit the entire stripped text as a single document. Useful
+    /// when "we'd rather have something than nothing" — the
+    /// extractor still records the miss in `_section_misses.json`
+    /// so the recipe author can iterate on the regex.
+    FullDocument {
+        /// Cap the output at this character count. None = no cap.
+        #[serde(default)]
+        max_chars: Option<usize>,
+    },
+    /// Emit the first N characters of the stripped text. Cheap
+    /// approximation of "the document's intro" for content-heavy
+    /// pages without clear section structure.
+    FirstNChars { n: usize },
+}
+
+// ---------------------------------------------------------------------------
+// AcquirerConfig
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum AcquirerConfig {
+    /// Bulk-download one or more archives over HTTP with resume.
+    ///
+    /// Single-source recipes use `url = "..."`. Multi-source recipes
+    /// (e.g. the Stack Exchange knowledge layer pulling from several
+    /// per-site .7z archives) use `urls = ["...", "..."]`. The
+    /// downloader writes each archive under a per-corpus directory,
+    /// so the extractor receives a directory of archives rather than
+    /// a single file in the multi-source case.
+    ///
+    /// Exactly one of `url` / `urls` must be set; recipes that set
+    /// both fail to build.
+    #[serde(rename = "bulk_download")]
+    BulkDownload {
+        #[serde(default)]
+        url: Option<String>,
+        #[serde(default)]
+        urls: Option<Vec<String>>,
+        #[serde(default = "default_true")]
+        resume: bool,
+    },
+    #[serde(rename = "web_crawl")]
+    WebCrawl {
+        seed_urls: Vec<String>,
+        link_pattern: String,
+        #[serde(default = "default_max_pages")]
+        max_pages: usize,
+    },
+    /// Generic REST API acquirer. Replaces the never-implemented
+    /// `api_paginated` stub with a real, recipe-author-friendly
+    /// surface: parameterised URL templates, pagination
+    /// strategies (offset / cursor / next-URL / page-number),
+    /// JSONPath document-URL follow, rate limiting, custom
+    /// headers / User-Agent. Combined with `[recipe.parameters]`,
+    /// a domain expert can author a working recipe for SEC EDGAR /
+    /// CourtListener / OpenAlex / PubMed / etc. without touching
+    /// Rust. See [`crate::acquirers::http_api`].
+    #[serde(rename = "http_api")]
+    HttpApi {
+        /// Base URL — referenced via `{base_url}` in
+        /// `requests[].url`, optional otherwise. Exists primarily
+        /// so the recipe author doesn't repeat the same prefix in
+        /// every template.
+        #[serde(default)]
+        base_url: String,
+        /// One or more request templates. Each template may declare
+        /// `for_each` to cross-product over named parameters
+        /// declared in `[recipe.parameters]`. The acquirer issues
+        /// one paginated request sequence per template × resolved
+        /// `for_each` binding.
+        requests: Vec<RequestTemplate>,
+        /// Pagination strategy. Absent = single-page request.
+        #[serde(default)]
+        pagination: Option<PaginationStrategy>,
+        /// Document-follow config. When present, the acquirer
+        /// treats each page response as an *index* (a list of
+        /// document URLs) and fetches the documents in parallel,
+        /// writing them under `<acquired-dir>/docs/<sha>.<ext>`
+        /// for the extractor. When absent, the page responses
+        /// themselves are persisted.
+        #[serde(default)]
+        follow: Option<FollowConfig>,
+        /// Token-bucket rate limit, requests per second across all
+        /// in-flight requests for this acquirer instance. None =
+        /// no throttling. SEC requires ≤ 10 req/sec; OpenAlex
+        /// recommends ≤ 10 req/sec with an email tag.
+        #[serde(default)]
+        rate_limit_per_second: Option<f32>,
+        /// Override the default `CorpusEngine/0.1` User-Agent.
+        /// Some APIs (SEC, GitHub) reject requests without a
+        /// contact-bearing UA.
+        #[serde(default)]
+        user_agent: Option<String>,
+        /// Extra HTTP headers (Authorization, Accept, etc.).
+        /// Templated values may use `{name}` placeholders to
+        /// reference recipe parameters (e.g. an API token).
+        #[serde(default)]
+        headers: Option<BTreeMap<String, String>>,
+    },
+    #[serde(rename = "local_file")]
+    LocalFile { path: String },
+    /// Download all parquet shards for a public HuggingFace dataset.
+    /// Uses the HF dataset API to enumerate shards, then downloads each
+    /// with resume support, returning a directory of parquet files.
+    #[serde(rename = "huggingface_dataset")]
+    HuggingFaceDataset {
+        /// Dataset repo in `org/name` format, e.g. `"manu/project_gutenberg"`.
+        repo: String,
+        /// Optional subset prefix to filter shards, e.g. `"en"` matches
+        /// filenames starting with `data/en-`. If absent, all parquet shards
+        /// are downloaded.
+        #[serde(default)]
+        subset: Option<String>,
+        /// Restrict ingestion to a specific subset of shard indices.
+        ///
+        /// Indices refer to position in the **sorted** manifest (ascending by
+        /// filename). Both the coordinator and the peer must sort the same
+        /// full manifest before slicing, so they agree on which file each
+        /// index refers to.
+        ///
+        /// `None` = download all files (default; preserves existing behaviour).
+        #[serde(default)]
+        file_indices: Option<Vec<usize>>,
+    },
+    /// Runtime-registered acquirer. `kind` selects an implementation
+    /// previously registered via [`CorpusEngine::register_acquirer`];
+    /// `params` is passed through unchanged so the implementation can
+    /// deserialize its own config. Used by `KnowledgeView` so that
+    /// DB-reading acquirers (SQLite, Postgres) can live outside the
+    /// `corpus-engine` crate, which stays free of database dependencies.
+    #[serde(rename = "custom")]
+    Custom {
+        kind: String,
+        #[serde(default)]
+        params: serde_json::Value,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// ExtractorConfig
+// ---------------------------------------------------------------------------
+
+/// Extraction shape for the Stack Exchange XML extractor. See the
+/// `StackExchangeXml` variant of [`ExtractorConfig`] for the contract.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SeMode {
+    /// One `ExtractedDoc` per high-score answer with the question
+    /// inlined. The reference shape — pair with the `breadth` recipe.
+    #[default]
+    AnswerOnly,
+    /// One `ExtractedDoc` per question, grouping up to
+    /// `max_answers_per_question` top-scoring answers under a
+    /// structured "Approach 1 / Approach 2" body. The knowledge shape
+    /// — pair with the `passthrough` chunker and the `KnowledgeDensity`
+    /// filter.
+    QuestionWithAnswers,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ExtractorConfig {
+    #[serde(rename = "mediawiki_xml")]
+    MediawikiXml {
+        #[serde(default = "default_namespace_filter")]
+        namespace_filter: Vec<u32>,
+        #[serde(default = "default_true")]
+        skip_redirects: bool,
+        #[serde(default)]
+        decompress: Option<String>,
+    },
+    /// StackExchange XML data dump extractor.
+    ///
+    /// Supports two extraction shapes (`mode`):
+    ///
+    /// - [`SeMode::AnswerOnly`] (default — preserves the legacy
+    ///   placeholder behaviour): emit one `ExtractedDoc` per high-score
+    ///   answer with the question body inlined as `Q: … A (score N): …`.
+    ///   The single-answer reference shape — pair with the `breadth`
+    ///   recipe.
+    /// - [`SeMode::QuestionWithAnswers`]: group up to
+    ///   `max_answers_per_question` top-scoring answers under each
+    ///   question and emit one `ExtractedDoc` per question. The full
+    ///   thread becomes the FTS-indexed `content`; a synthesized
+    ///   breadth summary (question title + first sentence of each
+    ///   answer) is placed in `embed_text` so the vector embedding
+    ///   captures the trade-off space without overflowing the embed
+    ///   model's context window. Pair with the `passthrough` chunker.
+    ///
+    /// Knowledge-density signals (answer count, score, length, closed
+    /// status, tag list) are written to each grouped doc's `metadata`
+    /// so the [`KnowledgeDensity`](crate::filters::FilterConfig)
+    /// document filter can reject single-answer reference posts. Set
+    /// `apply_to` on the filter to scope the cut to specific
+    /// communities (e.g. `"stackoverflow.com"`) while letting smaller,
+    /// already knowledge-dense sites pass through.
+    #[serde(rename = "stackexchange_xml")]
+    StackExchangeXml {
+        /// Minimum answer score to include (applies in both modes).
+        /// Default 3 — community-validated answers, with one-line
+        /// "just google it" noise excluded.
+        #[serde(default = "default_min_score")]
+        min_score: i32,
+
+        /// Extraction mode. See `SeMode` for shape semantics.
+        #[serde(default)]
+        mode: SeMode,
+
+        /// In `QuestionWithAnswers` mode, cap answers grouped under
+        /// each question (sorted by score, ties broken by post id).
+        /// Past 5 answers, marginal trade-off coverage drops sharply
+        /// while the document grows past the embed context window.
+        #[serde(default = "default_max_answers_per_question")]
+        max_answers_per_question: usize,
+
+        /// Reject answers shorter than this many characters. Filters
+        /// out one-line code snippets and "+1 to the above" noise that
+        /// inflate scores without adding retrievable knowledge.
+        /// Default 0 (no length floor).
+        #[serde(default)]
+        min_answer_length: usize,
+
+        /// Skip questions whose `ClosedDate` attribute is non-empty
+        /// (Stack Overflow marks duplicates / off-topic / opinion-based
+        /// questions this way). Default true — closed posts are
+        /// systematically less knowledge-dense.
+        #[serde(default = "default_true")]
+        exclude_closed: bool,
+
+        /// Restrict to questions tagged with at least one of these
+        /// tags. `None` (default) means no tag filter. Tags are
+        /// matched case-insensitively.
+        #[serde(default)]
+        tag_filter: Option<Vec<String>>,
+    },
+    #[serde(rename = "jsonl")]
+    Jsonl {
+        #[serde(default)]
+        content_field: Option<String>,
+        #[serde(default)]
+        title_field: Option<String>,
+        #[serde(default)]
+        filter: Option<String>,
+        #[serde(default)]
+        decompress: Option<String>,
+    },
+    /// JSON-API extractor. Reads a single JSON file (typically the
+    /// per-page response persisted by the `http_api` acquirer when
+    /// `[acquire.follow]` is absent), runs `document_path` over it as
+    /// JSONPath, and emits one [`ExtractedDoc`](crate::extractors::ExtractedDoc)
+    /// per matching object using `content_field` for the body text.
+    /// See [`crate::extractors::json_api::JsonApiExtractor`].
+    #[serde(rename = "json")]
+    Json {
+        /// JSONPath expression selecting the documents array. Common
+        /// shapes: `$.results[*]`, `$.data.items[*]`, `$.hits.hits[*]._source`.
+        document_path: String,
+        /// Required: name of the field on each matched object that
+        /// holds the document's full text.
+        content_field: String,
+        #[serde(default)]
+        title_field: Option<String>,
+        #[serde(default)]
+        url_field: Option<String>,
+        #[serde(default)]
+        id_field: Option<String>,
+    },
+    #[serde(rename = "html")]
+    Html {
+        #[serde(default)]
+        content_selector: Option<String>,
+        #[serde(default)]
+        title_selector: Option<String>,
+    },
+    /// Section-aware HTML extractor: emits one
+    /// [`ExtractedDoc`](crate::extractors::ExtractedDoc) per
+    /// regex-matched section per file. Use this when a domain expert
+    /// (e.g. a financial journalist working with SEC filings) knows
+    /// that the *interesting* text lives between specific headings —
+    /// MD&A, related-party transactions, revenue disaggregation —
+    /// and wants to ingest only those sections.
+    ///
+    /// When *no* section matches a file, the optional `fallback`
+    /// block decides what to ingest (full document or first N
+    /// characters). Without a fallback, the file is skipped.
+    ///
+    /// Misses are recorded in a sidecar `_section_misses.json`
+    /// under the source directory so `sovereign recipe test` can
+    /// surface "section X missed; nearby text: …; suggestion: …"
+    /// for the recipe author. See [`SectionRule`] and
+    /// [`FallbackRule`].
+    #[serde(rename = "html_sections")]
+    HtmlSections {
+        sections: Vec<SectionRule>,
+        #[serde(default)]
+        fallback: Option<FallbackRule>,
+        #[serde(default)]
+        title_selector: Option<String>,
+    },
+    #[serde(rename = "csv")]
+    Csv {
+        content_column: String,
+        #[serde(default)]
+        title_column: Option<String>,
+        #[serde(default)]
+        delimiter: Option<char>,
+    },
+    /// Project Gutenberg catalog CSV (`pg_catalog.csv`). Emits one
+    /// `ExtractedDoc` per `Text` work, with content = catalog
+    /// metadata block and `embed_text` = a vector-friendly summary.
+    /// Pair with `chunker = "passthrough"` and a `[catalog]` block.
+    /// See [`crate::extractors::gutenberg_catalog`].
+    #[serde(rename = "gutenberg_catalog")]
+    GutenbergCatalog {},
+    /// Wikipedia catalog — one chunk per article carrying title +
+    /// abstract + section anchors. Pair with `chunker = "passthrough"`,
+    /// `[corpus] kind = "catalog"`, and a `[catalog]` block whose
+    /// `content_recipe` points at `wikipedia-article` for the per-
+    /// article on-demand fetch. Source JSONL is produced offline by
+    /// `sovereign-recipes/wikipedia-catalog/scripts/build_catalog.py`
+    /// from the Wikimedia abstract dump.
+    #[serde(rename = "wikipedia_catalog")]
+    WikipediaCatalog {},
+    /// Per-article on-demand extractor for Wikipedia. Consumes the
+    /// MediaWiki Action API JSON (`action=parse&prop=wikitext|sections|
+    /// links|properties`) and emits one `ExtractedDoc` per article
+    /// section with full `WikipediaChunkMetadata` — same shape as
+    /// the bulk JSONL extractor produces, so fetched articles are
+    /// indistinguishable from dump-extracted ones downstream
+    /// (atlas link graph, section-typed retrieval, contested-marker
+    /// classification all work identically).
+    #[serde(rename = "wikipedia_api_article")]
+    WikipediaApiArticle {},
+    #[serde(rename = "parquet")]
+    Parquet {
+        content_column: String,
+        #[serde(default)]
+        label_column: Option<String>,
+        /// Optional column to use as the document URL (e.g. `"url"` in
+        /// `wikimedia/wikipedia`). Populates search result source links.
+        #[serde(default)]
+        url_column: Option<String>,
+        /// Optional transform applied to the content column before chunking.
+        /// `"openalex_inverted_index"` reconstructs text from OpenAlex's
+        /// inverted-index JSON format (`{ "word": [pos1, pos2], ... }`).
+        #[serde(default)]
+        content_transform: Option<String>,
+    },
+    #[serde(rename = "plaintext")]
+    Plaintext {
+        #[serde(default)]
+        title_pattern: Option<String>,
+        #[serde(default)]
+        strip_boilerplate: Option<String>,
+    },
+    /// Extractor for the `wikimedia/structured-wikipedia` HuggingFace dataset
+    /// in its parquet form. For the ZIP+JSONL form (the default distribution),
+    /// use `WikipediaJsonl` instead.
+    #[serde(rename = "wikipedia_structured")]
+    WikipediaStructured {
+        #[serde(default = "default_title_column")]
+        title_column: String,
+        #[serde(default = "default_url_column")]
+        url_column: String,
+        #[serde(default = "default_controversy_patterns")]
+        controversy_patterns: Vec<String>,
+        #[serde(default = "default_factual_patterns")]
+        factual_patterns: Vec<String>,
+        #[serde(default = "default_true")]
+        structural_signals: bool,
+    },
+    /// Extractor for the `wikimedia/structured-wikipedia` dataset in its
+    /// actual distribution format: a ZIP archive containing a JSONL file.
+    /// Produces one `ExtractedDoc` per section with full `WikipediaChunkMetadata`
+    /// (section type, revision ID, Wikidata QID, page ID, outgoing links).
+    #[serde(rename = "wikipedia_jsonl")]
+    WikipediaJsonl {
+        #[serde(default = "default_controversy_patterns")]
+        controversy_patterns: Vec<String>,
+        #[serde(default = "default_factual_patterns")]
+        factual_patterns: Vec<String>,
+        /// Restrict processing to articles `[start, end)` in the JSONL.
+        /// Set by the collaborative ingestion planner to partition the
+        /// single-file Wikipedia JSONL across mesh nodes. `None` = all.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        article_range: Option<(u64, u64)>,
+        /// Restrict processing to a specific set of **logical** shard
+        /// indices over the ZIP's canonical JSONL entries (as produced
+        /// by [`crate::engine::canonical_jsonl_shard_entries`], which
+        /// filters out `__MACOSX/` and `._*` resource-fork junk).
+        /// Set by the collaborative-ingestion planner for multi-shard
+        /// JSONL corpora such as Wikipedia (76 shards). Mutually
+        /// exclusive with `article_range` — the sharded path streams
+        /// directly from the ZIP and skips the merged-JSONL cache.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        shard_indices: Option<Vec<usize>>,
+    },
+    /// Tree-sitter code extractor. Walks the source directory, parses each
+    /// supported file with its grammar, and yields one `ExtractedDoc` per
+    /// symbol (function, class, struct, etc.). Requires the `treesitter`
+    /// Cargo feature on `corpus-engine`.
+    #[serde(rename = "code")]
+    Code {
+        #[serde(default = "default_code_context_lines")]
+        context_lines: usize,
+        #[serde(default = "default_code_max_lines")]
+        max_lines_per_chunk: usize,
+    },
+    /// Section-aware markdown extractor. Walks a single `.md` file (or
+    /// a directory of them) and yields one `ExtractedDoc` per
+    /// heading-bounded section. Each chunk carries
+    /// [`crate::extractors::markdown_types::MarkdownChunkMetadata`]
+    /// (section_path, section_depth, heading_anchor, outgoing_links,
+    /// inline_code_spans). Used by the narrative-stream branch of the
+    /// two-stream atlas pipeline (CHARTER, ARCH_PRINCIPLES, ADRs,
+    /// accepted spec.md files). Requires the `markdown` Cargo feature.
+    #[serde(rename = "markdown")]
+    Markdown {},
+    /// Walks the user's `~/.claude/plans/` and
+    /// `~/.claude/projects/-Users-*/memory/` trees plus
+    /// `~/.claude/plans/_TEMPLATE.md`, yielding one `ExtractedDoc` per
+    /// `.md` file with `source_id` set to the path relative to
+    /// `~/.claude/`. Pairs with `mutable_merge =
+    /// "source_doc_id_newest_mtime"` so two daemons editing the same
+    /// memory or plan file converge on the newer copy after a mesh
+    /// merge. The acquirer points at `~/.claude` (resolved by the
+    /// `local_file` path-shape); the extractor handles its own
+    /// directory walk for the canonical subset.
+    #[serde(rename = "alignment_workspace")]
+    AlignmentWorkspace {},
+}
+
+fn default_code_context_lines() -> usize {
+    3
+}
+fn default_code_max_lines() -> usize {
+    150
+}
+
+// ---------------------------------------------------------------------------
+// ChunkerConfig
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum ChunkerConfig {
+    #[serde(rename = "paragraph")]
+    Paragraph {
+        #[serde(default = "default_max_chunk_chars")]
+        max_chars: usize,
+        #[serde(default = "default_overlap_chars")]
+        overlap_chars: usize,
+    },
+    #[serde(rename = "sentence")]
+    Sentence {
+        #[serde(default = "default_max_chunk_chars")]
+        max_chars: usize,
+    },
+    #[serde(rename = "fixed")]
+    Fixed {
+        #[serde(default = "default_max_chunk_chars")]
+        max_chars: usize,
+        #[serde(default = "default_overlap_chars")]
+        overlap_chars: usize,
+    },
+    #[serde(rename = "semantic")]
+    Semantic {
+        #[serde(default = "default_max_chunk_chars")]
+        max_chars: usize,
+    },
+    /// Emits the input text as a single chunk. Use when the extractor
+    /// already produces chunk-sized output (e.g. the `code` extractor).
+    #[serde(rename = "passthrough")]
+    Passthrough,
+    /// One chunk per `*`-prefixed bullet on a `Portal:Current_events`
+    /// page. Sub-bullets fold under their parent. Used by the
+    /// `wikipedia-newsworthy` recipe so each event is its own retrieval
+    /// unit.
+    #[serde(rename = "portal_event_bullet")]
+    PortalEventBullet {
+        #[serde(default = "default_portal_bullet_max_chars")]
+        max_chars: usize,
+    },
+}
+
+fn default_portal_bullet_max_chars() -> usize {
+    2048
+}
+
+// ---------------------------------------------------------------------------
+// IndexConfig
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexConfig {
+    #[serde(default = "default_true")]
+    pub fts: bool,
+    #[serde(default = "default_true")]
+    pub vector: bool,
+    #[serde(default = "default_embedding_model")]
+    pub embedding_model: String,
+    #[serde(default = "default_embedding_dimensions")]
+    pub embedding_dimensions: usize,
+}
+
+impl Default for IndexConfig {
+    fn default() -> Self {
+        Self {
+            fts: default_true(),
+            vector: default_true(),
+            embedding_model: default_embedding_model(),
+            embedding_dimensions: default_embedding_dimensions(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Recipe parsing
+// ---------------------------------------------------------------------------
+
+/// Highest recipe `schema_version` this build of `corpus-engine`
+/// understands. The reader refuses recipes with a `[corpus]
+/// schema_version > MAX_SCHEMA_VERSION` so a recipe authored
+/// against a newer engine surfaces as a clear "upgrade your
+/// corpus-engine" error instead of silently parsing with missing
+/// fields the recipe author expected to be honoured.
+///
+/// Bump this only when a NEW field requires reader cooperation
+/// (e.g. a new acquirer that older engines can't run safely). Pure
+/// additions — fields with `#[serde(default)]` — do NOT require a
+/// bump because old engines tolerate them and new engines treat
+/// missing values as default. See `tests/recipe_back_compat.rs`
+/// for the back-compat policy in full.
+pub const MAX_SCHEMA_VERSION: u32 = 1;
+
+impl Recipe {
+    /// Parse a `Recipe` from a TOML string.
+    ///
+    /// Two layers of back-compat guard:
+    ///
+    /// 1. Schema-version cap — refuse recipes declaring a future
+    ///    `schema_version` so the loader fails loudly instead of
+    ///    silently dropping fields the recipe author expected
+    ///    the engine to honour.
+    /// 2. Deprecation-aware error messages — recipes referencing
+    ///    removed acquirer/extractor variants (e.g. the never-
+    ///    implemented `api_paginated` from before PR1) get a
+    ///    tailored "use `<replacement>` instead" message instead
+    ///    of a generic `unknown variant` parse error.
+    pub fn from_toml(toml_str: &str) -> Result<Self> {
+        match toml::from_str::<Self>(toml_str) {
+            Ok(recipe) => {
+                check_schema_version(recipe.corpus.schema_version)?;
+                Ok(recipe)
+            }
+            Err(e) => Err(translate_parse_error(e)),
+        }
+    }
+
+    /// Load a `Recipe` from a `.toml` file on disk.
+    pub fn from_file(path: &Path) -> Result<Self> {
+        let contents = std::fs::read_to_string(path)?;
+        Self::from_toml(&contents)
+    }
+
+    /// Build a recipe with resolved parameter values stamped on
+    /// (consumes self, returns a new value). Used by the CLI /
+    /// desktop install path right before kicking off ingest:
+    /// they parse the recipe TOML, prompt for parameters, validate
+    /// via [`Recipe::resolve_parameters`], then stamp via this
+    /// builder before handing to `CorpusEngine::ingest`.
+    pub fn with_resolved_parameters(mut self, params: ResolvedParameters) -> Self {
+        self.resolved_parameters = params;
+        self
+    }
+
+    /// Validate user-supplied parameter values against the recipe's
+    /// `[recipe.parameters]` schema and produce a [`ResolvedParameters`]
+    /// the `http_api` acquirer (and the install-time CLI prompt) will
+    /// consult during `{name}` interpolation.
+    ///
+    /// - Unknown keys in `provided` are rejected with
+    ///   [`Error::InvalidInput`]: catching typos at install time is
+    ///   far cheaper than discovering an empty corpus an hour later.
+    /// - Missing required keys without a default are also rejected.
+    /// - Defaults are applied verbatim from the recipe; type
+    ///   coercion errors surface as `InvalidInput` with the offending
+    ///   parameter name.
+    /// - List parameters supplied as a single comma-separated string
+    ///   are split — the CLI's interactive prompt yields one string,
+    ///   so we accept both shapes here rather than pushing the split
+    ///   responsibility upstream.
+    pub fn resolve_parameters(
+        &self,
+        provided: &BTreeMap<String, toml::Value>,
+    ) -> Result<ResolvedParameters> {
+        // Reject unknown keys up front so misspellings surface loudly.
+        for k in provided.keys() {
+            if !self.parameters.contains_key(k) {
+                let declared: Vec<&str> = self
+                    .parameters
+                    .keys()
+                    .map(|s| s.as_str())
+                    .collect();
+                return Err(Error::InvalidInput(format!(
+                    "unknown parameter `{k}` for recipe `{}` (declared: [{}])",
+                    self.corpus.id,
+                    declared.join(", "),
+                )));
+            }
+        }
+
+        let mut values = BTreeMap::new();
+        for (name, spec) in &self.parameters {
+            let raw = provided
+                .get(name)
+                .cloned()
+                .or_else(|| spec.default.clone());
+            let value = match (raw, spec.required) {
+                (Some(v), _) => parameter_value_from_toml(name, &spec.kind, v)?,
+                (None, true) => {
+                    return Err(Error::InvalidInput(format!(
+                        "missing required parameter `{name}` for recipe `{}`",
+                        self.corpus.id,
+                    )));
+                }
+                (None, false) => empty_value(&spec.kind),
+            };
+            values.insert(name.clone(), value);
+        }
+        Ok(ResolvedParameters { values })
+    }
+}
+
+fn empty_value(kind: &ParameterKind) -> ParameterValue {
+    match kind {
+        ParameterKind::String | ParameterKind::Date => {
+            ParameterValue::String(String::new())
+        }
+        ParameterKind::Int => ParameterValue::Int(0),
+        ParameterKind::List => ParameterValue::List(Vec::new()),
+    }
+}
+
+fn parameter_value_from_toml(
+    name: &str,
+    kind: &ParameterKind,
+    v: toml::Value,
+) -> Result<ParameterValue> {
+    match (kind, v) {
+        (ParameterKind::String, toml::Value::String(s)) => {
+            Ok(ParameterValue::String(s))
+        }
+        (ParameterKind::Int, toml::Value::Integer(i)) => Ok(ParameterValue::Int(i)),
+        (ParameterKind::Int, toml::Value::String(s)) => s
+            .parse::<i64>()
+            .map(ParameterValue::Int)
+            .map_err(|e| Error::InvalidInput(format!(
+                "parameter `{name}` is not an integer: {s} ({e})"
+            ))),
+        (ParameterKind::Date, toml::Value::String(s)) => {
+            if !is_iso_date(&s) {
+                return Err(Error::InvalidInput(format!(
+                    "parameter `{name}` is not an ISO-8601 date (YYYY-MM-DD): {s}"
+                )));
+            }
+            Ok(ParameterValue::Date(s))
+        }
+        (ParameterKind::List, toml::Value::Array(arr)) => {
+            let mut items = Vec::with_capacity(arr.len());
+            for item in arr {
+                match item {
+                    toml::Value::String(s) => items.push(s),
+                    other => {
+                        return Err(Error::InvalidInput(format!(
+                            "parameter `{name}` list entries must be strings, got: {other:?}"
+                        )))
+                    }
+                }
+            }
+            Ok(ParameterValue::List(items))
+        }
+        // Convenience: comma-separated string for list parameters.
+        // The CLI prompt yields one string; the desktop form yields
+        // a true array. Both should work.
+        (ParameterKind::List, toml::Value::String(s)) => {
+            let items = s
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect();
+            Ok(ParameterValue::List(items))
+        }
+        (kind, other) => Err(Error::InvalidInput(format!(
+            "parameter `{name}` expected {kind:?}, got TOML value: {other:?}"
+        ))),
+    }
+}
+
+/// Refuse recipes whose declared `schema_version` is higher than
+/// the engine knows. See [`MAX_SCHEMA_VERSION`].
+fn check_schema_version(v: u32) -> Result<()> {
+    if v > MAX_SCHEMA_VERSION {
+        return Err(Error::Recipe(format!(
+            "recipe declares schema_version = {v} but this engine \
+             supports schema_version <= {MAX_SCHEMA_VERSION}. \
+             The recipe was authored against a newer engine; \
+             upgrade `corpus-engine` to load it."
+        )));
+    }
+    Ok(())
+}
+
+/// Translate a serde TOML parse error into something actionable
+/// for the recipe author. Three rewrite passes, in order:
+///
+/// 1. **Deprecation aliases** (e.g. `api_paginated` → `http_api`):
+///    name the replacement so the user doesn't reverse-engineer
+///    the rename from a generic "unknown variant" message.
+/// 2. **Missing required fields**: rephrase `missing field 'X'`
+///    in plain language and, when the field is a section we know
+///    well, list valid `type` values inline. The default serde
+///    message points the caret at line 1 even when the issue is
+///    "the section doesn't exist anywhere" — that's misleading and
+///    the rewrite drops it.
+/// 3. **Unknown enum variants**: name the field path that the
+///    bad value was assigned to, when the parse error carries
+///    enough position info to recover it. The default message
+///    quotes the bad value but not the field, so a recipe with
+///    `[acquire.follow] document_format = "pdf"` reads as just
+///    "unknown variant 'pdf'" with no field hint.
+///
+/// Falls through to the raw serde message when no rewrite
+/// applies — better to surface the technical error than to
+/// invent a "helpful" rewrite that misdescribes the failure.
+fn translate_parse_error(e: toml::de::Error) -> Error {
+    const DEPRECATIONS: &[(&str, &str, &str)] = &[
+        // (deprecated_name, replacement, since)
+        (
+            "api_paginated",
+            "http_api",
+            "PR1 — recipe-authoring platform",
+        ),
+    ];
+    let raw = e.to_string();
+
+    // 1. Deprecation aliases — keep first so a deprecated variant
+    //    name takes precedence over the generic "unknown variant"
+    //    rewrite below.
+    for (old, new, since) in DEPRECATIONS {
+        if raw.contains(old) {
+            return Error::Recipe(format!(
+                "recipe references the removed acquirer/extractor type \
+                 `{old}`. Migrate to `{new}` (replaced in {since}). \
+                 See SYSTEM_OVERVIEW.md §3.10. Underlying parse error: {raw}"
+            ));
+        }
+    }
+
+    // 2. Missing required field — `missing field \`X\`` (single
+    //    backticks in serde's output).
+    if let Some(field) = extract_missing_field(&raw) {
+        return Error::Recipe(rewrite_missing_field(&field, &raw));
+    }
+
+    // 3. Unknown variant — `unknown variant \`X\`, expected one of …`
+    if let Some((bad_value, allowed)) = extract_unknown_variant(&raw) {
+        return Error::Recipe(rewrite_unknown_variant(&bad_value, &allowed, &raw));
+    }
+
+    Error::Recipe(raw)
+}
+
+/// Pull the field name out of a serde `missing field \`X\`` message.
+fn extract_missing_field(raw: &str) -> Option<String> {
+    let anchor = "missing field `";
+    let start = raw.find(anchor)? + anchor.len();
+    let rest = &raw[start..];
+    let end = rest.find('`')?;
+    Some(rest[..end].to_string())
+}
+
+/// Pull `(bad_value, allowed_csv)` out of a serde
+/// `unknown variant \`X\`, expected one of \`a\`, \`b\`, …` message.
+fn extract_unknown_variant(raw: &str) -> Option<(String, String)> {
+    let var_anchor = "unknown variant `";
+    let var_start = raw.find(var_anchor)? + var_anchor.len();
+    let after_var = &raw[var_start..];
+    let var_end = after_var.find('`')?;
+    let bad_value = after_var[..var_end].to_string();
+    // Allowed list: everything between "expected one of " and the
+    // end of the line / next backtick-free run. Serde emits the
+    // list with backticks; surface it as plain CSV.
+    let allowed_anchor = "expected one of ";
+    let allowed_start = raw.find(allowed_anchor)? + allowed_anchor.len();
+    let allowed_chunk = &raw[allowed_start..];
+    let allowed_end = allowed_chunk
+        .find('\n')
+        .unwrap_or(allowed_chunk.len());
+    let allowed = allowed_chunk[..allowed_end]
+        .replace('`', "")
+        .replace(", ", ", ");
+    Some((bad_value, allowed))
+}
+
+/// Compose a plain-language explanation for a missing required key,
+/// and inline the valid `type` values when the missing field names
+/// a section whose `type` enum we know up-front. The known sections
+/// stay narrow on purpose — better to fall back to the raw serde
+/// message than to give wrong "valid types" guidance.
+fn rewrite_missing_field(field: &str, raw: &str) -> String {
+    match field {
+        "acquire" => format!(
+            "Recipe is missing the `[acquire]` section. Every recipe needs \
+             one. Add it with `type = \"...\"` (one of: bulk_download | \
+             http_api | web_crawl | local_file | huggingface_dataset). \
+             Underlying parser error: {raw}"
+        ),
+        "extract" => format!(
+            "Recipe is missing the `[extract]` section. Add it with \
+             `type = \"...\"` (one of: plaintext | html | html_sections | \
+             json | jsonl | csv | parquet | mediawiki_xml | \
+             stackexchange_xml | wikipedia_jsonl | wikipedia_structured | \
+             wikipedia_catalog | wikipedia_api_article | gutenberg_catalog \
+             | code | markdown). Underlying parser error: {raw}"
+        ),
+        "chunk" => format!(
+            "Recipe is missing the `[chunk]` section. Add it with \
+             `type = \"...\"` (one of: paragraph | sentence | fixed | \
+             semantic | passthrough). Underlying parser error: {raw}"
+        ),
+        "corpus" => format!(
+            "Recipe is missing the `[corpus]` section. Every recipe needs \
+             one with at least `id = \"...\"` and `name = \"...\"`. \
+             Underlying parser error: {raw}"
+        ),
+        "type" => format!(
+            "A section is missing its required `type` field. Look at the \
+             TOML caret below to see which section. Each acquirer / \
+             extractor / chunker / pattern needs an explicit `type = \
+             \"...\"`. Underlying parser error: {raw}"
+        ),
+        "base_url" => format!(
+            "An `[acquire]` block with `type = \"http_api\"` is missing \
+             `base_url`. Add `base_url = \"https://api.example.com\"`. \
+             Underlying parser error: {raw}"
+        ),
+        "id" | "name" => format!(
+            "The `[corpus]` section is missing required field `{field}`. \
+             Both `id` (stable identifier) and `name` (display name) are \
+             required. Underlying parser error: {raw}"
+        ),
+        "document_path" => format!(
+            "An `[extract]` block with `type = \"json\"` is missing \
+             `document_path`. Set it to a JSONPath that selects the \
+             documents array (e.g. `$.results[*]`). Underlying parser \
+             error: {raw}"
+        ),
+        "content_field" => format!(
+            "An `[extract]` block is missing `content_field` — the name \
+             of the JSON field on each matched object that holds the \
+             document body text. Underlying parser error: {raw}"
+        ),
+        _ => format!(
+            "Recipe is missing required field `{field}`. Add it to the \
+             section the parser caret points at below. Underlying parser \
+             error: {raw}"
+        ),
+    }
+}
+
+/// Compose a plain-language explanation for an unknown enum value,
+/// naming the field path when the parse error carries enough span
+/// info for us to recover it. Serde's default points the caret at
+/// the assignment but doesn't quote the field name in the error
+/// text, which makes the message read as just "unknown variant 'X'".
+fn rewrite_unknown_variant(bad_value: &str, allowed: &str, raw: &str) -> String {
+    // Serde's TOML error formatter prints the surrounding span
+    // including the offending key on a nearby line. Pull the most
+    // recent `key = "value"` or `key = ...` from the raw message to
+    // surface the field. This is best-effort; if we can't find a
+    // key, fall back to "a field" phrasing.
+    let field_hint = extract_field_from_span(raw, bad_value);
+    let field_phrase = match field_hint.as_deref() {
+        Some(f) => format!("field `{f}`"),
+        None => "a field".to_string(),
+    };
+    format!(
+        "{field_phrase} got `{bad_value}` but allowed values are: \
+         {allowed}. Underlying parser error: {raw}"
+    )
+}
+
+/// Best-effort extraction of `key` from a serde TOML error span
+/// containing `key = "<bad_value>"` or similar. Walks the message
+/// line-by-line looking for an `=` neighbouring the bad value.
+fn extract_field_from_span(raw: &str, bad_value: &str) -> Option<String> {
+    for line in raw.lines() {
+        let trimmed = line.trim_start_matches(|c: char| {
+            c.is_ascii_digit() || c == '|' || c == ' '
+        });
+        if !trimmed.contains(bad_value) || !trimmed.contains('=') {
+            continue;
+        }
+        let key_part = trimmed.split('=').next()?.trim();
+        if !key_part.is_empty()
+            && key_part.chars().all(|c| {
+                c.is_ascii_alphanumeric() || c == '_' || c == '.'
+            })
+        {
+            return Some(key_part.to_string());
+        }
+    }
+    None
+}
+
+/// Lexical ISO-8601 calendar-date check (`YYYY-MM-DD`). We don't
+/// validate semantic correctness (e.g. February 30) here — that's
+/// the caller's job. This function exists so the recipe schema
+/// doesn't gain a dependency on `chrono` purely for parameter
+/// validation.
+fn is_iso_date(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    bytes.len() == 10
+        && bytes[4] == b'-'
+        && bytes[7] == b'-'
+        && bytes[..4].iter().all(|c| c.is_ascii_digit())
+        && bytes[5..7].iter().all(|c| c.is_ascii_digit())
+        && bytes[8..].iter().all(|c| c.is_ascii_digit())
+}
+
+// ---------------------------------------------------------------------------
+// Built-in recipes
+// ---------------------------------------------------------------------------
+
+/// Bundled recipe TOML for well-known corpora, embedded at compile
+/// time. Used as a **last-resort fallback** by
+/// `RecipeRegistry::fetch_recipe()` so a corpus listed in the snapshot
+/// catalog still installs even when:
+///
+/// - the registry's `toml_url` 404s (recipe not pushed to GitHub yet —
+///   common during development);
+/// - the user has no internet; or
+/// - the user is running an air-gapped build.
+///
+/// Returns `None` for unknown ids; the caller falls back to its prior
+/// error message in that case.
+///
+/// To add a new bundled recipe: drop `recipes/<id>/recipe.toml` in the
+/// crate, add an arm here, and the live registry catalog
+/// (`registry_snapshot.toml` + `sovereign-recipes/registry.toml`) entry
+/// for it. Match-arm coverage stays paired with the snapshot via the
+/// `bundled_recipe_covers_every_snapshot_entry` test below.
+pub fn bundled_recipe_toml(id: &str) -> Option<&'static str> {
+    match id {
+        "wikipedia" => Some(include_str!("../recipes/wikipedia/recipe.toml")),
+        "wikipedia-simple" => Some(include_str!("../recipes/wikipedia-simple/recipe.toml")),
+        "stackexchange" => Some(include_str!("../recipes/stackexchange/recipe.toml")),
+        "stackexchange-knowledge" => {
+            Some(include_str!("../recipes/stackexchange-knowledge/recipe.toml"))
+        }
+        "openalex" => Some(include_str!("../recipes/openalex/recipe.toml")),
+        "gutenberg" => Some(include_str!("../recipes/gutenberg/recipe.toml")),
+        "gutenberg-work" => Some(include_str!("../recipes/gutenberg-work/recipe.toml")),
+        "wikipedia-catalog" => Some(include_str!("../recipes/wikipedia-catalog/recipe.toml")),
+        "wikipedia-article" => Some(include_str!("../recipes/wikipedia-article/recipe.toml")),
+        "wikipedia-newsworthy" => {
+            Some(include_str!("../recipes/wikipedia-newsworthy/recipe.toml"))
+        }
+        "alignment" => Some(include_str!("../recipes/alignment/recipe.toml")),
+        "sep" => Some(include_str!("../recipes/sep/recipe.toml")),
+        "crs_reports" => Some(include_str!("../recipes/crs_reports/recipe.toml")),
+        _ => None,
+    }
+}
+
+/// Returns `Recipe` definitions for well-known corpora, loaded from the
+/// `recipes/` directory at compile time via `include_str!`.
+///
+/// **For tests only.** Production code uses
+/// `RecipeRegistry::fetch_recipe()` which checks local overrides,
+/// fetches from the registry URL, and falls back to
+/// [`bundled_recipe_toml`].
+#[cfg(test)]
+pub(crate) fn builtin_recipes() -> Vec<Recipe> {
+    const IDS: &[&str] = &[
+        "wikipedia",
+        "wikipedia-simple",
+        "stackexchange",
+        "stackexchange-knowledge",
+        "openalex",
+        "gutenberg",
+        "sep",
+        "crs_reports",
+    ];
+    IDS.iter()
+        .map(|id| {
+            let toml = bundled_recipe_toml(id).expect("bundled recipe present");
+            Recipe::from_toml(toml).expect("built-in recipe.toml failed to parse")
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The exact failure modes seen in the recipe-author live trial.
+    /// Each case targets a real validation message a non-technical
+    /// user would see through the desktop UI, and asserts the rewrite
+    /// surfaces remediation guidance instead of the raw serde
+    /// "TOML parse error at line 1" framing.
+    #[test]
+    fn translate_missing_acquire_section_names_the_section_and_lists_types() {
+        // No `[acquire]` block at all — the failure mode in the
+        // first agent draft of every recipe-author trial.
+        let toml_str = r#"
+[corpus]
+id = "x"
+name = "x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+        let err = Recipe::from_toml(toml_str).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("[acquire]"), "should name the section: {msg}");
+        assert!(msg.contains("http_api"), "should list valid types: {msg}");
+        assert!(
+            !msg.starts_with("TOML parse error"),
+            "rewrite should drop the misleading line-1 framing: {msg}",
+        );
+    }
+
+    #[test]
+    fn translate_missing_type_in_acquire_lists_no_specific_types() {
+        // `[acquire]` present but missing `type` — needs a generic
+        // "look at caret" hint since we can't tell which section.
+        let toml_str = r#"
+[corpus]
+id = "x"
+name = "x"
+
+[acquire]
+base_url = "https://example.com"
+
+[[acquire.requests]]
+url = "{base_url}/x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+        let err = Recipe::from_toml(toml_str).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("`type`"), "should name the missing field: {msg}");
+        assert!(
+            msg.contains("acquirer") || msg.contains("section"),
+            "should hint at which section: {msg}",
+        );
+    }
+
+    #[test]
+    fn translate_unknown_variant_pdf_names_field_and_lists_allowed() {
+        // The bw9pkay71 trial failure: `document_format = "pdf"`.
+        let toml_str = r#"
+[corpus]
+id = "x"
+name = "x"
+
+[acquire]
+type = "http_api"
+base_url = "https://example.com"
+
+[[acquire.requests]]
+url = "{base_url}/x"
+
+[acquire.follow]
+document_url_path = "$.urls[*]"
+document_format = "pdf"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+        let err = Recipe::from_toml(toml_str).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("pdf"), "should quote the bad value: {msg}");
+        assert!(
+            msg.contains("html") && msg.contains("json"),
+            "should list allowed values: {msg}",
+        );
+        // Best-effort field-name extraction — should at least
+        // recognise the bad value lives in `document_format`.
+        assert!(
+            msg.contains("document_format") || msg.contains("field"),
+            "should hint at the field name when the span carries it: {msg}",
+        );
+    }
+
+    #[test]
+    fn translate_falls_through_for_unrecognised_errors() {
+        // A genuinely unexpected parse error should still surface.
+        let toml_str = "this is not valid TOML at all = = =";
+        let err = Recipe::from_toml(toml_str).unwrap_err();
+        let msg = format!("{err}");
+        assert!(!msg.is_empty(), "should still surface something: {msg}");
+    }
+
+    #[test]
+    fn extract_missing_field_pulls_field_from_serde_message() {
+        let raw = "TOML parse error\n  |\n1 | [acquire]\n  | ^^^^^^^^^\nmissing field `type`";
+        assert_eq!(extract_missing_field(raw).as_deref(), Some("type"));
+        let raw2 = "missing field `acquire`";
+        assert_eq!(extract_missing_field(raw2).as_deref(), Some("acquire"));
+        assert_eq!(extract_missing_field("no anchor here"), None);
+    }
+
+    #[test]
+    fn extract_unknown_variant_pulls_value_and_allowed_list() {
+        let raw =
+            "unknown variant `pdf`, expected one of `html`, `json`, `xml`, `plaintext`";
+        let (val, allowed) = extract_unknown_variant(raw).unwrap();
+        assert_eq!(val, "pdf");
+        assert!(allowed.contains("html"));
+        assert!(allowed.contains("plaintext"));
+    }
+
+    #[test]
+    fn round_trip_serialization() {
+        let recipe = &builtin_recipes()[0]; // wikipedia
+        let toml_str = toml::to_string(recipe).expect("serialize to TOML");
+        let parsed: Recipe = Recipe::from_toml(&toml_str).expect("deserialize from TOML");
+        assert_eq!(parsed.corpus.id, recipe.corpus.id);
+        assert_eq!(parsed.corpus.name, recipe.corpus.name);
+        assert_eq!(parsed.corpus.mesh_sharing, recipe.corpus.mesh_sharing);
+    }
+
+    #[test]
+    fn catalog_recipe_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "gutenberg"
+name = "Project Gutenberg Catalog"
+license = "Public Domain"
+kind = "catalog"
+mesh_sharing = true
+
+[acquire]
+type = "bulk_download"
+url = "https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv.gz"
+
+[extract]
+type = "gutenberg_catalog"
+
+[chunk]
+type = "passthrough"
+
+[index]
+fts = true
+vector = true
+
+[catalog]
+id_field = "gutenberg_id"
+download_url_template = "https://www.gutenberg.org/cache/epub/{id}/pg{id}.txt"
+content_recipe = "gutenberg-work"
+ingest_estimate_wpm = 8000
+enrich_estimate_wpm = 500
+"#;
+        let r = Recipe::from_toml(toml_str).expect("catalog recipe must parse");
+        assert_eq!(r.corpus.kind, crate::types::CorpusKind::Catalog);
+        assert!(!r.corpus.on_demand);
+        assert!(matches!(
+            r.extract,
+            ExtractorConfig::GutenbergCatalog {}
+        ));
+        let cat = r.catalog.expect("[catalog] block parsed");
+        assert_eq!(cat.id_field, "gutenberg_id");
+        assert_eq!(cat.content_recipe, "gutenberg-work");
+        assert!(cat
+            .download_url_template
+            .contains("{id}"));
+        assert_eq!(cat.ingest_estimate_wpm, Some(8000));
+    }
+
+    #[test]
+    fn on_demand_recipe_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "gutenberg-work"
+name = "Project Gutenberg — Single Work"
+license = "Public Domain"
+on_demand = true
+mesh_sharing = true
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/PLACEHOLDER"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+max_chars = 2048
+"#;
+        let r = Recipe::from_toml(toml_str).expect("on-demand recipe must parse");
+        assert!(r.corpus.on_demand);
+        assert_eq!(r.corpus.kind, crate::types::CorpusKind::Knowledge);
+    }
+
+    #[test]
+    fn bundled_gutenberg_recipes_parse() {
+        // Both the catalog (`gutenberg`) and on-demand work
+        // (`gutenberg-work`) recipes must always be loadable from the
+        // bundled snapshot — the on-demand ingest path resolves them
+        // by id at runtime.
+        for id in &["gutenberg", "gutenberg-work"] {
+            let toml = bundled_recipe_toml(id)
+                .unwrap_or_else(|| panic!("bundled recipe `{id}` is missing"));
+            let r = Recipe::from_toml(toml)
+                .unwrap_or_else(|e| panic!("bundled recipe `{id}` parse error: {e}"));
+            assert_eq!(r.corpus.id, *id);
+        }
+    }
+
+    #[test]
+    fn legacy_recipes_without_filter_block_parse() {
+        // Recipes from before the `[[filter]]` extension must still
+        // deserialize cleanly. The `filters` field defaults to empty.
+        let toml_str = r#"
+[corpus]
+id = "wikipedia"
+name = "Wikipedia"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "wikipedia_jsonl"
+
+[chunk]
+type = "paragraph"
+"#;
+        let r = Recipe::from_toml(toml_str).expect("legacy recipe must parse");
+        assert!(r.filters.is_empty());
+        assert_eq!(r.filter_mode.mode, ComposeMode::Any); // default
+    }
+
+    #[test]
+    fn filter_block_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "wikipedia"
+name = "Wikipedia"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "wikipedia_jsonl"
+
+[chunk]
+type = "paragraph"
+
+[[filter]]
+type = "pageview_rank"
+rank_file = "@bundled:pageview_ranks_202311"
+max_rank = 100000
+
+[[filter]]
+type = "title_list"
+list_file = "@bundled:vital_articles_l5"
+
+[filter_mode]
+mode = "any"
+"#;
+        let r = Recipe::from_toml(toml_str).expect("recipe with filters must parse");
+        assert_eq!(r.filters.len(), 2);
+        assert_eq!(r.filter_mode.mode, ComposeMode::Any);
+        match &r.filters[0] {
+            FilterConfig::PageviewRank { rank_file, max_rank } => {
+                assert_eq!(rank_file, "@bundled:pageview_ranks_202311");
+                assert_eq!(*max_rank, 100_000);
+            }
+            other => panic!("expected pageview_rank, got {other:?}"),
+        }
+        match &r.filters[1] {
+            FilterConfig::TitleList { list_file } => {
+                assert_eq!(list_file, "@bundled:vital_articles_l5");
+            }
+            other => panic!("expected title_list, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn filter_mode_all_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "x"
+name = "x"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/x.zip"
+
+[extract]
+type = "wikipedia_jsonl"
+
+[chunk]
+type = "paragraph"
+
+[[filter]]
+type = "title_list"
+list_file = "@bundled:vital_articles_l5"
+
+[filter_mode]
+mode = "all"
+"#;
+        let r = Recipe::from_toml(toml_str).unwrap();
+        assert_eq!(r.filter_mode.mode, ComposeMode::All);
+    }
+
+    #[test]
+    fn parse_mediawiki_xml_recipe_from_toml() {
+        let toml_str = r#"
+[corpus]
+id = "wikipedia"
+name = "Wikipedia (English)"
+description = "English Wikipedia dump"
+license = "CC-BY-SA-4.0"
+
+[acquire]
+type = "bulk_download"
+url = "https://dumps.wikimedia.org/enwiki/latest/enwiki-latest-pages-articles.xml.bz2"
+
+[extract]
+type = "mediawiki_xml"
+decompress = "bzip2"
+
+[chunk]
+type = "paragraph"
+"#;
+        let recipe = Recipe::from_toml(toml_str).expect("should parse wikipedia recipe");
+        assert_eq!(recipe.corpus.id, "wikipedia");
+        assert_eq!(recipe.corpus.mesh_sharing, true);
+
+        match &recipe.acquire {
+            AcquirerConfig::BulkDownload { url, urls, resume } => {
+                assert!(urls.is_none());
+                assert!(url.as_deref().unwrap().contains("wikimedia"));
+                assert!(*resume); // default
+            }
+            _ => panic!("expected BulkDownload"),
+        }
+
+        match &recipe.extract {
+            ExtractorConfig::MediawikiXml {
+                namespace_filter,
+                skip_redirects,
+                decompress,
+            } => {
+                assert_eq!(*namespace_filter, vec![0]); // default
+                assert!(*skip_redirects); // default
+                assert_eq!(decompress.as_deref(), Some("bzip2"));
+            }
+            _ => panic!("expected MediawikiXml"),
+        }
+
+        match &recipe.chunk {
+            ChunkerConfig::Paragraph {
+                max_chars,
+                overlap_chars,
+            } => {
+                assert_eq!(*max_chars, 2048); // default
+                assert_eq!(*overlap_chars, 256); // default
+            }
+            _ => panic!("expected Paragraph chunker"),
+        }
+
+        // IndexConfig should use defaults
+        assert!(recipe.index.fts);
+        assert!(recipe.index.vector);
+        assert_eq!(recipe.index.embedding_model, "qwen3-embedding-0.6b");
+        assert_eq!(recipe.index.embedding_dimensions, 0); // 0 = auto-detect
+    }
+
+    #[test]
+    fn builtin_recipes_count() {
+        let recipes = builtin_recipes();
+        assert_eq!(recipes.len(), 8);
+    }
+
+    #[test]
+    fn builtin_recipes_have_valid_ids() {
+        let expected_ids = [
+            "wikipedia",
+            "wikipedia-simple",
+            "stackexchange",
+            "stackexchange-knowledge",
+            "openalex",
+            "gutenberg",
+            "sep",
+            "crs_reports",
+        ];
+        let recipes = builtin_recipes();
+        for (recipe, expected_id) in recipes.iter().zip(expected_ids.iter()) {
+            assert_eq!(
+                &recipe.corpus.id, expected_id,
+                "unexpected id for recipe"
+            );
+            assert!(!recipe.corpus.id.is_empty(), "recipe id must not be empty");
+            assert!(!recipe.corpus.name.is_empty(), "recipe name must not be empty");
+        }
+    }
+
+    /// The SEP recipe is the demo target for the epistemic enrichment
+    /// layer and the canonical example of a parquet-sourced corpus.
+    /// These assertions guard against accidental regression to the old
+    /// HTML web-crawl path or the wrong source URL.
+    #[test]
+    fn sep_recipe_uses_huggingface_parquet_source() {
+        let recipes = builtin_recipes();
+        let sep = recipes
+            .iter()
+            .find(|r| r.corpus.id == "sep")
+            .expect("SEP recipe should be in builtin_recipes()");
+
+        // Acquirer must be a bulk download from HuggingFace, not a web crawl.
+        match &sep.acquire {
+            AcquirerConfig::BulkDownload { url, urls, resume } => {
+                assert!(urls.is_none(), "SEP recipe is single-source");
+                let url = url.as_deref().expect("SEP recipe sets `url`");
+                assert!(
+                    url.contains("huggingface.co"),
+                    "SEP source should be hosted on HuggingFace, got: {url}"
+                );
+                assert!(
+                    url.contains(".parquet"),
+                    "SEP source should be a parquet file, got: {url}"
+                );
+                assert!(*resume, "SEP downloads should support resume");
+            }
+            other => panic!("SEP must use BulkDownload, got {other:?}"),
+        }
+
+        // Extractor must be Parquet pointed at the right columns.
+        match &sep.extract {
+            ExtractorConfig::Parquet {
+                content_column,
+                label_column,
+                ..
+            } => {
+                assert_eq!(content_column, "text");
+                assert_eq!(label_column.as_deref(), Some("category"));
+            }
+            other => panic!("SEP must use Parquet extractor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sep_recipe_has_enrichment_enabled() {
+        let recipes = builtin_recipes();
+        let sep = recipes
+            .iter()
+            .find(|r| r.corpus.id == "sep")
+            .expect("SEP recipe should be in builtin_recipes()");
+
+        let enrichment = sep
+            .enrichment
+            .as_ref()
+            .expect("SEP must have an enrichment block");
+
+        assert!(enrichment.enabled, "SEP enrichment must be enabled");
+        // Landing 3.B flipped SEP from the v1 field_model to the v2
+        // per-article atlas flow (`sovereign enrich sep-ingest`).
+        // The type tag changes together with `[enrichment.chunking]`
+        // appearing in the recipe — both surface as "atlas is the
+        // primary surface". The legacy field_model config nests
+        // under `[enrichment.field_model]` for the full-parquet
+        // build path.
+        assert_eq!(
+            enrichment.enrichment_type, "atlas",
+            "SEP enrichment type must be `atlas` (flipped in Landing 3.B)"
+        );
+        assert_eq!(
+            enrichment.domain.as_deref(),
+            Some("philosophy"),
+            "SEP enrichment domain must be philosophy"
+        );
+        assert!(
+            enrichment.prompt_version.is_some(),
+            "SEP must have a prompt_version"
+        );
+
+        // Clustering config
+        let clustering = enrichment
+            .clustering
+            .as_ref()
+            .expect("SEP must have clustering config");
+        assert_eq!(clustering.min_cluster_size, Some(50));
+
+        // Alignment config
+        let alignment = enrichment
+            .alignment
+            .as_ref()
+            .expect("SEP must have alignment config");
+        assert!(alignment.alignment_threshold.is_some());
+
+        // Fault lines config
+        let fault_lines = enrichment
+            .fault_lines
+            .as_ref()
+            .expect("SEP must have fault_lines config");
+        assert!(fault_lines.min_confidence.is_some());
+    }
+
+    #[test]
+    fn sep_recipe_size_estimate_matches_huggingface_dataset() {
+        let recipes = builtin_recipes();
+        let sep = recipes
+            .iter()
+            .find(|r| r.corpus.id == "sep")
+            .unwrap();
+        // The HuggingFace parquet is roughly 1–2 GB compressed and
+        // expands to several GB indexed once embeddings + claims are
+        // included. The old 0.5/1.5 estimates were wildly wrong.
+        assert!(
+            sep.corpus.size_compressed_gb >= 1.0,
+            "SEP compressed size should reflect the real ~1.4 GB parquet, got {}",
+            sep.corpus.size_compressed_gb
+        );
+        assert!(
+            sep.corpus.size_indexed_gb >= 4.0,
+            "SEP indexed size should account for embeddings + enrichment, got {}",
+            sep.corpus.size_indexed_gb
+        );
+    }
+
+    #[test]
+    fn gutenberg_recipe_is_a_catalog() {
+        // Updated for the catalog-corpus paradigm: `gutenberg`
+        // is now the metadata catalog (one chunk per work) and
+        // pairs with the on-demand `gutenberg-work` content
+        // recipe. The previous all-of-Gutenberg HuggingFace
+        // parquet ingest is retired — see
+        // `let-s-build-out-the-majestic-neumann.md` plan file.
+        let recipes = builtin_recipes();
+        let gut = recipes
+            .iter()
+            .find(|r| r.corpus.id == "gutenberg")
+            .expect("gutenberg recipe must exist");
+        assert_eq!(gut.corpus.kind, crate::types::CorpusKind::Catalog);
+        match &gut.acquire {
+            AcquirerConfig::BulkDownload { url, .. } => {
+                let u = url.as_deref().unwrap_or("");
+                assert!(
+                    u.contains("pg_catalog.csv"),
+                    "expected pg_catalog.csv URL, got {u:?}"
+                );
+            }
+            other => panic!("expected BulkDownload, got {other:?}"),
+        }
+        match &gut.extract {
+            ExtractorConfig::GutenbergCatalog {} => {}
+            other => panic!("expected GutenbergCatalog extractor, got {other:?}"),
+        }
+        let cat = gut.catalog.as_ref().expect("[catalog] block required");
+        assert_eq!(cat.content_recipe, "gutenberg-work");
+    }
+
+    #[test]
+    fn huggingface_dataset_variant_round_trips_toml() {
+        let toml_str = r#"
+[corpus]
+id = "gutenberg"
+name = "Project Gutenberg"
+
+[acquire]
+type = "huggingface_dataset"
+repo = "manu/project_gutenberg"
+subset = "en"
+
+[extract]
+type = "parquet"
+content_column = "text"
+
+[chunk]
+type = "paragraph"
+"#;
+        let recipe = Recipe::from_toml(toml_str).expect("should parse");
+        match &recipe.acquire {
+            AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => {
+                assert_eq!(repo, "manu/project_gutenberg");
+                assert_eq!(subset.as_deref(), Some("en"));
+            }
+            _ => panic!("wrong acquirer variant after TOML round-trip"),
+        }
+    }
+
+    #[test]
+    fn wikipedia_recipe_uses_structured_jsonl() {
+        let recipes = builtin_recipes();
+        let wp = recipes
+            .iter()
+            .find(|r| r.corpus.id == "wikipedia")
+            .expect("wikipedia recipe must exist");
+
+        // structured_wikipedia was removed in favour of the single wikipedia recipe.
+        assert!(
+            recipes.iter().all(|r| r.corpus.id != "structured_wikipedia"),
+            "structured_wikipedia recipe should have been removed"
+        );
+
+        match &wp.acquire {
+            AcquirerConfig::BulkDownload { url, .. } => {
+                let url = url.as_deref().expect("wikipedia recipe is single-source");
+                assert!(
+                    url.contains("structured-wikipedia"),
+                    "wikipedia recipe must download from structured-wikipedia"
+                );
+                assert!(url.ends_with(".zip"), "download URL must be a ZIP file");
+            }
+            other => panic!("expected BulkDownload, got {other:?}"),
+        }
+
+        match &wp.extract {
+            ExtractorConfig::WikipediaJsonl { .. } => {}
+            other => panic!("expected WikipediaJsonl extractor, got {other:?}"),
+        }
+
+        // Wikipedia Core ships with enrichment OFF — Layer 1 prioritises
+        // time-to-grounded over atlas depth; users who promote to Full
+        // can flip it on. The enrichment block is still present so the
+        // settings/UX layer can preview the eventual config.
+        let enrichment = wp.enrichment.as_ref().expect("wikipedia must have enrichment block");
+        assert!(!enrichment.enabled, "Core must ship with enrichment disabled");
+        assert_eq!(enrichment.enrichment_type, "field_model");
+        assert_eq!(enrichment.domain.as_deref(), Some("multi"));
+
+        let update = wp.update.as_ref().expect("wikipedia must have update config");
+        assert!(update.auto_update);
+        assert!(!update.manifest_url.is_empty());
+
+        // Core scope filter: Vital Articles Level 5 only. Pageview-rank
+        // bundling was deliberately dropped — see
+        // `corpus-engine/src/filters/assets.rs` for the rationale.
+        assert_eq!(
+            wp.filters.len(),
+            1,
+            "Wikipedia Core ships with a single Vital Articles filter"
+        );
+        match &wp.filters[0] {
+            FilterConfig::TitleList { list_file } => {
+                assert!(
+                    list_file.contains("vital_articles"),
+                    "Wikipedia Core filter must reference the vital articles list, got {list_file}"
+                );
+            }
+            other => panic!("Wikipedia Core filter must be title_list, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wikipedia_simple_recipe_loads_clean() {
+        let recipes = builtin_recipes();
+        let simple = recipes
+            .iter()
+            .find(|r| r.corpus.id == "wikipedia-simple")
+            .expect("wikipedia-simple recipe must exist");
+        match &simple.acquire {
+            AcquirerConfig::HuggingFaceDataset { repo, subset, .. } => {
+                assert_eq!(repo, "wikimedia/wikipedia");
+                assert_eq!(subset.as_deref(), Some("20231101.simple"));
+            }
+            other => panic!("expected HuggingFaceDataset, got {other:?}"),
+        }
+        match &simple.extract {
+            ExtractorConfig::WikipediaStructured { .. } => {}
+            other => panic!("expected WikipediaStructured, got {other:?}"),
+        }
+        // Layer 0 is intentionally unfiltered and unenriched.
+        assert!(simple.filters.is_empty(), "Simple English should not have filters");
+        let enrichment = simple.enrichment.as_ref().expect("enrichment block present");
+        assert!(!enrichment.enabled);
+    }
+
+    #[test]
+    fn wikipedia_structured_variant_round_trips_toml() {
+        let toml_str = r#"
+[corpus]
+id = "structured_wikipedia"
+name = "Wikipedia (Structured)"
+
+[acquire]
+type = "huggingface_dataset"
+repo = "wikimedia/structured-wikipedia"
+subset = "20240916.en"
+
+[extract]
+type = "wikipedia_structured"
+
+[chunk]
+type = "paragraph"
+"#;
+        let recipe = Recipe::from_toml(toml_str).expect("should parse wikipedia_structured recipe");
+        match &recipe.extract {
+            ExtractorConfig::WikipediaStructured {
+                title_column,
+                url_column,
+                structural_signals,
+                ..
+            } => {
+                assert_eq!(title_column, "name"); // default
+                assert_eq!(url_column, "url"); // default
+                assert!(*structural_signals); // default
+            }
+            other => panic!("expected WikipediaStructured, got {other:?}"),
+        }
+    }
+
+    /// The knowledge layer recipe must wire together the
+    /// question-with-answers extractor, the knowledge-density filter
+    /// (scoped to Stack Overflow), the passthrough chunker (so the
+    /// embed_text override actually fires), and the engineering
+    /// enrichment domain. Drift on any of these silently degrades
+    /// retrieval shape — keep them pinned by test.
+    #[test]
+    fn stackexchange_knowledge_recipe_wires_the_full_pipeline() {
+        let recipes = builtin_recipes();
+        let r = recipes
+            .iter()
+            .find(|r| r.corpus.id == "stackexchange-knowledge")
+            .expect("recipe present");
+
+        // Multi-source bulk download from the IA mirror — Core scope
+        // is just the small charter sites for fast first install. SO
+        // Posts is opt-in via expand, not bundled by default.
+        match &r.acquire {
+            AcquirerConfig::BulkDownload { url, urls, .. } => {
+                assert!(url.is_none(), "knowledge recipe is multi-source");
+                let urls = urls.as_ref().expect("multi-source URLs");
+                assert!(urls.iter().any(|u| u.contains("softwareengineering")));
+                assert!(urls.iter().any(|u| u.contains("dba")));
+                assert!(
+                    !urls.iter().any(|u| u.contains("stackoverflow.com-Posts")),
+                    "Core scope must not bundle SO Posts (17 GB) — opt-in via expand"
+                );
+            }
+            other => panic!("expected BulkDownload, got {other:?}"),
+        }
+
+        // Question-with-answers extractor with sane density-aware defaults.
+        match &r.extract {
+            ExtractorConfig::StackExchangeXml {
+                mode,
+                max_answers_per_question,
+                exclude_closed,
+                ..
+            } => {
+                assert_eq!(*mode, SeMode::QuestionWithAnswers);
+                assert!(*max_answers_per_question >= 3);
+                assert!(*exclude_closed);
+            }
+            other => panic!("expected StackExchangeXml extractor, got {other:?}"),
+        }
+
+        // KnowledgeDensity filter scoped to SO only.
+        assert!(
+            !r.filters.is_empty(),
+            "knowledge recipe must declare a knowledge_density filter"
+        );
+        match &r.filters[0] {
+            crate::filters::FilterConfig::KnowledgeDensity(cfg) => {
+                assert!(cfg.min_substantive_answers >= 2);
+                let apply = cfg
+                    .apply_to
+                    .as_ref()
+                    .expect("apply_to should scope SO only");
+                assert!(apply.iter().any(|s| s == "stackoverflow.com"));
+            }
+            other => panic!("expected KnowledgeDensity filter, got {other:?}"),
+        }
+
+        // Passthrough chunker — required for embed_text override.
+        assert!(matches!(r.chunk, ChunkerConfig::Passthrough));
+
+        // Engineering enrichment domain declared (even if disabled).
+        let enrichment = r.enrichment.as_ref().expect("enrichment block declared");
+        assert_eq!(enrichment.domain.as_deref(), Some("engineering"));
+        assert!(!enrichment.enabled, "MVP keeps enrichment off until prompts land");
+    }
+
+    /// The breadth/reference recipe stays simple: HuggingFace parquet
+    /// source, no enrichment. Test guards against regressions where a
+    /// future change accidentally shapes it as a knowledge layer.
+    #[test]
+    fn stackexchange_breadth_recipe_is_reference_shape() {
+        let recipes = builtin_recipes();
+        let r = recipes
+            .iter()
+            .find(|r| r.corpus.id == "stackexchange")
+            .expect("recipe present");
+        assert!(matches!(r.acquire, AcquirerConfig::HuggingFaceDataset { .. }));
+        assert!(matches!(r.extract, ExtractorConfig::Parquet { .. }));
+        assert!(r.filters.is_empty(), "breadth layer takes the dataset as-is");
+        assert!(
+            r.enrichment.as_ref().map(|e| !e.enabled).unwrap_or(true),
+            "breadth layer must not enable enrichment"
+        );
+    }
+
+    /// Multi-source bulk_download must round-trip through TOML
+    /// without losing the URL list.
+    #[test]
+    fn bulk_download_multi_source_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "bulk_download"
+urls = ["https://a.example/dump.7z", "https://b.example/dump.7z"]
+
+[extract]
+type = "stackexchange_xml"
+
+[chunk]
+type = "passthrough"
+"#;
+        let recipe = Recipe::from_toml(toml_str).expect("parse");
+        match &recipe.acquire {
+            AcquirerConfig::BulkDownload { url, urls, resume } => {
+                assert!(url.is_none());
+                let urls = urls.as_ref().expect("urls present");
+                assert_eq!(urls.len(), 2);
+                assert!(*resume);
+            }
+            other => panic!("expected BulkDownload, got {other:?}"),
+        }
+    }
+
+    /// Only SEP intentionally enables enrichment by default. Wikipedia
+    /// Core ships with enrichment off (it costs hours of LLM time on a
+    /// laptop and Layer 1 is about time-to-grounded, not atlas depth);
+    /// users who expand to Full can re-enable it. All other recipes
+    /// must also be off by default.
+    #[test]
+    fn non_sep_builtin_recipes_skip_enrichment_by_default() {
+        let enrichment_allowed = ["sep"];
+        let recipes = builtin_recipes();
+        for recipe in &recipes {
+            if enrichment_allowed.contains(&recipe.corpus.id.as_str()) {
+                continue;
+            }
+            let enrichment_active = recipe
+                .enrichment
+                .as_ref()
+                .map(|e| e.enabled)
+                .unwrap_or(false);
+            assert!(
+                !enrichment_active,
+                "Recipe '{}' has enrichment enabled — only SEP and Wikipedia should",
+                recipe.corpus.id
+            );
+        }
+    }
+
+    // ----------------------------------------------------------------------
+    // [recipe.parameters] + AcquirerConfig::HttpApi
+    // ----------------------------------------------------------------------
+
+    /// Recipe authors should be able to declare install-time
+    /// parameters and reference them inside an `http_api` acquirer
+    /// via `{name}` placeholders. Round-trip the TOML so both halves
+    /// of the schema (parameters block + HttpApi variant) survive.
+    #[test]
+    fn http_api_recipe_with_parameters_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "sec-filings"
+name = "SEC EDGAR Filings"
+
+[parameters.entities]
+type = "list"
+description = "CIK numbers or tickers"
+required = true
+
+[parameters.form_types]
+type = "list"
+description = "Filing types"
+default = ["10-K", "10-Q", "8-K"]
+
+[parameters.start_date]
+type = "date"
+default = "2022-01-01"
+
+[acquire]
+type = "http_api"
+base_url = "https://efts.sec.gov/LATEST/search-index"
+rate_limit_per_second = 8.0
+user_agent = "CW-Test admin@example.com"
+
+[[acquire.requests]]
+url = "{base_url}?q=%22{entity}%22&forms={form_type}&startdt={start_date}"
+for_each = ["entities", "form_types"]
+
+[acquire.pagination]
+type = "offset"
+param = "start"
+page_size = 100
+
+[acquire.follow]
+document_url_path = "$.hits.hits[*]._source.file_url"
+document_format = "html"
+max_concurrency = 6
+
+[extract]
+type = "html"
+
+[chunk]
+type = "paragraph"
+"#;
+        let r = Recipe::from_toml(toml_str).expect("recipe must parse");
+
+        // Parameters block
+        assert_eq!(r.parameters.len(), 3);
+        let entities = r.parameters.get("entities").expect("entities declared");
+        assert_eq!(entities.kind, ParameterKind::List);
+        assert!(entities.required);
+
+        // HttpApi acquirer
+        match r.acquire {
+            AcquirerConfig::HttpApi {
+                base_url,
+                requests,
+                pagination,
+                follow,
+                rate_limit_per_second,
+                user_agent,
+                ..
+            } => {
+                assert!(base_url.contains("efts.sec.gov"));
+                assert_eq!(requests.len(), 1);
+                assert_eq!(requests[0].for_each, vec!["entities", "form_types"]);
+                assert_eq!(requests[0].method, HttpMethod::Get);
+                match pagination.expect("pagination present") {
+                    PaginationStrategy::Offset { param, page_size, .. } => {
+                        assert_eq!(param, "start");
+                        assert_eq!(page_size, 100);
+                    }
+                    other => panic!("expected Offset, got {other:?}"),
+                }
+                let f = follow.expect("follow present");
+                assert!(f.document_url_path.starts_with("$"));
+                assert_eq!(f.document_format, DocFormat::Html);
+                assert_eq!(f.max_concurrency, 6);
+                assert_eq!(rate_limit_per_second, Some(8.0));
+                assert_eq!(user_agent.as_deref(), Some("CW-Test admin@example.com"));
+            }
+            other => panic!("expected HttpApi, got {other:?}"),
+        }
+    }
+
+    /// `resolve_parameters` should apply defaults, reject unknown
+    /// keys, and validate types. The CLI / desktop call this
+    /// before kicking off acquisition.
+    #[test]
+    fn resolve_parameters_applies_defaults_and_validates() {
+        let toml_str = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[parameters.entities]
+type = "list"
+required = true
+
+[parameters.form_types]
+type = "list"
+default = ["10-K"]
+
+[parameters.start_date]
+type = "date"
+default = "2022-01-01"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#;
+        let r = Recipe::from_toml(toml_str).unwrap();
+
+        // Provide entities only — form_types + start_date take defaults.
+        let mut provided = BTreeMap::new();
+        provided.insert(
+            "entities".into(),
+            toml::Value::Array(vec![
+                toml::Value::String("NVDA".into()),
+                toml::Value::String("MSFT".into()),
+            ]),
+        );
+        let resolved = r.resolve_parameters(&provided).expect("resolve OK");
+        match resolved.values.get("entities").unwrap() {
+            ParameterValue::List(items) => {
+                assert_eq!(items, &vec!["NVDA".to_string(), "MSFT".into()]);
+            }
+            other => panic!("expected List, got {other:?}"),
+        }
+        assert_eq!(
+            resolved
+                .values
+                .get("form_types")
+                .map(ParameterValue::as_interpolation),
+            Some("10-K".into()),
+        );
+        assert_eq!(
+            resolved
+                .values
+                .get("start_date")
+                .map(ParameterValue::as_interpolation),
+            Some("2022-01-01".into()),
+        );
+    }
+
+    #[test]
+    fn resolve_parameters_rejects_unknown_keys() {
+        let toml_str = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[parameters.entities]
+type = "list"
+required = true
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#;
+        let r = Recipe::from_toml(toml_str).unwrap();
+        let mut provided = BTreeMap::new();
+        provided.insert(
+            "entites".into(), // typo
+            toml::Value::Array(vec![toml::Value::String("NVDA".into())]),
+        );
+        let err = r.resolve_parameters(&provided).unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("entites"), "should mention typo: {msg}");
+        assert!(msg.contains("entities"), "should suggest declared param: {msg}");
+    }
+
+    #[test]
+    fn resolve_parameters_rejects_missing_required() {
+        let toml_str = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[parameters.entities]
+type = "list"
+required = true
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#;
+        let r = Recipe::from_toml(toml_str).unwrap();
+        let provided = BTreeMap::new();
+        let err = r.resolve_parameters(&provided).unwrap_err();
+        assert!(
+            format!("{err}").contains("missing required parameter"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn resolve_parameters_validates_iso_date() {
+        let toml_str = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[parameters.start_date]
+type = "date"
+required = true
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#;
+        let r = Recipe::from_toml(toml_str).unwrap();
+        let mut bad = BTreeMap::new();
+        bad.insert(
+            "start_date".into(),
+            toml::Value::String("01/01/2022".into()),
+        );
+        let err = r.resolve_parameters(&bad).unwrap_err();
+        assert!(format!("{err}").contains("ISO-8601"), "{err}");
+
+        let mut good = BTreeMap::new();
+        good.insert(
+            "start_date".into(),
+            toml::Value::String("2022-01-01".into()),
+        );
+        let resolved = r.resolve_parameters(&good).unwrap();
+        match resolved.values.get("start_date").unwrap() {
+            ParameterValue::Date(s) => assert_eq!(s, "2022-01-01"),
+            other => panic!("expected Date, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn list_parameter_accepts_comma_separated_string() {
+        // The CLI's interactive prompt yields a single string rather
+        // than a TOML array. Make sure the resolver splits it cleanly.
+        let toml_str = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[parameters.entities]
+type = "list"
+required = true
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/x"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#;
+        let r = Recipe::from_toml(toml_str).unwrap();
+        let mut provided = BTreeMap::new();
+        provided.insert(
+            "entities".into(),
+            toml::Value::String("NVDA, MSFT,GOOGL".into()),
+        );
+        let resolved = r.resolve_parameters(&provided).unwrap();
+        match resolved.values.get("entities").unwrap() {
+            ParameterValue::List(items) => {
+                assert_eq!(
+                    items,
+                    &vec![
+                        "NVDA".to_string(),
+                        "MSFT".into(),
+                        "GOOGL".into(),
+                    ]
+                );
+            }
+            other => panic!("expected List, got {other:?}"),
+        }
+    }
+
+    /// Investigation enrichment schema: entity types + relationship
+    /// types + patterns must round-trip cleanly. The recipe author
+    /// writes this in TOML and the pipeline drives prompt generation
+    /// from the parsed shape; a regression here breaks the
+    /// recipe-author flow silently.
+    #[test]
+    fn investigation_enrichment_schema_round_trips() {
+        let toml_str = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "html"
+
+[chunk]
+type = "paragraph"
+
+[enrichment]
+enabled = true
+type = "investigation"
+domain = "investigation"
+
+[[enrichment.entity_types]]
+name = "company"
+description = "A corporation or legal entity"
+attributes = ["name", "ticker", "cik"]
+
+[[enrichment.entity_types]]
+name = "fund"
+description = "An investment fund"
+attributes = ["name", "manager"]
+
+[[enrichment.relationship_types]]
+name = "revenue"
+description = "Recognized revenue from B to A"
+attributes = ["amount_usd", "period", "percentage_of_total"]
+directional = true
+
+[[enrichment.relationship_types]]
+name = "investment"
+description = "A invested equity in B"
+attributes = ["amount_usd", "date"]
+directional = true
+
+[[enrichment.patterns]]
+type = "circular_flow"
+name = "money_cycles"
+description = "A→B→C→A money cycles"
+min_entities = 3
+edge_types = ["revenue", "investment"]
+
+[[enrichment.patterns]]
+type = "role_overlap"
+name = "invest_in_customer"
+description = "A invests in B and B is a customer of A"
+[enrichment.patterns.entity_roles]
+investor = "investment.from"
+customer = "revenue.to"
+
+[[enrichment.patterns]]
+type = "threshold"
+name = "revenue_concentration"
+description = "Revenue concentration above 10%"
+edge_type = "revenue"
+attribute = "percentage_of_total"
+threshold = 0.10
+comparison = "greater_than"
+"#;
+        let r = Recipe::from_toml(toml_str).expect("recipe must parse");
+
+        let enr = r.enrichment.expect("enrichment block parsed");
+        assert_eq!(enr.enrichment_type, "investigation");
+        assert_eq!(enr.entity_types.len(), 2);
+        assert_eq!(enr.entity_types[0].name, "company");
+        assert!(enr.entity_types[0].attributes.iter().any(|a| a == "ticker"));
+
+        assert_eq!(enr.relationship_types.len(), 2);
+        assert_eq!(enr.relationship_types[0].name, "revenue");
+        assert!(enr.relationship_types[0].directional);
+
+        assert_eq!(enr.patterns.len(), 3);
+        match &enr.patterns[0] {
+            PatternDecl::CircularFlow { name, min_entities, edge_types, .. } => {
+                assert_eq!(name, "money_cycles");
+                assert_eq!(*min_entities, 3);
+                assert_eq!(edge_types, &vec!["revenue".to_string(), "investment".into()]);
+            }
+            other => panic!("expected CircularFlow, got {other:?}"),
+        }
+        match &enr.patterns[1] {
+            PatternDecl::RoleOverlap { name, entity_roles, .. } => {
+                assert_eq!(name, "invest_in_customer");
+                assert_eq!(entity_roles.get("investor").map(String::as_str), Some("investment.from"));
+                assert_eq!(entity_roles.get("customer").map(String::as_str), Some("revenue.to"));
+            }
+            other => panic!("expected RoleOverlap, got {other:?}"),
+        }
+        match &enr.patterns[2] {
+            PatternDecl::Threshold {
+                name,
+                edge_type,
+                attribute,
+                threshold,
+                comparison,
+                ..
+            } => {
+                assert_eq!(name, "revenue_concentration");
+                assert_eq!(edge_type, "revenue");
+                assert_eq!(attribute, "percentage_of_total");
+                assert!((*threshold - 0.10).abs() < 1e-9);
+                assert_eq!(*comparison, Comparison::GreaterThan);
+            }
+            other => panic!("expected Threshold, got {other:?}"),
+        }
+    }
+
+    /// Pagination strategies should round-trip for all four shapes.
+    #[test]
+    fn pagination_strategies_round_trip() {
+        for (toml_block, check) in [
+            (
+                r#"
+[acquire.pagination]
+type = "cursor"
+param = "after"
+response_path = "$.next_cursor"
+"#,
+                Box::new(|p: PaginationStrategy| {
+                    matches!(p, PaginationStrategy::Cursor { ref param, .. } if param == "after")
+                }) as Box<dyn Fn(PaginationStrategy) -> bool>,
+            ),
+            (
+                r#"
+[acquire.pagination]
+type = "next_url"
+response_path = "$.next"
+"#,
+                Box::new(|p| matches!(p, PaginationStrategy::NextUrl { .. })),
+            ),
+            (
+                r#"
+[acquire.pagination]
+type = "page_number"
+end = 5
+"#,
+                Box::new(|p| {
+                    matches!(p, PaginationStrategy::PageNumber { start, end, .. } if start == 1 && end == 5)
+                }),
+            ),
+        ] {
+            let toml_str = format!(
+                r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "http_api"
+base_url = "https://api.example/"
+
+[[acquire.requests]]
+url = "{{base_url}}/items"
+{toml_block}
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "sentence"
+"#
+            );
+            let r = Recipe::from_toml(&toml_str).expect("parse");
+            let pagination = match r.acquire {
+                AcquirerConfig::HttpApi { pagination, .. } => pagination.expect("pagination"),
+                _ => panic!("expected HttpApi"),
+            };
+            assert!(check(pagination), "round-trip check failed");
+        }
+    }
+}

@@ -1,0 +1,53 @@
+[corpus]
+id = "stackexchange"
+name = "Stack Exchange Reference"
+description = """
+Stack Exchange reference layer — high-quality single-canonical-answer Q&A for code-and-syntax lookup. \
+Sourced from common-pile/stackexchange, which mirrors the December 2024 dump as one composed parquet \
+row per question (question body + comments + answers + answer comments). The retrieval contract is \
+"the user knows what they want; the corpus knows the canonical answer." \
+\
+Pair with `stackexchange-knowledge` for the trade-off / multi-answer shape — the two corpora are \
+non-overlapping by intent: this one captures what an 8B model alone would *almost* get right but \
+where the verbatim SO snippet is better, the knowledge layer captures what no single model has \
+internalized because the answer is "it depends."\
+"""
+license = "CC-BY-SA-4.0"
+mesh_sharing = true
+size_compressed_gb = 39.0
+size_indexed_gb = 120.0
+
+# ─── Acquisition ─────────────────────────────────────────────────────
+# common-pile/stackexchange is parquet — no .7z extraction step required,
+# unlike the IA mirror used by the knowledge layer. Trade-off: this
+# pre-aggregated form bakes Q+A together, so the per-answer score
+# threshold cuts that the spec calls for can only be approximated at
+# the document level. For finer per-answer filtering on a refresh,
+# switch to `bulk_download` against archive.org and `stackexchange_xml`
+# extraction with `mode = "answer_only"` once .7z extraction lands.
+[acquire]
+type = "huggingface_dataset"
+repo = "common-pile/stackexchange"
+
+[extract]
+type = "parquet"
+content_column = "text"
+label_column = "id"
+
+# Paragraph chunking over the composed Q+A text. 2048 chars per chunk
+# is large enough that a typical accepted answer stays in one chunk,
+# small enough that the embedding model's context window stays honest.
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+
+# Reference lookups don't need enrichment — there's no trade-off space
+# to map when each thread has one canonical answer. Spend the
+# enrichment budget on the knowledge layer instead.
+[enrichment]
+enabled = false

@@ -1,0 +1,71 @@
+[corpus]
+id = "sep"
+name = "Stanford Encyclopedia of Philosophy"
+description = """
+Peer-reviewed encyclopedia entries from the Stanford Encyclopedia of Philosophy. \
+Includes claim and relationship enrichment for the epistemic-research skill.\
+"""
+# SEP entries are authored under Stanford copyright. Use is permitted for
+# educational and research purposes. Do NOT redistribute raw text commercially.
+license = "Copyright Stanford University (educational/research use)"
+# mesh_sharing is disabled because SEP's license does not permit redistribution.
+mesh_sharing = false
+size_compressed_gb = 1.4
+size_indexed_gb = 6.0
+
+# Sourced from AiresPucrs/stanford-encyclopedia-philosophy on HuggingFace,
+# which mirrors SEP entries as a single parquet file. This avoids scraping
+# plato.stanford.edu directly (slow, fragile, and impolite to Stanford's servers).
+# The parquet has columns: title, text, url.
+[acquire]
+type = "bulk_download"
+url = "https://huggingface.co/datasets/AiresPucrs/stanford-encyclopedia-philosophy/resolve/main/data/train-00000-of-00001.parquet"
+resume = true
+
+[extract]
+type = "parquet"
+content_column = "text"
+label_column = "category"
+url_column = "metadata"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+# embedding_model and embedding_dimensions are auto-detected from the
+# loaded model at ingest time. Only specify these if you need to override.
+
+# ── Atlas enrichment (v2, per-article) ───────────────────────────────
+#
+# See sovereign-recipes/sep/recipe.toml for the full narrative. The
+# short version: each SEP article becomes its own enrichment corpus
+# (`sep-<slug>`) scaffolded by `sovereign enrich sep-ingest <slug>`,
+# then enriched by `sovereign enrich build sep-<slug>` via the
+# `philosophy_atlas` pipeline.
+[enrichment]
+enabled = true
+type = "atlas"
+pipeline = "philosophy_atlas"
+domain = "philosophy"
+prompt_version = "2.1.0"
+paragraphs_per_section = 10
+
+# HDBSCAN / alignment / fault-line params retained for the legacy
+# full-corpus field-model flow. Atlas (per-article) + field-model
+# (full-corpus) coexist on the same source parquet.
+[enrichment.clustering]
+min_cluster_size = 50
+epsilon = 0.10
+label_sample_size = 5
+
+[enrichment.alignment]
+alignment_threshold = 0.65
+min_chunks_for_discovery = 80
+
+[enrichment.fault_lines]
+proximity_threshold = 0.60
+min_confidence = 0.70
