@@ -74,6 +74,16 @@ fn cooldown_table() -> &'static Mutex<HashMap<String, Instant>> {
 pub enum RecoveryOutcome {
     /// Canonical `<corpus>/` already exists — no recovery needed.
     AlreadyHasCanonical,
+    /// Canonical `<corpus>/` exists on disk but does NOT carry a
+    /// corpus-engine `_corpus_meta.json`. Another subsystem owns
+    /// the directory — for code corpora the daemon stores
+    /// `scip_graph.db` at `<canonical>/scip_graph.db` while the
+    /// chunk data lives in `<canonical>-partition-local/`.
+    /// Attempting `merge_partitions_into_canonical` from here would
+    /// trip `promote_single_shard: refusing to overwrite existing`,
+    /// so we short-circuit. The cooldown is NOT stamped — discovery
+    /// is cheap and re-evaluating each tick costs nothing.
+    CanonicalDirectoryReserved,
     /// No `<corpus>-partition-*/` dirs on disk — nothing to merge.
     NotEnoughPartitions,
     /// The previous attempt was within the cooldown window. Caller
@@ -137,9 +147,19 @@ pub async fn try_recover_stranded_partitions(
     corpus_id: &str,
 ) -> RecoveryOutcome {
     // Cheap pre-checks first — these don't consume the cooldown.
-    let canonical_meta = index_dir.join(corpus_id).join("_corpus_meta.json");
+    let canonical_dir = index_dir.join(corpus_id);
+    let canonical_meta = canonical_dir.join("_corpus_meta.json");
     if canonical_meta.exists() {
         return RecoveryOutcome::AlreadyHasCanonical;
+    }
+    // The canonical-named directory exists but doesn't carry our
+    // meta. Another subsystem (SCIP code-graph for code corpora —
+    // `<canonical>/scip_graph.db` is created by daemon_cmd at
+    // startup and code_walk during atlas builds) owns the
+    // directory. The merge engine will refuse to overwrite, so
+    // skip up-front rather than emit ERROR + WARN every tick.
+    if canonical_dir.exists() {
+        return RecoveryOutcome::CanonicalDirectoryReserved;
     }
 
     // Discovery: any `<corpus>-partition-*/` with a meta file?
@@ -394,6 +414,46 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let outcome = try_recover_stranded_partitions(dir.path(), "absent").await;
         assert!(matches!(outcome, RecoveryOutcome::NotEnoughPartitions));
+    }
+
+    /// Regression: code corpora put the SCIP call-graph at
+    /// `<canonical>/scip_graph.db` while their chunk data lives in
+    /// `<canonical>-partition-local/`. auto_recover must NOT try to
+    /// merge in that case — `promote_single_shard` would fail every
+    /// tick with `refusing to overwrite existing`. Observed in the
+    /// daemon log (May 2026) for corpora `commonwealth`,
+    /// `commonwealth-ai`, `corpus-engine`, `sovereign`.
+    #[tokio::test]
+    async fn skips_when_canonical_dir_holds_only_scip_graph() {
+        let dir = tempfile::tempdir().unwrap();
+        // Canonical dir present, no _corpus_meta.json — only
+        // scip_graph.db (placeholder file is enough; we never read
+        // its content here).
+        let canonical = dir.path().join("commonwealth");
+        std::fs::create_dir_all(&canonical).unwrap();
+        std::fs::write(canonical.join("scip_graph.db"), b"sqlite-stub").unwrap();
+        // A real partition with chunks would normally live next to it.
+        let partition = dir.path().join("commonwealth-partition-local");
+        std::fs::create_dir_all(&partition).unwrap();
+        std::fs::write(
+            partition.join("_corpus_meta.json"),
+            r#"{"processed_shards":[0]}"#,
+        )
+        .unwrap();
+
+        let outcome = try_recover_stranded_partitions(dir.path(), "commonwealth").await;
+        assert!(
+            matches!(outcome, RecoveryOutcome::CanonicalDirectoryReserved),
+            "expected CanonicalDirectoryReserved, got {outcome:?}",
+        );
+        // The canonical was untouched; SCIP file still there.
+        assert!(canonical.join("scip_graph.db").exists());
+        // No cooldown stamp on this path — re-evaluation each tick
+        // is cheap and lets recovery resume the moment the SCIP-
+        // owned directory goes away (e.g. after a `sovereign
+        // corpus remove` flow).
+        let outcome2 = try_recover_stranded_partitions(dir.path(), "commonwealth").await;
+        assert!(matches!(outcome2, RecoveryOutcome::CanonicalDirectoryReserved));
     }
 
     #[tokio::test]

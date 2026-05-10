@@ -381,6 +381,14 @@ pub async fn corpus_collaborate(
                              will produce canonical"
                         );
                     }
+                    crate::auto_recover::RecoveryOutcome::CanonicalDirectoryReserved => {
+                        // The canonical-named directory exists but
+                        // doesn't carry our `_corpus_meta.json` —
+                        // owned by SCIP for code corpora. Fall
+                        // through to the 409 quietly; this isn't a
+                        // recoverable state from the chunk-merge
+                        // path.
+                    }
                 }
             }
 
