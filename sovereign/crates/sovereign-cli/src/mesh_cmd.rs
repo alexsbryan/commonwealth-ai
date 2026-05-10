@@ -1120,7 +1120,7 @@ async fn cmd_corpus_diag(args: &[String]) -> i32 {
     };
 
     // Resolve the same indexes dir the daemon uses: read
-    // `~/.config/sovereign/config.toml`'s `[data] dir` if present,
+    // `~/.sovereign/config.toml`'s `[data] dir` if present,
     // fall back to `~/.sovereign`. Diag is a read-only command so a
     // mis-resolution is recoverable by passing --titles-file later;
     // we still want it to "just work" against the live install

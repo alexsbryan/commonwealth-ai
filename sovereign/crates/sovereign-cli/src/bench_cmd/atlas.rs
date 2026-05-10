@@ -22,7 +22,7 @@
 //! that mirrors the cost split projects total runtime accurately.
 //!
 //! Workflow:
-//!   1. Edit `~/.config/sovereign/config.toml` `[models].primary`.
+//!   1. Edit `~/.sovereign/config.toml` `[models].primary`.
 //!   2. `systemctl --user restart sovereign.service`
 //!   3. `sovereign bench atlas --output run-<label>.json`
 //!   4. Repeat for each candidate model.

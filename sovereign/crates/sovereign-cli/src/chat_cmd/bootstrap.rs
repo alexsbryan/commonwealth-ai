@@ -503,7 +503,7 @@ async fn resolve_model_ids(
         )),
         (_, None) => Err(Error::Serialization(
             "daemon lists no embedding model — retrieval will fail. Set `[models] embed` in \
-             ~/.config/sovereign/config.toml or pass --embed-model."
+             ~/.sovereign/config.toml or pass --embed-model."
                 .into(),
         )),
     }

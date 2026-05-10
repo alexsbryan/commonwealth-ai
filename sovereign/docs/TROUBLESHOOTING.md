@@ -35,7 +35,7 @@ sovereign setup --reset
 
 ### `sovereign setup` says "Already set up"
 
-A config file exists at `~/.config/sovereign/config.toml` (Linux) or `~/Library/Application Support/sovereign/config.toml` (macOS). Use `sovereign setup --reset` to wipe and reconfigure, or edit the file manually.
+A config file exists at `~/.sovereign/config.toml`. Use `sovereign setup --reset` to wipe and reconfigure, or edit the file manually. (Pre-consolidation installs that wrote to the XDG config dir are migrated automatically on first load.)
 
 ### Want to switch models after setup
 
@@ -59,14 +59,14 @@ Check the actual listening port:
 lsof -iTCP -sTCP:LISTEN -P | grep sovereign
 ```
 
-If it's listening on a different port, your `~/.config/sovereign/config.toml` has a non-default `client_port` — edit and restart. If nothing is listening, the daemon didn't start cleanly; see the first entry above.
+If it's listening on a different port, your `~/.sovereign/config.toml` has a non-default `client_port` — edit and restart. If nothing is listening, the daemon didn't start cleanly; see the first entry above.
 
 ### Port conflict with another tool
 
 Many devtools grab `:8080` or `:3000`; `:9741` was chosen to avoid that. If something else owns `:9741`:
 
 ```toml
-# ~/.config/sovereign/config.toml
+# ~/.sovereign/config.toml
 [daemon]
 client_port = 19741
 internal_port = 19742

@@ -1,7 +1,7 @@
 //! `sovereign setup` — first-run onboarding.
 //!
 //! Flow: detect hardware → pick primary model → download three slots
-//! in parallel → write `~/.config/sovereign/config.toml` → register
+//! in parallel → write `~/.sovereign/config.toml` → register
 //! launchd/systemd service → poll the running daemon.
 //!
 //! Flags:
@@ -315,8 +315,9 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("--help, -h",      "Show this message"),
         ]),
         crate::util::help::HelpSection::Notes(
-            "Writes config to the XDG config dir (macOS: ~/Library/Application Support/sovereign/,\n\
-             Linux: ~/.config/sovereign/). Phase 4 split: this command no longer registers a\n\
+            "Writes config to ~/.sovereign/config.toml (alongside the rest of the user-scoped\n\
+             sovereign state). Older installs that wrote to the XDG config dir are migrated\n\
+             automatically on first load. Phase 4 split: this command no longer registers a\n\
              system service. To register the daemon with launchd/systemd so it survives logout,\n\
              run `sovereign install-service` after the wizard completes. To start the daemon\n\
              once without registering it, run `sovereign daemon`.",

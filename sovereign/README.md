@@ -158,7 +158,7 @@ cargo run --release -p sovereign-server -- --config sovereign-server.toml
 - **Daemon didn't come up after `sovereign setup`** → Check `~/.sovereign/logs/daemon.err`. Most common cause: a corrupt GGUF download (a sub-1 MB file). See [TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#sovereign-setup-finishes-but-waiting-for-daemon-to-come-up-times-out).
 - **`project serve` listens on `:8080` instead of `:9741`** → Stale binary; rebuild.
 - **`mesh create` fails with "mesh already exists"** → Run `sovereign mesh rotate` instead.
-- **Want to switch models post-setup** → Edit `~/.config/sovereign/config.toml` or `sovereign setup --reset`.
+- **Want to switch models post-setup** → Edit `~/.sovereign/config.toml` or `sovereign setup --reset`.
 - **Anything else** → `sovereign doctor` walks through every check, or see [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 
 ## Where to go next

@@ -329,7 +329,7 @@ pub async fn run(
     }
 }
 
-/// Production entry point: load `~/.config/sovereign/config.toml`,
+/// Production entry point: load `~/.sovereign/config.toml`,
 /// derive `(daemon_url, model_id)`, build a [`LocalLlmBackend`],
 /// and call [`run`].
 ///
@@ -350,7 +350,7 @@ pub async fn run_with_default_backend(
                 "audit_extract: no setup config; skipping LLM-backed extraction"
             );
             return ExtractRunSummary {
-                skip_reason: Some("no setup config (~/.config/sovereign/config.toml)"),
+                skip_reason: Some("no setup config (~/.sovereign/config.toml)"),
                 ..Default::default()
             };
         }

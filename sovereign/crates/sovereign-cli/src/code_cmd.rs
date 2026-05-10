@@ -1222,7 +1222,7 @@ fn tempfile_dir() -> std::io::Result<PathBuf> {
 /// as knowledge corpora.
 async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), String> {
     let cfg = sovereign_core::setup_config::SetupConfig::load()
-        .map_err(|e| format!("read ~/.config/sovereign/config.toml: {e}"))?;
+        .map_err(|e| format!("read ~/.sovereign/config.toml: {e}"))?;
     let port = cfg.daemon.client_port;
     let endpoint = format!("http://localhost:{port}/v1");
     let embed_model = cfg

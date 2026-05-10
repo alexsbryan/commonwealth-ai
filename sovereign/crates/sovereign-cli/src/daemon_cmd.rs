@@ -5,7 +5,7 @@
 //! service manager keep it alive.
 //!
 //! Responsibilities:
-//! 1. Read `~/.config/sovereign/config.toml` for model paths + ports.
+//! 1. Read `~/.sovereign/config.toml` for model paths + ports.
 //! 2. Build an `EmbeddedLlamaCpp` inference provider from the three
 //!    GGUF slots (primary / fast / embed).
 //! 3. Build a `ToolRegistry` + `NoteStore` so `/mcp/*` has tools.
@@ -1757,7 +1757,7 @@ async fn wait_for_ready(timeout: std::time::Duration) -> bool {
 ///
 /// Hot-swapped into `EmbeddedDaemon::inference_provider` by the admin
 /// reload handler when the user changes a `models.*` path in
-/// `~/.config/sovereign/config.toml` (e.g. via the desktop Settings
+/// `~/.sovereign/config.toml` (e.g. via the desktop Settings
 /// panel's model picker). Keeps the model-loading side of the daemon
 /// out of `sovereign-mesh`, which has no business knowing about GGUF.
 struct LlamaCppFactory {

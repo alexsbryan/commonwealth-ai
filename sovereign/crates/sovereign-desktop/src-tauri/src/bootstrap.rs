@@ -12,9 +12,9 @@
 //!    succeeds we know a daemon (CLI-started or otherwise) is
 //!    already serving. Return `Attach`.
 //! 2. Fall back to config on disk. Prefer the CLI's `SetupConfig`
-//!    (`~/.config/sovereign/config.toml`) — if present, the user
-//!    has run `sovereign setup` before and we should use those
-//!    model paths rather than asking again in the wizard.
+//!    (`~/.sovereign/config.toml`) — if present, the user has run
+//!    `sovereign setup` before and we should use those model paths
+//!    rather than asking again in the wizard.
 //! 3. If `SetupConfig` is absent but `DesktopConfig` says
 //!    `setup_complete`, we're an older desktop-only install —
 //!    `DesktopLegacy` keeps today's behaviour unchanged.

@@ -19,8 +19,9 @@ toml = { workspace = true }
 dashmap = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
-# Platform-native paths for `SetupConfig::default_path()` and friends.
-# The setup_config module is the only consumer at the moment.
+# Home-dir + platform-native config-dir resolution for setup_config.
+# `default_path()` lives at `~/.sovereign/config.toml`; `legacy_default_path()`
+# is the pre-consolidation XDG location used for one-shot migration.
 dirs = "5"
 
 [dev-dependencies]

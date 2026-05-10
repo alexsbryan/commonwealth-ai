@@ -93,7 +93,7 @@ struct ResponseMessage {
 
 /// Configuration for [`LocalLlmBackend`]. Decoupled from the
 /// backend struct so callers can build a config from
-/// `~/.config/sovereign/config.toml` (or test harnesses) and pass
+/// `~/.sovereign/config.toml` (or test harnesses) and pass
 /// it to [`LocalLlmBackend::new`].
 #[derive(Debug, Clone)]
 pub struct LocalLlmConfig {

@@ -160,7 +160,7 @@ async fn run_inspect(
             eprintln!("embed failed: {e}");
             eprintln!(
                 "hint: the daemon may be serving the chat model on /embeddings. \
-                 Check `[models] embed` in ~/.config/sovereign/config.toml."
+                 Check `[models] embed` in ~/.sovereign/config.toml."
             );
             return 1;
         }

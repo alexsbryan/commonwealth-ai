@@ -35,7 +35,7 @@ secondary harness. It hits the running daemon's
 
 ```bash
 # 1. Pick a candidate model.
-$EDITOR ~/.config/sovereign/config.toml      # set [models].primary
+$EDITOR ~/.sovereign/config.toml             # set [models].primary
 
 # 2. Restart the daemon so it loads the new model.
 systemctl --user restart sovereign.service

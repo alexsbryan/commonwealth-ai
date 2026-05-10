@@ -21,10 +21,26 @@ crates/sovereign-desktop/src-tauri/binaries/tessdata/
 .sovereign/notes.db-wal
 
 # Bench data artifacts — regenerable from scripts in the same dir, too
-# large or session-specific to source-control. Scripts (.py / .sh / .md)
-# stay tracked; only the produced data files are ignored.
+# large or session-specific to source-control. Scaffolding (README.md,
+# input .toml fixtures, run scripts) stays tracked; the campaign-level
+# findings are consolidated into bench/HISTORY.md. Only raw produced
+# data is ignored.
 bench/atlas_retrieval/chunks-*.jsonl
+bench/atlas_retrieval/bench-results-*.json
+bench/atlas_retrieval/bench-report-*.md
+bench/atlas_retrieval/brief-quality-*
+bench/atlas_retrieval/regression-*.jsonl
+bench/atlas_retrieval/regression-*.md
+bench/atlas_retrieval/embedding-comparison.md
+bench/atlas_retrieval/golden-gt-*.jsonl
+bench/atlas_throughput/run-*.json
+bench/atlas_throughput/run-*.log
 bench/sep_atlas/logs/
+bench/sep_eval/
+bench/voice/baseline/*.json
+bench/voice/baseline/*.txt
+bench/voice/baseline/*.md
+bench/voice/baseline/diff-*.txt
 
 # Playwright artifacts (chat surface e2e tests).
 crates/sovereign-desktop/test-results/

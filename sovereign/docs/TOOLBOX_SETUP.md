@@ -519,7 +519,7 @@ prompts:
 ./target/release/sovereign-cli setup
 ```
 
-Setup writes `~/.config/sovereign/config.toml` with your chosen
+Setup writes `~/.sovereign/config.toml` with your chosen
 model paths. You can also hand-edit that file:
 
 ```toml
@@ -601,7 +601,7 @@ binary directly:
 ./target/release/sovereign-desktop
 ```
 
-It uses the same `~/.config/sovereign/config.toml` as
+It uses the same `~/.sovereign/config.toml` as
 `sovereign-cli`, so whatever `sovereign setup` wrote is what the
 desktop app will load.
 

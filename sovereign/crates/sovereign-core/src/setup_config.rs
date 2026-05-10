@@ -1,12 +1,20 @@
 //! Persistent configuration written by `sovereign setup` and read by
-//! `sovereign daemon run`. Lives at `~/.config/sovereign/config.toml`
-//! on Linux, or `~/Library/Application Support/sovereign/config.toml`
-//! on macOS (whatever `dirs::config_dir()` resolves to) — distinct
-//! from the project-level `.sovereign/sovereign.toml` which configures
-//! per-project watchers.
+//! `sovereign daemon run`. Lives at `~/.sovereign/config.toml` —
+//! co-located with the rest of the user-scoped sovereign state (corpora,
+//! indexes, notes db, mesh.json). Distinct from the project-level
+//! `.sovereign/sovereign.toml` which configures per-project watchers.
 //!
-//! The split is deliberate: model paths and daemon ports are user-scoped,
-//! while test/lint runners and workspace roots are project-scoped.
+//! The split is: user-scoped state (this file + everything else under
+//! `~/.sovereign/`) versus project-scoped state (test/lint runners,
+//! workspace roots — in the repo's `.sovereign/sovereign.toml`).
+//!
+//! ## Legacy location
+//!
+//! Earlier versions wrote this file to `dirs::config_dir()/sovereign/
+//! config.toml` (i.e. `~/.config/sovereign/...` on Linux,
+//! `~/Library/Application Support/sovereign/...` on macOS). `load()` and
+//! `exists()` transparently migrate the file from that path on first
+//! access; no operator action is required.
 //!
 //! This module used to live in `sovereign-cli`. It moved here so the
 //! desktop app (which depends on `sovereign-core` but *not* on the CLI
@@ -18,7 +26,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// Top-level structure of `~/.config/sovereign/config.toml`.
+/// Top-level structure of `~/.sovereign/config.toml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SetupConfig {
     pub models: ModelsSection,
@@ -375,10 +383,20 @@ fn default_data_dir() -> PathBuf {
 }
 
 impl SetupConfig {
-    /// The canonical XDG config path:
-    /// - Linux: `~/.config/sovereign/config.toml`
-    /// - macOS: `~/Library/Application Support/sovereign/config.toml`
+    /// The canonical config path: `~/.sovereign/config.toml`. Co-located
+    /// with `~/.sovereign/`'s other user-scoped state (corpora, indexes,
+    /// notes db, mesh.json) so operators only have one user directory
+    /// to remember. Falls back to `./.sovereign/config.toml` if the home
+    /// directory can't be resolved — matches `default_data_dir()`.
     pub fn default_path() -> PathBuf {
+        default_data_dir().join("config.toml")
+    }
+
+    /// The pre-consolidation location: `dirs::config_dir()/sovereign/
+    /// config.toml` (`~/.config/sovereign/...` on Linux,
+    /// `~/Library/Application Support/sovereign/...` on macOS). Returned
+    /// for migration only; new writes always go to `default_path()`.
+    pub fn legacy_default_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| {
                 dirs::home_dir()
@@ -389,16 +407,28 @@ impl SetupConfig {
             .join("config.toml")
     }
 
+    /// If the canonical path doesn't exist but the legacy path does,
+    /// move the file. Idempotent — after the first call the legacy path
+    /// is gone, so subsequent calls are no-ops. Errors are logged via
+    /// `eprintln!` and swallowed so a migration hiccup never blocks
+    /// daemon startup; the caller will hit a normal "config not found"
+    /// error path if the legacy file genuinely can't be migrated.
+    fn migrate_legacy_if_needed() {
+        migrate_config_between(&Self::legacy_default_path(), &Self::default_path());
+    }
+
     /// Whether the config file exists on disk. Used by `sovereign setup`
     /// to short-circuit when the user has already configured, and by the
     /// desktop app's bootstrap probe to decide whether to skip the
     /// model-selection screens in the setup wizard.
     pub fn exists() -> bool {
+        Self::migrate_legacy_if_needed();
         Self::default_path().exists()
     }
 
     /// Load from the canonical path.
     pub fn load() -> Result<Self, String> {
+        Self::migrate_legacy_if_needed();
         let path = Self::default_path();
         Self::load_from(&path)
     }
@@ -455,6 +485,33 @@ impl SetupConfig {
             *path = expand_home(path);
         }
         self.data.dir = expand_home(&self.data.dir);
+    }
+}
+
+/// Move `legacy → new_path` iff legacy exists and new_path doesn't.
+/// Pure on its inputs so tests can drive it without overriding `$HOME`.
+/// Logs to stderr on success or failure; never panics.
+fn migrate_config_between(legacy: &Path, new_path: &Path) {
+    if new_path.exists() || !legacy.exists() || new_path == legacy {
+        return;
+    }
+    if let Some(parent) = new_path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            eprintln!("sovereign: migrate config: create {}: {e}", parent.display());
+            return;
+        }
+    }
+    match std::fs::rename(legacy, new_path) {
+        Ok(()) => eprintln!(
+            "sovereign: migrated config {} → {}",
+            legacy.display(),
+            new_path.display()
+        ),
+        Err(e) => eprintln!(
+            "sovereign: migrate config {} → {} failed: {e}",
+            legacy.display(),
+            new_path.display()
+        ),
     }
 }
 
@@ -559,6 +616,53 @@ yield_to_foreground_secs = 0
     fn default_path_includes_sovereign_and_config_toml() {
         let p = SetupConfig::default_path();
         assert!(p.ends_with("sovereign/config.toml"), "unexpected path: {}", p.display());
+    }
+
+    #[test]
+    fn migrate_moves_legacy_when_new_path_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("legacy/config.toml");
+        let new_path = tmp.path().join("new/config.toml");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::write(&legacy, "primary=\"/m/p.gguf\"\n").unwrap();
+
+        migrate_config_between(&legacy, &new_path);
+
+        assert!(new_path.exists(), "new path should exist after migration");
+        assert!(!legacy.exists(), "legacy path should be gone after migration");
+        assert_eq!(
+            std::fs::read_to_string(&new_path).unwrap(),
+            "primary=\"/m/p.gguf\"\n"
+        );
+    }
+
+    #[test]
+    fn migrate_is_noop_when_new_path_already_exists() {
+        // Operator has already migrated (or is on a fresh install): the
+        // legacy file may still exist as a stale leftover, but we must
+        // not clobber the canonical file.
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("legacy/config.toml");
+        let new_path = tmp.path().join("new/config.toml");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(new_path.parent().unwrap()).unwrap();
+        std::fs::write(&legacy, "stale\n").unwrap();
+        std::fs::write(&new_path, "canonical\n").unwrap();
+
+        migrate_config_between(&legacy, &new_path);
+
+        assert_eq!(std::fs::read_to_string(&new_path).unwrap(), "canonical\n");
+        assert!(legacy.exists(), "legacy untouched when new path present");
+    }
+
+    #[test]
+    fn migrate_is_noop_when_legacy_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let legacy = tmp.path().join("legacy/config.toml");
+        let new_path = tmp.path().join("new/config.toml");
+        // Neither file exists.
+        migrate_config_between(&legacy, &new_path);
+        assert!(!new_path.exists());
     }
 
     #[test]

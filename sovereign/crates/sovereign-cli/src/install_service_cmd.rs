@@ -69,7 +69,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Notes(
             "Writes a launchd plist (macOS) or systemd user unit (Linux) that runs \
              `sovereign daemon run` on login + restarts on crash. The daemon's setup \
-             wizard must have been completed first (config at ~/.config/sovereign/config.toml). \
+             wizard must have been completed first (config at ~/.sovereign/config.toml). \
              Run `sovereign daemon --setup-only` if not.",
         ),
     ],

@@ -12,7 +12,7 @@ Yes. `sovereign-inference` supports an OpenAI-compatible `RemoteApiProvider`. Fo
 
 ### How do I switch to a different primary model?
 
-Edit `~/.config/sovereign/config.toml` (Linux) or `~/Library/Application Support/sovereign/config.toml` (macOS):
+Edit `~/.sovereign/config.toml`:
 
 ```toml
 [models]
@@ -42,7 +42,7 @@ From the user's point of view there's one binary (`sovereign`), one daemon (`sov
 - **Mesh state**: platform-native data dir (e.g. `~/Library/Application Support/sovereign/mesh.json` on macOS)
 - **Code intelligence indexes**: `~/.sovereign/indexes/<corpus>/`
 - **Knowledge corpora**: `~/.sovereign/indexes/_downloads/<corpus>/` (shards) + indexed into the same corpus dir
-- **Config**: `~/.config/sovereign/config.toml` (XDG) or `~/Library/Application Support/sovereign/config.toml` (macOS)
+- **Config**: `~/.sovereign/config.toml`
 - **Logs**: `~/.sovereign/logs/daemon.log`
 
 ### How do I configure a web search API key?
