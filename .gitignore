@@ -4,13 +4,6 @@
 # `bootstrap.sh` on a fresh workstation.
 
 # ── Sub-repos: tracked independently ──────────────────────────────────────
-/sovereign/
-/commonwealth/
-/corpus-engine/
-/oicp-types/
-/sovereign-recipes/
-/src-ta/
-/src-tauri/
 
 # ── Build artefacts ───────────────────────────────────────────────────────
 /target/
