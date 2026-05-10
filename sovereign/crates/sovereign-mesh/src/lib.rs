@@ -26,8 +26,6 @@ pub mod deep_link;
 pub mod gossip;
 pub mod inference_adapter;
 pub mod join;
-pub mod peer_addr;
-pub mod peer_health;
 pub mod prompt_compactor;
 pub mod source_content_validator;
 pub mod tool_profile;

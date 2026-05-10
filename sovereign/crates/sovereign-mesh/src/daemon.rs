@@ -1077,7 +1077,7 @@ impl EmbeddedDaemon {
                 // gossiped list fails on the first attempt in
                 // toolbox/container environments that lack an IPv6
                 // route to the tailnet.
-                base_urls: crate::peer_addr::sorted_addresses(
+                base_urls: commonwealth_core::peer_addr::sorted_addresses(
                     &m.addresses.iter().copied().collect::<Vec<_>>(),
                 )
                 .iter()
@@ -2193,7 +2193,6 @@ mod tests {
                 max_extras_memory_gb: None,
                 primary_pool: None,
                 extra: std::collections::BTreeMap::new(),
-                primary_pool: None,
             },
             daemon: DaemonSection::default(),
             data: DataSection::default(),

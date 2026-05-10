@@ -743,7 +743,7 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
 /// IPv6 ULA tied at rank 0, leading to nondeterministic IPv6-first
 /// picks that broke on hosts without IPv6 routing.
 fn best_peer_url(addrs: &[std::net::SocketAddr]) -> Option<String> {
-    let sorted = crate::peer_addr::sorted_addresses(addrs);
+    let sorted = commonwealth_core::peer_addr::sorted_addresses(addrs);
     let best = *sorted.first()?;
     let host = match best.ip() {
         std::net::IpAddr::V4(_) => best.ip().to_string(),

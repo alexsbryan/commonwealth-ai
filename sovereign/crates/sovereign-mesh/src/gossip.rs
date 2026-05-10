@@ -263,7 +263,7 @@ pub async fn run_one_round(
                 // `last_working_address_cache` has a hint) try IPv4
                 // before falling through to IPv6. Subsequent rounds
                 // are reordered by the cache regardless.
-                let addrs = crate::peer_addr::sorted_addresses(
+                let addrs = commonwealth_core::peer_addr::sorted_addresses(
                     &m.addresses.iter().copied().collect::<Vec<_>>(),
                 );
                 (m.node_id, addrs)
@@ -460,7 +460,7 @@ pub async fn run_one_round(
                         // Sort addresses IPv4-first via the shared
                         // ranker so mesh-store push retries match
                         // the order used by inference routing.
-                        let addrs = crate::peer_addr::sorted_addresses(
+                        let addrs = commonwealth_core::peer_addr::sorted_addresses(
                             &m.addresses.iter().copied().collect::<Vec<_>>(),
                         );
                         (m.node_id, addrs)

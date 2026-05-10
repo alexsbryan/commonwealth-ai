@@ -206,7 +206,7 @@ pub struct MeshInferenceProvider {
     /// linearly-backed-off cooldown. Filtered out of routing
     /// candidates while quarantined; one successful response clears
     /// the state. See [`peer_health`] for the policy.
-    peer_health: Arc<crate::peer_health::PeerHealthTracker>,
+    peer_health: Arc<commonwealth_core::peer_health::PeerHealthTracker>,
 }
 
 impl MeshInferenceProvider {
@@ -256,7 +256,7 @@ impl MeshInferenceProvider {
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
             local_benchmark: Arc::new(RwLock::new(None)),
-            peer_health: Arc::new(crate::peer_health::PeerHealthTracker::new()),
+            peer_health: Arc::new(commonwealth_core::peer_health::PeerHealthTracker::new()),
         }
     }
 
