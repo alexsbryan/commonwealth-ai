@@ -1,0 +1,50 @@
+# default_pipelines.toml — ATOS pipeline aliases.
+#
+# A pipeline alias maps a model name (what the client sends in the
+# chat-completions `model` field) to a middleware stack + a concrete
+# model. The middleware stack runs on the request before it reaches
+# the configured `model_id`; from the client's perspective, the
+# pipeline is a model.
+#
+# See `commonwealth-api/src/middleware/` for the middleware
+# implementations referenced here by id.
+
+[[pipeline]]
+# The "just start opencode" entry point. Resolves to the big coder
+# model with the full ATOS middleware stack: approval gating,
+# automatic context injection, ATOS tool advertisement, per-turn
+# decision extraction.
+#
+# `decision_extractor` lives at the tail so its `post_process` runs
+# after every other middleware has finished observing the response,
+# and its pre-path `process` (which consumes the previous turn's
+# `pending_decision`) runs after `approval_gate` has resolved the
+# session's feature scope. See
+# `commonwealth-api::middleware::decision_extractor` for the
+# two-turn-lookahead state machine.
+name = "sovereign-coder"
+model_id = "qwen-27b-coder"
+middleware = ["approval_gate", "session_briefing", "context_injector", "tool_injector", "artifact_surface", "decision_extractor"]
+
+[pipeline.context]
+inject_notes = true
+inject_spec = true
+inject_invariants_only = false
+
+[[pipeline]]
+# Red-team variant. Same model, restricted middleware — no notes
+# digest (to keep reviewers from seeing implementation history),
+# spec invariants section only, read-only enforcer blocks write
+# tools at the middleware layer.
+#
+# M4 defines the alias; the `read_only_enforcer` middleware is
+# implemented lazily (it's a thin wrapper over the approval gate's
+# write-intent detection) and ships alongside the core four.
+name = "sovereign-red-team"
+model_id = "qwen-27b-coder"
+middleware = ["read_only_enforcer", "context_injector"]
+
+[pipeline.context]
+inject_notes = false
+inject_spec = true
+inject_invariants_only = true

@@ -1,0 +1,13 @@
+/target
+**/*.rs.bk
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# Sovereign code intelligence
+.sovereign/project.json
+.sovereign/scip/

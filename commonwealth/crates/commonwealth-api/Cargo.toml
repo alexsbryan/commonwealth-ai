@@ -1,0 +1,64 @@
+[package]
+name = "commonwealth-api"
+description = "Axum HTTP server with OpenAI-compatible and OICP endpoints for Commonwealth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { workspace = true }
+commonwealth-discovery = { workspace = true }
+commonwealth-inference = { workspace = true }
+commonwealth-knowledge = { workspace = true }
+commonwealth-app = { workspace = true }
+commonwealth-state = { workspace = true }
+corpus-engine = { workspace = true }
+# ATOS orchestrator library — middleware stack references it for
+# session state, approval lookups, and note-store access.
+sovereign-atos = { path = "../../../sovereign/crates/sovereign-atos" }
+# Shared tool manifest — the tool_injector middleware pulls the
+# canonical ATOS tool descriptors from here so schemas can't drift
+# from the tool implementations.
+sovereign-tools = { path = "../../../sovereign/crates/sovereign-tools", features = ["treesitter"] }
+sovereign-core  = { path = "../../../sovereign/crates/sovereign-core" }
+axum = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Used by `spawn_corpus_install_with_parameters` to bridge the API's
+# JSON wire format into the TOML values that
+# `Recipe::resolve_parameters` validates against the recipe's
+# declared `[recipe.parameters]` schema.
+toml = { workspace = true }
+thiserror = { workspace = true }
+bytes = { workspace = true }
+hex = "0.4"
+reqwest = { workspace = true }
+# `LocalInferenceService` is an async trait with streaming return
+# types; needs async-trait for the sugar and futures for the
+# Stream alias used in the handler's SSE wrapper.
+async-trait = "0.1"
+futures = "0.3"
+# Used to swap `AppStateInner.self_node_id` after the join handshake
+# adopts a founder-assigned ID. Cheap reads (Arc clone), single
+# atomic swap on adoption, no async lock contention.
+arc-swap = "1.7"
+sha2 = "0.10"
+# Phase 6 canonical-sync: server side packs the canonical index dir
+# into a tar.zst stream, client side unpacks and validates fingerprint
+# before atomic rename. Both crates have stable C/Rust impls.
+tar = "0.4"
+zstd = "0.13"
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
+# Home-dir lookup for the alignment projector hook in auto_recover
+# and corpus_sync. Already a transitive dep via sovereign-cli; pulling
+# it in directly here avoids reaching across crates for a single call.
+dirs = "5"
+
+[dev-dependencies]
+commonwealth-discovery = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros"] }
+tower = "0.5"
+http-body-util = "0.1"
+tempfile = "3"

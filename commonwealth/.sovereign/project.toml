@@ -1,0 +1,149 @@
+schema_version = 2
+
+[project]
+name = "commonwealth"
+
+[observation]
+observed_at = 1778187099
+has_git = true
+embed_model_available = true
+
+[[observation.language]]
+id = "rust"
+display = "Rust workspace (9 crates)"
+scip = "not_required"
+
+[[observation.dep]]
+name = "anyhow"
+version = "1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "axum"
+version = "0.8"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "bytes"
+version = "1.0"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "clap"
+version = "4"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "commonwealth-api"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "commonwealth-app"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "commonwealth-core"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "commonwealth-discovery"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "commonwealth-inference"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "commonwealth-knowledge"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "commonwealth-state"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "corpus-engine"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "hostname"
+version = "0.4"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "reqwest"
+version = "0.12"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "rusqlite"
+version = "0.35"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "serde"
+version = "1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "serde_json"
+version = "1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "thiserror"
+version = "2"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tokio"
+version = "1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tokio-util"
+version = "0.7"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "toml"
+version = "0.8"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tracing"
+version = "0.1"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[[observation.dep]]
+name = "tracing-subscriber"
+version = "0.3"
+source_file = "Cargo.toml"
+kind = "direct"
+
+[lifecycle]
+founded = false
+charter_version = 0
+current_phase = 0

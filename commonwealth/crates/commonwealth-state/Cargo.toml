@@ -1,0 +1,15 @@
+[package]
+name = "commonwealth-state"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+commonwealth-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+rusqlite = { version = "0.35", features = ["bundled"] }
+bytes = "1.0"
