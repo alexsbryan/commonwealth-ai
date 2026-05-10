@@ -258,7 +258,16 @@ pub async fn run_one_round(
         mesh.members
             .values()
             .filter(|m| m.node_id != self_id)
-            .map(|m| (m.node_id, m.addresses.clone()))
+            .map(|m| {
+                // Sort IPv4-first so first-contact rounds (before
+                // `last_working_address_cache` has a hint) try IPv4
+                // before falling through to IPv6. Subsequent rounds
+                // are reordered by the cache regardless.
+                let addrs = crate::peer_addr::sorted_addresses(
+                    &m.addresses.iter().copied().collect::<Vec<_>>(),
+                );
+                (m.node_id, addrs)
+            })
             .collect()
     };
 
@@ -447,7 +456,15 @@ pub async fn run_one_round(
                 mesh.members
                     .values()
                     .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
-                    .map(|m| (m.node_id, m.addresses.iter().copied().collect()))
+                    .map(|m| {
+                        // Sort addresses IPv4-first via the shared
+                        // ranker so mesh-store push retries match
+                        // the order used by inference routing.
+                        let addrs = crate::peer_addr::sorted_addresses(
+                            &m.addresses.iter().copied().collect::<Vec<_>>(),
+                        );
+                        (m.node_id, addrs)
+                    })
                     .collect()
             };
 

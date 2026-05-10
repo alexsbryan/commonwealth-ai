@@ -22,6 +22,19 @@ pub struct RemoteApiProvider {
     context_size: u32,
 }
 
+/// Default request timeout for `RemoteApiProvider`. Matches the
+/// local-inference path's `CHAT_TIMEOUT` (1800s / 30 min) so a remote
+/// peer isn't artificially capped tighter than the same call would be
+/// locally — a Phase 1 enrichment call that takes 3 minutes on a slow
+/// CPU-bound peer (grammar masking is single-threaded) would time out
+/// at the previous 120s default before the peer could return, even
+/// though the peer was healthy and producing tokens.
+///
+/// Embed callers reuse this provider; their response is <1s in
+/// practice so the long timeout never fires for them in the happy
+/// path. Tests/customization can adjust via `with_timeout`.
+const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1800);
+
 impl RemoteApiProvider {
     pub fn new(
         endpoint: &str,
@@ -29,8 +42,21 @@ impl RemoteApiProvider {
         model_id: &str,
         context_size: u32,
     ) -> Self {
+        Self::with_timeout(endpoint, api_key, model_id, context_size, DEFAULT_TIMEOUT)
+    }
+
+    /// Construct with an explicit request timeout. Use for tests or
+    /// for short-lived health probes where waiting 30 min on a
+    /// hanging peer is wrong.
+    pub fn with_timeout(
+        endpoint: &str,
+        api_key: Option<String>,
+        model_id: &str,
+        context_size: u32,
+        timeout: std::time::Duration,
+    ) -> Self {
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(120))
+            .timeout(timeout)
             .build()
             .unwrap_or_default();
 

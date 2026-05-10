@@ -737,26 +737,14 @@ async fn discover_and_spawn_pull_loops(state: AppState, self_id: NodeId, daemon_
     }
 }
 
-/// Pick the best reachable URL for a peer. Prefers Tailscale addresses
-/// (CGNAT 100.64.0.0/10 or ULA fd7a:115c:a1e0::/48) which work across
-/// Wi-Fi networks where LAN IPs silently fail. Mirrors the logic in
-/// `corpus_collaborate`'s peer-dispatch path.
+/// Pick the best reachable URL for a peer. Delegates to
+/// `peer_addr::rank` so this matches the order used by gossip and
+/// inference fallback. The previous local sort had IPv4 CGNAT and
+/// IPv6 ULA tied at rank 0, leading to nondeterministic IPv6-first
+/// picks that broke on hosts without IPv6 routing.
 fn best_peer_url(addrs: &[std::net::SocketAddr]) -> Option<String> {
-    if addrs.is_empty() {
-        return None;
-    }
-    let mut sorted: Vec<std::net::SocketAddr> = addrs.iter().copied().collect();
-    sorted.sort_by_key(|addr| match addr.ip() {
-        std::net::IpAddr::V4(v4) => {
-            let o = v4.octets();
-            if o[0] == 100 && (o[1] & 0xc0) == 64 { 0 } else { 1 }
-        }
-        std::net::IpAddr::V6(v6) => {
-            let s = v6.segments();
-            if s[0] == 0xfd7a && s[1] == 0x115c && s[2] == 0xa1e0 { 0 } else { 2 }
-        }
-    });
-    let best = sorted[0];
+    let sorted = crate::peer_addr::sorted_addresses(addrs);
+    let best = *sorted.first()?;
     let host = match best.ip() {
         std::net::IpAddr::V4(_) => best.ip().to_string(),
         std::net::IpAddr::V6(v6) => format!("[{v6}]"),

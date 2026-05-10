@@ -1070,18 +1070,26 @@ impl EmbeddedDaemon {
                 // 9742 (which is internal). The gossiped addresses
                 // carry port 9742 (that's what the join handshake
                 // targets). Rewrite to 9741 for inference.
-                base_urls: m
-                    .addresses
-                    .iter()
-                    .map(|addr| {
-                        let ip = addr.ip();
-                        if ip.is_ipv6() {
-                            format!("http://[{ip}]:9741/v1")
-                        } else {
-                            format!("http://{ip}:9741/v1")
-                        }
-                    })
-                    .collect(),
+                // Sort by `peer_addr::rank` so the inference fallback
+                // chain in `peer_inference.rs` tries IPv4 (typically
+                // Tailscale CGNAT) before IPv6 ULA. Without this sort
+                // a peer with an IPv6 address ahead of its IPv4 in the
+                // gossiped list fails on the first attempt in
+                // toolbox/container environments that lack an IPv6
+                // route to the tailnet.
+                base_urls: crate::peer_addr::sorted_addresses(
+                    &m.addresses.iter().copied().collect::<Vec<_>>(),
+                )
+                .iter()
+                .map(|addr| {
+                    let ip = addr.ip();
+                    if ip.is_ipv6() {
+                        format!("http://[{ip}]:9741/v1")
+                    } else {
+                        format!("http://{ip}:9741/v1")
+                    }
+                })
+                .collect(),
                 system_ram_gb: m.capabilities.hardware.system_ram_gb,
                 benchmark: m.capabilities.benchmark.clone(),
             })
@@ -2141,6 +2149,7 @@ mod tests {
                 code: None,
                 context_size: None,
                 max_extras_memory_gb: None,
+                primary_pool: None,
                 extra: std::collections::BTreeMap::new(),
             },
             daemon: DaemonSection::default(),
