@@ -279,20 +279,47 @@ async fn cmd_join(args: &[String]) -> i32 {
         return 1;
     };
 
-    let link = match parse_join_argument(arg) {
-        Some(l) => l,
-        None => {
-            eprintln!("Invalid join argument: {arg}");
-            eprintln!("Expected a bare key (cwth-XXXX-XXXX-XXXX), an https URL, or a sovereign:// link.");
-            return 1;
-        }
-    };
+    // Validate the argument before either path so the user sees the
+    // same error regardless of whether a daemon is up. `parse_join_argument`
+    // accepts bare keys / https URLs / sovereign:// — same set as
+    // /v1/mesh/join on the daemon side.
+    if parse_join_argument(arg).is_none() {
+        eprintln!("Invalid join argument: {arg}");
+        eprintln!("Expected a bare key (cwth-XXXX-XXXX-XXXX), an https URL, or a sovereign:// link.");
+        return 1;
+    }
 
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
-    let daemon = EmbeddedDaemon::new(mesh_data_dir());
 
+    // Prefer the running daemon's HTTP endpoint when it's reachable.
+    // Why: building a fresh `EmbeddedDaemon` from the CLI process
+    // creates a SEPARATE in-memory `AppState`. Its `start_daemon`
+    // fails silently to bind :9741/:9742 (the running daemon already
+    // owns them, the bind error is swallowed by a `warn!` + `return`
+    // inside an async block — not a hard failure), the handshake
+    // still completes on the founder's side, but only the CLI
+    // process's mesh state gets updated — never the long-running
+    // daemon's. CLI exits, in-memory join state evaporates, and the
+    // daemon keeps its solo-mesh `join_key_hash`. Every subsequent
+    // gossip from peers mismatches and gets rejected.
+    //
+    // Routing through `POST /v1/mesh/join` makes the running daemon
+    // perform the join in-process, so the AppState that actually
+    // serves gossip is the one that gets the adopted mesh.
     println!();
     println!("Joining mesh...");
+    if daemon_listening_on(9741).await {
+        return join_via_running_daemon(arg, &node_name).await;
+    }
+
+    eprintln!("(no daemon detected on :9741 — running the join in-process)");
+    let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    let Some(link) = parse_join_argument(arg) else {
+        // Pre-validated above, so this is unreachable. Bail
+        // defensively rather than panic.
+        eprintln!("Invalid join argument: {arg}");
+        return 1;
+    };
     match daemon.join_mesh(&link, &node_name).await {
         Ok(result) => {
             println!();
@@ -308,6 +335,85 @@ async fn cmd_join(args: &[String]) -> i32 {
             eprintln!("Failed to join mesh: {e}");
             1
         }
+    }
+}
+
+/// Probe `127.0.0.1:<port>` for an HTTP listener. Used to decide
+/// between the in-process `EmbeddedDaemon` path and the
+/// daemon-HTTP-endpoint path in `cmd_join`. We hit `/v1/models` rather
+/// than `/` because the daemon's root route returns 405 for GET and
+/// reqwest's `.send()` succeeds against 405 just as well as 200 — the
+/// goal is "is anything listening", not "is the response 2xx".
+async fn daemon_listening_on(port: u16) -> bool {
+    let url = format!("http://127.0.0.1:{port}/v1/models");
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(500))
+        .build()
+    else {
+        return false;
+    };
+    client.get(&url).send().await.is_ok()
+}
+
+/// POST `arg` to the running daemon's `/v1/mesh/join` endpoint and
+/// surface the response. Mirrors the success / failure output of the
+/// in-process path so the user can't tell which one ran (and shouldn't
+/// have to).
+async fn join_via_running_daemon(arg: &str, node_name: &str) -> i32 {
+    let url = "http://127.0.0.1:9741/v1/mesh/join";
+    let body = serde_json::json!({
+        "key_or_url": arg,
+        "node_name": node_name,
+    });
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
+        }
+    };
+    let resp = match client.post(url).json(&body).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to reach running daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    let status = resp.status();
+    let payload: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Daemon returned non-JSON response (status={status}): {e}");
+            return 1;
+        }
+    };
+    if status.is_success() {
+        let mesh_name = payload
+            .get("mesh_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(unknown)");
+        let node_id = payload
+            .get("node_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(unknown)");
+        println!();
+        println!("\u{2713} Connected to \"{mesh_name}\"");
+        println!("  Your node id: {node_id}");
+        println!();
+        println!("Shared compute is now available.");
+        println!();
+        0
+    } else {
+        let err = payload
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(no error message)");
+        eprintln!();
+        eprintln!("Failed to join mesh (daemon returned {status}): {err}");
+        1
     }
 }
 

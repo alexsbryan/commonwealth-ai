@@ -1,0 +1,45 @@
+# Keep the build context lean. Without this, `podman build` tar-streams
+# the entire monorepo into the builder — including 261 GB of GGUFs and
+# multi-GB cargo build outputs — making every container build start
+# with a multi-minute "Sending build context" stall.
+#
+# The Containerfiles under sovereign/container/ COPY in only the paths
+# cargo / build-scripts actually need; this list enumerates the bulky
+# directories that are NEVER referenced by those COPYs so podman can
+# skip them outright.
+
+# Local Rust build artifacts (workspace target + per-crate targets).
+target/
+**/target/
+
+# 261 GB of GGUFs. The container pulls models from R2 at runtime via
+# rclone; the host's local cache must never leak into the image.
+sovereign/models/
+
+# Large corpora datasets. Exclude everything under sovereign-recipes/
+# EXCEPT the wikipedia/data/ slice that corpus-engine/build.rs depends
+# on (vital_articles_l1..l5.txt — bundled into the binary via
+# include_bytes!).
+sovereign-recipes/*
+!sovereign-recipes/wikipedia/
+sovereign-recipes/wikipedia/*
+!sovereign-recipes/wikipedia/data/
+
+# IDE / editor scratch state.
+.idea/
+.vscode/
+*.swp
+
+# Local databases, logs, traces.
+*.sqlite
+*.sqlite-journal
+*.log
+
+# Git internals — never needed in the image.
+.git/
+
+# Container artifacts themselves.
+**/Containerfile
+**/Dockerfile
+.containerignore
+.dockerignore

@@ -110,7 +110,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("run",     "Same as bare — kept for explicit invocation by launchd / systemd unit files."),
             ("start",   "Start the daemon in the background (detached child + PID file at ~/.sovereign/daemon.pid). Waits for readiness."),
             ("status",  "Report whether the daemon is running and answering on :9741."),
-            ("stop",    "Stop the daemon cleanly (SIGTERM). Uses the PID file from `start` when present; otherwise falls back to launchctl / systemctl."),
+            ("stop",    "Stop the daemon cleanly (SIGTERM). Tries the PID file first, then looks up the listener on :9741 via lsof/ss, then falls back to launchctl / systemctl."),
             ("reload",  "Apply config changes without a restart (POST /v1/admin/reload)."),
             ("restart", "Hard-restart via launchctl / systemctl. Drops in-flight requests."),
         ]),
@@ -1075,6 +1075,34 @@ async fn run_daemon(args: &[String]) -> i32 {
         config.daemon.client_port
     );
 
+    // ── Pidfile ───────────────────────────────────────────────────
+    //
+    // `sovereign daemon stop` keys off `~/.sovereign/daemon.pid` to
+    // know which process to SIGTERM. Previously only `daemon start`
+    // (the detached-child launcher) wrote that file, so any other
+    // launch path — `sovereign daemon run` from a shell, `cargo run
+    // -- daemon run`, systemd's `ExecStart` — left no pidfile and
+    // `stop` silently fell back to `systemctl/launchctl stop`, which
+    // is a no-op for daemons launched outside the service manager.
+    //
+    // Writing the pidfile here from `run_daemon` itself makes the
+    // file an accurate property of "a daemon is running" rather than
+    // "the daemon was launched via `start`". The bind has already
+    // succeeded above, so any pre-existing pidfile is stale and can
+    // be overwritten safely (the live owner of :9741 is us).
+    let pid_path = daemon_pid_path();
+    if let Some(parent) = pid_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let self_pid = std::process::id();
+    if let Err(e) = std::fs::write(&pid_path, format!("{self_pid}\n")) {
+        tracing::warn!(
+            path = %pid_path.display(),
+            error = %e,
+            "could not write daemon pidfile — `daemon stop` will need lsof/launchctl fallback"
+        );
+    }
+
     // ── Block until SIGINT/SIGTERM ────────────────────────────────
     wait_for_shutdown().await;
 
@@ -1084,6 +1112,18 @@ async fn run_daemon(args: &[String]) -> i32 {
     // boot (the regression that left Machine A and Machine B in
     // different meshes after every Ctrl-C).
     let _ = daemon.shutdown().await;
+
+    // Remove the pidfile only if it still points at us. If something
+    // racier (a fresh `daemon start` parent re-wrote it during our
+    // shutdown, or a new daemon took our port after we released it)
+    // claimed the file, leave it alone — `read_daemon_pid` already
+    // handles a stale pidfile via `kill(pid, 0)`.
+    if let Ok(raw) = std::fs::read_to_string(&pid_path) {
+        if raw.trim().parse::<u32>().ok() == Some(self_pid) {
+            let _ = std::fs::remove_file(&pid_path);
+        }
+    }
+
     eprintln!("sovereign daemon stopped");
     0
 }
@@ -1337,6 +1377,38 @@ async fn stop_daemon() -> i32 {
         }
     }
 
+    // No usable pidfile. Before forwarding to systemctl/launchctl,
+    // try a port-based lookup: if something is listening on :9741, that
+    // process IS the daemon and we can SIGTERM it directly. This catches:
+    //   - daemons launched by an older binary that didn't write a pidfile
+    //   - daemons started via `cargo run -- daemon run` from a dev shell
+    //   - daemons whose pidfile was hand-deleted
+    // Without this, `daemon stop` falls through to `systemctl stop` on
+    // an inactive unit, which is a no-op returning exit 0 — i.e. silently
+    // reports success while the actual daemon keeps serving.
+    #[cfg(unix)]
+    if let Some(pid) = find_daemon_pid_by_port(9741) {
+        let rc = unsafe { libc_kill(pid, 15 /* SIGTERM */) };
+        if rc == 0 {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            while std::time::Instant::now() < deadline {
+                if unsafe { libc_kill(pid, 0) } != 0 {
+                    let _ = std::fs::remove_file(daemon_pid_path());
+                    eprintln!("✓ stopped (pid {pid}, found by :9741 listener)");
+                    return 0;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+            eprintln!(
+                "⚠ pid {pid} (owner of :9741) didn't exit after 10s; leaving it alone"
+            );
+            return 1;
+        }
+        // kill() failed (most likely EPERM on a daemon owned by another
+        // user). Fall through to the service-manager path; it might be
+        // the only thing with permission.
+    }
+
     match crate::service_install::stop_service() {
         Ok(()) => {
             eprintln!("✓ stop signal sent — daemon will exit after draining in-flight requests");
@@ -1346,6 +1418,135 @@ async fn stop_daemon() -> i32 {
             eprintln!("error: {e}");
             1
         }
+    }
+}
+
+/// Find the PID listening on `port` on localhost. Used by `daemon stop`
+/// as a last-resort fallback when no pidfile is present and the service
+/// manager has nothing to stop — see `stop_daemon` for the call site.
+///
+/// We try two probes in order, preferring `lsof` because its output is
+/// stable and trivially parseable, then `ss` (iproute2) for hosts where
+/// lsof isn't installed (notably minimal Linux containers). Both are
+/// invoked with arguments that print one PID per line and nothing else.
+#[cfg(unix)]
+fn find_daemon_pid_by_port(port: u16) -> Option<i32> {
+    use std::process::Command;
+
+    // `lsof -t` → "terse" output: bare PIDs, one per line.
+    // `-sTCP:LISTEN` filters out connected sockets (so we don't pick up
+    // a client of :9741 if one happens to be alive).
+    // `-i 4TCP:<port>` is more selective than `-i :<port>` — IPv4 only,
+    // TCP only, avoiding UDP false positives.
+    if let Ok(out) = Command::new("lsof")
+        .args([
+            "-t",
+            "-sTCP:LISTEN",
+            "-i",
+            &format!("4TCP:{port}"),
+        ])
+        .output()
+    {
+        if out.status.success() {
+            if let Some(pid) = parse_first_pid_line(&out.stdout) {
+                return Some(pid);
+            }
+        }
+    }
+
+    // `ss -H -tlnp 'sport = :<port>'` prints one line per listener
+    // with no header. The pid lives inside `users:(("name",pid=N,fd=...))`
+    // so we have to extract it. -H suppresses the header line.
+    if let Ok(out) = Command::new("ss")
+        .args([
+            "-H",
+            "-tlnp",
+            &format!("sport = :{port}"),
+        ])
+        .output()
+    {
+        if out.status.success() {
+            if let Some(pid) = parse_ss_first_pid(&String::from_utf8_lossy(&out.stdout)) {
+                return Some(pid);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(unix)]
+fn parse_first_pid_line(bytes: &[u8]) -> Option<i32> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    text.lines()
+        .next()
+        .and_then(|l| l.trim().parse::<i32>().ok())
+}
+
+/// Extract the first `pid=N` integer from one or more `ss -tlnp` lines.
+/// Returns None when no line contains a `pid=` token or the digits don't
+/// parse as i32. The pid token shape is iproute2-stable: the relevant
+/// fragment is `users:(("name",pid=12345,fd=7))`.
+#[cfg(unix)]
+fn parse_ss_first_pid(text: &str) -> Option<i32> {
+    for line in text.lines() {
+        if let Some(rest) = line.split("pid=").nth(1) {
+            let digits: String =
+                rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+            if let Ok(p) = digits.parse::<i32>() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(all(test, unix))]
+mod stop_daemon_tests {
+    use super::*;
+
+    #[test]
+    fn parses_lsof_terse_single_pid() {
+        assert_eq!(parse_first_pid_line(b"664307\n"), Some(664307));
+    }
+
+    #[test]
+    fn parses_lsof_terse_first_of_multiple_pids() {
+        // lsof -t prints one pid per line if multiple processes match.
+        // Picking the first is fine — the bind would have prevented a
+        // second daemon from coexisting; multiple lines means there is
+        // a non-daemon listener masquerading on the port, and we'd
+        // rather SIGTERM the obvious one than spray signals at every
+        // pid in the list.
+        assert_eq!(parse_first_pid_line(b"664307\n123\n"), Some(664307));
+    }
+
+    #[test]
+    fn returns_none_on_empty_lsof_output() {
+        assert_eq!(parse_first_pid_line(b""), None);
+        assert_eq!(parse_first_pid_line(b"\n"), None);
+    }
+
+    #[test]
+    fn parses_ss_listener_line_with_pid() {
+        // Real shape of `ss -H -tlnp 'sport = :9741'` output:
+        let sample = "LISTEN 0      4096       127.0.0.1:9741       0.0.0.0:* \
+                      users:((\"sovereign-cli\",pid=664307,fd=12))";
+        assert_eq!(parse_ss_first_pid(sample), Some(664307));
+    }
+
+    #[test]
+    fn ignores_ss_lines_without_pid_field() {
+        let sample = "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*\n\
+                      LISTEN 0 4096 127.0.0.1:9741 0.0.0.0:* \
+                        users:((\"sovereign-cli\",pid=664307,fd=12))";
+        assert_eq!(parse_ss_first_pid(sample), Some(664307));
+    }
+
+    #[test]
+    fn ss_no_pid_token_returns_none() {
+        assert_eq!(parse_ss_first_pid(""), None);
+        assert_eq!(parse_ss_first_pid("LISTEN 0 128 0.0.0.0:22 0.0.0.0:*"), None);
     }
 }
 

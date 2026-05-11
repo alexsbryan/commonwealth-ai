@@ -695,30 +695,65 @@ impl EmbeddedDaemon {
         link: &DeepLink,
         node_name: &str,
     ) -> Result<JoinMeshResult, MeshError> {
-        // Auto-leave any existing mesh before joining a new one.
+        // Auto-leave the existing mesh ONLY if it's an auto-created
+        // solo mesh (just the founder, no other members). Populated
+        // meshes (members > 1) require an explicit `mesh leave` from
+        // the caller before joining a new one.
         //
-        // Why: after `sovereign setup`, the CLI daemon
-        // (`daemon_cmd.rs`) auto-creates a solo mesh at boot so it
-        // has a valid state to gossip from. If the user then pastes a
-        // real invite to switch meshes, this method used to error with
-        // `AlreadyRunning` and force a two-step "leave, wait, join"
-        // flow — but the HTTP listener is tied to the daemon task, so
-        // the `leave` call takes the listener offline before `join`
-        // can arrive. The result: paste-invite silently failed and the
-        // user was stuck in the solo mesh.
+        // Why the gate exists: `self.leave()` calls
+        // `persist::clear()` which deletes `mesh.json` AND
+        // `join_key.secret` from disk BEFORE the handshake runs.
+        // If the handshake then fails (bad key, no peer accepting,
+        // network blip, daemon listener fails to re-bind), the user
+        // is left without the original mesh on disk. For a solo
+        // auto-created mesh that's fine — `mesh create` rebuilds it
+        // in 100 ms. For a real, populated mesh it silently
+        // destroys peer relationships the user can't recover from
+        // local state alone. (See HANDOFF_WS2_MESH_FANOUT.md note
+        // on the 2026-05-10 incident.)
         //
-        // Switching is a valid operation, and the alternative (manual
-        // ordering from the caller) isn't survivable across the
-        // launchd restart race. Do the leave internally in one call
-        // so callers get atomic "switch mesh" semantics.
+        // Why auto-leave still applies for solos: after `sovereign
+        // setup`, `daemon_cmd.rs` auto-creates a solo mesh at boot
+        // so the daemon has a valid state to gossip from. If the
+        // user then pastes a real invite, they expect "join the new
+        // mesh", not "AlreadyRunning error, please run leave first".
+        // The solo case is harmless to auto-leave.
         if self.is_running().await {
-            tracing::info!(
-                "join_mesh: daemon is in an existing mesh — auto-leaving before joining"
-            );
-            // User intent: switch meshes. Use leave (clears state)
-            // not shutdown (preserves it) — without the clear, the
-            // resume on next launch would race the join and we'd be
-            // back in the previous mesh after a restart.
+            // Snapshot member count under the read lock. We pull
+            // `app_state` here even though we don't keep a handle
+            // to it past the check — refusing without observing
+            // the live mesh would either always-refuse or
+            // always-allow, both worse than this honest probe.
+            let live_members: Option<(String, usize)> = {
+                let state = self.state.read().await;
+                match &*state {
+                    DaemonState::Running { app_state, .. } => {
+                        let mesh = app_state.inner.mesh.read().await;
+                        Some((mesh.name.clone(), mesh.members.len()))
+                    }
+                    DaemonState::Stopped => None,
+                }
+            };
+            if let Some((mesh_name_now, member_count)) = live_members {
+                if member_count > 1 {
+                    tracing::warn!(
+                        mesh_name = %mesh_name_now,
+                        members = member_count,
+                        "join_mesh: refusing to auto-leave a populated mesh"
+                    );
+                    return Err(MeshError::AlreadyInPopulatedMesh {
+                        mesh_name: mesh_name_now,
+                        members: member_count,
+                    });
+                }
+                tracing::info!(
+                    mesh_name = %mesh_name_now,
+                    "join_mesh: daemon is in a solo mesh — auto-leaving before joining"
+                );
+            }
+            // Solo mesh (or daemon already stopped — leave is a
+            // no-op then). Safe to clear state and proceed with
+            // the new handshake.
             let _ = self.leave().await;
         }
 
@@ -1857,6 +1892,19 @@ pub struct PeerInferenceEndpoint {
 /// network between them and the joiner. Built from
 /// `local_ip_candidates()` plus a kind classifier — the desktop UI
 /// uses `kind` to recommend the best one (Tailscale > LAN > IPv6).
+///
+/// **Cloud-peer override.** When `SOVEREIGN_ADVERTISE_ADDR` is set in
+/// the daemon's environment, `reachable_addresses` ignores the
+/// interface-enumeration path entirely and stamps that value into the
+/// `MemberRecord.addresses`. This is the cloud-peer escape hatch: a
+/// containerised daemon's `if-addrs` table lists the Docker bridge
+/// (172.17.0.0/16) **before** the userspace tailscale netstack, so the
+/// founder receives `172.17.0.3:9742` as our self-advertised address
+/// and immediately marks us Offline because that IP isn't routable
+/// from the laptop. The entrypoint sets this env to `$(tailscale
+/// ip -4)` before exec-ing the daemon, which makes the founder see the
+/// tailnet IP and gossip succeeds. See `HANDOFF_WS2_MESH_FANOUT.md`
+/// for the full incident trail.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct RelayCandidate {
     /// Bare IP literal (no brackets for IPv6 — frontend formats it).
@@ -1971,6 +2019,15 @@ pub fn relay_candidates(internal_port: u16) -> Vec<RelayCandidate> {
 /// receive a wildcard address will see self-loopback behavior; the
 /// warning log below makes that case visible.
 fn reachable_addresses(port: u16) -> Vec<SocketAddr> {
+    if let Some(override_list) = read_advertise_addr_override(port) {
+        info!(
+            addrs = ?override_list,
+            "mesh: using SOVEREIGN_ADVERTISE_ADDR override instead of \
+             auto-detected interfaces — peers will see this exact set"
+        );
+        return override_list;
+    }
+
     let ips = local_ip_candidates();
     if ips.is_empty() {
         warn!(
@@ -1985,6 +2042,67 @@ fn reachable_addresses(port: u16) -> Vec<SocketAddr> {
         )];
     }
     ips.into_iter().map(|ip| SocketAddr::new(ip, port)).collect()
+}
+
+/// Parse `SOVEREIGN_ADVERTISE_ADDR` into one or more `SocketAddr`s.
+///
+/// Accepted shapes (comma-separated, all entries must parse or the
+/// whole override is rejected and we fall back to auto-detect):
+///   - `100.112.195.45`           → IP only; combined with `port`
+///   - `100.112.195.45:9742`      → explicit host:port
+///   - `[fd7a:115c:a1e0::1]:9742` → IPv6 bracketed
+///   - `fd7a:115c:a1e0::1`        → bare IPv6; combined with `port`
+///
+/// Returns None when the env var is unset, empty, or fails to parse.
+/// We deliberately ignore unset *or* malformed values rather than
+/// erroring at boot — a bad env var should degrade to auto-detect with
+/// a warning, not refuse to start a daemon that would otherwise work
+/// on its LAN.
+fn read_advertise_addr_override(port: u16) -> Option<Vec<SocketAddr>> {
+    let raw = std::env::var("SOVEREIGN_ADVERTISE_ADDR").ok()?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let mut out = Vec::new();
+    for part in trimmed.split(',') {
+        let entry = part.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        if let Some(addr) = parse_advertise_entry(entry, port) {
+            out.push(addr);
+        } else {
+            warn!(
+                value = entry,
+                "SOVEREIGN_ADVERTISE_ADDR contained an entry we couldn't \
+                 parse as IP or host:port — ignoring this entry"
+            );
+        }
+    }
+
+    if out.is_empty() { None } else { Some(out) }
+}
+
+fn parse_advertise_entry(entry: &str, default_port: u16) -> Option<SocketAddr> {
+    use std::net::IpAddr;
+    use std::str::FromStr;
+
+    // host:port (or bracketed IPv6) — `SocketAddr::from_str` handles
+    // both. Try this first because `IpAddr::from_str` rejects strings
+    // containing a port, while `SocketAddr::from_str` only accepts a
+    // complete socket address.
+    if let Ok(sa) = SocketAddr::from_str(entry) {
+        return Some(sa);
+    }
+
+    // Bare IPv4 or IPv6 — combine with the daemon's internal_port.
+    if let Ok(ip) = IpAddr::from_str(entry) {
+        return Some(SocketAddr::new(ip, default_port));
+    }
+
+    None
 }
 
 pub fn local_ip_candidates() -> Vec<std::net::IpAddr> {
@@ -2239,6 +2357,112 @@ mod tests {
 }
 
 #[cfg(test)]
+mod advertise_addr_tests {
+    use super::*;
+
+    #[test]
+    fn parses_bare_ipv4_with_default_port() {
+        let addr = parse_advertise_entry("100.112.195.45", 9742).unwrap();
+        assert_eq!(addr.to_string(), "100.112.195.45:9742");
+    }
+
+    #[test]
+    fn parses_ipv4_with_explicit_port() {
+        let addr = parse_advertise_entry("100.112.195.45:9999", 9742).unwrap();
+        assert_eq!(addr.to_string(), "100.112.195.45:9999");
+    }
+
+    #[test]
+    fn parses_bare_ipv6_with_default_port() {
+        let addr = parse_advertise_entry("fd7a:115c:a1e0::1", 9742).unwrap();
+        assert_eq!(addr.to_string(), "[fd7a:115c:a1e0::1]:9742");
+    }
+
+    #[test]
+    fn parses_bracketed_ipv6_with_explicit_port() {
+        let addr = parse_advertise_entry("[fd7a:115c:a1e0::1]:9999", 9742).unwrap();
+        assert_eq!(addr.to_string(), "[fd7a:115c:a1e0::1]:9999");
+    }
+
+    #[test]
+    fn rejects_garbage_entry() {
+        assert!(parse_advertise_entry("not-an-ip", 9742).is_none());
+        assert!(parse_advertise_entry("", 9742).is_none());
+        assert!(parse_advertise_entry("100.112.195.45:", 9742).is_none());
+    }
+
+    // Env-var-reading tests use a Mutex to serialise — the test
+    // harness runs tests in parallel by default, and env is per-process
+    // shared state.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn env_unset_returns_none() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
+        assert!(read_advertise_addr_override(9742).is_none());
+    }
+
+    #[test]
+    fn env_empty_returns_none() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("SOVEREIGN_ADVERTISE_ADDR", "   ");
+        let got = read_advertise_addr_override(9742);
+        std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
+        assert!(got.is_none());
+    }
+
+    #[test]
+    fn env_single_ip_yields_one_socket() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("SOVEREIGN_ADVERTISE_ADDR", "100.112.195.45");
+        let got = read_advertise_addr_override(9742);
+        std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
+        let got = got.expect("override should parse");
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].to_string(), "100.112.195.45:9742");
+    }
+
+    #[test]
+    fn env_comma_separated_yields_each_socket() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var(
+            "SOVEREIGN_ADVERTISE_ADDR",
+            "100.112.195.45, 10.0.0.5:9999",
+        );
+        let got = read_advertise_addr_override(9742);
+        std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
+        let got = got.expect("override should parse");
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].to_string(), "100.112.195.45:9742");
+        assert_eq!(got[1].to_string(), "10.0.0.5:9999");
+    }
+
+    #[test]
+    fn env_with_one_bad_entry_drops_just_that_entry() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var(
+            "SOVEREIGN_ADVERTISE_ADDR",
+            "garbage, 100.112.195.45",
+        );
+        let got = read_advertise_addr_override(9742);
+        std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
+        let got = got.expect("partial override should parse the good entry");
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].to_string(), "100.112.195.45:9742");
+    }
+
+    #[test]
+    fn env_all_bad_returns_none() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("SOVEREIGN_ADVERTISE_ADDR", "garbage, more-garbage");
+        let got = read_advertise_addr_override(9742);
+        std::env::remove_var("SOVEREIGN_ADVERTISE_ADDR");
+        assert!(got.is_none());
+    }
+}
+
+#[cfg(test)]
 mod takeover_tests {
     //! Unit tests for `takeover_serve_at` — Phase 3 daemon-takeover of
     //! the standalone `sovereign serve --background` process. We
@@ -2320,4 +2544,22 @@ pub enum MeshError {
 
     #[error("Network error: {0}")]
     Network(String),
+
+    /// `join_mesh` was called on a daemon already in a populated mesh
+    /// (members beyond self). The auto-leave-then-join shortcut is
+    /// fine for switching out of a freshly-created solo mesh, but
+    /// against a real mesh it would persist::clear before attempting
+    /// the new handshake — if that handshake then failed for any
+    /// reason (bad key, no peer, network), the user is left with the
+    /// old mesh's `mesh.json` already deleted on disk. Refuse early
+    /// so the destructive step never runs without an explicit
+    /// `mesh leave` from the caller.
+    #[error(
+        "Cannot auto-switch meshes: already in '{mesh_name}' with {members} member(s). \
+         Run `sovereign mesh leave` first if you intend to switch."
+    )]
+    AlreadyInPopulatedMesh {
+        mesh_name: String,
+        members: usize,
+    },
 }

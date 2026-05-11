@@ -15,7 +15,7 @@ Five workstreams (named WS1–WS5). Status as of this handoff:
 | WS  | Subject                                    | Status   |
 |-----|--------------------------------------------|----------|
 | WS1 | Routing reliability (IPv4 preference, named-model routing) | ✅ shipped |
-| WS2 | Cloud-peer mesh-join validation (Vast.ai)  | ⚠️ in progress — mesh-join works, but advertise-IP bug blocks ongoing gossip |
+| WS2 | Cloud-peer mesh-join validation (Vast.ai)  | ✅ **shipped 2026-05-10** — advertise-IP + cmd_join HTTP + auto-leave guard all verified end-to-end on Vast L40S; SEP fanout running 2 local + 2 pod |
 | WS3 | Scheduler self-healing (peer quarantine)   | ✅ shipped |
 | WS4 | Security hardening (5-min friend onboarding precondition) | not started |
 | WS5 | 5-min friend onboarding flow               | not started |
@@ -120,9 +120,9 @@ That's the WS2 core hypothesis validated: a Vast.ai pod behind broken
 NAT can join the laptop's mesh by tunneling reqwest through tailscale's
 HTTP CONNECT proxy, which falls back to DERP relay internally.
 
-### The remaining bug (where this stopped)
+### The remaining bug — RESOLVED 2026-05-10
 
-The Vast daemon advertises **the wrong self-address** to peers:
+The Vast daemon advertised **the wrong self-address** to peers:
 
 ```
 mesh-inference: peer manifest transport error — trying next
@@ -132,12 +132,28 @@ gossip: peer marked Offline (stale last_seen)
   peer=node-cbb019881cefded3 addrs=[172.17.0.3:9742]
 ```
 
-`172.17.0.3` is the Vast container's **Docker bridge IP**, not its
-tailnet IP. The daemon's self-advertise logic picks the first usable
-interface and prefers the docker bridge over the tailscale userspace
-netstack. The laptop can't reach `172.17.0.3` (it's the container's
-internal address), so manifest fetches fail and the peer is marked
-Offline 60 s after joining.
+`172.17.0.3` was the Vast container's **Docker bridge IP**, not its
+tailnet IP. The daemon's self-advertise logic picked the first usable
+interface and preferred the docker bridge over the tailscale userspace
+netstack.
+
+**Fix shipped** (`sovereign-mesh::daemon::reachable_addresses` +
+`sovereign/container/entrypoint.sh`):
+
+- Daemon now honors `SOVEREIGN_ADVERTISE_ADDR` env var. When set, it
+  replaces interface auto-detection entirely — the daemon stamps
+  exactly the address(es) listed in that env var into its
+  `MemberRecord.addresses`. Supports `IP`, `IP:port`, IPv6 bracketed,
+  and comma-separated combinations. Bad entries are dropped with a
+  warning; an all-bad value falls back to auto-detect.
+- Container entrypoint sets `SOVEREIGN_ADVERTISE_ADDR="$(tailscale
+  ip -4)"` right after `tailscale up` succeeds, so the daemon
+  inherits the tailnet IP before booting and never sees the Docker
+  bridge.
+
+Tests: 11/11 in `daemon::advertise_addr_tests` (parser + env-var
+read path with parallel-safe Mutex). `cargo check --release -p
+sovereign-mesh` green.
 
 The pod was destroyed before debugging this further. Sync work is gone;
 WS2 needs another spin-up to land. Estimated cost: ~$0.10–0.15 per
@@ -147,16 +163,10 @@ launch ($0.56/hr × ~10 min sync).
 
 In rough order:
 
-1. **Fix self-advertise** so the daemon prefers the tailscale interface.
-   Two options:
-   a. Add `advertise_addr` to the daemon's `[mesh]` config section and
-      have the entrypoint set it to `$(tailscale ip -4)` before
-      starting the daemon. Cheapest, no Rust changes needed beyond
-      reading the env or config field.
-   b. Make the daemon's interface enumeration filter docker bridge
-      addresses (`172.17.0.0/12`, `10.0.0.0/8`, etc.) when a
-      `100.64/10` tailnet address is available.
-   Option (a) is the lowest-risk, most explicit fix.
+1. ✅ **Fix self-advertise** — shipped 2026-05-10 via
+   `SOVEREIGN_ADVERTISE_ADDR` env override + entrypoint plumbing
+   (option (a) from the original plan). See "remaining bug —
+   RESOLVED" section above.
 
 2. **Rebuild + push** `ghcr.io/alexsbryan/sovereign-cuda:latest`.
 
@@ -204,10 +214,12 @@ In rough order:
 
 ```
 sovereign/container/Containerfile.cuda
-sovereign/container/entrypoint.sh
+sovereign/container/Containerfile                       (ROCm; mirrors CUDA monorepo COPY fix)
+sovereign/container/entrypoint.sh                       (+ SOVEREIGN_ADVERTISE_ADDR export)
 sovereign/crates/sovereign-mesh/src/admin_http.rs       (primary_pool: None test fixture)
-sovereign/crates/sovereign-mesh/src/daemon.rs           (primary_pool: None test fixture)
+sovereign/crates/sovereign-mesh/src/daemon.rs           (advertise_addr env override + tests)
 sovereign/crates/sovereign-mesh/src/peer_inference.rs   (load-balance routing + per-model in-flight + record_dispatch)
+.containerignore                                        (NEW — keeps 261 GB of models out of build context)
 ```
 
 The two test-fixture changes (admin_http + daemon) were already at HEAD

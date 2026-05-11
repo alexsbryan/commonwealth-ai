@@ -118,7 +118,27 @@ tailscale up \
     --authkey="$TS_AUTHKEY" \
     --hostname="sovereign-${HOSTNAME}" \
     --accept-dns=false
-echo "[entrypoint] tailnet IP: $(tailscale ip -4 || true)"
+TAILNET_IP="$(tailscale ip -4 || true)"
+echo "[entrypoint] tailnet IP: ${TAILNET_IP:-<unknown>}"
+
+# Pin the daemon's self-advertised address to the tailnet IP.
+#
+# Without this, the daemon's `if-addrs` enumeration finds the Docker
+# bridge interface (172.17.0.0/16) first and stamps that into its
+# MemberRecord.addresses. The founder receives `172.17.0.3:9742` as
+# our self-address, fails to reach it, and marks us Offline ~60 s
+# after the handshake completes — so gossip dies even though the
+# initial join succeeded. With SOVEREIGN_ADVERTISE_ADDR set, the
+# daemon ignores interface enumeration and advertises exactly the
+# tailnet IP, which the founder can reach via WireGuard / DERP.
+#
+# Read by `sovereign-mesh::daemon::reachable_addresses`.
+if [ -n "$TAILNET_IP" ]; then
+    export SOVEREIGN_ADVERTISE_ADDR="$TAILNET_IP"
+    echo "[entrypoint] SOVEREIGN_ADVERTISE_ADDR=${SOVEREIGN_ADVERTISE_ADDR}"
+else
+    echo "[entrypoint] WARNING: tailscale ip -4 returned empty — daemon will fall back to interface auto-detect (likely the Docker bridge IP, which the founder cannot reach)."
+fi
 
 # HTTP_PROXY/HTTPS_PROXY: reqwest auto-detects these and sends valid
 # HTTP CONNECT requests to the HTTP proxy port. Works without the
