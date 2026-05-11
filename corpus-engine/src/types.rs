@@ -43,6 +43,97 @@ pub type InferenceFn = Arc<
         + Sync,
 >;
 
+// ─── Rerank Function ────────────────────────────────────
+
+/// Cross-encoder reranker injected by the caller. Given a query and
+/// a slice of candidate documents (in the same order), returns one
+/// relevance score per document. Higher = more relevant. The score
+/// is the raw rank logit from the cross-encoder; absolute magnitude
+/// is model-dependent (bge-reranker-v2-m3 returns ~[-10, +10]),
+/// so callers should treat it as ordinal within a single call —
+/// not directly comparable across calls or across rerankers.
+///
+/// Sovereign passes its local Rerank slot. Commonwealth passes a
+/// mesh peer advertising `x:rerank`. Tests pass a mock returning
+/// uniform scores (which preserves input order).
+///
+/// Length contract: `out.len() == docs.len()`, in the same order.
+pub type RerankFn = Arc<
+    dyn Fn(&str, Vec<String>) -> Pin<Box<dyn Future<Output = Result<Vec<f32>>> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// Configuration for the cross-encoder rerank pass that runs on
+/// top of vector + FTS hybrid retrieval. The pass is opt-in: if
+/// `enabled` is false (or the runtime doesn't pass a `RerankFn`),
+/// `CorpusIndex::search` behaves exactly as before — same scores,
+/// same ordering, same threshold semantics.
+///
+/// When enabled, the search path overfetches `candidates_k`
+/// candidates from LanceDB, scores all of them with the cross-encoder
+/// in a single batched call, and then truncates to the caller's
+/// requested `limit`. The rerank score replaces `ScoredChunk.score`;
+/// the original hybrid score lands in `metadata["fusion_score"]` and
+/// the rerank logit in `metadata["rerank_score"]` for observability.
+#[derive(Debug, Clone)]
+pub struct RerankConfig {
+    /// Master switch. When false, the search path skips rerank
+    /// entirely — no overfetch, no extra latency.
+    pub enabled: bool,
+    /// How many candidates to pull from LanceDB before reranking.
+    /// Default 50; raise to widen the funnel, lower to cap latency.
+    pub candidates_k: usize,
+    /// Optional minimum rank logit. Candidates scoring below this
+    /// are dropped before truncation. `None` keeps everything.
+    /// bge-reranker-v2-m3 conventionally treats `0.0` as the
+    /// relevance threshold (sigmoid → 0.5).
+    pub min_score: Option<f32>,
+    /// Blend weight on the rerank score in `[0.0, 1.0]`.
+    ///
+    /// - `1.0` (default) — final score is purely the rerank logit
+    ///   (min-max normalised across the candidate pool); the
+    ///   "replace fusion score" behaviour.
+    /// - `0.0` — final score is the original fusion score; rerank
+    ///   is computed but ignored (useful for instrumentation /
+    ///   ablation).
+    /// - In between — linear blend
+    ///   `alpha * rerank_norm + (1 - alpha) * fusion_norm`. Both
+    ///   sides are min-max normalised to `[0, 1]` within the
+    ///   candidate pool first so the units match.
+    ///
+    /// Empirical knob — the right alpha is corpus-dependent. SEP
+    /// (narrow canonical-source attribution) favours lower alpha
+    /// because pure rerank promotes tangential articles densely
+    /// mentioning the topic over the canonical entry; Wikipedia
+    /// (topical-article attribution) tolerates higher alpha.
+    pub alpha: f32,
+    /// When true, aggregate chunks by `source_doc_id` (or `title`
+    /// fallback) after reranking, keep each source's single
+    /// best-scoring chunk, then return the top-`limit` distinct
+    /// sources. Addresses the failure mode where the cross-encoder
+    /// promotes 3-4 chunks from a tangential article that mentions
+    /// the topic densely, crowding out the canonical entry's
+    /// single highest-scoring chunk.
+    ///
+    /// Trade-off: caps depth-per-source at 1 chunk, which hurts
+    /// answers that legitimately need multi-chunk coverage of a
+    /// single article. Off by default.
+    pub per_article: bool,
+}
+
+impl Default for RerankConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            candidates_k: 50,
+            min_score: None,
+            alpha: 1.0,
+            per_article: false,
+        }
+    }
+}
+
 // ─── Chunk Range ────────────────────────────────────────
 
 /// A contiguous range of chunk IDs within a corpus.

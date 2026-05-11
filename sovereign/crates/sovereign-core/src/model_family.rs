@@ -30,6 +30,15 @@ pub enum ModelFamily {
     /// Always-on thinking, cannot be disabled.
     Phi4Reasoning,
     SmolLM3,
+    /// Cross-encoder reranker — covers BERT-based BGE rerankers
+    /// (bge-reranker-v2-m3) and Qwen3-based Jina rerankers
+    /// (jina-reranker-v3). Both expose the same llama.cpp interface
+    /// when loaded with `pooling_type = LLAMA_POOLING_TYPE_RANK`:
+    /// feed a (query, doc) pair through `llama_decode`, read a
+    /// single scalar relevance logit from the embedding output.
+    /// Neither chat-capable nor embedding-capable — the scalar is
+    /// the only output, consumed by `CorpusIndex::search_with_rerank`.
+    Reranker,
     Unknown,
 }
 
@@ -61,6 +70,28 @@ pub struct ModelQuirks {
     /// Embedding-specific configuration. None for generative-only families.
     /// Populated only when the slot is the Embed slot.
     pub embed: Option<EmbedQuirks>,
+
+    /// Reranker-specific configuration. None for everything except
+    /// cross-encoder reranker families (`BgeReranker`). Populated
+    /// only when the slot is a Rerank slot.
+    pub rerank: Option<RerankQuirks>,
+}
+
+/// Cross-encoder rerank configuration. Sits alongside `EmbedQuirks`
+/// — same shape (model-specific defaults overridable in `models.toml`),
+/// different responsibilities.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RerankQuirks {
+    /// Max input tokens the encoder will accept. bge-reranker-v2-m3
+    /// supports 8192; older bge-reranker-large is 512. Sequences
+    /// longer than this are truncated *before* tokenization to keep
+    /// the doc tail rather than the query tail.
+    pub max_context: usize,
+    /// Hard cap on how many candidate docs the reranker batches in a
+    /// single forward pass. Above this the runtime chunks the batch.
+    /// Bounded by GPU memory pressure — 50 is a safe default for a
+    /// 568M-param BGE reranker on Vulkan/ROCm at 8192 ctx.
+    pub max_batch: usize,
 }
 
 /// Controls how thinking mode is enabled or disabled for a model family.
@@ -113,6 +144,7 @@ impl ModelFamily {
                 default_top_p:            0.95,
                 default_presence_penalty: 1.5,
                 embed: None,
+                rerank: None,
             },
 
             // Qwen3.5 uses the same thinking tokens as Qwen3 but a
@@ -128,6 +160,7 @@ impl ModelFamily {
                 default_top_p:            0.95,
                 default_presence_penalty: 1.5,
                 embed: None,
+                rerank: None,
             },
 
             // Qwen3-Embedding uses last-token pooling and requires the
@@ -151,6 +184,7 @@ impl ModelFamily {
                     append_eos_token:     true,
                     output_dimensions:    1024, // overridden in manifest for 4B (2560) / 8B (4096)
                 }),
+                rerank: None,
             },
 
             ModelFamily::Gemma3 => ModelQuirks {
@@ -160,6 +194,7 @@ impl ModelFamily {
                 default_top_p:            0.95,
                 default_presence_penalty: 0.0,
                 embed: None,
+                rerank: None,
             },
 
             // Gemma 4 inherits Gemma 3's quirks — same chat-template
@@ -173,6 +208,7 @@ impl ModelFamily {
                 default_top_p:            0.95,
                 default_presence_penalty: 0.0,
                 embed: None,
+                rerank: None,
             },
 
             ModelFamily::Llama3 => ModelQuirks {
@@ -182,6 +218,7 @@ impl ModelFamily {
                 default_top_p:            0.9,
                 default_presence_penalty: 0.0,
                 embed: None,
+                rerank: None,
             },
 
             ModelFamily::Phi4 => ModelQuirks {
@@ -191,6 +228,7 @@ impl ModelFamily {
                 default_top_p:            1.0,
                 default_presence_penalty: 0.0,
                 embed: None,
+                rerank: None,
             },
 
             // Phi-4-reasoning cannot have thinking disabled. Attempting
@@ -204,6 +242,27 @@ impl ModelFamily {
                 default_top_p:            0.95,
                 default_presence_penalty: 0.0,
                 embed: None,
+                rerank: None,
+            },
+
+            // Cross-encoder reranker. Sampling defaults are placebos
+            // — the rerank path never decodes generative tokens, it
+            // reads the rank logit straight out of the encoder. The
+            // shape that matters lives in `rerank.max_context` and
+            // `rerank.max_batch`. Default 8192-token context matches
+            // jina-reranker-v3 + bge-reranker-v2-m3; smaller bge
+            // variants (512-ctx) override via `quirks_override`.
+            ModelFamily::Reranker => ModelQuirks {
+                thinking: ThinkingControl::None,
+                default_temperature:      0.0,
+                default_top_k:            Option::None,
+                default_top_p:            1.0,
+                default_presence_penalty: 0.0,
+                embed: None,
+                rerank: Some(RerankQuirks {
+                    max_context: 8192,
+                    max_batch:   50,
+                }),
             },
 
             // SmolLM3 uses the same thinking token convention as Qwen3,
@@ -218,6 +277,7 @@ impl ModelFamily {
                 default_top_p:            0.9,
                 default_presence_penalty: 0.0,
                 embed: None,
+                rerank: None,
             },
 
             // Safe conservative defaults. No thinking injection.
@@ -230,6 +290,7 @@ impl ModelFamily {
                 default_top_p:            0.9,
                 default_presence_penalty: 0.0,
                 embed: None,
+                rerank: None,
             },
         }
     }

@@ -47,7 +47,7 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 
 use super::sanitize_fts_query;
 use crate::error::{Error, Result};
-use crate::types::ScoredChunk;
+use crate::types::{RerankConfig, RerankFn, ScoredChunk};
 
 use super::CorpusIndex;
 
@@ -347,6 +347,247 @@ impl CorpusIndex {
             "CorpusIndex::search complete"
         );
         Ok(scored)
+    }
+
+    /// Hybrid search + optional cross-encoder rerank.
+    ///
+    /// Behaves identically to `search()` when `rerank_fn` is `None`
+    /// or `config.enabled` is false. When both are set, this method:
+    ///   1. Pulls `config.candidates_k` candidates from LanceDB
+    ///      (overfetch — usually 50, vs. the caller's typical limit
+    ///      of 5-10);
+    ///   2. Scores every candidate's content with the cross-encoder
+    ///      in a single batched call (`RerankFn` returns one score
+    ///      per doc in order);
+    ///   3. Promotes the rerank logit to `ScoredChunk.score`,
+    ///      stashes the original hybrid score in
+    ///      `metadata["fusion_score"]` and the rerank logit in
+    ///      `metadata["rerank_score"]` (both as f32-stringified);
+    ///   4. Applies `config.min_score` threshold (if set), sorts by
+    ///      rerank score descending, truncates to the caller's
+    ///      `limit`.
+    ///
+    /// On reranker error the method falls back to the un-reranked
+    /// hybrid result — observability via the warn-log, never a
+    /// silent retrieval failure. The fall-through preserves the
+    /// "rerank is purely additive" guarantee: enabling it should
+    /// never make retrieval worse than baseline, even when the
+    /// reranker model is missing or crashing.
+    pub async fn search_with_rerank(
+        &self,
+        query_embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+        rerank_fn: Option<&RerankFn>,
+        config: &RerankConfig,
+    ) -> Result<Vec<ScoredChunk>> {
+        let has_reranker = config.enabled && rerank_fn.is_some();
+        let dedup_only = config.enabled && config.per_article && rerank_fn.is_none();
+        // Run the overfetch+process path when either:
+        //   - a reranker is wired (the normal rerank case), OR
+        //   - per-article dedup is requested without a reranker (the
+        //     ablation that tests whether the dedup mechanism alone
+        //     captures the source-recall lift). With no reranker, the
+        //     fusion score from `search()` is the only ordering
+        //     signal — overfetch widens the pool so dedup can prune
+        //     duplicate-source chunks and surface the next-best
+        //     distinct source within the user's `limit`.
+        let needs_overfetch = has_reranker || dedup_only;
+
+        if !needs_overfetch {
+            return self.search(query_embedding, query_text, limit).await;
+        }
+
+        // Overfetch: pull more candidates than the caller asked for so
+        // the reranker / dedup has room to re-order. We grow the LanceDB
+        // limit to `max(limit, candidates_k)` and re-truncate at the end.
+        let overfetch = limit.max(config.candidates_k);
+        let candidates = self.search(query_embedding, query_text, overfetch).await?;
+
+        if candidates.is_empty() {
+            return Ok(candidates);
+        }
+
+        let scores: Option<Vec<f32>> = if has_reranker {
+            // Prefix the chunk with its title (when present) so the
+            // reranker can see the source identity. SEP / Wikipedia
+            // eval banks score by canonical source — without the
+            // title, the cross-encoder has only the chunk body to
+            // go on and tends to over-promote topical-but-non-canonical
+            // chunks.
+            let docs: Vec<String> = candidates
+                .iter()
+                .map(|c| match &c.title {
+                    Some(t) => format!("Title: {t}\n\n{}", c.content),
+                    None => c.content.clone(),
+                })
+                .collect();
+            let rerank_fn = rerank_fn.expect("has_reranker => Some");
+            let t_rerank = std::time::Instant::now();
+            let rerank_result = rerank_fn(query_text, docs).await;
+            let elapsed_ms = t_rerank.elapsed().as_millis() as u64;
+            match rerank_result {
+                Ok(s) if s.len() == candidates.len() => {
+                    tracing::trace!(
+                        corpus = %self.corpus_id,
+                        rerank_ms = elapsed_ms,
+                        n = s.len(),
+                        "rerank scored"
+                    );
+                    Some(s)
+                }
+                Ok(s) => {
+                    tracing::warn!(
+                        corpus = %self.corpus_id,
+                        expected = candidates.len(),
+                        got = s.len(),
+                        "rerank length mismatch — falling back to fusion order"
+                    );
+                    let mut fallback = candidates;
+                    fallback.truncate(limit);
+                    return Ok(fallback);
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = %self.corpus_id,
+                        error = %e,
+                        "rerank failed — falling back to fusion order"
+                    );
+                    let mut fallback = candidates;
+                    fallback.truncate(limit);
+                    return Ok(fallback);
+                }
+            }
+        } else {
+            None
+        };
+
+        // Min-max normalise both fusion + rerank within the candidate
+        // pool. Without this, the linear blend mixes incompatible
+        // scales: fusion is typically [0.0, 0.05] in hybrid mode (RRF)
+        // while jina-reranker-v3 emits logits in roughly [3, 6] — a
+        // raw average would always be dominated by rerank. Normalising
+        // both to [0, 1] inside the pool makes alpha mean what it says.
+        // (Dedup-only ablation: skip this and keep fusion scores as-is.)
+        let (fusion_min, fusion_max) = candidates
+            .iter()
+            .map(|c| c.score)
+            .fold((f32::INFINITY, f32::NEG_INFINITY), |(mn, mx), s| {
+                (mn.min(s), mx.max(s))
+            });
+        let alpha = config.alpha.clamp(0.0, 1.0);
+
+        // Promote blended score (or keep fusion score if no reranker);
+        // preserve raw fusion + rerank in metadata.
+        let mut reranked: Vec<ScoredChunk> = match scores {
+            Some(scores) => {
+                let (rerank_min, rerank_max) = scores
+                    .iter()
+                    .copied()
+                    .fold((f32::INFINITY, f32::NEG_INFINITY), |(mn, mx), s| {
+                        (mn.min(s), mx.max(s))
+                    });
+                let fusion_span = (fusion_max - fusion_min).max(1e-6);
+                let rerank_span = (rerank_max - rerank_min).max(1e-6);
+                candidates
+                    .into_iter()
+                    .zip(scores.into_iter())
+                    .map(|(mut chunk, logit)| {
+                        let fusion_norm = (chunk.score - fusion_min) / fusion_span;
+                        let rerank_norm = (logit - rerank_min) / rerank_span;
+                        let blended = alpha * rerank_norm + (1.0 - alpha) * fusion_norm;
+                        chunk.metadata.insert(
+                            "fusion_score".to_string(),
+                            format!("{:.6}", chunk.score),
+                        );
+                        chunk.metadata.insert(
+                            "rerank_score".to_string(),
+                            format!("{:.6}", logit),
+                        );
+                        chunk.metadata.insert(
+                            "blended_score".to_string(),
+                            format!("{:.6}", blended),
+                        );
+                        chunk.score = blended;
+                        chunk
+                    })
+                    .collect()
+            }
+            None => {
+                // Dedup-only ablation: leave fusion score in place, only
+                // tag metadata so downstream observability sees the path.
+                candidates
+                    .into_iter()
+                    .map(|mut chunk| {
+                        chunk.metadata.insert(
+                            "fusion_score".to_string(),
+                            format!("{:.6}", chunk.score),
+                        );
+                        chunk.metadata.insert(
+                            "rerank_mode".to_string(),
+                            "dedup_only".to_string(),
+                        );
+                        chunk
+                    })
+                    .collect()
+            }
+        };
+
+        let before = reranked.len();
+        if let Some(min) = config.min_score {
+            reranked.retain(|c| c.score >= min);
+        }
+        reranked.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        if config.per_article {
+            // Walk the sorted list once; keep the first chunk we
+            // see for each distinct source. Sources without a
+            // `source_doc_id` fall back to `title`; chunks with
+            // neither (rare) are bucketed under their content
+            // hash so they don't collide.
+            let mut seen: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            let mut deduped: Vec<ScoredChunk> = Vec::with_capacity(limit);
+            for chunk in reranked.into_iter() {
+                let key = chunk
+                    .source_doc_id
+                    .clone()
+                    .or_else(|| chunk.title.clone())
+                    .unwrap_or_else(|| {
+                        // Last resort — every chunk gets its own
+                        // bucket so we never drop a chunk
+                        // entirely.
+                        format!("__chunk_{:?}", chunk.chunk_id)
+                    });
+                if seen.insert(key) {
+                    deduped.push(chunk);
+                    if deduped.len() >= limit {
+                        break;
+                    }
+                }
+            }
+            reranked = deduped;
+        }
+
+        let after = reranked.len();
+        reranked.truncate(limit);
+
+        tracing::debug!(
+            corpus = %self.corpus_id,
+            candidates = before,
+            kept = after,
+            returned = reranked.len(),
+            has_reranker,
+            alpha,
+            per_article = config.per_article,
+            min_score = ?config.min_score,
+            "CorpusIndex::search_with_rerank complete"
+        );
+        Ok(reranked)
     }
 
     /// Fetch every chunk whose `title` matches `title` exactly, up to

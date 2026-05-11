@@ -391,6 +391,94 @@ pub async fn build_session_with_skills(
     // signal.
     let _bump_flusher = Arc::clone(&atlas_mgr).spawn_bump_flusher(30);
 
+    // Optional cross-encoder reranker. When `SOVEREIGN_RERANK_MODEL_PATH`
+    // is set, load that GGUF into a `StandaloneReranker` and wire it
+    // into the Runtime. The reranker runs locally (the daemon-attached
+    // `SplitInferenceProvider` doesn't support rerank), so this is
+    // process-local additional weight (~500 MB for jina-reranker-v3-Q6_K).
+    //
+    // The candidate pool / threshold defaults come from
+    // `RerankConfig::default()` (candidates_k = 50, no min_score) but
+    // can be tuned per-run via `SOVEREIGN_RERANK_CANDIDATES_K` and
+    // `SOVEREIGN_RERANK_MIN_SCORE` so an eval ablation can sweep them
+    // without rebuilding.
+    // Dedup-only ablation: `SOVEREIGN_RERANK_DEDUP_ONLY=1` enables
+    // overfetch + per-article dedup using ONLY the fusion ordering.
+    // Tests whether the SEP source-recall lift seen in the reranker
+    // experiment is actually driven by the dedup mechanism or by the
+    // cross-encoder logits — a critical question for the
+    // "do we need a reranker slot at all?" decision in
+    // `sovereign/docs/RERANK_EXPERIMENT.md`. Takes precedence over
+    // `SOVEREIGN_RERANK_MODEL_PATH` so the operator can A/B without
+    // touching two env vars at once.
+    let dedup_only = std::env::var("SOVEREIGN_RERANK_DEDUP_ONLY")
+        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if dedup_only {
+        let mut cfg = corpus_engine::RerankConfig::default();
+        cfg.enabled = true;
+        cfg.per_article = true;
+        if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
+            if let Ok(n) = s.parse::<usize>() {
+                cfg.candidates_k = n;
+            }
+        }
+        eprintln!(
+            "Rerank dedup-only ablation: candidates_k={}, per_article=true (no cross-encoder)",
+            cfg.candidates_k
+        );
+        runtime = runtime.with_rerank_config(cfg);
+    } else if let Ok(rerank_path) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
+        let path = PathBuf::from(&rerank_path);
+        match sovereign_inference::reranker_standalone::StandaloneReranker::load(
+            &path,
+            sovereign_core::model_family::ModelFamily::Reranker,
+            None,
+        ) {
+            Ok(reranker) => {
+                let reranker: Arc<dyn InferenceProvider> = Arc::new(reranker);
+                let rerank_fn =
+                    sovereign_tools::corpus::inference_to_rerank_fn(reranker);
+                let mut cfg = corpus_engine::RerankConfig::default();
+                cfg.enabled = true;
+                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
+                    if let Ok(n) = s.parse::<usize>() {
+                        cfg.candidates_k = n;
+                    }
+                }
+                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_MIN_SCORE") {
+                    if let Ok(f) = s.parse::<f32>() {
+                        cfg.min_score = Some(f);
+                    }
+                }
+                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_ALPHA") {
+                    if let Ok(f) = s.parse::<f32>() {
+                        cfg.alpha = f;
+                    }
+                }
+                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_PER_ARTICLE") {
+                    cfg.per_article =
+                        s == "1" || s.eq_ignore_ascii_case("true");
+                }
+                eprintln!(
+                    "Reranker:    {} (candidates_k={}, alpha={:.2}, per_article={}, min_score={:?})",
+                    path.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
+                    cfg.candidates_k,
+                    cfg.alpha,
+                    cfg.per_article,
+                    cfg.min_score
+                );
+                runtime = runtime.with_rerank(rerank_fn, cfg);
+            }
+            Err(e) => {
+                eprintln!(
+                    "warning: failed to load reranker at {}: {e} — running baseline",
+                    path.display()
+                );
+            }
+        }
+    }
+
     Ok(ChatSession {
         runtime: Arc::new(runtime),
         store,

@@ -3,7 +3,7 @@ use std::pin::Pin;
 use async_trait::async_trait;
 use futures::Stream;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::types::*;
 
 // Re-export observer types so `sovereign_core::StateStoreObserver`
@@ -283,6 +283,31 @@ pub trait InferenceProvider: Send + Sync {
     /// 1–5% retrieval improvement on instruction-aware models.
     async fn embed_query(&self, query: &str) -> Result<Vec<f32>> {
         self.embed(query).await
+    }
+
+    /// Cross-encoder rerank. Score each `doc` against `query`; higher
+    /// score = more relevant. Returns one score per doc, in the same
+    /// order as input. Implementations should batch internally — the
+    /// caller passes a single multi-doc request to amortise the
+    /// model-load + tokenisation cost.
+    ///
+    /// Default returns `Err(Error::NotImplemented)` so providers
+    /// without a reranker (remote API, mesh peer, stubs) satisfy the
+    /// trait without lying about capability. `EmbeddedLlamaCpp`
+    /// overrides this when a `[rerank]` slot is configured in
+    /// `models.toml`. The `CorpusIndex::search_with_rerank` path
+    /// catches the error and falls back to the un-reranked fusion
+    /// result — enabling rerank is purely additive.
+    ///
+    /// Score semantics are model-specific. bge-reranker-v2-m3 returns
+    /// raw rank logits in roughly `[-10, +10]`; conventional
+    /// relevance threshold is `0.0` (sigmoid → 0.5). Callers must
+    /// not compare scores across providers.
+    async fn rerank_batch(&self, query: &str, docs: &[String]) -> Result<Vec<f32>> {
+        let _ = (query, docs);
+        Err(Error::NotImplemented(
+            "rerank_batch not supported by this provider".to_string(),
+        ))
     }
 
     /// Return the model ID that will be selected for a request at the given

@@ -22,6 +22,15 @@ pub enum Error {
     #[error("Embedding error: {0}")]
     Embed(String),
 
+    /// Cross-encoder rerank failure. Surfaced from
+    /// `RerankFn` calls in `CorpusIndex::search_with_rerank`. The
+    /// search path catches it, logs a warning, and falls back to the
+    /// un-reranked fusion result — enabling rerank is purely
+    /// additive, so a transient model issue must never degrade
+    /// retrieval below baseline.
+    #[error("Rerank error: {0}")]
+    Rerank(String),
+
     #[error("HTTP error: {0}")]
     Http(#[from] reqwest::Error),
 

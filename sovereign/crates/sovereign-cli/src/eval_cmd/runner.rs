@@ -1099,7 +1099,23 @@ async fn run_question(
         // atlas can actually rescue topically-aligned chunks lance
         // ranked just outside the limit.
         let search_limit = if !atlases.is_empty() { limit * 3 } else { limit };
-        match idx.search(query_vec, &q.question, search_limit).await {
+        // Route through `search_with_rerank` so a runtime-wired
+        // cross-encoder reranker actually fires on this path (the
+        // eval bypasses `Runtime::search_corpus_indexes`). When no
+        // reranker is installed or `rerank_config.enabled = false`,
+        // the call is byte-identical to `search()` — same overfetch,
+        // same ordering, same threshold semantics — so the
+        // baseline-vs-rerank A/B is honest.
+        match idx
+            .search_with_rerank(
+                query_vec,
+                &q.question,
+                search_limit,
+                session.runtime.rerank_fn.as_ref(),
+                &session.runtime.rerank_config,
+            )
+            .await
+        {
             Ok(hits) => {
                 if !hits.is_empty() && !corpora_hit.contains(&info.corpus_id) {
                     corpora_hit.push(info.corpus_id.clone());

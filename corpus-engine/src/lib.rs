@@ -123,7 +123,7 @@ pub use sharding::{
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, EmbedFn, IndexInfo,
-    IndexStats, InferenceFn, IngestResult, ScoredChunk, ShardInfo,
+    IndexStats, InferenceFn, IngestResult, RerankConfig, RerankFn, ScoredChunk, ShardInfo,
 };
 pub use yield_hook::YieldHook;
 

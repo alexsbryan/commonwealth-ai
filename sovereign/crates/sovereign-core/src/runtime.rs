@@ -2978,6 +2978,21 @@ pub struct Runtime {
     /// `None` = no folder corpora known (CLI fallback / tests),
     /// which preserves the pre-Phase-F label rendering exactly.
     pub folder_metadata: Option<Arc<dyn crate::traits::FolderMetadataOracle>>,
+    /// Optional cross-encoder reranker. When `Some`, every call to
+    /// `search_corpus_indexes` (and its filtered companion) hits
+    /// `CorpusIndex::search_with_rerank` instead of `search`; the
+    /// hybrid result gets re-ordered by a model trained to score
+    /// (query, doc) relevance directly. `None` preserves baseline
+    /// fusion-only behaviour exactly.
+    ///
+    /// Bootstrapped from `SOVEREIGN_RERANK=1` (or wired explicitly
+    /// by the daemon when models.toml carries a `[rerank]` slot).
+    pub rerank_fn: Option<corpus_engine::RerankFn>,
+    /// Configuration for the rerank pass — overfetch size, optional
+    /// threshold. Always present; `enabled = false` makes
+    /// `search_with_rerank` no-op back to baseline regardless of
+    /// `rerank_fn`'s presence.
+    pub rerank_config: corpus_engine::RerankConfig,
     /// Per-conversation last-turn provenance snapshot, written at
     /// dispatch inside [`Self::handle_expressive_query_stream`] and
     /// read by [`Self::get_last_turn_provenance`]. Last-write-wins
@@ -3024,8 +3039,42 @@ impl Runtime {
             atlas_context_provider: None,
             sensitive_corpora: None,
             folder_metadata: None,
+            rerank_fn: None,
+            rerank_config: corpus_engine::RerankConfig::default(),
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Install a cross-encoder reranker. Pure-additive: when enabled,
+    /// every corpus search overfetches `config.candidates_k` candidates
+    /// from the hybrid fusion path, scores them with `fn`, sorts by
+    /// rerank score, and truncates to the caller's limit. When `fn`
+    /// errors at runtime, the search-side fallback preserves baseline
+    /// fusion ordering — enabling the reranker can never make retrieval
+    /// worse than without it.
+    pub fn with_rerank(
+        mut self,
+        rerank_fn: corpus_engine::RerankFn,
+        config: corpus_engine::RerankConfig,
+    ) -> Self {
+        self.rerank_fn = Some(rerank_fn);
+        self.rerank_config = config;
+        self
+    }
+
+    /// Install rerank *config* without a reranker function. Used by
+    /// the per-article-dedup-only ablation: overfetch + dedup using
+    /// fusion scores only, no cross-encoder calls. Validates whether
+    /// the SEP source-recall lift attributed to the reranker
+    /// experiment is actually driven by dedup or by the
+    /// cross-encoder logits.
+    pub fn with_rerank_config(
+        mut self,
+        config: corpus_engine::RerankConfig,
+    ) -> Self {
+        self.rerank_fn = None;
+        self.rerank_config = config;
+        self
     }
 
     /// Fetch the most recent witness-turn provenance for `conversation_id`,
@@ -3802,11 +3851,22 @@ impl Runtime {
                     continue;
                 }
             };
-            match idx.search(embedding, query_text, limit).await {
+            match idx
+                .search_with_rerank(
+                    embedding,
+                    query_text,
+                    limit,
+                    self.rerank_fn.as_ref(),
+                    &self.rerank_config,
+                )
+                .await
+            {
                 Ok(scored) => {
                     tracing::info!(
                         corpus = %info.corpus_id,
                         results = scored.len(),
+                        rerank_enabled = self.rerank_config.enabled
+                            && self.rerank_fn.is_some(),
                         "{label}: search complete"
                     );
                     chunks.extend(scored);
@@ -3905,7 +3965,16 @@ impl Runtime {
                     continue;
                 }
             };
-            match idx.search(embedding, query_text, limit).await {
+            match idx
+                .search_with_rerank(
+                    embedding,
+                    query_text,
+                    limit,
+                    self.rerank_fn.as_ref(),
+                    &self.rerank_config,
+                )
+                .await
+            {
                 Ok(scored) => {
                     chunks.extend(scored);
                 }

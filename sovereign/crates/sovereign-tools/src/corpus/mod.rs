@@ -33,6 +33,30 @@ pub fn inference_to_embed_fn(inference: Arc<dyn InferenceProvider>) -> corpus_en
     })
 }
 
+/// Create a corpus-engine `RerankFn` from Sovereign's `InferenceProvider`.
+/// Uses the provider's `rerank_batch` method which, on `EmbeddedLlamaCpp`,
+/// dispatches to the installed `RerankSlot` (cross-encoder reranker).
+///
+/// Providers without a reranker return `Error::NotImplemented` from
+/// `rerank_batch`; the wrapper converts that into
+/// `corpus_engine::Error::Rerank`. The search path
+/// (`CorpusIndex::search_with_rerank`) catches that and falls back
+/// to the un-reranked fusion result — so installing this wrapper is
+/// always safe.
+pub fn inference_to_rerank_fn(
+    inference: Arc<dyn InferenceProvider>,
+) -> corpus_engine::RerankFn {
+    Arc::new(move |query: &str, docs: Vec<String>| {
+        let inf = Arc::clone(&inference);
+        let query = query.to_string();
+        Box::pin(async move {
+            inf.rerank_batch(&query, &docs)
+                .await
+                .map_err(|e| corpus_engine::Error::Rerank(e.to_string()))
+        })
+    })
+}
+
 /// Create a corpus-engine `BatchEmbedFn` from Sovereign's `InferenceProvider`.
 /// Uses the provider's `embed_batch` method which, on `EmbeddedLlamaCpp`,
 /// packs multiple sequences into a single llama.cpp decode call for

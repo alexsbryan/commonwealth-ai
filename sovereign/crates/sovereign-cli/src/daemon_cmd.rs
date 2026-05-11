@@ -365,6 +365,34 @@ async fn run_daemon(args: &[String]) -> i32 {
             // workloads (atlas enrich) want 1800+ to skip the 3–4 s
             // reload tax between back-to-back short LLM calls.
             arc.start_idle_monitor(config.daemon.primary_idle_secs);
+            // Optional cross-encoder reranker. Bootstraps from
+            // `SOVEREIGN_RERANK_MODEL_PATH` — points at a GGUF
+            // reranker (e.g. jina-reranker-v3, bge-reranker-v2-m3).
+            // When unset, the daemon comes up without a reranker and
+            // `Runtime.rerank_fn` stays `None` so retrieval baseline
+            // behaviour is preserved.
+            if let Ok(rerank_path) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
+                let path = PathBuf::from(&rerank_path);
+                match arc.install_rerank_slot(path, ModelFamily::Reranker) {
+                    Ok(model_id) => {
+                        tracing::info!(
+                            slot = "rerank",
+                            model_id = %model_id,
+                            "rerank slot installed from SOVEREIGN_RERANK_MODEL_PATH"
+                        );
+                    }
+                    Err(e) => {
+                        // Soft-fail: a missing or broken reranker
+                        // file should not block daemon startup;
+                        // retrieval simply runs the baseline path.
+                        tracing::warn!(
+                            path = %rerank_path,
+                            error = %e,
+                            "rerank slot install failed — running without reranker"
+                        );
+                    }
+                }
+            }
             arc
         }
         Err(e) => {
