@@ -35,6 +35,7 @@ pub mod landscape_digest_http;
 pub mod newsworthy_host;
 pub mod mcp_router;
 pub mod mesh_http;
+pub mod model_fetch;
 pub(crate) mod oicp_select;
 pub mod peer_inference;
 pub mod persist;

@@ -1854,6 +1854,28 @@ fn register_local_model_slots(
         );
         app_state.install_slot_aliases(slot_aliases);
     }
+
+    // Install the servable-model-files allowlist so peers can
+    // pull these GGUFs via `/internal/v1/models/list` +
+    // `/internal/v1/models/file/:name`. Dedup by canonical path
+    // — `primary_pool` slots all point at the same file as the
+    // primary slot, and there's no point advertising it three
+    // times. See `commonwealth-api::routes_internal::model_files`.
+    let mut servable: Vec<std::path::PathBuf> = Vec::new();
+    let mut seen: std::collections::HashSet<std::path::PathBuf> = std::collections::HashSet::new();
+    for (_, path) in &slots {
+        let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if seen.insert(canon.clone()) {
+            servable.push(canon);
+        }
+    }
+    if !servable.is_empty() {
+        info!(
+            files = servable.len(),
+            "installing servable model files allowlist for peer fetch"
+        );
+        app_state.install_servable_model_files(servable);
+    }
 }
 
 /// A peer's inference service, as seen by the local

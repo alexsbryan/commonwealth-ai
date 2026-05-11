@@ -87,6 +87,13 @@ if-addrs = "0.13"
 # default_path resolution.
 chrono = { workspace = true }
 dirs = "6"
+# Streaming SHA-256 in `model_fetch` so the file is hashed
+# while the bytes pass through — no second pass over disk.
+sha2 = "0.10"
+# Percent-encode model file names in the peer-fetch URL so a
+# filename with characters that would otherwise need encoding
+# (spaces, plus signs) reaches the server intact.
+urlencoding = "2"
 # FS watcher primitives for the Reindexer's freshness pipeline.
 # `notify` drives the kernel-level change events; `ignore` honours
 # .gitignore semantics so we don't fire on target/ or node_modules/.

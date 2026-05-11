@@ -22,6 +22,7 @@ mod corpus_sync;
 mod gossip;
 mod knowledge;
 mod mesh_admin;
+mod model_files;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
 pub use corpus_collaborate::{corpus_collaborate, CollaborateRequest};
@@ -38,6 +39,9 @@ pub use corpus_queue::{
     NextUnitRequest, NextUnitResponse,
 };
 pub use corpus_sync::{index_serve, index_transfer, model_transfer};
+pub use model_files::{
+    list_model_files, serve_model_file, ListResponse as ModelFileListResponse, ModelFileInfo,
+};
 pub use gossip::{
     gossip, scheduling_intent, scheduling_plan, GossipRejection, GossipRequest, GossipResponse,
     SchedulingIntent, SchedulingIntentResponse,

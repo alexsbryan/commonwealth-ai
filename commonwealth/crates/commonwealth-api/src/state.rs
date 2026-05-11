@@ -174,6 +174,27 @@ pub struct AppStateInner {
     /// `SetupConfig`). Resolution then falls through to the
     /// existing pipeline / model alias paths.
     pub slot_aliases: ArcSwap<std::collections::HashMap<String, String>>,
+    /// Absolute paths of GGUF files this daemon will serve over
+    /// `/internal/v1/models/*` to other mesh peers. Populated at
+    /// daemon boot from `SetupConfig.models.*` so a friend or a
+    /// fresh cloud pod can pull the model files from us instead of
+    /// from R2/S3 — the friend doesn't have our bucket creds, and
+    /// the cloud pod's R2 sync has been the slowest step of every
+    /// fresh launch.
+    ///
+    /// `ArcSwap` so the admin reload path can update the list when
+    /// `[models]` paths change on disk. Empty when the daemon has
+    /// not installed bindings yet (early boot, or test fixtures
+    /// that bypass the production `start_daemon` flow).
+    ///
+    /// Serving is an allowlist, not a directory browser: only paths
+    /// listed here are exposed. A request whose `name` doesn't match
+    /// the `file_name()` of one of these paths gets 404, even if
+    /// the file exists somewhere on disk. Keeps the surface area to
+    /// "files this daemon is configured to load and would have
+    /// already loaded itself" — same trust boundary as the
+    /// inference path.
+    pub servable_model_files: ArcSwap<Vec<std::path::PathBuf>>,
     /// ATOS middleware registry. Holds one instance of each
     /// middleware the pipelines can reference by id.
     pub middleware_registry: Arc<crate::middleware::MiddlewareRegistry>,
@@ -358,6 +379,20 @@ impl AppState {
         names
     }
 
+    /// Replace the servable-model-files allowlist atomically. Daemon
+    /// startup calls this once after the slot table is built; the
+    /// admin reload path calls it again on `[models]` change. Each
+    /// path should be absolute (no `..`/symlink trickery) — the
+    /// serve handler matches only on `file_name()` and reads the
+    /// canonical path, but feeding it relative inputs would still
+    /// be a footgun for whoever calls it next.
+    pub fn install_servable_model_files(
+        &self,
+        files: Vec<std::path::PathBuf>,
+    ) {
+        self.inner.servable_model_files.store(Arc::new(files));
+    }
+
 
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
         let mesh_store = Arc::new(
@@ -448,6 +483,7 @@ impl AppState {
                 pipeline_aliases:
                     commonwealth_core::pipeline_aliases::PipelineAliasTable::default_table(),
                 slot_aliases: ArcSwap::from_pointee(std::collections::HashMap::new()),
+                servable_model_files: ArcSwap::from_pointee(Vec::new()),
                 middleware_registry: Arc::new(middleware_registry),
                 session_store,
                 repo_root: std::env::current_dir().ok(),

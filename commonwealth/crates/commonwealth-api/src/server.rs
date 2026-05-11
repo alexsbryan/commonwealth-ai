@@ -60,6 +60,15 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/model/transfer",
             post(routes_internal::model_transfer),
         )
+        // Peer-to-peer GGUF distribution. See routes_internal::model_files.
+        .route(
+            "/internal/v1/models/list",
+            get(routes_internal::list_model_files),
+        )
+        .route(
+            "/internal/v1/models/file/{name}",
+            get(routes_internal::serve_model_file),
+        )
         .route(
             "/internal/index/transfer",
             post(routes_internal::index_transfer),
