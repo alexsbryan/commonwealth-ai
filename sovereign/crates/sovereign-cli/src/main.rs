@@ -596,10 +596,20 @@ async fn main() {
                 // The daemon run loop depends on tracing for visibility
                 // into model load, mesh resume, and gossip. Initialize a
                 // subscriber up front so launchd/systemd can tail it.
+                //
+                // `corpus_engine=info` is load-bearing for the
+                // wikipedia-newsworthy watcher specifically: its
+                // tick / portal-ingest / tracked-state events live in
+                // `corpus_engine::update::newsworthy_watcher`, and
+                // without this entry every `newsworthy.tick` /
+                // `newsworthy.portal_ingested` line was being dropped
+                // at the subscriber — masking whether the watcher was
+                // actually running.
                 util::tracing_init::init_tracing(
                     "sovereign_cli=info,\
                      sovereign_mesh=info,\
                      sovereign_inference=info,\
+                     corpus_engine=info,\
                      commonwealth_discovery=info,\
                      commonwealth_api=info",
                 );

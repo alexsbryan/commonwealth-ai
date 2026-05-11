@@ -49,3 +49,12 @@ vector = true
 [update]
 manifest_url = "https://updates.sovereign.dev/manifests/wikipedia-newsworthy.json"
 auto_update = true
+# This corpus is watcher-driven: `corpus_engine::update::newsworthy_watcher`
+# owns fetches and reindexes against the parent `wikipedia` corpus.
+# Declaring `ingest_driver = "watcher"` tells `CorpusEngine::ingest` to
+# short-circuit to "create empty index + write _corpus_meta.json + return"
+# instead of running the `[acquire]` pipeline (which the watcher uses for
+# request *shape*, not for an install-time fetch — the `{date_yyyy_month_dd}`
+# placeholder is substituted by the watcher per-tick, not by the recipe
+# resolver).
+ingest_driver = "watcher"

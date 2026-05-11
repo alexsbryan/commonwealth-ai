@@ -1562,12 +1562,25 @@ impl EmbeddedDaemon {
             );
             let (newsworthy_shutdown_tx, newsworthy_shutdown_rx) =
                 tokio::sync::watch::channel(false);
-            // Hold the sender on the task so it stays alive for the
-            // task's lifetime — same pattern as the storage-snapshot
-            // loop above. Process exit drops the task → drops the
-            // sender → loop sees `changed()` and exits.
-            let _hold = newsworthy_shutdown_tx;
-            let _newsworthy_handle = watcher.spawn(newsworthy_shutdown_rx);
+            // Wrap `watcher.spawn` in another `tokio::spawn` so the
+            // sender is moved INTO the wrapping task's async block
+            // (mirroring the storage-snapshot loop above). Earlier
+            // attempts bound `let _hold = sender` directly in this
+            // function — but that scope ends as soon as
+            // `start_daemon` returns a few lines down, dropping the
+            // sender, which causes the watcher's
+            // `shutdown_rx.changed()` arm to fire on Err before the
+            // jitter window completes. The watcher would log
+            // `newsworthy.watcher_starting` and then silently exit
+            // without ever ticking. Moving the bind inside the
+            // wrapping async task keeps the sender alive for as long
+            // as the watcher's `JoinHandle` is being awaited — i.e.
+            // for the daemon's lifetime under normal operation.
+            tokio::spawn(async move {
+                let _hold_shutdown_tx = newsworthy_shutdown_tx;
+                let handle = watcher.spawn(newsworthy_shutdown_rx);
+                let _ = handle.await;
+            });
             info!("WikipediaNewsworthyWatcher started");
         }
 

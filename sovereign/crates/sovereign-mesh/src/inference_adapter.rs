@@ -1138,22 +1138,17 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             });
         }
     }
-    // Provider name still reflects the primary — that's the name
-    // response attribution uses ("qwen3.5-27b @ peer BeefyMac").
-    // Fall back to whatever single model we have, or a sentinel.
-    let provider_name = models
-        .iter()
-        .max_by(|a, b| {
-            // Pick the "biggest" advertised model as the primary
-            // display name. If sizes are unknown, the one that
-            // landed later (Slow) wins via stable ordering.
-            a.size_gb
-                .unwrap_or(0.0)
-                .partial_cmp(&b.size_gb.unwrap_or(0.0))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .map(|m| m.id.clone())
-        .unwrap_or_else(|| "sovereign-local".to_string());
+    // Provider name reflects the configured chat primary — that's
+    // the name response attribution uses ("qwen3.5-27b @ peer
+    // BeefyMac"). Ask the provider directly for its Slow slot
+    // (with Fast and a "sovereign-local" sentinel as fallbacks)
+    // rather than guessing across advertised slots. The earlier
+    // max-by-size heuristic mis-identified the primary when a
+    // larger code-slot GGUF outweighed the chat primary — e.g.
+    // Qwopus3.6-35B Q8 (~34 GB code slot) shadowing Darwin-36B Q6
+    // (~28 GB primary) so peers attributed every reply to the
+    // code model.
+    let provider_name = resolve_primary_model_name(provider);
     ProviderManifest {
         oicp_version: OICP_VERSION.to_string(),
         provider: Some(ProviderInfo {
@@ -1899,5 +1894,33 @@ mod self_manifest_tests {
         let profile: CapabilityProfile = std::collections::HashMap::new();
         let claims = synthesize_code_slot_claims("mystery-model.Q4_K_M", &profile);
         assert_eq!(claims[0].affinity, 0.0);
+    }
+
+    #[test]
+    fn manifest_provider_name_is_chat_primary_not_largest_slot() {
+        // Regression for the "peer attributes replies to the code
+        // slot" bug observed 2026-05-10: a user swapped the chat
+        // primary to Darwin-36B Q6 (~28 GB) while leaving a larger
+        // Qwopus3.6-35B Q8 (~34 GB) in the code slot. The OICP
+        // `provider.name` peers see came out as the code model
+        // because the picker maxed by size_gb instead of asking
+        // the provider for its Speed::Slow slot.
+        //
+        // The provider's primary is what attribution should
+        // reflect, regardless of whether some other configured
+        // slot happens to be a larger file on disk.
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "chat-primary.Q5_K_M",
+            code_id: Some("huge-code-specialist.Q8_0"),
+        };
+        let manifest = build_self_manifest(&stub);
+        let provider = manifest.provider.expect("provider block populated");
+        assert_eq!(
+            provider.name.as_deref(),
+            Some("chat-primary.Q5_K_M"),
+            "provider.name must reflect the configured chat primary, \
+             not whichever advertised slot happens to be largest"
+        );
     }
 }

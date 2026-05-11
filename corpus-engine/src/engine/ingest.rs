@@ -136,6 +136,63 @@ impl CorpusEngine {
             recipe.index.embedding_dimensions = probe.len();
         }
 
+        // ── Watcher-driven recipes: short-circuit to empty index ────
+        //
+        // Recipes declaring `[update] ingest_driver = "watcher"` are
+        // populated by a daemon-side watcher (see
+        // `corpus_engine::update::newsworthy_watcher`) rather than the
+        // acquire/extract/chunk pipeline. Install creates a valid but
+        // empty CorpusIndex so peer install paths, mesh auto-resume,
+        // and the desktop setup wizard all converge on the same on-
+        // disk shape; the watcher writes the first chunks on its first
+        // tick. Critically, this means we DO NOT invoke the recipe's
+        // `[acquire]` block here — its URL template carries watcher-
+        // time placeholders (e.g. `{date_yyyy_month_dd}` for
+        // wikipedia-newsworthy) that aren't valid recipe parameters
+        // and would otherwise trip the template validator.
+        let watcher_driven = recipe
+            .update
+            .as_ref()
+            .is_some_and(|u| u.has_external_driver());
+        if watcher_driven {
+            let started = Instant::now();
+            let corpus_id = recipe.corpus.id.clone();
+            let canonical = self.index_dir.join(&corpus_id);
+            if !canonical.exists() {
+                std::fs::create_dir_all(canonical.parent().unwrap_or(&self.index_dir))?;
+                let _idx = CorpusIndex::create_with_sharing(
+                    &canonical,
+                    &recipe.corpus.id,
+                    &recipe.corpus.name,
+                    &recipe.index.embedding_model,
+                    recipe.index.embedding_dimensions,
+                    recipe.corpus.mesh_sharing,
+                    recipe.corpus.query_sharing,
+                    &recipe.corpus.license,
+                )
+                .await?;
+                tracing::info!(
+                    corpus_id = %corpus_id,
+                    driver = recipe.update.as_ref().and_then(|u| u.ingest_driver.as_deref()).unwrap_or(""),
+                    path = %canonical.display(),
+                    "ingest: created empty index for watcher-driven recipe"
+                );
+            } else {
+                tracing::info!(
+                    corpus_id = %corpus_id,
+                    path = %canonical.display(),
+                    "ingest: watcher-driven recipe — canonical index already present, no-op"
+                );
+            }
+            return Ok(IngestResult {
+                corpus_id,
+                chunks_created: 0,
+                index_size_bytes: 0,
+                duration_secs: started.elapsed().as_secs(),
+                docs_skipped: 0,
+            });
+        }
+
         // ── Choose output path ─────────────────────────────────────
         //
         // Unified primitive: all new ingests write to the per-node

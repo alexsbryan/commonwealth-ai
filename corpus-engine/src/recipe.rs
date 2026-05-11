@@ -333,6 +333,37 @@ pub struct UpdateConfig {
     /// user instead.
     #[serde(default)]
     pub auto_update: bool,
+
+    /// Names the subsystem that owns ingest + ongoing updates for this
+    /// corpus. When set, [`crate::engine::CorpusEngine::ingest`]
+    /// short-circuits to "create an empty index, write
+    /// `_corpus_meta.json`, return" instead of running the recipe's
+    /// `[acquire]` pipeline — the named driver is then responsible for
+    /// populating chunks on its own schedule.
+    ///
+    /// Current values:
+    /// - `"watcher"` — daemon-side watcher (e.g.
+    ///   `corpus_engine::update::newsworthy_watcher::WikipediaNewsworthyWatcher`)
+    ///   handles fetches + reindexes via `reindex_by_source_doc_id`.
+    ///   The recipe's `[acquire]` block is informational shape only
+    ///   (the watcher reads the URL template + chunker config from it)
+    ///   and is not invoked by `ingest`.
+    ///
+    /// `None` (the default) preserves the historical contract: ingest
+    /// runs the full acquire/extract/chunk/index pipeline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingest_driver: Option<String>,
+}
+
+impl UpdateConfig {
+    /// True if this recipe declares an external ingest driver (e.g.
+    /// a daemon-side watcher). Used by `CorpusEngine::ingest` to short-
+    /// circuit to "create empty index + return" rather than running
+    /// the acquire pipeline. Callers that care about the specific
+    /// driver name read `ingest_driver.as_deref()` directly.
+    pub fn has_external_driver(&self) -> bool {
+        self.ingest_driver.as_deref().is_some_and(|s| !s.is_empty())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2771,6 +2802,60 @@ type = "paragraph"
         assert!(
             r.enrichment.as_ref().map(|e| !e.enabled).unwrap_or(true),
             "breadth layer must not enable enrichment"
+        );
+    }
+
+    /// Watcher-driven recipes carry `[update] ingest_driver = "watcher"`.
+    /// `CorpusEngine::ingest` short-circuits on this signal to "create
+    /// empty index + return" instead of running the recipe's acquire
+    /// pipeline — which for wikipedia-newsworthy would otherwise trip
+    /// the template validator on the watcher's `{date_yyyy_month_dd}`
+    /// placeholder. Test guards against accidental field removal that
+    /// would silently re-enable the broken install path.
+    #[test]
+    fn wikipedia_newsworthy_declares_watcher_ingest_driver() {
+        // `builtin_recipes()`'s IDS list deliberately excludes the
+        // newsworthy recipe (it has no acquire-pipeline use), so we
+        // parse the bundled TOML directly.
+        let toml = bundled_recipe_toml("wikipedia-newsworthy")
+            .expect("wikipedia-newsworthy must be a bundled recipe");
+        let r = Recipe::from_toml(toml)
+            .expect("wikipedia-newsworthy recipe.toml must parse");
+        let update = r
+            .update
+            .as_ref()
+            .expect("wikipedia-newsworthy must declare [update]");
+        assert_eq!(
+            update.ingest_driver.as_deref(),
+            Some("watcher"),
+            "wikipedia-newsworthy must declare ingest_driver=\"watcher\" so \
+             CorpusEngine::ingest skips the acquire pipeline that would \
+             otherwise trip the watcher-time placeholder validator"
+        );
+        assert!(
+            update.has_external_driver(),
+            "has_external_driver() must return true for watcher-driven recipes"
+        );
+    }
+
+    /// Default for non-watcher recipes: `ingest_driver` is None and
+    /// `has_external_driver()` is false. Asserted against the wikipedia
+    /// L1 recipe so a future regression that defaults the field to
+    /// some non-None sentinel would also short-circuit the L1 install.
+    #[test]
+    fn standard_recipes_have_no_external_ingest_driver() {
+        let recipes = builtin_recipes();
+        let r = recipes
+            .iter()
+            .find(|r| r.corpus.id == "wikipedia")
+            .expect("wikipedia recipe must exist");
+        let driven = r
+            .update
+            .as_ref()
+            .is_some_and(|u| u.has_external_driver());
+        assert!(
+            !driven,
+            "standard ingest recipes must not declare an external ingest driver"
         );
     }
 
