@@ -35,7 +35,7 @@
 //!   operator sees; both at INFO so they show up in normal daemon
 //!   output without DEBUG flags.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -54,6 +54,30 @@ const INITIAL_COOLDOWN: Duration = Duration::from_secs(60);
 /// indefinitely masked.
 const MAX_COOLDOWN: Duration = Duration::from_secs(600);
 
+/// Recent-event ring buffer capacity per peer. The "soft health"
+/// signal — distinct from the hard quarantine threshold — is the
+/// success fraction over the last `RECENT_EVENT_WINDOW` events.
+/// 20 is small enough that one isolated failure doesn't dominate
+/// the score (1/20 = 5% drop, recoverable in a few requests), and
+/// large enough that real degradation (>30% failure rate)
+/// surfaces within seconds.
+///
+/// The empirical anchor is the 2026-05-11 SEP fanout incident:
+/// a thrashing Q4 pod had ~6 successes per 100 attempts in a
+/// 5-minute window. The hard quarantine took until the 3rd
+/// CONSECUTIVE failure to engage, but the success rate was
+/// continuously visible from the first half-dozen events —
+/// soft health would have pushed routing away from the peer
+/// almost immediately, where quarantine cycled in and out and
+/// the load balancer kept stampeding back to the bad peer.
+const RECENT_EVENT_WINDOW: usize = 20;
+
+/// Soft-health floor. Returned by `health_weight` even when every
+/// recent event is a failure — keeps the peer marginally routable
+/// so it has SOME chance to demonstrate recovery. Quarantine takes
+/// over the hard "skip" when this many failures in a row land.
+const HEALTH_WEIGHT_FLOOR: f32 = 0.05;
+
 #[derive(Debug, Default, Clone)]
 struct PeerHealth {
     /// Failures since the last success. Reset to 0 on
@@ -69,6 +93,17 @@ struct PeerHealth {
     /// attempt is allowed and either resets (success) or re-arms
     /// quarantine with a longer cooldown (failure).
     quarantined_until: Option<Instant>,
+    /// Ring buffer of recent outcomes (true = success, false =
+    /// failure), capped at `RECENT_EVENT_WINDOW`. Drives the
+    /// `health_weight` soft signal used by the load balancer to
+    /// bias routing AWAY from struggling peers before they cross
+    /// the hard quarantine threshold.
+    ///
+    /// Pushed on every `record_success`/`record_failure`. Cleared
+    /// when a peer transitions out of quarantine via success —
+    /// the new event series starts fresh so a sustained-recovery
+    /// peer regains full weight quickly.
+    recent_events: VecDeque<bool>,
 }
 
 impl PeerHealth {
@@ -77,6 +112,26 @@ impl PeerHealth {
             Some(deadline) => deadline > now,
             None => false,
         }
+    }
+
+    /// Compute success rate over the recent-event ring buffer.
+    /// Returns 1.0 when the buffer is empty (no data → optimistic;
+    /// a never-tried peer gets a full chance to prove itself).
+    fn recent_success_rate(&self) -> f32 {
+        if self.recent_events.is_empty() {
+            return 1.0;
+        }
+        let successes = self.recent_events.iter().filter(|&&ok| ok).count();
+        successes as f32 / self.recent_events.len() as f32
+    }
+
+    /// Push an outcome onto the ring buffer, evicting the oldest
+    /// entry if at capacity. Constant-time amortised.
+    fn push_event(&mut self, success: bool) {
+        if self.recent_events.len() >= RECENT_EVENT_WINDOW {
+            self.recent_events.pop_front();
+        }
+        self.recent_events.push_back(success);
     }
 }
 
@@ -103,6 +158,36 @@ impl PeerHealthTracker {
             .unwrap_or(false)
     }
 
+    /// Soft-health weight in `[HEALTH_WEIGHT_FLOOR, 1.0]`. This is
+    /// the success rate over the last `RECENT_EVENT_WINDOW` events,
+    /// floored so a struggling peer stays marginally routable
+    /// (quarantine handles the hard "skip" case separately).
+    ///
+    /// **Use case**: the load balancer multiplies `peer_inflight`
+    /// by `1.0 / health_weight` when comparing against `local_inflight`.
+    /// A peer at 30% success rate appears to the balancer as having
+    /// 3.3× its actual in-flight count, pushing new requests toward
+    /// the healthier peer (or local) without removing the struggling
+    /// peer from the candidate set entirely.
+    ///
+    /// **Why a floor**: a peer that's recovered after a brief outage
+    /// shouldn't stay banned by its own historical failures. The
+    /// `HEALTH_WEIGHT_FLOOR` (5%) gives every advertised peer at
+    /// least a small dispatch probability per round, letting it
+    /// re-prove itself organically as `recent_events` cycles fresh
+    /// successes through.
+    ///
+    /// **Empty buffer = 1.0** — a never-tried peer is optimistically
+    /// treated as fully healthy. The first failure pushes weight to
+    /// ~0% (1/1 = 0% success), the next success to 50%, etc., so
+    /// the signal converges in handfuls of events.
+    pub fn health_weight(&self, peer_name: &str) -> f32 {
+        let map = self.peers.lock().unwrap();
+        map.get(peer_name)
+            .map(|h| h.recent_success_rate().max(HEALTH_WEIGHT_FLOOR))
+            .unwrap_or(1.0)
+    }
+
     /// Mark a successful interaction with the peer. Resets the
     /// consecutive-failure counter and clears any quarantine flag —
     /// success is full vindication. The `quarantine_count` is
@@ -114,12 +199,20 @@ impl PeerHealthTracker {
         let was_quarantined = entry.quarantined_until.is_some();
         entry.consecutive_failures = 0;
         entry.quarantined_until = None;
+        // Clear the soft-health ring buffer on recovery-from-quarantine
+        // so the peer's effective weight jumps back to 1.0 immediately
+        // after the first post-cooldown success. Without the wipe, a
+        // peer with 19 failures in its buffer would need 19 more
+        // successes to fully recover — too slow for fanout workloads
+        // where the bad-peer window was brief.
         if was_quarantined {
+            entry.recent_events.clear();
             tracing::info!(
                 peer = %peer_name,
                 "peer-health: peer recovered after success"
             );
         }
+        entry.push_event(true);
     }
 
     /// Mark a failed interaction with the peer. Returns `true` iff
@@ -130,6 +223,7 @@ impl PeerHealthTracker {
         let mut map = self.peers.lock().unwrap();
         let entry = map.entry(peer_name.to_string()).or_default();
         entry.consecutive_failures = entry.consecutive_failures.saturating_add(1);
+        entry.push_event(false);
 
         if entry.consecutive_failures < FAILURE_THRESHOLD {
             return false;
@@ -308,5 +402,111 @@ mod tests {
         let names: Vec<_> = snap.iter().map(|r| r.0.as_str()).collect();
         assert!(names.contains(&"mac"));
         assert!(names.contains(&"laptop"));
+    }
+
+    #[test]
+    fn health_weight_optimistic_for_unknown_peer() {
+        // A peer the tracker has never seen returns 1.0 so the
+        // load balancer is willing to send it work and observe
+        // outcomes. Anything lower would penalise new peers
+        // before they had a chance to prove themselves.
+        let h = PeerHealthTracker::new();
+        assert_eq!(h.health_weight("brand-new-pod"), 1.0);
+    }
+
+    #[test]
+    fn health_weight_tracks_recent_success_rate() {
+        let h = PeerHealthTracker::new();
+        // 4 successes, 1 failure → 80% weight. Note: float
+        // comparison via abs() because 4/5 = 0.8 is exact in
+        // binary but the floor.max() path may round.
+        for _ in 0..4 {
+            h.record_success("pod");
+        }
+        h.record_failure("pod");
+        let w = h.health_weight("pod");
+        assert!((w - 0.8).abs() < 1e-6, "expected ~0.8, got {w}");
+    }
+
+    #[test]
+    fn health_weight_floors_at_minimum_not_zero() {
+        // Even after a stream of failures, weight doesn't go to 0 —
+        // the floor keeps the peer marginally routable so it has
+        // a chance to recover. Quarantine handles the hard skip.
+        let h = PeerHealthTracker::new();
+        for _ in 0..RECENT_EVENT_WINDOW {
+            h.record_failure("pod");
+        }
+        // Recent success rate is 0/20 = 0%, but the floor lifts it.
+        let w = h.health_weight("pod");
+        assert!(
+            w >= HEALTH_WEIGHT_FLOOR && w < 0.10,
+            "expected floor (~5%), got {w}"
+        );
+    }
+
+    #[test]
+    fn health_weight_thrash_regression_5pct_under_load() {
+        // Empirical anchor: the 2026-05-11 SEP fanout incident had
+        // ~5% success rate on the Q4 pod (1 success / 20 attempts)
+        // while it was reload-thrashing. After the burst, the soft
+        // signal should be at the floor — telling the load balancer
+        // "treat this peer as effectively 20× more loaded than its
+        // raw in-flight count suggests."
+        let h = PeerHealthTracker::new();
+        h.record_success("pod"); // the one slug that made it through
+        for _ in 0..19 {
+            h.record_failure("pod");
+        }
+        let w = h.health_weight("pod");
+        // 1/20 = 0.05 = exactly the floor; allow tiny float slack.
+        assert!(
+            (w - HEALTH_WEIGHT_FLOOR).abs() < 1e-6,
+            "thrashing-peer weight should sit at floor ~{HEALTH_WEIGHT_FLOOR}, got {w}"
+        );
+    }
+
+    #[test]
+    fn ring_buffer_caps_at_window_size() {
+        // The buffer is meant to be a SLIDING window — old events
+        // age out. Push 50 events; only the last 20 should be in
+        // the score.
+        let h = PeerHealthTracker::new();
+        for _ in 0..30 {
+            h.record_failure("pod"); // 30 old failures
+        }
+        for _ in 0..RECENT_EVENT_WINDOW {
+            h.record_success("pod"); // 20 fresh successes
+        }
+        // The 30 failures should have aged out completely. The
+        // last 20 events are all successes → weight = 1.0.
+        // record_success also clears consecutive_failures so the
+        // peer isn't quarantined, but record_success doesn't wipe
+        // the buffer unless the peer was actually quarantined —
+        // and 3 consecutive failures DID trigger quarantine in
+        // this sequence. Once the 20 successes land, weight is
+        // 1.0 either way (buffer cleared on quarantine-recovery
+        // OR full of fresh successes).
+        assert_eq!(h.health_weight("pod"), 1.0);
+    }
+
+    #[test]
+    fn recovery_after_quarantine_clears_history() {
+        // A peer that quarantines, then recovers via a single
+        // success, should have its weight jump back to 1.0
+        // immediately — not stay anchored at 0% by the prior
+        // failure history. This is the "fast recovery" property
+        // that lets a transient outage not penalise the peer
+        // for the next 20 requests.
+        let h = PeerHealthTracker::new();
+        for _ in 0..FAILURE_THRESHOLD {
+            h.record_failure("pod");
+        }
+        assert!(h.is_quarantined("pod"));
+        h.record_success("pod");
+        assert!(!h.is_quarantined("pod"));
+        // The single success after quarantine clears the buffer
+        // and pushes 1 success, so weight = 1.0.
+        assert_eq!(h.health_weight("pod"), 1.0);
     }
 }

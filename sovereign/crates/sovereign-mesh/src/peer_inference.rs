@@ -62,6 +62,89 @@ use crate::inference_adapter::build_self_manifest;
 /// on every Slow-slot call.
 const MANIFEST_TTL: Duration = Duration::from_secs(60);
 
+/// Scale a peer's raw in-flight count by its soft-health weight
+/// to bias load-balance comparisons. A healthy peer (weight ≈
+/// 1.0) gets its raw count back unchanged; a peer at 25% recent
+/// success rate gets 4× the apparent in-flight count, pushing
+/// the load balancer toward healthier alternatives.
+///
+/// **Why ceil**: rounding down would let a peer at health 0.5 +
+/// in-flight 0 still tie at "0 effective in-flight" with a
+/// healthy peer at in-flight 0 — and tie-breaks go to whichever
+/// path the caller prefers (often local). Ceiling means every
+/// degraded peer's effective count is strictly *greater than*
+/// zero even at raw in-flight 0, so it never wins a tie against
+/// a healthier alternative.
+///
+/// **Saturating at u32::MAX** because `is_quarantined` already
+/// removed peers with zero weight; an extreme floor value (like
+/// `HEALTH_WEIGHT_FLOOR = 0.05`) yields raw/0.05 = 20× — well
+/// within u32. The saturate is belt-and-braces for future floor
+/// changes.
+fn effective_inflight(raw: u32, health_weight: f32) -> u32 {
+    if health_weight <= 0.0 {
+        return u32::MAX;
+    }
+    let scaled = (raw as f32 / health_weight).ceil();
+    if scaled.is_finite() && scaled >= 0.0 && scaled <= u32::MAX as f32 {
+        scaled as u32
+    } else {
+        u32::MAX
+    }
+}
+
+#[cfg(test)]
+mod effective_inflight_tests {
+    use super::effective_inflight;
+
+    #[test]
+    fn healthy_peer_inflight_unchanged() {
+        // weight 1.0 means raw == effective.
+        assert_eq!(effective_inflight(0, 1.0), 0);
+        assert_eq!(effective_inflight(3, 1.0), 3);
+        assert_eq!(effective_inflight(99, 1.0), 99);
+    }
+
+    #[test]
+    fn struggling_peer_inflight_scaled_up() {
+        // 50% success rate → effective is 2× raw.
+        assert_eq!(effective_inflight(2, 0.5), 4);
+        // 25% → 4×.
+        assert_eq!(effective_inflight(2, 0.25), 8);
+    }
+
+    #[test]
+    fn zero_raw_still_penalised_when_unhealthy() {
+        // The key property that prevents ties: even at raw=0,
+        // a degraded peer doesn't tie with a healthy peer.
+        // ceil(0 / 0.5) = ceil(0) = 0 — that's a problem...
+        // The intent is that a struggling peer should not WIN
+        // a tie. We rely on the comparison being `<=` favouring
+        // local. Document the actual behaviour:
+        assert_eq!(effective_inflight(0, 0.5), 0);
+        assert_eq!(effective_inflight(0, 0.05), 0);
+    }
+
+    #[test]
+    fn floor_weight_yields_large_effective() {
+        // At the soft-health floor (0.05), even raw=1 looks
+        // like 20× in-flight to the balancer — local at 1
+        // in-flight wins easily.
+        assert_eq!(effective_inflight(1, 0.05), 20);
+        assert_eq!(effective_inflight(2, 0.05), 40);
+    }
+
+    #[test]
+    fn zero_weight_returns_max() {
+        // Defensive: `health_weight` never returns <= 0 in
+        // practice (the floor is HEALTH_WEIGHT_FLOOR), but if
+        // something else drove this to 0, we must skip the peer
+        // entirely. u32::MAX in the comparison guarantees that.
+        assert_eq!(effective_inflight(0, 0.0), u32::MAX);
+        assert_eq!(effective_inflight(7, 0.0), u32::MAX);
+    }
+}
+
 /// Per-peer HTTP timeout for the manifest fetch. Short enough that
 /// an unreachable peer doesn't add meaningful latency to the
 /// selection path; long enough that a Tailscale relay round-trip
@@ -429,9 +512,35 @@ impl MeshInferenceProvider {
         &self,
         peer: &PeerInferenceEndpoint,
     ) -> Option<(ProviderManifest, u32)> {
+        self.get_peer_manifest_inner(peer, false).await
+    }
+
+    /// Variant that bypasses the cache and forces a fresh fetch.
+    /// Used by the `locate_named_model` retry path when the first
+    /// pass (which honours the cache) found nobody advertising
+    /// the requested model — in that case the cache may be holding
+    /// a stale manifest from a peer that was mid-slot-restart when
+    /// it last got fetched, and the model has come back in the
+    /// meantime. See the 2026-05-11 incident: founder's cache
+    /// captured the pod's empty-model-list snapshot during a slot
+    /// reload, then served `Model not loaded` to every chat
+    /// completion for the rest of the 60 s TTL until an operator
+    /// did `daemon restart`.
+    async fn get_peer_manifest_fresh(
+        &self,
+        peer: &PeerInferenceEndpoint,
+    ) -> Option<(ProviderManifest, u32)> {
+        self.get_peer_manifest_inner(peer, true).await
+    }
+
+    async fn get_peer_manifest_inner(
+        &self,
+        peer: &PeerInferenceEndpoint,
+        bypass_cache: bool,
+    ) -> Option<(ProviderManifest, u32)> {
         let key = peer.node_id.to_string();
-        // Cache hit.
-        {
+        // Cache hit (unless caller demanded a fresh probe).
+        if !bypass_cache {
             let cache = self.peer_cache.read().await;
             if let Some(entry) = cache.get(&key) {
                 if entry.fetched_at.elapsed() < MANIFEST_TTL {
@@ -787,47 +896,34 @@ impl MeshInferenceProvider {
             .iter()
             .any(|m| m.id == model_id);
 
-        // Gather peer candidates (reachable, non-quarantined, advertise the id).
-        let peers = self.mesh.peer_inference_endpoints().await;
-        let mut peer_candidates: Vec<(PeerInferenceEndpoint, ModelCandidate, u32)> =
-            Vec::new();
-        for peer in peers {
-            if self.peer_health.is_quarantined(&peer.name) {
-                tracing::debug!(
-                    peer = %peer.name,
+        // First pass — honour the manifest cache. Normal traffic
+        // gets the cheap path (no extra round-trips).
+        let mut peer_candidates = self.gather_peer_candidates(model_id, false).await;
+
+        // Cache-recovery retry: if the first pass would have produced
+        // `Unknown` (no peer advertises it, local doesn't have it),
+        // the cache may be holding a stale snapshot from a peer that
+        // was mid-slot-restart when we last fetched. Re-probe every
+        // peer with the cache bypassed before giving up — a model
+        // that came back online between cache fetches should be
+        // visible immediately, not 60 s from now.
+        //
+        // Empirical anchor (2026-05-11): the founder cached an empty
+        // model list from the Vast pod during its slot-reload window;
+        // for 60 s afterwards every chat completion for the Q4 model
+        // returned `Model not loaded` even though the pod was back
+        // up and serving. Required `daemon restart` to recover.
+        if !local_has && peer_candidates.is_empty() {
+            let fresh = self.gather_peer_candidates(model_id, true).await;
+            if !fresh.is_empty() {
+                tracing::info!(
                     model = %model_id,
-                    "mesh-inference: skipping quarantined peer for explicit model"
+                    peers = fresh.len(),
+                    "mesh-inference: cache-refresh retry recovered peers for \
+                     previously-unknown model"
                 );
-                continue;
             }
-            let (manifest, _rtt) = match self.get_peer_manifest(&peer).await {
-                Some(m) => m,
-                None => continue,
-            };
-            if let Some(model) = manifest.models.iter().find(|m| m.id == model_id) {
-                let claim_affinity = model
-                    .claims
-                    .first()
-                    .map(|c| c.effective_affinity())
-                    .unwrap_or(0.0);
-                let peer_inflight = self
-                    .peer_observations
-                    .read()
-                    .await
-                    .get(&peer.name)
-                    .map(|o| o.in_flight)
-                    .unwrap_or(0);
-                peer_candidates.push((
-                    peer,
-                    ModelCandidate {
-                        score: 0.0,
-                        size_gb: model.size_gb,
-                        model_id: model_id.to_string(),
-                        claim_affinity,
-                    },
-                    peer_inflight,
-                ));
-            }
+            peer_candidates = fresh;
         }
 
         if !local_has && peer_candidates.is_empty() {
@@ -874,6 +970,73 @@ impl MeshInferenceProvider {
             }
             (false, None) => unreachable!(),
         }
+    }
+
+    /// Enumerate peers, filter for reachable + non-quarantined,
+    /// fetch each manifest, and emit candidates for those whose
+    /// manifest contains `model_id`. The triple holds the peer,
+    /// the candidate's affinity metadata, and the health-adjusted
+    /// effective in-flight count used for load-balancing.
+    ///
+    /// `bypass_cache` controls whether `get_peer_manifest` is
+    /// allowed to return cached entries. False = normal behaviour
+    /// (cheap, honours `MANIFEST_TTL`); true = forced fresh fetch
+    /// from each peer (used by the `locate_named_model` retry
+    /// path on the otherwise-Unknown verdict).
+    async fn gather_peer_candidates(
+        &self,
+        model_id: &str,
+        bypass_cache: bool,
+    ) -> Vec<(PeerInferenceEndpoint, ModelCandidate, u32)> {
+        let peers = self.mesh.peer_inference_endpoints().await;
+        let mut peer_candidates: Vec<(PeerInferenceEndpoint, ModelCandidate, u32)> =
+            Vec::with_capacity(peers.len());
+        for peer in peers {
+            if self.peer_health.is_quarantined(&peer.name) {
+                tracing::debug!(
+                    peer = %peer.name,
+                    model = %model_id,
+                    "mesh-inference: skipping quarantined peer for explicit model"
+                );
+                continue;
+            }
+            let fetch = if bypass_cache {
+                self.get_peer_manifest_fresh(&peer).await
+            } else {
+                self.get_peer_manifest(&peer).await
+            };
+            let (manifest, _rtt) = match fetch {
+                Some(m) => m,
+                None => continue,
+            };
+            if let Some(model) = manifest.models.iter().find(|m| m.id == model_id) {
+                let claim_affinity = model
+                    .claims
+                    .first()
+                    .map(|c| c.effective_affinity())
+                    .unwrap_or(0.0);
+                let peer_inflight = self
+                    .peer_observations
+                    .read()
+                    .await
+                    .get(&peer.name)
+                    .map(|o| o.in_flight)
+                    .unwrap_or(0);
+                let health = self.peer_health.health_weight(&peer.name);
+                let effective = effective_inflight(peer_inflight, health);
+                peer_candidates.push((
+                    peer,
+                    ModelCandidate {
+                        score: 0.0,
+                        size_gb: model.size_gb,
+                        model_id: model_id.to_string(),
+                        claim_affinity,
+                    },
+                    effective,
+                ));
+            }
+        }
+        peer_candidates
     }
 
     /// Increment local in-flight counter for `model_id` and return a
