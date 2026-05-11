@@ -135,8 +135,30 @@ impl PeerHealthTracker {
             return false;
         }
 
-        // Trigger quarantine. Backoff is linear in `quarantine_count`
-        // — first time 60s, second 120s, etc., capped at MAX_COOLDOWN.
+        // Already quarantined — don't compound. Failures during an
+        // active quarantine window are expected (in-flight calls
+        // draining after a peer restart, concurrent extracts all
+        // discovering the same outage at once). The existing
+        // deadline already covers this incident; bumping
+        // `quarantine_count` and extending the cooldown for every
+        // additional failure turns a 60 s "peer is briefly down"
+        // event into a 4–10 min ban after a burst of 6+ concurrent
+        // failures — and a fanout client retrying through the
+        // cooldown then keeps re-extending it. See the 2026-05-11
+        // SEP fanout incident where a model-slot reload on a single
+        // pod cascaded into the whole fanout queue failing
+        // instantly: the cache still had the right manifest, but
+        // `is_quarantined` rejected the peer for ~4 min instead of
+        // the expected 60 s.
+        if entry.quarantined_until.map_or(false, |d| d > now) {
+            return false;
+        }
+
+        // Transitioning INTO quarantine (either first time, or
+        // re-arming after a previous cooldown expired). Bump count
+        // and set deadline; backoff is linear in `quarantine_count`
+        // — first time 60 s, second 120 s, etc., capped at
+        // `MAX_COOLDOWN`.
         entry.quarantine_count = entry.quarantine_count.saturating_add(1);
         let cooldown = std::cmp::min(
             INITIAL_COOLDOWN.saturating_mul(entry.quarantine_count),
@@ -228,6 +250,53 @@ mod tests {
         }
         assert!(h.is_quarantined("mac"));
         assert!(!h.is_quarantined("laptop"));
+    }
+
+    #[test]
+    fn burst_of_failures_during_quarantine_does_not_compound_cooldown() {
+        // Regression for the 2026-05-11 SEP fanout incident: a single
+        // peer outage that triggered 6 concurrent failures used to
+        // re-quarantine 4 times (3rd failure starts cooldown, 4th-6th
+        // each bumped `quarantine_count`), turning a 60 s cooldown
+        // into 240 s and a fanout retry storm into 10-minute+ ban.
+        let h = PeerHealthTracker::new();
+        // 6 concurrent failures (simulates one in-flight burst all
+        // discovering the same listener reset at once).
+        for _ in 0..6 {
+            h.record_failure("pod");
+        }
+        // After the burst we expect ONE quarantine, not four.
+        let snap = h.snapshot();
+        let pod = snap
+            .iter()
+            .find(|r| r.0 == "pod")
+            .expect("pod recorded");
+        // seconds_until_recovery should be close to INITIAL_COOLDOWN,
+        // not 4× it. Tolerate up to a few seconds of test runtime
+        // skew; the real test is that it isn't multiples larger.
+        assert!(
+            pod.3 <= INITIAL_COOLDOWN.as_secs(),
+            "cooldown extended past 60 s on first burst (got {}s)",
+            pod.3
+        );
+        assert!(pod.1, "peer should be quarantined");
+    }
+
+    #[test]
+    fn record_failure_during_quarantine_returns_false() {
+        // Per the docstring, `record_failure` returns true *iff* this
+        // call triggered (or extended) quarantine. A redundant failure
+        // during an existing quarantine window neither triggers nor
+        // extends, so it must return false.
+        let h = PeerHealthTracker::new();
+        for _ in 0..FAILURE_THRESHOLD {
+            h.record_failure("pod");
+        }
+        assert!(h.is_quarantined("pod"));
+        // Additional failures while in cooldown return false.
+        assert!(!h.record_failure("pod"));
+        assert!(!h.record_failure("pod"));
+        assert!(!h.record_failure("pod"));
     }
 
     #[test]
