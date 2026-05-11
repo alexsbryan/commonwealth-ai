@@ -698,13 +698,29 @@ pub struct CorpusMeta {
     #[serde(default)]
     pub on_demand: bool,
 
-    /// Parent corpus id, set on per-work corpora produced by an
-    /// on-demand catalog ingest (e.g. `gutenberg-2701` carries
-    /// `parent_corpus_id = "gutenberg"`). Stamped onto the on-disk
-    /// `IndexMeta` so search consumers can group per-work corpora
-    /// under their catalog and suppress repeated ingest offers for
-    /// works already read. Always `None` in TOML files on disk;
-    /// populated only via [`crate::types::CorpusSpec::Inline`].
+    /// Parent corpus this recipe is grouped under. Two use cases share
+    /// the field:
+    ///
+    /// 1. **Dynamic per-work catalog children.** Set at runtime by an
+    ///    on-demand catalog ingest (e.g. `gutenberg-2701` carries
+    ///    `parent_corpus_id = "gutenberg"`) via
+    ///    [`crate::types::CorpusSpec::Inline`]. Search consumers group
+    ///    per-work corpora under their catalog and suppress repeated
+    ///    ingest offers for works already read.
+    ///
+    /// 2. **Static layer/satellite relationships declared in TOML.**
+    ///    `wikipedia-simple` and `wikipedia-newsworthy` declare
+    ///    `parent_corpus_id = "wikipedia"` to mark themselves as
+    ///    layers of the Core Wikipedia corpus. UI surfaces (e.g. the
+    ///    desktop picker) hide layered children from the top-level
+    ///    list and render them as toggles under the parent's row. The
+    ///    data layer is unaffected — each child still has its own
+    ///    `id`, index dir, mesh-sharing rules, and watcher (if any).
+    ///
+    /// Stamped onto the on-disk `IndexMeta` in both cases, so
+    /// `installed_indexes()` and downstream UI can group consistently.
+    /// Pointing at an id that doesn't exist is not a parse error — the
+    /// desktop falls back to top-level rendering for orphans.
     #[serde(default)]
     pub parent_corpus_id: Option<String>,
 
@@ -2812,6 +2828,35 @@ type = "paragraph"
     /// the template validator on the watcher's `{date_yyyy_month_dd}`
     /// placeholder. Test guards against accidental field removal that
     /// would silently re-enable the broken install path.
+    #[test]
+    fn wikipedia_layers_declare_parent_corpus_id() {
+        // Both `wikipedia-simple` (Layer 0) and `wikipedia-newsworthy`
+        // (Layer 2) must declare `parent_corpus_id = "wikipedia"` so
+        // the desktop picker can group them under the Core row instead
+        // of rendering them as separate top-level entries.
+        for id in ["wikipedia-simple", "wikipedia-newsworthy"] {
+            let toml = bundled_recipe_toml(id)
+                .unwrap_or_else(|| panic!("{id} must be a bundled recipe"));
+            let r = Recipe::from_toml(toml)
+                .unwrap_or_else(|e| panic!("{id} recipe.toml must parse: {e}"));
+            assert_eq!(
+                r.corpus.parent_corpus_id.as_deref(),
+                Some("wikipedia"),
+                "{id} must declare parent_corpus_id=\"wikipedia\" so the \
+                 desktop groups it under the Core Wikipedia row"
+            );
+        }
+
+        // Counter-example: the Core wikipedia recipe itself must NOT
+        // declare a parent, otherwise it'd disappear from the picker.
+        let core = bundled_recipe_toml("wikipedia").expect("wikipedia bundled");
+        let parsed = Recipe::from_toml(core).expect("wikipedia parses");
+        assert!(
+            parsed.corpus.parent_corpus_id.is_none(),
+            "the Core wikipedia recipe must not declare a parent_corpus_id"
+        );
+    }
+
     #[test]
     fn wikipedia_newsworthy_declares_watcher_ingest_driver() {
         // `builtin_recipes()`'s IDS list deliberately excludes the

@@ -361,6 +361,12 @@ export interface CorpusEntry {
   embedding_dimensions: number | null;
   /** True when the IVF-PQ vector index is built and semantic search is available. */
   vector_index_ready: boolean;
+  /**
+   * If set, this corpus is a layer/satellite of `parent_corpus_id`.
+   * The picker hides children from the top-level list and renders
+   * them as toggles under the parent's row instead.
+   */
+  parent_corpus_id: string | null;
 }
 
 /** Detailed health stats for an installed corpus — loaded on demand. */

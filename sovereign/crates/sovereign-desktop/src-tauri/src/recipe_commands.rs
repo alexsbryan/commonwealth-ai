@@ -327,6 +327,7 @@ fn upsert_local_registry(
             .unwrap_or(false),
         mesh_sharing: recipe.corpus.mesh_sharing,
         prebuilt: None,
+        parent_corpus_id: recipe.corpus.parent_corpus_id.clone(),
     });
     snapshot.generated_at = rfc3339_now();
     let serialized = toml::to_string_pretty(&snapshot)

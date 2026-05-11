@@ -132,6 +132,12 @@ pub struct CorpusEntry {
     pub registry_url: Option<String>,
     /// Recipe schema version (1 = initial). Used for compatibility checks.
     pub schema_version: Option<u32>,
+    /// Parent corpus id when this entry is a layer/satellite (e.g.
+    /// `wikipedia-simple` and `wikipedia-newsworthy` carry
+    /// `parent_corpus_id = "wikipedia"`). The desktop hides children
+    /// from the top-level picker and surfaces them as toggles under
+    /// the parent's row. `null` for top-level corpora.
+    pub parent_corpus_id: Option<String>,
 }
 
 /// Detailed health report for a single installed corpus, loaded on demand
@@ -2079,19 +2085,14 @@ pub async fn list_corpora(
 
     // Pull built-in catalog from registry snapshot (no network required).
     //
-    // `wikipedia-simple` is filtered out: it's a layer-0 satellite of
-    // the Wikipedia corpus (Layer 0 of the layered Wikipedia stack — see
-    // `lc_start_layered_setup`). The user-facing surface is a single
-    // "Wikipedia" entry whose Install button kicks off both layers via
-    // `startLayeredSetup`. Surfacing wikipedia-simple as a peer in the
-    // picker would force users to grok an internal staging detail; the
-    // recipe stays registered (so the daemon can still install it on
-    // demand) but doesn't render as its own row.
-    let builtins: Vec<_> = engine
-        .builtin_corpora()
-        .into_iter()
-        .filter(|b| b.id != "wikipedia-simple")
-        .collect();
+    // Layer/satellite corpora (those with a `parent_corpus_id` —
+    // `wikipedia-simple`, `wikipedia-newsworthy`) are still returned
+    // here. The desktop frontend hides them from the top-level picker
+    // and re-renders them as toggleable layers under the parent's row.
+    // Returning them in this list keeps the install/remove/progress
+    // wiring uniform — every layer is still a real corpus with its own
+    // id, status, and progress payload.
+    let builtins: Vec<_> = engine.builtin_corpora().into_iter().collect();
 
     // Look up live install status. Failure here is non-fatal — we still
     // want to render the catalog so the user can choose what to install.
@@ -2175,6 +2176,7 @@ pub async fn list_corpora(
             vector_index_ready,
             registry_url: registry_entry.map(|e| e.toml_url.clone()),
             schema_version: Some(1),
+            parent_corpus_id: b.parent_corpus_id.clone(),
         });
     }
 

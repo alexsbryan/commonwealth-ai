@@ -287,6 +287,12 @@ pub struct BuiltinCorpus {
     pub size_indexed_gb: f64,
     pub license: String,
     pub mesh_sharing: bool,
+    /// If set, this corpus is a layer/satellite of `parent_corpus_id`.
+    /// Sourced from the registry snapshot; the desktop hides children
+    /// from the top-level picker and renders them as toggles under the
+    /// parent row. `None` for top-level corpora.
+    #[serde(default)]
+    pub parent_corpus_id: Option<String>,
 }
 
 // ─── Corpus Spec ────────────────────────────────────────

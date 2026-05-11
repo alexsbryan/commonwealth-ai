@@ -261,7 +261,28 @@ fn build_docs(
         if end <= start || end > wikitext.len() {
             continue;
         }
-        let body_raw = &wikitext[start..end];
+        // MediaWiki returns `byteoffset` as a UTF-8 byte index into the
+        // wikitext, but the index occasionally lands inside a multi-byte
+        // codepoint — typically when the section boundary abuts an
+        // em-dash, en-dash, or non-ASCII character. A raw `wikitext[..]`
+        // slice in that case panics the tokio worker (`byte index N is
+        // not a char boundary; it is inside '–'`), which on
+        // newsworthy-watcher follower steps takes down the daemon's
+        // HTTP listener with no easy recovery. Use the fallible
+        // `.get()` slice and skip the section if the bounds aren't
+        // char-aligned — preferable to a global panic, and the next
+        // refresh tick gets another chance with updated wikitext.
+        // Surfaced 2026-05-10 by `2026_Israel–Lebanon_ceasefire` whose
+        // 177703..177706 em-dash sat exactly at a section boundary.
+        let Some(body_raw) = wikitext.get(start..end) else {
+            tracing::warn!(
+                start,
+                end,
+                section = name.as_str(),
+                "wikipedia_api_article: byteoffset lands mid-codepoint; skipping section"
+            );
+            continue;
+        };
         let body = strip_wikitext(body_raw);
         if body.len() < MIN_SECTION_TEXT {
             continue;

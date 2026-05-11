@@ -589,6 +589,7 @@ fn upsert_local_registry_entry(
             .unwrap_or(false),
         mesh_sharing: recipe.corpus.mesh_sharing,
         prebuilt: None,
+        parent_corpus_id: recipe.corpus.parent_corpus_id.clone(),
     });
     snapshot.generated_at = rfc3339_now();
 

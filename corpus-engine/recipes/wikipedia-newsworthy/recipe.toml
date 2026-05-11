@@ -14,6 +14,10 @@ public Wikipedia signals.\
 license = "CC-BY-SA-4.0"
 kind = "knowledge"
 on_demand = false
+# Layer 2 of the Wikipedia stack. The desktop picker hides children
+# with a `parent_corpus_id` and renders them as toggles under the
+# parent's row.
+parent_corpus_id = "wikipedia"
 mesh_sharing = true
 query_sharing = true
 scope = "newsworthy"

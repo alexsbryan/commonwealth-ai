@@ -70,6 +70,16 @@ pub struct RegistryEntry {
     /// Optional pre-built LanceDB index available for download.
     #[serde(default)]
     pub prebuilt: Option<RegistryPrebuilt>,
+    /// If set, this corpus is a layer/satellite of `parent_corpus_id`
+    /// (e.g. `wikipedia-simple` and `wikipedia-newsworthy` both declare
+    /// `parent_corpus_id = "wikipedia"`). The desktop hides children
+    /// from the top-level picker and renders them as toggles under the
+    /// parent row. Mirrors the recipe-level field of the same name —
+    /// duplicated here so the registry snapshot is self-sufficient and
+    /// the desktop doesn't need to parse every recipe TOML to group
+    /// the picker.
+    #[serde(default)]
+    pub parent_corpus_id: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -275,6 +285,7 @@ impl RecipeRegistry {
                 size_indexed_gb: e.size_indexed_gb,
                 license: e.license.clone(),
                 mesh_sharing: e.mesh_sharing,
+                parent_corpus_id: e.parent_corpus_id.clone(),
             })
             .collect()
     }

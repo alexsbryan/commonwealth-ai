@@ -23,6 +23,7 @@ size_compressed_gb = 0.4
 size_indexed_gb = 1.0
 enrichment_enabled = false
 mesh_sharing = true
+parent_corpus_id = "wikipedia"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-simple/recipe.toml"
 sha256 = ""
 
@@ -155,5 +156,6 @@ size_compressed_gb = 0.05
 size_indexed_gb = 0.20
 enrichment_enabled = false
 mesh_sharing = true
+parent_corpus_id = "wikipedia"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia-newsworthy/recipe.toml"
 sha256 = ""

@@ -41,6 +41,28 @@
     ),
   );
 
+  // Top-level picker rows: drop layers (children with parent_corpus_id —
+  // rendered under their parent's row) and internal collaborative-ingest
+  // partitions (`<corpus>-partition-<self>` directories that flow through
+  // to listInstalledIndexes by accident). Keeps the user-facing list to
+  // one row per logical corpus family.
+  let isPartition = (id: string): boolean =>
+    /^.+-partition-(?:node-[0-9a-f]+|self)$/.test(id);
+  let topLevelCorpora = $derived(
+    corpora.filter((c) => !c.parent_corpus_id && !isPartition(c.id)),
+  );
+  // Group children by parent_corpus_id so each parent row can render
+  // its layers in a sub-panel.
+  let childrenByParent: Record<string, typeof corpora> = $derived.by(() => {
+    const map: Record<string, typeof corpora> = {};
+    for (const c of corpora) {
+      if (c.parent_corpus_id) {
+        (map[c.parent_corpus_id] ||= []).push(c);
+      }
+    }
+    return map;
+  });
+
   onMount(async () => {
     await refresh();
     await corpusProgressStore.init();
@@ -282,7 +304,7 @@
     </div>
   {/if}
 
-  {#each corpora as corpus}
+  {#each topLevelCorpora as corpus}
     {@const inProgress =
       corpus.status === "installing" ||
       (progress[corpus.id] &&
@@ -383,6 +405,51 @@
             <div class="corpus-blurb">{corpus.description}</div>
           {/if}
         </div>
+        {#if childrenByParent[corpus.id]?.length}
+          <div class="corpus-layers" data-testid="corpus-layers">
+            <span class="layers-label">Layers:</span>
+            {#each childrenByParent[corpus.id] as layer}
+              {@const layerInProgress =
+                layer.status === "installing" ||
+                (progress[layer.id] &&
+                  progress[layer.id].phase !== "complete" &&
+                  progress[layer.id].phase !== "failed")}
+              {@const layerInstalled = layer.status === "installed"}
+              <button
+                type="button"
+                class="layer-chip"
+                class:installed={layerInstalled}
+                class:installing={layerInProgress}
+                class:available={!layerInstalled && !layerInProgress}
+                data-testid="layer-chip"
+                data-layer-id={layer.id}
+                data-layer-status={layerInProgress ? "installing" : layer.status}
+                disabled={layerInProgress}
+                aria-pressed={layerInstalled}
+                aria-label="{layerInstalled
+                  ? `Remove ${layer.name} layer`
+                  : layerInProgress
+                    ? `${layer.name} layer is installing`
+                    : `Add ${layer.name} layer`}"
+                title={layer.description}
+                onclick={() =>
+                  layerInstalled ? handleRemove(layer.id) : handleInstall(layer.id)}
+              >
+                <span class="layer-dot" aria-hidden="true"></span>
+                <span class="layer-name">{layer.name}</span>
+                <span class="layer-action" aria-hidden="true">
+                  {#if layerInstalled}
+                    Remove
+                  {:else if layerInProgress}
+                    Installing…
+                  {:else}
+                    Add
+                  {/if}
+                </span>
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
 
       <div class="corpus-action">
@@ -689,5 +756,110 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* ── Layers panel — sub-corpora rendered under their parent's row.
+        e.g. Wikipedia carries Simple English (Layer 0) and Newsworthy
+        (Layer 2) as toggleable chips. The whole chip is the
+        click target (button); the trailing label tells the user
+        what will happen. ── */
+  .corpus-layers {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    font-size: 0.72rem;
+  }
+  .layers-label {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+  .layer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px 3px 8px;
+    border: 1px solid var(--border-muted, rgba(255, 255, 255, 0.14));
+    border-radius: 999px;
+    background: var(--bg-subtle, rgba(255, 255, 255, 0.04));
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease,
+      color 120ms ease, transform 80ms ease;
+  }
+  .layer-chip:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+  .layer-chip:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  .layer-chip:focus-visible {
+    outline: 2px solid var(--focus-ring, #5aa9ff);
+    outline-offset: 2px;
+  }
+  .layer-chip:disabled {
+    cursor: progress;
+  }
+
+  /* States */
+  .layer-chip.installed {
+    border-color: rgba(120, 220, 140, 0.5);
+    background: rgba(120, 220, 140, 0.12);
+  }
+  .layer-chip.installing {
+    border-color: rgba(255, 200, 80, 0.55);
+    background: rgba(255, 200, 80, 0.10);
+  }
+  .layer-chip.available {
+    border-style: dashed;
+  }
+  .layer-chip.available:hover {
+    border-style: solid;
+  }
+
+  .layer-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex: 0 0 auto;
+  }
+  .layer-chip.installed .layer-dot {
+    background: #78dc8c;
+  }
+  .layer-chip.installing .layer-dot {
+    background: #ffc850;
+    animation: layer-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes layer-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
+  .layer-name {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .layer-action {
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-left: 1px solid var(--border-muted, rgba(255, 255, 255, 0.14));
+    padding-left: 6px;
+  }
+  .layer-chip.installed .layer-action {
+    color: rgba(120, 220, 140, 0.95);
+  }
+  .layer-chip.installing .layer-action {
+    color: rgba(255, 200, 80, 0.95);
+  }
+  .layer-chip:hover:not(:disabled) .layer-action {
+    color: var(--text-strong, #fff);
   }
 </style>

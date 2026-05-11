@@ -58,9 +58,40 @@ pub async fn build_structural_atlas(
     indexes_dir: PathBuf,
     recipes_dir: PathBuf,
 ) -> StructuralAtlasOutcome {
+    build_structural_atlas_inner(corpus_id, indexes_dir, recipes_dir, false).await
+}
+
+/// Force a structural atlas rebuild, overwriting any existing
+/// `atoms.json` / `edges.json` at the corpus's atlas dir. Used by
+/// the newsworthy watcher's `on_chunks_committed` hook to refresh
+/// the atlas after the watcher mutates the underlying chunks — the
+/// install-time [`build_structural_atlas`] bails on AlreadyPresent
+/// so it can't be reused for the post-write rebuild path.
+///
+/// Same machinery as `build_structural_atlas` otherwise — uses the
+/// `structure_first` strategy, walks chunk metadata (no embedding),
+/// writes atomically via `write_atomic_json` so an in-progress
+/// rebuild can't half-corrupt the atlas. On a 1.85M-chunk wikipedia
+/// corpus the rebuild takes ~30s-2min reading metadata; callers
+/// should run this on a detached task rather than blocking a
+/// request handler.
+pub async fn rebuild_structural_atlas(
+    corpus_id: &str,
+    indexes_dir: PathBuf,
+    recipes_dir: PathBuf,
+) -> StructuralAtlasOutcome {
+    build_structural_atlas_inner(corpus_id, indexes_dir, recipes_dir, true).await
+}
+
+async fn build_structural_atlas_inner(
+    corpus_id: &str,
+    indexes_dir: PathBuf,
+    recipes_dir: PathBuf,
+    force: bool,
+) -> StructuralAtlasOutcome {
     let atlas_dir = indexes_dir.join(corpus_id).join("atlas");
     let atoms_path = atlas_dir.join("atoms.json");
-    if atoms_path.exists() {
+    if !force && atoms_path.exists() {
         return StructuralAtlasOutcome::AlreadyPresent { atoms_path };
     }
 

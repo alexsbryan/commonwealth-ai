@@ -1,0 +1,130 @@
+# Wikipedia-Newsworthy retrieval smoke bank — 6 current-events
+# questions targeting the `wikipedia` corpus (where the newsworthy
+# watcher's follower step writes refreshed article content). Use
+# this to measure whether the freshness daemon actually surfaces
+# recent events that L5 Wikipedia alone wouldn't carry.
+#
+# Schema mirrors `sovereign-recipes/wikipedia/eval/wikipedia_questions.toml`:
+# see that file for the canonical field semantics. Scoring is
+# keyword-fuzzy on `expected_facts` and case-insensitive
+# underscore-folded on `expected_sources`.
+#
+# Calibration (2026-05-10):
+# - All questions cross-reference Portal:Current_events bullets that
+#   landed in the watcher's tracked set on the day this bank was
+#   authored. If the tracked set has rotated past these events (the
+#   30-day rolling window dropped them), questions may regress —
+#   that's the design, not a bug.
+# - `expected_sources` only lists titles confirmed present in
+#   ~/.sovereign/indexes/wikipedia after a watcher refresh tick;
+#   they're real, refreshed-by-newsworthy article names, not
+#   speculative L5 entries.
+# - Hands-off bench setup: install + watcher run + 1 tick is
+#   sufficient to populate enough chunks to score this bank.
+
+[bank]
+name = "wikipedia-newsworthy-smoke"
+corpus = "wikipedia"
+description = """
+6-question bank exercising the wikipedia-newsworthy freshness daemon's
+contribution to retrieval quality. Each question concerns an event from
+the rolling 30-day Portal:Current_events window that L5 Wikipedia's
+vital-articles cut alone couldn't answer. A 100% sources-matched
+result means the newsworthy refresh successfully landed and is
+queryable; <100% with the daemon installed indicates either a fetch
+failure (rate limits, recipe drift) or an indexing gap.
+"""
+
+[[questions]]
+id = "newsworthy-israel-lebanon-ceasefire"
+category = "newsworthy"
+question = "When was the 2026 Israel–Lebanon ceasefire agreed, and which country brokered it?"
+expected_facts = [
+  "16 April 2026",
+  "United States",
+  "Hezbollah",
+  "10-day truce",
+]
+expected_sources = [
+  "2026 Israel–Lebanon ceasefire",
+  "2026 Lebanon war",
+]
+notes = "Top-result probe — verifies the watcher's follower step actually wrote the ceasefire article into wikipedia."
+
+[[questions]]
+id = "newsworthy-iran-war-ceasefire"
+category = "newsworthy"
+question = "What ended the 2026 Iran war, and what role did the United States play?"
+expected_facts = [
+  "2026",
+  "ceasefire",
+  "United States",
+  "Trump",
+]
+expected_sources = [
+  "2026 Iran war",
+  "2026 Iran war ceasefire",
+  "2025–2026 Iran–United States negotiations",
+]
+notes = "Multi-article synthesis across three refreshed articles. Tests retrieval breadth, not just the top hit."
+
+[[questions]]
+id = "newsworthy-strait-of-hormuz-crisis"
+category = "newsworthy"
+question = "What triggered the 2026 Strait of Hormuz crisis?"
+expected_facts = [
+  "Iran",
+  "2026",
+  "oil",
+]
+expected_sources = [
+  "2026 Strait of Hormuz crisis",
+]
+notes = "Single-article recall on a tightly-scoped current event."
+
+[[questions]]
+id = "newsworthy-iran-us-negotiations"
+category = "newsworthy"
+question = "What were the 2025–2026 Iran–United States negotiations about?"
+expected_facts = [
+  "Iran",
+  "United States",
+  "2025",
+  "2026",
+]
+expected_sources = [
+  "2025–2026 Iran–United States negotiations",
+]
+notes = "Date-range parameter recall — exercises the title-normaliser on the en-dash variant."
+
+[[questions]]
+id = "newsworthy-economic-impact-iran-war"
+category = "newsworthy"
+question = "What was the economic impact of the 2026 Iran war on global oil markets?"
+expected_facts = [
+  "oil",
+  "2026",
+  "Iran",
+]
+expected_sources = [
+  "Economic impact of the 2026 Iran war",
+  "2026 Strait of Hormuz crisis",
+]
+notes = "Multi-article — economic-impact article + Hormuz crisis. Probes whether topical adjacency surfaces both."
+
+[[questions]]
+id = "newsworthy-lebanon-war-context"
+category = "newsworthy"
+question = "How did the 2026 Lebanon war connect to the wider Middle Eastern conflict?"
+expected_facts = [
+  "Lebanon",
+  "Israel",
+  "2026",
+  "Iran",
+]
+expected_sources = [
+  "2026 Lebanon war",
+  "Middle Eastern crisis (2023–present)",
+  "2026 Israel–Lebanon ceasefire",
+]
+notes = "Cross-article causal connection. The 'Middle Eastern crisis (2023–present)' source may rate-limit on first install (HTTP 429); re-running the bank after a watcher tick should fill in."

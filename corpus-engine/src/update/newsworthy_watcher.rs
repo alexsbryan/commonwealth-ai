@@ -30,10 +30,12 @@
 //! `sovereign newsworthy status` reads this same KV state — operators
 //! never have to attach a debugger.
 
+use std::panic::AssertUnwindSafe;
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Datelike, NaiveDate, TimeZone, Utc};
+use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
 
@@ -82,6 +84,30 @@ pub trait NewsworthyHost: Send + Sync {
     fn store_set(&self, app_id: &str, key: &str, value: Vec<u8>) -> Result<()>;
     fn store_scan(&self, app_id: &str, prefix: &str) -> Result<Vec<(String, Vec<u8>)>>;
     fn store_delete(&self, app_id: &str, key: &str) -> Result<bool>;
+
+    /// Called by the watcher at the end of a tick that wrote chunks
+    /// into one or more corpora. The host is expected to schedule a
+    /// structural-atlas rebuild for each affected corpus so that
+    /// atom-tier retrieval doesn't serve stale content from the
+    /// pre-refresh state. The watcher fires this hook *detached* —
+    /// implementations should spawn their own background task and
+    /// return immediately rather than blocking the watcher's tick
+    /// loop on a long atlas rebuild.
+    ///
+    /// `affected` carries `(corpus_id, role)` pairs. `role` is
+    /// `"portal"` for the watcher's `corpus_id` (the wikipedia-
+    /// newsworthy portal page sink) and `"refresh"` for the
+    /// `parent_corpus_id` (the L5 wikipedia article-refresh sink).
+    /// Hosts may dispatch differently per role — e.g. always rebuild
+    /// the smaller portal-page atlas inline, defer the multi-million-
+    /// chunk parent corpus rebuild to a low-priority queue.
+    ///
+    /// Default no-op so tests + minimal hosts don't have to wire
+    /// the atlas pipeline. The production host
+    /// (`sovereign-mesh::newsworthy_host::MeshNewsworthyHost`)
+    /// implements this against
+    /// `corpus_engine::enrichment::atlas::postinstall::rebuild_structural_atlas`.
+    fn on_chunks_committed(&self, _affected: &[(String, &'static str)]) {}
 }
 
 /// Lifecycle of a tracked article.
@@ -171,11 +197,30 @@ impl Default for NewsworthyConfig {
             window_days: 30,
             tick_interval: Duration::from_secs(24 * 3600),
             jitter_max: Duration::from_secs(15 * 60),
-            fetch_concurrency: 4,
+            // Drop to 1 in-flight request. Earlier 4-way concurrency
+            // triggered HTTP 429 cascades from MediaWiki on cold-
+            // start refresh waves (~48/57 articles rejected in
+            // 2026-05-10 tests). MediaWiki's per-source limit for
+            // anonymous + non-bot User-Agent traffic is roughly
+            // one-per-second sustained; a single in-flight request
+            // honoring `Retry-After` (see `HttpMediaWikiClient`)
+            // sits comfortably under that.
+            fetch_concurrency: 1,
             corpus_id: "wikipedia-newsworthy".to_string(),
             parent_corpus_id: "wikipedia".to_string(),
             mediawiki_base_url: "https://en.wikipedia.org/w/api.php".to_string(),
-            user_agent: "commonwealth-ai/0.1 (newsworthy)".to_string(),
+            // Wikipedia's User-Agent policy
+            // (https://meta.wikimedia.org/wiki/User-Agent_policy) wants
+            // an identifying string with a contact URL or email so
+            // operators can be reached if a script misbehaves.
+            // commonwealth-ai is open-source and unauthenticated, so
+            // we point at the repo. Without this, our requests were
+            // treated as generic browser traffic and rate-limited
+            // more aggressively.
+            user_agent:
+                "commonwealth-ai-newsworthy/0.1 (https://github.com/alexsbryan/sovereign; \
+                 ops@commonwealth.ai) reqwest/0.12"
+                    .to_string(),
         }
     }
 }
@@ -212,10 +257,84 @@ pub struct HttpMediaWikiClient {
     pub http: reqwest::Client,
 }
 
+/// How long to wait before retrying when MediaWiki returns 429 and
+/// doesn't supply a `Retry-After` header. Five seconds is comfortably
+/// above the per-source rate-limit window for anonymous traffic, and
+/// gives intermittent capacity issues time to clear without us spinning.
+const DEFAULT_RETRY_AFTER_SECS: u64 = 5;
+
+/// Maximum number of retries on a single MediaWiki request. Higher
+/// counts pay diminishing returns — a 429 that won't clear in three
+/// honoured-Retry-After cycles is almost certainly a sustained block
+/// that needs operator attention, not patience.
+const MAX_RETRY_ATTEMPTS: usize = 3;
+
+/// Parse a `Retry-After` header value. MediaWiki always returns seconds
+/// (per RFC 7231 §7.1.3 — HTTP-date variant is allowed but unused
+/// here). Capped at 60s so a buggy upstream can't park us indefinitely.
+fn parse_retry_after_secs(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    headers
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .map(|secs| secs.min(60))
+}
+
+/// Send a request through MediaWiki's API with rate-limit-aware retry.
+/// On HTTP 429 the client honours `Retry-After` (or falls back to
+/// `DEFAULT_RETRY_AFTER_SECS` with jitter) and retries up to
+/// `MAX_RETRY_ATTEMPTS` times before propagating the error. Other
+/// 4xx/5xx status codes return immediately without retry — they're
+/// recipe / permission failures that won't clear by waiting.
+async fn send_with_backoff(
+    builder: reqwest::RequestBuilder,
+    label: &str,
+) -> Result<reqwest::Response> {
+    let mut attempt: usize = 0;
+    loop {
+        // `try_clone()` keeps the template intact for the next
+        // iteration — `send()` consumes the clone, never the
+        // original builder. Returns None only if the request has
+        // a streaming body, which our GET-only MediaWiki calls
+        // never use.
+        let req = builder.try_clone().ok_or_else(|| {
+            Error::Extraction(format!("MediaWiki {label}: request builder not cloneable"))
+        })?;
+        let response = req
+            .send()
+            .await
+            .map_err(|e| Error::Extraction(format!("MediaWiki {label}: {e}")))?;
+        let status = response.status();
+        if status != reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Ok(response);
+        }
+        attempt += 1;
+        if attempt > MAX_RETRY_ATTEMPTS {
+            return Err(Error::Extraction(format!(
+                "MediaWiki {label}: 429 Too Many Requests after {MAX_RETRY_ATTEMPTS} retries"
+            )));
+        }
+        let suggested = parse_retry_after_secs(response.headers());
+        let base_secs = suggested.unwrap_or(DEFAULT_RETRY_AFTER_SECS);
+        let jitter_ms = rand_jitter_ms(500);
+        let sleep_for = Duration::from_secs(base_secs) + Duration::from_millis(jitter_ms);
+        tracing::warn!(
+            attempt,
+            max_attempts = MAX_RETRY_ATTEMPTS,
+            retry_after_secs = base_secs,
+            jitter_ms,
+            label,
+            retry_after_header = suggested.is_some(),
+            "newsworthy.mediawiki_rate_limited — backing off before retry"
+        );
+        tokio::time::sleep(sleep_for).await;
+    }
+}
+
 #[async_trait::async_trait]
 impl MediaWikiClient for HttpMediaWikiClient {
     async fn fetch_parse(&self, page: &str) -> Result<String> {
-        let response = self
+        let builder = self
             .http
             .get(&self.base_url)
             .header(reqwest::header::USER_AGENT, &self.user_agent)
@@ -225,10 +344,9 @@ impl MediaWikiClient for HttpMediaWikiClient {
                 ("prop", "wikitext|sections|links|properties"),
                 ("format", "json"),
                 ("formatversion", "2"),
-            ])
-            .send()
-            .await
-            .map_err(|e| Error::Extraction(format!("MediaWiki fetch: {e}")))?;
+            ]);
+        let label = format!("fetch_parse page={page}");
+        let response = send_with_backoff(builder, &label).await?;
         if !response.status().is_success() {
             return Err(Error::Extraction(format!(
                 "MediaWiki returned {} for page {page}",
@@ -246,7 +364,7 @@ impl MediaWikiClient for HttpMediaWikiClient {
             return Ok(Vec::new());
         }
         let joined = titles.join("|");
-        let response = self
+        let builder = self
             .http
             .get(&self.base_url)
             .header(reqwest::header::USER_AGENT, &self.user_agent)
@@ -257,10 +375,14 @@ impl MediaWikiClient for HttpMediaWikiClient {
                 ("redirects", "1"),
                 ("format", "json"),
                 ("formatversion", "2"),
-            ])
-            .send()
-            .await
-            .map_err(|e| Error::Extraction(format!("MediaWiki batch: {e}")))?;
+            ]);
+        let response = send_with_backoff(builder, "batch_revisions").await?;
+        if !response.status().is_success() {
+            return Err(Error::Extraction(format!(
+                "MediaWiki batch returned {}",
+                response.status()
+            )));
+        }
         let body: serde_json::Value = response
             .json()
             .await
@@ -480,14 +602,30 @@ impl WikipediaNewsworthyWatcher {
                     for (article, rev) in batch.iter().zip(revs) {
                         if Some(rev.latest_revid) != article.last_known_rev_id {
                             let _permit = sem.clone().acquire_owned().await.ok();
-                            match self.refresh_article(article, &rev, now).await {
-                                Ok(()) => report.refreshed += 1,
-                                Err(e) => {
+                            tracing::info!(
+                                title = %article.title,
+                                from_rev = ?article.last_known_rev_id,
+                                to_rev = rev.latest_revid,
+                                "newsworthy.refresh_attempt"
+                            );
+                            match catch_unwind_async(
+                                self.refresh_article(article, &rev, now),
+                                || article.title.clone(),
+                                "newsworthy.refresh_panicked",
+                            )
+                            .await
+                            {
+                                Ok(Ok(())) => report.refreshed += 1,
+                                Ok(Err(e)) => {
                                     tracing::warn!(
                                         title = %article.title,
                                         error = %e,
                                         "newsworthy.refresh_failed"
                                     );
+                                    report.errors += 1;
+                                }
+                                Err(()) => {
+                                    // Already logged inside catch_unwind_async.
                                     report.errors += 1;
                                 }
                             }
@@ -503,9 +641,19 @@ impl WikipediaNewsworthyWatcher {
 
         for article in to_fetch {
             let _permit = sem.clone().acquire_owned().await.ok();
-            match self.fetch_article_initial(&article, now).await {
-                Ok(()) => report.fetched += 1,
-                Err(e) => {
+            tracing::info!(
+                title = %article.title,
+                "newsworthy.initial_fetch_attempt"
+            );
+            match catch_unwind_async(
+                self.fetch_article_initial(&article, now),
+                || article.title.clone(),
+                "newsworthy.initial_fetch_panicked",
+            )
+            .await
+            {
+                Ok(Ok(())) => report.fetched += 1,
+                Ok(Err(e)) => {
                     tracing::warn!(
                         title = %article.title,
                         error = %e,
@@ -513,10 +661,44 @@ impl WikipediaNewsworthyWatcher {
                     );
                     report.errors += 1;
                 }
+                Err(()) => {
+                    // Already logged inside catch_unwind_async.
+                    report.errors += 1;
+                }
             }
         }
 
         report.elapsed_ms = started.elapsed().as_millis() as u64;
+
+        // Notify the host that chunks landed in one or more corpora
+        // so it can schedule an atlas rebuild (closes the structural
+        // enrichment gap noted in
+        // `project_newsworthy_atlas_enrichment_gap.md`). Two role
+        // tags: "portal" for the wikipedia-newsworthy corpus_id
+        // (small, fast to rebuild), "refresh" for the parent
+        // wikipedia corpus (large; host may defer or throttle).
+        let mut affected: Vec<(String, &'static str)> = Vec::new();
+        if report.portal_ingested {
+            affected.push((self.config.corpus_id.clone(), "portal"));
+        }
+        if report.refreshed + report.fetched > 0 {
+            affected.push((self.config.parent_corpus_id.clone(), "refresh"));
+        }
+        if !affected.is_empty() {
+            let summary: Vec<String> = affected
+                .iter()
+                .map(|(id, role)| format!("{role}={id}"))
+                .collect();
+            tracing::info!(
+                refreshed = report.refreshed,
+                fetched = report.fetched,
+                portal_ingested = report.portal_ingested,
+                affected = ?summary,
+                "newsworthy.atlas_rebuild_dispatch — notifying host to schedule atlas refresh for corpora that received writes this tick"
+            );
+            self.host.on_chunks_committed(&affected);
+        }
+
         Ok(report)
     }
 
@@ -838,6 +1020,51 @@ pub fn format_yyyy_month_dd(date: NaiveDate) -> String {
     format!("{}_{}_{:02}", date.year(), month_name, date.day())
 }
 
+/// Run an async future and catch panics, logging the panic message
+/// along with caller-supplied identifying context (e.g. article
+/// title). Returns:
+/// - `Ok(value)` when the future completed without panicking.
+/// - `Err(())` when the future panicked. The panic is logged via
+///   `tracing::error!` with the supplied event name and context; the
+///   caller is expected to count it as an error and move on. The
+///   tokio runtime is NOT poisoned because the panic is absorbed
+///   here.
+///
+/// Use this around per-article watcher steps (`refresh_article`,
+/// `fetch_article_initial`) so that one bad article — for example a
+/// MediaWiki revision whose section boundaries land mid-codepoint
+/// (see `corpus-engine::extractors::wikipedia_api_article`) — can't
+/// take down the daemon's HTTP listener with it.
+pub(crate) async fn catch_unwind_async<F, T, C>(
+    fut: F,
+    context: C,
+    event_name: &'static str,
+) -> std::result::Result<T, ()>
+where
+    F: std::future::Future<Output = T>,
+    C: FnOnce() -> String,
+{
+    match AssertUnwindSafe(fut).catch_unwind().await {
+        Ok(v) => Ok(v),
+        Err(panic) => {
+            // Panic payloads are typically &str or String; fall back
+            // to a generic marker for other types so we always emit
+            // a non-empty message.
+            let msg = panic
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_else(|| "<non-string panic payload>".to_string());
+            tracing::error!(
+                context = %context(),
+                panic_msg = %msg,
+                "{event_name}"
+            );
+            Err(())
+        }
+    }
+}
+
 /// Walk a `?action=parse` JSON response and return the union of all
 /// bullet-scoped wikilinks across every section's wikitext. The
 /// chunker's `extract_bullet_links` does the per-bullet extraction;
@@ -863,7 +1090,7 @@ pub fn collect_outbound_links_from_parsed(parsed: &serde_json::Value) -> Vec<Str
     union
 }
 
-fn rand_jitter_ms(max: u64) -> u64 {
+pub(crate) fn rand_jitter_ms(max: u64) -> u64 {
     if max == 0 {
         return 0;
     }

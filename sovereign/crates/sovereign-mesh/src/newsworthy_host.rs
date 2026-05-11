@@ -114,4 +114,77 @@ impl NewsworthyHost for MeshNewsworthyHost {
             .delete(app_id, key)
             .map_err(|e| CorpusError::Database(format!("MeshStore.delete: {e}")))
     }
+
+    /// Schedule a structural atlas rebuild for each affected corpus.
+    /// Spawned on a detached tokio task so the watcher's tick body
+    /// isn't blocked on the rebuild — wikipedia (1.85M chunks) reads
+    /// in ~30s-2min and we don't want that on the critical path.
+    ///
+    /// Cadence: the watcher fires this hook at most once per tick
+    /// (default 24h), so no extra throttling is layered here. If the
+    /// rebuild takes longer than the tick interval — unlikely at
+    /// metadata-only structure_first speeds — back-to-back ticks
+    /// would overlap and the second would block on Lance file
+    /// contention until the first finished.
+    fn on_chunks_committed(&self, affected: &[(String, &'static str)]) {
+        let Some(engine) = self.app_state.inner.corpus_engine.clone() else {
+            tracing::warn!(
+                affected_count = affected.len(),
+                "newsworthy.atlas_rebuild_skipped — no corpus_engine on AppState; refreshed chunks landed but atlas stays stale"
+            );
+            return;
+        };
+        let indexes_dir = engine.index_dir().to_path_buf();
+        // structure_first doesn't read recipes (metadata-only walk);
+        // pass the indexes_dir as a stand-in for recipes_dir to
+        // satisfy the engine constructor inside `rebuild_structural_atlas`.
+        let recipes_dir = indexes_dir.clone();
+        let work: Vec<(String, &'static str)> = affected.to_vec();
+        tokio::spawn(async move {
+            for (corpus_id, role) in &work {
+                let started = std::time::Instant::now();
+                tracing::info!(
+                    corpus_id = %corpus_id,
+                    role = %role,
+                    "newsworthy.atlas_rebuild_start"
+                );
+                let outcome = sovereign_tools::atlas_postinstall::rebuild_structural_atlas(
+                    corpus_id,
+                    indexes_dir.clone(),
+                    recipes_dir.clone(),
+                )
+                .await;
+                match outcome {
+                    sovereign_tools::atlas_postinstall::StructuralAtlasOutcome::Built {
+                        atoms_path,
+                        elapsed_secs,
+                        ..
+                    } => tracing::info!(
+                        corpus_id = %corpus_id,
+                        role = %role,
+                        atoms_path = %atoms_path.display(),
+                        elapsed_secs,
+                        wall_ms = started.elapsed().as_millis() as u64,
+                        "newsworthy.atlas_rebuild_complete"
+                    ),
+                    sovereign_tools::atlas_postinstall::StructuralAtlasOutcome::AlreadyPresent {
+                        atoms_path,
+                    } => tracing::warn!(
+                        corpus_id = %corpus_id,
+                        role = %role,
+                        atoms_path = %atoms_path.display(),
+                        "newsworthy.atlas_rebuild_skipped — rebuild_structural_atlas returned AlreadyPresent which shouldn't happen with force=true; investigate"
+                    ),
+                    sovereign_tools::atlas_postinstall::StructuralAtlasOutcome::Failed { reason } => {
+                        tracing::warn!(
+                            corpus_id = %corpus_id,
+                            role = %role,
+                            reason,
+                            "newsworthy.atlas_rebuild_failed — atlas stays at last known state until next tick retries"
+                        );
+                    }
+                }
+            }
+        });
+    }
 }

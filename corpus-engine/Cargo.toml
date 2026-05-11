@@ -25,6 +25,12 @@ tracing = "0.1"
 # HTTP
 reqwest = { version = "0.12", features = ["gzip", "brotli", "stream", "json"] }
 
+# Server-Sent Events client — used by the newsworthy watcher to
+# subscribe to Wikimedia EventStreams (`stream.wikimedia.org`) for
+# push-based article freshness instead of polling MediaWiki's API.
+# Handles SSE framing, `Last-Event-ID` resumption, and auto-reconnect.
+reqwest-eventsource = "0.6"
+
 # Vector database
 lancedb = "0.27"
 

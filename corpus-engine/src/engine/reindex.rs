@@ -303,9 +303,26 @@ impl CorpusEngine {
         let written = insert_pairs.len();
         index.insert_batch(&insert_pairs).await?;
 
+        // Glassbox: every reindex_by_source_doc_id call is a live
+        // mutation that downstream consumers (atlas, /v1/knowledge/
+        // search) read from. Emitting an info event so newsworthy
+        // watcher ticks land as concrete chunk-counts in the daemon
+        // log — operators can grep `reindex.committed
+        // corpus_id=wikipedia source_doc_id=…` and answer "what did
+        // the watcher actually write?" without attaching a Lance
+        // reader.
+        let elapsed_ms = t.elapsed().as_millis() as u64;
+        tracing::info!(
+            corpus_id,
+            source_doc_id,
+            chunks_written = written,
+            elapsed_ms,
+            "reindex.committed"
+        );
+
         Ok(ReindexResult::Updated {
             chunks_written: written,
-            elapsed_ms: t.elapsed().as_millis() as u64,
+            elapsed_ms,
         })
     }
 
