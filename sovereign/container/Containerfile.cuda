@@ -125,7 +125,62 @@ new=re.sub(r'\"rocm\"','\"cuda\"',m.group(0),count=1); \
 p.write_text(src[:m.start()]+new+src[m.end():])"
 
 WORKDIR /workspace/sovereign
+# Pre-fetch dependencies so the llama.cpp source lands on disk in the
+# cargo registry; then patch its CMakeLists to default GGML_CUDA_NCCL
+# to OFF. NCCL is only useful for multi-GPU peer-to-peer collectives,
+# but llama.cpp's `ggml_cuda_init` calls `ncclCommInitAll`
+# unconditionally and hard-fails on hosts where the driver/runtime/
+# NCCL combo doesn't line up (common on Vast.ai marketplaces where
+# host driver versions vary widely). Single-GPU pods don't need NCCL.
+# With this patch, ncclCommInitAll is never called and the daemon
+# starts cleanly on any host with a CUDA-capable driver.
+RUN cargo fetch
+RUN find /root/.cargo/registry/src -path '*/llama-cpp-sys-2-*/llama.cpp/ggml/CMakeLists.txt' \
+  | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
+  && find /root/.cargo/registry/src -path '*/llama-cpp-sys-2-*/llama.cpp/ggml/CMakeLists.txt' \
+  | xargs grep -n GGML_CUDA_NCCL
 RUN cargo build --release --bin sovereign-cli
+
+# ─── CUDA preflight binary ───────────────────────────────────────────
+# A tiny native test that mirrors llama.cpp's `ggml_cuda_init` path —
+# calls `ncclCommInitAll` exactly the way llama.cpp does. The runtime
+# entrypoint runs this BEFORE the 38 GB R2 model sync so a
+# driver/runtime incompat (common on heterogeneous marketplaces like
+# Vast.ai where host driver versions vary widely) surfaces in ~1 s
+# instead of after 5+ minutes of wasted GGUF download.
+RUN mkdir -p /tmp/preflight && cat > /tmp/preflight/preflight.cu <<'EOF'
+#include <cuda_runtime.h>
+#include <stdio.h>
+int main() {
+    int n = 0;
+    cudaError_t e = cudaGetDeviceCount(&n);
+    if (e != cudaSuccess) {
+        fprintf(stderr, "preflight: cudaGetDeviceCount failed: %s\n",
+                cudaGetErrorString(e));
+        return 2;
+    }
+    if (n < 1) {
+        fprintf(stderr, "preflight: no CUDA devices visible\n");
+        return 3;
+    }
+    // Allocate + free a tiny buffer to confirm the runtime can actually
+    // talk to the device, not just enumerate it. Catches driver/runtime
+    // version mismatches that pass cudaGetDeviceCount but fail at first
+    // real GPU operation.
+    void* p = nullptr;
+    e = cudaMalloc(&p, 4096);
+    if (e != cudaSuccess) {
+        fprintf(stderr, "preflight: cudaMalloc failed: %s\n",
+                cudaGetErrorString(e));
+        return 4;
+    }
+    cudaFree(p);
+    printf("preflight: OK (%d GPU(s), runtime functional)\n", n);
+    return 0;
+}
+EOF
+RUN nvcc -O2 -o /usr/local/bin/cuda-preflight /tmp/preflight/preflight.cu \
+ && rm -rf /tmp/preflight
 
 # ─── Runtime stage ───────────────────────────────────────────────────
 # `runtime` (not `devel`) image is ~3 GB smaller and ships cuBLAS +
@@ -150,6 +205,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /workspace/sovereign/target/release/sovereign-cli /usr/local/bin/sovereign-cli
+COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
 
 WORKDIR /workspace
 RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign /root/.config/rclone

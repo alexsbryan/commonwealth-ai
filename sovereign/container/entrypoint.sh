@@ -71,10 +71,46 @@ if [[ -f /usr/local/cuda/version.json ]]; then
     awk -F'"' '/version/ {print "  cuda toolkit (image): " $4; exit}' /usr/local/cuda/version.json
 fi
 
+# ─── CUDA preflight (fail-fast on driver/NCCL incompat) ──────────────
+# Run a tiny native binary that mirrors llama.cpp's `ggml_cuda_init`
+# path. If it fails, the daemon would fail the same way ~5 minutes
+# later (after the GGUF rclone sync). Catching the failure here saves
+# both the wall-time and the prepaid bandwidth on bad-driver hosts
+# (common on Vast.ai marketplaces where host driver versions vary
+# widely). ROCm pods don't have this binary in the image; the test
+# is silently skipped.
+if [[ -x /usr/local/bin/cuda-preflight ]]; then
+    echo "[entrypoint] CUDA preflight..."
+    if ! /usr/local/bin/cuda-preflight; then
+        echo "[entrypoint] FATAL: CUDA preflight failed."
+        echo "  This host's NVIDIA driver / CUDA runtime / NCCL combo is incompatible"
+        echo "  with the daemon. Continuing would burn the GGUF sync time only to crash"
+        echo "  at slot load. Bail out so the orchestrator can pick a different offer."
+        exit 1
+    fi
+fi
+
 # ─── 1. Tailscale ────────────────────────────────────────────────────
+# Tailscale provides TWO outbound proxy listeners on its userspace
+# netstack:
+#   --socks5-server     SOCKS5 (used by curl --socks5-hostname, etc.)
+#   --outbound-http-proxy-listen  HTTP CONNECT proxy (used by reqwest
+#                                  via HTTP_PROXY/HTTPS_PROXY env).
+#
+# Both route traffic through tailscale's DERP fallback when direct
+# WireGuard NAT-traversal silently drops packets (Vast.ai container
+# NAT exhibits this). We expose BOTH because reqwest as built (no
+# `socks` cargo feature) treats `socks5h://` URLs as if they were
+# HTTP proxies and sends a CONNECT to the SOCKS port — which
+# tailscale's SOCKS5 server (correctly) rejects with "incompatible
+# SOCKS version". Giving reqwest a real HTTP CONNECT proxy lets it
+# tunnel without needing the socks feature.
 echo "[entrypoint] starting tailscaled…"
-tailscaled --tun=userspace-networking --state=/var/lib/tailscale/tailscaled.state \
-    --socket=/var/run/tailscale/tailscaled.sock &
+tailscaled --tun=userspace-networking \
+    --state=/var/lib/tailscale/tailscaled.state \
+    --socket=/var/run/tailscale/tailscaled.sock \
+    --socks5-server=localhost:1055 \
+    --outbound-http-proxy-listen=localhost:1080 &
 TS_PID=$!
 sleep 2
 echo "[entrypoint] joining tailnet (hostname=sovereign-${HOSTNAME})"
@@ -83,6 +119,64 @@ tailscale up \
     --hostname="sovereign-${HOSTNAME}" \
     --accept-dns=false
 echo "[entrypoint] tailnet IP: $(tailscale ip -4 || true)"
+
+# HTTP_PROXY/HTTPS_PROXY: reqwest auto-detects these and sends valid
+# HTTP CONNECT requests to the HTTP proxy port. Works without the
+# `socks` feature flag on reqwest.
+export HTTP_PROXY="http://localhost:1080"
+export HTTPS_PROXY="http://localhost:1080"
+# ALL_PROXY: kept on SOCKS5 for curl-style clients (the beacon below
+# uses --socks5-hostname explicitly, but ALL_PROXY is a curl-ecosystem
+# convention worth preserving for rclone and others).
+export ALL_PROXY="socks5h://localhost:1055"
+# Don't proxy LOCAL traffic (127.0.0.1) — sovereign-cli talks to its
+# own daemon on loopback during mesh-join; that must NOT go via the
+# proxy. Add the daemon's bind hosts so internal lookups stay direct.
+export NO_PROXY="localhost,127.0.0.1,0.0.0.0"
+
+# ─── Tailnet reachability beacon ─────────────────────────────────────
+# Confirm we can reach the mesh seed (founder's :9742) over the
+# tailnet before sinking 5+ min into the GGUF sync. Catches: TS_AUTHKEY
+# revoked/exhausted, Tailscale ACL blocking tag:cloud-peer → laptop,
+# founder's daemon down or bound to a different port, and stale
+# MESH_SEED_ADDR (pointing at an IP no longer in the tailnet).
+#
+# Retries for ~60s with 5s spacing — `tailscale up` returns as soon as
+# auth completes, but the DERP relay handshake and the per-peer
+# WireGuard path establishment take an additional ~10–20s. Without the
+# retry, a beacon firing in the first second of `tailscale up` failure
+# is a false negative: tailscale's just still warming up.
+seed_host="${MESH_SEED_ADDR%:*}"
+seed_port="${MESH_SEED_ADDR#*:}"
+echo "[entrypoint] tailnet reach beacon: ${seed_host}:${seed_port} (via SOCKS5)..."
+beacon_ok=""
+for attempt in $(seq 1 12); do
+    # curl with --socks5-hostname routes through tailscale's userspace
+    # netstack, which falls back to DERP if direct WG is broken.
+    # `-o /dev/null` discards body, `-w` captures the http code only.
+    code=$(curl --socks5-hostname localhost:1055 -s -m 5 -o /dev/null \
+        -w "%{http_code}" "http://${seed_host}:${seed_port}/" 2>/dev/null || true)
+    # ANY response (even 404 or 405) proves the path works — the
+    # founder's daemon may not have a handler at GET / but reaching it
+    # is what we're verifying. "000" = no TCP-level connection.
+    if [ -n "$code" ] && [ "$code" != "000" ]; then
+        beacon_ok="$attempt"
+        break
+    fi
+    sleep 5
+done
+if [ -z "$beacon_ok" ]; then
+    echo "[entrypoint] FATAL: cannot reach mesh seed ${MESH_SEED_ADDR} over the tailnet (12 attempts × 5s + 5s timeout each)."
+    echo "  Likely causes:"
+    echo "    - TS_AUTHKEY expired / revoked / single-use already consumed"
+    echo "    - Tailscale ACL doesn't allow tag:cloud-peer → ${seed_host}:${seed_port}"
+    echo "    - Founder's daemon isn't running, or is bound to a different port"
+    echo "    - MESH_SEED_ADDR is stale (founder's tailnet IP changed)"
+    echo "    - WireGuard NAT-traversal failed (rare; would need DERP relay)"
+    echo "  Bail out before the 38 GB GGUF sync."
+    exit 1
+fi
+echo "[entrypoint] mesh seed reachable (attempt ${beacon_ok})"
 
 # ─── 2. rclone config + model sync ───────────────────────────────────
 # provider = Cloudflare + region = auto are required for R2.
@@ -108,23 +202,23 @@ echo "  bucket    = ${R2_BUCKET}"
 echo "  akey len  = ${#R2_ACCESS_KEY}    (expected 32)"
 echo "  skey len  = ${#R2_SECRET_KEY}    (expected ~64)"
 
-echo "[entrypoint] R2 self-test 1/2: list root remote"
-if ! rclone lsd r2: 2>&1; then
-    echo "[entrypoint] FATAL: 'rclone lsd r2:' failed."
-    echo "  This means auth itself is broken — endpoint/keys are wrong."
-    echo "  Common causes:"
-    echo "    - R2_ENDPOINT is the wrong host (need https://<account>.r2.cloudflarestorage.com)"
-    echo "    - You passed the Cloudflare API Token instead of the S3 Access Key + Secret"
-    echo "    - region = auto wasn't applied (should be in this image now; rebuild if not)"
-    exit 1
-fi
-
-echo "[entrypoint] R2 self-test 2/2: list target bucket"
+# Single self-test: list the target bucket directly. This is the
+# minimum permission a scoped R2 token (Object Read on a specific
+# bucket) is granted, which is the security-correct config — no
+# need for account-level ListBuckets. The previous two-step probe
+# called `rclone lsd r2:` first, which DID require ListBuckets and
+# rejected scoped tokens with 403, masking otherwise-fine bucket
+# access. A single bucket-scoped probe diagnoses both auth and
+# bucket-access failures with one call.
+echo "[entrypoint] R2 self-test: list target bucket"
 if ! rclone lsf "r2:${R2_BUCKET}" 2>&1; then
     echo "[entrypoint] FATAL: 'rclone lsf r2:${R2_BUCKET}' failed."
-    echo "  Auth works but bucket access does not. Likely causes:"
+    echo "  Possible causes:"
+    echo "    - R2_ENDPOINT is the wrong host (need https://<account>.r2.cloudflarestorage.com)"
+    echo "    - R2_ACCESS_KEY / R2_SECRET_KEY are wrong, swapped, or include whitespace"
     echo "    - Bucket name typo (R2_BUCKET=${R2_BUCKET} doesn't exist)"
-    echo "    - Token wasn't scoped to this bucket"
+    echo "    - Token isn't scoped to this bucket OR is missing 'Object Read' permission"
+    echo "    - region = auto wasn't applied (should be in this image now; rebuild if not)"
     exit 1
 fi
 
@@ -210,8 +304,22 @@ if [ -n "$MESH_JOIN_LINK" ]; then
     done
 
     if curl -s -m 3 -o /dev/null -w "%{http_code}" http://127.0.0.1:9741/v1/models | grep -q "^200$"; then
-        echo "[entrypoint] daemon up — joining mesh via invite link"
-        if sovereign-cli mesh join "$MESH_JOIN_LINK"; then
+        # Synthesize a full sovereign://join URL when MESH_JOIN_LINK is
+        # the bare key (cwth-XXXX-XXXX-XXXX). The bare-key form drops
+        # `relay_hint` and the daemon falls through to mDNS discovery,
+        # which doesn't traverse Tailscale (pod and founder are on
+        # different L2 segments connected only by overlay). Using
+        # MESH_SEED_ADDR as the relay tells the join handshake to
+        # speak directly to the founder's :9742 instead of broadcasting.
+        # Already-formed URLs (sovereign://join/... or https://...) are
+        # passed through unchanged.
+        join_arg="$MESH_JOIN_LINK"
+        if [[ "$join_arg" =~ ^cwth- ]]; then
+            join_arg="sovereign://join/${join_arg}?relay=${MESH_SEED_ADDR}"
+            echo "[entrypoint] synthesizing join URL with relay=${MESH_SEED_ADDR}"
+        fi
+        echo "[entrypoint] daemon up — joining mesh"
+        if sovereign-cli mesh join "$join_arg"; then
             echo "[entrypoint] mesh join succeeded"
         else
             echo "[entrypoint] mesh join FAILED — pod will run in solo mesh; use per-config base_url to reach it"

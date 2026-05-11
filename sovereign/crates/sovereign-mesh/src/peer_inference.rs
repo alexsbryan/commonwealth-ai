@@ -207,6 +207,22 @@ pub struct MeshInferenceProvider {
     /// candidates while quarantined; one successful response clears
     /// the state. See [`peer_health`] for the policy.
     peer_health: Arc<commonwealth_core::peer_health::PeerHealthTracker>,
+    /// Per-model in-flight counter for explicit-model-id requests
+    /// served by the local slot. Drives load-aware routing in
+    /// [`MeshInferenceProvider::locate_named_model`]: when a request
+    /// asks for a model that both we and a peer advertise, the peer
+    /// gets the request iff its in-flight is strictly lower than
+    /// ours. Without this, the laptop's single primary slot would
+    /// hoard every request named for Darwin-36B even when a Mac
+    /// peer that also advertises it sits idle.
+    ///
+    /// Bumped on dispatch in the explicit-`Local` branch, decremented
+    /// when the dispatch completes (success, failure, or stream
+    /// drop). `std::sync::Mutex` (not `tokio::sync::RwLock`) so the
+    /// stream-completion guard can decrement in a synchronous Drop
+    /// without spawning a task.
+    local_inflight_by_model:
+        Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
 }
 
 impl MeshInferenceProvider {
@@ -257,6 +273,9 @@ impl MeshInferenceProvider {
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
             local_benchmark: Arc::new(RwLock::new(None)),
             peer_health: Arc::new(commonwealth_core::peer_health::PeerHealthTracker::new()),
+            local_inflight_by_model: Arc::new(std::sync::Mutex::new(
+                std::collections::HashMap::new(),
+            )),
         }
     }
 
@@ -736,40 +755,42 @@ impl MeshInferenceProvider {
     /// Resolve `request.model_id` to a concrete location.
     ///
     /// Contract: when a caller names a specific model the daemon
-    /// MUST honour that name — silent substitution to the local
-    /// primary slot is the bug we're fixing. Lookup order is
-    /// local-first (local wins ties — no round-trip, no
-    /// attribution churn) then each reachable peer's manifest in
-    /// the order `peer_inference_endpoints` returns them.
+    /// MUST honour that name — silent substitution to a different
+    /// model is forbidden. But when multiple nodes in the mesh
+    /// advertise the same id (e.g., laptop + Mac both have
+    /// Darwin-36B), the choice between them is a *load-balancing*
+    /// decision, not a name-resolution decision: we pick the node
+    /// with the lowest current in-flight count for that model.
+    ///
+    /// Selection rule:
+    /// 1. Collect every reachable, non-quarantined candidate that
+    ///    advertises the id, plus `self` if it does.
+    /// 2. Score each by in-flight count for this model (per-model
+    ///    for local; per-peer for peers — peer observations aren't
+    ///    broken down by model, but they still reflect this
+    ///    scheduler's outstanding requests to that peer, which is
+    ///    the relevant queue depth from our POV).
+    /// 3. Pick the minimum. Break ties in favour of local (no
+    ///    round-trip, no attribution churn).
     ///
     /// Returns:
-    /// - `Local`: our `self_manifest` advertises the id; serve via
-    ///   `self.local`. The local provider's slot picker
-    ///   (`EmbeddedLlamaCpp::select_slot_for_request`) knows how to
-    ///   route by name into Fast/Primary/Code/extras slots.
-    /// - `Peer(peer, candidate)`: a reachable peer's manifest
-    ///   advertises the id; route there over HTTP.
+    /// - `Local`: serve via `self.local`. The local provider's slot
+    ///   picker knows how to route by name into the matching slot.
+    /// - `Peer(peer, candidate)`: route there over HTTP.
     /// - `Unknown`: no node in the mesh advertises the id. Caller
     ///   surfaces this as a clear error rather than falling back to
     ///   a different model.
     async fn locate_named_model(&self, model_id: &str) -> NamedModelLocation {
-        // Local first.
-        if self
+        let local_has = self
             .self_manifest
             .models
             .iter()
-            .any(|m| m.id == model_id)
-        {
-            return NamedModelLocation::Local;
-        }
-        // Then peers, in the order the mesh hands them back. Skip
-        // peers that are currently quarantined — they're presumed
-        // unhealthy and routing to them would waste a request budget
-        // before the cooldown elapses. A quarantined peer's recovery
-        // happens automatically: when the cooldown expires the peer
-        // re-enters this list and the next request either succeeds
-        // (clearing health state) or re-arms with a longer cooldown.
+            .any(|m| m.id == model_id);
+
+        // Gather peer candidates (reachable, non-quarantined, advertise the id).
         let peers = self.mesh.peer_inference_endpoints().await;
+        let mut peer_candidates: Vec<(PeerInferenceEndpoint, ModelCandidate, u32)> =
+            Vec::new();
         for peer in peers {
             if self.peer_health.is_quarantined(&peer.name) {
                 tracing::debug!(
@@ -789,7 +810,14 @@ impl MeshInferenceProvider {
                     .first()
                     .map(|c| c.effective_affinity())
                     .unwrap_or(0.0);
-                return NamedModelLocation::Peer(
+                let peer_inflight = self
+                    .peer_observations
+                    .read()
+                    .await
+                    .get(&peer.name)
+                    .map(|o| o.in_flight)
+                    .unwrap_or(0);
+                peer_candidates.push((
                     peer,
                     ModelCandidate {
                         score: 0.0,
@@ -797,10 +825,97 @@ impl MeshInferenceProvider {
                         model_id: model_id.to_string(),
                         claim_affinity,
                     },
-                );
+                    peer_inflight,
+                ));
             }
         }
-        NamedModelLocation::Unknown
+
+        if !local_has && peer_candidates.is_empty() {
+            return NamedModelLocation::Unknown;
+        }
+
+        // Pick the minimum in-flight peer (if any). Cheap O(n) since
+        // peer fanout is small (≤ tens of nodes in practice).
+        let best_peer = peer_candidates
+            .into_iter()
+            .min_by_key(|(_, _, inflight)| *inflight);
+
+        match (local_has, best_peer) {
+            (false, Some((peer, cand, _))) => NamedModelLocation::Peer(peer, cand),
+            (true, None) => NamedModelLocation::Local,
+            (true, Some((peer, cand, peer_inflight))) => {
+                let local_inflight = self
+                    .local_inflight_by_model
+                    .lock()
+                    .expect("local_inflight_by_model poisoned")
+                    .get(model_id)
+                    .copied()
+                    .unwrap_or(0);
+                // Tie → local. Strictly less → local. Otherwise peer.
+                if local_inflight <= peer_inflight {
+                    tracing::debug!(
+                        model = %model_id,
+                        local_inflight,
+                        peer = %peer.name,
+                        peer_inflight,
+                        "mesh-inference: local wins load-balance for explicit model"
+                    );
+                    NamedModelLocation::Local
+                } else {
+                    tracing::info!(
+                        model = %model_id,
+                        local_inflight,
+                        peer = %peer.name,
+                        peer_inflight,
+                        "mesh-inference: peer wins load-balance for explicit model"
+                    );
+                    NamedModelLocation::Peer(peer, cand)
+                }
+            }
+            (false, None) => unreachable!(),
+        }
+    }
+
+    /// Increment local in-flight counter for `model_id` and return a
+    /// drop-guard that decrements on Drop. Pairs the inc/dec via the
+    /// guard so any early return path — `?` on the local call, stream
+    /// drop, panic — releases the slot in the counter. Caller MUST
+    /// hold the guard across the whole local dispatch (the `.await`
+    /// for `complete()` or the lifetime of the wrapped stream for
+    /// `complete_stream()`).
+    fn enter_local_inflight(
+        &self,
+        model_id: &str,
+    ) -> LocalInflightGuard {
+        let mut map = self
+            .local_inflight_by_model
+            .lock()
+            .expect("local_inflight_by_model poisoned");
+        *map.entry(model_id.to_string()).or_insert(0) += 1;
+        LocalInflightGuard {
+            counter: Arc::clone(&self.local_inflight_by_model),
+            model_id: model_id.to_string(),
+        }
+    }
+}
+
+/// RAII guard for the per-model local in-flight counter. Decrements
+/// the counter in `Drop`; safe to drop after the entry has been
+/// pruned to zero (saturating subtract + no-op when absent).
+struct LocalInflightGuard {
+    counter: Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
+    model_id: String,
+}
+
+impl Drop for LocalInflightGuard {
+    fn drop(&mut self) {
+        let Ok(mut map) = self.counter.lock() else { return };
+        if let Some(v) = map.get_mut(&self.model_id) {
+            *v = v.saturating_sub(1);
+            if *v == 0 {
+                map.remove(&self.model_id);
+            }
+        }
     }
 }
 
@@ -845,6 +960,7 @@ impl InferenceProvider for MeshInferenceProvider {
                         model = %model_id,
                         "mesh-inference: serving complete() locally by explicit model name"
                     );
+                    let _guard = self.enter_local_inflight(model_id);
                     return self.local.complete(request).await;
                 }
                 NamedModelLocation::Peer(peer, peer_cand) => {
@@ -854,6 +970,19 @@ impl InferenceProvider for MeshInferenceProvider {
                         model = %peer_cand.model_id,
                         "mesh-inference: routing complete() to peer by explicit model name"
                     );
+                    // Bump the peer's observed in-flight count BEFORE
+                    // we hand off. Two reasons:
+                    //   1. `locate_named_model`'s load-balance rule
+                    //      reads `peer_observations[name].in_flight`
+                    //      to decide whether to route subsequent
+                    //      concurrent requests here. Without this
+                    //      increment, every concurrent caller sees
+                    //      `peer_inflight=0` and floods one peer.
+                    //   2. The matching `record_success` /
+                    //      `record_failure` below decrement it, so the
+                    //      count tracks reality without separate
+                    //      bookkeeping.
+                    self.record_dispatch(Some(&peer.name)).await;
                     let mut last_transport_err: Option<String> = None;
                     for url in &peer.base_urls {
                         let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
@@ -861,6 +990,7 @@ impl InferenceProvider for MeshInferenceProvider {
                             Ok(mut resp) => {
                                 resp.model_id = peer_cand.model_id.clone();
                                 self.peer_health.record_success(&peer.name);
+                                self.record_success(Some(&peer.name)).await;
                                 return Ok(Self::annotate(resp, &peer.name));
                             }
                             Err(e) => {
@@ -884,6 +1014,7 @@ impl InferenceProvider for MeshInferenceProvider {
                     // `Unknown` and failing fast instead of waiting
                     // through another full address round.
                     self.peer_health.record_failure(&peer.name);
+                    self.record_failure(Some(&peer.name)).await;
                     return Err(sovereign_core::error::Error::Routing(format!(
                         "model '{}' is advertised by peer '{}' but all peer \
                          addresses failed: {}",
@@ -981,12 +1112,16 @@ impl InferenceProvider for MeshInferenceProvider {
                         model = %model_id,
                         "mesh-inference: serving complete_stream() locally by explicit model name"
                     );
+                    let guard = self.enter_local_inflight(model_id);
                     let stream = self.local.complete_stream(request).await?;
                     let observed: Pin<
                         Box<dyn Stream<Item = Result<String>> + Send>,
-                    > = Box::pin(ThroughputObservedStream::new(
-                        stream,
-                        ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+                    > = Box::pin(InflightGuardedStream::new(
+                        ThroughputObservedStream::new(
+                            stream,
+                            ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+                        ),
+                        guard,
                     ));
                     return Ok((observed, model_id.to_string()));
                 }
@@ -1212,6 +1347,36 @@ pub struct LedgerEmission {
     pub(crate) from_node: commonwealth_core::ids::NodeId,
     pub(crate) model_id: String,
     pub(crate) emitter: commonwealth_state::ContributionEmitter,
+}
+
+/// Stream wrapper that holds a [`LocalInflightGuard`] for its
+/// lifetime. The guard's `Drop` decrements the per-model in-flight
+/// counter when the consumer drops the stream — full consumption,
+/// early cancel, or panic all release the slot correctly. Generic
+/// over the inner stream type so it doesn't force an extra box.
+struct InflightGuardedStream<S> {
+    inner: S,
+    _guard: LocalInflightGuard,
+}
+
+impl<S> InflightGuardedStream<S> {
+    fn new(inner: S, guard: LocalInflightGuard) -> Self {
+        Self { inner, _guard: guard }
+    }
+}
+
+impl<S> Stream for InflightGuardedStream<S>
+where
+    S: Stream + Unpin,
+{
+    type Item = S::Item;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.inner).poll_next(cx)
+    }
 }
 
 struct ThroughputObservedStream {
