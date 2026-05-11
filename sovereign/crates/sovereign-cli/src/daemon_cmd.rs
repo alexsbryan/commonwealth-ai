@@ -625,6 +625,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         watched_lint_scope.clone(),
         watched_test_scope.clone(),
         Arc::clone(&watcher_active_flag),
+        workspace_dir.clone(),
     )
     .await;
 
@@ -1144,6 +1145,7 @@ async fn build_tool_registry(
     watched_lint_scope: Option<String>,
     watched_test_scope: Option<String>,
     watcher_active_flag: Arc<AtomicBool>,
+    workspace_dir: Option<PathBuf>,
 ) -> ToolRegistry {
     let indexes_dir = data_dir.join("indexes");
 
@@ -1200,6 +1202,16 @@ async fn build_tool_registry(
             .with_watcher_active(Arc::clone(&watcher_active_flag));
         if let Some(scope) = watched_lint_scope.clone() {
             tool = tool.with_watched_scope(scope);
+        }
+        if let Some(ws) = workspace_dir.clone() {
+            tool = tool.with_workspace_root(ws);
+        }
+        tools.register(Box::new(tool));
+    }
+    {
+        let mut tool = sovereign_tools::DriftPostureTool::new();
+        if let Some(ws) = workspace_dir.clone() {
+            tool = tool.with_workspace_root(ws);
         }
         tools.register(Box::new(tool));
     }

@@ -36,10 +36,30 @@
 //!    failure prints which step failed and what to do.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
-const TEMPLATE_RECIPE_DIR: &str = "/Users/alexsbryan/dev/commonwealth-ai/sovereign-recipes/_templates/narrative-markdown";
-const SOVEREIGN_BIN: &str = "/Users/alexsbryan/.local/bin/sovereign";
+use tracing::{debug, info, warn};
+
+/// Path to the `sovereign` binary used for subprocess fan-out.
+///
+/// Resolved at orchestrator entry from, in order: `--sovereign-bin` CLI
+/// arg, `SOVEREIGN_BIN` env var, `std::env::current_exe()` (this same
+/// binary). The current-exe default is the right answer in production:
+/// the drift orchestrator is itself a subcommand of sovereign-cli, so
+/// re-invoking the same binary is portable across machines.
+fn resolve_sovereign_bin(cli_override: Option<&str>) -> PathBuf {
+    if let Some(p) = cli_override {
+        return PathBuf::from(p);
+    }
+    if let Ok(p) = std::env::var("SOVEREIGN_BIN") {
+        if !p.is_empty() {
+            return PathBuf::from(p);
+        }
+    }
+    std::env::current_exe()
+        .ok()
+        .unwrap_or_else(|| PathBuf::from("sovereign"))
+}
 
 #[derive(Debug, Default)]
 struct DetectArgs {
@@ -48,6 +68,7 @@ struct DetectArgs {
     output: Option<PathBuf>,
     project_id: Option<String>,
     chat_model: Option<String>,
+    sovereign_bin: Option<String>,
 }
 
 pub async fn cmd_detect(args: &[String]) -> i32 {
@@ -92,6 +113,17 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         .output
         .clone()
         .unwrap_or_else(|| PathBuf::from("./drift_report.md"));
+    let sovereign_bin = resolve_sovereign_bin(parsed.sovereign_bin.as_deref());
+    let sovereign_bin_str = sovereign_bin.to_string_lossy().into_owned();
+    info!(
+        code_path = %code_path.display(),
+        narrative_count = parsed.narrative_paths.len(),
+        project_id = %project_id,
+        structural_atlas_id = %structural_atlas_id,
+        sovereign_bin = %sovereign_bin_str,
+        output = %output_path.display(),
+        "drift_orchestrator:start"
+    );
 
     println!("=== sovereign drift detect ===");
     println!("  code         = {}", code_path.display());
@@ -104,9 +136,11 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
     println!();
 
     // ── Step 1: probe + resolve chat model ───────────────────
+    info!("drift_orchestrator:step_chat_model_probe_start");
     let chat_model = match resolve_chat_model(parsed.chat_model.as_deref()).await {
         Ok(m) => m,
         Err(msg) => {
+            warn!(error = %msg, "drift_orchestrator:step_chat_model_probe_failed");
             eprintln!("✗ chat-model probe failed: {msg}");
             eprintln!();
             eprintln!("  Remediation: confirm `sovereign daemon status` is running and");
@@ -114,28 +148,36 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
             return 1;
         }
     };
+    info!(chat_model = %chat_model, "drift_orchestrator:step_chat_model_resolved");
     println!("  ✓ chat model = {chat_model}");
 
     // ── Step 2: code index (idempotent, with retry on flaky
     //              partition-local race — see task #33/#35) ─────
     if !corpus_exists(&project_id) {
+        info!(project_id = %project_id, "drift_orchestrator:step_code_index_start");
         println!();
         println!("  → indexing code corpus '{project_id}'…");
-        if !run_code_index_with_retry(&code_path, &project_id) {
+        if !run_code_index_with_retry(&sovereign_bin_str, &code_path, &project_id) {
+            warn!(project_id = %project_id, "drift_orchestrator:step_code_index_failed");
             eprintln!("✗ `sovereign code index` failed after retry.");
             eprintln!("  Remediation: re-run manually:");
             eprintln!("    sovereign code index {} --corpus-id {}", code_path.display(), project_id);
             return 1;
         }
+        info!(project_id = %project_id, "drift_orchestrator:step_code_index_done");
     } else {
+        debug!(project_id = %project_id, "drift_orchestrator:step_code_index_cached");
         println!("  · code index '{project_id}' already exists (cached)");
     }
 
     // ── Step 3: structural atlas (idempotent) ────────────────
     let source_corpus = pick_source_corpus(&project_id);
+    debug!(source_corpus = %source_corpus, "drift_orchestrator:source_corpus_resolved");
     if !atlas_has_content(&structural_atlas_id) {
+        info!(atlas_id = %structural_atlas_id, source_corpus = %source_corpus, "drift_orchestrator:step_structural_atlas_start");
         println!("  → building structural atlas '{structural_atlas_id}'…");
-        if !run_step(SOVEREIGN_BIN, &["enrich", "ingest", &structural_atlas_id, "--source-corpus", &source_corpus]) {
+        if !run_step(&sovereign_bin_str, &["enrich", "ingest", &structural_atlas_id, "--source-corpus", &source_corpus]) {
+            warn!(atlas_id = %structural_atlas_id, "drift_orchestrator:step_structural_atlas_failed");
             eprintln!("✗ structural atlas ingest failed.");
             eprintln!("  Remediation: try `sovereign enrich ingest {} --source-corpus {}` and inspect the error.",
                 structural_atlas_id, source_corpus);
@@ -144,7 +186,9 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         // Stub minimal enrichment config so atlas-cross-corpus
         // accepts this atlas as a peer.
         ensure_structural_enrich_config(&structural_atlas_id);
+        info!(atlas_id = %structural_atlas_id, "drift_orchestrator:step_structural_atlas_done");
     } else {
+        debug!(atlas_id = %structural_atlas_id, "drift_orchestrator:step_structural_atlas_cached");
         println!("  · structural atlas '{structural_atlas_id}' already exists (cached)");
     }
 
@@ -167,12 +211,16 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         "--output",
         &archaeology_md.to_string_lossy(),
     ];
-    let archaeology_ok = run_step(SOVEREIGN_BIN, &archaeology_args);
+    info!(atlas_id = %structural_atlas_id, output = %archaeology_md.display(), "drift_orchestrator:step_archaeology_start");
+    let archaeology_ok = run_step(&sovereign_bin_str, &archaeology_args);
     if !archaeology_ok {
+        warn!(atlas_id = %structural_atlas_id, "drift_orchestrator:step_archaeology_failed");
         eprintln!(
             "⚠ git-archaeology failed — drift report will skip the Provenance \
              & Evolution section."
         );
+    } else {
+        info!(atlas_id = %structural_atlas_id, "drift_orchestrator:step_archaeology_done");
     }
 
     // ── Step 4: per-narrative pipeline ───────────────────────
@@ -181,26 +229,32 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         let nid = basename_id(narrative_path)
             .unwrap_or_else(|| "narrative".into());
         let nid = format!("{project_id}-{nid}");
+        info!(narrative_id = %nid, narrative_path = %narrative_path.display(), "drift_orchestrator:narrative_start");
         println!();
         println!("  ── narrative `{nid}` ──");
 
         // 4a: stamp recipe (idempotent).
         if !ensure_recipe(&nid, narrative_path) {
+            warn!(narrative_id = %nid, "drift_orchestrator:narrative_recipe_stamp_failed");
             eprintln!("✗ failed to stamp recipe for {nid}.");
             return 1;
         }
 
         // 4b: install corpus (idempotent).
         if !corpus_exists(&nid) {
+            info!(narrative_id = %nid, "drift_orchestrator:narrative_corpus_install_start");
             println!("    → installing narrative corpus '{nid}'…");
-            if !run_step(SOVEREIGN_BIN, &["corpus", "install", &nid]) {
+            if !run_step(&sovereign_bin_str, &["corpus", "install", &nid]) {
+                warn!(narrative_id = %nid, "drift_orchestrator:narrative_corpus_install_failed");
                 eprintln!("✗ corpus install failed.");
                 eprintln!("  Remediation: `sovereign corpus install {nid}` and inspect.");
                 return 1;
             }
             // The install is async; wait until the meta lands.
             wait_for_corpus(&nid, 60);
+            info!(narrative_id = %nid, "drift_orchestrator:narrative_corpus_install_done");
         } else {
+            debug!(narrative_id = %nid, "drift_orchestrator:narrative_corpus_cached");
             println!("    · corpus '{nid}' already exists (cached)");
         }
 
@@ -212,23 +266,28 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         let cfg_path = enrich_config_path(&nid);
         let chapters_present = chapters_path(&nid).exists();
         if !cfg_path.exists() || !chapters_present {
+            info!(narrative_id = %nid, "drift_orchestrator:narrative_enrich_init_start");
             println!("    → init enrichment for '{nid}'…");
-            if !run_step(SOVEREIGN_BIN, &["enrich", "init", &nid, "--from-corpus", &nid, "--pipeline", "literary_atlas"]) {
+            if !run_step(&sovereign_bin_str, &["enrich", "init", &nid, "--from-corpus", &nid, "--pipeline", "literary_atlas"]) {
+                warn!(narrative_id = %nid, "drift_orchestrator:narrative_enrich_init_failed");
                 eprintln!("✗ enrich init failed.");
                 return 1;
             }
             // Pin the resolved chat model so build doesn't fall
             // back to a registered-but-not-loaded id.
             patch_chat_model_in_config(&cfg_path, &chat_model);
+            info!(narrative_id = %nid, chat_model = %chat_model, "drift_orchestrator:narrative_enrich_init_done");
         } else {
+            debug!(narrative_id = %nid, chat_model = %chat_model, "drift_orchestrator:narrative_enrich_init_cached");
             println!("    · enrichment config + chapters exist — pinning chat_model={chat_model}");
             patch_chat_model_in_config(&cfg_path, &chat_model);
         }
 
         // 4d: build atlas (with auto-recovery for partial extract).
         if !atlas_has_content(&nid) {
+            info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_start");
             println!("    → building narrative atlas (LLM, ~5-30 min)…");
-            let build_status = run_step_capture(SOVEREIGN_BIN, &[
+            let build_status = run_step_capture(&sovereign_bin_str, &[
                 "enrich", "build", &nid, "--full", "--skip", "seed", "--skip", "configure",
             ]);
             if !build_status.success {
@@ -244,6 +303,7 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
                 // Distinguish via the explicit "no chapter manifest"
                 // signal in stdout.
                 if build_status.stdout_combined.contains("no chapter manifest") {
+                    warn!(narrative_id = %nid, recovery_attempted = false, "drift_orchestrator:narrative_atlas_build_failed_no_manifest");
                     eprintln!("✗ enrich build for {nid} failed: chapter manifest missing.");
                     eprintln!("  Likely cause: a prior orchestrator run errored between writing");
                     eprintln!("  config.json and chapters.json. Wipe and retry:");
@@ -252,22 +312,29 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
                     return 1;
                 }
                 if build_status.stdout_combined.contains("step `extract` exited") {
+                    info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_start");
                     println!("    ⚠ build halted on partial extract — recovering via cluster + name + resolve…");
-                    if !run_step(SOVEREIGN_BIN, &["enrich", "cluster", &nid])
-                        || !run_step(SOVEREIGN_BIN, &["enrich", "name", &nid])
-                        || !run_step(SOVEREIGN_BIN, &["enrich", "resolve", &nid, "--phase", "all"])
+                    if !run_step(&sovereign_bin_str, &["enrich", "cluster", &nid])
+                        || !run_step(&sovereign_bin_str, &["enrich", "name", &nid])
+                        || !run_step(&sovereign_bin_str, &["enrich", "resolve", &nid, "--phase", "all"])
                     {
+                        warn!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_failed");
                         eprintln!("✗ recovery from partial extract failed.");
                         eprintln!("  Remediation: `sovereign enrich errors {nid}` for diagnostics.");
                         return 1;
                     }
+                    info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_recovery_done");
                 } else {
+                    warn!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_failed");
                     eprintln!("✗ enrich build failed for {nid}.");
                     eprintln!("  Remediation: `sovereign enrich errors {nid}` for diagnostics.");
                     return 1;
                 }
+            } else {
+                info!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_done");
             }
         } else {
+            debug!(narrative_id = %nid, "drift_orchestrator:narrative_atlas_build_cached");
             println!("    · narrative atlas exists (cached)");
         }
         narrative_atlas_ids.push(nid.clone());
@@ -275,11 +342,16 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         // 4e: cross-corpus matching.
         let cross_path = cross_corpus_path(&nid);
         if !cross_path.exists() {
+            info!(narrative_id = %nid, structural_atlas_id = %structural_atlas_id, "drift_orchestrator:narrative_cross_corpus_start");
             println!("    → matching '{nid}' ↔ '{structural_atlas_id}'…");
-            if !run_step(SOVEREIGN_BIN, &["enrich", "atlas-cross-corpus", &nid, &structural_atlas_id]) {
+            if !run_step(&sovereign_bin_str, &["enrich", "atlas-cross-corpus", &nid, &structural_atlas_id]) {
+                warn!(narrative_id = %nid, "drift_orchestrator:narrative_cross_corpus_partial");
                 eprintln!("⚠ cross-corpus match returned non-zero — drift report will continue with whatever edges landed.");
+            } else {
+                info!(narrative_id = %nid, "drift_orchestrator:narrative_cross_corpus_done");
             }
         } else {
+            debug!(narrative_id = %nid, "drift_orchestrator:narrative_cross_corpus_cached");
             println!("    · cross-corpus edges exist (cached)");
         }
     }
@@ -300,9 +372,13 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         "--output",
         &rough_edges_md.to_string_lossy(),
     ];
-    let rough_ok = run_step(SOVEREIGN_BIN, &rough_args);
+    info!(project_id = %project_id, output = %rough_edges_md.display(), "drift_orchestrator:step_rough_edges_start");
+    let rough_ok = run_step(&sovereign_bin_str, &rough_args);
     if !rough_ok {
+        warn!(project_id = %project_id, "drift_orchestrator:step_rough_edges_failed");
         eprintln!("⚠ rough-edges scan failed — drift report will skip the Internal section.");
+    } else {
+        info!(project_id = %project_id, "drift_orchestrator:step_rough_edges_done");
     }
 
     // ── Step 5: render drift report ──────────────────────────
@@ -329,10 +405,51 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         drift_args.push(archaeology_json.to_string_lossy().into_owned());
     }
     let drift_args_refs: Vec<&str> = drift_args.iter().map(String::as_str).collect();
-    if !run_step(SOVEREIGN_BIN, &drift_args_refs) {
+    info!(
+        narrative_count = narrative_atlas_ids.len(),
+        archaeology = archaeology_ok,
+        rough_edges = rough_ok,
+        output = %output_path.display(),
+        "drift_orchestrator:step_report_render_start"
+    );
+    if !run_step(&sovereign_bin_str, &drift_args_refs) {
+        warn!(output = %output_path.display(), "drift_orchestrator:step_report_render_failed");
         eprintln!("✗ drift report rendering failed.");
         return 1;
     }
+    info!(output = %output_path.display(), "drift_orchestrator:step_report_render_done");
+
+    // ── Step 6: write fingerprint sidecar ─────────────────────
+    // The freshness-gate model (sibling to lint_status / test_status).
+    // `drift_posture` reads this fingerprint to answer "is the report
+    // current against the narrative docs?" without re-running the LLM
+    // pipeline. Sidecar lives alongside the markdown report so all
+    // drift state co-locates.
+    let drift_dir = output_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let narrative_abs: Vec<PathBuf> = parsed
+        .narrative_paths
+        .iter()
+        .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone()))
+        .collect();
+    match sovereign_tools::write_fingerprint(&drift_dir, &narrative_abs, &output_path) {
+        Ok(fp_path) => {
+            info!(
+                fingerprint = %fp_path.display(),
+                narratives = narrative_abs.len(),
+                "drift_orchestrator:fingerprint_written"
+            );
+            println!("  ✓ fingerprint: {}", fp_path.display());
+        }
+        Err(e) => {
+            warn!(error = %e, "drift_orchestrator:fingerprint_write_failed");
+            eprintln!("⚠ failed to write drift fingerprint: {e}");
+            eprintln!("   (drift_posture will report `never_run` until this succeeds)");
+        }
+    }
+    info!(output = %output_path.display(), "drift_orchestrator:complete");
 
     println!();
     println!("✓ drift report ready: {}", output_path.display());
@@ -348,7 +465,9 @@ async fn resolve_chat_model(operator_choice: Option<&str>) -> Result<String, Str
         vec!["primary".into(), "fast".into()]
     };
     for candidate in &candidates {
+        debug!(candidate = %candidate, "drift_orchestrator:chat_model_probe_candidate");
         if probe_chat(candidate).await {
+            debug!(candidate = %candidate, "drift_orchestrator:chat_model_probe_accepted");
             return Ok(candidate.clone());
         }
     }
@@ -416,7 +535,7 @@ fn ensure_recipe(corpus_id: &str, doc_path: &Path) -> bool {
         r#"[corpus]
 id = "{corpus_id}"
 name = "{display}"
-description = "Stamped by `sovereign drift detect` from {tmpl}."
+description = "Narrative atlas stamped by `sovereign drift detect`."
 license = "private"
 # mesh_sharing = true: the auth boundary is Tailscale-IP, so this only
 # exposes the corpus to mesh peers the user themselves trust. Replication
@@ -446,7 +565,6 @@ pipeline = "literary_atlas"
 "#,
         corpus_id = corpus_id,
         display = display,
-        tmpl = TEMPLATE_RECIPE_DIR,
         path = doc_path.display(),
     );
     if let Err(e) = std::fs::write(&recipe_toml, content) {
@@ -636,14 +754,14 @@ fn run_step(bin: &str, args: &[&str]) -> bool {
 /// Output is captured (not streamed) so we can inspect the error
 /// signature. Operator sees the combined stdout/stderr at the end
 /// of each attempt.
-fn run_code_index_with_retry(code_path: &Path, project_id: &str) -> bool {
+fn run_code_index_with_retry(sovereign_bin: &str, code_path: &Path, project_id: &str) -> bool {
     const MAX_ATTEMPTS: u32 = 2;
     let path_str = code_path.to_string_lossy();
     let args: [&str; 4] = ["code", "index", &path_str, "--corpus-id"];
     let mut attempt: u32 = 0;
     loop {
         attempt += 1;
-        let r = run_step_capture(SOVEREIGN_BIN, &[args[0], args[1], args[2], args[3], project_id]);
+        let r = run_step_capture(sovereign_bin, &[args[0], args[1], args[2], args[3], project_id]);
         if r.success {
             return true;
         }
@@ -654,8 +772,14 @@ fn run_code_index_with_retry(code_path: &Path, project_id: &str) -> bool {
             && (r.stdout_combined.contains("Missing metadata at")
                 || r.stdout_combined.contains("lance error: Not found"));
         if !is_flaky_partition_race || attempt >= MAX_ATTEMPTS {
+            if !is_flaky_partition_race {
+                debug!(project_id = %project_id, attempt, "drift_orchestrator:code_index_failure_non_retryable");
+            } else {
+                warn!(project_id = %project_id, attempt, max = MAX_ATTEMPTS, "drift_orchestrator:code_index_exhausted_retries");
+            }
             return false;
         }
+        warn!(project_id = %project_id, attempt, max = MAX_ATTEMPTS, "drift_orchestrator:code_index_partition_race_retry");
         eprintln!(
             "    ⚠ code index hit the flaky partition-local race — retrying ({attempt}/{MAX_ATTEMPTS}). \
              See task #33 for root-cause investigation."
@@ -680,24 +804,112 @@ fn run_code_index_with_retry(code_path: &Path, project_id: &str) -> bool {
     }
 }
 
+/// Spawn a child process and stream its stdout/stderr line-by-line
+/// to the parent's stdout/stderr in real time while simultaneously
+/// collecting them into a buffer for post-mortem failure-signature
+/// inspection.
+///
+/// Replaces an earlier `Command::output()` capture that blocked
+/// silently for the entire child lifetime (~25-30 min on the LLM
+/// build step). Glassbox §9.1 — the operator must be able to see
+/// progress on long-running phases without attaching a debugger.
+///
+/// Also fires a heartbeat every 30 seconds when no child output
+/// has landed, so a hang vs. legitimate slow phase is
+/// distinguishable from the terminal.
 fn run_step_capture(bin: &str, args: &[&str]) -> StepResult {
-    let out = Command::new(bin).args(args).output();
-    match out {
-        Ok(o) => {
-            let mut combined = String::new();
-            combined.push_str(&String::from_utf8_lossy(&o.stdout));
-            combined.push_str(&String::from_utf8_lossy(&o.stderr));
-            // Echo to operator so they see progress.
-            print!("{}", combined);
-            StepResult {
-                success: o.status.success(),
-                stdout_combined: combined,
-            }
+    use std::io::{BufRead, BufReader, Write};
+    use std::sync::mpsc::channel;
+    use std::thread;
+    use std::time::Duration;
+
+    let mut child = match Command::new(bin)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            return StepResult {
+                success: false,
+                stdout_combined: format!("subprocess spawn failed: {e}"),
+            };
         }
-        Err(e) => StepResult {
-            success: false,
-            stdout_combined: format!("subprocess spawn failed: {e}"),
-        },
+    };
+
+    let stdout = child.stdout.take().expect("stdout piped");
+    let stderr = child.stderr.take().expect("stderr piped");
+
+    let (tx, rx) = channel::<String>();
+    let tx_stderr = tx.clone();
+
+    // Stream stdout line by line. Each line lands in two places:
+    // the parent's stdout (so the operator sees it) and the
+    // collection channel (so the orchestrator can grep for failure
+    // signatures after the child exits).
+    let h_stdout = thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().map_while(std::result::Result::ok) {
+            println!("{line}");
+            let _ = std::io::stdout().flush();
+            let _ = tx.send(line);
+        }
+    });
+    let h_stderr = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().map_while(std::result::Result::ok) {
+            eprintln!("{line}");
+            let _ = std::io::stderr().flush();
+            let _ = tx_stderr.send(line);
+        }
+    });
+
+    // Heartbeat: when no child output has arrived in ~30s, print
+    // a one-liner so a hung child is visibly distinct from "still
+    // working but quiet". The heartbeat thread polls the channel
+    // with a timeout; child-completion drops both senders, which
+    // closes the channel and ends the loop.
+    let started = std::time::Instant::now();
+    let mut combined = String::new();
+    let mut last_output_at = std::time::Instant::now();
+    loop {
+        match rx.recv_timeout(Duration::from_secs(30)) {
+            Ok(line) => {
+                combined.push_str(&line);
+                combined.push('\n');
+                last_output_at = std::time::Instant::now();
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                let quiet = last_output_at.elapsed().as_secs();
+                let total = started.elapsed().as_secs();
+                let mins = total / 60;
+                let secs = total % 60;
+                eprintln!(
+                    "    ⏱ still in subprocess (quiet for {quiet}s, total {mins}m{secs:02}s elapsed)"
+                );
+                let _ = std::io::stderr().flush();
+                tracing::debug!(
+                    quiet_secs = quiet,
+                    total_secs = total,
+                    "drift_orchestrator:subprocess_heartbeat"
+                );
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
+
+    let _ = h_stdout.join();
+    let _ = h_stderr.join();
+
+    let success = child
+        .wait()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    StepResult {
+        success,
+        stdout_combined: combined,
     }
 }
 
@@ -733,6 +945,11 @@ fn parse_args(args: &[String]) -> Result<DetectArgs, String> {
                 out.chat_model = Some(v.clone());
                 i += 2;
             }
+            "--sovereign-bin" => {
+                let v = args.get(i + 1).ok_or("--sovereign-bin requires a value")?;
+                out.sovereign_bin = Some(v.clone());
+                i += 2;
+            }
             other => return Err(format!("unknown flag: {other}")),
         }
     }
@@ -752,6 +969,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("--output <md>", "Path for the markdown digest. Default: ./drift_report.md (JSON sidecar at <output>.json)."),
             ("--project-id <id>", "Override the corpus id derived from the code path's basename."),
             ("--chat-model <slot>", "Override chat-slot probe (default: primary, fallback: fast)."),
+            ("--sovereign-bin <path>", "Path to the `sovereign` binary used for subprocess fan-out. Default: env SOVEREIGN_BIN, else this binary's own path."),
         ]),
         crate::util::help::HelpSection::Examples(&[
             (

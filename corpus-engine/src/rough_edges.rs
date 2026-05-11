@@ -47,6 +47,24 @@ pub struct RoughEdgeFinding {
 pub enum FindingKind {
     Marker(MarkerKind),
     DocDrift(DocDriftKind),
+    Smell(SmellKind),
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum SmellKind {
+    /// A `const _: &str = "/Users/..."` / `"/home/..."` / `"C:\\Users\\..."`
+    /// (or any string literal beginning with one of those prefixes)
+    /// appearing in a `src/**/*.rs` file outside tests/examples.
+    /// Absolute developer-home paths break portability across machines.
+    /// ARCH_PRINCIPLES §6.3 anti-pattern.
+    AbsoluteUserPath,
+    /// A `.rs` file >300 lines containing at least one `fn`/`impl`
+    /// declaration but zero `tracing::` calls. Glassbox principle
+    /// (§9.1): every non-obvious decision in production code should
+    /// emit a tracing event. Pure-data files and trivial helpers are
+    /// excluded by the size + `fn`/`impl` gate.
+    ZeroTracing,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -338,12 +356,15 @@ pub fn scan_doc_drift(source_root: &Path) -> Vec<RoughEdgeFinding> {
     out
 }
 
-/// Convenience: run both tier 0 (markers) and tier 1 (doc-drift)
-/// and return a single sorted vec. The orchestrator and the
-/// standalone CLI both use this.
+/// Convenience: run tier 0 (markers), tier 1 (doc-drift), and
+/// tier 2 (smells: absolute user paths, zero-tracing files) and
+/// return a single sorted vec. The orchestrator and the standalone
+/// CLI both use this.
 pub fn scan_all(source_root: &Path) -> Vec<RoughEdgeFinding> {
     let mut all = scan_markers(source_root);
     all.extend(scan_doc_drift(source_root));
+    all.extend(scan_absolute_user_paths(source_root));
+    all.extend(scan_zero_tracing(source_root));
     all.sort_by(|a, b| {
         a.kind
             .cmp(&b.kind)
@@ -351,6 +372,167 @@ pub fn scan_all(source_root: &Path) -> Vec<RoughEdgeFinding> {
             .then_with(|| a.line.cmp(&b.line))
     });
     all
+}
+
+/// Match a string literal whose contents begin with an absolute path
+/// rooted in a developer-home prefix: `/Users/`, `/home/`, `C:\Users\`.
+/// Anchored to the *contents* of the literal, not the surrounding
+/// code, so it catches both `const FOO: &str = "/Users/..."` and the
+/// dynamic `format!("/Users/...{x}")` shape.
+fn absolute_path_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r#""(/Users/|/home/|C:\\\\Users\\\\)"#).expect("absolute_path_re compile")
+    })
+}
+
+/// Walk `source_root` and emit a finding for every absolute user
+/// path literal found in `src/**/*.rs` files outside `tests/` and
+/// `examples/` (test fixtures often need real paths; examples are
+/// allowed to be developer-specific).
+pub fn scan_absolute_user_paths(source_root: &Path) -> Vec<RoughEdgeFinding> {
+    let mut out: Vec<RoughEdgeFinding> = Vec::new();
+    for entry in walkdir::WalkDir::new(source_root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            !(e.depth() > 0
+                && (name == ".git"
+                    || name == "node_modules"
+                    || name == "target"
+                    || name == "dist"
+                    || name == "build"
+                    || name == "__pycache__"
+                    || name.starts_with(".") && name != ".cargo"))
+        })
+        .flatten()
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if !is_source_file(path) {
+            continue;
+        }
+        if path_is_in_tests_or_examples(path) {
+            continue;
+        }
+        let raw = match std::fs::read_to_string(path) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        if raw.len() > 1024 * 1024 {
+            continue;
+        }
+        let re = absolute_path_re();
+        for (i, line) in raw.lines().enumerate() {
+            // Skip the rough_edges scanner's own regex literal (it
+            // contains the prefix strings by construction).
+            if line.contains("absolute_path_re") {
+                continue;
+            }
+            if !re.is_match(line) {
+                continue;
+            }
+            let snippet = line.trim().to_string();
+            let snippet = if snippet.len() > 160 {
+                let mut s = snippet[..160].to_string();
+                s.push_str("…");
+                s
+            } else {
+                snippet
+            };
+            out.push(RoughEdgeFinding {
+                kind: FindingKind::Smell(SmellKind::AbsoluteUserPath),
+                severity: Severity::Likely,
+                file: path.to_path_buf(),
+                line: (i as u32) + 1,
+                symbol: None,
+                message: "absolute developer-home path in source (breaks portability)".into(),
+                snippet,
+            });
+        }
+    }
+    out.sort_by(|a, b| a.file.cmp(&b.file).then_with(|| a.line.cmp(&b.line)));
+    out
+}
+
+/// Walk `source_root` and emit a finding for every `.rs` file
+/// >300 lines that contains a `fn`/`impl` declaration but no
+/// `tracing::` calls. Pure-data files (no `fn`/`impl`) are exempt.
+/// Test files (`tests/`, `examples/`, `#[cfg(test)]` modules) are
+/// exempt by convention — they don't need glassbox tracing.
+pub fn scan_zero_tracing(source_root: &Path) -> Vec<RoughEdgeFinding> {
+    const MIN_LINES: usize = 300;
+    let mut out: Vec<RoughEdgeFinding> = Vec::new();
+    for entry in walkdir::WalkDir::new(source_root)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| {
+            let name = e.file_name().to_string_lossy();
+            !(e.depth() > 0
+                && (name == ".git"
+                    || name == "node_modules"
+                    || name == "target"
+                    || name == "dist"
+                    || name == "build"
+                    || name == "__pycache__"
+                    || name.starts_with(".") && name != ".cargo"))
+        })
+        .flatten()
+    {
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if !is_source_file(path) {
+            continue;
+        }
+        if path_is_in_tests_or_examples(path) {
+            continue;
+        }
+        let raw = match std::fs::read_to_string(path) {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        let line_count = raw.lines().count();
+        if line_count < MIN_LINES {
+            continue;
+        }
+        // Stripping doc lines keeps a stray `// tracing::debug!` in
+        // a comment from satisfying the gate.
+        let body = strip_doc_lines(&raw);
+        if !(body.contains("fn ") || body.contains("impl ")) {
+            continue;
+        }
+        if body.contains("tracing::") {
+            continue;
+        }
+        out.push(RoughEdgeFinding {
+            kind: FindingKind::Smell(SmellKind::ZeroTracing),
+            severity: Severity::Note,
+            file: path.to_path_buf(),
+            line: 1,
+            symbol: None,
+            message: format!(
+                "{line_count}-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)"
+            ),
+            snippet: String::new(),
+        });
+    }
+    out.sort_by(|a, b| a.file.cmp(&b.file));
+    out
+}
+
+/// True iff the path contains a `tests/` or `examples/` directory
+/// component. Both are conventionally allowed to be developer-specific
+/// or skip glassbox tracing.
+fn path_is_in_tests_or_examples(path: &Path) -> bool {
+    path.components().any(|c| {
+        let s = c.as_os_str().to_string_lossy();
+        s == "tests" || s == "examples"
+    })
 }
 
 /// Strip lines that begin with `///` or `//!` (Rust outer/inner doc

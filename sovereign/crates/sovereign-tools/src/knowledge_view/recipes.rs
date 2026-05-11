@@ -384,8 +384,11 @@ mod tests {
         assert_eq!(enrichment.domain.as_deref(), Some("institutional"));
     }
 
+    // Pins the §7.2 structural privacy invariant for all three
+    // KnowledgeView recipes. ARCH_PRINCIPLES.md §7.2 cites this test
+    // by name — keep the name stable.
     #[test]
-    fn all_three_recipes_share_privacy_guarantees() {
+    fn knowledge_view_recipes_are_structurally_local() {
         let p = personal_knowledge_recipe(&PathBuf::from("/a"));
         let c = conversation_history_recipe(&PathBuf::from("/b"), &[]);
         let i = institutional_notes_recipe(&PathBuf::from("/c"));
@@ -393,17 +396,7 @@ mod tests {
             assert_eq!(r.corpus.scope.as_deref(), Some("local"));
             assert!(!r.corpus.mesh_sharing);
             assert_eq!(r.corpus.query_sharing, Some(false));
-        }
-    }
-
-    #[test]
-    fn both_recipes_share_privacy_guarantees() {
-        let p = personal_knowledge_recipe(&PathBuf::from("/a"));
-        let c = conversation_history_recipe(&PathBuf::from("/b"), &[]);
-        for r in [p, c] {
-            assert_eq!(r.corpus.scope.as_deref(), Some("local"));
-            assert!(!r.corpus.mesh_sharing);
-            assert_eq!(r.corpus.query_sharing, Some(false));
+            assert_eq!(r.corpus.license, "local-only");
         }
     }
 

@@ -45,6 +45,11 @@ pub use code::BuildTool;
 #[cfg(feature = "treesitter")]
 pub use code::{DriftTool, SpecTool};
 #[cfg(feature = "treesitter")]
+pub use code::{
+    compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
+    PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
+};
+#[cfg(feature = "treesitter")]
 pub use code::{WriteNoteTool, ReadNotesTool, DeleteNoteTool};
 #[cfg(feature = "treesitter")]
 pub use code::BlastRadiusTool;

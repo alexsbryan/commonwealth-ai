@@ -47,18 +47,42 @@ fn translate_stream_frame(frame: CoreStreamFrame) -> wire::StreamFrame {
             reason: translate_finish_reason(reason),
             usage: usage.map(translate_stream_usage),
         },
-        CoreStreamFrame::Error(msg) => wire::StreamFrame::Error(msg),
+        CoreStreamFrame::Error(msg) => {
+            // Stream errors are unusual and load-bearing — they
+            // terminate the request from the model side. Trace once
+            // per occurrence (cheap: error frames are rare by design).
+            tracing::warn!(error = %msg, "inference_adapter:stream_error_frame");
+            wire::StreamFrame::Error(msg)
+        }
     }
 }
 
 fn translate_finish_reason(r: CoreFinishReason) -> wire::FinishReason {
+    // Non-Stop reasons are operationally interesting (Length =
+    // truncation, ContentFilter = guard tripped, Cancelled = client
+    // bailed, Error = backend failed). Stop is the silent default.
     match r {
         CoreFinishReason::Stop => wire::FinishReason::Stop,
-        CoreFinishReason::Length => wire::FinishReason::Length,
-        CoreFinishReason::ToolCalls => wire::FinishReason::ToolCalls,
-        CoreFinishReason::ContentFilter => wire::FinishReason::ContentFilter,
-        CoreFinishReason::Cancelled => wire::FinishReason::Cancelled,
-        CoreFinishReason::Error(msg) => wire::FinishReason::Error(msg),
+        CoreFinishReason::Length => {
+            tracing::debug!("inference_adapter:finish_reason_length");
+            wire::FinishReason::Length
+        }
+        CoreFinishReason::ToolCalls => {
+            tracing::debug!("inference_adapter:finish_reason_tool_calls");
+            wire::FinishReason::ToolCalls
+        }
+        CoreFinishReason::ContentFilter => {
+            tracing::warn!("inference_adapter:finish_reason_content_filter");
+            wire::FinishReason::ContentFilter
+        }
+        CoreFinishReason::Cancelled => {
+            tracing::debug!("inference_adapter:finish_reason_cancelled");
+            wire::FinishReason::Cancelled
+        }
+        CoreFinishReason::Error(msg) => {
+            tracing::warn!(error = %msg, "inference_adapter:finish_reason_error");
+            wire::FinishReason::Error(msg)
+        }
     }
 }
 
@@ -97,6 +121,7 @@ fn synthesize_tool_stream(
     let mut frames: Vec<wire::StreamFrame> = Vec::with_capacity(3);
 
     let choice = resp.choices.into_iter().next();
+    let choice_present = choice.is_some();
     let (content, tool_calls, finish_reason_str) = match choice {
         Some(c) => (
             c.message.content,
@@ -105,19 +130,57 @@ fn synthesize_tool_stream(
         ),
         None => (String::new(), Vec::new(), "stop".into()),
     };
+    if !choice_present {
+        // Provider returned a response with no choices — degenerate
+        // case that downstream clients receive as an empty stream.
+        // Loud so it surfaces in incident-triage logs.
+        tracing::warn!("inference_adapter:synthesize_tool_stream_no_choice");
+    }
 
-    if !content.trim().is_empty() {
+    let has_content = !content.trim().is_empty();
+    let has_tool_calls = !tool_calls.is_empty();
+
+    if has_content {
         frames.push(wire::StreamFrame::Token(content));
     }
-    if !tool_calls.is_empty() {
-        frames.push(wire::StreamFrame::ToolCalls(tool_calls));
+    if has_tool_calls {
+        frames.push(wire::StreamFrame::ToolCalls(tool_calls.clone()));
     }
+    // Classify the synthesis shape so operators can post-hoc tell
+    // which path the model took without grepping individual frames.
+    // Four observed shapes: tool-only (most common for agentic
+    // turns), content-only (fallback when grammar fails), mixed,
+    // and empty (degenerate — already warned above).
+    let shape = match (has_content, has_tool_calls) {
+        (false, true) => "tool_only",
+        (true, true) => "content_plus_tools",
+        (true, false) => "content_only",
+        (false, false) => "empty",
+    };
+    tracing::debug!(
+        shape = %shape,
+        tool_call_count = tool_calls.len(),
+        finish_reason = %finish_reason_str,
+        "inference_adapter:synthesize_tool_stream_shape"
+    );
+
     let reason = match finish_reason_str.as_str() {
         "tool_calls" => wire::FinishReason::ToolCalls,
         "length" => wire::FinishReason::Length,
         "content_filter" => wire::FinishReason::ContentFilter,
         "cancelled" => wire::FinishReason::Cancelled,
-        _ => wire::FinishReason::Stop,
+        other => {
+            // Unknown finish-reason strings collapse to Stop, but
+            // we leave a breadcrumb so a regression in the upstream
+            // string vocabulary shows up in telemetry.
+            if other != "stop" {
+                tracing::debug!(
+                    finish_reason = %other,
+                    "inference_adapter:synthesize_tool_stream_unknown_finish_reason"
+                );
+            }
+            wire::FinishReason::Stop
+        }
     };
     let usage = resp.usage.map(|u| wire::StreamUsage {
         prompt_tokens: u.prompt_tokens,
@@ -231,6 +294,10 @@ impl SovereignInferenceAdapter {
         if tools.is_empty() {
             return None;
         }
+        tracing::debug!(
+            tool_count = tools.len(),
+            "inference_adapter:forward_tools"
+        );
         Some(
             tools
                 .iter()
@@ -345,11 +412,22 @@ impl SovereignInferenceAdapter {
         // through to the embedded provider's default" — which is
         // `enable_thinking: false` in `apply_chat_template_oaicompat`.
         req.enable_thinking = extract_enable_thinking(request.chat_template_kwargs.as_ref());
-        let speed = if req.tools.is_some() {
-            sovereign_core::types::Speed::Slow
+        let (speed, slot_picker) = if req.tools.is_some() {
+            (sovereign_core::types::Speed::Slow, "tools_bias_slow")
         } else {
-            crate::oicp_select::pick_slot_for_oicp(self.provider.as_ref(), &req)
+            (
+                crate::oicp_select::pick_slot_for_oicp(self.provider.as_ref(), &req),
+                "oicp_select",
+            )
         };
+        tracing::debug!(
+            speed = ?speed,
+            slot_picker = %slot_picker,
+            has_tools = req.tools.is_some(),
+            model_id = req.model_id.as_deref().unwrap_or(""),
+            structured_output = req.structured_output.is_some(),
+            "inference_adapter:slot_selected"
+        );
         req.with_speed(speed)
     }
 }
@@ -656,6 +734,13 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         &self,
         mut request: ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse, String> {
+        tracing::debug!(
+            message_count = request.messages.len(),
+            model = request.model.as_deref().unwrap_or(""),
+            has_tools = request.tools.as_ref().is_some_and(|t| !t.is_empty()),
+            stream = false,
+            "inference_adapter:chat_completion_entry"
+        );
         // Glassbox prompt-size accounting + tool-profile trim +
         // opt-in compaction BEFORE anything reads the request.
         //
@@ -730,12 +815,25 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         //     markup the chat template emits when no grammar is set.
         let grammar_constrained = req.structured_output.is_some()
             && tool_envelope_schema_for_with_env(&request).is_some();
+        if tools_present {
+            tracing::debug!(
+                grammar_constrained,
+                "inference_adapter:tool_parse_mode"
+            );
+        }
         let (parsed_calls, parse_errors) = if tools_present {
             if grammar_constrained {
                 let direct = parse_tool_envelope_direct(&resp.text);
                 if !direct.is_empty() {
+                    tracing::debug!(
+                        tool_call_count = direct.len(),
+                        "inference_adapter:tool_parse_grammar_direct_ok"
+                    );
                     (direct, Vec::new())
                 } else {
+                    tracing::debug!(
+                        "inference_adapter:tool_parse_grammar_direct_empty_falling_back_to_marker"
+                    );
                     sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
                 }
             } else {
@@ -855,6 +953,13 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         String,
     > {
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        tracing::debug!(
+            message_count = request.messages.len(),
+            model = request.model.as_deref().unwrap_or(""),
+            has_tools = tools_present,
+            stream = true,
+            "inference_adapter:chat_completion_stream_entry"
+        );
 
         // Streaming + tool_calls path. Local backends parse the
         // `<tool_call>` markup AFTER the model finishes generating, so

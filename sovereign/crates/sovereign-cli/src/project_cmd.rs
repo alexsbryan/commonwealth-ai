@@ -2901,12 +2901,16 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     {
         let mut tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
-            .with_watcher_active(Arc::clone(&watcher_active_flag));
+            .with_watcher_active(Arc::clone(&watcher_active_flag))
+            .with_workspace_root(repo_root.clone());
         if let Some(scope) = lint_watched_scope {
             tool = tool.with_watched_scope(scope);
         }
         tools.register(Box::new(tool));
     }
+    tools.register(Box::new(
+        sovereign_tools::DriftPostureTool::new().with_workspace_root(repo_root.clone()),
+    ));
     tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
         Arc::clone(&lint_store),
     )));

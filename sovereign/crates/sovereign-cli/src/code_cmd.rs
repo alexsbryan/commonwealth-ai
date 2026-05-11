@@ -476,6 +476,19 @@ async fn cmd_brief(args: &[String]) -> i32 {
         None
     };
 
+    // ── Drift dir ────────────────────────────────────────────
+    // The brief reads the drift fingerprint + report sidecar to
+    // render a "Drift posture" section. Defaults to
+    // ~/.sovereign/drift/; falls through to None if neither the
+    // fingerprint nor the report exists yet (`render_drift_posture`
+    // is itself robust to the empty case).
+    let drift_dir_path = home_dir().join(".sovereign").join("drift");
+    let drift_dir_opt: Option<&Path> = if drift_dir_path.exists() {
+        Some(drift_dir_path.as_path())
+    } else {
+        None
+    };
+
     // ── Assemble ──────────────────────────────────────────────
     let inputs = BriefInputs {
         working_set: &working_set,
@@ -486,6 +499,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
         branch_name: &branch_name,
         budget_tokens,
         feature_id: feature_id.as_deref(),
+        drift_dir: drift_dir_opt,
     };
     let brief = match assemble_brief(inputs, &notes).await {
         Ok(b) => b,

@@ -771,6 +771,29 @@ background loop refreshes OICP manifests; up to 2 retries.
 `remote.rs` is OpenAI-compatible (vLLM, Ollama, llama.cpp server, TGI,
 Commonwealth).
 
+**Polished slot management** (runtime control). `models.toml` declares
+multiple slot configs and `model_id` routing; the daemon exposes runtime
+HTTP endpoints for slot orchestration:
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /internal/models/load` | Load an extra model into a slot (subject to `max_extras_memory_gb` budget). |
+| `POST /internal/models/unload` | Unload a non-primary slot. |
+| `GET  /internal/models/inventory` | Live inventory: which slots are resident, idle, evictable. |
+
+The eviction policy is LRU over non-primary slots, bounded by
+`max_extras_memory_gb`. Primary chat + embed slots are pinned. Per
+the OICP provider-name invariant, `build_self_manifest` uses
+`resolve_primary_model_name(provider)` — never the largest slot — so
+a Code slot bigger than the chat primary doesn't shadow peer
+attribution.
+
+Invariants to know (pinned by name in memory):
+
+- **Gemma 4 + Metal is unsupported** on llama-cpp-2 0.1.145 — ggml-metal lacks the matmul kernels and decode SIGSEGVs. CPU fallback via `SOVEREIGN_FORCE_CPU_CHAT=1`; Qwen confirmed working.
+- **Daemon doesn't auto-resolve "fast"/"primary" slot aliases** on `/v1/chat/completions` — pass the actual model name from config, not the abstract slot.
+- **`AppState::with_*` installers must run before `inner.clone()`** in `EmbeddedDaemon::start_daemon` — `Arc::get_mut` fails silently if `inner` is already shared, and `/v1/chat/completions` returns 503 on every request.
+
 ### 4.4 Tools
 
 Local tools (`sovereign-tools/src/`):
@@ -915,7 +938,7 @@ governance review process (spec §4.3); **not** the scheduler.
 
 | Frontend            | Purpose                                                                  |
 |---------------------|--------------------------------------------------------------------------|
-| `sovereign-cli`     | Interactive REPL + named subcommands: `setup`, `project` (init/design/plan/charter/found/amend/phase/audit/serve/refresh/install-hooks), `atos` (provision/start-milestone/end-milestone/spec/teardown/doctor/install-plugin), `daemon` (long-running, owns :9741), `doctor`, `mesh`, `corpus`, `code`, `mcp`, `recipe`, `tools`, `reflect`, `voice` (Tier-B voice-contract harness — see §4.15) |
+| `sovereign-cli`     | Interactive REPL + named subcommands. Grouped by surface: **agent lifecycle** — `setup`, `chat`, `daemon` (long-running, owns :9741), `serve`, `stop`, `install-service`, `doctor`, `status`. **Project/ATOS authoring** — `project` (init/design/plan/charter/found/amend/phase/audit), `charter`, `design`, `plan`, `amend`, `audit`, `milestone`, `notes`, `nudge`. **ATOS execution** — `atos` (provision/start-milestone/end-milestone/spec/teardown/doctor/install-plugin/`run` — §4.13). **Knowledge management** — `mesh`, `alignment` (mesh-replicated workspace — §5.x), `corpus`, `newsworthy` (Wikipedia freshness — §4.14b), `recipe`, `recipe-agent`, `maintainer`, `awareness`. **Code intelligence** — `code`, `mcp`, `tools`. **Enrichment / atlases** — `enrich`, `atlas`, `reading-diag`. **Architectural correctness** — `drift`, `rough-edges`, `git-archaeology`, `archaeology-eval` (§4.16). **Quality gates** — `eval`, `bench`, `voice` (Tier-B voice-contract harness — §4.15), `reflect`. **Misc** — `refresh`, `init`. Full surface registered at `sovereign-cli/src/main.rs:381-619`. |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; SSE + WS streaming; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve` |
 | `sovereign-desktop` | Tauri 2 + Svelte 5; setup wizard, chat w/ streaming + provenance, knowledge management (`KnowledgeStatus`, `CorpusProgressBanner`), skill manager, mesh UI, `sovereign://` deep-link handler, system tray |
 
@@ -1067,6 +1090,18 @@ embedded via `include_str!` with a `// sovereign-atos-version: X.Y.Z`
 header. Injects `X-Feature-Id` (from current branch's feature dir) and
 `X-Session-Id` so the daemon knows which spec to splice.
 `sovereign atos doctor` compares installed plugin to CLI binary version.
+
+**`atos run` — the runner loop.** `sovereign atos run` is the
+agent-driven execution surface that takes a feature spec and runs the
+opencode/Claude-Code sub-agent in a managed loop against MCP tools
+(`sovereign-cli/src/atos_cmd/run.rs`, ~4300 lines). Subprocess fan-out
+to the sub-agent, MCP-tool brokerage, milestone advancement
+(start-milestone → reviewer loop → done-marker accept → end-milestone),
+deviation capture, and run-record persistence to `FeatureStore.runs`
+all live in this module. The runner is the consumer side of the ATOS
+state machine; the project/feature subcommands are the authoring side.
+A planned split (one file per stage of the loop) is sequenced in
+§10.1.
 
 ### 4.14 Local Corpora — Folder Drop + Obsidian Vault + Watched Folder
 
@@ -1230,6 +1265,33 @@ corpus configured for OCR on a daemon that can't honour it.
   guard-tripped or errored corpora prominently above the source list
   (5-second polling refresh while the section is mounted).
 
+### 4.14b Newsworthy — Wikipedia freshness layer
+
+Daemon-driven near-real-time refresh for the `wikipedia-newsworthy`
+corpus (and any future corpus declaring `[update] ingest_driver =
+"watcher"` in its recipe). Pulls article revisions from the Wikipedia
+EventStreams SSE endpoint, batches them through `batch_revisions`,
+applies content updates via `CorpusEngine::reindex_file`, and
+triggers downstream atlas rebuilds.
+
+| Layer | Where |
+|---|---|
+| Recipe flag | `corpus-engine/src/recipe.rs::UpdateConfig.ingest_driver` accepts `"watcher"`. `CorpusEngine::ingest` short-circuits for watcher-driven recipes (creates an empty index and returns) so `sovereign corpus install wikipedia-newsworthy` doesn't trip on the placeholder template. |
+| Event stream | `corpus-engine/src/update/newsworthy_event_stream.rs` — `NewsworthyEventStream` (SSE subscription with reconnect + checkpoint persistence). |
+| Watcher | `corpus-engine/src/update/newsworthy.rs` — long-running tokio task. Hardened against per-article failures via `catch_unwind_async`; safe-slice MediaWiki byteoffsets (em-dashes on section boundaries previously panicked the worker and took the listener with it); `fetch_concurrency=1` + Wikipedia-policy `User-Agent` + `Retry-After` honouring + exponential backoff. |
+| Atlas hook | `NewsworthyHost::on_chunks_committed` (`sovereign-mesh/src/newsworthy_host.rs`) — fires `rebuild_structural_atlas` off the tick body once per affected corpus per refresh. Verified: 1.57M atoms / 1.3GB edges rebuilt in 22.7s after a tick wrote 9 refreshed articles. |
+| Daemon plumbing | `EmbeddedDaemon::start_daemon` wires the `MeshNewsworthyHost` impl; per the daemon-shutdown-sender invariant, the shutdown channel sender is held inside the spawned async block (was previously dropped at fn return). |
+| CLI | `sovereign newsworthy` subcommand surfaces watcher controls + status. |
+
+Layered picker: the desktop's Settings → Local Knowledge surfaces
+Wikipedia variants (wikipedia-simple, wikipedia-newsworthy) as a
+**Layers chip panel** on a single Wikipedia row. Recipe TOMLs declare
+`parent_corpus_id = "wikipedia"` to opt into this; the registry
+preserves the parent through `BuiltinCorpus → CorpusEntry`.
+`*-partition-*` corpus ids are filtered out of the user-facing list.
+Pinned by Playwright spec at
+`sovereign-desktop/tests/e2e/specs/knowledge-layers.spec.ts`.
+
 ### 4.15 Voice contract — Tier-B harness + situated synthesis path
 
 Deep-dive: `sovereign/bench/voice/README.md`.
@@ -1292,6 +1354,48 @@ with `chat_model` + `judge_model` + per-scenario `runtime_ms` /
 (the harness-shipped state): 8/12 small + 8/12 large; with a
 small/large pool, **10/12 unique scenarios passable**. Two scenarios
 remain hard for both models (05-silence-sits, 09-edge-of-competence-legal).
+
+### 4.16 Architectural correctness tooling
+
+Five tools that audit narrative-vs-code drift and gate the merge path
+against the principles in `sovereign/ARCH_PRINCIPLES.md`. All callable
+via `sovereign-cli` subcommands and all share the same atlas + atom
+infrastructure.
+
+| Tool | Subcommand | What it does | Source |
+|---|---|---|---|
+| **Drift detection** | `sovereign drift detect --code <repo> --narrative <doc> [--narrative <doc>...] --output <md>` | Orchestrates 8 primitives (probe chat model → index code → build structural atlas → run git-archaeology → for each narrative: stamp recipe + install + enrich init + enrich build + cross-corpus match → render report). Idempotent and resilient: re-runs cache, partial-extract failures auto-recover via cluster+name+resolve, model-probe failure surfaces a concrete remediation. | `sovereign-cli/src/drift_cmd.rs` (entry) + `sovereign-cli/src/drift_cmd_orchestrator.rs` (resilience layer) |
+| **Git archaeology** | `sovereign git-archaeology <atlas-corpus-id> [--source-corpus <id>]` | Walks the code's git history and attaches per-atom provenance (`first_seen`, `last_modified`, `stability_days`, `modification_count`, `primary_authors`, `staleness`) plus co-evolution pairs above the jaccard threshold. JSON sidecar at `~/.sovereign/indexes/<atlas>/atlas/git_archaeology.json`. The drift orchestrator folds this in as the Provenance & Evolution section. | `corpus-engine/src/git_archaeology.rs` (walker + co-evolution) + `sovereign-cli/src/git_archaeology_cmd.rs` |
+| **Archaeology eval** | `sovereign archaeology-eval [--baseline <prior-run>]` | Witness checks + baseline diff for archaeology output — re-runs every cited commit against `git` and surfaces fabricated cites or regressions. Also runs the curated inquiries bank (`sovereign/inquiries/*.toml` — principle witnesses, twin-tool sanity checks). | `sovereign-cli/src/archaeology_eval_cmd.rs` |
+| **Rough edges** | `sovereign rough-edges <code-corpus> [--source-path <dir>] [--output <md>]` | Tier-0 marker scan: `TODO`, `FIXME`, `HACK`, `XXX` comments. Tier-1 rustdoc-vs-signature drift: `# Panics` sections without `panic!`/`unwrap()`/`expect()`/`assert!`/`unreachable!`/`todo!`/`unimplemented!()`; `# Errors` sections on functions that don't return `Result<…>`. Severity: XXX→Critical, FIXME/HACK→Likely, TODO→Note. The drift orchestrator folds in the JSON sidecar as the Internal section. | `corpus-engine/src/rough_edges.rs` (scanner core) + `sovereign-cli/src/rough_edges_cmd.rs` |
+| **Plan alignment** | (Claude Code PreToolUse hook) | Every plan file under `~/.claude/plans/*.md` must answer four alignment questions: Context, What-extends, What-removes, Restraint patterns, Could-this-be-less. Enforced via a PreToolUse hook on `ExitPlanMode` (commit `806f4bc`) that rejects the call if the file lacks the four sections. The plan-alignment discipline produces the inquiries the drift detector checks. See `sovereign/docs/PLAN_ALIGNMENT.md`. | (harness hook; no daemon binding) |
+
+**Atlases this consumes / produces.** Drift detect builds **one
+structural atlas per code corpus** (`<id>-self-atlas`) and **one
+narrative atlas per --narrative arg** (`<project-id>-<basename>`). It
+matches them via `enrich atlas-cross-corpus` and renders the digest
+via `enrich atlas-drift-report` (`sovereign-cli/src/enrich_cmd/
+atlas_drift_report.rs`). The structural atlas excludes function-tier
+atoms by default; pass `--include-functions` to drift detect for
+function-level drift.
+
+**Cadence and gating.** The architectural-correctness layer is
+designed to run on three cadences: (1) weekly `sovereign drift detect`
+via launchd against `SYSTEM_OVERVIEW.md` + `ARCH_PRINCIPLES.md`, with
+output at `~/.sovereign/drift/latest.md`; (2) on every change via a
+pre-push ratchet hook that fails on delta-worse counts (rough-edges
+total, files >1200 lines without §10 entry, principle-inquiry witness
+score, absolute-path-in-src count); (3) session-start brief surfaces
+the latest drift posture + git-archaeology volatility list. See
+`sovereign/docs/DRIFT_DETECTION.md` for details.
+
+**Reading the digest.** `Act on` (critical findings only — normative
+narrative claims with no structural anchor); `Confirmed` (dual-attested
+components); `Provenance & Evolution` (stability + recent volatility +
+co-evolution clusters + staleness queue); `Investigation queue`
+(unmatched narrative entities, auto-classified into file-path /
+method-function / abstract-principle / self-reference / worth-a-closer-look
+buckets); `Internal` (rough-edges summary).
 
 ---
 
@@ -1531,6 +1635,29 @@ LWW conflict resolution, per-`app_id` namespace, `RetentionGc` for TTL.
 `knowledge_access`), `AppRegistry`, `AppProcess` lifecycle, `AppPortMap`
 + `forward()` reverse-proxy helpers.
 
+### 5.8b Mesh-replicated workspace (newest-mtime convergence)
+
+The **alignment** family lets a working set of files (default
+`~/.claude/`) replicate across mesh peers without a central server.
+Conflict resolution is **newest-mtime-wins**, a pragmatic LWW for
+file-shaped state where every peer's clock is approximately Tailscale-
+synchronised. Surface and storage:
+
+| Layer | Where |
+|---|---|
+| Acquirer | `corpus-engine/src/acquirers/local_file.rs` paired with a mutable-merge policy — recipes carry `corpus.mutable_merge = "source_doc_id_newest_mtime"`. |
+| Merge policy | `corpus-engine/src/sharding.rs::merge_shards` honours the `mutable_merge` policy when merging two shards; same-`source_doc_id` rows fold onto the newest `mtime`. |
+| Projector | `corpus-engine/src/alignment_projector.rs` projects the replicated corpus back out to a directory on disk (default `~/.claude/`) under an exclusive lock so concurrent projectors can't race. Mtime-stable: identical content with an older mtime is not re-written. |
+| Recipe | `sovereign-recipes/alignment/recipe.toml` — `scope = "local"`, `mesh_sharing = false` for *the corpus contents*; the **alignment** corpora are local-only in the same structural-privacy sense as KnowledgeView (§7 of `ARCH_PRINCIPLES.md`). The mesh shuttles the corpus bytes peer-to-peer but **does not gossip them onto the open mesh**: only mutually-authenticated alignment peers see the replication payload. |
+| CLI | `sovereign alignment` — replicate / projector lifecycle. |
+
+The pattern composes with the rest of the corpus-engine plumbing —
+the same partition tar served by `GET /internal/index/serve` is what
+ships the corpus bytes between peers, and the same `apply_update`
+pipeline applies them on the receiving side. Newsworthy uses an
+analogous shape for a different convergence policy (event-stream-driven
+refresh instead of mtime LWW).
+
 ### 5.9 CLI
 
 ```
@@ -1756,9 +1883,23 @@ file or gap with an entry is sequenced work.
 | `project_cmd.rs` split | `sovereign-cli/src/project_cmd.rs` (~7000 lines) | Subcommand-per-file is the obvious shape; gated on the post-found project lifecycle settling so we know which subcommands are genuinely sticky vs. exploratory. |
 | `embedded.rs` split | `sovereign-inference/src/embedded.rs` (~5300 lines) | Embedded daemon glue — slot management, lifecycle, and HTTP handlers cohere today; split when an alternate embedding mode forces the seam. |
 | `commands.rs` (Tauri) split | `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) | Tauri's command-registration surface; splitting requires re-grouping by feature without breaking the IPC name registry. Coordination cost > current pain. |
+| `atos_cmd/run.rs` split | `sovereign-cli/src/atos_cmd/run.rs` (~4300 lines) | ATOS runner loop (§4.13). Subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, done-marker accept, run-record persistence all cohere as one state machine today. Split is one-file-per-stage when the stage boundaries stabilise. Landed 2026-05-06 in commits 032a0ad + 0229adb; the audit pass that produced this entry caught it. |
+| `mesh_cmd.rs` split | `sovereign-cli/src/mesh_cmd.rs` (~3000 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under mesh self-heal + cloud peering work. |
+| `json_constraint.rs` split | `sovereign-inference/src/json_constraint.rs` (~3100 lines) | LLGuidance JSON-Schema constraint integration. The grammar layer + tokenizer glue + diff coalescer cohere tightly; splitting requires the grammar API to stabilise upstream. |
 
 (`atos_cmd.rs` and `local.rs` were the prior tenants of this list; both
 were split into folders in the spring 2026 refactor pass.)
+
+### 10.1b corpus-engine deferrals
+
+| Item | Location | Why deferred |
+|------|----------|--------------|
+| `recipe.rs` split | `corpus-engine/src/recipe.rs` (~3500 lines) | Recipe TOML schema + loader + recipe-authoring tools + parameter resolution + `bundled_recipe_toml(id: &str)` dispatch + ~9 inline tests. The §2-style enumify of `bundled_recipe_toml` (RecipeId enum) is a prerequisite for a clean split — sequenced after that work. |
+| `notes.rs` split | `corpus-engine/src/notes.rs` (~3200 lines) | NoteStore façade + FeatureStore schema + persistence migrations (v6→v7) + lifecycle management + decision-log tools. The SQL schemas + migrations couple tightly; split requires a stable schema. |
+| `atlas/resolution.rs` split | `corpus-engine/src/enrichment/atlas/resolution.rs` (~4500 lines) | Atlas URI resolution + scoring. The hottest-iteration file in the atlas pipeline — splitting churn-heavy code obscures git history while the algorithm is still settling. |
+| `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas pipeline orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state; cohesive while atlas phase shape keeps moving (grammar-constrained Phase 1, Phase 4 entity synthesis, Phase 7 configurations). |
+| `engine/mod.rs` split | `corpus-engine/src/engine/mod.rs` (~3000 lines) | `CorpusEngine` façade. Holds the public surface (`ingest`, `expand`, `reindex_file`, `apply_update`) plus dispatch glue. Splitting is plausible once the watcher-driven recipes settle and the `ingest_driver` enumify lands. |
+| `pipelines/literary_atlas.rs` split | `corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs` (~2900 lines) | Atlas pipeline for literary corpora. Stable but large; splits naturally along phase boundaries (extract, cluster, name, resolve, synthesize). |
 
 ### 10.2 Commonwealth deferrals
 

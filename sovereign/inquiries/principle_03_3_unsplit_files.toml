@@ -1,25 +1,45 @@
 # ARCH_PRINCIPLES.md §3.3 — "Files we haven't split *yet* are
 # flagged, not hidden."
 #
-# As of 2026-05-08, the principle's current outliers (>5000
-# lines) are runtime.rs, project_cmd.rs, embedded.rs, and
-# Tauri's commands.rs. All four are listed in SYSTEM_OVERVIEW.md
-# §10.1 with deferral rationale.
+# As of 2026-05-11, the principle's outliers fall in three bands:
 #
-# This inquiry verifies the four cited files exist in the atlas
-# and have live history. If a future refactor splits any of them
-# without updating both ARCH_PRINCIPLES §3.3 and
-# SYSTEM_OVERVIEW §10.1, this inquiry's globs miss the renamed
-# files and the inquiry fails — exactly the doc-drift signal we
-# want.
+#   - >5000 lines (original tenants): runtime.rs, project_cmd.rs,
+#     embedded.rs, Tauri's commands.rs.
+#   - 3000–4500 lines (added 2026-05-11 by the architecture-drift
+#     audit pass): atlas/resolution.rs, atos_cmd/run.rs, recipe.rs,
+#     notes.rs, pipeline/runner.rs, json_constraint.rs, engine/mod.rs.
+#   - ~3000 lines (audit pass, sequenced last): mesh_cmd.rs,
+#     literary_atlas.rs.
+#
+# All 13 files are listed in SYSTEM_OVERVIEW.md §10.1 / §10.1b with
+# deferral rationale. This inquiry verifies every cited file exists
+# in the atlas and has live history. If a future refactor splits
+# any of them without updating both ARCH_PRINCIPLES §3.3 and
+# SYSTEM_OVERVIEW §10.1/§10.1b, this inquiry's globs miss the
+# renamed files and the inquiry fails — exactly the doc-drift
+# signal we want. Pairs with the pre-push ratchet
+# (sovereign/.githooks/pre-push) which blocks regressions in the
+# passing-inquiry count.
 
 [inquiry]
 id = "principle_03_3_unsplit_files"
-title = "§3.3 Unsplit-files claim — runtime.rs / project_cmd.rs / embedded.rs / commands.rs"
+title = "§3.3 Unsplit-files claim — 13 roadmapped outliers"
 file_globs = [
+    # Sovereign (>5000 lines)
     "**/sovereign-core/src/runtime.rs",
     "**/sovereign-cli/src/project_cmd.rs",
     "**/sovereign-inference/src/embedded.rs",
     "**/sovereign-desktop/src-tauri/src/commands.rs",
+    # Sovereign (3000-4500, added 2026-05-11)
+    "**/sovereign-cli/src/atos_cmd/run.rs",
+    "**/sovereign-cli/src/mesh_cmd.rs",
+    "**/sovereign-inference/src/json_constraint.rs",
+    # corpus-engine (3000-4500, added 2026-05-11)
+    "**/corpus-engine/src/recipe.rs",
+    "**/corpus-engine/src/notes.rs",
+    "**/corpus-engine/src/enrichment/atlas/resolution.rs",
+    "**/corpus-engine/src/enrichment/pipeline/runner.rs",
+    "**/corpus-engine/src/engine/mod.rs",
+    "**/corpus-engine/src/enrichment/pipeline/pipelines/literary_atlas.rs",
 ]
 min_score = 0.5

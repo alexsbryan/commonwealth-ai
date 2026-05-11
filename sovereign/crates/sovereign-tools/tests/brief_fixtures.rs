@@ -181,6 +181,7 @@ async fn snapshot_clean_main() {
         branch_name: "main",
         budget_tokens: 1500,
         feature_id: None,
+        drift_dir: None,
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("01_clean_main", &brief);
@@ -212,6 +213,7 @@ async fn snapshot_small_feature_branch_with_notes() {
         branch_name: "feature/auth-rate-limiting",
         budget_tokens: 1500,
         feature_id: None,
+        drift_dir: None,
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("02_small_feature_branch_with_notes", &brief);
@@ -234,6 +236,7 @@ async fn snapshot_large_refactor_caps_working_set_at_20() {
         branch_name: "refactor/big-cleanup",
         budget_tokens: 4000,
         feature_id: None,
+        drift_dir: None,
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("03_large_refactor", &brief);
@@ -274,6 +277,7 @@ async fn snapshot_with_atlas_and_archaeology() {
         branch_name: "feature/auth-cleanup",
         budget_tokens: 2000,
         feature_id: None,
+        drift_dir: None,
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("04_with_atlas_and_archaeology", &brief);
@@ -325,6 +329,7 @@ min_score = 0.5
         branch_name: "feature/auth-rate-limiting",
         budget_tokens: 1500,
         feature_id: None,
+        drift_dir: None,
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     assert_snapshot("05_principles_for_this_area", &brief);
@@ -364,6 +369,7 @@ async fn snapshot_recent_activity_with_backdated_commits() {
         branch_name: "main",
         budget_tokens: 2000,
         feature_id: None,
+        drift_dir: None,
     };
     let brief = assemble_brief(inputs, &notes).await.unwrap();
     // Recent-activity section is non-deterministic on commit hash

@@ -114,11 +114,22 @@ The watcher runs continuously. After you finish editing a file, `lint_status` of
 **Daemon-side watcher setup.** The long-running `sovereign daemon run` starts the lint/test watcher only when a workspace is configured. Either set `SOVEREIGN_WORKSPACE_DIR=<path>` in the launchd/systemd environment, or write the path to `~/.sovereign/workspace` (single-line text file). The daemon then loads `<workspace>/.sovereign/sovereign.toml` and runs the configured `[lint_runner]` / `[test_runner]` commands. The committed workspace-root config uses `scripts/sovereign-lint.sh` which fan-runs `cargo check` over corpus-engine + sovereign + commonwealth in parallel — one env var lights up coverage for all three. After changing the workspace config, restart the daemon (per `reference_daemon_restart_lwcr.md`: `launchctl bootout` + `bootstrap`).
 
 **Decision tree — "does this compile?"**
-1. `lint_status`
+
+The workspace-level `status` field answers "is the watcher idle and clean across everything?" — useful for final pre-commit checks. The new **per-file query mode** answers "are MY files clean?" — useful during active editing, since the watcher may still be running the full workspace check long after the crate containing your edits has finished.
+
+1. **Active editing** — call `lint_status --changed` (or `lint_status --files a.rs,b.rs` for an explicit set). The response includes `files[]` with one entry per queried path. Read each entry's `status`:
+   - `fresh_passing` → that file compiles cleanly as of `checked_at_unix`
+   - `fresh_failing` → that file has errors; check the filtered `errors[]` for the diagnostics
+   - `stale` → file's mtime is newer than the last run; watcher hasn't seen this edit yet
+   - `never_checked` → no run has covered this file (file may be outside watched scope)
+
+   The top-level `status` is still the workspace-wide answer when you want it. `--changed` auto-derives the file list from `git diff --name-only HEAD` + untracked `.rs` files.
+
+2. **Pre-commit / pre-push** — plain `lint_status` (no flags). Workspace-wide:
    - `fresh_passing` → clean, keep going
    - `fresh_failing` → errors are already in the response, fix them
    - `stale` → watcher queued but run not done yet; call again in ~15s
-   - `running` → check again in ~15s
+   - `running` → check again in ~15s (or use `--changed` to get a per-file answer against the *prior* completed run while this one finishes)
    - `never_run` → watcher not configured; **only then** fall back to `cargo check` via Bash
 
 **Decision tree — "do tests pass?"**

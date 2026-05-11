@@ -1931,6 +1931,130 @@ fn is_iso_date(s: &str) -> bool {
 // Built-in recipes
 // ---------------------------------------------------------------------------
 
+/// Type-safe identifier for every bundled recipe in this crate.
+///
+/// The wire form (TOML files, the `registry_snapshot.toml` catalog,
+/// `sovereign corpus install <id>` CLI args) stays string-typed — the
+/// strings are the API contract per ARCH_PRINCIPLES.md §2.2. This
+/// enum is the source of truth on the Rust side: adding a new bundled
+/// recipe means adding a variant here, which gives compile-time
+/// exhaustiveness across the dispatch + accessor surface, and the
+/// `bundled_recipe_covers_every_snapshot_entry` test keeps the
+/// enum aligned with the catalog.
+///
+/// To add a new bundled recipe:
+///   1. Drop `recipes/<id>/recipe.toml` in the crate.
+///   2. Add a `RecipeId` variant here.
+///   3. Extend `RecipeId::id()`, `RecipeId::bundled_toml()`, and
+///      `RecipeId::from_id()` — `rustc` flags any of these you miss.
+///   4. Add the catalog entry to `registry_snapshot.toml` +
+///      `sovereign-recipes/registry.toml`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RecipeId {
+    Wikipedia,
+    WikipediaSimple,
+    StackExchange,
+    StackExchangeKnowledge,
+    OpenAlex,
+    Gutenberg,
+    GutenbergWork,
+    WikipediaCatalog,
+    WikipediaArticle,
+    WikipediaNewsworthy,
+    Alignment,
+    Sep,
+    CrsReports,
+}
+
+impl RecipeId {
+    /// Wire-form string id for this recipe. Stable contract — these
+    /// strings appear in `registry_snapshot.toml`, recipe TOML
+    /// frontmatter, the `corpus install <id>` CLI surface, mesh
+    /// gossip, and on-disk state. Don't rename without coordinating
+    /// across all of those.
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Wikipedia => "wikipedia",
+            Self::WikipediaSimple => "wikipedia-simple",
+            Self::StackExchange => "stackexchange",
+            Self::StackExchangeKnowledge => "stackexchange-knowledge",
+            Self::OpenAlex => "openalex",
+            Self::Gutenberg => "gutenberg",
+            Self::GutenbergWork => "gutenberg-work",
+            Self::WikipediaCatalog => "wikipedia-catalog",
+            Self::WikipediaArticle => "wikipedia-article",
+            Self::WikipediaNewsworthy => "wikipedia-newsworthy",
+            Self::Alignment => "alignment",
+            Self::Sep => "sep",
+            Self::CrsReports => "crs_reports",
+        }
+    }
+
+    /// Parse a wire-form id. `None` for unknown ids — caller falls
+    /// back to its remote-fetch / error path.
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "wikipedia" => Some(Self::Wikipedia),
+            "wikipedia-simple" => Some(Self::WikipediaSimple),
+            "stackexchange" => Some(Self::StackExchange),
+            "stackexchange-knowledge" => Some(Self::StackExchangeKnowledge),
+            "openalex" => Some(Self::OpenAlex),
+            "gutenberg" => Some(Self::Gutenberg),
+            "gutenberg-work" => Some(Self::GutenbergWork),
+            "wikipedia-catalog" => Some(Self::WikipediaCatalog),
+            "wikipedia-article" => Some(Self::WikipediaArticle),
+            "wikipedia-newsworthy" => Some(Self::WikipediaNewsworthy),
+            "alignment" => Some(Self::Alignment),
+            "sep" => Some(Self::Sep),
+            "crs_reports" => Some(Self::CrsReports),
+            _ => None,
+        }
+    }
+
+    /// The compile-time bundled recipe TOML for this id. Each arm is
+    /// an `include_str!` of the recipe file in `recipes/<id>/`.
+    pub fn bundled_toml(self) -> &'static str {
+        match self {
+            Self::Wikipedia => include_str!("../recipes/wikipedia/recipe.toml"),
+            Self::WikipediaSimple => include_str!("../recipes/wikipedia-simple/recipe.toml"),
+            Self::StackExchange => include_str!("../recipes/stackexchange/recipe.toml"),
+            Self::StackExchangeKnowledge => {
+                include_str!("../recipes/stackexchange-knowledge/recipe.toml")
+            }
+            Self::OpenAlex => include_str!("../recipes/openalex/recipe.toml"),
+            Self::Gutenberg => include_str!("../recipes/gutenberg/recipe.toml"),
+            Self::GutenbergWork => include_str!("../recipes/gutenberg-work/recipe.toml"),
+            Self::WikipediaCatalog => include_str!("../recipes/wikipedia-catalog/recipe.toml"),
+            Self::WikipediaArticle => include_str!("../recipes/wikipedia-article/recipe.toml"),
+            Self::WikipediaNewsworthy => {
+                include_str!("../recipes/wikipedia-newsworthy/recipe.toml")
+            }
+            Self::Alignment => include_str!("../recipes/alignment/recipe.toml"),
+            Self::Sep => include_str!("../recipes/sep/recipe.toml"),
+            Self::CrsReports => include_str!("../recipes/crs_reports/recipe.toml"),
+        }
+    }
+
+    /// Every bundled `RecipeId`, in declaration order. Used by tests
+    /// to assert the enum stays paired with `registry_snapshot.toml`
+    /// without manually enumerating in two places.
+    pub const ALL: &'static [RecipeId] = &[
+        Self::Wikipedia,
+        Self::WikipediaSimple,
+        Self::StackExchange,
+        Self::StackExchangeKnowledge,
+        Self::OpenAlex,
+        Self::Gutenberg,
+        Self::GutenbergWork,
+        Self::WikipediaCatalog,
+        Self::WikipediaArticle,
+        Self::WikipediaNewsworthy,
+        Self::Alignment,
+        Self::Sep,
+        Self::CrsReports,
+    ];
+}
+
 /// Bundled recipe TOML for well-known corpora, embedded at compile
 /// time. Used as a **last-resort fallback** by
 /// `RecipeRegistry::fetch_recipe()` so a corpus listed in the snapshot
@@ -1944,32 +2068,13 @@ fn is_iso_date(s: &str) -> bool {
 /// Returns `None` for unknown ids; the caller falls back to its prior
 /// error message in that case.
 ///
-/// To add a new bundled recipe: drop `recipes/<id>/recipe.toml` in the
-/// crate, add an arm here, and the live registry catalog
-/// (`registry_snapshot.toml` + `sovereign-recipes/registry.toml`) entry
-/// for it. Match-arm coverage stays paired with the snapshot via the
-/// `bundled_recipe_covers_every_snapshot_entry` test below.
+/// Per ARCH_PRINCIPLES.md §2.1+§2.2: the dispatch is now type-safe
+/// via [`RecipeId`]; this function stays as the string-keyed
+/// adapter for callers that already hold a `&str` from the wire
+/// (registry catalog id, CLI arg). New Rust callsites should prefer
+/// `RecipeId::<variant>.bundled_toml()` directly.
 pub fn bundled_recipe_toml(id: &str) -> Option<&'static str> {
-    match id {
-        "wikipedia" => Some(include_str!("../recipes/wikipedia/recipe.toml")),
-        "wikipedia-simple" => Some(include_str!("../recipes/wikipedia-simple/recipe.toml")),
-        "stackexchange" => Some(include_str!("../recipes/stackexchange/recipe.toml")),
-        "stackexchange-knowledge" => {
-            Some(include_str!("../recipes/stackexchange-knowledge/recipe.toml"))
-        }
-        "openalex" => Some(include_str!("../recipes/openalex/recipe.toml")),
-        "gutenberg" => Some(include_str!("../recipes/gutenberg/recipe.toml")),
-        "gutenberg-work" => Some(include_str!("../recipes/gutenberg-work/recipe.toml")),
-        "wikipedia-catalog" => Some(include_str!("../recipes/wikipedia-catalog/recipe.toml")),
-        "wikipedia-article" => Some(include_str!("../recipes/wikipedia-article/recipe.toml")),
-        "wikipedia-newsworthy" => {
-            Some(include_str!("../recipes/wikipedia-newsworthy/recipe.toml"))
-        }
-        "alignment" => Some(include_str!("../recipes/alignment/recipe.toml")),
-        "sep" => Some(include_str!("../recipes/sep/recipe.toml")),
-        "crs_reports" => Some(include_str!("../recipes/crs_reports/recipe.toml")),
-        _ => None,
-    }
+    RecipeId::from_id(id).map(|r| r.bundled_toml())
 }
 
 /// Returns `Recipe` definitions for well-known corpora, loaded from the
@@ -2216,6 +2321,51 @@ max_chars = 2048
         let r = Recipe::from_toml(toml_str).expect("on-demand recipe must parse");
         assert!(r.corpus.on_demand);
         assert_eq!(r.corpus.kind, crate::types::CorpusKind::Knowledge);
+    }
+
+    #[test]
+    fn recipe_id_from_id_round_trips_for_every_variant() {
+        // Every RecipeId variant's id() must round-trip through
+        // from_id() — pin the wire-form contract per
+        // ARCH_PRINCIPLES.md §2.2 (legacy_view_id_constants_match_view_kind
+        // is the reference pattern).
+        for &recipe_id in RecipeId::ALL {
+            let wire = recipe_id.id();
+            assert_eq!(
+                RecipeId::from_id(wire),
+                Some(recipe_id),
+                "RecipeId::{recipe_id:?} ↔ {wire:?} round-trip broke"
+            );
+            // bundled_toml() must also resolve. include_str! enforces
+            // the file exists at compile time; this just checks
+            // non-empty content reached us.
+            assert!(
+                !recipe_id.bundled_toml().is_empty(),
+                "RecipeId::{recipe_id:?}.bundled_toml() returned empty",
+            );
+        }
+    }
+
+    #[test]
+    fn recipe_id_dispatch_matches_string_adapter() {
+        // bundled_recipe_toml(&str) must agree with
+        // RecipeId::<v>.bundled_toml() byte-for-byte. Catches a
+        // case where the adapter falls behind the enum.
+        for &recipe_id in RecipeId::ALL {
+            let via_adapter = bundled_recipe_toml(recipe_id.id())
+                .expect("adapter returned None for known recipe id");
+            let via_enum = recipe_id.bundled_toml();
+            assert_eq!(
+                via_adapter, via_enum,
+                "RecipeId::{recipe_id:?} dispatch mismatch between adapter and enum"
+            );
+        }
+    }
+
+    #[test]
+    fn bundled_recipe_toml_unknown_id_returns_none() {
+        assert!(bundled_recipe_toml("does-not-exist").is_none());
+        assert!(RecipeId::from_id("does-not-exist").is_none());
     }
 
     #[test]

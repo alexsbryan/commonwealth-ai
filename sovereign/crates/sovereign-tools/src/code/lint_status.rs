@@ -11,9 +11,10 @@
 //! - After any structural change (new imports, type changes) to catch type
 //!   errors before wasting time on test runs.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::SystemTime;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use serde_json::json;
@@ -22,7 +23,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::lint_results::LintResultStore;
+use corpus_engine::lint_results::{LintResult, LintResultStore, LintRunSummary};
 
 pub struct LintStatusTool {
     store: Arc<LintResultStore>,
@@ -31,11 +32,22 @@ pub struct LintStatusTool {
     watched_scope: Option<String>,
     /// Shared with the watcher coordinator — true while the FS watcher is live.
     watcher_active: Option<Arc<AtomicBool>>,
+    /// Workspace root, used to resolve relative paths in the `files` query
+    /// param and to run `git diff` when `changed = true`. Optional because
+    /// MCP-spawned daemons may not have a workspace configured; in that
+    /// case per-file queries require absolute paths from the caller and
+    /// `changed = true` becomes a no-op.
+    workspace_root: Option<PathBuf>,
 }
 
 impl LintStatusTool {
     pub fn new(store: Arc<LintResultStore>) -> Self {
-        Self { store, watched_scope: None, watcher_active: None }
+        Self {
+            store,
+            watched_scope: None,
+            watcher_active: None,
+            workspace_root: None,
+        }
     }
 
     pub fn with_watched_scope(mut self, scope: String) -> Self {
@@ -45,6 +57,11 @@ impl LintStatusTool {
 
     pub fn with_watcher_active(mut self, flag: Arc<AtomicBool>) -> Self {
         self.watcher_active = Some(flag);
+        self
+    }
+
+    pub fn with_workspace_root(mut self, root: PathBuf) -> Self {
+        self.workspace_root = Some(root);
         self
     }
 }
@@ -77,13 +94,31 @@ impl Tool for LintStatusTool {
                 .to_string(),
             parameters: json!({
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "files": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Filter freshness to a specific set of paths. The response gains a per-file `files[]` array with status (`fresh_passing | fresh_failing | stale | never_checked`), `checked_at_unix`, `mtime_unix`, and per-file error/warning counts. Top-level `errors[]` / `warnings[]` are filtered to these files too. Paths may be absolute or workspace-relative."
+                    },
+                    "changed": {
+                        "type": "boolean",
+                        "description": "Shortcut for `files`: auto-derive the list from `git diff --name-only HEAD` + untracked `.rs` files. The killer query for active editing: 'are MY files clean?' Mutually-exclusive with `files`; if both provided, `files` wins."
+                    }
+                },
                 "required": []
             }),
             examples: vec![
                 ToolExample {
                     situation: "You've edited one or more files and want to know if the code compiles. Do NOT run `cargo check` or `cargo build` — that fights the background watcher for the Cargo file lock and blocks both processes. This reads the watcher's cached result instantly with no contention.".into(),
                     call: serde_json::json!({}),
+                },
+                ToolExample {
+                    situation: "Active edit loop — you just touched a few files and want to know if THOSE files are clean. The workspace-wide check may still be running, but per-file freshness lands as soon as cargo finishes each crate.".into(),
+                    call: serde_json::json!({ "changed": true }),
+                },
+                ToolExample {
+                    situation: "Scripting / explicit query against a known file set (e.g. a pre-commit hook with a precomputed list).".into(),
+                    call: serde_json::json!({ "files": ["corpus-engine/src/recipe.rs", "sovereign/crates/sovereign-cli/src/drift_cmd_orchestrator.rs"] }),
                 },
             ],
             effect: Effect::Read,
@@ -103,7 +138,22 @@ impl Tool for LintStatusTool {
                     "errors":          { "type": "array" },
                     "warnings":        { "type": "array" },
                     "run_id":          { "type": "integer" },
-                    "output_truncated":{ "type": "boolean" }
+                    "output_truncated":{ "type": "boolean" },
+                    "files": {
+                        "type": "array",
+                        "description": "Per-file freshness, populated when the call passes `files` or `changed`. Each entry: { path, status, checked_at_unix, mtime_unix, errors, warnings }. `status` uses the same vocabulary as the top-level workspace status: `fresh_passing | fresh_failing | stale | never_checked`.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "path":            { "type": "string" },
+                                "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","never_checked"] },
+                                "checked_at_unix": { "type": ["integer","null"] },
+                                "mtime_unix":      { "type": ["integer","null"] },
+                                "errors":          { "type": "integer" },
+                                "warnings":        { "type": "integer" }
+                            }
+                        }
+                    }
                 }
             })),
         }
@@ -146,16 +196,32 @@ impl Tool for LintStatusTool {
         ))
     }
 
-    async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let explicit_active = self
             .watcher_active
             .as_ref()
             .map(|f| f.load(Ordering::Relaxed));
 
+        // Resolve the per-file query (if any). `files` wins over
+        // `changed`; both unset means workspace-only mode.
+        let query_paths = self.resolve_query_paths(params);
+
         let is_running = self.store.run_in_progress().await.unwrap_or(false);
 
         if is_running {
             // Run in progress = watcher is doing real work right now.
+            // Per-file freshness is still computable against the
+            // last completed run (if any) — answer the kill query
+            // "are my files clean as of the most recent finish?"
+            // while the workspace check trundles on.
+            let prior = self.store.latest_run().await.ok().flatten();
+            let files_block = if let (Some(paths), Some(run)) = (&query_paths, &prior) {
+                Some(self.build_files_block(paths, run).await)
+            } else {
+                query_paths
+                    .as_ref()
+                    .map(|paths| paths.iter().map(|p| never_checked_entry(p)).collect())
+            };
             return Ok(StepOutput::Json(json!({
                 "status": "running",
                 "summary": null,
@@ -165,6 +231,7 @@ impl Tool for LintStatusTool {
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
                 "watcher_active": derive_watcher_active(explicit_active, None, true),
+                "files": files_block,
             })));
         }
 
@@ -174,6 +241,9 @@ impl Tool for LintStatusTool {
         })?;
 
         let Some(run) = latest else {
+            let files_block = query_paths
+                .as_ref()
+                .map(|paths| paths.iter().map(|p| never_checked_entry(p)).collect::<Vec<_>>());
             return Ok(StepOutput::Json(json!({
                 "status": "never_run",
                 "summary": null,
@@ -183,6 +253,7 @@ impl Tool for LintStatusTool {
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
                 "watcher_active": derive_watcher_active(explicit_active, None, false),
+                "files": files_block,
             })));
         };
 
@@ -205,12 +276,24 @@ impl Tool for LintStatusTool {
             "fresh_failing"
         };
 
-        let errors: Vec<_> = self
-            .store
-            .latest_failures(50)
-            .await
-            .unwrap_or_default()
-            .into_iter()
+        let raw_failures = self.store.latest_failures(50).await.unwrap_or_default();
+        let raw_warnings = self.store.latest_warnings(50).await.unwrap_or_default();
+
+        // Filter top-level diagnostics to the queried file set when
+        // a filter is active. The unfiltered counts are still in
+        // `summary` (workspace-level), so this is purely an
+        // ergonomic narrowing of the per-finding lists.
+        let (failures, warnings_raw) = if let Some(paths) = &query_paths {
+            (
+                filter_results_by_paths(&raw_failures, paths, self.workspace_root.as_deref()),
+                filter_results_by_paths(&raw_warnings, paths, self.workspace_root.as_deref()),
+            )
+        } else {
+            (raw_failures.clone(), raw_warnings.clone())
+        };
+
+        let errors: Vec<_> = failures
+            .iter()
             .map(|f| {
                 json!({
                     "file": f.file,
@@ -223,12 +306,8 @@ impl Tool for LintStatusTool {
             })
             .collect();
 
-        let warnings: Vec<_> = self
-            .store
-            .latest_warnings(50)
-            .await
-            .unwrap_or_default()
-            .into_iter()
+        let warnings: Vec<_> = warnings_raw
+            .iter()
             .map(|w| {
                 json!({
                     "file": w.file,
@@ -243,6 +322,23 @@ impl Tool for LintStatusTool {
             .iter()
             .map(|p| p.to_string_lossy().to_string())
             .collect();
+
+        // Per-file freshness, populated only when the caller asked
+        // for it. Reuses the same raw_* diagnostics so the per-file
+        // counts agree with the (possibly filtered) top-level
+        // arrays.
+        let files_block: Option<Vec<serde_json::Value>> = if let Some(paths) = &query_paths {
+            Some(
+                paths
+                    .iter()
+                    .map(|p| {
+                        self.freshness_entry(p, &run, &stale, &raw_failures, &raw_warnings)
+                    })
+                    .collect(),
+            )
+        } else {
+            None
+        };
 
         Ok(StepOutput::Json(json!({
             "status": status,
@@ -259,7 +355,258 @@ impl Tool for LintStatusTool {
             "age_seconds": age_seconds,
             "watched_scope": self.watched_scope,
             "watcher_active": derive_watcher_active(explicit_active, Some(age_seconds), false),
+            "files": files_block,
         })))
+    }
+}
+
+impl LintStatusTool {
+    /// Parse the `files` / `changed` params and resolve to absolute
+    /// paths. Returns `None` when neither param is set (workspace-only
+    /// mode — existing callers see no behaviour change).
+    fn resolve_query_paths(&self, params: &serde_json::Value) -> Option<Vec<PathBuf>> {
+        let explicit: Option<Vec<String>> = params
+            .get("files")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect()
+            });
+        let want_changed = params
+            .get("changed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let raw: Vec<String> = if let Some(paths) = explicit {
+            // `files` wins over `changed` if both are supplied.
+            paths
+        } else if want_changed {
+            self.git_changed_files().unwrap_or_default()
+        } else {
+            return None;
+        };
+
+        let resolved: Vec<PathBuf> = raw
+            .into_iter()
+            .map(|p| self.canonicalize_query_path(&p))
+            .collect();
+        Some(resolved)
+    }
+
+    /// Resolve a caller-supplied path. Absolute → as-is. Relative →
+    /// joined to workspace_root if known, else cwd. Canonicalization
+    /// is best-effort: if it fails (deleted file, broken symlink), we
+    /// keep the joined path so the response can still report
+    /// `never_checked` or `stale` honestly.
+    fn canonicalize_query_path(&self, p: &str) -> PathBuf {
+        let raw = PathBuf::from(p);
+        let joined = if raw.is_absolute() {
+            raw
+        } else if let Some(root) = &self.workspace_root {
+            root.join(&raw)
+        } else {
+            std::env::current_dir()
+                .map(|cwd| cwd.join(&raw))
+                .unwrap_or(raw)
+        };
+        std::fs::canonicalize(&joined).unwrap_or(joined)
+    }
+
+    /// `git diff --name-only HEAD` + untracked Rust files. Returns
+    /// workspace-relative paths; canonicalization happens later.
+    /// Silent on failure (no git, no HEAD, not a repo) — the caller
+    /// gets an empty list and the response shape stays consistent.
+    fn git_changed_files(&self) -> Option<Vec<String>> {
+        let root = self.workspace_root.as_ref()?;
+        let mut out: Vec<String> = Vec::new();
+        let diff = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["diff", "--name-only", "HEAD"])
+            .output()
+            .ok()?;
+        if diff.status.success() {
+            for line in String::from_utf8_lossy(&diff.stdout).lines() {
+                if line.ends_with(".rs") {
+                    out.push(line.to_string());
+                }
+            }
+        }
+        // Pick up new files that aren't yet tracked.
+        let untracked = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(["ls-files", "--others", "--exclude-standard"])
+            .output()
+            .ok()?;
+        if untracked.status.success() {
+            for line in String::from_utf8_lossy(&untracked.stdout).lines() {
+                if line.ends_with(".rs") {
+                    out.push(line.to_string());
+                }
+            }
+        }
+        Some(out)
+    }
+
+    /// Build the `files[]` array from an already-resolved list of
+    /// query paths against a known prior run. Used in the
+    /// `running` branch where we're answering "as of the last
+    /// completed run, were these clean?"
+    async fn build_files_block(
+        &self,
+        paths: &[PathBuf],
+        run: &LintRunSummary,
+    ) -> Vec<serde_json::Value> {
+        let stale = self
+            .store
+            .stale_files_since_last_run()
+            .await
+            .unwrap_or_default();
+        let failures = self.store.latest_failures(200).await.unwrap_or_default();
+        let warnings = self.store.latest_warnings(200).await.unwrap_or_default();
+        paths
+            .iter()
+            .map(|p| self.freshness_entry(p, run, &stale, &failures, &warnings))
+            .collect()
+    }
+
+    /// Compute the per-file freshness JSON entry. The status enum
+    /// mirrors the workspace status vocabulary so callers parse
+    /// both levels with the same rule.
+    fn freshness_entry(
+        &self,
+        path: &Path,
+        run: &LintRunSummary,
+        stale: &[PathBuf],
+        failures: &[LintResult],
+        warnings: &[LintResult],
+    ) -> serde_json::Value {
+        let checked_at_unix = run
+            .finished_at
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_secs() as i64);
+        let mtime_unix = std::fs::metadata(path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64);
+
+        let path_str = path.to_string_lossy();
+        let is_stale_marked = stale.iter().any(|s| paths_match(s, path));
+        let file_mtime_after_run = match (mtime_unix, checked_at_unix) {
+            (Some(m), Some(c)) => m > c,
+            _ => false,
+        };
+
+        let file_failures = failures
+            .iter()
+            .filter(|r| diag_matches_path(&r.file, path, self.workspace_root.as_deref()))
+            .count();
+        let file_warnings = warnings
+            .iter()
+            .filter(|r| diag_matches_path(&r.file, path, self.workspace_root.as_deref()))
+            .count();
+
+        let status = if is_stale_marked || file_mtime_after_run {
+            "stale"
+        } else if file_failures > 0 {
+            "fresh_failing"
+        } else {
+            "fresh_passing"
+        };
+
+        json!({
+            "path": path_str,
+            "status": status,
+            "checked_at_unix": checked_at_unix,
+            "mtime_unix": mtime_unix,
+            "errors": file_failures,
+            "warnings": file_warnings,
+        })
+    }
+}
+
+/// Default per-file entry for "no run has happened" or "watcher
+/// hasn't seen anything" cases. Reports `never_checked` plus
+/// best-effort mtime so the caller still knows the file exists.
+fn never_checked_entry(path: &Path) -> serde_json::Value {
+    let mtime_unix = std::fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64);
+    json!({
+        "path": path.to_string_lossy(),
+        "status": "never_checked",
+        "checked_at_unix": serde_json::Value::Null,
+        "mtime_unix": mtime_unix,
+        "errors": 0,
+        "warnings": 0,
+    })
+}
+
+/// Filter a raw diagnostics vec down to the files in `query_paths`.
+/// Cargo's `file` column may be workspace-relative or absolute; we
+/// resolve both sides to the same shape before comparing.
+fn filter_results_by_paths(
+    raw: &[LintResult],
+    query_paths: &[PathBuf],
+    workspace_root: Option<&Path>,
+) -> Vec<LintResult> {
+    raw.iter()
+        .filter(|r| {
+            query_paths
+                .iter()
+                .any(|qp| diag_matches_path(&r.file, qp, workspace_root))
+        })
+        .cloned()
+        .collect()
+}
+
+/// True iff a diagnostic's `file` column refers to `query_path`.
+/// Handles three flavours cargo emits: absolute, workspace-relative,
+/// and `crate-name/src/...` shapes. The query path is already
+/// canonicalized to absolute; we normalize the diagnostic the same
+/// way and compare. Suffix-match is the last-resort fallback for
+/// odd cargo output forms.
+fn diag_matches_path(diag_file: &str, query_path: &Path, workspace_root: Option<&Path>) -> bool {
+    let diag = Path::new(diag_file);
+    if diag.is_absolute() {
+        if let (Ok(a), Ok(b)) = (std::fs::canonicalize(diag), std::fs::canonicalize(query_path)) {
+            return a == b;
+        }
+        return diag == query_path;
+    }
+    if let Some(root) = workspace_root {
+        let joined = root.join(diag);
+        if let (Ok(a), Ok(b)) = (
+            std::fs::canonicalize(&joined),
+            std::fs::canonicalize(query_path),
+        ) {
+            if a == b {
+                return true;
+            }
+        }
+    }
+    // Suffix fallback — handles edge cases like cargo emitting
+    // `corpus-engine/src/recipe.rs` without a leading
+    // `commonwealth-ai/`.
+    query_path.to_string_lossy().ends_with(diag_file)
+}
+
+/// True iff two paths refer to the same file. Used for the stale
+/// list, which is stored as caller-supplied PathBufs (could be
+/// either absolute or relative depending on who marked them).
+fn paths_match(a: &Path, b: &Path) -> bool {
+    if a == b {
+        return true;
+    }
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(ca), Ok(cb)) => ca == cb,
+        _ => false,
     }
 }
 
@@ -294,4 +641,82 @@ fn derive_watcher_active(
         return true;
     }
     matches!(last_run_age_secs, Some(age) if age < WATCHER_FRESH_SECS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diag_matches_path_absolute() {
+        let tmp = std::env::temp_dir().join("lint_status_match_abs.rs");
+        std::fs::write(&tmp, b"").unwrap();
+        let canonical = std::fs::canonicalize(&tmp).unwrap();
+        assert!(diag_matches_path(
+            canonical.to_str().unwrap(),
+            &canonical,
+            None
+        ));
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn diag_matches_path_workspace_relative() {
+        // Stage a temp workspace with a real file so canonicalize() succeeds.
+        let workspace = std::env::temp_dir().join("lint_status_ws_rel");
+        std::fs::create_dir_all(workspace.join("src")).unwrap();
+        let file = workspace.join("src").join("lib.rs");
+        std::fs::write(&file, b"").unwrap();
+        let canonical = std::fs::canonicalize(&file).unwrap();
+        // Cargo would emit a workspace-relative diagnostic.
+        assert!(diag_matches_path("src/lib.rs", &canonical, Some(&workspace)));
+        std::fs::remove_file(&file).ok();
+        std::fs::remove_dir_all(&workspace).ok();
+    }
+
+    #[test]
+    fn diag_matches_path_suffix_fallback() {
+        // Crate-name-prefixed diagnostic when the canonical workspace
+        // join doesn't resolve. Suffix-match is the safety net.
+        let query = PathBuf::from("/tmp/some/synthetic/path/corpus-engine/src/recipe.rs");
+        assert!(diag_matches_path(
+            "corpus-engine/src/recipe.rs",
+            &query,
+            None
+        ));
+    }
+
+    #[test]
+    fn never_checked_entry_reports_null_checked_at() {
+        let entry = never_checked_entry(&PathBuf::from("/tmp/does-not-exist.rs"));
+        assert_eq!(entry["status"], "never_checked");
+        assert!(entry["checked_at_unix"].is_null());
+        assert_eq!(entry["errors"], 0);
+        assert_eq!(entry["warnings"], 0);
+    }
+
+    #[test]
+    fn resolve_query_paths_prefers_explicit_files_over_changed() {
+        let store = Arc::new(
+            LintResultStore::open(std::path::Path::new(":memory:")).unwrap(),
+        );
+        let tool = LintStatusTool::new(store).with_workspace_root(std::env::temp_dir());
+        let params = json!({
+            "files": ["a.rs", "b.rs"],
+            "changed": true,
+        });
+        let resolved = tool.resolve_query_paths(&params).unwrap();
+        // Two paths in, two out — `files` was used, `changed` did
+        // not append a git-derived list on top.
+        assert_eq!(resolved.len(), 2);
+    }
+
+    #[test]
+    fn resolve_query_paths_returns_none_when_neither_set() {
+        let store = Arc::new(
+            LintResultStore::open(std::path::Path::new(":memory:")).unwrap(),
+        );
+        let tool = LintStatusTool::new(store);
+        assert!(tool.resolve_query_paths(&json!({})).is_none());
+    }
 }

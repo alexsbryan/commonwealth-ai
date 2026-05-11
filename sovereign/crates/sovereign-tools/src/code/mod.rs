@@ -72,6 +72,13 @@ pub mod spec;
 #[cfg(feature = "treesitter")]
 pub mod drift;
 
+// Architectural-drift freshness gate — sibling to lint_status /
+// test_status. Reads the fingerprint sidecar the drift orchestrator
+// writes; reports fresh/stale/partial/never_run against the
+// narrative docs. Replaces the launchd-cron trigger model.
+#[cfg(feature = "treesitter")]
+pub mod drift_posture;
+
 // Working notes tools.
 #[cfg(feature = "treesitter")]
 pub mod write_note;
@@ -154,6 +161,11 @@ pub use build::BuildTool;
 pub use spec::SpecTool;
 #[cfg(feature = "treesitter")]
 pub use drift::DriftTool;
+#[cfg(feature = "treesitter")]
+pub use drift_posture::{
+    compute_posture, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool,
+    PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
+};
 
 #[cfg(feature = "treesitter")]
 pub use write_note::WriteNoteTool;

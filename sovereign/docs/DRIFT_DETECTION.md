@@ -260,16 +260,132 @@ The digest section is summary-only (counts + 5 examples per kind);
 the full per-marker list lives in the rough-edges JSON sidecar at
 `<output>.rough.json`.
 
+### Tier 2 smells
+
+Two additional structural scans that don't need an LLM:
+
+- **Absolute user paths** (`FindingKind::Smell(AbsoluteUserPath)`,
+  Severity::Likely) — string literals beginning `"/Users/..."`,
+  `"/home/..."`, or `"C:\\Users\\..."` in `src/**/*.rs` outside
+  `tests/` and `examples/`. Catches portability bugs of the shape
+  the audit found in `drift_cmd_orchestrator.rs` (which hardcoded
+  `/Users/alexsbryan/.local/bin/sovereign` and broke on cloud peers).
+- **Zero-tracing files** (`FindingKind::Smell(ZeroTracing)`,
+  Severity::Note) — `.rs` files >300 lines that contain at least one
+  `fn`/`impl` declaration but no `tracing::` calls. The glassbox
+  principle (`ARCH_PRINCIPLES.md` §9.1) says every non-obvious
+  decision in production code should emit a tracing event;
+  pure-data files (no `fn`/`impl`) are exempt by the gate. The
+  reference of compliance is `sovereign-mesh/src/auto_ingest.rs`
+  (47 events / 1236 LOC).
+
+Both scans skip `tests/` and `examples/` directories — test fixtures
+need real paths and example code is allowed to be developer-specific.
+
+## Cadence and gating
+
+`sovereign drift detect` is **lazily evaluated**, not scheduled. The
+report is treated as a piece of state that has a freshness lifetime —
+just like `lint_status` or `test_status`. Two gates and one signal
+read that state; the LLM-bound rebuild fires only when something
+asks for fresh data.
+
+### How freshness is determined
+
+On a successful run, the orchestrator writes a fingerprint sidecar
+at `~/.sovereign/drift/.fingerprint` recording the SHA-256 of every
+narrative doc that fed the report. A new tool, `drift_posture`,
+reads that fingerprint, re-hashes the live narrative docs, and
+reports one of four states:
+
+- **`fresh`** — every narrative hash matches.
+- **`stale`** — at least one narrative doc changed since the last run.
+- **`partial`** — fingerprint missing one of the requested narratives
+  (a new doc was added since the last run).
+- **`never_run`** — no fingerprint or report exists yet.
+
+SHA-256 is the right signal, not mtime: `git checkout` and `touch`
+both flip mtime without changing content, and the report costs
+25-30 minutes per narrative — we don't want to invalidate it for
+a no-op.
+
+### Gate 1: session-start brief (the signal)
+
+The session-start working-set brief (commit `a0543ce`) calls
+`drift_posture` and renders a one-line "Drift posture" section:
+
+```
+## Drift posture
+
+stale · last run 2d ago · 4 Act-on findings
+↳ ARCH_PRINCIPLES §7.2 — "knowledge_view_recipes_are_structurally_local"
+↳ SYSTEM_OVERVIEW §10.1b — recipe.rs split sequenced after RecipeId enumify
+↳ ARCH_PRINCIPLES §3.3 — atos_cmd/run.rs 4328 lines, split deferred
+```
+
+When the brief sees `stale` or `never_run`, that's the prompt for
+the operator to run `sovereign drift detect`. No cron, no surprise
+midnight LLM job — the human is in the loop, asked explicitly.
+
+### Gate 2: pre-push ratchet (the merge gate)
+
+The existing pre-push hook (commit `8c765ed`) reads the same
+`drift_posture` output. When the push includes commits to a
+narrative doc (`SYSTEM_OVERVIEW.md` / `ARCH_PRINCIPLES.md`), the
+hook requires `drift_posture` to be `fresh` against the post-push
+state — i.e. the operator must re-run `sovereign drift detect`
+before pushing narrative changes. PRs that don't touch the
+narratives pass-through unchanged. Other axes (rough-edges count,
+file-size outliers, principle-inquiry witness score) ratchet
+independently per the §10 deferral list.
+
+### Why lazy beats cron
+
+- The cron model invalidated the report on a clock tick, not a
+  meaningful change. A repo that hadn't seen a single commit
+  Sunday-to-Sunday would still spend 50 minutes of LLM time
+  rebuilding the same report.
+- The cron model also required per-machine install (launchd plist
+  with `{BINARY}`/`{REPO}`/`{HOME}` substitutions), which doesn't
+  travel with the repo. The fingerprint sidecar travels with the
+  developer's `~/.sovereign/`, but the freshness check is part of
+  the binary — no install step.
+- Lazy evaluation composes cleanly with the existing freshness-gate
+  pattern (`lint_status`, `test_status`). One mental model for "is
+  this cached result current against the inputs?" applies to all
+  three.
+
+### Calling `drift_posture` directly
+
+```bash
+sovereign tools call drift_posture
+# {
+#   "status": "stale",
+#   "last_run_at_unix": 1715432100,
+#   "age_seconds": 86400,
+#   "act_on_count": 4,
+#   "top_critical": [...],
+#   "narrative_paths": ["..."],
+#   "stale_paths": ["...SYSTEM_OVERVIEW.md"],
+#   "output_path": "/Users/.../latest.md"
+# }
+```
+
+Cheap (two file reads + two SHA-256 hashes). No network, no LLM,
+no cargo lock contention. Designed to be called on every prompt
+without thinking about cost.
+
 ## Out of scope (for now)
 
 - **Live re-extraction on doc/code edits** — drift is one-shot per
   invocation. Watcher integration is future work.
 - **Auto-fix suggestions** — the report names actions but doesn't
   generate diffs.
-- **Tier 2/3 internal contradictions** — convergent parallel
+- **Tier 3 internal contradictions** — convergent parallel
   implementations (clustering on structural atoms) and trait-impl
   contract violations (LLM validation per impl). Pending. Tier 0
-  (markers) and tier 1 (rustdoc-vs-signature drift) ship in v1.
+  (markers), tier 1 (rustdoc-vs-signature drift), and tier 2 (smells
+  — see below) ship today.
 - **Non-markdown narrative formats** — docx, asciidoc,
   restructuredtext. The extractor surface generalises (each gets its
   own Extractor impl); v1 ships markdown only.

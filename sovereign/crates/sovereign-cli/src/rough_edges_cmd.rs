@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 
 use corpus_engine::rough_edges::{
-    scan_all, DocDriftKind, FindingKind, MarkerKind, RoughEdgeFinding, Severity,
+    scan_all, DocDriftKind, FindingKind, MarkerKind, RoughEdgeFinding, Severity, SmellKind,
 };
 
 pub async fn run(args: &[String]) -> i32 {
@@ -206,6 +206,7 @@ struct JsonReport {
 fn summary_line(findings: &[RoughEdgeFinding]) -> String {
     let mut markers = 0usize;
     let mut doc_drift = 0usize;
+    let mut smells = 0usize;
     let mut critical = 0usize;
     let mut likely = 0usize;
     let mut note = 0usize;
@@ -213,6 +214,7 @@ fn summary_line(findings: &[RoughEdgeFinding]) -> String {
         match f.kind {
             FindingKind::Marker(_) => markers += 1,
             FindingKind::DocDrift(_) => doc_drift += 1,
+            FindingKind::Smell(_) => smells += 1,
         }
         match f.severity {
             Severity::Critical => critical += 1,
@@ -221,7 +223,7 @@ fn summary_line(findings: &[RoughEdgeFinding]) -> String {
         }
     }
     format!(
-        "{} findings ({markers} markers · {doc_drift} doc-drift · {critical} critical · {likely} likely · {note} note)",
+        "{} findings ({markers} markers · {doc_drift} doc-drift · {smells} smells · {critical} critical · {likely} likely · {note} note)",
         findings.len()
     )
 }
@@ -317,6 +319,43 @@ fn render_markdown(
             out.push_str(&format!(
                 "- *…and {} more (see JSON sidecar)*\n",
                 doc_drift.len() - cap
+            ));
+        }
+        out.push('\n');
+    }
+
+    // Smells (tier-2) section.
+    let smells: Vec<&RoughEdgeFinding> = findings
+        .iter()
+        .filter(|f| matches!(f.kind, FindingKind::Smell(_)))
+        .collect();
+    if !smells.is_empty() {
+        out.push_str(&format!(
+            "## Smells ({})\n\n_Code smells the structural-correctness layer flags: \
+             absolute developer paths in source (portability), large files with zero \
+             tracing events (§9.1 glassbox)._\n\n",
+            smells.len()
+        ));
+        let cap = 50;
+        for f in smells.iter().take(cap) {
+            let rel = relativize(&f.file, source_path);
+            let kind_label = match f.kind {
+                FindingKind::Smell(SmellKind::AbsoluteUserPath) => "absolute-user-path",
+                FindingKind::Smell(SmellKind::ZeroTracing) => "zero-tracing",
+                _ => "other",
+            };
+            out.push_str(&format!(
+                "- `{}:{}` ({}) — {}\n",
+                rel.display(),
+                f.line,
+                kind_label,
+                f.message
+            ));
+        }
+        if smells.len() > cap {
+            out.push_str(&format!(
+                "- *…and {} more (see JSON sidecar)*\n",
+                smells.len() - cap
             ));
         }
         out.push('\n');

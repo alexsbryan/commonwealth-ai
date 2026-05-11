@@ -164,9 +164,20 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // Watcher tools — no `with_watcher_active` here. The CLI is a
     // reader over the daemon's shared store; the tools' built-in
     // freshness heuristic decides `watcher_active` from data age.
-    tools.register(Box::new(sovereign_tools::LintStatusTool::new(Arc::clone(
-        &lint_store,
-    ))));
+    // `with_workspace_root` enables per-file freshness queries
+    // (`lint_status --files <paths>` and `lint_status --changed`).
+    tools.register(Box::new(
+        sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
+            .with_workspace_root(repo_root.clone()),
+    ));
+    // Architectural-drift freshness gate — sibling to lint_status.
+    // Replaces the launchd-cron trigger model: the brief / pre-push
+    // hook query this; the orchestrator writes the fingerprint after
+    // a successful run.
+    tools.register(Box::new(
+        sovereign_tools::DriftPostureTool::new()
+            .with_workspace_root(repo_root.clone()),
+    ));
     tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
         Arc::clone(&lint_store),
     )));

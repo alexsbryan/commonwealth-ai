@@ -98,6 +98,11 @@ pub struct BriefInputs<'a> {
     /// Optional ATOS feature id to scope notes (mirrors
     /// `inject-notes.sh` behaviour).
     pub feature_id: Option<&'a str>,
+    /// Directory holding the architectural-drift fingerprint +
+    /// report (typically `~/.sovereign/drift/`). When provided and
+    /// `repo_root` is set, a "Drift posture" section is rendered.
+    /// `None` ⇒ skip the section.
+    pub drift_dir: Option<&'a Path>,
 }
 
 /// The structural-atlas-side sidecar produced by `sovereign git-archaeology`.
@@ -131,8 +136,20 @@ pub async fn assemble_brief(
     let s1 = render_working_set(inputs.working_set);
     push_if_fits(&mut out, &mut remaining, &s1);
 
+    // Section 1.4: Drift posture.
+    // Slots between working-set and principles because drift status
+    // ("are the narrative docs still anchored to the code?") frames
+    // *every* principle the next section would cite — a stale doc
+    // means cited principles may not match the current code.
+    if let (Some(drift_dir), Some(repo_root)) = (inputs.drift_dir, inputs.repo_root) {
+        let s_drift = render_drift_posture(drift_dir, repo_root);
+        if !s_drift.is_empty() {
+            push_if_fits(&mut out, &mut remaining, &s_drift);
+        }
+    }
+
     // Section 1.5: Principles for this area.
-    // Slotted between working-set and notes so the model sees
+    // Slotted between drift posture and notes so the model sees
     // architectural commitments before any narrative claims.
     if let Some(inquiries_dir) = inputs.inquiries_dir {
         let s_principles =
@@ -214,6 +231,106 @@ fn render_working_set(files: &[PathBuf]) -> String {
     }
     out.push('\n');
     out
+}
+
+/// Render the drift posture section using the same freshness logic
+/// the `drift_posture` MCP tool exposes. Cheap — reads the fingerprint
+/// sidecar + SHA-256 hashes a couple of small markdown files.
+///
+/// Skipped (empty string) when the posture has nothing actionable to
+/// say (`fresh` with no Act-on findings) — a clean drift state is
+/// the default and shouldn't burn brief tokens.
+fn render_drift_posture(drift_dir: &Path, repo_root: &Path) -> String {
+    use crate::code::drift_posture::{compute_posture, PostureStatus, DEFAULT_NARRATIVES};
+
+    let narrative_paths: Vec<PathBuf> = DEFAULT_NARRATIVES
+        .iter()
+        .map(|p| {
+            let joined = repo_root.join(p);
+            std::fs::canonicalize(&joined).unwrap_or(joined)
+        })
+        .collect();
+    let posture = compute_posture(drift_dir, &narrative_paths);
+
+    // Skip the section entirely when there's nothing the operator
+    // needs to act on. `fresh` + zero Act-on = noise.
+    let act_on = posture.act_on_count.unwrap_or(0);
+    if matches!(posture.status, PostureStatus::Fresh) && act_on == 0 {
+        return String::new();
+    }
+
+    let mut out = String::from("## Drift posture\n\n");
+    let status_line = match posture.status {
+        PostureStatus::Fresh => format!(
+            "fresh · {} Act-on finding{}",
+            act_on,
+            if act_on == 1 { "" } else { "s" }
+        ),
+        PostureStatus::Stale => {
+            let age = posture
+                .age_seconds
+                .map(|s| format!(" · last run {}", humanize_age(s)))
+                .unwrap_or_default();
+            let touched = if posture.stale_paths.len() == 1 {
+                " · 1 narrative doc changed".to_string()
+            } else {
+                format!(" · {} narrative docs changed", posture.stale_paths.len())
+            };
+            format!("**stale**{age}{touched}")
+        }
+        PostureStatus::Partial => "**partial** · new narrative doc(s) since last run".into(),
+        PostureStatus::NeverRun => {
+            "**never run** — `sovereign drift detect` to seed the report".into()
+        }
+    };
+    out.push_str(&status_line);
+    out.push_str("\n\n");
+
+    // Surface the top 3 critical findings when we have them — those
+    // are the deviations the next session is most likely to need
+    // to act on.
+    for c in posture.top_critical.iter().take(3) {
+        let section = c
+            .section
+            .as_deref()
+            .map(|s| format!(" {}", s))
+            .unwrap_or_default();
+        let doc = if c.doc.is_empty() {
+            String::new()
+        } else {
+            format!("{}", c.doc)
+        };
+        out.push_str(&format!(
+            "- {doc}{section} — {}\n",
+            truncate_to_chars(&c.claim, 140)
+        ));
+    }
+    if act_on > 3 {
+        out.push_str(&format!("- _+{} more (see `~/.sovereign/drift/latest.md`)_\n", act_on - 3));
+    }
+
+    // Hint the operator at the remediation when stale or never-run.
+    if matches!(posture.status, PostureStatus::Stale | PostureStatus::NeverRun) {
+        out.push_str("\nRun `sovereign drift detect` to refresh.\n");
+    }
+
+    out.push('\n');
+    out
+}
+
+/// Render an age delta as a short human string. Used by the drift
+/// posture section header so "stale · last run 2d ago" beats
+/// "stale · last run 172800s ago" for readability.
+fn humanize_age(seconds: u64) -> String {
+    if seconds < 60 {
+        format!("{seconds}s ago")
+    } else if seconds < 3_600 {
+        format!("{}m ago", seconds / 60)
+    } else if seconds < 86_400 {
+        format!("{}h ago", seconds / 3_600)
+    } else {
+        format!("{}d ago", seconds / 86_400)
+    }
 }
 
 /// Surface architectural commitments (inquiries) that target a file
@@ -512,6 +629,7 @@ mod tests {
             branch_name: "main",
             budget_tokens: 1500,
             feature_id: None,
+            drift_dir: None,
         };
         let brief = assemble_brief(inputs, &notes).await.unwrap();
         assert!(brief.contains("# Project context: test @ main"));
@@ -536,6 +654,7 @@ mod tests {
             branch_name: "main",
             budget_tokens: 4000,
             feature_id: None,
+            drift_dir: None,
         };
         let brief = assemble_brief(inputs, &notes).await.unwrap();
         assert!(brief.contains("`f0.rs`"));
@@ -571,6 +690,7 @@ mod tests {
             branch_name: "main",
             budget_tokens: 4000,
             feature_id: None,
+            drift_dir: None,
         };
         let brief = assemble_brief(inputs, &notes).await.unwrap();
         assert!(brief.contains("Recent activity"));
@@ -595,6 +715,7 @@ mod tests {
             branch_name: "main",
             budget_tokens: 50,
             feature_id: None,
+            drift_dir: None,
         };
         let brief = assemble_brief(inputs, &notes).await.unwrap();
         let cost = estimate_tokens(&brief);
