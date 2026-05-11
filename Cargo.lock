@@ -8645,6 +8645,7 @@ dependencies = [
  "sovereign-core",
  "sovereign-inference",
  "sovereign-mesh",
+ "sovereign-pipeline",
  "sovereign-store",
  "sovereign-tools",
  "tempfile",
@@ -8805,6 +8806,24 @@ dependencies = [
  "tower-http",
  "tracing",
  "urlencoding",
+ "uuid",
+]
+
+[[package]]
+name = "sovereign-pipeline"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
  "uuid",
 ]
 

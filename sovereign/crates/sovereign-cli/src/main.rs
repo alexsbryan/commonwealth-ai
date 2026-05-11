@@ -46,6 +46,7 @@ mod project_toml;
 mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
+mod pipeline_cmd;
 mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;
@@ -198,6 +199,7 @@ const HELP: Help = Help {
             ("doctor",  "Diagnose setup and daemon health"),
             ("reflect", "Review session reflections; retire fixed ones"),
             ("recipe",  "Run a corpus ingestion recipe"),
+            ("pipeline", "Generic ingestion driver — durable worklist + retry + pause-resume"),
             ("bench",   "Throughput + correctness benchmarks for enrichment LLM tasks"),
             ("atlas",   "Atlas-style structural enrichment (Wikipedia link graph today)"),
             ("eval",    "Run a question bank against a corpus; measure retrieval quality"),
@@ -409,6 +411,11 @@ async fn main() {
             }
             "recipe" => {
                 let code = recipe_cmd::run_recipe(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "pipeline" => {
+                util::tracing_init::init_tracing("sovereign_cli=info,sovereign_pipeline=info");
+                let code = pipeline_cmd::run_pipeline(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "recipe-agent" => {

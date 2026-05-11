@@ -1,0 +1,75 @@
+# SEP core ingestion — `sovereign pipeline` recipe.
+#
+# Each work unit is one SEP slug (e.g. `compatibilism`). The driver
+# shells out to:
+#
+#   sovereign enrich sep-ingest <slug> --force
+#   sovereign enrich build sep-<slug>
+#
+# Idempotence comes from sovereign's own enrichment layer (atoms.json
+# check inside `enrich build`) plus the worklist's `done` state. Re-
+# running this recipe is safe — already-completed slugs are skipped
+# at the worklist level; previously-finished slugs that were re-seeded
+# are skipped inside `enrich build` itself.
+#
+# ## Operational defaults
+#
+# - `concurrency = 1` keeps a single laptop honest. Mesh-distributed
+#   runs should override at the driver level (concurrency = number of
+#   mesh slots) — the work itself is per-slug-atomic so there's no
+#   coordination across drivers.
+# - `max_attempts = 3` covers transient peer drops and brief mesh
+#   capacity squeezes. A unit that fails three times is almost
+#   always a data bug (404 slug, broken parquet row) not a peer issue.
+# - `timeout_secs = 7200` (2h) — long SEP articles (e.g. set-theory)
+#   can take 20+ min per phase on commodity hardware.
+# - `[schedule.active_hours]` is left commented; uncomment to make
+#   the driver auto-pause during waking hours.
+
+[recipe]
+id      = "sep-core-v1"
+version = 1
+
+[source]
+# Default: enumerate every SEP slug available from the cached parquet.
+# Batteries-included — `sovereign pipeline run sep-core-v1.toml` Just
+# Works regardless of corpus state. If the parquet isn't acquired yet
+# the command fails with a clear "run `sovereign corpus acquire sep`"
+# message at seed time.
+#
+# To run against a curated subset instead, pass `--slugs <file>` or
+# `--key <slug>` to `pipeline run`. The recipe-level default stays
+# the full corpus so partial-run usage is purely additive.
+type    = "command"
+command = "sovereign enrich sep-ingest --list"
+
+[enrich]
+# `&&` short-circuits — if sep-ingest fails (404 slug, missing
+# parquet, etc.), enrich build is never invoked and the unit fails
+# fast with a clear stderr.
+command      = "sovereign enrich sep-ingest {key} --force && sovereign enrich build sep-{key}"
+timeout_secs = 7200
+
+# Built-in classifier covers timeout / refused / vram_thrash /
+# model_missing / mismatch / unknown. The two custom rules below tag
+# SEP-specific failure modes so the failure-bucket histogram is
+# actionable instead of a sea of `unknown`.
+[[enrich.failure_classifier]]
+bucket          = "sep_phase_validation"
+stderr_pattern  = "Phase \\d+ validation failed|atom schema violation"
+
+[[enrich.failure_classifier]]
+bucket          = "parquet_missing"
+stderr_pattern  = "sep\\.parquet.*not found|run `sovereign corpus acquire sep`"
+
+[dispatch]
+max_attempts = 3
+lease_secs   = 7200
+concurrency  = 1
+
+# Uncomment + tune to auto-pause during the day. The driver finishes
+# in-flight units before sleeping, so a `pipeline run` left running
+# under `tmux` will silently park and resume on schedule.
+#
+# [schedule]
+# active_hours = "22:00-07:00"

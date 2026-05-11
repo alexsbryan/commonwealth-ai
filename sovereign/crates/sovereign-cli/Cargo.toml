@@ -10,6 +10,7 @@ sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 sovereign-mesh = { workspace = true }
 sovereign-atos = { workspace = true }
+sovereign-pipeline = { workspace = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
