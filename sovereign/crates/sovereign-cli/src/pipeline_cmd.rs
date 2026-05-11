@@ -16,7 +16,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use sovereign_pipeline::driver::{DriverConfig, Shutdown};
-use sovereign_pipeline::{recipe::Recipe, run_recipe, status, worklist::Worklist};
+use sovereign_pipeline::{
+    ledger, pod,
+    recipe::Recipe,
+    run_recipe, status,
+    worklist::Worklist,
+};
 use tokio::sync::Mutex;
 
 use crate::util::help::{self, Help, HelpSection};
@@ -42,6 +47,19 @@ const HELP: Help = Help {
             (
                 "list",
                 "List every recipe-id known to the worklist DB.",
+            ),
+            (
+                "pod up",
+                "Launch a Vast.ai pod with the sovereign CUDA image, join the mesh, \
+                 register in the cost ledger.",
+            ),
+            (
+                "pod list",
+                "Show every pod the ledger knows about with accrued cost.",
+            ),
+            (
+                "pod down <vast-id>",
+                "Destroy a Vast pod, close its ledger entry, print final cost.",
             ),
         ]),
         HelpSection::Flags(&[
@@ -94,6 +112,7 @@ pub async fn run_pipeline(args: &[String]) -> i32 {
         "run" => cmd_run(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
         "list" => cmd_list(&args[1..]).await,
+        "pod" => cmd_pod(&args[1..]).await,
         other => {
             eprintln!("unknown subcommand: {other}");
             help::print(&HELP);
@@ -307,6 +326,277 @@ async fn cmd_list(args: &[String]) -> i32 {
         }
     }
     0
+}
+
+async fn cmd_pod(args: &[String]) -> i32 {
+    if args.is_empty() {
+        eprintln!("usage: sovereign pipeline pod <up | list | down> [flags]");
+        return 2;
+    }
+    match args[0].as_str() {
+        "up" => cmd_pod_up(&args[1..]).await,
+        "list" => cmd_pod_list(&args[1..]),
+        "down" => cmd_pod_down(&args[1..]),
+        other => {
+            eprintln!("unknown pod subcommand: {other}");
+            2
+        }
+    }
+}
+
+async fn cmd_pod_up(args: &[String]) -> i32 {
+    // Defaults tuned for the SEP fanout use case — single 48 GB GPU,
+    // sovereign CUDA image, 80 GB disk for model cache.
+    let mut gpu_name: String = "L40S".into();
+    let mut image: Option<String> = std::env::var("SOVEREIGN_VAST_IMAGE").ok();
+    let mut disk_gb: u32 = 80;
+    let mut recipe_id: String = "ad-hoc".into();
+    let mut label: Option<String> = None;
+    let mut mesh_join_link: Option<String> = std::env::var("MESH_JOIN_LINK").ok();
+    let mut founder_addr: Option<String> = std::env::var("SOVEREIGN_FOUNDER_ADDR").ok();
+    let mut tailscale_authkey: Option<String> = std::env::var("TAILSCALE_AUTHKEY").ok();
+    let mut max_price: f64 = 0.80;
+    let mut dry_run: bool = false;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--gpu" => { i += 1; gpu_name = args[i].clone(); }
+            "--image" => { i += 1; image = Some(args[i].clone()); }
+            "--disk" => { i += 1; disk_gb = args[i].parse().unwrap_or(disk_gb); }
+            "--recipe-id" => { i += 1; recipe_id = args[i].clone(); }
+            "--label" => { i += 1; label = Some(args[i].clone()); }
+            "--mesh-join-link" => { i += 1; mesh_join_link = Some(args[i].clone()); }
+            "--founder-addr" => { i += 1; founder_addr = Some(args[i].clone()); }
+            "--max-price" => { i += 1; max_price = args[i].parse().unwrap_or(max_price); }
+            "--dry-run" => { dry_run = true; }
+            other => {
+                eprintln!("unknown flag: {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    let Some(image) = image else {
+        eprintln!(
+            "no container image. Pass `--image <ref>` or set SOVEREIGN_VAST_IMAGE.\n\
+             Example: --image ghcr.io/<you>/sovereign-cuda:latest"
+        );
+        return 2;
+    };
+    let Some(join_link) = mesh_join_link else {
+        eprintln!(
+            "no mesh-join link. Pass `--mesh-join-link cwth-…` or set MESH_JOIN_LINK.\n\
+             Get one with: sovereign mesh status (look for the join-link line)"
+        );
+        return 2;
+    };
+    let Some(founder) = founder_addr else {
+        eprintln!(
+            "no founder address. Pass `--founder-addr <ip>` or set SOVEREIGN_FOUNDER_ADDR.\n\
+             This is the Tailscale IPv4 of the mesh founder (your laptop, usually)."
+        );
+        return 2;
+    };
+    let Some(ts_key) = tailscale_authkey.take() else {
+        eprintln!(
+            "no Tailscale auth key. Pass via TAILSCALE_AUTHKEY env var.\n\
+             Generate one in the Tailscale admin: Settings → Keys → Generate auth key (reusable)."
+        );
+        return 2;
+    };
+
+    // Build the search query — verified hosts only, CUDA ≥ 12.4 so
+    // the image's CUDA runtime matches at runtime.
+    let query = format!(
+        "gpu_name={gpu_name} verified=true rentable=true cuda_max_good>=12.4 \
+         dph_total<={max_price}"
+    );
+    let offers = match pod::search_offers(&query, 50) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("vastai search failed: {e}");
+            return 1;
+        }
+    };
+    let Some(pick) = pod::pick_offer(&offers) else {
+        eprintln!("no offers matched: {query}");
+        return 1;
+    };
+
+    println!(
+        "selected offer: id={} gpu={} ${:.3}/hr rel={:.2} verified={} loc={}",
+        pick.id, pick.gpu_name, pick.price_per_hour, pick.reliability, pick.verified, pick.geolocation,
+    );
+
+    // Build the onstart command: export env vars, then exec the image
+    // entrypoint. Vast's SSH instance type ignores image ENTRYPOINT
+    // by default, so we invoke it explicitly.
+    let onstart_cmd = format!(
+        "set -eu\n\
+         export TAILSCALE_AUTHKEY='{ts_key}'\n\
+         export MESH_JOIN_LINK='{join_link}'\n\
+         export MESH_SEED_ADDR='{founder}'\n\
+         export SOVEREIGN_FOUNDER_ADDR='{founder}'\n\
+         exec /entrypoint.sh\n",
+    );
+
+    let label_value = label.unwrap_or_else(|| format!("{recipe_id}-pod"));
+    let req = pod::CreateRequest {
+        offer_id: pick.id,
+        image: &image,
+        disk_gb,
+        onstart_cmd: &onstart_cmd,
+        env: "",
+        label: &label_value,
+        ssh: true,
+    };
+
+    if dry_run {
+        println!(
+            "DRY RUN: would create instance via vastai create instance {} \
+             --image {} --disk {} --label {} --ssh --onstart-cmd <…>",
+            pick.id, image, disk_gb, label_value
+        );
+        return 0;
+    }
+
+    let created = match pod::create_instance(&req, pick) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("vastai create failed: {e}");
+            return 1;
+        }
+    };
+
+    let rec = ledger::PodRecord {
+        vast_id: created.vast_id.clone(),
+        label: label_value,
+        recipe_id,
+        gpu_name: created.gpu_name,
+        image: created.image,
+        started_at: ledger::unix_now(),
+        ended_at: None,
+        cost_per_hour: created.cost_per_hour,
+        status: ledger::PodStatus::Running,
+    };
+    if let Err(e) = ledger::append(ledger::default_path(), rec) {
+        eprintln!(
+            "WARNING: pod {} launched but ledger append failed: {e}\n\
+             Track manually until `pod list` resolves.",
+            created.vast_id
+        );
+    }
+
+    println!();
+    println!("pod launched:");
+    println!("  vast id     {}", created.vast_id);
+    println!("  $/hr        {:.3}", created.cost_per_hour);
+    println!("  image       {}", image);
+    println!();
+    println!("Watch it come online with:");
+    println!("  vastai logs {} --tail 50", created.vast_id);
+    println!("Then verify the mesh saw it:");
+    println!("  sovereign mesh status");
+    0
+}
+
+fn cmd_pod_list(_args: &[String]) -> i32 {
+    let path = ledger::default_path();
+    let pods = match ledger::read(&path) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("ledger read failed: {e}");
+            return 1;
+        }
+    };
+    if pods.is_empty() {
+        println!("(no pods in {})", path.display());
+        return 0;
+    }
+    println!(
+        "{:<10} {:<6} {:<22} {:<12} {:>8} {:>10}  {}",
+        "vast_id", "state", "label", "gpu", "$/hr", "accrued", "started_at"
+    );
+    let mut running_total = 0.0;
+    for p in &pods {
+        let cost = ledger::accrued_cost(p);
+        let state = match p.status {
+            ledger::PodStatus::Running => "live",
+            ledger::PodStatus::Closed => "down",
+        };
+        let started = chrono::DateTime::<chrono::Local>::from(
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(p.started_at as u64),
+        );
+        println!(
+            "{:<10} {:<6} {:<22} {:<12} {:>8.3} {:>9.2}$  {}",
+            p.vast_id,
+            state,
+            truncate(&p.label, 22),
+            truncate(&p.gpu_name, 12),
+            p.cost_per_hour,
+            cost,
+            started.format("%Y-%m-%d %H:%M")
+        );
+        if p.status == ledger::PodStatus::Running {
+            running_total += cost;
+        }
+    }
+    println!();
+    println!("running pods accruing: ${:.2}", running_total);
+    0
+}
+
+fn cmd_pod_down(args: &[String]) -> i32 {
+    let Some(vast_id) = args.first().cloned() else {
+        eprintln!("usage: sovereign pipeline pod down <vast-id>");
+        return 2;
+    };
+    let path = ledger::default_path();
+    let cost_before = ledger::read(&path)
+        .ok()
+        .and_then(|pods| pods.into_iter().find(|p| p.vast_id == vast_id))
+        .map(|p| (p.cost_per_hour, ledger::accrued_cost(&p)));
+
+    if let Err(e) = pod::destroy_instance(&vast_id) {
+        eprintln!("vastai destroy failed: {e}");
+        // Continue to ledger close — operator may have already
+        // destroyed the pod manually and just wants to clean up.
+    }
+    match ledger::close(&path, &vast_id) {
+        Ok(rec) => {
+            let total = ledger::accrued_cost(&rec);
+            let hours = ledger::elapsed_hours(&rec);
+            println!("pod {} destroyed.", vast_id);
+            println!("  elapsed     {:.2} h", hours);
+            println!("  $/hr        {:.3}", rec.cost_per_hour);
+            println!("  total cost  ${:.2}", total);
+        }
+        Err(ledger::LedgerError::NotFound(_)) => {
+            if let Some((rate, accrued)) = cost_before {
+                println!("pod {} destroyed (was not in running set).", vast_id);
+                println!("  last-seen rate {:.3} $/hr", rate);
+                println!("  last accrued   ${:.2}", accrued);
+            } else {
+                println!("pod {} destroyed (no ledger entry).", vast_id);
+            }
+        }
+        Err(e) => {
+            eprintln!("ledger close failed: {e}");
+            return 1;
+        }
+    }
+    0
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        s.to_string()
+    } else {
+        let mut t: String = s.chars().take(max.saturating_sub(1)).collect();
+        t.push('…');
+        t
+    }
 }
 
 fn default_db_path() -> PathBuf {

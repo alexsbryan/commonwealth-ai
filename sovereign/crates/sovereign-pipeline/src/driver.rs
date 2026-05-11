@@ -34,6 +34,7 @@ use tokio::process::Command;
 use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 
+use crate::adaptive::{outcome_from_bucket, AdaptiveConcurrency, Outcome};
 use crate::classifier::{classify, ExecOutcome};
 use crate::recipe::{parse_window, Recipe, Schedule};
 use crate::worklist::{Worklist, WorklistError};
@@ -129,7 +130,7 @@ pub async fn run_recipe(
         ..Default::default()
     };
 
-    let concurrency = recipe.dispatch.concurrency.max(1);
+    let adaptive = Arc::new(AdaptiveConcurrency::new(recipe.dispatch.concurrency.max(1)));
     let mut in_flight: JoinSet<UnitResult> = JoinSet::new();
     let mut last_status = Instant::now();
 
@@ -137,9 +138,10 @@ pub async fn run_recipe(
         // ── Shutdown / schedule gate ────────────────────────────
         let stop_claiming = shutdown.requested() || !schedule_allows_claiming(&recipe.schedule);
 
-        // ── Top up in-flight up to `concurrency` ────────────────
+        // ── Top up in-flight up to effective concurrency ────────
         if !stop_claiming {
-            let want = (concurrency as usize).saturating_sub(in_flight.len());
+            let target = adaptive.effective() as usize;
+            let want = target.saturating_sub(in_flight.len());
             if want >= CLAIM_BATCH_MIN as usize {
                 let claimed: Vec<String> = {
                     let mut wl = worklist.lock().await;
@@ -198,7 +200,7 @@ pub async fn run_recipe(
                 if let Some(joined) = res {
                     match joined {
                         Ok(unit) => {
-                            handle_completion(&unit, &recipe, &worklist, &mut summary).await?;
+                            handle_completion(&unit, &recipe, &worklist, &mut summary, &adaptive).await?;
                         }
                         Err(e) => {
                             tracing::warn!(error = %e, "in-flight task panicked");
@@ -213,7 +215,7 @@ pub async fn run_recipe(
 
         // ── Periodic status line ────────────────────────────────
         if last_status.elapsed() >= cfg.status_tick {
-            emit_status(&recipe_id, &worklist, &summary, in_flight.len()).await?;
+            emit_status(&recipe_id, &worklist, &summary, in_flight.len(), &adaptive).await?;
             last_status = Instant::now();
         }
     }
@@ -244,12 +246,14 @@ async fn handle_completion(
     recipe: &Recipe,
     worklist: &Arc<Mutex<Worklist>>,
     summary: &mut RunSummary,
+    adaptive: &Arc<AdaptiveConcurrency>,
 ) -> Result<()> {
     let mut wl = worklist.lock().await;
     match &unit.outcome {
         ExecResult::Success => {
             wl.ack_success(&unit.recipe_id, &unit.key)?;
             summary.succeeded += 1;
+            adaptive.record(Outcome::Success);
             tracing::info!(recipe = %unit.recipe_id, key = %unit.key, "unit success");
         }
         ExecResult::TimedOut { combined } => {
@@ -264,6 +268,7 @@ async fn handle_completion(
             if matches!(state, crate::worklist::State::Failed) {
                 summary.failed += 1;
             }
+            adaptive.record(outcome_from_bucket(bucket));
             tracing::warn!(
                 recipe = %unit.recipe_id,
                 key = %unit.key,
@@ -290,6 +295,7 @@ async fn handle_completion(
             if matches!(state, crate::worklist::State::Failed) {
                 summary.failed += 1;
             }
+            adaptive.record(outcome_from_bucket(bucket));
             tracing::warn!(
                 recipe = %unit.recipe_id,
                 key = %unit.key,
@@ -381,6 +387,7 @@ async fn emit_status(
     worklist: &Arc<Mutex<Worklist>>,
     summary: &RunSummary,
     in_flight: usize,
+    adaptive: &Arc<AdaptiveConcurrency>,
 ) -> Result<()> {
     let stats = worklist.lock().await.stats(recipe_id)?;
     let elapsed_secs = (unix_now() - summary.started_at_unix).max(1) as f64;
@@ -389,6 +396,8 @@ async fn emit_status(
     tracing::info!(
         recipe = %recipe_id,
         in_flight,
+        concurrency_eff = adaptive.effective(),
+        concurrency_max = adaptive.configured(),
         pending = stats.pending,
         done = stats.done,
         failed = stats.failed,

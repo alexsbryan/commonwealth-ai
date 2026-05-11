@@ -5,8 +5,11 @@
 //! `Worklist` primitive in `worklist.rs`, so swapping out the driver
 //! (or running a non-driver consumer like the dashboard) is trivial.
 
+pub mod adaptive;
 pub mod classifier;
 pub mod driver;
+pub mod ledger;
+pub mod pod;
 pub mod recipe;
 pub mod status;
 pub mod worklist;
