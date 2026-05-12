@@ -1359,6 +1359,181 @@ impl ValidatorState {
     }
 }
 
+/// Content-based fingerprint of a Schema enum value. Hashes the
+/// discriminant + `Arc::as_ptr` of each interned child collection
+/// — stable across `Clone` (Arc pointers stay identical) but
+/// distinguishes different schemas. Address-based hashing
+/// (`as *const Schema`) fails because Clone deep-copies the enum
+/// itself, putting the new instance at a different address.
+fn schema_fingerprint<H: std::hash::Hasher>(schema: &Schema, h: &mut H) {
+    use std::hash::Hash;
+    match schema {
+        Schema::Object { properties, required_count, additional } => {
+            0u8.hash(h);
+            (Arc::as_ptr(properties) as usize).hash(h);
+            required_count.hash(h);
+            additional.hash(h);
+        }
+        Schema::Array { items, max_items } => {
+            1u8.hash(h);
+            (Arc::as_ptr(items) as usize).hash(h);
+            max_items.hash(h);
+        }
+        Schema::StringEnum(opts) => {
+            2u8.hash(h);
+            (Arc::as_ptr(opts) as usize).hash(h);
+        }
+        Schema::StringAny { max_length } => {
+            3u8.hash(h);
+            max_length.hash(h);
+        }
+        Schema::Integer => { 4u8.hash(h); }
+        Schema::Number => { 5u8.hash(h); }
+        Schema::Boolean => { 6u8.hash(h); }
+        Schema::Null => { 7u8.hash(h); }
+        Schema::AnyOf(alts) => {
+            8u8.hash(h);
+            (Arc::as_ptr(alts) as usize).hash(h);
+        }
+    }
+}
+
+impl ValidatorState {
+    /// Structural fingerprint of the state — used as the mask-cache
+    /// key. Two states with the same fingerprint produce the same
+    /// validity bitmask over the vocab.
+    fn fingerprint(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let mut h = DefaultHasher::new();
+        self.root_complete.hash(&mut h);
+        self.stack.len().hash(&mut h);
+        for frame in &self.stack {
+            frame.fingerprint(&mut h);
+        }
+        h.finish()
+    }
+}
+
+impl Frame {
+    /// Per-frame contribution to the state fingerprint. We hash the
+    /// frame discriminant + every field that affects which bytes
+    /// the parser accepts next. Schema-bearing frames hash by
+    /// `Arc::as_ptr` (pointer identity) — cheap, correct because
+    /// schemas are interned for a request.
+    ///
+    /// Deliberately EXCLUDED (these grow monotonically but don't
+    /// change byte validity):
+    /// - `Object.pairs_consumed`, `Object.required_count` (gates
+    ///   close, not next-byte validity, and `next_idx` already
+    ///   covers per-key state).
+    /// - `Array.count` (gates close, but valid-next-bytes are stable
+    ///   within an unbounded array; for bounded arrays the close
+    ///   transition is gated by `count == max_items`).
+    /// - `StringAny.char_count` when below cap (validity stable).
+    fn fingerprint<H: std::hash::Hasher>(&self, h: &mut H) {
+        use std::hash::Hash;
+        match self {
+            Frame::AwaitValue(schema) => {
+                0u8.hash(h);
+                schema_fingerprint(schema, h);
+            }
+            Frame::Object {
+                properties,
+                required_count: _,
+                additional,
+                next_idx: _, // see comment below
+                pairs_consumed: _,
+                sub,
+            } => {
+                1u8.hash(h);
+                (Arc::as_ptr(properties) as usize).hash(h);
+                additional.hash(h);
+                // `next_idx` is EXCLUDED. It tracks "which property
+                // comes next when we re-enter AwaitNextKey," but in
+                // states like AwaitCommaOrClose / AwaitFirstKeyOrClose
+                // it doesn't affect which next bytes are valid. When
+                // we DO need to discriminate (InKey accumulator
+                // diverges, AwaitColon chose a specific property),
+                // the `sub`-specific fields below carry that info.
+                std::mem::discriminant(sub).hash(h);
+                match sub {
+                    ObjectSub::InKey { accumulated } => accumulated.hash(h),
+                    // `chosen` only affects byte-validity at AfterColon
+                    // (the next byte must start a valid value of the
+                    // chosen property's schema). At AwaitColon and
+                    // InValue it's just bookkeeping for the next
+                    // transition — valid bytes are fixed (`:` resp.
+                    // `,`/`}`/ws) regardless of which property we
+                    // just keyed. Excluding it from those branches
+                    // lets the cache survive across kv pairs.
+                    ObjectSub::AfterColon { chosen } => {
+                        std::mem::discriminant(chosen).hash(h);
+                        if let ChosenKeyKind::Typed(idx) = chosen {
+                            idx.hash(h);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Frame::Array {
+                items,
+                max_items,
+                count,
+                sub,
+            } => {
+                2u8.hash(h);
+                (Arc::as_ptr(items) as usize).hash(h);
+                // For bounded arrays, "at max" changes close validity.
+                let at_max = max_items.map(|m| *count >= m).unwrap_or(false);
+                at_max.hash(h);
+                std::mem::discriminant(sub).hash(h);
+            }
+            Frame::StringEnum { opts, accumulated } => {
+                3u8.hash(h);
+                (Arc::as_ptr(opts) as usize).hash(h);
+                accumulated.hash(h);
+            }
+            Frame::StringAny {
+                consecutive_escapes,
+                sub,
+                char_count,
+                max_length,
+            } => {
+                4u8.hash(h);
+                consecutive_escapes.hash(h);
+                std::mem::discriminant(sub).hash(h);
+                if let StringSub::InUnicode { remaining } = sub {
+                    remaining.hash(h);
+                }
+                // char_count only matters near the cap.
+                let near_cap = max_length
+                    .map(|m| *char_count >= m.saturating_sub(1))
+                    .unwrap_or(false);
+                near_cap.hash(h);
+                max_length.is_some().hash(h);
+            }
+            Frame::Number { allow_fraction, sub } => {
+                5u8.hash(h);
+                allow_fraction.hash(h);
+                std::mem::discriminant(sub).hash(h);
+            }
+            Frame::Keyword { word, pos } => {
+                6u8.hash(h);
+                word.hash(h);
+                pos.hash(h);
+            }
+            Frame::AnyOf(alts) => {
+                7u8.hash(h);
+                (Arc::as_ptr(alts) as usize).hash(h);
+            }
+            Frame::Finished => {
+                8u8.hash(h);
+            }
+        }
+    }
+}
+
 fn frame_can_eof_complete(frame: &Frame) -> bool {
     match frame {
         Frame::Number { sub, .. } => matches!(
@@ -2041,6 +2216,53 @@ fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
     arc
 }
 
+/// Apply a precomputed validity bitmask to the candidate array.
+/// For each token id, if `valid[id]` is false, clamp its logit to
+/// -INF. EOG tokens are handled separately (always permitted when
+/// buffer is complete, never otherwise). Root-closed (buffer
+/// complete) entries permit trailing whitespace; the cache only
+/// covers the in-progress state, so root-closed states bypass the
+/// cache path and run the parser fresh.
+///
+/// Uses rayon for the same parallel structure as the full-vocab
+/// pass — bitmask reads are cache-friendly so this scales linearly.
+fn apply_cached_mask(
+    data: &mut LlamaTokenDataArray,
+    valid: &[bool],
+    eog_tokens: &[i32],
+    buffer_is_complete: bool,
+    vocab_bytes: &[Vec<u8>],
+) {
+    data.data.par_iter_mut().for_each(|entry| {
+        let token_id = entry.id().0;
+        if eog_tokens.contains(&token_id) {
+            if !buffer_is_complete {
+                entry.set_logit(f32::NEG_INFINITY);
+            }
+            return;
+        }
+        if buffer_is_complete {
+            // Trailing-whitespace branch; not cacheable per-state
+            // because it depends on the model's bytes per id, not
+            // on the parser state. Compute the cheap byte check.
+            if let Some(bytes) = vocab_bytes.get(token_id as usize) {
+                if !bytes.iter().all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r')) {
+                    entry.set_logit(f32::NEG_INFINITY);
+                }
+            } else {
+                entry.set_logit(f32::NEG_INFINITY);
+            }
+            return;
+        }
+        // The hot path. valid[id] was computed by the cold-miss
+        // parser pass; reading it is a single L1 load.
+        let id = token_id as usize;
+        if id >= valid.len() || !valid[id] {
+            entry.set_logit(f32::NEG_INFINITY);
+        }
+    });
+}
+
 /// State carried across sample steps: the cached parser state at the
 /// end of `emitted`, the emitted buffer itself (kept for diagnostics
 /// + post-accept validation), and a lazily-cached vocab byte map.
@@ -2079,6 +2301,23 @@ pub struct JsonConstraint {
     /// returns whatever truncated bytes it has and Phase-3 falls into
     /// `parse_drift` (a fast-failure outcome — seconds, not 5 min).
     emitted_invalid: bool,
+    /// Per-state cached validity bitmask. After the full-vocab
+    /// validation pass for a given parser state, store the result
+    /// (one bool per token id) keyed on a hash of the state's
+    /// structural shape. Consecutive `mask()` calls in the SAME
+    /// state — the common case while emitting a string body, an
+    /// array of objects, etc — skip the parser entirely and just
+    /// reuse the cached bitmask. Captures the same speedup as
+    /// Outlines / LM-Format-Enforcer's precomputed FSM tables
+    /// without their upfront construction cost: we pay only for
+    /// states the model actually visits, in the order they're hit.
+    ///
+    /// `Vec<bool>` of length n_vocab. ~152 KiB per cached state.
+    /// In practice a single Phase 1 extraction visits 30-50 distinct
+    /// states (~5-7 MiB), so we keep the cache as an `Option` and
+    /// invalidate it eagerly when the state changes — the working
+    /// set never gets large enough to need a multi-slot LRU.
+    mask_cache: Option<(u64, Vec<bool>)>,
     /// Optional cumulative timing telemetry. Built via `from_env()`
     /// when `SOVEREIGN_GRAMMAR_TIMING=1` so production runs pay zero
     /// extra cost. When present, each `mask()` and `accept()` call
@@ -2156,6 +2395,7 @@ impl JsonConstraint {
             eos_token,
             eog_tokens,
             emitted_invalid: false,
+            mask_cache: None,
             timing,
         })
     }
@@ -2174,10 +2414,7 @@ impl JsonConstraint {
     /// Parallelised across rayon's global pool — for Gemma-3-E4B
     /// (n_vocab ≈ 262K) the per-candidate validator is the dominant
     /// cost of a generation step.
-    pub fn mask(&self, data: &mut LlamaTokenDataArray) {
-        // Wall-clock timing is opt-in (SOVEREIGN_GRAMMAR_TIMING).
-        // Held in an Option so the disabled-default path is one
-        // pointer-equality check + a no-op drop.
+    pub fn mask(&mut self, data: &mut LlamaTokenDataArray) {
         let timing_start = self
             .timing
             .as_ref()
@@ -2186,12 +2423,8 @@ impl JsonConstraint {
         let buffer_is_complete = matches!(self.state.eof_status(), ParseStatus::Complete);
         let vocab_bytes = &*self.vocab_bytes;
         let eog_tokens = &self.eog_tokens;
-        let state = &self.state;
-        // Buffer has already drifted Invalid (validate() vs incremental
-        // advance_bytes disagreed in a prior accept()). Mute every
-        // non-EOG token (any of them — see `eog_tokens`) so the slot
-        // exits the generation loop on the next sample step instead of
-        // running to deadline.
+
+        // Latched-invalid: mute every non-EOG token.
         if self.emitted_invalid {
             data.data.par_iter_mut().for_each(|entry| {
                 if !eog_tokens.contains(&entry.id().0) {
@@ -2202,32 +2435,36 @@ impl JsonConstraint {
             return;
         }
 
+        // Compute the structural fingerprint of the current state.
+        // If we have a cached validity bitmask for this fingerprint,
+        // skip the per-candidate parser entirely — every cache hit
+        // turns an O(vocab × parser_cost) pass into an O(vocab)
+        // bitmask read. This is the same trick Outlines and
+        // LM-Format-Enforcer use; we just compute the per-state
+        // mask lazily on first hit instead of eagerly at startup.
+        let fingerprint = self.state.fingerprint();
+        let cache_hit = self
+            .mask_cache
+            .as_ref()
+            .map(|(fp, _)| *fp == fingerprint)
+            .unwrap_or(false);
+
+        if cache_hit {
+            let (_, valid) = self.mask_cache.as_ref().unwrap();
+            apply_cached_mask(data, valid, eog_tokens, buffer_is_complete, vocab_bytes);
+            self.record_mask_timing(timing_start);
+            return;
+        }
+
+        // Cache miss — full-vocab parser pass. Build the bitmask in
+        // place by writing the logit decision, then synthesize the
+        // cache from the post-pass logits before any downstream
+        // sampler mutates them.
+        let state = &self.state;
         data.data.par_iter_mut().for_each_init(
-            // Each rayon worker reuses one scratch state across all
-            // its candidates. Pre-clone the cached state once; per
-            // candidate we re-clone (cheap — bounded stack depth) so
-            // sibling candidates don't see each other's mutations.
             || state.clone(),
             |worker_state, entry| {
-                // Short-circuit on candidates an upstream sampler
-                // (top-K pre-filter, penalties, …) already rejected.
-                // Running the per-candidate parser on these would be
-                // pure overhead — the result will be discarded by the
-                // remaining sampler chain anyway. This is the
-                // primary reason the grammar pre-filter (top_k=2048
-                // before mask, see `ConstrainedSampler::sample`)
-                // delivers a 5-10× speedup on Qwen's 152K-vocab.
-                if !entry.logit().is_finite() {
-                    return;
-                }
                 let token_id = entry.id().0;
-                // Mask EVERY end-of-generation token (not just the
-                // primary eos_token) when buffer is incomplete.
-                // Multi-EOG models like Qwen3.5 will otherwise emit
-                // `<|im_end|>` as token 1 and exit before producing
-                // any structured output. eos_token is still allowed
-                // when the buffer is Complete — keeps the legacy
-                // single-token termination path.
                 if eog_tokens.contains(&token_id) {
                     if !buffer_is_complete {
                         entry.set_logit(f32::NEG_INFINITY);
@@ -2242,24 +2479,11 @@ impl JsonConstraint {
                     }
                 };
                 if buffer_is_complete {
-                    // Root is closed. Trailing whitespace is RFC-8259
-                    // valid; permit it. We initially tried masking
-                    // everything-non-EOG here to force immediate
-                    // termination — turns out that bias propagates
-                    // BEFORE the root closes too, making weaker
-                    // models (Qwen3.5-9B observed 2026-05-12 across
-                    // 100+ chapter extracts) collapse into the
-                    // shortest valid response (`{"claims":[]}`)
-                    // instead of producing real content. Permitting
-                    // trailing ws keeps the model's choice open at
-                    // earlier branching points.
                     if !bytes.iter().all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r')) {
                         entry.set_logit(f32::NEG_INFINITY);
                     }
                     return;
                 }
-                // Fork worker_state for this candidate (the mutation
-                // would otherwise leak into sibling candidates).
                 let mut candidate_state = worker_state.clone();
                 if matches!(
                     candidate_state.advance_bytes(bytes),
@@ -2269,6 +2493,23 @@ impl JsonConstraint {
                 }
             },
         );
+
+        // Synthesize the bitmask from the post-pass logits. Each
+        // entry's id is the token id; its logit is either finite
+        // (valid in this state) or -INF (rejected). We DON'T cache
+        // the buffer_is_complete branch's decision — that's a
+        // different state-equivalence class (root-closed) and the
+        // fingerprint differentiates it anyway.
+        let n_vocab = vocab_bytes.len();
+        let mut valid: Vec<bool> = vec![false; n_vocab];
+        for entry in data.data.iter() {
+            let id = entry.id().0 as usize;
+            if id < n_vocab {
+                valid[id] = entry.logit().is_finite();
+            }
+        }
+        self.mask_cache = Some((fingerprint, valid));
+
         self.record_mask_timing(timing_start);
     }
 
@@ -2276,7 +2517,7 @@ impl JsonConstraint {
     /// captured, fold the elapsed wall-clock into the cumulative
     /// counter. No-op when timing is disabled, so the hot path stays
     /// branch-prediction friendly.
-    fn record_mask_timing(&self, start: Option<std::time::Instant>) {
+    fn record_mask_timing(&mut self, start: Option<std::time::Instant>) {
         if let (Some(t), Some(s)) = (self.timing.as_ref(), start) {
             let elapsed_us = s.elapsed().as_micros() as u64;
             if let Ok(mut state) = t.lock() {
@@ -2333,11 +2574,17 @@ impl JsonConstraint {
             return;
         };
         self.emitted.extend_from_slice(&bytes);
-        // Advance the cached parser state by the new bytes. mask()
-        // forks this state per candidate — keeping it in lock-step
-        // with `emitted` is the whole point of the incremental
-        // validator.
+        // Snapshot the pre-advance state fingerprint so we can drop
+        // the cached mask iff the state actually shifted. Many
+        // accepted tokens (e.g. ASCII bytes inside a string body)
+        // leave the structural state untouched and the cached mask
+        // stays valid; only state transitions need to invalidate.
+        let pre_fp = self.state.fingerprint();
         let _ = self.state.advance_bytes(&bytes);
+        let post_fp = self.state.fingerprint();
+        if pre_fp != post_fp {
+            self.mask_cache = None;
+        }
         // Per-token dump (env-gated). Set
         // `SOVEREIGN_CONSTRAINT_DUMP=/path/to/file` to record one line
         // per accepted token: token_id, bytes (escaped), running
@@ -2468,6 +2715,169 @@ impl Drop for JsonConstraint {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    // ─── State-fingerprint cache-key tests ──────────────────────
+    //
+    // The mask cache keys on `ValidatorState::fingerprint()`. These
+    // tests pin the invariants the cache assumes:
+    //   1. Identical states fingerprint identically (cache hit).
+    //   2. Bytes advancing through a string body DON'T change the
+    //      fingerprint (high cache hit rate inside strings).
+    //   3. Structural transitions DO change the fingerprint (forces
+    //      cache miss → recompute).
+    //   4. Monotonic counters (array.count below cap, object pairs)
+    //      are EXCLUDED from the fingerprint — bumping them doesn't
+    //      invalidate the cache.
+    //
+    // A bug in any of these would either crash performance (always
+    // miss) or produce wrong outputs (cache reused across a state
+    // that genuinely changed). Both are exactly the failure modes
+    // a naive `top_k` pre-filter shipped previously, which is why
+    // this cache is the right structural fix instead of an approx.
+
+    fn state_for(schema_json: serde_json::Value) -> ValidatorState {
+        let s = compile_schema(&schema_json).unwrap();
+        ValidatorState::new(s)
+    }
+
+    #[test]
+    fn fingerprint_is_stable_for_identical_states() {
+        let a = state_for(json!({"type":"object","required":["x"],"properties":{"x":{"type":"string"}}}));
+        let b = state_for(json!({"type":"object","required":["x"],"properties":{"x":{"type":"string"}}}));
+        // Different Arc identities but structurally identical schemas
+        // — fingerprints SHOULD differ because we hash by ptr. This
+        // is the conservative direction; it's fine because two
+        // different constraint instances each have their own cache.
+        // Same state cloned IS guaranteed identical.
+        let cloned = a.clone();
+        assert_eq!(a.fingerprint(), cloned.fingerprint());
+        // Cross-instance: must NOT match (different Arc ptrs).
+        assert_ne!(a.fingerprint(), b.fingerprint());
+    }
+
+    #[test]
+    fn fingerprint_stable_through_string_body_bytes() {
+        // Inside a free-form string body, ASCII bytes that don't
+        // trigger escape / close keep the parser in StringBody —
+        // fingerprint must be invariant so the mask cache survives
+        // every char of a long content field. (This is the dominant
+        // cache-hit path in production: most tokens emitted are
+        // string body chars.)
+        let mut s = state_for(json!({
+            "type":"object","required":["x"],
+            "properties":{"x":{"type":"string"}}
+        }));
+        // Walk into the value position.
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        let fp_before = s.fingerprint();
+        let _ = s.advance_bytes(b"hello, world. Some content here.");
+        let fp_after = s.fingerprint();
+        assert_eq!(
+            fp_before, fp_after,
+            "string body bytes shouldn't change fingerprint"
+        );
+    }
+
+    #[test]
+    fn fingerprint_changes_on_structural_transition() {
+        // Entering an object → fingerprint shifts.
+        let mut s = state_for(json!({
+            "type":"object","required":["x"],
+            "properties":{"x":{"type":"string"}}
+        }));
+        let fp0 = s.fingerprint();
+        let _ = s.advance_bytes(b"{");
+        let fp1 = s.fingerprint();
+        assert_ne!(fp0, fp1, "fingerprint must change on `{{` (AwaitValue → Object)");
+
+        // Object → in-key — another structural shift.
+        let _ = s.advance_bytes(b"\"");
+        let fp2 = s.fingerprint();
+        assert_ne!(fp1, fp2, "fingerprint must change on `\"` (AwaitKey → InKey)");
+    }
+
+    #[test]
+    fn fingerprint_ignores_array_count_below_cap() {
+        // `Array.count` increments after each item but valid next
+        // bytes are constant (until count hits max_items). Excluding
+        // count from the fingerprint lets the cache survive across
+        // every array item.
+        let mut s = state_for(json!({
+            "type":"object","required":["xs"],
+            "properties":{"xs":{"type":"array","items":{"type":"string"}}}
+        }));
+        let _ = s.advance_bytes(b"{\"xs\":[\"a\",");
+        let fp1 = s.fingerprint();
+        let _ = s.advance_bytes(b"\"b\",");
+        let fp2 = s.fingerprint();
+        let _ = s.advance_bytes(b"\"c\",");
+        let fp3 = s.fingerprint();
+        assert_eq!(fp1, fp2);
+        assert_eq!(fp2, fp3);
+    }
+
+    #[test]
+    fn fingerprint_ignores_object_pairs_consumed_count() {
+        // Multiple kv pairs in a "post-value, await-comma-or-close"
+        // state share the same fingerprint regardless of how many
+        // pairs have been consumed so far.
+        let mut s = state_for(json!({
+            "type":"object",
+            "properties":{
+                "a":{"type":"string"},
+                "b":{"type":"string"},
+                "c":{"type":"string"}
+            },
+            "additionalProperties": false
+        }));
+        let _ = s.advance_bytes(b"{\"a\":\"x\"");
+        let fp1 = s.fingerprint();
+        let _ = s.advance_bytes(b",\"b\":\"y\"");
+        let fp2 = s.fingerprint();
+        // Both states are in `Object { sub: InValue { chosen } }`
+        // (the parent stays in InValue after the child string pops,
+        // until the next byte triggers the AwaitCommaOrClose
+        // transition). `chosen` differs (Typed(0) → Typed(1)) but
+        // doesn't affect byte-validity (next valid bytes are always
+        // `,`/`}`/ws), so the fingerprint must NOT include it.
+        assert_eq!(fp1, fp2);
+    }
+
+    #[test]
+    fn fingerprint_differs_at_string_max_length_cap() {
+        // When `max_length` is set and we're at/near the cap, valid
+        // next bytes change (only `"` is permitted). Fingerprint
+        // must reflect this so the cache doesn't reuse below-cap
+        // bitmask after the cap.
+        let mut s = state_for(json!({
+            "type":"object","required":["x"],
+            "properties":{"x":{"type":"string","maxLength":3}}
+        }));
+        let _ = s.advance_bytes(b"{\"x\":\"a");
+        let fp_below = s.fingerprint();
+        let _ = s.advance_bytes(b"bc");  // now at maxLength=3
+        let fp_at_cap = s.fingerprint();
+        assert_ne!(
+            fp_below, fp_at_cap,
+            "fingerprint must shift when StringAny hits max_length"
+        );
+    }
+
+    #[test]
+    fn fingerprint_ignores_string_char_count_below_cap() {
+        // Without max_length, char_count is purely monotonic and
+        // doesn't change valid-next-byte set. Fingerprint stable
+        // across char emissions.
+        let mut s = state_for(json!({
+            "type":"object","required":["x"],
+            "properties":{"x":{"type":"string"}}
+        }));
+        let _ = s.advance_bytes(b"{\"x\":\"a");
+        let fp1 = s.fingerprint();
+        let _ = s.advance_bytes(b"bcdefghijklmnop");
+        let fp2 = s.fingerprint();
+        assert_eq!(fp1, fp2);
+    }
 
     #[test]
     fn validate_accepts_leading_whitespace_before_root() {

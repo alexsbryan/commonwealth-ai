@@ -4880,48 +4880,29 @@ const THINK_BUDGET: usize = 512;
 pub struct ConstrainedSampler {
     inner: LlamaSampler,
     constraint: Option<crate::json_constraint::JsonConstraint>,
-    /// Top-K pre-filter applied BEFORE the grammar mask when a
-    /// constraint is active. Clamps all but the top
-    /// `GRAMMAR_PRE_FILTER_K` candidates to -INF so the grammar
-    /// mask's per-candidate validator only runs on the survivors,
-    /// not all 152K tokens of Qwen's vocab.
-    ///
-    /// Measured impact on Qwen3.5-9B Q5_K_S, M3 Max (2026-05-12):
-    /// grammar-constrained throughput jumped from 14 tok/s to
-    /// ~32 tok/s — same speed as free-form generation — with no
-    /// degradation in output quality (the model's top-2048
-    /// distribution always contains grammar-valid options on
-    /// well-formed prompts).
-    grammar_pre_filter: Option<LlamaSampler>,
 }
 
-/// Generous top-K cap for the grammar pre-filter. 2048 is large
-/// enough that the model's top-K-by-logit virtually always contains
-/// grammar-valid options (the lossy tail starts well below 2048 on
-/// typical structured-output prompts) and small enough that the
-/// grammar mask's per-candidate validator runs in ~1 ms instead of
-/// the 50-100 ms full-vocab pass.
-const GRAMMAR_PRE_FILTER_K: i32 = 2048;
-
 impl ConstrainedSampler {
-    /// Per-token: pull candidates from ctx, optionally pre-filter to
-    /// the top-K most-likely tokens, mask via grammar constraint
-    /// (skipping already-rejected candidates), apply the rest of
-    /// the sampler chain, return the selected token.
+    /// Per-token: pull candidates from ctx, mask via constraint (if
+    /// any), apply the rest of the chain, return the selected token.
+    ///
+    /// Performance note (2026-05-12): the mask is currently full-vocab
+    /// O(152K × per-candidate-parser-cost). A previous attempt to
+    /// pre-filter via `LlamaSampler::top_k(2048)` before the mask
+    /// achieved 2.3× speedup on the trivial-prompt probe but
+    /// produced incorrect output on real prompts (Chinese tokens
+    /// slipped through the grammar). The root issue is that
+    /// per-candidate incremental parsing is structurally wrong;
+    /// the right fix is a precomputed token-acceptance table per
+    /// FSM state (the pattern LM-Format-Enforcer and Outlines use).
+    /// Until that lands, the slower-but-correct mask stays.
     pub fn sample(&mut self, ctx: &llama_cpp_2::context::LlamaContext<'_>, idx: i32) -> LlamaToken {
         let mut data = if idx < 0 {
             ctx.token_data_array()
         } else {
             ctx.token_data_array_ith(idx)
         };
-        if let Some(c) = self.constraint.as_ref() {
-            // Pre-filter to top-K so the grammar mask only validates
-            // candidates with non-negligible probability. The mask
-            // itself short-circuits on -INF logits, so this is a
-            // ~5-10× speedup over the original full-vocab mask.
-            if let Some(pre) = self.grammar_pre_filter.as_ref() {
-                data.apply_sampler(pre);
-            }
+        if let Some(c) = self.constraint.as_mut() {
             c.mask(&mut data);
         }
         data.apply_sampler(&self.inner);
@@ -4990,16 +4971,9 @@ fn build_sampler(
         samplers.push(LlamaSampler::temp(temp));
         samplers.push(LlamaSampler::dist(rand_seed()));
     }
-    // Build the grammar pre-filter only when a constraint is active.
-    // For free-form (non-grammar) generation, the existing chain's
-    // top_k=40 already does the right thing; adding a 2048 pre-filter
-    // would be pure overhead.
-    let grammar_pre_filter = constraint.as_ref().map(|_| LlamaSampler::top_k(GRAMMAR_PRE_FILTER_K));
-
     ConstrainedSampler {
         inner: LlamaSampler::chain_simple(samplers),
         constraint,
-        grammar_pre_filter,
     }
 }
 
