@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "generated_at_unix": 1778598183,
+  "narrative_hashes": {
+    "/Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md": "e81128bdbf90f96d7fbc909bd203291a18bd25be6bb4974758086e96fb7e76a2",
+    "/Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md": "e71f8b69ada095ce237b108ba5306bc9dcf7ea61949464c37c75c9e3fa513b6c"
+  },
+  "output_path": "/Users/alexsbryan/dev/commonwealth-ai/drift_report_post_cache_fix.md"
+}
