@@ -362,6 +362,22 @@ pub struct MeshInferenceProvider {
     /// without spawning a task.
     local_inflight_by_model:
         Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
+    /// Slot-alias map mirrored from the daemon's `AppState`. Keyed by
+    /// the alias name a caller might send (`commonwealth/primary`,
+    /// `primary`, `fast`, …), valued at the GGUF stem currently bound
+    /// to that slot. Populated by the daemon after slot registration
+    /// (`set_slot_aliases`) and re-read on every request so a hot
+    /// model swap takes effect on the next call.
+    ///
+    /// Used inside the `NamedModelLocation::Local` branch to rewrite
+    /// `request.model_id` from the alias to the underlying GGUF before
+    /// handing to the local provider. The mesh-routing decision in
+    /// `locate_named_model` runs *before* this rewrite — so the alias
+    /// is what the load-balancer sees, peers that advertise the same
+    /// alias become routing candidates, and the resolution to a
+    /// specific GGUF only happens on the node that actually serves
+    /// the request.
+    slot_aliases: arc_swap::ArcSwap<std::collections::HashMap<String, String>>,
 }
 
 impl MeshInferenceProvider {
@@ -415,7 +431,23 @@ impl MeshInferenceProvider {
             local_inflight_by_model: Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
             )),
+            slot_aliases: arc_swap::ArcSwap::from_pointee(
+                std::collections::HashMap::new(),
+            ),
         }
+    }
+
+    /// Install the slot-alias map. Called by the daemon after model
+    /// slots are registered so the mesh-aware path can rewrite
+    /// `commonwealth/primary` → the local GGUF stem before serving
+    /// locally. Safe to call multiple times — each call atomically
+    /// swaps in the new map, so a runtime model swap can publish a
+    /// new mapping without restarting the daemon.
+    pub fn set_slot_aliases(
+        &self,
+        aliases: std::collections::HashMap<String, String>,
+    ) {
+        self.slot_aliases.store(Arc::new(aliases));
     }
 
     /// Snapshot of per-peer health for diagnostics surfaces.
@@ -1211,12 +1243,41 @@ impl InferenceProvider for MeshInferenceProvider {
         if let Some(model_id) = explicit_model_id(request) {
             match self.locate_named_model(model_id).await {
                 NamedModelLocation::Local => {
-                    tracing::info!(
-                        model = %model_id,
-                        "mesh-inference: serving complete() locally by explicit model name"
-                    );
-                    let _guard = self.enter_local_inflight(model_id);
-                    return self.local.complete(request).await;
+                    // Resolve slot aliases for the local-serving path
+                    // only — the routing decision above already saw
+                    // the alias and chose Local, so peers that also
+                    // advertise the alias got their fair chance to
+                    // win. The underlying provider works in terms of
+                    // GGUF stems, so we rewrite here and hand it the
+                    // resolved id. No-op when the requested id isn't
+                    // an alias (the map lookup returns None).
+                    let aliases = self.slot_aliases.load();
+                    let resolved = aliases.get(model_id).cloned();
+                    let log_model = model_id.to_string();
+                    let request_owned;
+                    let serve_request = match resolved {
+                        Some(target) => {
+                            tracing::info!(
+                                alias = %log_model,
+                                target = %target,
+                                "mesh-inference: serving complete() locally — resolved slot alias"
+                            );
+                            request_owned = CompletionRequest {
+                                model_id: Some(target),
+                                ..request.clone()
+                            };
+                            &request_owned
+                        }
+                        None => {
+                            tracing::info!(
+                                model = %log_model,
+                                "mesh-inference: serving complete() locally by explicit model name"
+                            );
+                            request
+                        }
+                    };
+                    let _guard = self.enter_local_inflight(&log_model);
+                    return self.local.complete(serve_request).await;
                 }
                 NamedModelLocation::Peer(peer, peer_cand) => {
                     tracing::info!(

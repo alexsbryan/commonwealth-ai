@@ -731,15 +731,66 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Mirrors the desktop wiring in
     // `sovereign-desktop/src-tauri/src/state.rs:649` so a request
     // hitting either entrypoint follows the same routing rules.
-    let routed_provider: Arc<dyn InferenceProvider> = Arc::new(
+    // Keep a typed handle to the mesh provider so we can push the
+    // slot-alias map into it once `register_local_model_slots` has
+    // populated `AppState.slot_aliases`. The trait-object form is
+    // what the daemon needs; the typed form is what the alias
+    // installer needs.
+    let mesh_provider = Arc::new(
         sovereign_mesh::peer_inference::MeshInferenceProvider::new(
             Arc::clone(&provider),
             Arc::clone(&daemon),
         ),
     );
+    let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
     daemon
         .set_inference_provider(Arc::clone(&routed_provider))
         .await;
+    // Push slot aliases from AppState into the mesh provider once
+    // the daemon's setup phase has registered model slots. Without
+    // this, the mesh layer can't resolve `commonwealth/primary` →
+    // local GGUF in its Local-serving branch, and the deferred
+    // resolution path (routes_inference passes the alias through
+    // for mesh routing) never lands on a real slot. Done on a
+    // spawned task because `daemon.app_state()` only returns
+    // `Some` after `start()` transitions DaemonState to Running.
+    {
+        let daemon_for_alias_push = Arc::clone(&daemon);
+        let mesh_for_alias_push = mesh_provider.clone();
+        tokio::spawn(async move {
+            // Poll briefly for the AppState to be available. The
+            // setup transition usually completes within a few
+            // hundred ms; cap at 30s so a stuck setup never hangs
+            // this spawn.
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            loop {
+                if let Some(state) = daemon_for_alias_push.app_state().await {
+                    let snapshot = state.inner.slot_aliases.load();
+                    let map: std::collections::HashMap<String, String> = snapshot
+                        .iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    if !map.is_empty() {
+                        tracing::info!(
+                            count = map.len(),
+                            "daemon_cmd: pushing slot aliases into mesh provider"
+                        );
+                        mesh_for_alias_push.set_slot_aliases(map);
+                        break;
+                    }
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    tracing::warn!(
+                        "daemon_cmd: slot-alias push timed out after 30s — \
+                         mesh layer will serve aliases as plain model ids"
+                    );
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+        });
+    }
     // Hand the engine to the mesh daemon so the auto_ingest loop and
     // /internal/corpus/* HTTP surface can both see in-progress
     // wikipedia/etc. ingests. See engine block above for the
@@ -2130,12 +2181,28 @@ impl ProviderFactory for LlamaCppFactory {
         // `run_daemon`. See the comment on the cold-start wiring
         // for why a bare `EmbeddedLlamaCpp` here would re-introduce
         // the silent-substitution bug.
-        let routed: Arc<dyn InferenceProvider> = Arc::new(
+        let mesh_provider = Arc::new(
             sovereign_mesh::peer_inference::MeshInferenceProvider::new(
                 raw,
                 Arc::clone(&self.daemon),
             ),
         );
+        // Push current slot aliases into the freshly-built mesh
+        // provider so a reload preserves the deferred-resolution
+        // wiring. Mirrors the cold-start spawned task in
+        // `run_daemon`; here we run inline because the daemon is
+        // already in the Running state at reload time.
+        if let Some(state) = self.daemon.app_state().await {
+            let snapshot = state.inner.slot_aliases.load();
+            let map: std::collections::HashMap<String, String> = snapshot
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect();
+            if !map.is_empty() {
+                mesh_provider.set_slot_aliases(map);
+            }
+        }
+        let routed: Arc<dyn InferenceProvider> = mesh_provider;
         Ok(routed)
     }
 }

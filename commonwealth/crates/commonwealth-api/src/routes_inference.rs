@@ -91,13 +91,37 @@ pub async fn chat_completions(
     // instead of GGUF filenames. Pipeline aliases below still take
     // precedence — a client that explicitly names a pipeline alias
     // gets the full middleware stack rather than the bare slot.
-    if let Some(slot_target) = state.resolve_slot_alias(&requested_model) {
+    //
+    // EXCEPTION: the mesh-routable forms (`primary`, `commonwealth/primary`,
+    // `fast`, `commonwealth/fast`) are passed through *unresolved* so
+    // the mesh-inference layer's `locate_named_model` can see them as
+    // routing targets — both this node and any peer that loaded a Slow
+    // slot advertise the alias in their OICP manifest, so leaving the
+    // alias in the request lets the load-balancer pick whichever node
+    // is less busy. The alias is resolved to the local GGUF later,
+    // inside `MeshInferenceProvider::complete`, but only on the branch
+    // that actually serves locally. Resolving here (before routing)
+    // pinned every call to whichever node had that specific GGUF id,
+    // and the moment one peer swapped quants every cross-mesh request
+    // failed with `Model not loaded`.
+    let is_mesh_routable_alias = matches!(
+        requested_model.as_str(),
+        "primary" | "commonwealth/primary" | "fast" | "commonwealth/fast"
+    );
+    if !is_mesh_routable_alias {
+        if let Some(slot_target) = state.resolve_slot_alias(&requested_model) {
+            debug!(
+                requested = %requested_model,
+                target = %slot_target,
+                "chat_completions: slot alias resolved"
+            );
+            request.model = Some(slot_target);
+        }
+    } else {
         debug!(
             requested = %requested_model,
-            target = %slot_target,
-            "chat_completions: slot alias resolved"
+            "chat_completions: mesh-routable alias — deferring resolution to mesh layer"
         );
-        request.model = Some(slot_target);
     }
 
     let requested_model = request.model.clone().unwrap_or_default();
