@@ -1185,6 +1185,72 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         });
     }
 
+    // Stable mesh aliases for the Slow slot. Advertising
+    // `commonwealth/primary` (and the short `primary`) as
+    // additional ProviderModel entries makes them routable across
+    // the mesh: any node whose Slow slot is loaded shows up as a
+    // candidate when another node asks for "primary", regardless
+    // of which underlying GGUF each node has loaded (Q4_K_L vs
+    // Q6_K, Qwopus vs Darwin, etc.). The receiving daemon
+    // resolves the alias locally on inbound /v1/chat/completions,
+    // so the call lands on whatever Slow slot is hot.
+    //
+    // Why both forms: `commonwealth/primary` is the namespaced
+    // canonical id; `primary` is the unqualified shortcut the
+    // OpenAI-compatible client surface accepts. Advertising both
+    // keeps either form's load-balancer view in sync.
+    //
+    // We re-use the Slow slot's claims/size_gb/capabilities so
+    // alias rows are scored identically to the underlying slot.
+    // Skipped if there's no Slow slot loaded — a node without a
+    // primary can't honour a "primary" request, so it shouldn't
+    // appear as a candidate.
+    let slow_model_name = provider.model_id_for(Speed::Slow);
+    if !slow_model_name.is_empty() && slow_model_name != "unknown" {
+        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .info_for_file(&slow_model_name);
+        let (capabilities, size_gb) = match info {
+            Some(slot) => (slot.capabilities, slot.size_gb),
+            None => {
+                let mut caps = std::collections::HashMap::new();
+                caps.insert(Capability::General, 2u8);
+                caps.insert(Capability::Analysis, 2u8);
+                (caps, None)
+            }
+        };
+        for alias_id in ["commonwealth/primary", "primary"] {
+            if !seen_ids.insert(alias_id.to_string()) {
+                continue;
+            }
+            // Synthesize claims with the alias id so the
+            // ProviderModel emits coherent attribution if a peer
+            // hits this row. The underlying slot is still Slow,
+            // so callers get the same latency/quality profile.
+            let claims = synthesize_slot_claims(Speed::Slow, alias_id, &capabilities);
+            tracing::info!(
+                alias = %alias_id,
+                target = %slow_model_name,
+                caps = ?capabilities,
+                "build_self_manifest: advertised primary alias"
+            );
+            models.push(ProviderModel {
+                id: alias_id.to_string(),
+                base_model: None,
+                quantization: None,
+                context_tokens: 32_768,
+                status: ModelStatus {
+                    available: true,
+                    loaded: true,
+                    estimated_tokens_per_sec: None,
+                    estimated_ttft_ms: None,
+                    estimated_load_time_sec: None,
+                },
+                size_gb,
+                claims,
+            });
+        }
+    }
+
     // PR-E2: Code specialist. Separate ProviderModel entry so peer
     // schedulers can see the `code` hint claim without having to
     // first elicit a hot-swap. Only emitted when the provider
@@ -1912,21 +1978,63 @@ mod self_manifest_tests {
             "manifest leaked a code claim even without a code slot: {:#?}",
             manifest.models
         );
-        assert_eq!(manifest.models.len(), 2, "expected fast + primary only");
+        // Fast + primary GGUF + 2 primary aliases (commonwealth/primary, primary).
+        assert_eq!(manifest.models.len(), 4, "expected fast + primary + 2 aliases: {:#?}", manifest.models);
     }
 
     #[test]
-    fn manifest_emits_third_entry_with_code_claim_when_code_slot_configured() {
+    fn manifest_emits_routable_primary_aliases() {
+        // Each node must advertise `commonwealth/primary` and the
+        // short `primary` so a peer requesting either form can
+        // see this node as a candidate and load-balance to it.
+        // Without the aliases, peer routing only works when both
+        // nodes have the same underlying GGUF id loaded —
+        // brittle the moment one node swaps quants.
+        let stub = SlotStub {
+            fast_id: "fast.Q4_0",
+            primary_id: "primary.Q5_K_M",
+            code_id: None,
+        };
+        let manifest = build_self_manifest(&stub);
+        let alias_ids: Vec<&str> = manifest
+            .models
+            .iter()
+            .filter(|m| m.id == "commonwealth/primary" || m.id == "primary")
+            .map(|m| m.id.as_str())
+            .collect();
+        assert!(
+            alias_ids.iter().any(|id| *id == "commonwealth/primary"),
+            "manifest must advertise `commonwealth/primary`: {:#?}",
+            manifest.models
+        );
+        assert!(
+            alias_ids.iter().any(|id| *id == "primary"),
+            "manifest must advertise the short `primary` alias: {:#?}",
+            manifest.models
+        );
+        // Alias entries claim `loaded: true` because the
+        // underlying Slow slot is loaded — anything else would
+        // make the load-balancer skip this node when it should
+        // be a viable candidate.
+        for m in manifest.models.iter().filter(|m| alias_ids.contains(&m.id.as_str())) {
+            assert!(m.status.loaded, "alias `{}` must claim loaded=true", m.id);
+            assert!(m.status.available, "alias `{}` must claim available=true", m.id);
+        }
+    }
+
+    #[test]
+    fn manifest_emits_code_entry_with_aliases() {
         let stub = SlotStub {
             fast_id: "fast.Q4_0",
             primary_id: "primary.Q5_K_M",
             code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
         };
         let manifest = build_self_manifest(&stub);
+        // fast + primary GGUF + 2 primary aliases + code.
         assert_eq!(
             manifest.models.len(),
-            3,
-            "expected fast + primary + code, got {:#?}",
+            5,
+            "expected fast + primary + 2 aliases + code: {:#?}",
             manifest.models
         );
         let code_model = manifest
