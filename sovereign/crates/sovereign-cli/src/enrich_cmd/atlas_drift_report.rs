@@ -371,6 +371,14 @@ struct NarrativeAtomView {
     quotable_excerpt: Option<String>,
     /// Origin chunk for source attribution.
     chunk_id: Option<String>,
+    /// The original `Claim.anchor` value, if any — distinct from
+    /// `canonical_name` which falls back to the prose first
+    /// sentence when no anchor exists. Lets the renderer report
+    /// "anchor exists but didn't match the structural atlas"
+    /// (an actionable state: the operator can grep the anchor
+    /// themselves) vs "no anchor" (model couldn't extract one).
+    /// `None` for non-Claim atoms.
+    anchor: Option<String>,
 }
 
 struct NarrativeIndex {
@@ -606,17 +614,45 @@ fn classify_unmatched_narrative(
                 .map(atom_text_is_normative)
                 .unwrap_or(false);
         if normative && fuzzy.is_none() {
-            let headline = format!(
-                "Normative claim without code evidence — `{}`",
-                truncate_first_sentence(&atom.description, 120)
-            );
+            // Two distinct cases, both rendered as critical but with
+            // different actionability:
+            //   (a) Claim never carried an anchor — the model
+            //       extracted prose only. The operator has nothing to
+            //       grep; the rule needs implementation OR revision.
+            //   (b) Claim DID carry an anchor (`Claim.anchor`
+            //       Some(...)), but the structural atlas didn't have
+            //       a matching entity. This happens regularly when
+            //       the structural atlas only indexes crate-level
+            //       atoms while the anchor names a function. The
+            //       operator can `grep <anchor>` directly — making
+            //       the headline carry the anchor turns the finding
+            //       from "I have nothing to act on" into "grep for X".
+            let (headline, action) = match atom.anchor.as_deref() {
+                Some(a) => (
+                    format!(
+                        "Normative claim — anchor `{}` not found in code atlas — `{}`",
+                        a,
+                        truncate_first_sentence(&atom.description, 120)
+                    ),
+                    format!(
+                        "Search the codebase for `{a}`; if present, the structural atlas is missing this symbol (separate fix). If absent, the principle is stale — revise or implement."
+                    ),
+                ),
+                None => (
+                    format!(
+                        "Normative claim without code evidence — `{}`",
+                        truncate_first_sentence(&atom.description, 120)
+                    ),
+                    "Locate the implementation of this rule; either anchor it via rustdoc on the relevant code or revise the principle if implementation has shifted.".to_string(),
+                ),
+            };
             set.critical.push(Finding {
                 severity: Severity::Critical,
                 kind: FindingKind::NormativeClaimWithoutAnchor,
                 headline,
                 narrative: Some(narrative_ref(atom)),
                 structural: None,
-                action: "Locate the implementation of this rule; either anchor it via rustdoc on the relevant code or revise the principle if implementation has shifted.".to_string(),
+                action,
                 rank_hint: 1000.0,
             });
             return;
@@ -1171,7 +1207,32 @@ fn headline_short(f: &Finding) -> String {
     // Strip the "Normative claim without code evidence — `...`"
     // prefix from headlines; the section title already says "Act
     // on" so the prefix is redundant.
+    //
+    // Two headline shapes:
+    //   - "Normative claim — anchor `X` not found in code atlas — `<prose>`"
+    //     (Claim had an anchor; atlas didn't match it.) Render the
+    //     `anchor X not found` as the parenthetical so the operator
+    //     sees the searchable token.
+    //   - "Normative claim without code evidence — `<prose>`"
+    //     (Claim never had an anchor.) Render `(no anchor)`.
     let h = &f.headline;
+    if let Some(rest) = h.strip_prefix("Normative claim — anchor `") {
+        // Pull out the anchor identifier between the first pair of
+        // backticks, then everything after the next ` — ` is prose.
+        if let Some(end) = rest.find('`') {
+            let anchor = &rest[..end];
+            let tail = &rest[end..];
+            // tail starts with `` ` not found in code atlas — `<prose>` ``
+            if let Some(prose_part) = tail.find(" — ") {
+                let prose = tail[prose_part + " — ".len()..]
+                    .trim_matches('`')
+                    .to_string();
+                return format!(
+                    "normative claim _(anchor `{anchor}` not in atlas)_ — {prose}"
+                );
+            }
+        }
+    }
     if let Some(idx) = h.find(" — ") {
         let (kind, rest) = h.split_at(idx);
         let rest = rest.trim_start_matches(" — ");
@@ -1371,12 +1432,32 @@ fn narrative_view(atlas_id: &str, atom: &AtomEnvelope) -> NarrativeAtomView {
             description: e.description.clone(),
             quotable_excerpt: e.defining_quote.clone(),
             chunk_id: Some(e.first_appearance.chunk_id.clone()),
+            anchor: None,
         },
         AtomEnvelope::Claim(c) => NarrativeAtomView {
             atlas_id: atlas_id.to_string(),
             id: c.id.as_str().to_string(),
             atom_type: "Claim".to_string(),
-            canonical_name: truncate_first_sentence(&c.content, 80),
+            // canonical_name is the string the cross-corpus fuzzy
+            // matcher consults to look up a structural-atlas symbol.
+            // For a Claim with a code anchor (engineering-atlas
+            // pipeline emits `code_anchors[0]` → `Claim.anchor`),
+            // prefer that — it's already a verbatim source-span
+            // snap and reads as a function or file name. Falling
+            // back to the prose first sentence is what we had
+            // before the anchor field existed; it always missed
+            // because the matcher's threshold is too tight for
+            // 80-character paraphrases of normative rules.
+            //
+            // The headline rendering reads `description` (full
+            // prose) separately, so swapping canonical_name here
+            // doesn't affect what the operator sees — only what
+            // the matcher tries to ground.
+            canonical_name: c
+                .anchor
+                .clone()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| truncate_first_sentence(&c.content, 80)),
             aliases: Vec::new(),
             entity_type: String::new(),
             discourse_act: Some(format!("{:?}", c.discourse_act)),
@@ -1384,6 +1465,7 @@ fn narrative_view(atlas_id: &str, atom: &AtomEnvelope) -> NarrativeAtomView {
             description: c.content.clone(),
             quotable_excerpt: c.quotable_excerpt.clone(),
             chunk_id: c.evidence.first().map(|r| r.chunk_id.clone()),
+            anchor: c.anchor.clone().filter(|s| !s.trim().is_empty()),
         },
         AtomEnvelope::Configuration(c) => NarrativeAtomView {
             atlas_id: atlas_id.to_string(),
@@ -1397,6 +1479,7 @@ fn narrative_view(atlas_id: &str, atom: &AtomEnvelope) -> NarrativeAtomView {
             description: c.description.clone(),
             quotable_excerpt: None,
             chunk_id: c.evidence.first().map(|r| r.chunk_id.clone()),
+            anchor: None,
         },
         // Other atom types (Event, State, Relation, ArgumentReconstruction,
         // Question) aren't load-bearing for v1 drift; render as Notes only.
@@ -1421,6 +1504,7 @@ fn narrative_view(atlas_id: &str, atom: &AtomEnvelope) -> NarrativeAtomView {
                 description: String::new(),
                 quotable_excerpt: None,
                 chunk_id: None,
+                anchor: None,
             }
         }
     }

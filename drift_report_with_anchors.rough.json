@@ -1,0 +1,3282 @@
+{
+  "corpus_id": "commonwealth-ai",
+  "source_path": "/Users/alexsbryan/dev/commonwealth-ai",
+  "findings": [
+    {
+      "kind": {
+        "kind": "Marker",
+        "todo": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-api/src/routes_app_internal.rs",
+      "line": 86,
+      "symbol": null,
+      "message": "replace with proper base64 decode once dep is added.",
+      "snippet": "// TODO: replace with proper base64 decode once dep is added."
+    },
+    {
+      "kind": {
+        "kind": "Marker",
+        "todo": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-daemon/src/main.rs",
+      "line": 952,
+      "symbol": null,
+      "message": "re-probe on config file change; for now, daemon restart is required.",
+      "snippet": "// TODO: re-probe on config file change; for now, daemon restart is required."
+    },
+    {
+      "kind": {
+        "kind": "Marker",
+        "todo": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/field_engine.rs",
+      "line": 693,
+      "symbol": null,
+      "message": "Query tables for actual counts.",
+      "snippet": "// TODO: Query tables for actual counts."
+    },
+    {
+      "kind": {
+        "kind": "Marker",
+        "todo": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/index/enrichment.rs",
+      "line": 396,
+      "symbol": null,
+      "message": "Implement via LanceDB merge or update API.",
+      "snippet": "// TODO: Implement via LanceDB merge or update API."
+    },
+    {
+      "kind": {
+        "kind": "Marker",
+        "todo": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/index/enrichment.rs",
+      "line": 409,
+      "symbol": null,
+      "message": "Implement via LanceDB merge or update API.",
+      "snippet": "// TODO: Implement via LanceDB merge or update API."
+    },
+    {
+      "kind": {
+        "kind": "Marker",
+        "todo": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/rough_edges.rs",
+      "line": 641,
+      "symbol": null,
+      "message": "handle the empty case\\n    // FIXME(alex): off-by-one\\n}\\n\",",
+      "snippet": "\"fn foo() {\\n    // TODO: handle the empty case\\n    // FIXME(alex): off-by-one\\n}\\n\","
+    },
+    {
+      "kind": {
+        "kind": "Marker",
+        "todo": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/tools_cmd/registry.rs",
+      "line": 34,
+      "symbol": null,
+      "message": "post-phase-2): extract the per-tool registration calls",
+      "snippet": "// TODO(post-phase-2): extract the per-tool registration calls"
+    },
+    {
+      "kind": {
+        "kind": "Marker",
+        "todo": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-server/src/main.rs",
+      "line": 377,
+      "symbol": null,
+      "message": "pass reporter to WatcherCoordinator when watcher support is added",
+      "snippet": "// TODO: pass reporter to WatcherCoordinator when watcher support is added"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/rough_edges.rs",
+      "line": 56,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "/// A `const _: &str = \"/Users/...\"` / `\"/home/...\"` / `\"C:\\\\Users\\\\...\"`"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/rough_edges.rs",
+      "line": 380,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "/// code, so it catches both `const FOO: &str = \"/Users/...\"` and the"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/rough_edges.rs",
+      "line": 381,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "/// dynamic `format!(\"/Users/...{x}\")` shape."
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/store_open.rs",
+      "line": 119,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "let dir = atlas_dir_for(Path::new(\"/home/u/.sovereign\"), \"personal-knowledge\");"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/store_open.rs",
+      "line": 122,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "PathBuf::from(\"/home/u/.sovereign/indexes/personal-knowledge/atlas\")"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/eval_cmd/runner.rs",
+      "line": 394,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "\"/home/alexbryan/.sovereign/corpora/sep/articles/{}.md\","
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/honesty.rs",
+      "line": 556,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "match parse_answer(\"/home/yara/docs.md\\n\", true) {"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/honesty.rs",
+      "line": 557,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "InterlocutorAnswer::Custom(s) => assert_eq!(s, \"/home/yara/docs.md\"),"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/util/prompts.rs",
+      "line": 130,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "\"/Users/alice/models/qwen.gguf\""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/util/prompts.rs",
+      "line": 137,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "strip_quoting(\"\\\"/Users/alice/models/qwen.gguf\\\"\"),"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/util/prompts.rs",
+      "line": 138,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "\"/Users/alice/models/qwen.gguf\""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/util/prompts.rs",
+      "line": 144,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "assert_eq!(strip_quoting(\"`/Users/alice/my model.gguf`\"), \"/Users/alice/my model.gguf\");"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/util/prompts.rs",
+      "line": 160,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "strip_quoting(\"/Users/alice/my\\\\ models/qwen.gguf\"),"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/util/prompts.rs",
+      "line": 161,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "\"/Users/alice/my models/qwen.gguf\""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/atos_plan_emit.rs",
+      "line": 136,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "\"workdir\": \"/Users/me/dev/myproject\","
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/atos_verify.rs",
+      "line": 103,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "\"workdir\": \"/Users/alexsbryan/dev/atos-experiment-oicp-types\","
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "absolute_user_path": null
+      },
+      "severity": "likely",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/mcp/config.rs",
+      "line": 81,
+      "symbol": null,
+      "message": "absolute developer-home path in source (breaks portability)",
+      "snippet": "args = [\"-y\", \"@modelcontextprotocol/server-filesystem\", \"/home/alice\"]"
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-api/src/middleware/artifact_surface.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "322-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-api/src/middleware/session_briefing.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "394-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-api/src/openai_types.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "625-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-core/src/capabilities.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "325-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-core/src/contributions.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "607-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-core/src/knowledge.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "497-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-core/src/mesh.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "357-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-core/src/model_aliases.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "328-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-discovery/src/gossip.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "481-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-discovery/src/membership.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "416-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-inference/src/scheduler/knowledge_assignment.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1075-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-state/src/store.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "372-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-test-harness/src/simulated_mesh.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "329-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/acquirers/http_api/pagination.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "393-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/atlas_traversal/brief.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "573-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/atlas_traversal/classifier.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "556-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/atlas_traversal/engine.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "667-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/atlas_traversal/spans.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "405-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/canonical_sync.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "313-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/chunkers/paragraph.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "422-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/chunkers/portal_event_bullet.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "350-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/design_signals.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "848-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/engine/article_stats.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "396-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/atlas/analysis/gaps.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "451-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/atlas/analysis/holistic_classifier.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "307-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/atlas/analysis/tension_classifier.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "519-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/atlas/analysis/tensions.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1179-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/atlas/atoms.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "850-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/atlas/cross_corpus.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "750-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/atlas/schema_validation.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1435-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/atlas/writer.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "467-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/domain.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "585-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/domains/conversational.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "496-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/domains/institutional.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "421-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/domains/personal.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "473-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/domains/philosophy.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "427-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/investigation/extract.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "469-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/investigation/mod.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "361-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/atlas.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "897-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/chapter_manifest.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "430-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/exemplar_bank.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "702-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/phase_cache.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "329-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/pipelines/engineering_atlas.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "463-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/pipelines/literary.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1071-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/pipelines/philosophy_atlas.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "709-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "879-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/progress.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "440-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/trait_def.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "464-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/types.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1625-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/pipeline/validation.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "560-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/sep.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "303-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/enrichment/skeleton.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "300-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/extractors/gutenberg_catalog.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "390-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/extractors/html_sections.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "533-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/extractors/json.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "386-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/extractors/json_api.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "439-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/extractors/markdown.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "483-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/extractors/parquet.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "459-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/extractors/wikipedia_structured.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "878-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/features.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1488-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/filters/knowledge_density.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "373-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/filters/mod.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "398-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/git_archaeology.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "717-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/index/enrichment.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "443-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/index/read.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "317-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/lint_results.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "541-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/notes.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "3198-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/plan_items.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "419-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/project_docs.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "413-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/recipe.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "3610-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/scip_graph.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "2385-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/scip_proto.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "456-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/test_results.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "527-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/testing.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1494-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/types.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "455-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/update/delta.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "361-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/corpus-engine/src/wikipedia_graph.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1383-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/oicp-types/src/lib.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "2221-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-atos/src/charter.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "495-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-atos/src/lib.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "370-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-atos/src/report.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "449-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/alignment_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "373-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/amend.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1224-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/archaeology_eval_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "599-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/atlas_cmd/budget.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "395-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/atos_cmd/ab.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "432-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/atos_cmd/doctor.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "333-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/atos_cmd/milestone.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "702-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/atos_cmd/run.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "4328-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/atos_cmd/spec.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "333-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/decay.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "431-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/entities.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "652-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/eval.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "329-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/filter.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "620-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/golden.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "481-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/inference.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "507-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/scenario.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "875-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/seed.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "409-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/suggest.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "432-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/timeline.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "491-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/awareness_cmd/trace.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "441-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/bench_cmd/atlas.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "828-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/chat_cmd/inspect.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "327-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/code_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1280-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/corpus_catalog_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "443-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/corpus_watch_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "726-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/design_onboarding.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "323-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/design_session.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "947-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/doc_fetcher.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "467-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/doctor_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1416-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/atlas_configuration.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "365-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/atlas_cross_corpus.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "376-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/atlas_drift_report.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1659-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/atlas_eval.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "554-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/atlas_phase_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "520-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/atlas_resolve.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "418-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/atlas_tensions_classify.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "775-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/build.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1205-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/config.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "333-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/diagnose.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "659-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/errors.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "740-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/eval.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1906-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/eval_median.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "605-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/init.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1414-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/investigation.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "487-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/promote.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "520-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/providers.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "378-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/reset.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "570-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/schema_review.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "539-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/sep_ingest.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "456-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/show.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "398-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/enrich_cmd/triage.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "365-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/eval_cmd/mod.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "545-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/eval_cmd/report.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "621-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/eval_cmd/runner.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1814-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/eval_cmd/score.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "924-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/found.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "2750-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/git_archaeology_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "677-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/honesty.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "563-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/mesh_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "3215-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/observation.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "694-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/phases.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "524-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/pipeline_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "642-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/plan_composer.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "701-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/project_toml.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "402-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/reading_diag_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1201-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/recipe_agent_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "325-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/recipe_agent_live_trial.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1670-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/recipe_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "753-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/reflect_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "753-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/rough_edges_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "395-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/serve_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "399-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/setup_cmd.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "1567-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/tools_cmd/mod.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "392-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/tools_cmd/registry.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "309-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/voice_eval/checks.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "643-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/voice_eval/mod.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "445-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/voice_eval/report.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "698-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-cli/src/voice_eval/scenarios.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "428-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/atlas_context.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "950-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/health.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "538-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/model_family.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "347-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/models_manifest.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "689-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/pipeline/curator.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "564-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/pipeline/presenter.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "620-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/pipeline/stages.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "383-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/query_session.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "404-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/setup_config.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "777-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/traits.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "959-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core/src/types.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "2734-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-desktop/src-tauri/src/mesh_commands.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "682-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-desktop/src-tauri/src/recipe_author_commands.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "506-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-desktop/src-tauri/src/recipe_commands.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "373-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-desktop/src-tauri/src/watched_folder_commands.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "458-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-eval/src/manifest.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "424-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-eval/src/tool_grader.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "379-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-inference/src/capacity.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "441-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-inference/src/hybrid.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "320-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-inference/src/json_grammar.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "743-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-inference/src/remote.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "582-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-mesh/src/admin_http.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "511-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-mesh/src/deep_link.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "474-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-mesh/src/mesh_http.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "609-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-mesh/src/model_fetch.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "344-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-mesh/src/project_http.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "334-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-mesh/src/projects.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "488-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-pipeline/src/recipe.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "451-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-pipeline/src/worklist.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "494-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-server/src/routes.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "320-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-server/src/routes_mcp.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "767-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-store/src/insight_store.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "412-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-store/src/memory.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "477-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-store/src/migrations.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "448-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/atlas_peer_advice.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "300-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/atos_plan_emit.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "465-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/atos_utils.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "435-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/atos_verify.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "355-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/blast_radius.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "460-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/brief.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "724-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/build.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "364-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/check_doc_paths.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "676-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/design_signals_extract.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "404-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/drift_findings.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "562-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/drift_posture.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "550-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/lint_status.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "722-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/mod.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "447-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/read_note_digest.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "409-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/spec.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "338-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/code/working_set.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "413-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/corpus/manager.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "661-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/corpus/stackexchange.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "306-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/corpus/wikipedia.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "525-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/document.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "350-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/enrich.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "864-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/index_validator.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "332-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/knowledge_view/acquirers/sqlite.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "703-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/knowledge_view/recipes.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "497-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/knowledge_view/relational.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "361-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/knowledge_view/strategic.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "324-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/knowledge_view/timeline.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "559-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/config.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "903-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/excerpt.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "313-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/frontmatter.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "582-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/humanise.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "307-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/ocr/cleanup.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "322-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/pre_scanner.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "488-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/preview.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "675-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/watched/registry.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "379-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/watched/state.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "310-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/local_corpus/writeback.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "748-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/mcp_surface.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "666-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/notes/diff_extract_backend.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "518-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/notes/nudge.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "557-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/notes/response_mine.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "453-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/rag/chunk.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "372-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/capability_request.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "593-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/checkpoint.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "668-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/decision_log.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "436-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/probe_url.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "632-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/project.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "452-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/recipe_schema.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "642-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/research_finding.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "387-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/situated_context.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "382-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/test_tool.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "406-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/recipe_author/write_structured.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "506-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/search.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "597-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/web/mod.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "406-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    },
+    {
+      "kind": {
+        "kind": "Smell",
+        "zero_tracing": null
+      },
+      "severity": "note",
+      "file": "/Users/alexsbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools/src/web/search.rs",
+      "line": 1,
+      "symbol": null,
+      "message": "711-line file has fn/impl declarations but zero tracing::* calls (§9.1 glassbox)",
+      "snippet": ""
+    }
+  ]
+}

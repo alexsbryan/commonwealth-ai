@@ -474,6 +474,7 @@ mod tests {
             quotable_excerpt: None,
             attributed_to: Some(e.id.clone()),
             confidence: Some(0.4), // below the hedge threshold
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         };
         let result = TraversalResult {

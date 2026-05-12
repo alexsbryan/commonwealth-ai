@@ -79,6 +79,16 @@ pub mod drift;
 #[cfg(feature = "treesitter")]
 pub mod drift_posture;
 
+// Point-of-edit query against the latest drift findings.
+// Companion to `drift_posture` (freshness gate): `findings`
+// answers "what does the report say about THIS symbol or THIS
+// file?" without re-running the LLM pipeline. Reads the JSON
+// sidecar that the drift orchestrator mirrors to the canonical
+// `~/.sovereign/drift/` path. Pre-edit, this is the narrative-
+// side counterpart to `callers(name)` / `blast(name)`.
+#[cfg(feature = "treesitter")]
+pub mod drift_findings;
+
 // Working notes tools.
 #[cfg(feature = "treesitter")]
 pub mod write_note;

@@ -981,6 +981,7 @@ mod tests {
             evidence: vec![],
             attributed_to: None,
             confidence: Some(confidence),
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
         }

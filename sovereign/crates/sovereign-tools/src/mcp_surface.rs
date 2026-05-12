@@ -72,6 +72,17 @@ pub const MCP_TOOLS_ALWAYS: &[&str] = &[
     "probe_url", "research_finding",
     // ATOS step verification — runs verify command + hollow/untouched gates.
     "atos_verify",
+    // Drift report query — point-of-edit narrative-side lookup.
+    // Sibling to `symbols`/`callers`/`blast` (code-side) and
+    // `drift_posture` (freshness gate). Reads the canonical drift
+    // JSON sidecar; never re-runs the LLM pipeline.
+    "drift_findings",
+    // `drift_posture` is wired in the in-process registry today
+    // but stayed out of MCP_TOOLS_ALWAYS because the freshness-
+    // gate use case was operator-facing. Adding it here lets an
+    // agent check freshness before relying on `drift_findings`
+    // results — the natural pair.
+    "drift_posture",
 ];
 
 /// MCP tools that should only appear when a spec exists in the

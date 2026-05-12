@@ -273,6 +273,30 @@ pub struct Claim {
     /// rationale.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f32>,
+    /// Code symbol / file path the claim asserts something about,
+    /// after [`AnchorSnapProcessor`] has snapped it to the closest
+    /// verbatim span in the source. For engineering-atlas pipelines
+    /// this comes from the LLM's `code_anchors[0]` (the first
+    /// declared anchor for the claim). For literary-atlas pipelines
+    /// the field is absent.
+    ///
+    /// `None` rather than empty string so the drift report renderer
+    /// can distinguish "claim never carried an anchor" from "claim
+    /// carried an empty anchor." Forward-compat: existing atoms.json
+    /// files written before this field was added deserialise cleanly
+    /// thanks to `#[serde(default)]`; absent serialisations write no
+    /// key thanks to `skip_serializing_if`.
+    ///
+    /// Wired through to `NarrativeAtomView.canonical_name` in
+    /// `atlas_drift_report.rs` so the cross-corpus fuzzy matcher
+    /// has a real code-symbol-shaped string to look up (the prose
+    /// content is too long to ever fuzzy-match a function name).
+    /// Without this field, every normative claim falls through to
+    /// the critical bucket as "(no anchor)" — the canonical
+    /// reproducer for the post-2026-05-12 drift report's empty
+    /// Act-on bucket.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
     pub enrichment_depth: EnrichmentDepth,
 }
 
@@ -639,6 +663,7 @@ mod tests {
             quotable_excerpt: None,
             attributed_to: Some(AtomId::entity(7)),
             confidence: Some(0.91),
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         };
         let json = serde_json::to_string(&AtomEnvelope::Claim(claim.clone())).unwrap();
@@ -653,6 +678,86 @@ mod tests {
             }
             _ => panic!("expected Claim"),
         }
+    }
+
+    #[test]
+    fn claim_anchor_round_trips_through_json() {
+        // Pin the contract that `Claim.anchor` survives serialise →
+        // deserialise. The drift-report renderer feeds `anchor` to
+        // the cross-corpus fuzzy matcher; before this field existed
+        // every normative claim landed in the critical "(no anchor)"
+        // bucket because the matcher consulted the prose content
+        // instead of the code symbol. This test exists so a future
+        // refactor (e.g. switching the serde representation, dropping
+        // the field "because it's optional") fails loudly here
+        // rather than silently re-introducing the bug.
+        use crate::enrichment::pipeline::atlas::{ClaimScope, DiscourseAct, EpistemicStatus};
+        let claim = Claim {
+            id: AtomId::claim(7),
+            content: "`open_index_for_corpus` always opens `<index_dir>/<corpus_id>`.".into(),
+            discourse_act: DiscourseAct::Assert,
+            epistemic_status: EpistemicStatus::Confident,
+            scope: ClaimScope::Universal,
+            evidence: vec![],
+            quotable_excerpt: None,
+            attributed_to: None,
+            confidence: None,
+            anchor: Some("open_index_for_corpus".into()),
+            enrichment_depth: EnrichmentDepth::Extracted,
+        };
+        let json = serde_json::to_string(&AtomEnvelope::Claim(claim.clone())).unwrap();
+        assert!(
+            json.contains("\"anchor\":\"open_index_for_corpus\""),
+            "anchor field must serialise into the JSON envelope, got: {json}"
+        );
+
+        let back: AtomEnvelope = serde_json::from_str(&json).unwrap();
+        match back {
+            AtomEnvelope::Claim(c) => {
+                assert_eq!(c.anchor.as_deref(), Some("open_index_for_corpus"));
+            }
+            _ => panic!("expected Claim"),
+        }
+
+        // Forward-compat: an atoms.json file written before this
+        // field existed deserialises cleanly with `anchor = None`,
+        // thanks to `#[serde(default)]`. Synthesise that legacy
+        // shape and round-trip it.
+        let legacy = r#"{"atom_type":"Claim","data":{
+            "id":"claim-0001",
+            "content":"legacy claim with no anchor field",
+            "discourse_act":"assert",
+            "epistemic_status":"confident",
+            "scope":"fictional",
+            "enrichment_depth":"extracted"
+        }}"#;
+        let parsed: AtomEnvelope = serde_json::from_str(legacy).unwrap();
+        match parsed {
+            AtomEnvelope::Claim(c) => assert!(c.anchor.is_none()),
+            _ => panic!("expected Claim from legacy atoms.json shape"),
+        }
+
+        // And: when anchor is None we DO NOT emit the key (so the
+        // file size doesn't grow for pre-engineering-atlas pipelines
+        // that never set an anchor).
+        let no_anchor = Claim {
+            id: AtomId::claim(8),
+            content: "no-anchor claim".into(),
+            discourse_act: DiscourseAct::Assert,
+            epistemic_status: EpistemicStatus::Confident,
+            scope: ClaimScope::Fictional,
+            evidence: vec![],
+            quotable_excerpt: None,
+            attributed_to: None,
+            confidence: None,
+            anchor: None,
+            enrichment_depth: EnrichmentDepth::Extracted,
+        };
+        let json = serde_json::to_string(&AtomEnvelope::Claim(no_anchor)).unwrap();
+        assert!(
+            !json.contains("\"anchor\""),
+            "anchor=None must skip serialisation, got: {json}"
+        );
     }
 
     #[test]

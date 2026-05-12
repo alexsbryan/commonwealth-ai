@@ -42,6 +42,7 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 2. `recent_changes(hours: 24)` — see which subsystems are active
 3. `project_context("<user's stated task>")` — pull relevant conventions and architecture docs
 4. `notes(query: "<task area>")` — surface decisions and invariants from prior sessions
+5. `drift_posture()` — answer "is the latest drift report still current against the narrative docs?" Returns top critical findings + age. If `status=stale`, the architecture docs have been edited since the last drift run; cite findings carefully. If `status=fresh`, the drift findings (and `drift_findings()` queries below) reflect current state.
 
 ### Precision tools — use these instead of reading files
 
@@ -64,14 +65,17 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 | "What are the project conventions for X?" | `project_context("X")` |
 | "What decisions were made about Y?" | `notes(query: "Y")` |
 | "How many things depend on this?" | `blast("symbol_name")` |
+| "What does the narrative say about THIS symbol/file?" | `drift_findings(query: "name")` |
+| "Is the latest drift report still current?" | `drift_posture()` |
 
 ### Mandatory pre-flight checks
 
 These are hard to undo when skipped. Do not proceed without them.
 
 - **Before adding a method to a trait:** `callers("TraitName")` to find ALL implementors. Every impl block must be updated or the build breaks.
-- **Before modifying a function signature:** `callers("function_name")`. 20 callers requires a different strategy than 2.
+- **Before modifying a function signature:** `callers("function_name")` for code-side blast + `drift_findings(query: "function_name")` for narrative-side claims. The latter surfaces normative claims like "X always returns Y" — change the function and you may also need to update the narrative doc.
 - **Before any non-trivial change to an existing function:** `blast("function_name", max_depth: 2)`. Know the transitive impact before touching it.
+- **Before renaming a public symbol or HTTP route:** `drift_findings(query: "old_name", kind: "any")`. If any normative claim references it, the rename must update the narrative atomically. Skip this and the next drift run will surface an "anchor not in atlas" finding pointing at the rename.
 - **Before using a type from another crate:** `symbols("TypeName")` to confirm it exists and check its fields.
 
 ### Writing notes — mandatory triggers
@@ -104,6 +108,17 @@ All fields except `task_summary` are optional. Be specific — vague reflections
 notes(kinds=["reflection"], query="blast")
 ```
 Active reflections from prior sessions surface automatically. Once a limitation is fixed, the developer retires the reflection via `sovereign reflect --retire` and it disappears from future results.
+
+### Drift tool feedback — mandatory when results disappoint
+
+The drift toolchain (`drift_posture`, `drift_findings`) is recent and known to be incomplete. **When the tool returns unhelpful results during a real workflow, call `session_reflection` immediately.** Specifically:
+
+- **`drift_findings` returned `no_matches`** for a query you know is anchored in the narrative — the anchor extraction or matching pipeline missed it. Reflect with `tool_name: "drift_findings"`, `wished_i_had_known`: the symbol you searched for, the narrative section that mentions it, and what the match SHOULD have been.
+- **`drift_findings` returned matches with prose-truncated anchors** (e.g. `"The daemon does not auto-resolve..."` as the anchor instead of a code symbol) — the Phase 1 prompt drifted. Reflect with `tool_name: "drift_findings"`, `manual_work_that_should_be_a_tool`: "had to grep manually because the anchor was prose, not a symbol."
+- **`drift_posture` returned `never_run`** despite a known recent drift run — the canonical-path mirror (`~/.sovereign/drift/latest.md.json`) didn't land. Reflect with `tool_name: "drift_posture"`, `manual_work_that_should_be_a_tool`: "had to read the markdown report directly because the JSON sidecar wasn't at the expected path."
+- **The action text on a finding was too vague to act on** — log this so the renderer's `action` template can grow more specific guidance per `FindingKind`.
+
+The bar for reflecting on drift tools is *lower* than for code-intelligence tools: it's a young surface, and silence is the failure mode that's hardest to detect later.
 
 ### Compilation and test feedback — use the watcher, not Bash
 

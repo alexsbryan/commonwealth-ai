@@ -178,6 +178,13 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         sovereign_tools::DriftPostureTool::new()
             .with_workspace_root(repo_root.clone()),
     ));
+    // Point-of-edit drift query — sibling to drift_posture. Lets
+    // an agent ask "what does the narrative say about THIS symbol
+    // or THIS file?" without re-running drift detect, mirroring
+    // how `callers(name)` answers the code-side question. Reads
+    // the canonical ~/.sovereign/drift/latest.md.json the
+    // orchestrator now mirrors after every run.
+    tools.register(Box::new(sovereign_tools::DriftFindingsTool::new()));
     tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
         Arc::clone(&lint_store),
     )));

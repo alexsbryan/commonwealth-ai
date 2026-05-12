@@ -50,6 +50,8 @@ pub use code::{
     PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
 };
 #[cfg(feature = "treesitter")]
+pub use code::drift_findings::DriftFindingsTool;
+#[cfg(feature = "treesitter")]
 pub use code::{WriteNoteTool, ReadNotesTool, DeleteNoteTool};
 #[cfg(feature = "treesitter")]
 pub use code::BlastRadiusTool;

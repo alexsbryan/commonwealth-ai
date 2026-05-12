@@ -1424,6 +1424,23 @@ pub fn resolve_step_3b(
                 resolved
             });
             let evidence = sketch_anchor_evidence(&section.section_id, &sketch.anchor);
+            // Carry the anchor onto the persisted atom. Empty-string
+            // anchors collapse to `None` so the renderer can branch on
+            // "claim has a code reference" vs "claim has nothing to
+            // ground against." `ClaimSketch.anchor` was already snapped
+            // to the closest verbatim source span by the
+            // `AnchorSnapProcessor` post-processor in the runner —
+            // here we just persist that result instead of dropping it
+            // on the floor (the pre-2026-05-12 bug that produced 0
+            // dual-attested findings in every drift report).
+            let anchor = {
+                let trimmed = sketch.anchor.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            };
             claims.push(super::atoms::Claim {
                 id: claim_id.clone(),
                 content: sketch.content.trim().to_string(),
@@ -1437,6 +1454,7 @@ pub fn resolve_step_3b(
                 attributed_to: attributed_to.clone(),
                 // Derived — Phase 5 will replace with LLM score.
                 confidence: None,
+                anchor,
                 enrichment_depth: section.enrichment_depth,
             });
             if let Some(entity_id) = attributed_to {

@@ -324,6 +324,7 @@ mod tests {
             evidence: vec![ChunkRef::new(evidence_chunk, None)],
             attributed_to: None,
             confidence: Some(0.9),
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
         }

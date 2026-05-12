@@ -477,6 +477,7 @@ mod tests {
             evidence: vec![],
             attributed_to: attrib.map(AtomId::entity),
             confidence: Some(0.9),
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
         }

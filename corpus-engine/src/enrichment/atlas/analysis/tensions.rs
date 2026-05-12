@@ -674,6 +674,7 @@ mod tests {
             attributed_to: attributed_to
                 .map(|e| AtomId::from_raw(format!("entity-{e:04}"))),
             confidence: Some(1.0),
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
         }

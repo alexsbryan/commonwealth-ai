@@ -287,8 +287,84 @@ fn print_cli_event(evt: &EnrichProgress) {
     }
 }
 
+/// Canonical on-disk artefact each step produces. The orchestrator
+/// short-circuits a step whose canonical output already exists.
+///
+/// "Canonical" here is the file downstream steps actually consume —
+/// not every artefact the step writes. Extract emits both run-files
+/// and a promoted `cache/questions.json`; downstream cluster reads
+/// `cache/questions.json`, so that's the gate. Resolve writes
+/// `atoms.json`, `edges.json`, and `trajectories.json` in lockstep;
+/// `atoms.json` is the one downstream tensions/gaps/report read, so
+/// it's the canonical witness.
+///
+/// `Configure` (Phase 8) is pipeline-gated and writes through
+/// `atlas_configuration`'s own cache, which the cmd already
+/// respects; we don't gate it here so the existing semantics
+/// remain unchanged.
+///
+/// `Seed` is intentionally NOT cached at this layer — the seed cmd
+/// has its own freshness checks and is cheap enough to re-evaluate.
+fn step_canonical_output(step: Step, corpus_id: &str) -> Option<std::path::PathBuf> {
+    match step {
+        Step::Extract => Some(paths::cache_dir(corpus_id).join("questions.json")),
+        Step::Cluster => Some(paths::cache_dir(corpus_id).join("atlas-clusters.json")),
+        Step::Name => {
+            Some(paths::cache_dir(corpus_id).join("atlas-named-clusters.json"))
+        }
+        Step::Resolve => {
+            Some(paths::index_root(corpus_id).join("atlas").join("atoms.json"))
+        }
+        Step::Tensions => Some(
+            paths::index_root(corpus_id)
+                .join("atlas")
+                .join("tension_candidates.json"),
+        ),
+        Step::Gaps => Some(paths::index_root(corpus_id).join("atlas").join("gaps.json")),
+        Step::Report => Some(
+            paths::index_root(corpus_id)
+                .join("atlas")
+                .join("schema_validation.json"),
+        ),
+        Step::Seed | Step::Configure => None,
+    }
+}
+
 async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
     let corpus = parsed.corpus_id.as_str();
+
+    // ── Idempotency gate ───────────────────────────────────────
+    //
+    // If the step's canonical output is already on disk, skip the
+    // re-run. Each step's cmd_* function would otherwise blindly
+    // re-do the work (extract burns ~30 min of LLM time; resolve
+    // is cheaper but still touches the same files). The contract
+    // is "to force this step, delete its output" — same workflow
+    // the operator just used in the drift-fix loop, now made
+    // explicit in the orchestrator instead of implicit in each
+    // step's cmd_*.
+    //
+    // Selection::Chapters bypasses the gate — the operator is
+    // explicitly asking for partial work and the extract step has
+    // its own per-chapter resume / retry logic.
+    let chapters_override = matches!(&parsed.selection, Selection::Chapters(_));
+    if !chapters_override {
+        if let Some(cache_path) = step_canonical_output(step, corpus) {
+            if cache_path.exists() {
+                println!(
+                    "  · {} cached — {} exists; skipping.",
+                    step.label(),
+                    cache_path.display()
+                );
+                println!(
+                    "    To force re-run: rm {}",
+                    cache_path.display()
+                );
+                return 0;
+            }
+        }
+    }
+
     match step {
         Step::Seed => seed_cmd::cmd_seed(&[corpus.into()]).await,
         Step::Extract => run_extract_step(parsed).await,
@@ -921,6 +997,59 @@ mod tests {
     fn parse_rejects_unknown_flag() {
         let err = parse_args(&["bk".into(), "--nope".into()]).unwrap_err();
         assert!(err.contains("unknown flag"));
+    }
+
+    #[test]
+    fn step_canonical_output_covers_every_cacheable_step() {
+        // Pin the idempotency contract: each step that should
+        // short-circuit on cached output declares a canonical path,
+        // and that path lives under the expected enrichment/index
+        // root for the corpus. A future step addition that forgets
+        // to map a path here would silently re-run every time;
+        // this test fails on the discriminant of the new variant
+        // so the omission can't slip through.
+        let corpus = "my-corpus";
+        // Steps that MUST be cacheable (the LLM-heavy ones and
+        // anything downstream depends on as input).
+        for step in [
+            Step::Extract,
+            Step::Cluster,
+            Step::Name,
+            Step::Resolve,
+            Step::Tensions,
+            Step::Gaps,
+            Step::Report,
+        ] {
+            let path = step_canonical_output(step, corpus)
+                .unwrap_or_else(|| panic!("step {step:?} must declare a canonical output"));
+            // Sanity — every path is namespaced under the corpus.
+            assert!(
+                path.to_string_lossy().contains(corpus),
+                "step {step:?} → {path:?} must be corpus-scoped"
+            );
+        }
+        // Steps with no cache (seed is cheap + has its own
+        // freshness check; configure is opt-in per pipeline).
+        for step in [Step::Seed, Step::Configure] {
+            assert!(
+                step_canonical_output(step, corpus).is_none(),
+                "step {step:?} should not be cache-gated (no canonical output)"
+            );
+        }
+    }
+
+    #[test]
+    fn step_canonical_output_resolve_writes_to_index_root_atoms_json() {
+        // Resolve's canonical output is `atoms.json` at the index
+        // root. The drift orchestrator uses this exact path when
+        // the operator wants to force a re-resolve (`rm atoms.json`).
+        // Pin the path explicitly so a future refactor of the
+        // atlas-output layout breaks loudly here instead of
+        // silently making `rm atoms.json` a no-op.
+        let path = step_canonical_output(Step::Resolve, "demo")
+            .expect("Resolve must have a canonical output");
+        let s = path.to_string_lossy();
+        assert!(s.ends_with("indexes/demo/atlas/atoms.json"), "got: {s}");
     }
 
     /// Every capability flag true — no steps auto-skipped. The

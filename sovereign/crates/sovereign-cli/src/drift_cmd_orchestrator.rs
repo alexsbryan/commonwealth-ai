@@ -176,10 +176,24 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
     if !atlas_has_content(&structural_atlas_id) {
         info!(atlas_id = %structural_atlas_id, source_corpus = %source_corpus, "drift_orchestrator:step_structural_atlas_start");
         println!("  → building structural atlas '{structural_atlas_id}'…");
-        if !run_step(&sovereign_bin_str, &["enrich", "ingest", &structural_atlas_id, "--source-corpus", &source_corpus]) {
+        // `--include-functions` promotes `pub fn` / `pub method` items
+        // into Entity atoms alongside the default struct/enum/trait
+        // set. Without it the atlas tops out at module + type
+        // granularity, so a normative claim anchored to a function
+        // name (e.g. `open_index_for_corpus`) has nothing to ground
+        // against — the drift report's fuzzy matcher returns
+        // `None` and the finding lands in the critical bucket as
+        // "anchor not in atlas." Cost: roughly doubles atom count
+        // (~3.4k → ~6.2k on commonwealth-ai), adds ~5-10 sec to
+        // the deterministic ingest walk (no LLM), negligible
+        // downstream pipeline cost. The structural-atlas step is
+        // cached after first build; flipping this on requires
+        // `rm -rf ~/.sovereign/indexes/<project>-self-atlas/` to
+        // force a fresh ingest.
+        if !run_step(&sovereign_bin_str, &["enrich", "ingest", &structural_atlas_id, "--source-corpus", &source_corpus, "--include-functions"]) {
             warn!(atlas_id = %structural_atlas_id, "drift_orchestrator:step_structural_atlas_failed");
             eprintln!("✗ structural atlas ingest failed.");
-            eprintln!("  Remediation: try `sovereign enrich ingest {} --source-corpus {}` and inspect the error.",
+            eprintln!("  Remediation: try `sovereign enrich ingest {} --source-corpus {} --include-functions` and inspect the error.",
                 structural_atlas_id, source_corpus);
             return 1;
         }
@@ -425,12 +439,32 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
     }
     info!(output = %output_path.display(), "drift_orchestrator:step_report_render_done");
 
-    // ── Step 6: write fingerprint sidecar ─────────────────────
+    // ── Step 6: write fingerprint sidecar + mirror to canonical path ──
     // The freshness-gate model (sibling to lint_status / test_status).
     // `drift_posture` reads this fingerprint to answer "is the report
     // current against the narrative docs?" without re-running the LLM
-    // pipeline. Sidecar lives alongside the markdown report so all
-    // drift state co-locates.
+    // pipeline.
+    //
+    // Two write destinations:
+    //
+    //   (1) Next to `--output` (back-compat): the operator's
+    //       chosen markdown path keeps its fingerprint sidecar,
+    //       so pre-existing workflows that point drift at a repo-
+    //       local path still see `<output>.fingerprint`.
+    //
+    //   (2) The canonical agent path `~/.sovereign/drift/`: this
+    //       is where `drift_posture` and the new `drift_findings`
+    //       MCP tools look by default. Without (2), any drift run
+    //       that didn't explicitly set `--output ~/.sovereign/...`
+    //       was invisible to the agent surface — the very gap
+    //       the user flagged. Mirroring the report + its JSON
+    //       sidecar + its fingerprint closes that.
+    //
+    // The canonical mirror writes `latest.md`, `latest.md.json`,
+    // and `.fingerprint`. Multiple project drift runs overwrite
+    // each other at this path — one repo per `~/.sovereign/drift/`
+    // is the v1 contract; per-project subdirs are a future change
+    // if the user runs drift against multiple workspaces.
     let drift_dir = output_path
         .parent()
         .map(|p| p.to_path_buf())
@@ -455,11 +489,79 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
             eprintln!("   (drift_posture will report `never_run` until this succeeds)");
         }
     }
+
+    // Mirror to the canonical agent path so `drift_posture` /
+    // `drift_findings` can find the latest report without the
+    // operator having to remember to point `--output` at it.
+    let canonical_dir = dirs::home_dir()
+        .map(|h| h.join(".sovereign").join("drift"))
+        .unwrap_or_else(|| PathBuf::from(".sovereign/drift"));
+    match mirror_to_canonical(&canonical_dir, &output_path, &narrative_abs) {
+        Ok(canonical_md) => {
+            info!(
+                canonical = %canonical_md.display(),
+                "drift_orchestrator:canonical_mirror_written"
+            );
+            println!("  ✓ canonical mirror: {}", canonical_md.display());
+        }
+        Err(e) => {
+            warn!(error = %e, "drift_orchestrator:canonical_mirror_failed");
+            eprintln!(
+                "⚠ failed to mirror drift report to {}: {e}",
+                canonical_dir.display()
+            );
+            eprintln!("   (drift_posture / drift_findings will only see the explicit --output copy)");
+        }
+    }
+
     info!(output = %output_path.display(), "drift_orchestrator:complete");
 
     println!();
     println!("✓ drift report ready: {}", output_path.display());
     0
+}
+
+/// Mirror the drift report + its JSON sidecar + a freshly-stamped
+/// fingerprint into the canonical `~/.sovereign/drift/` directory.
+/// `drift_posture` (and the forthcoming `drift_findings` tool)
+/// default to that path; without this mirror, the agent surface
+/// reports `never_run` for any run that targeted a repo-local
+/// `--output`. Best-effort: failures are surfaced but don't fail
+/// the parent drift run.
+fn mirror_to_canonical(
+    canonical_dir: &Path,
+    output_md: &Path,
+    narrative_abs: &[PathBuf],
+) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(canonical_dir)?;
+    let dest_md = canonical_dir.join("latest.md");
+    std::fs::copy(output_md, &dest_md)?;
+
+    // The JSON sidecar's filename is `<md-stem>.md.json`. Mirror
+    // it alongside as `latest.md.json` so consumers don't have to
+    // sniff the layout. If the sidecar isn't present (failed
+    // render step earlier), skip silently — fingerprint write
+    // below will still record the attempt.
+    let src_json = {
+        let stem = output_md
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("report.md");
+        output_md.with_file_name(format!("{stem}.json"))
+    };
+    if src_json.exists() {
+        let dest_json = canonical_dir.join("latest.md.json");
+        std::fs::copy(&src_json, &dest_json)?;
+    }
+
+    // Stamp a fresh fingerprint AT the canonical path. The
+    // sibling write next to `--output` is what feeds the
+    // operator's repo-local view; this one is what
+    // `drift_posture::compute_posture(~/.sovereign/drift/, ...)`
+    // reads. Using `dest_md` as the recorded `output_path` so
+    // the posture report points at the canonical mirror.
+    let _ = sovereign_tools::write_fingerprint(canonical_dir, narrative_abs, &dest_md)?;
+    Ok(dest_md)
 }
 
 // ── Step helpers ─────────────────────────────────────────────
