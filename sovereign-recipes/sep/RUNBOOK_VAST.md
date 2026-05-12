@@ -142,3 +142,10 @@ the same recipe picks up where it left off.
 | `~/.sovereign/mesh.json` | mesh membership (auto-managed) |
 | `sovereign-recipes/sep/pipelines/sep-core-v1.toml` | recipe — edit this to tune retries/concurrency/schedule |
 | `sovereign/container/Containerfile.cuda` | pod image source |
+
+
+3-step local pipeline run (no peers)
+
+  SOVEREIGN_DISABLE_PEER_INFERENCE=1 sovereign daemon start
+  sovereign pipeline run sovereign-recipes/sep/pipelines/sep-core-v1.toml
+  sovereign pipeline status sep-core-v1

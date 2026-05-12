@@ -361,9 +361,10 @@ pub async fn enrich_sep_ingest(
 
     if !is_valid_sep_slug(&slug) {
         return Err(format!(
-            "invalid SEP slug `{slug}`: slugs must match `[a-z0-9-]+` \
-             (lowercase, digits, or hyphens only — SEP category slugs \
-             follow this shape on plato.stanford.edu)"
+            "invalid SEP slug `{slug}`: slugs must match `[A-Za-z0-9-]+` \
+             (ASCII letters, digits, or hyphens only — the parquet's \
+             `category` column is mostly lowercase but a handful of \
+             entries like `18thGerman-preKant` are mixed-case)"
         ));
     }
 
@@ -403,15 +404,18 @@ pub async fn enrich_sep_ingest(
 /// SEP slug validator: lowercase ASCII, digits, and hyphens
 /// only, non-empty, 64-char cap. Matches the category slugs
 /// that appear in the parquet (`compatibilism`,
-/// `recursive-functions`, `18thgerman-prekant`, …). Reject
+/// `recursive-functions`, `18thGerman-preKant`, …). Reject
 /// everything else — defensive clamp before a CLI shell-out
-/// that writes a file named after the slug.
+/// that writes a file named after the slug. Accepts both cases
+/// because the parquet has 5 mixed-case categories
+/// (`18thGerman-preKant`, `emotion-Christian-tradition`,
+/// `equivME`, `physics-Rpcc`, `statphys-Boltzmann`).
 fn is_valid_sep_slug(slug: &str) -> bool {
     if slug.is_empty() || slug.len() > 64 {
         return false;
     }
     slug.chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        .all(|c| c.is_ascii_alphabetic() || c.is_ascii_digit() || c == '-')
 }
 
 // ─── Command: enrich_list_corpora ────────────────────────────────────
@@ -1125,7 +1129,8 @@ mod tests {
     fn sep_slug_validator_accepts_real_plato_slugs() {
         assert!(is_valid_sep_slug("compatibilism"));
         assert!(is_valid_sep_slug("recursive-functions"));
-        assert!(is_valid_sep_slug("18thgerman-prekant"));
+        assert!(is_valid_sep_slug("18thGerman-preKant"));
+        assert!(is_valid_sep_slug("emotion-Christian-tradition"));
     }
 
     #[test]
@@ -1133,7 +1138,6 @@ mod tests {
         assert!(!is_valid_sep_slug("../etc/passwd"));
         assert!(!is_valid_sep_slug("slug with spaces"));
         assert!(!is_valid_sep_slug("slug/with/slashes"));
-        assert!(!is_valid_sep_slug("UPPERCASE"));
         assert!(!is_valid_sep_slug("unicode-ümlaut"));
         assert!(!is_valid_sep_slug(""));
         assert!(!is_valid_sep_slug(&"a".repeat(65)));

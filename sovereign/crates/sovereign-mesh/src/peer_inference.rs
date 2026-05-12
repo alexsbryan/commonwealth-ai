@@ -79,6 +79,17 @@ const MANIFEST_TTL: Duration = Duration::from_secs(60);
 /// **Saturating at u32::MAX** because `is_quarantined` already
 /// removed peers with zero weight; an extreme floor value (like
 /// `HEALTH_WEIGHT_FLOOR = 0.05`) yields raw/0.05 = 20× — well
+/// Operator override that forces every inference call to stay
+/// on the local node, bypassing the load-balance scoring that
+/// might otherwise route to a peer. Read from the env on every
+/// call so flips take effect without a daemon restart (set the
+/// var, flip it back to "0" / unset to resume normal routing).
+fn peer_inference_disabled() -> bool {
+    std::env::var("SOVEREIGN_DISABLE_PEER_INFERENCE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 /// within u32. The saturate is belt-and-braces for future floor
 /// changes.
 fn effective_inflight(raw: u32, health_weight: f32) -> u32 {
@@ -142,6 +153,51 @@ mod effective_inflight_tests {
         // entirely. u32::MAX in the comparison guarantees that.
         assert_eq!(effective_inflight(0, 0.0), u32::MAX);
         assert_eq!(effective_inflight(7, 0.0), u32::MAX);
+    }
+}
+
+#[cfg(test)]
+mod peer_inference_disabled_tests {
+    use super::peer_inference_disabled;
+
+    // Run env-var tests serially via a process-wide mutex —
+    // std::env::set_var is not thread-safe and Cargo runs unit
+    // tests in parallel by default.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn unset_means_routing_enabled() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("SOVEREIGN_DISABLE_PEER_INFERENCE");
+        assert!(!peer_inference_disabled());
+    }
+
+    #[test]
+    fn value_one_disables_routing() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("SOVEREIGN_DISABLE_PEER_INFERENCE", "1");
+        assert!(peer_inference_disabled());
+        std::env::remove_var("SOVEREIGN_DISABLE_PEER_INFERENCE");
+    }
+
+    #[test]
+    fn value_true_case_insensitive_disables_routing() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("SOVEREIGN_DISABLE_PEER_INFERENCE", "TRUE");
+        assert!(peer_inference_disabled());
+        std::env::set_var("SOVEREIGN_DISABLE_PEER_INFERENCE", "true");
+        assert!(peer_inference_disabled());
+        std::env::remove_var("SOVEREIGN_DISABLE_PEER_INFERENCE");
+    }
+
+    #[test]
+    fn value_zero_or_other_keeps_routing_enabled() {
+        let _g = ENV_LOCK.lock().unwrap();
+        std::env::set_var("SOVEREIGN_DISABLE_PEER_INFERENCE", "0");
+        assert!(!peer_inference_disabled());
+        std::env::set_var("SOVEREIGN_DISABLE_PEER_INFERENCE", "no");
+        assert!(!peer_inference_disabled());
+        std::env::remove_var("SOVEREIGN_DISABLE_PEER_INFERENCE");
     }
 }
 
@@ -676,6 +732,20 @@ impl MeshInferenceProvider {
         if !Self::has_routing_signal(request) {
             return None;
         }
+        // Operator override: short-circuit all outbound peer
+        // routing. Set `SOVEREIGN_DISABLE_PEER_INFERENCE=1` in the
+        // daemon's environment to keep every inference call local
+        // regardless of load-balance scoring. Use when reserving
+        // a peer's compute (long ingests that shouldn't clobber a
+        // colleague's machine) — the request stays local even if
+        // a peer would strictly outscore the local manifest.
+        if peer_inference_disabled() {
+            tracing::debug!(
+                "mesh-inference: peer routing disabled via \
+                 SOVEREIGN_DISABLE_PEER_INFERENCE — staying local"
+            );
+            return None;
+        }
         if let Some(oicp) = &request.oicp {
             if oicp.sharding() == ShardingPrivacy::LocalOnly {
                 return None;
@@ -895,6 +965,28 @@ impl MeshInferenceProvider {
             .models
             .iter()
             .any(|m| m.id == model_id);
+
+        // Operator override: short-circuit all outbound peer
+        // routing on this code path too. The OICP `select_peer`
+        // path and this explicit-model-name path are independent
+        // — the env var has to gate both, or a recipe that names
+        // a specific GGUF (the common case for `enrich build`)
+        // sneaks past. Returns Local when we have the model, else
+        // Unknown (the caller surfaces a clear error rather than
+        // silently falling through to a peer).
+        if peer_inference_disabled() {
+            tracing::debug!(
+                model = %model_id,
+                local_has,
+                "mesh-inference: peer routing disabled via \
+                 SOVEREIGN_DISABLE_PEER_INFERENCE — local or unknown"
+            );
+            return if local_has {
+                NamedModelLocation::Local
+            } else {
+                NamedModelLocation::Unknown
+            };
+        }
 
         // First pass — honour the manifest cache. Normal traffic
         // gets the cheap path (no extra round-trips).

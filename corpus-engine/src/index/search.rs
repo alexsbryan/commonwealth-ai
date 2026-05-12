@@ -47,7 +47,7 @@ use lancedb::query::{ExecutableQuery, QueryBase};
 
 use super::sanitize_fts_query;
 use crate::error::{Error, Result};
-use crate::types::{RerankConfig, RerankFn, ScoredChunk};
+use crate::types::{DedupPicker, RerankConfig, RerankFn, ScoredChunk};
 
 use super::CorpusIndex;
 
@@ -381,8 +381,19 @@ impl CorpusIndex {
         rerank_fn: Option<&RerankFn>,
         config: &RerankConfig,
     ) -> Result<Vec<ScoredChunk>> {
+        // Per-corpus dedup filter — when set, dedup only fires for
+        // corpora whose id is in the allowlist. SEP wins from dedup;
+        // wiki regresses from it (RERANK_EXPERIMENT.md ablation), so
+        // the right default is opt-in per corpus rather than a
+        // single global toggle.
+        let corpus_eligible_for_dedup = match &config.dedup_corpus_filter {
+            Some(allow) => allow.contains(&self.corpus_id),
+            None => true,
+        };
+        let effective_per_article = config.per_article && corpus_eligible_for_dedup;
+
         let has_reranker = config.enabled && rerank_fn.is_some();
-        let dedup_only = config.enabled && config.per_article && rerank_fn.is_none();
+        let dedup_only = config.enabled && effective_per_article && rerank_fn.is_none();
         // Run the overfetch+process path when either:
         //   - a reranker is wired (the normal rerank case), OR
         //   - per-article dedup is requested without a reranker (the
@@ -543,34 +554,59 @@ impl CorpusIndex {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        if config.per_article {
-            // Walk the sorted list once; keep the first chunk we
-            // see for each distinct source. Sources without a
-            // `source_doc_id` fall back to `title`; chunks with
-            // neither (rare) are bucketed under their content
-            // hash so they don't collide.
+        if effective_per_article {
+            // Pick the within-article winner via the configured
+            // signal. FusedScore (the default) keeps the existing
+            // behaviour — walk the already-score-sorted list and
+            // take the first chunk per source. VectorDistance
+            // re-orders by cosine-to-query first so the picker
+            // selects the chunk whose embedding most resembles the
+            // query, regardless of RRF placement.
+            match config.dedup_picker {
+                DedupPicker::FusedScore => {
+                    // already sorted by score desc above
+                }
+                DedupPicker::VectorDistance => {
+                    reranked.sort_by(|a, b| {
+                        let av = a.vector_distance.unwrap_or(f32::INFINITY);
+                        let bv = b.vector_distance.unwrap_or(f32::INFINITY);
+                        av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                }
+            }
+
+            // Walk the (now-appropriately-sorted) list once; keep
+            // the first chunk we see for each distinct source.
+            // Sources without a `source_doc_id` fall back to
+            // `title`; chunks with neither (rare) are bucketed
+            // under their chunk_id so they don't collide.
             let mut seen: std::collections::HashSet<String> =
                 std::collections::HashSet::new();
-            let mut deduped: Vec<ScoredChunk> = Vec::with_capacity(limit);
+            let mut deduped: Vec<ScoredChunk> = Vec::with_capacity(limit.max(16));
             for chunk in reranked.into_iter() {
                 let key = chunk
                     .source_doc_id
                     .clone()
                     .or_else(|| chunk.title.clone())
                     .unwrap_or_else(|| {
-                        // Last resort — every chunk gets its own
-                        // bucket so we never drop a chunk
-                        // entirely.
                         format!("__chunk_{:?}", chunk.chunk_id)
                     });
                 if seen.insert(key) {
                     deduped.push(chunk);
-                    if deduped.len() >= limit {
-                        break;
-                    }
                 }
             }
             reranked = deduped;
+
+            // Re-sort by final score so the caller's top-K cut is
+            // still relevance-ordered. Even when the picker was
+            // VectorDistance, the across-article ranking should
+            // respect the fused / blended score so chunks compete
+            // on the same axis the operator chose.
+            reranked.sort_by(|a, b| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
         }
 
         let after = reranked.len();
@@ -583,7 +619,8 @@ impl CorpusIndex {
             returned = reranked.len(),
             has_reranker,
             alpha,
-            per_article = config.per_article,
+            per_article_requested = config.per_article,
+            per_article_applied = effective_per_article,
             min_score = ?config.min_score,
             "CorpusIndex::search_with_rerank complete"
         );

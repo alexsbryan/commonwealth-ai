@@ -414,18 +414,53 @@ pub async fn build_session_with_skills(
     let dedup_only = std::env::var("SOVEREIGN_RERANK_DEDUP_ONLY")
         .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
+    // Per-corpus dedup allowlist. Empirically (RERANK_EXPERIMENT.md):
+    // SEP gains +10 sources from dedup; wiki LOSES 3. Default is
+    // SEP-only when nothing is set, but the operator can override.
+    // Empty string ("") explicitly = no filter (apply to all corpora;
+    // matches the original cross-corpus ablation behaviour).
+    let dedup_filter = match std::env::var("SOVEREIGN_RERANK_DEDUP_CORPORA") {
+        Ok(s) if s.is_empty() => None,
+        Ok(s) => Some(
+            s.split(',')
+                .map(|t| t.trim().to_string())
+                .filter(|t| !t.is_empty())
+                .collect::<std::collections::HashSet<_>>(),
+        ),
+        Err(_) => Some(["sep".to_string()].into_iter().collect()),
+    };
+
+    // Dedup picker: `fused` (default, RRF/blended-score order) or
+    // `vector` (cosine distance to query — tests whether RRF noise
+    // inside an article is what hurts wiki dedup).
+    let dedup_picker = match std::env::var("SOVEREIGN_RERANK_DEDUP_PICKER")
+        .as_deref()
+        .unwrap_or("fused")
+    {
+        "vector" | "vector_distance" => corpus_engine::DedupPicker::VectorDistance,
+        _ => corpus_engine::DedupPicker::FusedScore,
+    };
+
     if dedup_only {
         let mut cfg = corpus_engine::RerankConfig::default();
         cfg.enabled = true;
         cfg.per_article = true;
+        cfg.dedup_corpus_filter = dedup_filter.clone();
+        cfg.dedup_picker = dedup_picker;
         if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
             if let Ok(n) = s.parse::<usize>() {
                 cfg.candidates_k = n;
             }
         }
         eprintln!(
-            "Rerank dedup-only ablation: candidates_k={}, per_article=true (no cross-encoder)",
-            cfg.candidates_k
+            "Rerank dedup-only ablation: candidates_k={}, per_article=true, picker={:?}, dedup_corpora={:?} (no cross-encoder)",
+            cfg.candidates_k,
+            cfg.dedup_picker,
+            cfg.dedup_corpus_filter.as_ref().map(|s| {
+                let mut v: Vec<&String> = s.iter().collect();
+                v.sort();
+                v
+            })
         );
         runtime = runtime.with_rerank_config(cfg);
     } else if let Ok(rerank_path) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
@@ -460,12 +495,19 @@ pub async fn build_session_with_skills(
                     cfg.per_article =
                         s == "1" || s.eq_ignore_ascii_case("true");
                 }
+                cfg.dedup_corpus_filter = dedup_filter.clone();
+                cfg.dedup_picker = dedup_picker;
                 eprintln!(
-                    "Reranker:    {} (candidates_k={}, alpha={:.2}, per_article={}, min_score={:?})",
+                    "Reranker:    {} (candidates_k={}, alpha={:.2}, per_article={}, dedup_corpora={:?}, min_score={:?})",
                     path.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
                     cfg.candidates_k,
                     cfg.alpha,
                     cfg.per_article,
+                    cfg.dedup_corpus_filter.as_ref().map(|s| {
+                        let mut v: Vec<&String> = s.iter().collect();
+                        v.sort();
+                        v
+                    }),
                     cfg.min_score
                 );
                 runtime = runtime.with_rerank(rerank_fn, cfg);

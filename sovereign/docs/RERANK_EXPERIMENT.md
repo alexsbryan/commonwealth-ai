@@ -279,6 +279,8 @@ SOVEREIGN_RERANK_ALPHA=0.7 \
 |---|---|---|
 | `SOVEREIGN_RERANK_MODEL_PATH` | unset | Loads the GGUF; flips `RerankConfig.enabled = true`. |
 | `SOVEREIGN_RERANK_DEDUP_ONLY` | `0` | `1` → overfetch + per-article dedup using fusion scores only (no cross-encoder). The ablation knob. Mutually exclusive with `SOVEREIGN_RERANK_MODEL_PATH` (dedup-only takes precedence). |
+| `SOVEREIGN_RERANK_DEDUP_CORPORA` | `sep` | Comma-separated allow-list of corpus IDs eligible for dedup. Empty string = no filter (apply to all). Default `sep` reflects the empirical finding that dedup is corpus-shape-specific. |
+| `SOVEREIGN_RERANK_DEDUP_PICKER` | `fused` | Which signal picks the within-article best chunk. `fused` = RRF/blended order (best for SEP). `vector` = cosine-to-query (partially recovers wiki, hurts SEP). |
 | `SOVEREIGN_RERANK_PER_ARTICLE` | `0` | `1` → per-article dedup after rerank. **The big lever on SEP.** |
 | `SOVEREIGN_RERANK_ALPHA` | `1.0` | Blend weight on rerank vs. fusion. `0.7` is the kept value. Both are min-max normalised inside the candidate pool. |
 | `SOVEREIGN_RERANK_CANDIDATES_K` | `50` | Pool size pulled from LanceDB before reranking. |
@@ -351,39 +353,97 @@ quantifies.
 
 ---
 
+## Follow-ups: per-corpus dedup + RRF noise probe
+
+### Per-corpus dedup filter (kept artifact)
+
+`RerankConfig.dedup_corpus_filter: Option<HashSet<String>>` lets
+dedup apply to a chosen allow-list of corpus IDs only. Bootstrap
+reads `SOVEREIGN_RERANK_DEDUP_CORPORA=sep,…` and defaults to
+`{"sep"}` when unset. Empty string explicitly = no filter (apply
+to all corpora — original ablation behaviour).
+
+Verified:
+
+| Bank | Filter | Sources | Facts |
+|---|---|---|---|
+| SEP | `sep` | 50/66 (76%) | 128/159 (81%) (dedup applied) |
+| Wiki | `sep` | 29/58 (50%) | 97/130 (75%) (untouched, baseline) |
+
+The filter does what it's supposed to — SEP keeps the dedup lift,
+wiki is structurally untouched.
+
+### RRF-noise hypothesis: vector-distance dedup picker
+
+`RerankConfig.dedup_picker: DedupPicker { FusedScore, VectorDistance }`
+chooses the signal that picks the best chunk within each source.
+Hypothesis: the wiki dedup regression is driven by LanceDB's RRF
+noise inside an article — RRF is rank-position-based, so an
+article's tangential paragraph can land at higher RRF rank than
+its canonical paragraph by quirk. Vector-distance picker re-orders
+the candidate pool by cosine-to-query (lower = better) before the
+dedup walk, so the chunk whose embedding most resembles the query
+represents the article.
+
+| Bank | Baseline | Dedup `fused` | Dedup `vector` |
+|---|---|---|---|
+| Wiki sources | 29/58 (50%) | 26 (-3) | **27 (-2)** |
+| Wiki facts | 97/130 (75%) | 86 (-11) | **91 (-6)** |
+| SEP sources | 40/66 (61%) | 50 (+10) | 46 (+6) |
+| SEP facts | 134/159 (84%) | 128 (-6) | 129 (-5) |
+
+**Findings:**
+
+1. **RRF noise is *part* of the wiki regression but not all of it.**
+   Vector-distance picker recovers about half the wiki loss
+   (+5 facts, +1 source over `fused`). Still **below baseline**.
+2. **Picker choice is corpus-dependent in the opposite direction
+   for SEP.** Vector picker hurts SEP (-4 sources vs. `fused`).
+   No globally-better picker exists; the right picker per corpus
+   is empirical, not architectural.
+3. **There's a deeper cause than RRF noise.** Wiki questions
+   legitimately need multi-chunk coverage from a single canonical
+   article for fact recall (best wiki dedup setting still loses
+   -6 facts vs. baseline). 1-chunk-per-article truncation strips
+   that. **Next experiment worth running: cap N chunks per
+   article (N=2 or 3) instead of 1.** Mechanical change to the
+   dedup walk (`HashSet → HashMap<key, count>`); should preserve
+   some multi-chunk depth on wiki while still spreading sources.
+
+The vector-distance picker code stays merged behind
+`SOVEREIGN_RERANK_DEDUP_PICKER=vector`, but the default is
+`fused` because it's strictly better on SEP (the only corpus
+that benefits from dedup today).
+
+---
+
 ## Decision
 
-The picture is corpus-dependent enough that **neither extreme is
-right**:
+After two ablation rounds, the picture is clear:
 
-- **Don't ship dedup-only as a default.** It's a clean win on SEP
-  but a clean regression on wiki. The dedup logic is corpus-shape-
-  dependent (narrow canonical vs. broader topical), so any global
-  on/off is wrong half the time.
-- **Don't ship the reranker slot as a default either.** It needs a
-  resident model slot, +1.7 s search latency, mesh-contract work,
-  and a per-corpus config story. Worth the cost only if multiple
-  corpora can use it productively.
+- **Dedup is SEP-only by default.** Per-corpus filter shipped
+  (env-var-gated, `RerankConfig.dedup_corpus_filter`). SEP users
+  get +10 sources, wiki users untouched. **The kept artifact of
+  this experiment.**
+- **The reranker slot stays experimental.** Resident model slot,
+  +1.7 s search latency, mesh-contract work — worth the cost only
+  if its residual contribution (+1 SEP source over best dedup,
+  +5 wiki sources over best dedup, +12 wiki facts over best
+  dedup) is judged big enough relative to those costs.
 
-What to do instead, in order of effort:
+Next experiments, in order of effort:
 
-1. **Make dedup a per-corpus (or skill) opt-in.** Cheap. The
-   `RerankConfig { enabled, per_article, … }` already lives at the
-   runtime layer; threading it through `installed_indexes()` or
-   attaching it to recipes is mechanical. Lets SEP users get the
-   +10 source lift without breaking wiki.
-2. **Investigate why dedup-only hurts wiki** — specifically, is
-   RRF noise the only cause, or is there a structural property of
-   the wiki corpus (chunk size, article length distribution) at
-   play? If RRF noise is the culprit, a cheap fix (e.g. dedup
-   keyed off vector_distance instead of fused score) might
-   recapture wiki without invoking the cross-encoder.
-3. **Only then** weigh the rerank-slot decision. With dedup landed
-   as a per-corpus knob and RRF-vs-vector dedup explored, the
-   reranker's remaining contribution is "+1 SEP source, +5 wiki
-   sources, +12 wiki facts" — and that's the actual size of the
-   prize the resident slot would have to justify against memory +
-   latency + mesh contract cost.
+1. **Cap-N chunks per article** — replace the 1-chunk-per-source
+   dedup with cap-N (try 2, 3). If wiki recovers to baseline-or-
+   better with N=2-3, dedup becomes a global default-on with a
+   per-corpus N. Cheap to try, no model required.
+2. **Vector-distance dedup *combined* with cap-N** — addresses
+   both contributors at once (which chunk per article + how many
+   chunks per article).
+3. **Only after exhausting (1) and (2)** — weigh the rerank-slot
+   decision. By that point the reranker's residual contribution
+   over the best mechanism-only baseline is the actual size of
+   the prize that the slot's costs would have to justify.
 
 The code from this experiment stays merged in but the defaults
 stay off. Future-me, when revisiting: re-run the smoke test first

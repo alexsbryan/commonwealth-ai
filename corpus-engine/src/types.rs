@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -120,6 +120,53 @@ pub struct RerankConfig {
     /// answers that legitimately need multi-chunk coverage of a
     /// single article. Off by default.
     pub per_article: bool,
+    /// Optional allow-list of `corpus_id`s eligible for the
+    /// per-article dedup pass. Empirically, dedup-only is a clean
+    /// win on SEP (narrow canonical sources, +10 sources) and a
+    /// clean regression on Wikipedia (broader topical articles,
+    /// -3 sources, see RERANK_EXPERIMENT.md ablation).
+    ///
+    /// - `None` (default): apply per_article to every corpus when
+    ///   `per_article = true`. Matches the original ablation
+    ///   behaviour.
+    /// - `Some(set)`: only apply per_article to corpora whose ID
+    ///   is in the set. Other corpora keep baseline-order results
+    ///   even when `per_article = true`. SEP-only is the
+    ///   empirically-validated default.
+    pub dedup_corpus_filter: Option<HashSet<String>>,
+    /// How the per-article dedup pass picks the "best chunk" within
+    /// each source. The hypothesis under test (RERANK_EXPERIMENT.md
+    /// §RRF noise investigation): the wiki dedup-only regression is
+    /// driven by LanceDB's RRF noise inside an article. RRF is
+    /// position-based, so an article's tangential paragraph can
+    /// land at higher RRF rank than its canonical-summary paragraph
+    /// purely by quirk. Switching the picker to `VectorDistance`
+    /// uses cosine-to-query as the within-article signal, which is
+    /// what a cross-encoder approximates without the cost.
+    pub dedup_picker: DedupPicker,
+}
+
+/// Which signal the per-article dedup pass uses to pick the
+/// best chunk within each source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DedupPicker {
+    /// Use the fused score (RRF or rerank-blended) — the simplest
+    /// rule: keep the first chunk we encounter per source in the
+    /// already-sorted candidate list. Vulnerable to RRF noise
+    /// inside an article.
+    FusedScore,
+    /// Use the raw `vector_distance` (cosine to query embedding) —
+    /// re-orders by closest-to-query before the dedup walk so the
+    /// within-article winner is the chunk whose embedding most
+    /// resembles the query. Chunks without a `vector_distance`
+    /// (FTS-only matches) sort last.
+    VectorDistance,
+}
+
+impl Default for DedupPicker {
+    fn default() -> Self {
+        DedupPicker::FusedScore
+    }
 }
 
 impl Default for RerankConfig {
@@ -130,6 +177,8 @@ impl Default for RerankConfig {
             min_score: None,
             alpha: 1.0,
             per_article: false,
+            dedup_corpus_filter: None,
+            dedup_picker: DedupPicker::FusedScore,
         }
     }
 }

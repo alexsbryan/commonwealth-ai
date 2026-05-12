@@ -41,7 +41,16 @@ version = 1
 # `--key <slug>` to `pipeline run`. The recipe-level default stays
 # the full corpus so partial-run usage is purely additive.
 type    = "command"
-command = "sovereign enrich sep-ingest --list"
+# Emit one bare slug per line, restricted to slugs that don't yet have
+# a built atlas. Three stages:
+#   1. `--list` produces `<header>\n<count>  <slug>` rows
+#   2. `awk 'NR>1 {print $2}'` drops the header + count, leaving the slug
+#   3. `while read … [ -f .../atoms.json ] || echo` skips slugs whose
+#      atlas/atoms.json already exists on disk
+# `enrich build` is idempotent on atoms.json, but `enrich sep-ingest
+# --force` still re-scaffolds (~2s × already-done count) — filtering
+# at the source keeps the worklist real-work-only and re-runs cheap.
+command = "sovereign enrich sep-ingest --list | awk 'NR>1 {print $2}' | while IFS= read -r s; do [ -f \"$HOME/.sovereign/indexes/sep-$s/atlas/atoms.json\" ] || echo \"$s\"; done"
 
 [enrich]
 # `&&` short-circuits — if sep-ingest fails (404 slug, missing
