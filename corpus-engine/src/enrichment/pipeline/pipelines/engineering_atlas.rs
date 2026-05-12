@@ -318,6 +318,13 @@ fn render_user_body(chapter: &ChapterInput) -> String {
 /// Phase 1 envelope. Kept narrow on purpose — every additional field
 /// is mask-state the model has to navigate.
 fn phase1_engineering_schema() -> serde_json::Value {
+    // `x-asciiExtended: true` on every string field blocks the
+    // occasional non-Latin token drift observed in drift reports
+    // (e.g. CJK characters like "或"/"生成" leaking into claim
+    // content). It permits ASCII + 2-byte UTF-8 (Latin Extended,
+    // Greek, Cyrillic, Arabic, Hebrew base) so accented names like
+    // "Björk" or "café" still pass — only 3+ byte UTF-8 (CJK,
+    // Devanagari, Hangul, etc.) is rejected by the grammar mask.
     serde_json::json!({
         "type": "object",
         "required": ["claims"],
@@ -330,12 +337,12 @@ fn phase1_engineering_schema() -> serde_json::Value {
                     "required": ["content", "code_anchors"],
                     "additionalProperties": false,
                     "properties": {
-                        "content": {"type": "string"},
+                        "content": {"type": "string", "x-asciiExtended": true},
                         "code_anchors": {
                             "type": "array",
-                            "items": {"type": "string"}
+                            "items": {"type": "string", "x-asciiExtended": true}
                         },
-                        "evidence_excerpt": {"type": "string"}
+                        "evidence_excerpt": {"type": "string", "x-asciiExtended": true}
                     }
                 }
             }

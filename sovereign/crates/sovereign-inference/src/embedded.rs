@@ -4880,6 +4880,13 @@ const THINK_BUDGET: usize = 512;
 pub struct ConstrainedSampler {
     inner: LlamaSampler,
     constraint: Option<crate::json_constraint::JsonConstraint>,
+    /// Vocab-sized bitmap of tokens whose rendered bytes contain a
+    /// 3+ byte UTF-8 leading byte (CJK / Devanagari / Hangul / etc.).
+    /// When `Some`, `sample()` clamps those tokens' logits to
+    /// `-INFINITY` on every step, regardless of whether a JSON
+    /// constraint is active. Populated by `build_sampler` when the
+    /// `SOVEREIGN_BLOCK_NON_LATIN` env var is set.
+    non_latin_denylist: Option<std::sync::Arc<Vec<bool>>>,
 }
 
 impl ConstrainedSampler {
@@ -4904,6 +4911,18 @@ impl ConstrainedSampler {
         };
         if let Some(c) = self.constraint.as_mut() {
             c.mask(&mut data);
+        }
+        // Non-Latin denylist: independent of the JSON-schema mask, so
+        // it covers free-form chat and non-`structured_output` paths
+        // that the grammar layer doesn't reach. A single L1 lookup per
+        // candidate; the bitmap was built once at slot-load.
+        if let Some(deny) = self.non_latin_denylist.as_ref() {
+            for entry in data.data.iter_mut() {
+                let id = entry.id().0 as usize;
+                if deny.get(id).copied().unwrap_or(false) {
+                    entry.set_logit(f32::NEG_INFINITY);
+                }
+            }
         }
         data.apply_sampler(&self.inner);
         data.selected_token()
@@ -4946,6 +4965,18 @@ fn build_sampler(
         }
     });
 
+    // Non-Latin token denylist: opt-in via env var. Built once per
+    // model and cached for the daemon's lifetime. Applies on every
+    // inference path (chat, completion, structured) so callers don't
+    // have to remember to set `x-asciiExtended` on every schema.
+    // Default OFF — some corpora (Confucian-philosophy articles,
+    // multilingual chat) legitimately need CJK tokens.
+    let non_latin_denylist = if non_latin_block_enabled() {
+        Some(crate::json_constraint::non_latin_denylist_for(model))
+    } else {
+        None
+    };
+
     // Temperature: per-request override → family default.
     let temp = request.temperature.unwrap_or(quirks.default_temperature);
     // Top-k: per-request override → family default → hard fallback of 40.
@@ -4974,6 +5005,21 @@ fn build_sampler(
     ConstrainedSampler {
         inner: LlamaSampler::chain_simple(samplers),
         constraint,
+        non_latin_denylist,
+    }
+}
+
+/// Read `SOVEREIGN_BLOCK_NON_LATIN` once per `build_sampler` call.
+/// Accepts the same truthy spellings as `SOVEREIGN_GRAMMAR_TIMING`
+/// (`1` / `true`, case-insensitive) so operators have a consistent
+/// toggle convention across grammar features.
+fn non_latin_block_enabled() -> bool {
+    match std::env::var("SOVEREIGN_BLOCK_NON_LATIN") {
+        Ok(v) => {
+            let v = v.trim();
+            v == "1" || v.eq_ignore_ascii_case("true")
+        }
+        Err(_) => false,
     }
 }
 

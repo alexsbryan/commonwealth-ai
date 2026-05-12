@@ -92,6 +92,16 @@ pub enum Schema {
     /// 78-word Wikipedia lead burned 11337 tokens before deadline.)
     StringAny {
         max_length: Option<usize>,
+        /// When `true`, reject UTF-8 leading bytes `>= 0xE0` inside the
+        /// string body — i.e. permit only ASCII + 2-byte UTF-8 (codepoints
+        /// U+0000–U+07FF: Latin Extended, Greek, Cyrillic, Arabic, Hebrew).
+        /// Blocks CJK, Devanagari, Hangul, and other 3+ byte scripts.
+        ///
+        /// Wired via the custom JSON Schema keyword `x-asciiExtended: true`.
+        /// Default is `false` (no behaviour change). Enable on schemas
+        /// where the model occasionally drifts into non-Latin tokens
+        /// (e.g. Chinese characters in English atom extraction).
+        ascii_extended: bool,
     },
     Integer,
     Number,
@@ -192,7 +202,14 @@ impl CompileCtx {
                         .get("maxLength")
                         .and_then(|v| v.as_u64())
                         .map(|n| n as usize);
-                    Ok(Schema::StringAny { max_length })
+                    let ascii_extended = obj
+                        .get("x-asciiExtended")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    Ok(Schema::StringAny {
+                        max_length,
+                        ascii_extended,
+                    })
                 }
             }
             "integer" => Ok(Schema::Integer),
@@ -399,7 +416,10 @@ fn parse_value(p: &mut Cursor, schema: &Schema) -> ParseStatus {
         } => parse_object(p, properties, *required_count, *additional),
         Schema::Array { items, max_items } => parse_array(p, items, *max_items),
         Schema::StringEnum(opts) => parse_string_enum(p, opts),
-        Schema::StringAny { max_length } => parse_string_any(p, *max_length),
+        Schema::StringAny {
+            max_length,
+            ascii_extended,
+        } => parse_string_any(p, *max_length, *ascii_extended),
         Schema::Integer => parse_number(p, false),
         Schema::Number => parse_number(p, true),
         Schema::Boolean => parse_keyword_alt(p, &["true", "false"]),
@@ -793,7 +813,11 @@ fn parse_string_enum(p: &mut Cursor, opts: &[String]) -> ParseStatus {
 /// Capping consecutive escapes at `MAX_CONSECUTIVE_STRING_ESCAPES`
 /// (3) breaks the loop without forbidding legitimate uses (escaped
 /// runs that long are vanishingly rare in real JSON content).
-fn parse_string_any(p: &mut Cursor, max_length: Option<usize>) -> ParseStatus {
+fn parse_string_any(
+    p: &mut Cursor,
+    max_length: Option<usize>,
+    ascii_extended: bool,
+) -> ParseStatus {
     if p.peek() != Some(b'"') {
         return ParseStatus::Invalid;
     }
@@ -826,12 +850,19 @@ fn parse_string_any(p: &mut Cursor, max_length: Option<usize>) -> ParseStatus {
                     }
                     Some(b'u') => {
                         p.advance();
-                        for _ in 0..4 {
+                        let mut hex = [0u8; 4];
+                        for slot in hex.iter_mut() {
                             match p.peek() {
                                 None => return ParseStatus::Incomplete,
-                                Some(b) if b.is_ascii_hexdigit() => p.advance(),
+                                Some(b) if b.is_ascii_hexdigit() => {
+                                    *slot = b;
+                                    p.advance();
+                                }
                                 _ => return ParseStatus::Invalid,
                             }
+                        }
+                        if ascii_extended && hex_codepoint_exceeds_2byte(&hex) {
+                            return ParseStatus::Invalid;
                         }
                         consecutive_escapes += 1;
                         char_count = char_count.saturating_add(1);
@@ -845,6 +876,13 @@ fn parse_string_any(p: &mut Cursor, max_length: Option<usize>) -> ParseStatus {
                 if !is_continuation && at_cap {
                     return ParseStatus::Invalid;
                 }
+                // `ascii_extended` blocks 3+ byte UTF-8 leading bytes
+                // (0xE0..=0xF7). Continuation bytes (0x80..=0xBF) are
+                // accepted; they belong to an already-validated 2-byte
+                // start. 2-byte starts (0xC2..=0xDF) and ASCII pass.
+                if ascii_extended && !is_continuation && b >= 0xE0 {
+                    return ParseStatus::Invalid;
+                }
                 p.advance();
                 if !is_continuation {
                     char_count = char_count.saturating_add(1);
@@ -853,6 +891,22 @@ fn parse_string_any(p: &mut Cursor, max_length: Option<usize>) -> ParseStatus {
             }
         }
     }
+}
+
+/// `hex` is the 4 ASCII hex digits of a `\uXXXX` escape. Returns true
+/// iff the encoded codepoint is U+0800 or higher (3-byte UTF-8). Used
+/// to enforce `ascii_extended` against escape-encoded CJK etc.
+fn hex_codepoint_exceeds_2byte(hex: &[u8; 4]) -> bool {
+    fn nib(b: u8) -> u32 {
+        match b {
+            b'0'..=b'9' => (b - b'0') as u32,
+            b'a'..=b'f' => (b - b'a' + 10) as u32,
+            b'A'..=b'F' => (b - b'A' + 10) as u32,
+            _ => 0,
+        }
+    }
+    let cp = (nib(hex[0]) << 12) | (nib(hex[1]) << 8) | (nib(hex[2]) << 4) | nib(hex[3]);
+    cp >= 0x0800
 }
 
 const MAX_CONSECUTIVE_STRING_ESCAPES: usize = 3;
@@ -997,7 +1051,7 @@ fn parse_value_any(p: &mut Cursor) -> ParseStatus {
         None => ParseStatus::Incomplete,
         Some(b'{') => parse_object(p, &[], 0, true),
         Some(b'[') => parse_array(p, &Schema::AnyOf(Arc::new(any_value_alts())), None),
-        Some(b'"') => parse_string_any(p, None),
+        Some(b'"') => parse_string_any(p, None, false),
         Some(b't') | Some(b'f') => parse_keyword_alt(p, &["true", "false"]),
         Some(b'n') => parse_keyword(p, "null"),
         Some(b'-') | Some(b'0'..=b'9') => parse_number(p, true),
@@ -1012,7 +1066,10 @@ fn any_value_alts() -> Vec<Schema> {
             required_count: 0,
             additional: true,
         },
-        Schema::StringAny { max_length: None },
+        Schema::StringAny {
+            max_length: None,
+            ascii_extended: false,
+        },
         Schema::Number,
         Schema::Boolean,
         Schema::Null,
@@ -1082,6 +1139,10 @@ enum Frame {
         sub: StringSub,
         char_count: usize,
         max_length: Option<usize>,
+        /// Mirrors `Schema::StringAny.ascii_extended`. When `true`, the
+        /// validator rejects UTF-8 leading bytes `>= 0xE0` (3+ byte
+        /// sequences) and `\uXXXX` escapes with `XXXX >= 0800`.
+        ascii_extended: bool,
     },
 
     /// Inside a JSON number. `allow_fraction` distinguishes Number from
@@ -1383,9 +1444,13 @@ fn schema_fingerprint<H: std::hash::Hasher>(schema: &Schema, h: &mut H) {
             2u8.hash(h);
             (Arc::as_ptr(opts) as usize).hash(h);
         }
-        Schema::StringAny { max_length } => {
+        Schema::StringAny {
+            max_length,
+            ascii_extended,
+        } => {
             3u8.hash(h);
             max_length.hash(h);
+            ascii_extended.hash(h);
         }
         Schema::Integer => { 4u8.hash(h); }
         Schema::Number => { 5u8.hash(h); }
@@ -1521,6 +1586,7 @@ impl Frame {
                 sub,
                 char_count,
                 max_length,
+                ascii_extended,
             } => {
                 4u8.hash(h);
                 consecutive_escapes.hash(h);
@@ -1534,6 +1600,7 @@ impl Frame {
                     .unwrap_or(false);
                 near_cap.hash(h);
                 max_length.is_some().hash(h);
+                ascii_extended.hash(h);
             }
             Frame::Number { allow_fraction, sub } => {
                 5u8.hash(h);
@@ -1605,7 +1672,15 @@ impl Frame {
                 sub,
                 char_count,
                 max_length,
-            } => Self::step_string_any(consecutive_escapes, sub, char_count, *max_length, byte),
+                ascii_extended,
+            } => Self::step_string_any(
+                consecutive_escapes,
+                sub,
+                char_count,
+                *max_length,
+                *ascii_extended,
+                byte,
+            ),
             Frame::Number {
                 allow_fraction,
                 sub,
@@ -1666,7 +1741,10 @@ impl Frame {
                     accumulated: Vec::new(),
                 })
             }
-            Schema::StringAny { max_length } => {
+            Schema::StringAny {
+                max_length,
+                ascii_extended,
+            } => {
                 if byte != b'"' {
                     return StepResult::Invalid;
                 }
@@ -1675,6 +1753,7 @@ impl Frame {
                     sub: StringSub::InBody,
                     char_count: 0,
                     max_length: *max_length,
+                    ascii_extended: *ascii_extended,
                 })
             }
             Schema::Integer => {
@@ -1967,6 +2046,7 @@ impl Frame {
         sub: &mut StringSub,
         char_count: &mut usize,
         max_length: Option<usize>,
+        ascii_extended: bool,
         byte: u8,
     ) -> StepResult {
         // Hard cap: once we've emitted `max_length` code points, the
@@ -1997,6 +2077,15 @@ impl Frame {
                         // A new code-point start would overrun the cap.
                         return StepResult::Invalid;
                     }
+                    // `ascii_extended`: reject 3+ byte UTF-8 starts
+                    // (0xE0..=0xF7). Continuation bytes (0x80..=0xBF)
+                    // are not new code-point starts and are accepted
+                    // here — the prior 2-byte start was already
+                    // validated. 2-byte starts (0xC2..=0xDF) and ASCII
+                    // pass unchanged.
+                    if ascii_extended && !is_continuation && b >= 0xE0 {
+                        return StepResult::Invalid;
+                    }
                     if !is_continuation {
                         *char_count = char_count.saturating_add(1);
                     }
@@ -2020,6 +2109,35 @@ impl Frame {
             StringSub::InUnicode { remaining } => {
                 if !byte.is_ascii_hexdigit() {
                     return StepResult::Invalid;
+                }
+                // `ascii_extended` against `\uXXXX`: once we know the
+                // first two hex digits we know whether the codepoint
+                // would land in the 3-byte UTF-8 range (>= U+0800).
+                // Reject early so the mask sampler steers the model
+                // away from completing the escape.
+                if ascii_extended {
+                    let consumed_digits = 4u8 - *remaining;
+                    let nib = match byte {
+                        b'0'..=b'9' => byte - b'0',
+                        b'a'..=b'f' => byte - b'a' + 10,
+                        b'A'..=b'F' => byte - b'A' + 10,
+                        _ => 0,
+                    };
+                    // After consuming this digit:
+                    //  digit-0: cp top nibble = nib (cp >= nib<<12).
+                    //  digit-1: cp top byte = prev<<4 | nib.
+                    // A codepoint reaches 3-byte UTF-8 at >= 0x0800,
+                    // i.e. top byte >= 0x08.
+                    if consumed_digits == 0 && nib >= 1 {
+                        // top nibble >= 1 means cp >= 0x1000 — always
+                        // 3-byte UTF-8.
+                        return StepResult::Invalid;
+                    }
+                    // (consumed_digits == 1 case: top nibble was 0,
+                    // need second nibble >= 8 for cp >= 0x0800.)
+                    if consumed_digits == 1 && nib >= 8 {
+                        return StepResult::Invalid;
+                    }
                 }
                 *remaining -= 1;
                 if *remaining == 0 {
@@ -2246,6 +2364,68 @@ fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
     }
     guard.insert(key, arc.clone());
     arc
+}
+
+/// Per-process cache of non-Latin token denylists, keyed by
+/// `LlamaModel` pointer. Mirrors `vocab_cache`'s lifecycle.
+fn non_latin_denylist_cache() -> &'static Mutex<HashMap<usize, Arc<Vec<bool>>>> {
+    static CACHE: OnceLock<Mutex<HashMap<usize, Arc<Vec<bool>>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Build a vocab-sized boolean bitmap where `true` means "the token's
+/// rendered bytes contain a UTF-8 leading byte for a 3+ byte
+/// sequence" (`0xE0..=0xF7`). Blocking these tokens makes CJK,
+/// Devanagari, Hangul, Hiragana/Katakana, and other 3-byte+ scripts
+/// unsampleable.
+///
+/// 2-byte UTF-8 leads (`0xC2..=0xDF` → Latin Extended, Greek,
+/// Cyrillic, Arabic, Hebrew base) and ASCII pass through. Tokens
+/// that are pure continuation bytes (`0x80..=0xBF`) are tails of a
+/// multi-byte sequence — once the leads are blocked, those tails
+/// have no preceding context to attach to and the BPE distribution
+/// won't pick them in isolation; we leave them alone.
+///
+/// Why scan ANY byte in the token rather than just the first: a
+/// single BPE token can encode `[ascii][CJK-lead][cont][cont][ascii]`
+/// or similar mixed payloads. Flagging on any internal lead byte
+/// catches those without needing per-token UTF-8 decoding.
+///
+/// Used by `ConstrainedSampler::sample` on every inference path
+/// (not just `structured_output`) when the operator enables the
+/// `SOVEREIGN_BLOCK_NON_LATIN` env var. Default OFF — some corpora
+/// legitimately quote Chinese/Japanese characters.
+pub fn non_latin_denylist_for(model: &LlamaModel) -> Arc<Vec<bool>> {
+    let key = model as *const LlamaModel as usize;
+    {
+        let guard = non_latin_denylist_cache()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(v) = guard.get(&key) {
+            return v.clone();
+        }
+    }
+    let vocab = vocab_bytes_for(model);
+    let denylist = build_non_latin_denylist(&vocab);
+    let arc = Arc::new(denylist);
+    let mut guard = non_latin_denylist_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some(existing) = guard.get(&key) {
+        return existing.clone();
+    }
+    guard.insert(key, arc.clone());
+    arc
+}
+
+/// Pure function variant — separate so the unit test can exercise
+/// the bitmap construction against a synthetic vocab without
+/// loading a real `LlamaModel`.
+fn build_non_latin_denylist(vocab_bytes: &[Vec<u8>]) -> Vec<bool> {
+    vocab_bytes
+        .iter()
+        .map(|bytes| bytes.iter().any(|b| (0xE0..=0xF7).contains(b)))
+        .collect()
 }
 
 /// Apply a precomputed validity bitmask to the candidate array.
@@ -3799,5 +3979,407 @@ mod tests {
         assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some("0"))).is_none());
         assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some("yes"))).is_none());
         assert!(super::build_timing(fake_env("SOVEREIGN_GRAMMAR_TIMING", Some(""))).is_none());
+    }
+
+    // ─── x-asciiExtended (CJK-block flag) ──────────────────────────
+    //
+    // The drift report writer observed occasional non-Latin token
+    // drift ("或", "生成") leaking into JSON string bodies under
+    // grammar-constrained generation. The default StringAny char-set
+    // accepts any UTF-8; `x-asciiExtended: true` restricts strings to
+    // ASCII + 2-byte UTF-8 (codepoints U+0000–U+07FF), which keeps
+    // accented Latin names like "café"/"Björk" while rejecting CJK
+    // and other 3+ byte UTF-8 scripts.
+
+    fn ascii_extended_schema(max_length: Option<u64>) -> serde_json::Value {
+        let mut prop = serde_json::json!({"type": "string", "x-asciiExtended": true});
+        if let Some(m) = max_length {
+            prop["maxLength"] = serde_json::json!(m);
+        }
+        serde_json::json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": prop}
+        })
+    }
+
+    #[test]
+    fn ascii_extended_compiles_from_keyword() {
+        let s = compile_schema(&ascii_extended_schema(None)).unwrap();
+        // Drill into the property schema and verify the flag landed.
+        let Schema::Object { properties, .. } = s else {
+            panic!("expected object");
+        };
+        let (_, inner) = &properties[0];
+        match inner {
+            Schema::StringAny {
+                ascii_extended, ..
+            } => assert!(*ascii_extended, "x-asciiExtended must propagate"),
+            other => panic!("expected StringAny, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ascii_extended_default_false_when_keyword_absent() {
+        let s = compile_schema(&json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string"}}
+        }))
+        .unwrap();
+        let Schema::Object { properties, .. } = s else {
+            panic!();
+        };
+        match &properties[0].1 {
+            Schema::StringAny { ascii_extended, .. } => assert!(!*ascii_extended),
+            _ => panic!(),
+        }
+    }
+
+    #[test]
+    fn ascii_extended_rejects_cjk_leading_byte() {
+        // U+6216 ("或") encodes to E6 88 96 in UTF-8 — the leading
+        // byte E6 must be rejected at the StringAny body position.
+        let mut s = state_for(ascii_extended_schema(None));
+        assert_eq!(s.advance_bytes(b"{\"x\":\""), ParseStatus::Incomplete);
+        let cjk = [0xE6_u8, 0x88, 0x96];
+        assert_eq!(
+            s.advance_bytes(&cjk),
+            ParseStatus::Invalid,
+            "0xE6 leading byte must be rejected under x-asciiExtended"
+        );
+    }
+
+    #[test]
+    fn ascii_extended_accepts_latin1_supplement() {
+        // U+00E9 ("é") encodes to C3 A9 — a 2-byte UTF-8 sequence
+        // which must pass under x-asciiExtended (accented Latin
+        // names are legitimate content).
+        let mut s = state_for(ascii_extended_schema(None));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        let cafe = b"caf\xC3\xA9";
+        assert_eq!(s.advance_bytes(cafe), ParseStatus::Incomplete);
+        assert_eq!(s.advance_bytes(b"\"}"), ParseStatus::Complete);
+    }
+
+    #[test]
+    fn ascii_extended_accepts_plain_ascii() {
+        let mut s = state_for(ascii_extended_schema(None));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        assert_eq!(s.advance_bytes(b"hello world"), ParseStatus::Incomplete);
+        assert_eq!(s.advance_bytes(b"\"}"), ParseStatus::Complete);
+    }
+
+    #[test]
+    fn ascii_extended_rejects_unicode_escape_for_cjk() {
+        // `中` is U+4E2D ("中"). The first hex digit `4` already
+        // implies codepoint >= 0x4000, well above the 0x0800 cutoff,
+        // so the validator must reject as soon as we see `4`.
+        let mut s = state_for(ascii_extended_schema(None));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        assert_eq!(s.advance_bytes(b"\\u"), ParseStatus::Incomplete);
+        assert_eq!(
+            s.advance_bytes(b"4"),
+            ParseStatus::Invalid,
+            "first hex nibble >= 1 means cp >= 0x1000 — must reject"
+        );
+    }
+
+    #[test]
+    fn ascii_extended_rejects_unicode_escape_at_boundary() {
+        // `ࠀ` is the exact threshold — must reject on the second
+        // hex digit (`8`) once the first (`0`) is consumed.
+        let mut s = state_for(ascii_extended_schema(None));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        assert_eq!(s.advance_bytes(b"\\u0"), ParseStatus::Incomplete);
+        assert_eq!(s.advance_bytes(b"8"), ParseStatus::Invalid);
+    }
+
+    #[test]
+    fn ascii_extended_accepts_unicode_escape_for_2byte_codepoint() {
+        // `é` ("é") is 2-byte UTF-8 — must pass even with the
+        // flag set. The first 3 nibbles (0, 0, E) keep cp < 0x0800.
+        let mut s = state_for(ascii_extended_schema(None));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        assert_eq!(s.advance_bytes(b"\\u00E9"), ParseStatus::Incomplete);
+        assert_eq!(s.advance_bytes(b"\"}"), ParseStatus::Complete);
+    }
+
+    #[test]
+    fn ascii_extended_off_still_accepts_cjk() {
+        // Default behaviour preserved: schemas without the keyword
+        // still accept CJK characters (some Wikipedia articles
+        // legitimately quote Chinese / Japanese terms).
+        let mut s = state_for(json!({
+            "type":"object","required":["x"],
+            "properties":{"x":{"type":"string"}}
+        }));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        let cjk = [0xE6_u8, 0x88, 0x96];
+        assert_eq!(s.advance_bytes(&cjk), ParseStatus::Incomplete);
+        assert_eq!(s.advance_bytes(b"\"}"), ParseStatus::Complete);
+    }
+
+    // ─── Throughput bench: ascii_extended vs default ──────────────
+    //
+    // Run with:
+    //   cargo test --release -p sovereign-inference --no-default-features \
+    //     -- --ignored bench_ascii_extended_advance_throughput --nocapture
+    //
+    // `#[ignore]` so it doesn't slow the regular test suite. Reports
+    // ns/byte for both configurations against a representative
+    // engineering_atlas Phase 1 payload (claims array of 12 items).
+    // The grammar mask's hot path is `ValidatorState::advance(byte)`;
+    // the ascii_extended check adds one comparison per non-continuation
+    // byte inside StringSub::InBody. Expected overhead < 5%.
+    #[test]
+    #[ignore]
+    fn bench_ascii_extended_advance_throughput() {
+        let payload = sample_engineering_payload();
+        let schema_plain = json!({
+            "type": "object",
+            "required": ["claims"],
+            "additionalProperties": false,
+            "properties": {
+                "claims": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["content", "code_anchors"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "content": {"type": "string"},
+                            "code_anchors": {
+                                "type": "array",
+                                "items": {"type": "string"}
+                            },
+                            "evidence_excerpt": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        });
+        let schema_restricted = json!({
+            "type": "object",
+            "required": ["claims"],
+            "additionalProperties": false,
+            "properties": {
+                "claims": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["content", "code_anchors"],
+                        "additionalProperties": false,
+                        "properties": {
+                            "content": {"type": "string", "x-asciiExtended": true},
+                            "code_anchors": {
+                                "type": "array",
+                                "items": {"type": "string", "x-asciiExtended": true}
+                            },
+                            "evidence_excerpt": {"type": "string", "x-asciiExtended": true}
+                        }
+                    }
+                }
+            }
+        });
+
+        let compiled_plain = compile_schema(&schema_plain).unwrap();
+        let compiled_restricted = compile_schema(&schema_restricted).unwrap();
+
+        // Warmup
+        for _ in 0..3 {
+            run_one(&compiled_plain, payload.as_bytes());
+            run_one(&compiled_restricted, payload.as_bytes());
+        }
+
+        let iters = 200usize;
+        let bytes_per_iter = payload.len() as u64;
+        let total_bytes = bytes_per_iter * iters as u64;
+
+        let t0 = std::time::Instant::now();
+        for _ in 0..iters {
+            std::hint::black_box(run_one(
+                &compiled_plain,
+                payload.as_bytes(),
+            ));
+        }
+        let plain_elapsed = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        for _ in 0..iters {
+            std::hint::black_box(run_one(
+                &compiled_restricted,
+                payload.as_bytes(),
+            ));
+        }
+        let restricted_elapsed = t1.elapsed();
+
+        let plain_ns_per_byte =
+            plain_elapsed.as_nanos() as f64 / total_bytes as f64;
+        let restricted_ns_per_byte =
+            restricted_elapsed.as_nanos() as f64 / total_bytes as f64;
+        let overhead_pct =
+            (restricted_ns_per_byte / plain_ns_per_byte - 1.0) * 100.0;
+
+        eprintln!(
+            "bench_ascii_extended_advance_throughput:\n  \
+             payload: {} bytes × {} iters = {} total bytes\n  \
+             plain      : {:>8.2} ns/byte ({:>6} µs total)\n  \
+             restricted : {:>8.2} ns/byte ({:>6} µs total)\n  \
+             overhead   : {:>+6.2}%",
+            payload.len(),
+            iters,
+            total_bytes,
+            plain_ns_per_byte,
+            plain_elapsed.as_micros(),
+            restricted_ns_per_byte,
+            restricted_elapsed.as_micros(),
+            overhead_pct,
+        );
+
+        // Soft regression gate: if ascii_extended somehow doubles the
+        // hot-path cost something has gone very wrong (e.g. a UTF-8
+        // decode crept into the inner loop). 50% would already be
+        // pathological; we set the bar high enough that noise on a
+        // loaded laptop won't flake.
+        assert!(
+            overhead_pct < 50.0,
+            "ascii_extended overhead {overhead_pct:.2}% exceeds 50% — \
+             check that the InBody hot path didn't acquire allocations"
+        );
+    }
+
+    fn run_one(schema: &Schema, payload: &[u8]) -> ParseStatus {
+        let mut state = ValidatorState::new(schema.clone());
+        state.advance_bytes(payload)
+    }
+
+    /// Synthetic payload modelled on engineering_atlas Phase 1 output —
+    /// 12 claims with content + code_anchors + evidence_excerpt. Pure
+    /// ASCII (the realistic post-fix case) so both configurations see
+    /// the same bytes; the difference is purely the per-byte branch.
+    fn sample_engineering_payload() -> String {
+        let mut claims = Vec::with_capacity(12);
+        for i in 0..12 {
+            claims.push(format!(
+                r#"{{"content":"The watcher in `lint_runner` debounces file events at 250ms and reruns cargo check across all configured packages; this is claim {i} of the synthetic batch and contains enough body text to exercise the StringAny InBody hot path for several hundred bytes per claim.","code_anchors":["sovereign/crates/sovereign-tools/src/code/lint_watcher.rs:142","sovereign/crates/sovereign-tools/src/code/lint_watcher.rs:198"],"evidence_excerpt":"if debounce.elapsed() >= Duration::from_millis(250) {{ trigger_rerun(); }}"}}"#
+            ));
+        }
+        format!(r#"{{"claims":[{}]}}"#, claims.join(","))
+    }
+
+    // ─── non_latin_denylist bitmap (free-form sampling path) ───────
+    //
+    // The grammar mask only fires on `structured_output` requests.
+    // To cover free-form chat / completion paths, `ConstrainedSampler`
+    // optionally consumes a vocab-sized bitmap built by
+    // `build_non_latin_denylist`. These tests pin the construction
+    // invariants — the wiring into `ConstrainedSampler::sample` is
+    // exercised by integration runs (requires a loaded LlamaModel,
+    // out of scope here).
+
+    #[test]
+    fn non_latin_denylist_flags_cjk_lead_byte() {
+        // "或" → E6 88 96. The lead byte E6 lands in 0xE0..=0xF7,
+        // so the token must be flagged.
+        let vocab = vec![
+            b"hello".to_vec(),         // ASCII only → keep
+            vec![0xE6, 0x88, 0x96],    // CJK "或" → block
+        ];
+        let deny = build_non_latin_denylist(&vocab);
+        assert_eq!(deny, vec![false, true]);
+    }
+
+    #[test]
+    fn non_latin_denylist_keeps_latin1_supplement() {
+        // "café" → 63 61 66 C3 A9. C3 is a 2-byte UTF-8 lead
+        // (0xC2..=0xDF), so it must NOT be flagged — accented Latin
+        // is legitimate content.
+        let vocab = vec![vec![0x63, 0x61, 0x66, 0xC3, 0xA9]];
+        let deny = build_non_latin_denylist(&vocab);
+        assert_eq!(deny, vec![false]);
+    }
+
+    #[test]
+    fn non_latin_denylist_keeps_pure_continuation_tokens() {
+        // A token that is pure UTF-8 continuation bytes (0x80..=0xBF)
+        // is a tail-half of a multi-byte sequence. Once the lead-byte
+        // tokens are blocked, these tails have no preceding context to
+        // attach to and the BPE distribution won't pick them in
+        // isolation. We deliberately don't flag them — flagging would
+        // also block tokens like the lower halves of accented Latin
+        // chars when they appear standalone, which has no upside.
+        let vocab = vec![vec![0x88, 0x96]];
+        let deny = build_non_latin_denylist(&vocab);
+        assert_eq!(deny, vec![false]);
+    }
+
+    #[test]
+    fn non_latin_denylist_flags_4byte_lead() {
+        // U+1F600 (😀, emoji) → F0 9F 98 80. The lead byte F0 is in
+        // 0xE0..=0xF7 → flagged. (Emoji aren't the primary target
+        // but they're 4-byte UTF-8 and the heuristic is the same;
+        // operators who want emoji should leave the env flag off.)
+        let vocab = vec![vec![0xF0, 0x9F, 0x98, 0x80]];
+        let deny = build_non_latin_denylist(&vocab);
+        assert_eq!(deny, vec![true]);
+    }
+
+    #[test]
+    fn non_latin_denylist_flags_mixed_payload_with_inner_lead() {
+        // BPE tokens can be byte fragments that span chars. A token
+        // encoding `[ascii][CJK-lead][cont]...` must be flagged even
+        // though it doesn't START with a CJK lead. (Real example: a
+        // BPE token like b" 中" — the leading space is ASCII, then
+        // the CJK char follows.)
+        let vocab = vec![vec![b' ', 0xE4, 0xB8, 0xAD]]; // " 中"
+        let deny = build_non_latin_denylist(&vocab);
+        assert_eq!(deny, vec![true]);
+    }
+
+    #[test]
+    fn non_latin_denylist_handles_empty_token() {
+        // Some special / control tokens render as empty bytes —
+        // must not blow up and must default to NOT flagged.
+        let vocab = vec![Vec::<u8>::new()];
+        let deny = build_non_latin_denylist(&vocab);
+        assert_eq!(deny, vec![false]);
+    }
+
+    #[test]
+    fn ascii_extended_fingerprint_differs_from_default() {
+        // The flag MUST be part of the fingerprint — otherwise the
+        // mask cache could reuse a permissive mask for a restricted
+        // state and let CJK bytes through.
+        let s_default = state_for(json!({
+            "type":"object","required":["x"],
+            "properties":{"x":{"type":"string"}}
+        }));
+        let s_restricted = state_for(ascii_extended_schema(None));
+        // Different Arc identities anyway, so they'd differ. The
+        // meaningful check is that two `Schema::StringAny` values
+        // with different `ascii_extended` produce different
+        // schema_fingerprint contributions.
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+        let mut h1 = DefaultHasher::new();
+        super::schema_fingerprint(
+            &Schema::StringAny {
+                max_length: None,
+                ascii_extended: false,
+            },
+            &mut h1,
+        );
+        let mut h2 = DefaultHasher::new();
+        super::schema_fingerprint(
+            &Schema::StringAny {
+                max_length: None,
+                ascii_extended: true,
+            },
+            &mut h2,
+        );
+        assert_ne!(h1.finish(), h2.finish());
+        // And the full validator fingerprints differ too (sanity).
+        assert_ne!(s_default.fingerprint(), s_restricted.fingerprint());
     }
 }
