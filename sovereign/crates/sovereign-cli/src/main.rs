@@ -364,8 +364,87 @@ fn parse_args() -> Option<Args> {
 
 // ─── Main ──────────────────────────────────────────────────────
 
-#[tokio::main]
-async fn main() {
+/// Entry point. Builds the tokio runtime explicitly (rather than via
+/// `#[tokio::main]`) so we can hand the multi-thread executor an 8 MiB
+/// per-worker stack and install a panic hook that survives a worker
+/// abort.
+///
+/// Why this matters: tokio spawns its worker threads through
+/// `pthread_create` with an explicit stack size that defaults to 2 MiB
+/// on macOS. `RUST_MIN_STACK` only influences `std::thread::Builder`,
+/// not pthread-created tokio workers. Drift-detect load reproducibly
+/// overflowed those 2 MiB stacks (77 overflows / 166 daemon starts on
+/// 2026-05-12) and the daemon died via SIGABRT with no backtrace
+/// because the panic hook ran on an already-corrupted stack frame.
+///
+/// The panic hook below routes panic info through both `tracing::error!`
+/// (so launchd/systemd log pipelines and the daemon.err tail see it)
+/// AND `eprintln!` (so it lands even if tracing isn't initialized yet,
+/// e.g. during the wizard or before `init_tracing`). Both paths print
+/// the full backtrace when `RUST_BACKTRACE=full` is set.
+fn main() {
+    // Set the diagnostic env vars BEFORE the tokio runtime is built —
+    // any worker thread spawned afterwards reads them at panic time.
+    // (`RUST_MIN_STACK` won't propagate to tokio workers but does help
+    // plain `std::thread::Builder::spawn` calls — rayon, blocking-pool
+    // threads, etc.)
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        std::env::set_var("RUST_BACKTRACE", "full");
+    }
+    if std::env::var_os("RUST_MIN_STACK").is_none() {
+        std::env::set_var("RUST_MIN_STACK", "8388608");
+    }
+
+    // Global panic hook. Captured panic info goes through both
+    // `tracing::error!` and `eprintln!` so the line lands regardless
+    // of whether tracing-subscriber is wired yet. Without this hook
+    // tokio's default behaviour writes panic frames straight to stderr
+    // bypassing the structured-logging layer, and on a worker abort
+    // (e.g. stack overflow → SIGABRT) the line never appears at all.
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        let payload: &str = if let Some(s) = info.payload().downcast_ref::<&'static str>() {
+            s
+        } else if let Some(s) = info.payload().downcast_ref::<String>() {
+            s.as_str()
+        } else {
+            "<non-string panic payload>"
+        };
+        // eprintln first — survives before/after tracing setup.
+        eprintln!(
+            "sovereign panic at {location}: {payload}\nbacktrace:\n{backtrace}"
+        );
+        tracing::error!(
+            location = %location,
+            payload = %payload,
+            backtrace = %backtrace,
+            "sovereign panic — see backtrace above"
+        );
+        // Chain to the previous hook so any installed test harness /
+        // tracing layer still sees the panic.
+        prev_hook(info);
+    }));
+
+    // Explicit multi-thread runtime with 8 MiB worker stacks. 8 MiB is
+    // the same headroom Cargo's build worker threads use and matches
+    // what corpus-engine's tree-sitter path needs on deeply-nested
+    // wikitext templates. Use `enable_all` to match `#[tokio::main]`'s
+    // default feature set (IO + time drivers).
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(8 * 1024 * 1024)
+        .thread_name("sovereign-rt-worker")
+        .build()
+        .expect("failed to build tokio runtime");
+    runtime.block_on(async_main());
+}
+
+async fn async_main() {
     // Check for subcommands before standard arg parsing.
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
 

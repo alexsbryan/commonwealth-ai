@@ -1440,22 +1440,44 @@ impl Frame {
             }
             Frame::Object {
                 properties,
-                required_count: _,
+                required_count,
                 additional,
-                next_idx: _, // see comment below
+                next_idx,
                 pairs_consumed: _,
                 sub,
             } => {
                 1u8.hash(h);
                 (Arc::as_ptr(properties) as usize).hash(h);
                 additional.hash(h);
-                // `next_idx` is EXCLUDED. It tracks "which property
-                // comes next when we re-enter AwaitNextKey," but in
-                // states like AwaitCommaOrClose / AwaitFirstKeyOrClose
-                // it doesn't affect which next bytes are valid. When
-                // we DO need to discriminate (InKey accumulator
-                // diverges, AwaitColon chose a specific property),
-                // the `sub`-specific fields below carry that info.
+                // `next_idx` is INCLUDED for the sub-states whose
+                // byte-validity reads it (and for the close-bracket
+                // gating against `required_count`). Initially we
+                // excluded it on the hope of better cache reuse
+                // across kv pairs, but that caused a real divergence:
+                //
+                //   schema: required ["content","evidence"]
+                //   buffer: `..."content":"x","co`
+                //   parser state: InKey { accumulated: [c, o] }, next_idx=1
+                //
+                // After "content" was consumed, next_idx ratcheted
+                // to 1 — `any_property_starts_with` should now only
+                // accept prefixes of "evidence". But the cache had a
+                // mask computed at next_idx=0, where `c` (prefix of
+                // "content") WAS valid. Same fingerprint → cache hit
+                // → mask permitted `c` → token sampled → validate()
+                // re-parsed the buffer, detected the duplicate-
+                // property attempt, latched `emitted_invalid`, model
+                // emitted EOG mid-generation. Reproduced on every
+                // multi-required-property schema (engineering_atlas
+                // Phase 1 included).
+                //
+                // The fix is to make next_idx part of the key.
+                // It costs us one extra cached mask per (next_idx,
+                // sub-discriminant) combination — typically 3-5
+                // additional entries per object schema, well under
+                // the 256-entry bound. The benefit is correctness.
+                next_idx.hash(h);
+                required_count.hash(h);
                 std::mem::discriminant(sub).hash(h);
                 match sub {
                     ObjectSub::InKey { accumulated } => accumulated.hash(h),
@@ -2159,6 +2181,16 @@ fn matches_first_byte(schema: &Schema, b: u8) -> bool {
 /// against the same model address may rebuild (cheap miss). For
 /// long-lived daemons this is effectively a one-time cost per loaded
 /// model.
+/// Upper bound on resident per-state masks. Sized to comfortably fit
+/// the working set of any schema we ship — Phase 1 atlas extraction
+/// visits ~30-50 distinct abstract states, literary_atlas at peak ~80.
+/// At 152 KiB per entry (n_vocab booleans) the bound caps in-memory
+/// cache cost at roughly 38 MiB worst-case per concurrent constraint,
+/// well under the daemon's per-request budget. Schemas that explore
+/// more distinct states (pathological enums, deep `anyOf` trees) trip
+/// the bound and pay an extra cache-miss on the oldest insertion.
+const MASK_CACHE_MAX_ENTRIES: usize = 256;
+
 fn vocab_cache() -> &'static Mutex<HashMap<usize, Arc<Vec<Vec<u8>>>>> {
     static CACHE: OnceLock<Mutex<HashMap<usize, Arc<Vec<Vec<u8>>>>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -2224,8 +2256,14 @@ fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
 /// covers the in-progress state, so root-closed states bypass the
 /// cache path and run the parser fresh.
 ///
-/// Uses rayon for the same parallel structure as the full-vocab
-/// pass — bitmask reads are cache-friendly so this scales linearly.
+/// Serial iteration — measured at 9.5 ms per call under rayon
+/// vs an expected ~0.7 ms of pure work, the work-stealing setup
+/// cost dominates for this tiny per-element task. A tight
+/// serial loop lets the CPU auto-vectorize the bitmask read
+/// path and pays no thread-pool overhead. The full-vocab
+/// parser pass below DOES benefit from rayon because each
+/// candidate clones+walks the validator, which is hundreds of
+/// nanoseconds per element.
 fn apply_cached_mask(
     data: &mut LlamaTokenDataArray,
     valid: &[bool],
@@ -2233,13 +2271,13 @@ fn apply_cached_mask(
     buffer_is_complete: bool,
     vocab_bytes: &[Vec<u8>],
 ) {
-    data.data.par_iter_mut().for_each(|entry| {
+    for entry in data.data.iter_mut() {
         let token_id = entry.id().0;
         if eog_tokens.contains(&token_id) {
             if !buffer_is_complete {
                 entry.set_logit(f32::NEG_INFINITY);
             }
-            return;
+            continue;
         }
         if buffer_is_complete {
             // Trailing-whitespace branch; not cacheable per-state
@@ -2252,7 +2290,7 @@ fn apply_cached_mask(
             } else {
                 entry.set_logit(f32::NEG_INFINITY);
             }
-            return;
+            continue;
         }
         // The hot path. valid[id] was computed by the cold-miss
         // parser pass; reading it is a single L1 load.
@@ -2260,7 +2298,7 @@ fn apply_cached_mask(
         if id >= valid.len() || !valid[id] {
             entry.set_logit(f32::NEG_INFINITY);
         }
-    });
+    }
 }
 
 /// State carried across sample steps: the cached parser state at the
@@ -2313,11 +2351,25 @@ pub struct JsonConstraint {
     /// states the model actually visits, in the order they're hit.
     ///
     /// `Vec<bool>` of length n_vocab. ~152 KiB per cached state.
-    /// In practice a single Phase 1 extraction visits 30-50 distinct
-    /// states (~5-7 MiB), so we keep the cache as an `Option` and
-    /// invalidate it eagerly when the state changes — the working
-    /// set never gets large enough to need a multi-slot LRU.
-    mask_cache: Option<(u64, Vec<bool>)>,
+    /// A single Phase 1 extraction visits 30-50 distinct states
+    /// (~5-7 MiB total). We keep every state we've ever seen — the
+    /// model returns to the same handful repeatedly (string-body,
+    /// after-colon, await-comma-or-close), so memoizing them all
+    /// turns a `string → comma → next_key → string` cycle from
+    /// "recompute string mask twice" into "reuse the cached one."
+    /// Pre-this-change the cache was a single `Option<(fp, mask)>`
+    /// that wiped on every state transition; the multi-entry map
+    /// closes that gap. Bounded by [`MASK_CACHE_MAX_ENTRIES`] to
+    /// stay well under the per-request VRAM budget.
+    mask_cache: HashMap<u64, Arc<Vec<bool>>>,
+    /// Insertion-order tracking for the simple LRU bound on
+    /// `mask_cache`. Approximate LRU — we only push on miss-and-
+    /// insert, not on hits — but the working set for a Phase 1
+    /// extraction is small enough (<50 states) that the bound is
+    /// rarely tripped in practice. It exists as a guardrail against
+    /// pathological schemas that explore hundreds of distinct
+    /// abstract states.
+    mask_cache_order: Vec<u64>,
     /// Optional cumulative timing telemetry. Built via `from_env()`
     /// when `SOVEREIGN_GRAMMAR_TIMING=1` so production runs pay zero
     /// extra cost. When present, each `mask()` and `accept()` call
@@ -2336,6 +2388,14 @@ pub struct JsonConstraint {
 struct TimingState {
     mask_calls: u64,
     mask_total_us: u64,
+    /// Subset of `mask_calls` that hit the per-state validity cache
+    /// (skipped the per-candidate parser pass).
+    mask_cache_hits: u64,
+    /// Cumulative duration of cache-hit mask calls.
+    mask_hit_total_us: u64,
+    /// Cumulative duration of cache-miss mask calls (full
+    /// vocab × parser_walk pass + bitmask synthesis).
+    mask_miss_total_us: u64,
     accept_calls: u64,
     accept_total_us: u64,
 }
@@ -2395,7 +2455,8 @@ impl JsonConstraint {
             eos_token,
             eog_tokens,
             emitted_invalid: false,
-            mask_cache: None,
+            mask_cache: HashMap::new(),
+            mask_cache_order: Vec::new(),
             timing,
         })
     }
@@ -2431,7 +2492,7 @@ impl JsonConstraint {
                     entry.set_logit(f32::NEG_INFINITY);
                 }
             });
-            self.record_mask_timing(timing_start);
+            self.record_mask_timing(timing_start, false);
             return;
         }
 
@@ -2442,17 +2503,16 @@ impl JsonConstraint {
         // bitmask read. This is the same trick Outlines and
         // LM-Format-Enforcer use; we just compute the per-state
         // mask lazily on first hit instead of eagerly at startup.
+        //
+        // Multi-entry cache: every state we've ever computed stays
+        // resident (subject to `MASK_CACHE_MAX_ENTRIES`). The earlier
+        // single-entry Option wiped on every state transition, so a
+        // `string → comma → next_key → string` cycle paid for the
+        // string-body mask twice. The map closes that.
         let fingerprint = self.state.fingerprint();
-        let cache_hit = self
-            .mask_cache
-            .as_ref()
-            .map(|(fp, _)| *fp == fingerprint)
-            .unwrap_or(false);
-
-        if cache_hit {
-            let (_, valid) = self.mask_cache.as_ref().unwrap();
-            apply_cached_mask(data, valid, eog_tokens, buffer_is_complete, vocab_bytes);
-            self.record_mask_timing(timing_start);
+        if let Some(valid) = self.mask_cache.get(&fingerprint).cloned() {
+            apply_cached_mask(data, &valid, eog_tokens, buffer_is_complete, vocab_bytes);
+            self.record_mask_timing(timing_start, true);
             return;
         }
 
@@ -2508,21 +2568,51 @@ impl JsonConstraint {
                 valid[id] = entry.logit().is_finite();
             }
         }
-        self.mask_cache = Some((fingerprint, valid));
+        self.insert_mask_cache(fingerprint, valid);
 
-        self.record_mask_timing(timing_start);
+        self.record_mask_timing(timing_start, false);
+    }
+
+    /// Insert a freshly-computed `(fingerprint, valid)` pair into the
+    /// mask cache, enforcing the entry-count bound. When the bound is
+    /// tripped we evict the oldest insertion (approximate FIFO; the
+    /// state distribution is small enough that true LRU isn't worth
+    /// the extra bookkeeping).
+    fn insert_mask_cache(&mut self, fingerprint: u64, valid: Vec<bool>) {
+        if self.mask_cache.contains_key(&fingerprint) {
+            // Defensive — should be unreachable on the miss path, but
+            // overwrite rather than double-insert if we hit it.
+            self.mask_cache.insert(fingerprint, Arc::new(valid));
+            return;
+        }
+        while self.mask_cache.len() >= MASK_CACHE_MAX_ENTRIES {
+            if let Some(old_fp) = self.mask_cache_order.first().copied() {
+                self.mask_cache_order.remove(0);
+                self.mask_cache.remove(&old_fp);
+            } else {
+                break;
+            }
+        }
+        self.mask_cache.insert(fingerprint, Arc::new(valid));
+        self.mask_cache_order.push(fingerprint);
     }
 
     /// Internal helper: when timing is enabled and `start` was
     /// captured, fold the elapsed wall-clock into the cumulative
     /// counter. No-op when timing is disabled, so the hot path stays
     /// branch-prediction friendly.
-    fn record_mask_timing(&mut self, start: Option<std::time::Instant>) {
+    fn record_mask_timing(&mut self, start: Option<std::time::Instant>, cache_hit: bool) {
         if let (Some(t), Some(s)) = (self.timing.as_ref(), start) {
             let elapsed_us = s.elapsed().as_micros() as u64;
             if let Ok(mut state) = t.lock() {
                 state.mask_calls += 1;
                 state.mask_total_us += elapsed_us;
+                if cache_hit {
+                    state.mask_cache_hits += 1;
+                    state.mask_hit_total_us += elapsed_us;
+                } else {
+                    state.mask_miss_total_us += elapsed_us;
+                }
             }
         }
     }
@@ -2574,17 +2664,12 @@ impl JsonConstraint {
             return;
         };
         self.emitted.extend_from_slice(&bytes);
-        // Snapshot the pre-advance state fingerprint so we can drop
-        // the cached mask iff the state actually shifted. Many
-        // accepted tokens (e.g. ASCII bytes inside a string body)
-        // leave the structural state untouched and the cached mask
-        // stays valid; only state transitions need to invalidate.
-        let pre_fp = self.state.fingerprint();
+        // Multi-entry cache means accept() never has to evict — the
+        // entry for the post-transition state is computed lazily on
+        // the next mask() miss and stays resident from there on.
+        // This is the load-bearing change vs the old single-Option
+        // cache, which had to wipe on every transition.
         let _ = self.state.advance_bytes(&bytes);
-        let post_fp = self.state.fingerprint();
-        if pre_fp != post_fp {
-            self.mask_cache = None;
-        }
         // Per-token dump (env-gated). Set
         // `SOVEREIGN_CONSTRAINT_DUMP=/path/to/file` to record one line
         // per accepted token: token_id, bytes (escaped), running
@@ -2698,10 +2783,27 @@ impl Drop for JsonConstraint {
         } else {
             0
         };
+        let cache_misses = state.mask_calls.saturating_sub(state.mask_cache_hits);
+        let mask_hit_avg_us = if state.mask_cache_hits > 0 {
+            state.mask_hit_total_us / state.mask_cache_hits
+        } else {
+            0
+        };
+        let mask_miss_avg_us = if cache_misses > 0 {
+            state.mask_miss_total_us / cache_misses
+        } else {
+            0
+        };
         tracing::info!(
             mask_calls = state.mask_calls,
             mask_total_us = state.mask_total_us,
             mask_avg_us,
+            mask_cache_hits = state.mask_cache_hits,
+            mask_cache_misses = cache_misses,
+            mask_hit_total_us = state.mask_hit_total_us,
+            mask_hit_avg_us,
+            mask_miss_total_us = state.mask_miss_total_us,
+            mask_miss_avg_us,
             accept_calls = state.accept_calls,
             accept_total_us = state.accept_total_us,
             accept_avg_us,
@@ -2817,12 +2919,21 @@ mod tests {
     }
 
     #[test]
-    fn fingerprint_ignores_object_pairs_consumed_count() {
-        // Multiple kv pairs in a "post-value, await-comma-or-close"
-        // state share the same fingerprint regardless of how many
-        // pairs have been consumed so far.
+    fn fingerprint_distinguishes_object_position_across_kv_pairs() {
+        // After each kv pair completes, `next_idx` advances to the
+        // next declared property. The fingerprint MUST reflect this
+        // because the set of valid next key prefixes depends on it:
+        // after "a" is consumed the model can only emit a prefix of
+        // "b" or "c", not "a" again. Pre-this-fix the fingerprint
+        // excluded next_idx and produced a real divergence —
+        // `InKey { accumulated: [c] }` was mask-permitted after "a"
+        // because the cached mask was computed at next_idx=0 where
+        // the schema's first property started with "c". See the
+        // `fingerprint_changes_when_next_idx_advances` test below
+        // for the canonical reproducer of that bug.
         let mut s = state_for(json!({
             "type":"object",
+            "required":["a","b","c"],
             "properties":{
                 "a":{"type":"string"},
                 "b":{"type":"string"},
@@ -2835,12 +2946,64 @@ mod tests {
         let _ = s.advance_bytes(b",\"b\":\"y\"");
         let fp2 = s.fingerprint();
         // Both states are in `Object { sub: InValue { chosen } }`
-        // (the parent stays in InValue after the child string pops,
-        // until the next byte triggers the AwaitCommaOrClose
-        // transition). `chosen` differs (Typed(0) → Typed(1)) but
-        // doesn't affect byte-validity (next valid bytes are always
-        // `,`/`}`/ws), so the fingerprint must NOT include it.
-        assert_eq!(fp1, fp2);
+        // BUT with different `next_idx` values (1 vs 2 after the
+        // respective bumps). They MUST differ — same fingerprint
+        // would mean the mask cache can reuse a next_idx=0 mask
+        // for a next_idx=1 state, the exact pollution that allowed
+        // the masker-divergence bug.
+        assert_ne!(
+            fp1, fp2,
+            "fingerprint must encode next_idx so the mask cache \
+             cannot reuse a next_idx=N mask for a next_idx=N+1 state"
+        );
+    }
+
+    #[test]
+    fn fingerprint_changes_when_next_idx_advances_for_in_key_state() {
+        // Canonical reproducer for the cache-pollution bug fixed
+        // 2026-05-12: with schema required=["content","evidence"]
+        // the model emitted `{"content":"...","co` and the mask
+        // permitted the `c` byte even though "co" is not a prefix
+        // of "evidence". Root cause: the fingerprint at
+        // `InKey { accumulated: [] }` was identical for next_idx=0
+        // and next_idx=1, so the mask computed when "content" was
+        // valid got reused when only "evidence" should be.
+        //
+        // The fingerprint must differ between these states. Once
+        // the cache stores them separately, the InKey mask at
+        // next_idx=1 correctly rejects `c` (not a prefix of
+        // "evidence"), preventing the duplicate-key emission that
+        // tripped `emitted_invalid` mid-generation.
+        let mut s_fresh = state_for(json!({
+            "type":"object","required":["content","evidence"],
+            "properties":{
+                "content":{"type":"string"},
+                "evidence":{"type":"string"}
+            }
+        }));
+        // State A: just opened object, about to read first key.
+        // next_idx=0, sub=AwaitFirstKeyOrClose → after `"`, InKey [].
+        let _ = s_fresh.advance_bytes(b"{\"");
+        let fp_at_key_idx0 = s_fresh.fingerprint();
+
+        let mut s_advanced = state_for(json!({
+            "type":"object","required":["content","evidence"],
+            "properties":{
+                "content":{"type":"string"},
+                "evidence":{"type":"string"}
+            }
+        }));
+        // State B: same shape (InKey { accumulated: [] }) but
+        // next_idx=1 (after content was consumed).
+        let _ = s_advanced.advance_bytes(b"{\"content\":\"x\",\"");
+        let fp_at_key_idx1 = s_advanced.fingerprint();
+
+        assert_ne!(
+            fp_at_key_idx0, fp_at_key_idx1,
+            "InKey {{accumulated: []}} at next_idx=0 vs next_idx=1 \
+             must have distinct fingerprints — they accept different \
+             starting bytes (anything-prefix-of-content vs prefix-of-evidence)"
+        );
     }
 
     #[test]
@@ -2877,6 +3040,61 @@ mod tests {
         let _ = s.advance_bytes(b"bcdefghijklmnop");
         let fp2 = s.fingerprint();
         assert_eq!(fp1, fp2);
+    }
+
+    #[test]
+    fn fingerprint_cycle_returns_to_same_value_for_recurring_states() {
+        // Multi-entry cache correctness contract: parsing two string
+        // bodies separated by structural transitions must produce the
+        // SAME fingerprint inside each body, so the cache reuses the
+        // first body's mask for the second body without recomputing.
+        //
+        // Pre-this-change the single-Option cache wiped on every
+        // transition; the test above (`fingerprint_stable_through_
+        // string_body_bytes`) proved the fingerprint was stable within
+        // one body, but not that two SEPARATE bodies share a key.
+        // That's the load-bearing invariant for the multi-entry cache:
+        // a recurring state must return to its prior fingerprint.
+        let mut s = state_for(json!({
+            "type":"object","required":["a","b"],
+            "properties":{
+                "a":{"type":"string"},
+                "b":{"type":"string"}
+            }
+        }));
+        // Advance into the first string body.
+        let _ = s.advance_bytes(b"{\"a\":\"");
+        let fp_in_a_body = s.fingerprint();
+        // Close `"a"` field and traverse to inside `"b"`.
+        let _ = s.advance_bytes(b"alpha\",\"b\":\"");
+        let fp_in_b_body = s.fingerprint();
+        // Different schema position (different Object.sub.chosen
+        // history) — fingerprints across distinct properties may
+        // legitimately differ; the contract we depend on is that
+        // ANY single property's body fingerprint is consistent
+        // across re-entries. Add a second value of the same field
+        // through array context to make the re-entry contract direct.
+        let mut s2 = state_for(json!({
+            "type":"array",
+            "items": {"type":"string"}
+        }));
+        let _ = s2.advance_bytes(b"[\"first");
+        let fp_first_body = s2.fingerprint();
+        let _ = s2.advance_bytes(b"\",\"second");
+        let fp_second_body = s2.fingerprint();
+        assert_eq!(
+            fp_first_body, fp_second_body,
+            "two string-body states inside the same array-of-strings \
+             schema must share a fingerprint so the multi-entry cache \
+             reuses the mask"
+        );
+        // Sanity: the inter-body fingerprints differ from each other
+        // when properties are different (per-property `chosen` matters
+        // for AfterColon but not for InValue body — these are inside
+        // the value, so should DIFFER only by schema-path. Use object
+        // schema with distinct types to make this real):
+        let _ = fp_in_a_body;
+        let _ = fp_in_b_body;
     }
 
     #[test]
