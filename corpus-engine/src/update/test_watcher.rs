@@ -37,11 +37,16 @@ use std::time::Instant;
 use async_trait::async_trait;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinHandle;
 
 use crate::test_results::{TestResultKind, TestResultStore};
 use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
+
+/// Default cooldown after a subprocess completes before consuming a
+/// queued rerun. See `lint_watcher::DEFAULT_RERUN_COOLDOWN_MS` for
+/// rationale.
+const DEFAULT_RERUN_COOLDOWN_MS: u64 = 3000;
 
 // ─── TestWatcher ─────────────────────────────────────────────────────────────
 
@@ -55,6 +60,12 @@ pub struct TestWatcher {
     /// Current in-progress run handle. `None` when idle.
     run_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     rerun_pending: Arc<AtomicBool>,
+    /// Optional shared run slot — see `LintWatcher::run_slot`. Sharing
+    /// one `Arc<Semaphore>` with 1 permit between the lint and test
+    /// watchers serializes their cargo subprocesses so they don't
+    /// compound memory pressure.
+    run_slot: Option<Arc<Semaphore>>,
+    cooldown_ms: u64,
 }
 
 impl TestWatcher {
@@ -71,7 +82,23 @@ impl TestWatcher {
             store,
             run_handle: Arc::new(Mutex::new(None)),
             rerun_pending: Arc::new(AtomicBool::new(false)),
+            run_slot: None,
+            cooldown_ms: DEFAULT_RERUN_COOLDOWN_MS,
         }
+    }
+
+    /// Share a run slot with the `LintWatcher` (or any other heavy
+    /// subprocess watcher) to serialize cargo invocations.
+    pub fn with_run_slot(mut self, slot: Arc<Semaphore>) -> Self {
+        self.run_slot = Some(slot);
+        self
+    }
+
+    /// Override the post-run cooldown (default 3s). Set to 0 to fire
+    /// queued reruns immediately.
+    pub fn with_cooldown_ms(mut self, ms: u64) -> Self {
+        self.cooldown_ms = ms;
+        self
     }
 
     /// Force a run immediately regardless of file changes. Used by
@@ -97,6 +124,8 @@ impl TestWatcher {
         let store = Arc::clone(&self.store);
         let handle_slot = Arc::clone(&self.run_handle);
         let rerun_pending = Arc::clone(&self.rerun_pending);
+        let run_slot = self.run_slot.clone();
+        let cooldown_ms = self.cooldown_ms;
 
         let handle = tokio::spawn(async move {
             // Loop: run the test subprocess, then check whether any file
@@ -104,12 +133,40 @@ impl TestWatcher {
             // again — exactly one follow-up iteration, no matter how many
             // changes piled up.
             loop {
+                // Serialize against sibling watchers (typically the lint
+                // runner) holding the shared slot.
+                let _permit = match &run_slot {
+                    Some(slot) => match slot.clone().acquire_owned().await {
+                        Ok(p) => {
+                            tracing::debug!("TestWatcher: acquired shared run slot");
+                            Some(p)
+                        }
+                        Err(_) => {
+                            tracing::warn!("TestWatcher: shared run slot closed");
+                            break;
+                        }
+                    },
+                    None => None,
+                };
+
                 if let Err(e) =
                     run_subprocess(command.clone(), working_dir.clone(), timeout_secs, Arc::clone(&store)).await
                 {
                     tracing::warn!("test runner failed: {e}");
                 }
+                // Release the permit before the cooldown so a sibling
+                // watcher can take the slot while we wait.
+                drop(_permit);
+
                 if rerun_pending.swap(false, Ordering::SeqCst) {
+                    if cooldown_ms > 0 {
+                        tracing::info!(
+                            cooldown_ms,
+                            "TestWatcher: rerun queued — sleeping for cooldown to coalesce further edits"
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_millis(cooldown_ms)).await;
+                        rerun_pending.store(false, Ordering::SeqCst);
+                    }
                     tracing::info!("TestWatcher: rerunning — file changes arrived during last run");
                     continue;
                 }

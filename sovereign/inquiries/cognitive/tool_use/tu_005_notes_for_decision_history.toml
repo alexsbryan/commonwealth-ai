@@ -1,0 +1,20 @@
+[item]
+id = "tu_005_notes_for_decision_history"
+title = "Tool selection: was there a prior decision about this?"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: before proposing a switch from FTS5 to LanceDB for the corpus chunk index, you want to know whether the team has previously discussed and decided this — a durable session-spanning record."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "notes"
+must_contain = ["FTS5", "LanceDB"]
+alternates_ok = ["code_search"]

@@ -1,0 +1,19 @@
+[item]
+id = "dq_011_builder_vs_constructor"
+title = "Builder pattern vs direct constructor"
+category = "decision_quality"
+description = "Builder pays off when many params are optional and ordering ambiguity is real."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A struct `Request` has 2 required fields (`url: Url`, `method: Method`) and 9 optional fields (timeout, retries, headers, body, auth, follow_redirects, max_redirects, user_agent, query_params). Callers typically set 1-3 of the optionals; which ones vary widely across call sites.
+
+Approach A: Provide `Request::new(url, method) -> RequestBuilder` returning a builder with one chainable method per optional, terminated by `.build()`.
+
+Approach B: Provide `Request::new(url, method, timeout, retries, headers, body, auth, follow_redirects, max_redirects, user_agent, query_params) -> Request` taking 11 positional arguments.
+
+Pick the approach with better call-site ergonomics."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

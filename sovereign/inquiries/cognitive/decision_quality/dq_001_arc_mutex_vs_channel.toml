@@ -1,0 +1,19 @@
+[item]
+id = "dq_001_shared_state_vs_message_passing"
+title = "Concurrency model: shared mutable state vs message passing"
+category = "decision_quality"
+description = "When one thread produces and one thread consumes, message passing removes coupling and ordering bugs."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A service has one producer thread (reads parsed events from a socket) and one consumer thread (writes them to disk in batches of 100). No other components touch this state.
+
+Approach A: A shared buffer protected by a mutex. Producer locks, pushes, unlocks. Consumer locks, drains 100, unlocks, writes.
+
+Approach B: A bounded FIFO queue (capacity 1000). Producer enqueues, consumer dequeues in a loop and writes when 100 have accumulated.
+
+Pick the approach with lower coupling between the threads and clearer ownership semantics."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

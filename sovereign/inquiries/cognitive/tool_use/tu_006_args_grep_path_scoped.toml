@@ -1,0 +1,22 @@
+[item]
+id = "tu_006_args_grep_path_scoped"
+title = "Argument shape: Grep needs both pattern AND path"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: find every `panic!(` invocation in the `sovereign-core` crate. You want the search scoped to that crate's directory, not the whole monorepo."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "Grep"
+# `panic` token catches both `panic!(` and `panic!\(` regex variants.
+# `sovereign/crates/sovereign-core` is load-bearing — it catches the
+# hallucinated `/home/user/sovereign-core` path failure mode.
+must_contain = ["panic", "sovereign/crates/sovereign-core"]

@@ -1,0 +1,19 @@
+[item]
+id = "dq_009_serde_format"
+title = "Serialization format: human-edited config file"
+category = "decision_quality"
+description = "Human-edited config wants readable, comment-supporting format."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A CLI tool reads a config file that ops engineers hand-edit. The file is checked into git; the team wants inline comments next to non-obvious values, and they don't want JSON's strictness about commas.
+
+Approach A: TOML, parsed via the `toml` crate.
+
+Approach B: JSON, parsed via `serde_json`.
+
+Pick the format suited to hand-editing with comments."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

@@ -1,0 +1,19 @@
+[item]
+id = "tu_004_blast_for_impact"
+title = "Tool selection: how many things depend on this function?"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: before modifying `parse_atom`, you want to know its transitive impact — not just direct callers but the full dependency cone two levels deep."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "blast"
+expected_args = { name = "parse_atom" }

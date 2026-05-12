@@ -1,0 +1,19 @@
+[item]
+id = "dq_adv_002_go_channel_close_pattern"
+title = "Go fan-in: who closes the channel?"
+category = "decision_quality"
+description = "Adversarial: closing a channel from the consumer panics on next send. Right pattern: producers coordinate (e.g., sync.WaitGroup), then ONE site closes after all producers done."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A Go program fans 4 producer goroutines into a single result channel `ch chan Result`. The consumer ranges over `ch` and exits when the channel is closed. The producers each finish at different unpredictable times.
+
+Approach A: The consumer closes `ch` when it has read enough results, signaling producers to stop.
+
+Approach B: A `sync.WaitGroup` tracks the 4 producers; a separate goroutine does `wg.Wait(); close(ch)`. The consumer ranges until the channel is closed.
+
+Pick the approach that doesn't risk a runtime panic on send-after-close."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_002_active_active_vs_active_passive"
+title = "Multi-region: active-active vs active-passive for a 99.95% SLA"
+category = "decision_quality"
+description = "Hard: active-active sounds 'better' but pays for split-brain complexity nobody needs at 99.95%."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A B2B reporting service has a 99.95% uptime SLA (≈4.4 hours of allowed downtime per year). The dataset is small enough to fit in a single region's primary database. The team has shipped a working single-region deployment. Customer contracts include no requirement for cross-region active failover.
+
+Approach A: Active-active across two regions with bidirectional async replication and conflict resolution.
+
+Approach B: Active-passive across two regions — primary serves all traffic, secondary kept warm with replication; manual failover documented and rehearsed quarterly.
+
+Pick the approach proportional to the actual SLA and conflict-resolution cost."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

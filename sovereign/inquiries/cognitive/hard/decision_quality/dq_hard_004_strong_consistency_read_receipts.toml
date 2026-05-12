@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_004_strong_consistency_read_receipts"
+title = "Read receipts in chat: strong vs eventual consistency"
+category = "decision_quality"
+description = "Hard: 'consistency' is the kneejerk pick. Read receipts can lag a few seconds without user-visible harm — eventual buys huge throughput."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A chat product needs to display read receipts ("Alice has seen this message"). The product manager is okay with a receipt appearing up to 3-5 seconds after the read actually happens. The chat service handles 10M concurrent users.
+
+Approach A: A linearizable cross-region datastore that ensures every read receipt is visible globally the instant the recipient's client acknowledges.
+
+Approach B: An eventually-consistent append-only log per conversation; receipts propagate via background replication with bounded lag.
+
+Pick the approach matched to the actual freshness requirement."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

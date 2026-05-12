@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_006_idempotent_payments"
+title = "Payment processing: at-most-once vs at-least-once with idempotency"
+category = "decision_quality"
+description = "Hard: 'at-most-once' sounds safe (no double charges) but loses payments. Industry answer is idempotency keys + retries."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A payment service calls an external card processor. Network calls sometimes time out without a clear success/failure indicator. The service must never charge a customer twice for the same purchase, and must not silently drop a charge the customer made.
+
+Approach A: At-most-once delivery — if the call times out, log the timeout and do NOT retry. Surface the ambiguity to the customer.
+
+Approach B: At-least-once delivery with idempotency keys — every charge request carries a unique key; the processor returns the same outcome for the same key; the service retries on timeout.
+
+Pick the approach that avoids both double-charges AND silent drops."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

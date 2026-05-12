@@ -1,0 +1,19 @@
+[item]
+id = "dq_013_typed_error_vs_string_error"
+title = "Library error type: typed enum vs string-only"
+category = "decision_quality"
+description = "Callers need to branch on error category; strings don't support reliable branching."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """You are designing the public error surface of a library that parses a binary protocol. Callers need to distinguish "input truncated" (retry with more data) from "checksum mismatch" (drop the packet) from "unknown opcode" (log and continue). Each branch takes a different action.
+
+Approach A: A typed error with one variant per failure category. Callers pattern-match (`switch`/`match`) on the variant.
+
+Approach B: A single error type carrying only a human-readable message string. Callers `if error.contains("truncated")` to branch.
+
+Pick the approach that lets callers branch reliably as the library evolves."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

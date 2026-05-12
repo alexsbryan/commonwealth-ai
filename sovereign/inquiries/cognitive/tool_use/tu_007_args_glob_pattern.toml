@@ -1,0 +1,19 @@
+[item]
+id = "tu_007_args_glob_pattern"
+title = "Argument shape: Glob double-star pattern"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: list every `.toml` file under the monorepo, regardless of nesting depth."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "Glob"
+expected_args = { pattern = "**/*.toml" }

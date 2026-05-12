@@ -1,0 +1,19 @@
+[item]
+id = "dq_014_monorepo_vs_polyrepo"
+title = "Repository structure: monorepo vs separate repos"
+category = "decision_quality"
+description = "Coordinated cross-component changes are cheap in a monorepo and expensive across repos."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A small team owns six closely-coupled services. Most pull requests touch two or three services in a single change. A breaking change in one service must land atomically with the call-site fix in the others. No external organization depends on any of these services individually.
+
+Approach A: One git repository, one CI pipeline, atomic cross-service PRs.
+
+Approach B: Six git repositories, six CI pipelines. Coordinated changes require a chain of PRs across repos (publish service A → bump in service B → publish → bump in service C → …).
+
+Pick the structure that matches the team's actual change pattern."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

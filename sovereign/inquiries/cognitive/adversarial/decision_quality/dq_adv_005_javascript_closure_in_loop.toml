@@ -1,0 +1,29 @@
+[item]
+id = "dq_adv_005_javascript_closure_in_loop"
+title = "JavaScript: var vs let in a closure-creating loop"
+category = "decision_quality"
+description = "Adversarial: classic `var` hoisting trap. With `var`, all closures see the final value of i. With `let`, each iteration creates a fresh binding."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """JavaScript code creates 5 button click handlers in a loop, each of which should log its own index when clicked. The intention is that clicking button #2 logs `2`, button #3 logs `3`, and so on.
+
+Approach A:
+```
+for (var i = 0; i < 5; i++) {
+  buttons[i].onclick = function() { console.log(i); };
+}
+```
+
+Approach B:
+```
+for (let i = 0; i < 5; i++) {
+  buttons[i].onclick = function() { console.log(i); };
+}
+```
+
+Pick the approach that makes each handler log its own loop index, not the final value of `i`."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

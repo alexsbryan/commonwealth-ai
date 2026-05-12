@@ -10,8 +10,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 use std::path::{Path, PathBuf};
 use sovereign_eval::{
-    audit_trail, diff as diff_mod, finalize, judge, manifest, mechanical, regression, scope,
-    tool_grader, workflow,
+    audit_trail, cognitive, diff as diff_mod, finalize, judge, manifest, mechanical, regression,
+    scope, tool_grader, workflow,
 };
 
 #[derive(Parser)]
@@ -60,6 +60,69 @@ enum Cmd {
         #[arg(long)]
         out_dir: Option<PathBuf>,
     },
+
+    /// Fast-tier cognitive unit-test bank against the Fast slot.
+    /// Mechanical scoring only — no judge call. See
+    /// `sovereign/inquiries/cognitive/` for the on-disk items.
+    Cognitive(CognitiveArgs),
+}
+
+#[derive(Args, Debug)]
+struct CognitiveArgs {
+    /// Daemon base URL. /v1/chat/completions is appended.
+    #[arg(long, default_value = "http://localhost:9741")]
+    daemon_url: String,
+
+    /// gguf file-stem of the model to invoke (NOT a slot alias like
+    /// "fast" — the daemon resolves by stem, not slot abstraction).
+    #[arg(long)]
+    model: String,
+
+    /// Optional category filter (situating_judgment, decision_quality,
+    /// honesty_calibration, code_reasoning, charter_satisfaction).
+    #[arg(long)]
+    category: Option<String>,
+
+    /// Optional single-item id filter — useful while authoring.
+    #[arg(long)]
+    item: Option<String>,
+
+    /// Root of the cognitive bank. Defaults to
+    /// `<workspace>/sovereign/inquiries/cognitive`.
+    #[arg(long)]
+    bank_root: Option<PathBuf>,
+
+    /// Workspace root used to resolve relative `[[context_blocks]].file`
+    /// references. Defaults to `cwd`.
+    #[arg(long)]
+    workspace_root: Option<PathBuf>,
+
+    /// Where to write the JSON report. Defaults to
+    /// `<data_dir>/runs/<auto-id>/cognitive.json`.
+    #[arg(long)]
+    out: Option<PathBuf>,
+
+    /// Path to a prior `cognitive.json`; render a baseline-diff in the
+    /// text summary and embed it in the JSON report.
+    #[arg(long)]
+    baseline: Option<PathBuf>,
+
+    /// Persist this run's report as the new baseline (writes a copy to
+    /// the given path on success).
+    #[arg(long)]
+    save_baseline: Option<PathBuf>,
+
+    /// Sampling temperature. Default matches `judge.rs` (0.0).
+    #[arg(long, default_value_t = cognitive::runner::DEFAULT_TEMPERATURE)]
+    temperature: f32,
+
+    /// Decoding seed. Default mirrors `judge.rs:JUDGE_SEED` shape.
+    #[arg(long, default_value_t = cognitive::runner::DEFAULT_SEED)]
+    seed: u64,
+
+    /// Max tokens per item response.
+    #[arg(long, default_value_t = cognitive::runner::DEFAULT_MAX_TOKENS)]
+    max_tokens: u32,
 }
 
 fn main() -> Result<()> {
@@ -100,7 +163,71 @@ fn main() -> Result<()> {
             later_run,
             out_dir,
         } => cmd_audit(&data_dir, &earlier_run, &later_run, out_dir.as_deref()),
+        Cmd::Cognitive(args) => cmd_cognitive(&data_dir, args),
     }
+}
+
+fn cmd_cognitive(data_dir: &Path, args: CognitiveArgs) -> Result<()> {
+    let cwd = std::env::current_dir().context("getting cwd")?;
+    let workspace_root = args.workspace_root.unwrap_or(cwd);
+    let bank_root = args
+        .bank_root
+        .unwrap_or_else(|| cognitive::default_bank_root(&workspace_root));
+
+    let category_filter = match &args.category {
+        Some(s) => Some(cognitive::Category::parse(s)?),
+        None => None,
+    };
+
+    let report = cognitive::run_suite(cognitive::SuiteOpts {
+        bank_root: &bank_root,
+        workspace_root: &workspace_root,
+        daemon_url: &args.daemon_url,
+        model: &args.model,
+        category_filter,
+        item_id_filter: args.item.as_deref(),
+        temperature: args.temperature,
+        seed: args.seed,
+        max_tokens: args.max_tokens,
+    })?;
+
+    let out_path = args.out.unwrap_or_else(|| {
+        data_dir
+            .join("runs")
+            .join(&report.run_id)
+            .join("cognitive.json")
+    });
+    write_pretty_json(&out_path, &report).context("writing cognitive report")?;
+
+    let baseline = match &args.baseline {
+        Some(p) => {
+            let raw = std::fs::read_to_string(p)
+                .with_context(|| format!("reading baseline {}", p.display()))?;
+            let r: cognitive::Report = serde_json::from_str(&raw)
+                .with_context(|| format!("parsing baseline {}", p.display()))?;
+            Some(r)
+        }
+        None => None,
+    };
+    let diff = baseline
+        .as_ref()
+        .map(|b| cognitive::report::diff_baseline(b, &report));
+
+    print!("{}", cognitive::report::render_text(&report, diff.as_ref()));
+    println!("\n→ wrote {}", out_path.display());
+
+    if let Some(save_path) = args.save_baseline {
+        write_pretty_json(&save_path, &report)
+            .with_context(|| format!("saving baseline to {}", save_path.display()))?;
+        println!("→ saved baseline {}", save_path.display());
+    }
+
+    let total = report.items_total;
+    let failed = total.saturating_sub(report.items_passed);
+    if failed > 0 {
+        std::process::exit(1);
+    }
+    Ok(())
 }
 
 #[derive(Args, Debug)]

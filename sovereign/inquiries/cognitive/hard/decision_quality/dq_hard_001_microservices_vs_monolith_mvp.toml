@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_001_microservices_vs_monolith_mvp"
+title = "Architecture for a 3-engineer MVP: microservices vs monolith"
+category = "decision_quality"
+description = "Hard: the industry-default 'microservices for scaling' is wrong here. Small team + no ops budget + MVP scope flips the right answer."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A 3-engineer team is building an MVP for a B2B SaaS product. Expected first-year traffic: 200 paid customers, peak ~50 req/s. The team has no dedicated platform engineer and no on-call rotation. The goal is to get to product-market fit in 6 months, then re-evaluate. They are deciding the initial architecture.
+
+Approach A: One monolithic backend service + one database. All code lives in one repo, deploys as one binary.
+
+Approach B: Five microservices (auth, billing, core API, notifications, reporting) communicating over a message bus, each with its own datastore.
+
+Pick the approach matched to the team's actual constraints — size, operational capacity, time horizon."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

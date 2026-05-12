@@ -1,0 +1,19 @@
+[item]
+id = "dq_004_bfs_vs_dfs_shortest_path"
+title = "Graph search: shortest path on an unweighted graph"
+category = "decision_quality"
+description = "BFS gives shortest path on unweighted graphs; DFS does not."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """Given an unweighted graph (each edge has cost 1), find the shortest path from node S to node T.
+
+Approach A: Depth-first search from S, returning the first path that reaches T.
+
+Approach B: Breadth-first search from S, returning the path when T is first dequeued.
+
+Pick the approach that returns the minimum-length path."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

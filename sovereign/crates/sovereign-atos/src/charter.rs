@@ -289,7 +289,11 @@ fn split_ordinal_from_title(raw: &str, fallback: i64) -> (i64, String) {
 /// `**Stop condition:**` and `**stop condition:**` match — Yara's
 /// story uses the title-cased form, but authors should not be
 /// punished for lowercase.
-fn find_stop_condition(brief: &str) -> Option<String> {
+///
+/// Public because the ATOS Runner ([`sovereign-cli atos run`]) gates
+/// the reviewer pass on this command's exit-zero per
+/// `sovereign/docs/ATOS_RUNNER.md` § Stop conditions.
+pub fn find_stop_condition(brief: &str) -> Option<String> {
     const MARKERS: &[&str] = &[
         "**Stop condition:**",
         "**stop condition:**",

@@ -1,0 +1,19 @@
+[item]
+id = "dq_003_async_for_oneshot_cli"
+title = "Async vs synchronous: one-shot CLI subcommand"
+category = "decision_quality"
+description = "Async pays its overhead with concurrency you actually need. A one-shot pipeline has no concurrency."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A CLI subcommand reads a JSON file, applies a schema migration to a local database, and exits. There is no concurrency — the steps run strictly in sequence.
+
+Approach A: Synchronous code top-to-bottom. Read the file, open the DB, run statements, close.
+
+Approach B: Async code on top of an event-loop runtime. Read the file with async I/O, run statements through an async DB driver, drive everything from an `async main`.
+
+Pick the approach that matches the program's actual concurrency need."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

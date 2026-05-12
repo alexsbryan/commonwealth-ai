@@ -24,11 +24,19 @@ use std::time::Instant;
 use async_trait::async_trait;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Semaphore};
 use tokio::task::JoinHandle;
 
 use crate::lint_results::{LintResultKind, LintResultStore};
 use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
+
+/// Default cooldown after a subprocess completes before consuming a
+/// queued rerun. Coalesces bursts of file edits arriving during the
+/// previous run into one rather than chain-spawning another full
+/// cargo invocation immediately. 3s is short enough that an operator
+/// editing one file at a time barely notices, long enough to let
+/// macOS reclaim memory from the just-completed cargo process.
+const DEFAULT_RERUN_COOLDOWN_MS: u64 = 3000;
 
 // ─── LintWatcher ─────────────────────────────────────────────────────────────
 
@@ -59,6 +67,13 @@ pub struct LintWatcher {
     store: Arc<LintResultStore>,
     run_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     rerun_pending: Arc<AtomicBool>,
+    /// Optional global slot. When set, the subprocess runner acquires
+    /// a permit before spawning cargo and releases on completion.
+    /// Sharing one `Arc<Semaphore>` (with 1 permit) between the
+    /// `LintWatcher` and `TestWatcher` serializes their cargo
+    /// invocations — the thundering-herd fix.
+    run_slot: Option<Arc<Semaphore>>,
+    cooldown_ms: u64,
 }
 
 impl LintWatcher {
@@ -75,7 +90,26 @@ impl LintWatcher {
             store,
             run_handle: Arc::new(Mutex::new(None)),
             rerun_pending: Arc::new(AtomicBool::new(false)),
+            run_slot: None,
+            cooldown_ms: DEFAULT_RERUN_COOLDOWN_MS,
         }
+    }
+
+    /// Share a run slot with other watchers (typically the
+    /// `TestWatcher`). With a 1-permit semaphore the two
+    /// subprocess-running watchers serialize instead of
+    /// running cargo concurrently and doubling memory pressure.
+    pub fn with_run_slot(mut self, slot: Arc<Semaphore>) -> Self {
+        self.run_slot = Some(slot);
+        self
+    }
+
+    /// Override the post-run cooldown (default 3s). Set to 0 to
+    /// disable — the next rerun will fire immediately after the
+    /// previous one finishes (the pre-cooldown behavior).
+    pub fn with_cooldown_ms(mut self, ms: u64) -> Self {
+        self.cooldown_ms = ms;
+        self
     }
 
     /// Operator-triggered run. Preempts any in-flight run so the operator
@@ -101,6 +135,8 @@ impl LintWatcher {
         let store = Arc::clone(&self.store);
         let handle_slot = Arc::clone(&self.run_handle);
         let rerun_pending = Arc::clone(&self.rerun_pending);
+        let run_slot = self.run_slot.clone();
+        let cooldown_ms = self.cooldown_ms;
 
         let handle = tokio::spawn(async move {
             // Loop: run the lint subprocess, then check whether any file
@@ -109,12 +145,45 @@ impl LintWatcher {
             // changes piled up. The check happens AFTER the subprocess
             // completes so an abort-storm can never replace this task.
             loop {
+                // Serialize against any sibling watcher (typically the
+                // test runner) holding the shared run slot. The permit
+                // guard releases on scope exit, even on early-return /
+                // panic paths inside the subprocess runner.
+                let _permit = match &run_slot {
+                    Some(slot) => match slot.clone().acquire_owned().await {
+                        Ok(p) => {
+                            tracing::debug!("LintWatcher: acquired shared run slot");
+                            Some(p)
+                        }
+                        Err(_) => {
+                            // Semaphore closed — bail without running.
+                            tracing::warn!("LintWatcher: shared run slot closed");
+                            break;
+                        }
+                    },
+                    None => None,
+                };
+
                 if let Err(e) =
                     run_lint_subprocess(command.clone(), working_dir.clone(), timeout_secs, Arc::clone(&store)).await
                 {
                     tracing::warn!("lint runner failed: {e}");
                 }
+                // Release the permit BEFORE the cooldown so a sibling
+                // watcher can use the slot while we're waiting.
+                drop(_permit);
+
                 if rerun_pending.swap(false, Ordering::SeqCst) {
+                    if cooldown_ms > 0 {
+                        tracing::info!(
+                            cooldown_ms,
+                            "LintWatcher: rerun queued — sleeping for cooldown to coalesce further edits"
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_millis(cooldown_ms)).await;
+                        // Drain any extra flags set during the cooldown
+                        // window into this single rerun.
+                        rerun_pending.store(false, Ordering::SeqCst);
+                    }
                     tracing::info!("LintWatcher: rerunning — file changes arrived during last run");
                     continue;
                 }

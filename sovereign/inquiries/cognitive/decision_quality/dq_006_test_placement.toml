@@ -1,0 +1,19 @@
+[item]
+id = "dq_006_unit_vs_integration_test"
+title = "Test type: unit vs integration"
+category = "decision_quality"
+description = "Unit tests exercise one function/method in isolation; integration tests exercise composition."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """You need a regression test for a single pure function that converts a numeric range string ("3-7") into a list of integers. The function has no I/O and no dependencies on other modules. The bug it fixes was an off-by-one in the range parsing.
+
+Approach A: A unit test calling the function directly with a handful of inputs and asserting the output list.
+
+Approach B: An end-to-end integration test that boots the application, drives a CLI command that internally uses the function, captures stdout, and asserts on the formatted output.
+
+Pick the test type that gives the tightest signal at the lowest cost."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

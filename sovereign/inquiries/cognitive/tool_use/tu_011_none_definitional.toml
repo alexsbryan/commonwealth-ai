@@ -1,0 +1,18 @@
+[item]
+id = "tu_011_none_definitional"
+title = "When NOT to call: definitional question"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: define the CAP theorem in one sentence."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "none"

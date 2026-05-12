@@ -1,0 +1,19 @@
+[item]
+id = "tu_002_symbols_for_definition"
+title = "Tool selection: find the definition of a type"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: show me the definition of the `CorpusEngine` struct — its fields and methods. The type name is exact."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "symbols"
+expected_args = { name = "CorpusEngine" }

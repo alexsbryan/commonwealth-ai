@@ -10,6 +10,7 @@
 //! Operator-driven — no daemon source changes.
 
 pub mod audit_trail;
+pub mod cognitive;
 pub mod diff;
 pub mod finalize;
 pub mod judge;

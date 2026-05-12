@@ -1,0 +1,19 @@
+[item]
+id = "dq_007_pagination_cursor_vs_offset"
+title = "Pagination: cursor vs offset+limit"
+category = "decision_quality"
+description = "Cursor pagination is stable under concurrent inserts/deletes; offset shifts."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A social feed API returns posts in reverse-chronological order. Posts are inserted concurrently while users scroll. Pagination must not show duplicate posts to a scrolling user and must not silently skip a post that was inserted between page fetches.
+
+Approach A: Offset + limit. `?offset=20&limit=20`. The client tracks how many it has seen.
+
+Approach B: Cursor. Each page returns an opaque cursor pointing at the last item; the next call passes the cursor as `?after=<cursor>`.
+
+Pick the approach that's stable under concurrent inserts."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

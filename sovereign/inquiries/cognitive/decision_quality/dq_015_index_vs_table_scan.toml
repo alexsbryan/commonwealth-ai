@@ -1,0 +1,19 @@
+[item]
+id = "dq_015_index_vs_table_scan"
+title = "SQLite query strategy: add an index vs full table scan"
+category = "decision_quality"
+description = "Add the index when the query pattern is hot and the table is large."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A SQLite table `events` has 12M rows. A new feature runs `SELECT * FROM events WHERE feature_id = ? ORDER BY ts DESC LIMIT 50` on every page load. There is no index on `feature_id`. `EXPLAIN QUERY PLAN` shows a full table scan. The table grows by ~50k rows/day. Writes are batched (one transaction every few minutes); read latency is the user-visible bottleneck.
+
+Approach A: Add `CREATE INDEX idx_events_feature_ts ON events(feature_id, ts DESC)`. Pay write amplification on every insert.
+
+Approach B: Leave the schema alone. Cache the query result in-process for 60s.
+
+Pick the approach that addresses the on-disk scan, not just the symptom."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

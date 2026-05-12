@@ -1,0 +1,19 @@
+[item]
+id = "dq_012_env_var_vs_config_file"
+title = "Config: env var vs config file for a 200-key configuration"
+category = "decision_quality"
+description = "Large structured configuration needs structured storage; env vars are flat and hostile to nesting."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A service has roughly 200 configuration values across 12 logical groups (db, cache, http, retries, tls, observability, feature flags, …). Many values are nested objects (e.g., `db.pool.{min,max,idle_timeout_ms}`). Ops engineers want to review configs in pull requests with diffs.
+
+Approach A: One env var per setting (`DB_POOL_MIN`, `DB_POOL_MAX`, …) parsed at startup.
+
+Approach B: A TOML file checked into the repo per environment, parsed at startup.
+
+Pick the approach that matches the structure of the data and the review workflow."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

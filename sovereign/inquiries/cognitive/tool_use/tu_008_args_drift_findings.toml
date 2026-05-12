@@ -1,0 +1,19 @@
+[item]
+id = "tu_008_args_drift_findings"
+title = "Argument shape: drift_findings keyed by symbol"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: before renaming the public function `extract_atom`, check whether any narrative documentation references it (a rename would otherwise leave the docs drifted)."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "drift_findings"
+expected_args = { query = "extract_atom" }

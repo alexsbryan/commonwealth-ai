@@ -500,22 +500,33 @@ async fn run_daemon(args: &[String]) -> i32 {
         let sov_cfg = corpus_engine::SovereignConfig::load_or_default(
             &ws.join(".sovereign"),
         );
+        // Single-permit semaphore shared by the lint + test watchers so
+        // their cargo subprocesses serialize instead of compounding
+        // memory pressure. Without this, both fire concurrent cargo
+        // check / cargo test invocations on every debounced edit
+        // flush, doubling RSS and inviting macOS to SIGTERM the daemon
+        // under pressure.
+        let run_slot = Arc::new(tokio::sync::Semaphore::new(1));
+
         if let Some(ref cfg) = sov_cfg.lint_runner {
             let working_dir = cfg.working_dir.as_ref().map(|d| {
                 let p = PathBuf::from(d);
                 if p.is_absolute() { p } else { ws.join(p) }
             });
             watched_lint_scope = Some(cfg.command.clone());
-            lint_watcher = Some(Arc::new(corpus_engine::LintWatcher::new(
-                &cfg.command,
-                working_dir,
-                cfg.timeout_secs.unwrap_or(120),
-                Arc::clone(&lint_store),
-            )));
+            lint_watcher = Some(Arc::new(
+                corpus_engine::LintWatcher::new(
+                    &cfg.command,
+                    working_dir,
+                    cfg.timeout_secs.unwrap_or(120),
+                    Arc::clone(&lint_store),
+                )
+                .with_run_slot(Arc::clone(&run_slot)),
+            ));
             tracing::info!(
                 command = %cfg.command,
                 workspace = %ws.display(),
-                "lint watcher configured"
+                "lint watcher configured (shared run slot)"
             );
         }
         if let Some(ref cfg) = sov_cfg.test_runner {
@@ -524,16 +535,19 @@ async fn run_daemon(args: &[String]) -> i32 {
                 if p.is_absolute() { p } else { ws.join(p) }
             });
             watched_test_scope = Some(cfg.command.clone());
-            test_watcher = Some(Arc::new(corpus_engine::TestWatcher::new(
-                &cfg.command,
-                working_dir,
-                cfg.timeout_secs.unwrap_or(300),
-                Arc::clone(&test_store),
-            )));
+            test_watcher = Some(Arc::new(
+                corpus_engine::TestWatcher::new(
+                    &cfg.command,
+                    working_dir,
+                    cfg.timeout_secs.unwrap_or(300),
+                    Arc::clone(&test_store),
+                )
+                .with_run_slot(Arc::clone(&run_slot)),
+            ));
             tracing::info!(
                 command = %cfg.command,
                 workspace = %ws.display(),
-                "test watcher configured"
+                "test watcher configured (shared run slot)"
             );
         }
 

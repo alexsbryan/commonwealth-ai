@@ -1,0 +1,19 @@
+[item]
+id = "tu_016_bash_curl_health"
+title = "Bash + curl: poll a local HTTP health endpoint"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: check whether the sovereign daemon is responding on localhost. The daemon exposes `/v1/models` at port 9741. You want a one-shot HTTP GET that prints the response body."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "Bash"
+expected_args = { command = "curl -s http://localhost:9741/v1/models" }

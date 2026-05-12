@@ -1,0 +1,19 @@
+[item]
+id = "tu_017_bash_git_log"
+title = "Bash: see recent commits on the current branch"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: list the 10 most recent commits on the current branch, one line each (short SHA + subject)."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "Bash"
+expected_args = { command = "git log --oneline -10" }

@@ -1,0 +1,18 @@
+[item]
+id = "tu_015_seq_pre_change_audit"
+title = "Sequencing: pre-change audit before modifying a function"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: before modifying the function `commit_chunks`, you want (a) the transitive blast radius and (b) any prior decisions or invariants recorded about it. List the tools in the order you will invoke them."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_sequence = ["blast", "notes"]

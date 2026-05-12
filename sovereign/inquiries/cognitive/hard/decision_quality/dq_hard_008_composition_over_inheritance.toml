@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_008_composition_over_inheritance"
+title = "Code reuse: inheritance vs composition"
+category = "decision_quality"
+description = "Hard: inheritance is the OO-101 reflex; the right move for shared behavior is usually composition."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A `Notifier` class sends user notifications. A new requirement adds a logging and rate-limiting capability that should be shared with 5 other unrelated classes (`Auditor`, `MetricsCollector`, `WebhookSender`, `Mailer`, `Pinger`). None of these classes is conceptually a subtype of any other — they're all "things that emit outbound events".
+
+Approach A: Create an abstract `OutboundEmitter` base class with logging and rate-limiting baked in; have all six classes extend it.
+
+Approach B: Implement logging and rate-limiting as standalone components (`Logger`, `RateLimiter`); each emitter holds and composes the components it needs.
+
+Pick the approach that scales when one of the six emitters needs DIFFERENT logging or rate-limiting behavior than the others."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

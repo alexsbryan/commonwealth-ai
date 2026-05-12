@@ -11,6 +11,7 @@ use crate::routes_inference;
 use crate::routes_internal;
 use crate::routes_knowledge;
 use crate::routes_oicp;
+use crate::routes_responses;
 use crate::routes_status;
 use crate::state::AppState;
 
@@ -22,6 +23,11 @@ pub fn client_router(state: AppState) -> Router {
             "/v1/chat/completions",
             post(routes_inference::chat_completions),
         )
+        // OpenAI Responses API — adapter over /v1/chat/completions.
+        // Required by `codex` and the OpenAI agents libraries since
+        // their dropping `wire_api="chat"` (2026-05). See
+        // `routes_responses` module docs for the translation contract.
+        .route("/v1/responses", post(routes_responses::responses))
         .route("/v1/embeddings", post(routes_inference::embeddings))
         .route("/v1/models", get(routes_inference::list_models))
         // Knowledge search endpoint.
@@ -328,6 +334,109 @@ mod tests {
             .unwrap();
 
         // Should fail because no models are loaded.
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn responses_endpoint_rejects_previous_response_id() {
+        // The /v1/responses adapter doesn't implement server-side
+        // conversation state. A request that carries
+        // `previous_response_id` must 400 so codex falls back to
+        // resending full history.
+        let app = client_router(test_app_state());
+        let body = serde_json::json!({
+            "model": "x",
+            "input": "hi",
+            "previous_response_id": "resp_old"
+        });
+        let response = app
+            .oneshot(
+                Request::post("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert!(json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("previous_response_id"));
+    }
+
+    #[tokio::test]
+    async fn responses_endpoint_no_model_loaded_returns_503() {
+        // With no local_inference and no loaded models, the inner
+        // chat_completions handler returns 503. The adapter forwards
+        // it as-is.
+        let app = client_router(test_app_state());
+        let body = serde_json::json!({
+            "model": "x",
+            "input": "hello"
+        });
+        let response = app
+            .oneshot(
+                Request::post("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn responses_endpoint_accepts_codex_shape_request() {
+        // Pin the wire shape codex actually sends so we know the
+        // adapter parses the canonical request format. We don't drive
+        // it through to a successful inference here — there's no model
+        // loaded — but the request must at least deserialise and
+        // reach the inner handler (i.e. 503, not 400).
+        let app = client_router(test_app_state());
+        let body = serde_json::json!({
+            "model": "primary",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hello"}]
+                }
+            ],
+            "instructions": "you are terse",
+            "tools": [{
+                "type": "function",
+                "name": "shell",
+                "description": "run a shell command",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"cmd": {"type": "string"}},
+                    "required": ["cmd"]
+                }
+            }],
+            "tool_choice": "auto",
+            "stream": false,
+            "max_output_tokens": 1024,
+            "store": false,
+            "parallel_tool_calls": true,
+            "reasoning": {"effort": "medium"}
+        });
+        let response = app
+            .oneshot(
+                Request::post("/v1/responses")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // Reached the inner handler => translation succeeded.
+        // The inner handler 503s with no model loaded.
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 

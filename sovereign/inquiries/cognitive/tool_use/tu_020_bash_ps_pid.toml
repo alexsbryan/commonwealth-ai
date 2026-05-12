@@ -1,0 +1,20 @@
+[item]
+id = "tu_020_bash_ps_pid"
+title = "Bash + ps: find a running process by name"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: find the PID(s) of any running `sovereign` binary on this machine, so you can decide whether to send SIGTERM."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "Bash"
+must_contain = ["pgrep", "sovereign"]
+alternates_ok = ["Grep"]

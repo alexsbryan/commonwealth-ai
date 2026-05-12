@@ -44,6 +44,7 @@ pub(crate) mod feature;
 pub(crate) mod milestone;
 pub(crate) mod plugin;
 pub(crate) mod provision;
+pub(crate) mod replay;
 pub(crate) mod run;
 pub(crate) mod spec;
 pub(crate) mod status;
@@ -88,6 +89,7 @@ pub async fn run_atos(args: &[String]) -> i32 {
         }
         "next" => milestone::cmd_next(rest).await,
         "run" => run::cmd_run(rest).await,
+        "replay" => replay::cmd_replay(rest).await,
         "start-milestone" => {
             announce(
                 "sovereign atos start-milestone",
@@ -174,6 +176,10 @@ fn print_help() {
          \x20                         Ralph-wiggum-style loop: spawn driver, wait for DONE.md,\n\
          \x20                         have a reviewer judge it against the charter, repeat.\n\
          \x20                         See sovereign/docs/ATOS_RUNNER.md.\n\
+         \x20   replay                --commit <sha> --workdir <repo> [--driver opencode|claude]\n\
+         \x20                         Reconstruct a historical commit as a Runner task. Synthesizes\n\
+         \x20                         DESIGN.md + CHARTER.md from the commit's diff via the Fast\n\
+         \x20                         slot, then delegates to `atos run`. See ATOS_RUNNER.md.\n\
          \x20   start-milestone <id>  --brief <path> [--driver claude|opencode]\n\
          \x20   end-milestone <id>    [--ordinal N]\n\
          \x20   archive <id>          --reason <text>\n\

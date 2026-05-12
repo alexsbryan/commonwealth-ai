@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_007_optimistic_locking"
+title = "Concurrency control: optimistic vs pessimistic locking, low-contention workload"
+category = "decision_quality"
+description = "Hard: pessimistic locking 'feels safe' but over-pays when actual conflicts are rare."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A user-profile-edit endpoint updates rows in a database. Measured concurrent-write-on-the-same-row rate is roughly 1 in 50,000 requests (a user opens edit screens on two devices and saves nearly simultaneously). Throughput is the constraining metric — the endpoint serves 8,000 req/s steady-state.
+
+Approach A: `SELECT ... FOR UPDATE` to take a pessimistic row lock at the start of every edit transaction; release on commit.
+
+Approach B: Read the row + version, write only if `WHERE version = <observed>`; retry the read-modify-write on the rare collision.
+
+Pick the approach that doesn't pay for conflict that doesn't happen."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

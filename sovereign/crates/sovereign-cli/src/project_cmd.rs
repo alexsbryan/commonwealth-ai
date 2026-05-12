@@ -2798,6 +2798,10 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Build background watchers ───────────────────────────────
 
+    // Shared run slot so lint + test cargo invocations serialize
+    // instead of double-spawning on every debounced edit flush.
+    let run_slot = Arc::new(tokio::sync::Semaphore::new(1));
+
     let test_watcher: Option<Arc<corpus_engine::TestWatcher>> =
         sovereign_cfg.test_runner.as_ref().map(|cfg| {
             let working_dir = cfg.working_dir.as_ref().map(|d| {
@@ -2808,12 +2812,15 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
                 "  test_runner      ✓  {}",
                 cfg.command.chars().take(60).collect::<String>()
             );
-            Arc::new(corpus_engine::TestWatcher::new(
-                &cfg.command,
-                working_dir,
-                cfg.timeout_secs.unwrap_or(300),
-                Arc::clone(&test_store),
-            ))
+            Arc::new(
+                corpus_engine::TestWatcher::new(
+                    &cfg.command,
+                    working_dir,
+                    cfg.timeout_secs.unwrap_or(300),
+                    Arc::clone(&test_store),
+                )
+                .with_run_slot(Arc::clone(&run_slot)),
+            )
         });
 
     let lint_watcher: Option<Arc<corpus_engine::LintWatcher>> =
@@ -2826,12 +2833,15 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
                 "  lint_runner      ✓  {}",
                 cfg.command.chars().take(60).collect::<String>()
             );
-            Arc::new(corpus_engine::LintWatcher::new(
-                &cfg.command,
-                working_dir,
-                cfg.timeout_secs.unwrap_or(120),
-                Arc::clone(&lint_store),
-            ))
+            Arc::new(
+                corpus_engine::LintWatcher::new(
+                    &cfg.command,
+                    working_dir,
+                    cfg.timeout_secs.unwrap_or(120),
+                    Arc::clone(&lint_store),
+                )
+                .with_run_slot(Arc::clone(&run_slot)),
+            )
         });
 
     if test_watcher.is_none() && lint_watcher.is_none() {

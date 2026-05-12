@@ -51,6 +51,12 @@ sha2 = "0.10"
 tar = "0.4"
 zstd = "0.13"
 tokio-util = { version = "0.7", features = ["io", "io-util"] }
+# ReceiverStream — used by routes_responses.rs to turn a tokio mpsc
+# of translated SSE events into an `axum::response::sse::Sse` body.
+# Three other workspace crates already depend on the same minor;
+# centralising under [workspace.dependencies] is filed against §8.1
+# but not done in the same PR as the route addition.
+tokio-stream = "0.1"
 # Home-dir lookup for the alignment projector hook in auto_recover
 # and corpus_sync. Already a transitive dep via sovereign-cli; pulling
 # it in directly here avoids reaching across crates for a single call.

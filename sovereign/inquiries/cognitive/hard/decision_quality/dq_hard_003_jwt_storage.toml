@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_003_jwt_storage"
+title = "Web app JWT storage: localStorage vs httpOnly cookie"
+category = "decision_quality"
+description = "Hard: localStorage is the 'easy default' in SPAs and is exploitable via XSS. HttpOnly cookie + SameSite is the security win."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A single-page web app authenticates users with a JWT. The app loads third-party analytics and ad scripts (the product is ad-supported), so the XSS attack surface is broad. The backend is hosted at api.example.com; the frontend at www.example.com. CSRF protection (anti-CSRF tokens or SameSite policy) is feasible.
+
+Approach A: Store the JWT in `localStorage` and attach it to each request as `Authorization: Bearer <jwt>`.
+
+Approach B: Store the JWT in an `HttpOnly; Secure; SameSite=Lax` cookie scoped to `.example.com`. The browser attaches it automatically.
+
+Pick the approach whose threat surface matches the app's actual exposure."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

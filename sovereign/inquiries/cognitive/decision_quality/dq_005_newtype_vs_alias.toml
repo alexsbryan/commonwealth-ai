@@ -1,0 +1,19 @@
+[item]
+id = "dq_005_distinct_types_for_ids"
+title = "Distinct types for ID kinds vs raw integers"
+category = "decision_quality"
+description = "When IDs of different kinds get mixed up at call sites, lift the distinction into the type system."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A service has two kinds of identifier — UserId and OrderId — both currently stored as 64-bit integers. The team has shipped two production bugs in the last quarter where a function expecting a UserId was called with an OrderId (or vice versa). The call compiled, the call ran, and the wrong record was returned.
+
+Approach A: Continue using a shared integer type. Rely on parameter names and code review to catch mix-ups.
+
+Approach B: Introduce distinct wrapper types — one per ID kind — so the compiler rejects passing the wrong kind. The runtime representation stays the same.
+
+Pick the approach that addresses the observed failure mode."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

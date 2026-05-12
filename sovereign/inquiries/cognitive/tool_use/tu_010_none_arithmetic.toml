@@ -1,0 +1,18 @@
+[item]
+id = "tu_010_none_arithmetic"
+title = "When NOT to call: arithmetic answerable from the prompt"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: a request has timeout 3000 ms and the client retries up to 4 times with exponential backoff doubling from 100 ms. What is the worst-case total wall time? Answer in milliseconds."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "none"

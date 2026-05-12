@@ -1,0 +1,19 @@
+[item]
+id = "dq_010_cpu_work_on_event_loop"
+title = "Long CPU work in an event-loop / async handler"
+category = "decision_quality"
+description = "Event-loop threads must not block — long synchronous work belongs on a worker pool."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """An HTTP handler in an event-loop-based server (e.g., Node.js, async Python, or any cooperative-scheduling runtime) needs to compute an SHA-256 hash of a 200 MB byte buffer. The hash takes ~600 ms of pure CPU on the target hardware. While that handler is running, no other request on the same loop can make progress.
+
+Approach A: Compute the hash inline in the handler.
+
+Approach B: Offload the hash to a worker thread / thread pool and await the result; the event loop continues serving other requests while the CPU work runs.
+
+Pick the approach that doesn't starve other requests."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

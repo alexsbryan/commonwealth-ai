@@ -1,0 +1,20 @@
+[item]
+id = "tu_012_none_conversation_recap"
+title = "When NOT to call: recap of in-context information"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Earlier in this conversation, the user said they want the new feature to default-off behind a feature flag named `EXPERIMENTAL_LAYOUT_V2`, ramped to 10% next Monday.
+
+Task: state the feature-flag rollout plan back to the user in one sentence."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "none"

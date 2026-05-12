@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_010_premature_caching"
+title = "Performance: add a cache vs profile first"
+category = "decision_quality"
+description = "Hard: 'add a cache' is the cargo-cult performance answer. The right move when the bottleneck is unverified is to measure."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """An internal dashboard page loads in 1.8 seconds. The product manager wants it under 500ms. The team has not profiled the page — the 1.8s number comes from a stopwatch. They have a one-engineer-week budget. The page makes 7 backend calls and renders a chart on the client.
+
+Approach A: Add a Redis cache in front of the database, on the assumption that "database queries are usually the bottleneck."
+
+Approach B: Profile the page first (server-side spans + client-side timings) to identify where the 1.8s actually goes, then optimize the dominant cost — which might or might not be database queries.
+
+Pick the approach that doesn't optimize what hasn't been measured."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

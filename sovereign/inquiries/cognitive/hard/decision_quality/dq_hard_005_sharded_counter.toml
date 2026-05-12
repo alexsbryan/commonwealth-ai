@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_005_sharded_counter"
+title = "Counter under heavy write contention: single row vs sharded"
+category = "decision_quality"
+description = "Hard: requires knowing that a single hot row becomes a serialization bottleneck under write contention even if the DB is fast."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A viral video page shows a global view count. Every page load increments the counter by 1. At peak the page receives 50,000 views per second across all clients, all incrementing the same global counter. The display tolerates the count being a few seconds out of date.
+
+Approach A: One row in the database: `UPDATE counters SET count = count + 1 WHERE id = 'video_42'` per view. Read directly from the row.
+
+Approach B: 128 shard rows for the counter. Each write picks a shard at random and increments it. Reads `SUM` across all shards (or background-rolls them up into a cached total).
+
+Pick the approach that doesn't bottleneck on row-level contention."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

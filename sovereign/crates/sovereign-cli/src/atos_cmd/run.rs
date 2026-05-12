@@ -95,6 +95,12 @@ struct RunCfg {
     dry_run: bool,
     fresh_plan: bool,
     show_help: bool,
+    /// Operator override per ATOS_RUNNER.md § Stop conditions #3.
+    /// When set, the loop body short-circuits: the current workdir
+    /// state is recorded as `verdict: "operator_accept"` and the
+    /// orchestrator closes the run as accepted without spawning a
+    /// driver or invoking the reviewer.
+    accept: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -152,6 +158,7 @@ impl RunCfg {
 
         let dry_run = flags.iter().any(|(k, _)| k == "dry-run");
         let fresh_plan = flags.iter().any(|(k, _)| k == "fresh-plan");
+        let accept = flags.iter().any(|(k, _)| k == "accept");
 
         let resolve_against_workdir = |raw: String| -> PathBuf {
             let p = PathBuf::from(&raw);
@@ -173,6 +180,7 @@ impl RunCfg {
             dry_run,
             fresh_plan,
             show_help,
+            accept,
         })
     }
 
@@ -544,6 +552,19 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
         }
     }
 
+    // Charter-defined hard gate per ATOS_RUNNER.md § Stop conditions.
+    // Pre-parsed once from the charter body. If present, the loop runs
+    // this shell command after DONE.md is written each iteration; on
+    // non-zero exit the reviewer is skipped and the iteration is
+    // soft-rejected.
+    let stop_condition: Option<String> = artifacts
+        .charter
+        .as_ref()
+        .and_then(|c| sovereign_atos::charter::find_stop_condition(&c.body));
+    if let Some(cmd) = stop_condition.as_deref() {
+        println!("  stop_cond = `{cmd}` (gates reviewer)");
+    }
+
     let orc = open_orchestrator_for(&cfg.workdir)
         .map_err(|e| format!("open .sovereign stores under {}: {e}", cfg.workdir.display()))?;
     let feature_id = resolve_or_provision_feature(&orc, &cfg, &artifacts).await?;
@@ -579,6 +600,21 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
     println!("atos run: feature={feature_id} run_id={run_id} dir={}", run_dir.display());
 
     let iter_log_path = run_dir.join("iterations.jsonl");
+
+    // Operator override per ATOS_RUNNER.md § Stop conditions #3.
+    // Short-circuit before any driver spawn: write a single iteration
+    // record with verdict "operator_accept", close the run, exit.
+    if cfg.accept {
+        println!("atos run: ✓ operator override --accept; closing run without driver/reviewer");
+        let now = chrono::Utc::now().to_rfc3339();
+        let mut rec = IterationRecord::new(1, "OPERATOR_ACCEPT", &now);
+        rec.verdict = "operator_accept".into();
+        rec.ended_at = now.clone();
+        append_jsonl(&iter_log_path, &rec)?;
+        let _ = orc.close_run(&run_id, 0, true, None).await;
+        return Ok(LoopOutcome::Accepted);
+    }
+
     let plan_path = run_dir.join("plan.json");
     let workdir_plan_md = cfg.workdir.join("PLAN.md");
     // Workdir-resident "live" plan — the source of truth that
@@ -699,7 +735,12 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                 break;
             }
             Phase::Plan => {
-                let prompt = build_plan_prompt(&artifacts, &feature_id, &cfg.workdir);
+                let prompt = build_plan_prompt(
+                    &artifacts,
+                    &feature_id,
+                    &cfg.workdir,
+                    last_rejection.as_ref(),
+                );
                 let prompt_path = iter_dir.join("prompt.md");
                 std::fs::write(&prompt_path, &prompt)
                     .map_err(|e| format!("write {}: {e}", prompt_path.display()))?;
@@ -809,9 +850,21 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                     Err(e) => {
                         eprintln!("atos run: plan agent did not produce a valid plan ({e})");
                         record.verdict = "plan_invalid".into();
-                        record.notes = Some(e);
-                        // No plan → next iteration retries PLAN unless
-                        // max-iters is exhausted.
+                        record.notes = Some(e.clone());
+                        // Surface the structural reason to the next
+                        // plan-phase prompt. Without this the next
+                        // iteration sends the exact same prompt and
+                        // the agent makes the exact same mistake.
+                        last_rejection = Some(RejectionMemo {
+                            summary: format!(
+                                "Your last PLAN.md was rejected by the runner's parser. Error: {e}"
+                            ),
+                            gaps: vec![Gap {
+                                area: "PLAN.md structure".into(),
+                                what_missing: e,
+                                suggested_action: "Rewrite PLAN.md from scratch using exactly the `## step-NN: <goal> [PENDING]` heading shape shown in the Required structure section. Do NOT preserve the operator's draft numbered-list format — restructure entirely.".into(),
+                            }],
+                        });
                     }
                 }
                 record.wall_seconds = iter_start.elapsed().as_secs();
@@ -1264,6 +1317,53 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                     record.ended_at = chrono::Utc::now().to_rfc3339();
                     append_jsonl(&iter_log_path, &record)?;
                     continue;
+                }
+
+                // ATOS_RUNNER.md § Stop conditions: charter-defined
+                // hard gate runs BEFORE the reviewer. Exit non-zero
+                // → soft-reject and continue; exit zero → proceed to
+                // reviewer as the second-layer judge.
+                if let Some(cmd) = stop_condition.as_deref() {
+                    let outcome = run_stop_condition(&cfg.workdir, cmd);
+                    let _ = std::fs::write(
+                        iter_dir.join("stop_condition.log"),
+                        format!(
+                            "$ {cmd}\nexit: {}\n--- stdout ---\n{}\n--- stderr ---\n{}\n",
+                            outcome.exit_code, outcome.stdout, outcome.stderr
+                        ),
+                    );
+                    if outcome.exit_code != 0 {
+                        println!(
+                            "atos run: ✗ stop_condition `{cmd}` exited {} — soft-rejecting",
+                            outcome.exit_code
+                        );
+                        record.verdict = "stop_condition_failed".into();
+                        let archived = iter_dir.join("DONE.rejected.md");
+                        let _ = std::fs::rename(&done_path, &archived);
+                        let tail = truncate(&outcome.stderr, 2000);
+                        let stdout_tail = truncate(&outcome.stdout, 2000);
+                        last_rejection = Some(RejectionMemo {
+                            summary: format!(
+                                "Charter stop_condition `{cmd}` exited {}. Reviewer was not consulted. Fix the failing check and rewrite DONE.md.",
+                                outcome.exit_code
+                            ),
+                            gaps: vec![Gap {
+                                area: "stop_condition".into(),
+                                what_missing: format!(
+                                    "`{cmd}` did not exit zero (got {})",
+                                    outcome.exit_code
+                                ),
+                                suggested_action: format!(
+                                    "Investigate the failure and re-run. Last stderr (truncated): {tail}\nLast stdout (truncated): {stdout_tail}"
+                                ),
+                            }],
+                        });
+                        record.wall_seconds = iter_start.elapsed().as_secs();
+                        record.ended_at = chrono::Utc::now().to_rfc3339();
+                        append_jsonl(&iter_log_path, &record)?;
+                        continue;
+                    }
+                    println!("atos run: ✓ stop_condition `{cmd}` passed");
                 }
 
                 let done_md = std::fs::read_to_string(&done_path)
@@ -1758,9 +1858,34 @@ fn build_plan_prompt(
     artifacts: &ResolvedArtifacts,
     feature_id: &str,
     workdir: &Path,
+    last_rejection: Option<&RejectionMemo>,
 ) -> String {
     let mut out = String::new();
     out.push_str("# ATOS run — PLAN phase\n\n");
+
+    // Surface the prior iteration's rejection BEFORE the framing so
+    // the agent sees feedback first. Without this the next iteration
+    // sends the same prompt and makes the same mistake.
+    if let Some(memo) = last_rejection {
+        out.push_str("## PREVIOUS ATTEMPT REJECTED — read this first\n\n");
+        out.push_str(&memo.summary);
+        out.push_str("\n\n");
+        if !memo.gaps.is_empty() {
+            out.push_str("Specific gaps:\n\n");
+            for gap in &memo.gaps {
+                out.push_str(&format!(
+                    "- **{}** — {}. Suggested fix: {}\n",
+                    gap.area, gap.what_missing, gap.suggested_action
+                ));
+            }
+            out.push('\n');
+        }
+        out.push_str(
+            "Do NOT repeat the previous mistake. Re-read the Required structure section below \
+             and write PLAN.md from scratch in that exact shape.\n\n",
+        );
+    }
+
     out.push_str(&format!(
         "You are planning the implementation. **Write `{0}/PLAN.md`** \
          using your `write` tool — markdown is the medium, not JSON. \
@@ -1888,7 +2013,12 @@ fn build_plan_prompt(
     }
     if let Some(plan) = artifacts.plan.as_ref() {
         out.push_str(&format!(
-            "## Operator's draft plan ({}) — refine, don't ignore\n\n",
+            "## Operator's hint about steps ({}) — content cues only, NOT format\n\n\
+             The text below names what the operator thinks the steps cover. \
+             USE IT for the step contents (what each step delivers) but DO NOT \
+             preserve its surface format — your PLAN.md must follow the \
+             `## step-NN:` heading shape from the Required structure section above, \
+             regardless of whatever shape the hint below uses.\n\n",
             plan.label
         ));
         out.push_str(plan.body.trim());
@@ -1897,8 +2027,10 @@ fn build_plan_prompt(
 
     out.push_str(
         "Now: read the design, decide the steps, and `write` PLAN.md \
-         with the structure above. After PLAN.md is on disk, exit your \
-         session — the runner takes over.\n",
+         with the EXACT structure shown in the Required structure section above \
+         (`## step-NN: <goal> [PENDING]` headings, `**Files:**` + `**Verify:**` lines, \
+         rationale paragraph). After PLAN.md is on disk, exit your session — the \
+         runner takes over.\n",
     );
     out
 }
@@ -3241,6 +3373,39 @@ fn git_diff_against(workdir: &Path, base_sha: &str) -> std::io::Result<String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+struct StopConditionOutcome {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+/// Run the charter's `stop_condition` shell command in the workdir.
+/// Exit zero means the agent's claim is mechanically verified; non-zero
+/// is a hard gate that the doc says short-circuits the reviewer pass.
+///
+/// Always reports a result — process-spawn failures land as exit_code
+/// 127 with the OS error in `stderr`, mirroring the convention bash
+/// uses for "command not found".
+fn run_stop_condition(workdir: &Path, command: &str) -> StopConditionOutcome {
+    let out = std::process::Command::new("bash")
+        .arg("-lc")
+        .arg(command)
+        .current_dir(workdir)
+        .output();
+    match out {
+        Ok(o) => StopConditionOutcome {
+            exit_code: o.status.code().unwrap_or(-1),
+            stdout: String::from_utf8_lossy(&o.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&o.stderr).into_owned(),
+        },
+        Err(e) => StopConditionOutcome {
+            exit_code: 127,
+            stdout: String::new(),
+            stderr: format!("failed to spawn stop_condition: {e}"),
+        },
+    }
+}
+
 fn strip_fences(raw: &str) -> String {
     let trimmed = raw.trim();
     if let Some(rest) = trimmed.strip_prefix("```json") {
@@ -3416,6 +3581,7 @@ mod tests {
             dry_run: true,
             fresh_plan: false,
             show_help: false,
+            accept: false,
         };
         let r = resolve_artifacts(&cfg).unwrap();
         assert!(r.design.is_some());
@@ -3441,6 +3607,7 @@ mod tests {
             dry_run: true,
             fresh_plan: false,
             show_help: false,
+            accept: false,
         };
         let err = resolve_artifacts(&cfg).unwrap_err();
         assert!(err.contains("no DESIGN.md"));

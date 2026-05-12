@@ -1,0 +1,19 @@
+[item]
+id = "dq_008_shared_pointer_vs_deep_copy"
+title = "Sharing large read-only data: shared pointer vs deep copy"
+category = "decision_quality"
+description = "Read-only data shared across tasks should be reference-shared, not copied."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A web service holds a 40 MB read-only lookup table, parsed at startup. Every incoming request needs read-only access. The service handles 5000 requests per second; each request spawns a lightweight task.
+
+Approach A: Wrap the table in a reference-counted shared pointer. Each task takes a cheap clone of the pointer; the table itself is never duplicated.
+
+Approach B: Implement deep clone on the table. Each task receives its own copy of all 40 MB.
+
+Pick the approach that scales with request volume."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

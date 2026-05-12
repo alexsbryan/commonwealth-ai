@@ -1,0 +1,19 @@
+[item]
+id = "dq_adv_001_pg_advisory_vs_select_for_update"
+title = "Cross-process coordination in Postgres: advisory lock vs SELECT FOR UPDATE"
+category = "decision_quality"
+description = "Adversarial: advisory locks are NOT tied to a row, persist for the session, and don't block reads. SELECT FOR UPDATE locks a specific row and is tied to a transaction. The right choice depends on whether the work is row-scoped."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """Two background workers race to be "the one" that runs a daily report generation step. The step does NOT modify any specific row — it iterates many tables, builds a new artifact, uploads it to object storage, and writes a `reports` row at the end. Workers must coordinate so only one runs the step per day. The application uses Postgres.
+
+Approach A: `SELECT pg_advisory_lock(<hash_of_today's_date>)` — workers acquire a session-scoped advisory lock keyed by a hash; non-acquiring workers skip the run.
+
+Approach B: `INSERT INTO report_runs (date) VALUES (current_date) ON CONFLICT DO NOTHING RETURNING id` followed by `SELECT * FROM report_runs WHERE date = current_date FOR UPDATE` to lock the row for the duration of the work.
+
+Pick the approach that correctly handles work that isn't tied to a specific pre-existing row."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "A"

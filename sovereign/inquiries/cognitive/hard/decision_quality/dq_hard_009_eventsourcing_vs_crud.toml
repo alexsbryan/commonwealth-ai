@@ -1,0 +1,19 @@
+[item]
+id = "dq_hard_009_eventsourcing_vs_crud"
+title = "Domain model: event sourcing vs CRUD for a simple TODO list"
+category = "decision_quality"
+description = "Hard: event sourcing is fashionable; for a low-stakes domain with no audit/replay requirement, it's overengineering."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A team is building a personal TODO list app. Items have a title, due date, and done/not-done state. There is no audit trail requirement, no need to reconstruct prior states, no integrations with other systems that consume mutations, and no compliance pressure. Two engineers will maintain the app.
+
+Approach A: Event sourcing — every mutation (`ItemAdded`, `ItemMarkedDone`, `DueDateChanged`) is an immutable event in an append-only log; current state is the fold over events; reads project to a separate view store.
+
+Approach B: A CRUD `items` table — INSERT/UPDATE/DELETE rows. Current state IS the table.
+
+Pick the approach proportional to the domain's actual complexity."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

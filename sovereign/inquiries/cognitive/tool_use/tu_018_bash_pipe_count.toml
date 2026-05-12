@@ -1,0 +1,23 @@
+[item]
+id = "tu_018_bash_pipe_count"
+title = "Bash: count Rust files in a crate via pipe"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: count how many `.rs` files exist under `sovereign/crates/sovereign-core/src/` (recursively). One number as output."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "Bash"
+# Either Bash with `find … | wc -l` style or Glob with the path scoped
+# into the pattern. The `sovereign-core` token is load-bearing —
+# unscoped Glob patterns (`**/*.rs`) miss it and rightly fail.
+must_contain = ["sovereign-core", ".rs"]
+alternates_ok = ["Glob"]

@@ -1,0 +1,19 @@
+[item]
+id = "dq_002_exception_vs_returned_error"
+title = "Recoverable vs unrecoverable failure: parsing untrusted input"
+category = "decision_quality"
+description = "User-supplied data fails by design; treat the failure as part of the API."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A library function parses a config string supplied by the application's end user. If the input is malformed, the caller wants to print a friendly error and keep running.
+
+Approach A: `parse(s)` throws an exception (or panics) with a useful message on invalid input. Callers wrap each call in try/catch.
+
+Approach B: `parse(s)` returns a tagged result (success-with-value | failure-with-error). Callers branch on the tag.
+
+Pick the approach that matches the failure's nature: expected-and-recoverable vs program-broken."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

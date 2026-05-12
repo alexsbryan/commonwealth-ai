@@ -1,0 +1,19 @@
+[item]
+id = "dq_adv_003_python_gil_cpu_bound"
+title = "Python parallelism: threading vs multiprocessing for CPU-bound work"
+category = "decision_quality"
+description = "Adversarial: CPython's GIL serializes Python bytecode across threads. CPU-bound Python work needs processes; only I/O-bound work benefits from threads."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A CPython 3.11 script applies a CPU-heavy pure-Python transformation function `f(x)` to 1,000,000 items. The host has 16 CPU cores. The transformation is entirely in Python bytecode — no NumPy, no C extensions, no I/O. The team wants near-linear speedup with core count.
+
+Approach A: `concurrent.futures.ThreadPoolExecutor(max_workers=16)` with `executor.map(f, items)`.
+
+Approach B: `concurrent.futures.ProcessPoolExecutor(max_workers=16)` with `executor.map(f, items)`.
+
+Pick the approach that actually parallelizes the CPU work on CPython."""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

@@ -1,0 +1,20 @@
+[item]
+id = "tu_003_code_search_for_concept"
+title = "Tool selection: search for a concept without a symbol name"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: find where in this codebase checkpoint-resume logic is implemented. You don't know the function name or type — only the concept."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_tool = "code_search"
+must_contain = ["checkpoint", "resume"]
+alternates_ok = ["Grep"]

@@ -1,0 +1,19 @@
+[item]
+id = "dq_adv_004_kubernetes_pdb_vs_replicas"
+title = "Kubernetes: PodDisruptionBudget vs raw replica count"
+category = "decision_quality"
+description = "Adversarial: raising replicas alone doesn't protect against voluntary disruption (drain, node upgrade). PDB is the explicit guarantee."
+
+[prompt]
+system = """You answer technical decision questions by picking ONE of two labeled approaches. Output exactly one JSON object with shape {"choice": "A" | "B", "rationale": "<one sentence>"}. No prose around it. No markdown fences."""
+user = """A Kubernetes Deployment runs 3 replicas of an HTTP service. During cluster upgrades, the platform team drains nodes one at a time. The service team has observed brief outages when ALL 3 replicas happened to land on the same node and that node was drained. The service must always have ≥2 healthy replicas during voluntary disruptions.
+
+Approach A: Raise replicas to 6 and add a `topologySpreadConstraints` to spread them across nodes.
+
+Approach B: Keep replicas at 3, add `topologySpreadConstraints` to spread across nodes, AND add a `PodDisruptionBudget` declaring `minAvailable: 2`.
+
+Pick the approach that explicitly tells the platform "you may not evict me below 2 healthy pods at once.\""""
+
+[scoring]
+kind = "multi_choice"
+expected_choice = "B"

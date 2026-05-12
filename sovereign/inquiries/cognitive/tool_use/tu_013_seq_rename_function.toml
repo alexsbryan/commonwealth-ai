@@ -1,0 +1,18 @@
+[item]
+id = "tu_013_seq_rename_function"
+title = "Sequencing: safely rename a function"
+category = "tool_use"
+
+[prompt]
+system = """You select tools from the menu below. Output exactly one JSON object. No prose around it. No markdown fences.
+
+{{menu}}"""
+user = """Task: rename the public function `parse_atom` to `parse_anchor` across the codebase. List the tools you will run in order, BEFORE editing any code, to make sure you have located every call site and aren't blindsided by a narrative-doc reference."""
+
+[[context_blocks]]
+name = "menu"
+file = "sovereign/inquiries/cognitive/tool_use/_tool_menu.md"
+
+[scoring]
+kind = "tool_use"
+expected_sequence = ["callers", "drift_findings"]
