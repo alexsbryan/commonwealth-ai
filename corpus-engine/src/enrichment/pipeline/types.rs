@@ -490,6 +490,7 @@ pub enum PhaseFailureKind {
     ThinkTruncated,
     ParseDrift,
     ChatError,
+    DeadlineExceeded,
     EmptyExtraction,
     Skipped,
 
@@ -526,6 +527,9 @@ impl PhaseFailureKind {
             }
             Self::ChatError => {
                 "Transport-level error. Verify the daemon at localhost:9741 is up (`sovereign doctor`), then retry with `--retry-failed`."
+            }
+            Self::DeadlineExceeded => {
+                "Daemon inference deadline hit (slow chat slot vs. token budget). Retry with `--retry-failed --terse` — the terse variant uses a tighter prompt that fits in the deadline."
             }
             Self::EmptyExtraction => {
                 "Model returned an envelope with no atoms. Inspect the prompt and exemplars for the failing phase; a schema-echo suggests the few-shot examples look like the target shape."

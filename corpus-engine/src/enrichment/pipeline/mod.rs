@@ -26,6 +26,7 @@
 
 pub mod atlas;
 pub mod atlas_clustering;
+pub mod atom_normalizer;
 pub mod chapter_manifest;
 pub mod exemplar_bank;
 pub mod phase_cache;

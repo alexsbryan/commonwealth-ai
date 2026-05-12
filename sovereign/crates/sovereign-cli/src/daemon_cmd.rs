@@ -1693,6 +1693,34 @@ async fn start_daemon() -> i32 {
         .stdout(std::process::Stdio::from(out_file))
         .stderr(std::process::Stdio::from(err_file));
 
+    // Diagnostics + defensive stack budget for the daemon process.
+    //
+    // - `RUST_BACKTRACE=full` makes the next stack overflow log a
+    //   real frame trace to daemon.err — without it we see only
+    //   "thread 'tokio-rt-worker' has overflowed its stack" with no
+    //   symbol info, which is what made the 2026-05-11 fragility
+    //   investigation slow.
+    // - `RUST_MIN_STACK=8388608` (8 MiB) bumps the default thread
+    //   stack size for every std::thread spawn the daemon makes.
+    //   tokio's multi-thread runtime workers inherit this when they
+    //   don't explicitly set `thread_stack_size`. Default is 2 MiB
+    //   on macOS, which we've reproducibly overflowed under
+    //   drift-detect load (77 overflows / 166 daemon starts this
+    //   session). 8 MiB is the same headroom Cargo's build worker
+    //   threads use and matches what corpus-engine's tree-sitter
+    //   path needs on deeply-nested wikitext templates.
+    //
+    // Both vars are only set when the parent didn't already set
+    // them — so a developer profiling with custom RUST_BACKTRACE
+    // (e.g. =0, =1) or shrinking the stack to reproduce isn't
+    // overridden.
+    if std::env::var_os("RUST_BACKTRACE").is_none() {
+        cmd.env("RUST_BACKTRACE", "full");
+    }
+    if std::env::var_os("RUST_MIN_STACK").is_none() {
+        cmd.env("RUST_MIN_STACK", "8388608");
+    }
+
     // Detach from the shell's process group so Ctrl-C in the invoking
     // terminal doesn't take the daemon down with it. Combined with
     // the /dev/null stdin + redirected stdio above, this is enough

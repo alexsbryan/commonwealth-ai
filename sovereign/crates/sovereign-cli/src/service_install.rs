@@ -80,6 +80,15 @@ pub fn stop_service() -> Result<(), String> {
                 // Already stopped — treat as success.
                 return Ok(());
             }
+            // macOS launchctl returns exit 3 with empty stderr when the
+            // service is not registered. That's the pidfile-only-install
+            // case: there's no service to stop because the user never
+            // ran `sovereign setup`. Treat as already-stopped so the
+            // caller (`stop_daemon` → `restart_daemon`) doesn't bail
+            // before starting a fresh daemon.
+            if out.status.code() == Some(3) && stderr.trim().is_empty() {
+                return Ok(());
+            }
             return Err(format!(
                 "launchctl stop com.sovereign.daemon failed: {}\n\
                  hint: if the daemon isn't registered, run `sovereign setup` first.",

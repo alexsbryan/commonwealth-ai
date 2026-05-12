@@ -330,6 +330,14 @@ pub enum ParseStatus {
 /// the model can emit in a valid completion before EOS).
 pub fn validate(schema: &Schema, bytes: &[u8]) -> ParseStatus {
     let mut p = Cursor::new(bytes);
+    // Skip leading whitespace to match the incremental
+    // `step_await_value` behavior. Validator and incremental parser
+    // must agree or the masker's `emitted_invalid` latch fires
+    // spuriously.
+    skip_ws(&mut p);
+    if p.eof() {
+        return ParseStatus::Incomplete;
+    }
     let v = parse_value(&mut p, schema);
     if v == ParseStatus::Invalid {
         return ParseStatus::Invalid;
@@ -1412,6 +1420,11 @@ impl Frame {
     }
 
     fn step_await_value(schema: &Schema, byte: u8) -> StepResult {
+        // Permit leading whitespace before the value. Combined with
+        // the multi-EOG mask in `JsonConstraint::new`, the model
+        // can either commit immediately or generate a few WS tokens
+        // and then commit — neither degenerates into a loop because
+        // the no-EOG-while-incomplete rule still applies.
         if is_ws(byte) {
             return StepResult::Consumed;
         }
@@ -2044,6 +2057,18 @@ pub struct JsonConstraint {
     /// against the same model via `vocab_cache`.
     vocab_bytes: Arc<Vec<Vec<u8>>>,
     eos_token: i32,
+    /// **Every** end-of-generation token id, not just `token_eos()`.
+    /// Modern chat-tuned models expose multiple EOG tokens (Qwen's
+    /// `<|im_end|>`, Llama's `<|eot_id|>`, gemma's `<end_of_turn>`),
+    /// and `model.is_eog_token(...)` returns true for any of them
+    /// while the streaming loop in `embedded.rs` terminates on the
+    /// first one it samples. If we only mask `token_eos()`, the
+    /// model can sample a different EOG as token 1 and exit before
+    /// emitting a single byte of structured output — observed on
+    /// Qwen3.5-9B-vOP under JSON-schema mode (2026-05-11 grammar
+    /// probe: completion_tokens=1, content=" "). Computed once at
+    /// construction by walking 0..n_vocab.
+    eog_tokens: Vec<i32>,
     /// Latched once `accept()` sees the cumulative buffer go Invalid by
     /// a fresh `validate()` re-parse. The masker's incremental
     /// `advance_bytes` and the recursive `validate()` can disagree on
@@ -2101,6 +2126,21 @@ impl JsonConstraint {
         let compiled = compile_schema(schema)?;
         let vocab_bytes = vocab_bytes_for(model);
         let eos_token = model.token_eos().0;
+        // Enumerate every EOG token id so the mask can clamp them
+        // all when the buffer is incomplete. Walk the vocab once;
+        // is_eog_token is a cheap field lookup in llama-cpp.
+        let n_vocab = model.n_vocab();
+        let mut eog_tokens: Vec<i32> = Vec::new();
+        for id in 0..n_vocab {
+            if model.is_eog_token(LlamaToken(id)) {
+                eog_tokens.push(id);
+            }
+        }
+        tracing::debug!(
+            count = eog_tokens.len(),
+            primary_eos = eos_token,
+            "JsonConstraint: enumerated EOG tokens"
+        );
         let state = ValidatorState::new(compiled.clone());
         // Timing instrumentation: opt-in via env. Read once per
         // constructor call so the operator can flip the env at runtime
@@ -2114,6 +2154,7 @@ impl JsonConstraint {
             state,
             vocab_bytes,
             eos_token,
+            eog_tokens,
             emitted_invalid: false,
             timing,
         })
@@ -2144,15 +2185,16 @@ impl JsonConstraint {
 
         let buffer_is_complete = matches!(self.state.eof_status(), ParseStatus::Complete);
         let vocab_bytes = &*self.vocab_bytes;
-        let eos_token = self.eos_token;
+        let eog_tokens = &self.eog_tokens;
         let state = &self.state;
         // Buffer has already drifted Invalid (validate() vs incremental
         // advance_bytes disagreed in a prior accept()). Mute every
-        // non-EOS token so the slot exits the generation loop on the
-        // next sample step instead of running to deadline.
+        // non-EOG token (any of them — see `eog_tokens`) so the slot
+        // exits the generation loop on the next sample step instead of
+        // running to deadline.
         if self.emitted_invalid {
             data.data.par_iter_mut().for_each(|entry| {
-                if entry.id().0 != eos_token {
+                if !eog_tokens.contains(&entry.id().0) {
                     entry.set_logit(f32::NEG_INFINITY);
                 }
             });
@@ -2167,8 +2209,26 @@ impl JsonConstraint {
             // sibling candidates don't see each other's mutations.
             || state.clone(),
             |worker_state, entry| {
+                // Short-circuit on candidates an upstream sampler
+                // (top-K pre-filter, penalties, …) already rejected.
+                // Running the per-candidate parser on these would be
+                // pure overhead — the result will be discarded by the
+                // remaining sampler chain anyway. This is the
+                // primary reason the grammar pre-filter (top_k=2048
+                // before mask, see `ConstrainedSampler::sample`)
+                // delivers a 5-10× speedup on Qwen's 152K-vocab.
+                if !entry.logit().is_finite() {
+                    return;
+                }
                 let token_id = entry.id().0;
-                if token_id == eos_token {
+                // Mask EVERY end-of-generation token (not just the
+                // primary eos_token) when buffer is incomplete.
+                // Multi-EOG models like Qwen3.5 will otherwise emit
+                // `<|im_end|>` as token 1 and exit before producing
+                // any structured output. eos_token is still allowed
+                // when the buffer is Complete — keeps the legacy
+                // single-token termination path.
+                if eog_tokens.contains(&token_id) {
                     if !buffer_is_complete {
                         entry.set_logit(f32::NEG_INFINITY);
                     }
@@ -2182,6 +2242,17 @@ impl JsonConstraint {
                     }
                 };
                 if buffer_is_complete {
+                    // Root is closed. Trailing whitespace is RFC-8259
+                    // valid; permit it. We initially tried masking
+                    // everything-non-EOG here to force immediate
+                    // termination — turns out that bias propagates
+                    // BEFORE the root closes too, making weaker
+                    // models (Qwen3.5-9B observed 2026-05-12 across
+                    // 100+ chapter extracts) collapse into the
+                    // shortest valid response (`{"claims":[]}`)
+                    // instead of producing real content. Permitting
+                    // trailing ws keeps the model's choice open at
+                    // earlier branching points.
                     if !bytes.iter().all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r')) {
                         entry.set_logit(f32::NEG_INFINITY);
                     }
@@ -2243,7 +2314,13 @@ impl JsonConstraint {
             .timing
             .as_ref()
             .map(|_| std::time::Instant::now());
-        if token.0 == self.eos_token {
+        // Any EOG token — primary eos_token or any of the model's
+        // chat-template terminators (`<|im_end|>`, `<|eot_id|>`, …) —
+        // is a terminal no-op. The streaming loop in embedded.rs
+        // exits on `is_eog_token(...)` so accept() should never
+        // advance the buffer with the EOG's text bytes (which would
+        // desync the parser).
+        if self.eog_tokens.contains(&token.0) {
             self.record_accept_timing(timing_start);
             return;
         }
@@ -2391,6 +2468,25 @@ impl Drop for JsonConstraint {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn validate_accepts_leading_whitespace_before_root() {
+        // step_await_value consumes leading whitespace, so validate()
+        // must agree. Without alignment, the masker's emitted_invalid
+        // latch fires spuriously when the model samples a single
+        // space token (the canonical instant-EOG trap on multi-EOG
+        // models like Qwen3.5).
+        let s = compile_schema(&serde_json::json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string"}}
+        }))
+        .unwrap();
+        assert_eq!(validate(&s, b" "), ParseStatus::Incomplete);
+        assert_eq!(validate(&s, b"\n"), ParseStatus::Incomplete);
+        assert_eq!(validate(&s, b" {\"x\":\"a\"}"), ParseStatus::Complete);
+        assert_eq!(validate(&s, b"{\"x\":\"a\"}\n"), ParseStatus::Complete);
+    }
 
     #[test]
     fn validate_simple_object_complete() {

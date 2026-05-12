@@ -1572,3 +1572,4 @@ fn load_cross_corpus(path: &Path) -> Option<Vec<Value>> {
     let edges = value.get("edges")?.as_array()?.clone();
     Some(edges)
 }
+

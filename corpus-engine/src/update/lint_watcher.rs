@@ -18,6 +18,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use async_trait::async_trait;
@@ -33,12 +34,31 @@ use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
 
 /// Runs a configured lint command on file changes and stores results for MCP
 /// queries.
+///
+/// ## Run semantics
+///
+/// `on_files_changed` and `force_run` differ deliberately:
+///
+/// - `on_files_changed` (debounced filesystem events): if a run is already in
+///   flight, **does not abort it** — instead sets a `rerun_pending` flag, and
+///   the in-flight run's tokio task starts another iteration when it finishes.
+///   This prevents the abort-storm seen during active coding (every keystroke
+///   killing a 60+ second monorepo `cargo check` and starting over from
+///   scratch — net forward progress: zero).
+/// - `force_run` (operator-triggered, e.g. RunLintTool / RunTestsTool):
+///   preempts the in-flight run because the operator is actively waiting on a
+///   fresh result.
+///
+/// The `rerun_pending` flag collapses arbitrarily many file-change flushes
+/// during one run into exactly one follow-up run — bursts of edits can never
+/// queue more than one extra iteration.
 pub struct LintWatcher {
     command: String,
     working_dir: Option<PathBuf>,
     timeout_secs: u64,
     store: Arc<LintResultStore>,
     run_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    rerun_pending: Arc<AtomicBool>,
 }
 
 impl LintWatcher {
@@ -54,15 +74,21 @@ impl LintWatcher {
             timeout_secs,
             store,
             run_handle: Arc::new(Mutex::new(None)),
+            rerun_pending: Arc::new(AtomicBool::new(false)),
         }
     }
 
+    /// Operator-triggered run. Preempts any in-flight run so the operator
+    /// sees a fresh result immediately.
     pub async fn force_run(&self) {
-        self.start_run().await;
+        self.spawn_run(true).await;
     }
 
-    async fn start_run(&self) {
-        {
+    /// Spawn a fresh run. If `preempt` is true, aborts any in-flight run
+    /// first. If false, the caller must verify no run is in flight before
+    /// calling — see [`on_files_changed`].
+    async fn spawn_run(&self, preempt: bool) {
+        if preempt {
             let mut guard = self.run_handle.lock().await;
             if let Some(handle) = guard.take() {
                 handle.abort();
@@ -74,10 +100,25 @@ impl LintWatcher {
         let timeout_secs = self.timeout_secs;
         let store = Arc::clone(&self.store);
         let handle_slot = Arc::clone(&self.run_handle);
+        let rerun_pending = Arc::clone(&self.rerun_pending);
 
         let handle = tokio::spawn(async move {
-            if let Err(e) = run_lint_subprocess(command, working_dir, timeout_secs, store).await {
-                tracing::warn!("lint runner failed: {e}");
+            // Loop: run the lint subprocess, then check whether any file
+            // changes arrived during the run. If so, take the flag and run
+            // again — exactly one follow-up iteration, no matter how many
+            // changes piled up. The check happens AFTER the subprocess
+            // completes so an abort-storm can never replace this task.
+            loop {
+                if let Err(e) =
+                    run_lint_subprocess(command.clone(), working_dir.clone(), timeout_secs, Arc::clone(&store)).await
+                {
+                    tracing::warn!("lint runner failed: {e}");
+                }
+                if rerun_pending.swap(false, Ordering::SeqCst) {
+                    tracing::info!("LintWatcher: rerunning — file changes arrived during last run");
+                    continue;
+                }
+                break;
             }
             let mut guard = handle_slot.lock().await;
             *guard = None;
@@ -85,6 +126,16 @@ impl LintWatcher {
 
         let mut guard = self.run_handle.lock().await;
         *guard = Some(handle);
+    }
+
+    /// True iff a subprocess run is currently executing.
+    async fn run_in_flight(&self) -> bool {
+        self.run_handle
+            .lock()
+            .await
+            .as_ref()
+            .map(|h| !h.is_finished())
+            .unwrap_or(false)
     }
 }
 
@@ -99,24 +150,29 @@ impl BackgroundWatcher for LintWatcher {
     }
 
     async fn on_files_changed(&self, paths: Vec<PathBuf>) {
-        tracing::info!(
-            count = paths.len(),
-            "LintWatcher: files changed, (re)starting lint"
-        );
         if let Err(e) = self.store.mark_stale(&paths).await {
             tracing::warn!("LintWatcher: failed to mark stale: {e}");
         }
-        self.start_run().await;
+        if self.run_in_flight().await {
+            // Don't abort the in-flight run — that throws away seconds-to-
+            // minutes of compilation work on every keystroke. Set the
+            // rerun flag; the in-flight task will pick it up when done.
+            self.rerun_pending.store(true, Ordering::SeqCst);
+            tracing::info!(
+                count = paths.len(),
+                "LintWatcher: files changed during in-flight run; queued rerun"
+            );
+        } else {
+            tracing::info!(
+                count = paths.len(),
+                "LintWatcher: files changed, starting lint"
+            );
+            self.spawn_run(false).await;
+        }
     }
 
     async fn current_status(&self) -> WatcherStatus {
-        let running = self
-            .run_handle
-            .lock()
-            .await
-            .as_ref()
-            .map(|h| !h.is_finished())
-            .unwrap_or(false);
+        let running = self.run_in_flight().await;
 
         if running {
             return WatcherStatus::Running;
@@ -299,6 +355,27 @@ mod tests {
         assert_eq!(summary.fail_count, 0);
         // Exit code 0 with only warnings: should still be passing.
         assert!(summary.passed());
+    }
+
+    /// Two `on_files_changed` calls during a long-running lint must not
+    /// abort the in-flight run. The second flush sets `rerun_pending`,
+    /// the in-flight task picks it up when done. Same contract as the
+    /// `test_watcher::queues_rerun_during_in_flight_run` test.
+    #[tokio::test]
+    async fn queues_rerun_during_in_flight_run() {
+        let store = make_store().await;
+        let watcher = make_watcher("sleep 30", Arc::clone(&store));
+
+        watcher.on_files_changed(vec![PathBuf::from("src/foo.rs")]).await;
+        watcher
+            .on_files_changed(vec![PathBuf::from("src/bar.rs")])
+            .await;
+
+        let stale = store.stale_files_since_last_run().await.unwrap();
+        assert_eq!(stale.len(), 2);
+
+        assert!(watcher.run_in_flight().await);
+        assert!(watcher.rerun_pending.load(Ordering::SeqCst));
     }
 
     #[tokio::test]

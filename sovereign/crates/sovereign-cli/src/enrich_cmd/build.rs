@@ -404,7 +404,9 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
         .filter(|(_, kind)| {
             matches!(
                 kind,
-                PhaseFailureKind::ThinkTruncated | PhaseFailureKind::ParseDrift
+                PhaseFailureKind::ThinkTruncated
+                    | PhaseFailureKind::ParseDrift
+                    | PhaseFailureKind::DeadlineExceeded
             )
         })
         .count();
@@ -417,7 +419,7 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
 
     println!();
     println!(
-        "  · auto-retry: {} retriable failure(s) (parse_drift / think_truncated) — \
+        "  · auto-retry: {} retriable failure(s) (parse_drift / think_truncated / deadline_exceeded) — \
          running `--retry-failed --terse` once",
         retriable_count
     );
@@ -448,7 +450,9 @@ async fn run_extract_step(parsed: &ParsedBuild) -> i32 {
         .filter(|(_, kind)| {
             matches!(
                 kind,
-                PhaseFailureKind::ThinkTruncated | PhaseFailureKind::ParseDrift
+                PhaseFailureKind::ThinkTruncated
+                    | PhaseFailureKind::ParseDrift
+                    | PhaseFailureKind::DeadlineExceeded
             )
         })
         .count();

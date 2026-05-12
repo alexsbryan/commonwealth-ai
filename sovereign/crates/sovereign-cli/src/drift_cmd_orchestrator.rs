@@ -268,7 +268,13 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
         if !cfg_path.exists() || !chapters_present {
             info!(narrative_id = %nid, "drift_orchestrator:narrative_enrich_init_start");
             println!("    → init enrichment for '{nid}'…");
-            if !run_step(&sovereign_bin_str, &["enrich", "init", &nid, "--from-corpus", &nid, "--pipeline", "literary_atlas"]) {
+            // engineering_atlas extracts ONLY claims-with-code-anchors,
+            // which is exactly what the drift matcher reads. literary_atlas
+            // also extracted entities/events/relations/questions — work
+            // the renderer discarded and the LLM cost ~30 min/document.
+            // See `pipelines/engineering_atlas.rs` for the schema and
+            // eval calibration.
+            if !run_step(&sovereign_bin_str, &["enrich", "init", &nid, "--from-corpus", &nid, "--pipeline", "engineering_atlas"]) {
                 warn!(narrative_id = %nid, "drift_orchestrator:narrative_enrich_init_failed");
                 eprintln!("✗ enrich init failed.");
                 return 1;
@@ -458,11 +464,23 @@ pub async fn cmd_detect(args: &[String]) -> i32 {
 
 // ── Step helpers ─────────────────────────────────────────────
 
+/// Resolve which slot to use for the LLM-bound narrative-atlas build.
+///
+/// **Default is `fast`**, not `primary`, by design. The drift detector
+/// should scale to a fast slot's capabilities so it generalizes to
+/// operators without a 36B+ primary model — a 9B fast slot already
+/// produces a useful first-pass atlas, and the per-chapter LLM time
+/// on `primary` (~3 min/chapter under schema-constrained 16k output)
+/// makes a 50-chapter doc effectively a multi-hour run. The
+/// `--chat-model primary` override is available when the operator
+/// wants peak quality and is willing to pay the time cost.
+///
+/// Probe order: explicit override (if given) → `fast` → `primary`.
 async fn resolve_chat_model(operator_choice: Option<&str>) -> Result<String, String> {
     let candidates: Vec<String> = if let Some(c) = operator_choice {
-        vec![c.to_string(), "primary".into(), "fast".into()]
+        vec![c.to_string(), "fast".into(), "primary".into()]
     } else {
-        vec!["primary".into(), "fast".into()]
+        vec!["fast".into(), "primary".into()]
     };
     for candidate in &candidates {
         debug!(candidate = %candidate, "drift_orchestrator:chat_model_probe_candidate");
@@ -483,8 +501,15 @@ async fn probe_chat(model: &str) -> bool {
         "messages": [{"role": "user", "content": "ok"}],
         "max_tokens": 4,
     });
+    // 120s is generous for a 4-token probe but the daemon may be
+    // serving a long-running inference call when we hit it (e.g. the
+    // operator has a Claude Code session driving completions through
+    // MCP); we want the probe to wait through that, not fail-fast.
+    // The probe is a structural correctness check (is a chat slot
+    // configured at all?), not a latency benchmark — false negatives
+    // here force a `--chat-model` override and waste a setup round.
     let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
+        .timeout(std::time::Duration::from_secs(120))
         .build()
     {
         Ok(c) => c,
@@ -968,7 +993,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
             ("--narrative <doc>", "Path to a markdown narrative document. Repeat for multiple. Each becomes its own atlas."),
             ("--output <md>", "Path for the markdown digest. Default: ./drift_report.md (JSON sidecar at <output>.json)."),
             ("--project-id <id>", "Override the corpus id derived from the code path's basename."),
-            ("--chat-model <slot>", "Override chat-slot probe (default: primary, fallback: fast)."),
+            ("--chat-model <slot>", "Override chat-slot probe (default: fast, fallback: primary). Drift detect targets `fast` by default so it scales to operators without a heavyweight primary model; pass `--chat-model primary` for peak quality at the cost of ~5-10× LLM wall time."),
             ("--sovereign-bin <path>", "Path to the `sovereign` binary used for subprocess fan-out. Default: env SOVEREIGN_BIN, else this binary's own path."),
         ]),
         crate::util::help::HelpSection::Examples(&[

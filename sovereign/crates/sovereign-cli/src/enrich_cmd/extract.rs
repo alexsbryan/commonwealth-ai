@@ -297,7 +297,9 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
                         ids.into_iter().partition(|(_, kind)| {
                             matches!(
                                 kind,
-                                PhaseFailureKind::ThinkTruncated | PhaseFailureKind::ParseDrift
+                                PhaseFailureKind::ThinkTruncated
+                                    | PhaseFailureKind::ParseDrift
+                                    | PhaseFailureKind::DeadlineExceeded
                             )
                         })
                     } else {
@@ -1150,7 +1152,9 @@ mod tests {
         let (targeted, filtered_out): (Vec<_>, Vec<_>) = ids.into_iter().partition(|(_, kind)| {
             matches!(
                 kind,
-                PhaseFailureKind::ThinkTruncated | PhaseFailureKind::ParseDrift
+                PhaseFailureKind::ThinkTruncated
+                    | PhaseFailureKind::ParseDrift
+                    | PhaseFailureKind::DeadlineExceeded
             )
         });
         let targeted_ids: Vec<&str> =

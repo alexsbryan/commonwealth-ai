@@ -249,6 +249,7 @@ impl EnrichProgress {
             super::types::PhaseFailureKind::ThinkTruncated => "think_truncated",
             super::types::PhaseFailureKind::ParseDrift => "parse_drift",
             super::types::PhaseFailureKind::ChatError => "chat_error",
+            super::types::PhaseFailureKind::DeadlineExceeded => "deadline_exceeded",
             super::types::PhaseFailureKind::EmptyExtraction => "empty_extraction",
             super::types::PhaseFailureKind::Skipped => "skipped",
             super::types::PhaseFailureKind::UnresolvedEntityName => "unresolved_entity_name",

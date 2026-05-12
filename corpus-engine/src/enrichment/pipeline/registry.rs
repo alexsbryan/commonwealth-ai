@@ -37,6 +37,9 @@ impl PipelineRegistry {
         r.register(super::pipelines::referential_atlas::PIPELINE_ID, || {
             Arc::new(super::pipelines::referential_atlas::ReferentialAtlasPipeline::new())
         });
+        r.register(super::pipelines::engineering_atlas::PIPELINE_ID, || {
+            Arc::new(super::pipelines::engineering_atlas::EngineeringAtlasPipeline::new())
+        });
         r
     }
 

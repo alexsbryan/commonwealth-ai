@@ -18,15 +18,20 @@
 //! logged at debug level). The subprocess may emit both Tier 2 events and
 //! prose output — the parser handles intermixed lines gracefully.
 //!
-//! ## Cancel-and-restart
+//! ## Queue-one-rerun, don't abort
 //!
-//! On every `on_files_changed` call, any in-progress run is aborted by killing
-//! the child process and abandoning the task. The stale-files table is updated
-//! before the new run starts so the WatcherStatus reflects current reality even
-//! during a run.
+//! On every `on_files_changed` call, if a run is already in flight the watcher
+//! sets a `rerun_pending` flag and does NOT abort — the in-flight task will
+//! start one more iteration when it finishes. This prevents the abort-storm
+//! seen during active coding (every keystroke killing a long-running test
+//! suite and starting over from scratch — net forward progress: zero).
+//! `force_run` (operator-triggered) still preempts so RunTestsTool callers
+//! see a fresh result quickly. The stale-files table is updated before the
+//! new run starts so WatcherStatus reflects current reality even during a run.
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use async_trait::async_trait;
@@ -49,6 +54,7 @@ pub struct TestWatcher {
     store: Arc<TestResultStore>,
     /// Current in-progress run handle. `None` when idle.
     run_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    rerun_pending: Arc<AtomicBool>,
 }
 
 impl TestWatcher {
@@ -64,19 +70,21 @@ impl TestWatcher {
             timeout_secs,
             store,
             run_handle: Arc::new(Mutex::new(None)),
+            rerun_pending: Arc::new(AtomicBool::new(false)),
         }
     }
 
     /// Force a run immediately regardless of file changes. Used by
     /// `RunTestsTool` to let agents trigger a synchronous test run.
     pub async fn force_run(&self) {
-        self.start_run().await;
+        self.spawn_run(true).await;
     }
 
-    /// Cancel the current in-progress run (if any) and start a new one.
-    async fn start_run(&self) {
-        // Cancel previous run.
-        {
+    /// Spawn a fresh run. If `preempt` is true, aborts any in-flight run
+    /// first (force_run path). If false, the caller must verify no run is in
+    /// flight before calling — see [`on_files_changed`].
+    async fn spawn_run(&self, preempt: bool) {
+        if preempt {
             let mut guard = self.run_handle.lock().await;
             if let Some(handle) = guard.take() {
                 handle.abort();
@@ -88,10 +96,24 @@ impl TestWatcher {
         let timeout_secs = self.timeout_secs;
         let store = Arc::clone(&self.store);
         let handle_slot = Arc::clone(&self.run_handle);
+        let rerun_pending = Arc::clone(&self.rerun_pending);
 
         let handle = tokio::spawn(async move {
-            if let Err(e) = run_subprocess(command, working_dir, timeout_secs, store).await {
-                tracing::warn!("test runner failed: {e}");
+            // Loop: run the test subprocess, then check whether any file
+            // changes arrived during the run. If so, take the flag and run
+            // again — exactly one follow-up iteration, no matter how many
+            // changes piled up.
+            loop {
+                if let Err(e) =
+                    run_subprocess(command.clone(), working_dir.clone(), timeout_secs, Arc::clone(&store)).await
+                {
+                    tracing::warn!("test runner failed: {e}");
+                }
+                if rerun_pending.swap(false, Ordering::SeqCst) {
+                    tracing::info!("TestWatcher: rerunning — file changes arrived during last run");
+                    continue;
+                }
+                break;
             }
             // Clear the handle when done so we don't hold a dangling Arc.
             let mut guard = handle_slot.lock().await;
@@ -100,6 +122,16 @@ impl TestWatcher {
 
         let mut guard = self.run_handle.lock().await;
         *guard = Some(handle);
+    }
+
+    /// True iff a subprocess run is currently executing.
+    async fn run_in_flight(&self) -> bool {
+        self.run_handle
+            .lock()
+            .await
+            .as_ref()
+            .map(|h| !h.is_finished())
+            .unwrap_or(false)
     }
 }
 
@@ -114,29 +146,33 @@ impl BackgroundWatcher for TestWatcher {
     }
 
     async fn on_files_changed(&self, paths: Vec<PathBuf>) {
-        tracing::info!(
-            count = paths.len(),
-            "TestWatcher: files changed, (re)starting run"
-        );
         // Mark changed files as stale before restarting so the status reflects
         // "stale" immediately — even before the new run finishes.
         if let Err(e) = self.store.mark_stale(&paths).await {
             tracing::warn!("TestWatcher: failed to mark stale files: {e}");
         }
-        self.start_run().await;
+        if self.run_in_flight().await {
+            // Don't abort the in-flight run — test suites can take minutes
+            // on a large workspace, and aborting them on every keystroke
+            // means the operator never sees a fresh result during active
+            // coding. Set the rerun flag; the in-flight task will pick it
+            // up when done.
+            self.rerun_pending.store(true, Ordering::SeqCst);
+            tracing::info!(
+                count = paths.len(),
+                "TestWatcher: files changed during in-flight run; queued rerun"
+            );
+        } else {
+            tracing::info!(
+                count = paths.len(),
+                "TestWatcher: files changed, starting run"
+            );
+            self.spawn_run(false).await;
+        }
     }
 
     async fn current_status(&self) -> WatcherStatus {
-        // Check if a run is actively in progress.
-        let running = self
-            .run_handle
-            .lock()
-            .await
-            .as_ref()
-            .map(|h| !h.is_finished())
-            .unwrap_or(false);
-
-        if running {
+        if self.run_in_flight().await {
             return WatcherStatus::Running;
         }
 
@@ -382,22 +418,29 @@ mod tests {
         );
     }
 
-    /// Second on_files_changed cancels the first and starts fresh.
+    /// Second on_files_changed during in-flight run queues a rerun rather
+    /// than aborting. Both file paths are still marked stale immediately.
     #[tokio::test]
-    async fn cancels_in_flight_run() {
+    async fn queues_rerun_during_in_flight_run() {
         let store = make_store().await;
-        // First command: sleep for 30 seconds (will be cancelled).
+        // First command: sleep for 30 seconds (would be cancelled under old
+        // semantics; under new semantics it stays running).
         let watcher = make_watcher("sleep 30", Arc::clone(&store));
 
-        // Start a long-running command.
         watcher.on_files_changed(vec![PathBuf::from("src/foo.rs")]).await;
-        // Immediately fire again — should cancel the first.
+        // Fire again — must not abort the in-flight sleep.
         watcher
             .on_files_changed(vec![PathBuf::from("src/bar.rs")])
             .await;
 
-        // The stale files should include both paths.
+        // Both paths get marked stale immediately.
         let stale = store.stale_files_since_last_run().await.unwrap();
         assert_eq!(stale.len(), 2);
+
+        // And the in-flight run is still running — confirms we didn't
+        // abort it the way the old `cancels_in_flight_run` test expected.
+        assert!(watcher.run_in_flight().await);
+        // The second flush should have set the rerun flag.
+        assert!(watcher.rerun_pending.load(Ordering::SeqCst));
     }
 }

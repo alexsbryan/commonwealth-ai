@@ -264,6 +264,21 @@ const MIN_PHASE1_CHAPTER_WORDS: usize = 40;
 /// runner has a token-aware chat closure configured.
 const PHASE1_SEED_OUTPUT_BUDGET: u32 = 24576;
 
+/// First-pass output budget for the default Phase 1 path (no seed,
+/// no retry). Sized to fit inside the daemon's per-request inference
+/// deadline (~300s by default) on a fast chat slot generating at
+/// ~10-15 tok/s — historically chapters that wanted more than this
+/// budget were the ones that drifted parse/think anyway, and the
+/// orchestrator's auto-retry pass (`run_extract_step` in build.rs)
+/// already promotes those failures to a 16384 terse retry with a
+/// different system prompt. Tuned against SEP document enrichment:
+/// matches the seed prompt's headroom (4096) since both are doing
+/// "extract a list of structured atoms from a section of prose."
+/// Sections that legitimately need more headroom get caught by the
+/// auto-retry; one wide budget for everyone was wasting hours
+/// per run on the 95% case to accommodate the 5%.
+const PHASE1_DEFAULT_OUTPUT_BUDGET: u32 = 4096;
+
 /// Count whitespace-separated tokens. Good-enough proxy for "words";
 /// the threshold only needs to be in the right order of magnitude.
 fn approx_word_count(text: &str) -> usize {
@@ -408,6 +423,12 @@ pub struct PhaseRunner {
     /// and runs only the remainder. See
     /// `Phase1CheckpointEntry` for the on-disk shape.
     checkpoint_path: Option<PathBuf>,
+    /// Cross-cutting post-process chain applied to every Phase 1
+    /// extraction after parse and before persistence. Defaults to
+    /// the production chain (anchor snap-to-source + backtick
+    /// augmentation) — override via [`with_atom_post_processors`]
+    /// in tests that need to pin a specific transform set.
+    atom_post_processors: super::atom_normalizer::AtomPostProcessorRegistry,
 }
 
 impl PhaseRunner {
@@ -428,7 +449,20 @@ impl PhaseRunner {
             runs,
             exemplars_dir: exemplars_dir.as_ref().to_path_buf(),
             checkpoint_path: None,
+            atom_post_processors:
+                super::atom_normalizer::AtomPostProcessorRegistry::default_chain(),
         }
+    }
+
+    /// Override the cross-cutting post-process chain. Tests use this
+    /// to pin a deterministic transform set or to skip
+    /// normalization entirely.
+    pub fn with_atom_post_processors(
+        mut self,
+        registry: super::atom_normalizer::AtomPostProcessorRegistry,
+    ) -> Self {
+        self.atom_post_processors = registry;
+        self
     }
 
     /// Append per-chapter results to `path` as JSONL while Phase 1
@@ -679,6 +713,27 @@ impl PhaseRunner {
 
         let mut extracted: Vec<ExtractedQuestion> = Vec::with_capacity(targets.len());
         let mut failures: Vec<Phase1Failure> = Vec::new();
+        // Fail-fast counter: when the daemon dies mid-run, every
+        // remaining chapter immediately errors with the same
+        // connection-refused HTTP signature, racing through 50+
+        // chapters in milliseconds and burying the real cause (daemon
+        // down) under derivative noise. Trip the breaker after a few
+        // consecutive identical chat-error failures and bail with a
+        // clear daemon-suspect message — the operator should restart
+        // the daemon, not retry-failed against a corpse.
+        let mut consecutive_chat_errors: u32 = 0;
+        const CONSECUTIVE_CHAT_ERROR_THRESHOLD: u32 = 3;
+        // Parallel breaker for "the daemon is up but the model+schema
+        // combination is stuck in a pathological mask state". The
+        // daemon emits a 503 with the literal phrase "pathological
+        // JSON-Schema mask state" / "inference deadline exceeded" each
+        // time generation hits the per-request deadline (~300s by
+        // default). Three of these in a row means the configured chat
+        // model cannot satisfy the grammar — chugging through 50+
+        // more chapters at 5min each is hours of waste. Bail with a
+        // clear "switch chat models" diagnosis.
+        let mut consecutive_deadline_errors: u32 = 0;
+        const CONSECUTIVE_DEADLINE_ERROR_THRESHOLD: u32 = 3;
 
         for (i, chapter) in targets.iter().enumerate() {
             progress(Phase1Progress::ChapterStart {
@@ -773,11 +828,23 @@ impl PhaseRunner {
                     // Cap at `PHASE1_SEED_OUTPUT_BUDGET` so a chapter
                     // that was going to truncate mid-relations now
                     // has headroom to finish its JSON on first pass.
-                    // Non-seed runs keep the baseline — they never
-                    // starved.
+                    //
+                    // No-seed default also routes through chat_with_tokens
+                    // when available, at a tight first-pass budget
+                    // (`PHASE1_DEFAULT_OUTPUT_BUDGET`). Sized to fit
+                    // inside the daemon's per-request inference deadline
+                    // on a fast chat slot. Sections that legitimately
+                    // need more tokens get caught by the orchestrator's
+                    // auto-retry pass at a 16384 terse budget. Fallback
+                    // to the un-budgeted closure preserves backwards
+                    // compatibility for callers that didn't install
+                    // `chat_with_tokens` (older tests, embedded callers).
                     match (seed_opt.as_ref(), &self.chat_with_tokens) {
                         (Some(_), Some(chat_t)) => {
                             (chat_t)(&prompt, PHASE1_SEED_OUTPUT_BUDGET).await
+                        }
+                        (None, Some(chat_t)) => {
+                            (chat_t)(&prompt, PHASE1_DEFAULT_OUTPUT_BUDGET).await
                         }
                         _ => (self.chat)(&prompt).await,
                     }
@@ -785,22 +852,90 @@ impl PhaseRunner {
             };
 
             let response = match chat_result {
-                Ok(r) => r,
+                Ok(r) => {
+                    consecutive_chat_errors = 0;
+                    consecutive_deadline_errors = 0;
+                    r
+                }
                 Err(e) => {
-                    let reason = format!("chat error: {e}");
+                    let err_str = format!("{e}");
+                    let reason = format!("chat error: {err_str}");
                     progress(Phase1Progress::ChapterFailed {
                         chapter_id: &chapter.chapter_id,
                         reason: &reason,
                     });
+
+                    // Distinguish daemon-down (connection refused) from
+                    // daemon-up-but-slow (inference deadline exceeded).
+                    // The orchestrator's auto-retry pass treats
+                    // `DeadlineExceeded` as retriable (terse retry with
+                    // a tighter prompt fits in the deadline), while
+                    // `ChatError` stays a transport-level concern that
+                    // the operator has to triage.
+                    let looks_like_daemon_down = err_str.contains("error sending request")
+                        || err_str.contains("connection refused")
+                        || err_str.contains("Connection refused");
+                    let looks_like_deadline = err_str.contains("inference deadline exceeded")
+                        || err_str.contains("pathological JSON-Schema mask state");
+                    let failure_kind = if looks_like_deadline {
+                        PhaseFailureKind::DeadlineExceeded
+                    } else {
+                        PhaseFailureKind::ChatError
+                    };
+
                     let failure = Phase1Failure {
                         chapter_id: chapter.chapter_id.clone(),
                         reason,
                         // No response body ever arrived — nothing to capture.
                         raw_response_head: None,
-                        failure_kind: PhaseFailureKind::ChatError,
+                        failure_kind,
                     };
                     self.persist_failure_checkpoint(&failure);
                     failures.push(failure);
+
+                    // Fail-fast counters: race-through-the-corpus
+                    // protection when the daemon is genuinely down
+                    // (HTTP connection refused) or when every chapter
+                    // is hitting the inference deadline (configured
+                    // chat model can't meet the budget for this
+                    // schema). 50+ chapters at 300s each is hours of
+                    // wasted time — bail with a precise diagnosis.
+                    if looks_like_daemon_down {
+                        consecutive_chat_errors = consecutive_chat_errors.saturating_add(1);
+                        consecutive_deadline_errors = 0;
+                        if consecutive_chat_errors >= CONSECUTIVE_CHAT_ERROR_THRESHOLD {
+                            // Bail with a precise diagnosis. The
+                            // operator should restart the daemon
+                            // (`sovereign daemon start`) before
+                            // retrying — running --retry-failed
+                            // against a dead daemon just produces
+                            // more chat errors.
+                            return Err(Error::InvalidInput(format!(
+                                "daemon appears unreachable: {CONSECUTIVE_CHAT_ERROR_THRESHOLD} consecutive \
+                                 chat dispatches failed with connection-refused / HTTP send errors. \
+                                 Last error: {err_str}. \
+                                 Restart the daemon (`sovereign daemon start`) and re-run, optionally \
+                                 with `--retry-failed` to pick up where this run left off."
+                            )));
+                        }
+                    } else if looks_like_deadline {
+                        consecutive_deadline_errors = consecutive_deadline_errors.saturating_add(1);
+                        consecutive_chat_errors = 0;
+                        if consecutive_deadline_errors >= CONSECUTIVE_DEADLINE_ERROR_THRESHOLD {
+                            return Err(Error::InvalidInput(format!(
+                                "phase 1 hit {CONSECUTIVE_DEADLINE_ERROR_THRESHOLD} consecutive inference-deadline \
+                                 timeouts — the configured chat model cannot satisfy the schema-constrained \
+                                 generation within the daemon's per-request deadline. \
+                                 Last error: {err_str}. \
+                                 Try a larger chat model (e.g. `--chat-model primary` if you ran with `fast`), \
+                                 or raise the deadline via `SOVEREIGN_INFERENCE_TIMEOUT_SECS`. Re-run with \
+                                 `--retry-failed` to pick up the chapters that already succeeded."
+                            )));
+                        }
+                    } else {
+                        consecutive_chat_errors = 0;
+                        consecutive_deadline_errors = 0;
+                    }
                     continue;
                 }
             };
@@ -851,6 +986,13 @@ impl PhaseRunner {
             let mut section_extraction = parsed.section_extraction;
             if let Some(ref mut sx) = section_extraction {
                 sx.section_id = chapter.chapter_id.clone();
+                // Cross-cutting post-process chain. Every pipeline's
+                // output flows through this registry — adding a new
+                // shared transform (path canonicalisation, dedupe,
+                // …) is a `register` call on the registry, not a
+                // runner edit. See `atom_normalizer` for the trait
+                // contract and current default chain.
+                self.atom_post_processors.process(sx, &chapter.text);
                 // Phase 1b coverage check — an audit pass that asks
                 // the model "what did you miss?" against its own
                 // extraction. Disabled by default because the SEP
@@ -2219,30 +2361,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn phase_1_default_variant_ignores_token_aware_chat() {
-        // Sanity check the other direction: when retry_mode is None,
-        // the runner goes through the default `chat` closure and
-        // does NOT touch `chat_with_tokens`, even if configured.
+    async fn phase_1_default_variant_routes_through_token_aware_chat_at_default_budget() {
+        // Updated 2026-05-11: the no-seed/no-retry path now routes
+        // through `chat_with_tokens` at `PHASE1_DEFAULT_OUTPUT_BUDGET`
+        // (4096) so the per-request token cap fits inside the
+        // daemon's inference deadline on fast chat slots. Previously
+        // this path called `(self.chat)(&prompt)` and inherited the
+        // daemon-side 16384 default, which routinely deadline-timed
+        // out at ~11 tok/s. Section that needs more headroom gets
+        // caught by `run_extract_step`'s auto-retry at 16384.
         use crate::enrichment::pipeline::pipelines::literary_atlas::LiteraryAtlasPipeline;
 
         let dir = tempdir().unwrap();
         let cache = PhaseCache::new(dir.path().join("cache"));
         let runs = RunOutputWriter::new(dir.path().join("runs"));
 
+        use std::sync::Mutex;
+        let recorded_budgets: Arc<Mutex<Vec<u32>>> = Arc::new(Mutex::new(Vec::new()));
+        let recorded_budgets_clone = Arc::clone(&recorded_budgets);
         let chat_with_tokens: ChatCompletionWithTokensFn =
-            Arc::new(move |_prompt: &ChatPrompt, _tokens: u32| {
-                Box::pin(async move {
-                    panic!(
-                        "chat_with_tokens should not be invoked when retry_mode is None"
-                    );
-                })
-            });
-
-        let runner = PhaseRunner::new(
-            Arc::new(LiteraryAtlasPipeline::new()),
-            alphabet_embed(),
-            // Canned atlas response so the chapter parses cleanly.
-            Arc::new(move |_prompt: &ChatPrompt| {
+            Arc::new(move |_prompt: &ChatPrompt, tokens: u32| {
+                recorded_budgets_clone.lock().unwrap().push(tokens);
                 let body = r#"{
                   "section_id": "ch_01",
                   "entities_introduced": [{"canonical_name": "A", "entity_type": "person"}],
@@ -2250,6 +2389,17 @@ mod tests {
                 }"#
                 .to_string();
                 Box::pin(async move { Ok(body) })
+            });
+
+        let runner = PhaseRunner::new(
+            Arc::new(LiteraryAtlasPipeline::new()),
+            alphabet_embed(),
+            Arc::new(move |_prompt: &ChatPrompt| {
+                Box::pin(async move {
+                    panic!(
+                        "default chat closure should not be invoked when chat_with_tokens is configured"
+                    );
+                })
             }),
             cache,
             runs,
@@ -2263,6 +2413,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.output.questions_by_chapter.len(), 1);
+        let recorded = recorded_budgets.lock().unwrap().clone();
+        assert_eq!(
+            recorded,
+            vec![PHASE1_DEFAULT_OUTPUT_BUDGET],
+            "expected one token-aware call at the default Phase 1 budget"
+        );
     }
 
     #[tokio::test]
