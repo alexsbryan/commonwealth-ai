@@ -52,6 +52,18 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 
 **DO NOT guess at a type's fields or a constructor's arguments.** Even during greenfield work, patterns come from existing code. `symbols` before assuming.
 
+### Read budget — three rules that prevent the 74k-token slide
+
+The /context audit on 2026-05-12 attributed 74.3k tokens to file reads, with ~22k flagged as savable. Three concrete failure patterns drove that, each with a fix:
+
+**DO NOT Read a Rust source file before calling `symbols` (or `code_search`) on a name from your task description.** Failure mode: you Read 100+ lines hunting for `narrative_view` then learn it's at line 1360 — a `symbols("narrative_view")` call would have returned `file:1360` in one round-trip with 1/30th the tokens. Empirically observed: 9 separate Reads of `atlas_drift_report.rs` in one session; 7 of them would have been replaced by 2 `symbols` calls + tighter Reads.
+
+**DO NOT Read a file you just Edited.** Edit's contract guarantees the change applied — the harness errors loudly if `old_string` wasn't unique or wasn't found. Re-Reading "to verify" is a tell that you don't trust the harness, not a real signal. Failure mode: 5k tokens spent re-Reading `atoms.rs` after each of the 8 anchor-field edits.
+
+**DO NOT Read the same `(file, offset)` twice in one session.** If you need that context again, scroll the conversation up — your prior Read is still in the message history. The file hasn't changed unless you Edited it (see rule above). Failure mode: re-Reading `atlas_drift_report.rs:357-446` three times across the drift work; the second and third were pure duplicates of the first.
+
+When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the returned site. The combined cost beats a blind Read every time.
+
 ### When to use which tool
 
 | Situation | Tool |

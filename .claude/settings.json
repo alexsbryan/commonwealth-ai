@@ -1,5 +1,10 @@
 {
   "enabledPlugins": {},
+  "statusLine": {
+    "type": "command",
+    "command": ".claude/scripts/read-budget-statusline.py",
+    "padding": 1
+  },
   "hooks": {
     "UserPromptSubmit": [
       {
