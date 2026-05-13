@@ -62,6 +62,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, warn};
 
+use crate::frontdoor;
 use crate::openai_types::{
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, FunctionCall, ToolCall,
     ToolDefinition, ToolFunction,
@@ -78,8 +79,23 @@ use crate::state::AppState;
 pub async fn responses(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(req): Json<ResponsesRequest>,
+    Json(mut req): Json<ResponsesRequest>,
 ) -> Response {
+    // ── Frontdoor normalization ───────────────────────────────────────
+    //
+    // Codex (and other coding harnesses) send a verbose tool catalog
+    // and elaborate system framing tuned for a frontier model that can
+    // filter noise from signal. Local 35B-A3B-class models can't do
+    // that filtering; they need pre-distilled task prose and a small,
+    // relevant tool catalog. The frontdoor pass simulates the
+    // "situating" step. See `frontdoor::distill_via_fast_slot` and
+    // `frontdoor::tool_keeplist` for the two halves.
+    //
+    // Gated behind `SOVEREIGN_FRONTDOOR=1` env until baselined.
+    if frontdoor::is_enabled() {
+        frontdoor::apply(&state, &headers, &mut req).await;
+    }
+
     // ── Hard rejections ───────────────────────────────────────────────
     //
     // `previous_response_id` is a stateful conversation chain. We don't
@@ -222,16 +238,30 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
     // tool list will then emit `apply_patch` / `local_shell` / etc.
     // and codex's router will accept the call against its real
     // handler.
+    // Catalog filtering — when the frontdoor is on, the model only
+    // sees the small set of tools in `CODEX_TOOL_KEEPLIST` plus the
+    // synthetic file-I/O tools appended below. This is the
+    // deterministic half of the frontdoor (see `frontdoor` module
+    // docs). When off, all tools pass through.
+    let frontdoor_on = frontdoor::is_enabled();
     let tools = req.tools.map(|tools_in| {
         tools_in
             .into_iter()
             .filter_map(|t| {
-                // Function tool with explicit name — straight pass-through.
+                // Function tool with explicit name — straight pass-through
+                // (when frontdoor is off) or keeplist-gated (when on).
                 if t.kind == "function" {
                     let Some(name) = t.name else {
                         debug!("responses: dropping function tool with no name");
                         return None;
                     };
+                    if frontdoor_on && !frontdoor::tool_keeplist_contains(&name) {
+                        debug!(
+                            name = %name,
+                            "frontdoor: dropping function tool not in keeplist"
+                        );
+                        return None;
+                    }
                     return Some(ToolDefinition {
                         kind: "function".to_string(),
                         function: ToolFunction {
@@ -242,6 +272,14 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
                             }),
                         },
                     });
+                }
+                // Frontdoor mode is strict: only function tools survive.
+                if frontdoor_on {
+                    debug!(
+                        kind = %t.kind,
+                        "frontdoor: dropping non-function built-in tool"
+                    );
+                    return None;
                 }
                 // Built-in tool — wrap under its `type` name so the
                 // model emits a chat.completions tool_call with that
@@ -281,12 +319,45 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
         }
         None => Some(synthetic_file_tools()),
     };
+    // Emit the post-filter, post-synthetic tool list so the catalog
+    // shrinkage is visible at info-level (the per-tool drop logs are
+    // debug-level and get filtered out in the deployed log threshold).
+    if let Some(t) = &tools {
+        let names: Vec<&str> = t.iter().map(|td| td.function.name.as_str()).collect();
+        tracing::info!(
+            frontdoor = frontdoor_on,
+            outbound_tool_count = t.len(),
+            outbound_tools = ?names,
+            "translate_request: tool catalog after filter + synthetic-append"
+        );
+    }
+
+    // Frontdoor mode: suppress chain-of-thought and floor max_tokens
+    // so the model has room to emit a complete `<tool_call>` envelope
+    // with multi-KB file content. Primary defaults to thinking; with
+    // codex's typical max_output_tokens cap (1-4K), think tokens
+    // exhaust the budget before the close `}` lands and the daemon's
+    // marker parser drops the truncated call. Floor at 16K (well
+    // within primary's 50K context) and explicitly disable thinking.
+    let (chat_template_kwargs, think_budget, max_tokens) = if frontdoor_on {
+        let floored = req
+            .max_output_tokens
+            .map(|m| m.max(16_384))
+            .or(Some(16_384));
+        (
+            Some(serde_json::json!({"enable_thinking": false})),
+            Some(0u32),
+            floored,
+        )
+    } else {
+        (None, None, req.max_output_tokens)
+    };
 
     Ok(ChatCompletionRequest {
         model: req.model,
         messages,
         temperature: req.temperature,
-        max_tokens: req.max_output_tokens,
+        max_tokens,
         stream: req.stream,
         top_p: req.top_p,
         frequency_penalty: None,
@@ -296,8 +367,8 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
         tool_choice: req.tool_choice,
         response_format: None,
         oicp: None,
-        chat_template_kwargs: None,
-        think_budget: None,
+        chat_template_kwargs,
+        think_budget,
         tool_profile: None,
     })
 }
@@ -920,6 +991,30 @@ impl ResponsesStreamState {
         if let Some(reason) = choice.get("finish_reason").and_then(|v| v.as_str()) {
             if !reason.is_empty() {
                 self.finish_reason = Some(reason.to_string());
+                // Per-turn outcome telemetry: shows whether the model
+                // finished naturally (`stop`), got cut by max_tokens
+                // (`length`), or emitted tool_calls. Combined with the
+                // text_buffer size and per-tool logs, this answers
+                // "why didn't this turn produce a file?".
+                let text_bytes = self
+                    .message
+                    .as_ref()
+                    .map(|m| m.text_buffer.len())
+                    .unwrap_or(0);
+                tracing::info!(
+                    response_id = %self.response_id,
+                    finish_reason = %reason,
+                    text_buffer_bytes = text_bytes,
+                    function_calls_emitted = self.function_calls.len(),
+                    "responses: stream turn terminal"
+                );
+                if reason == "length" {
+                    tracing::warn!(
+                        response_id = %self.response_id,
+                        text_buffer_bytes = text_bytes,
+                        "responses: model hit max_tokens — tool_call may be truncated"
+                    );
+                }
                 if let Some(open) = self.message.take() {
                     // output_text.done.
                     {
@@ -1158,6 +1253,9 @@ fn sse_event(event_name: &'static str, payload: &serde_json::Value) -> Event {
 
 const SYNTHETIC_TOOL_WRITE_FILE: &str = "write_file";
 const SYNTHETIC_TOOL_READ_FILE: &str = "read_file";
+const SYNTHETIC_TOOL_WRITE_FILE_BEGIN: &str = "write_file_begin";
+const SYNTHETIC_TOOL_WRITE_FILE_CHUNK: &str = "write_file_chunk";
+const SYNTHETIC_TOOL_WRITE_FILE_END: &str = "write_file_end";
 
 fn synthetic_file_tools() -> Vec<ToolDefinition> {
     vec![
@@ -1166,10 +1264,14 @@ fn synthetic_file_tools() -> Vec<ToolDefinition> {
             function: ToolFunction {
                 name: SYNTHETIC_TOOL_WRITE_FILE.to_string(),
                 description: Some(
-                    "Write text content to a file on disk. Overwrites if the file exists. \
-                     Use this for any file-create or file-replace operation — do NOT use \
-                     exec_command with heredoc or printf for file writes; this tool handles \
-                     escaping correctly. Returns the number of bytes written."
+                    "Write SHORT text content (≤400 bytes) to a file on disk. Overwrites if \
+                     the file exists. For LARGER content use the chunked write protocol: \
+                     `write_file_begin(path)` → repeated `write_file_chunk(path, chunk)` (one \
+                     150–250 byte chunk per call) → `write_file_end(path)`. Chunking keeps each \
+                     tool envelope small and is far more reliable for files over ~400 bytes. \
+                     \
+                     Emit `arguments` as a JSON object literal (not a stringified JSON). \
+                     Correct: `\"arguments\": {\"path\": \"/abs/x.rs\", \"content\": \"fn main(){}\"}`."
                         .to_string(),
                 ),
                 parameters: serde_json::json!({
@@ -1210,6 +1312,92 @@ fn synthetic_file_tools() -> Vec<ToolDefinition> {
                 }),
             },
         },
+        // Chunked-write protocol. Motivation: telemetry on v7 codex
+        // smoke (2026-05-13) showed FINAL-Bench 35B-A3B-Opus losing
+        // structural coherence (stray chars, nested types crossing
+        // scope, over-closing braces) when emitting multi-KB Rust
+        // source inside a single `<tool_call>` envelope. Breaking the
+        // write into 150–250 byte chunks keeps each emit short, well
+        // inside the model's reliable-emit window, and makes per-call
+        // failures recoverable instead of nuking the whole file.
+        ToolDefinition {
+            kind: "function".to_string(),
+            function: ToolFunction {
+                name: SYNTHETIC_TOOL_WRITE_FILE_BEGIN.to_string(),
+                description: Some(
+                    "Begin a chunked write. Creates (or truncates) the file at `path` to an \
+                     empty state. Follow with one or more `write_file_chunk(path, chunk)` \
+                     calls, then a single `write_file_end(path)` to commit. Use this when the \
+                     content you intend to write is over ~400 bytes — short writes can use \
+                     `write_file(path, content)` in one shot."
+                        .to_string(),
+                ),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Absolute path of the file to (re)create."
+                        }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                }),
+            },
+        },
+        ToolDefinition {
+            kind: "function".to_string(),
+            function: ToolFunction {
+                name: SYNTHETIC_TOOL_WRITE_FILE_CHUNK.to_string(),
+                description: Some(
+                    "Append one chunk of text to a file previously opened with \
+                     `write_file_begin(path)`. Recommended chunk size: 150–250 bytes (about \
+                     8–15 lines of code) — smaller chunks emit more reliably than long ones. \
+                     Call repeatedly until the entire content is on disk, then call \
+                     `write_file_end(path)` to commit."
+                        .to_string(),
+                ),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Absolute path of the file being assembled."
+                        },
+                        "chunk": {
+                            "type": "string",
+                            "description": "The text to append to the file. Newlines and \
+                                            special characters are preserved verbatim."
+                        }
+                    },
+                    "required": ["path", "chunk"],
+                    "additionalProperties": false
+                }),
+            },
+        },
+        ToolDefinition {
+            kind: "function".to_string(),
+            function: ToolFunction {
+                name: SYNTHETIC_TOOL_WRITE_FILE_END.to_string(),
+                description: Some(
+                    "Commit a chunked write. Returns the final byte count of the file. Call \
+                     once after all `write_file_chunk` calls have landed. (No-op apart from \
+                     reporting size — chunks are flushed as they arrive.)"
+                        .to_string(),
+                ),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Absolute path of the file being finalized."
+                        }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                }),
+            },
+        },
     ]
 }
 
@@ -1228,16 +1416,67 @@ fn synthetic_file_tools() -> Vec<ToolDefinition> {
 /// model emitted a fourth, badly-shaped attempt after three good
 /// ones.
 fn rewrite_synthetic_tool_call(name: &str, arguments_json: &str) -> Option<(String, String)> {
-    if name != SYNTHETIC_TOOL_WRITE_FILE && name != SYNTHETIC_TOOL_READ_FILE {
+    let is_synthetic = matches!(
+        name,
+        SYNTHETIC_TOOL_WRITE_FILE
+            | SYNTHETIC_TOOL_READ_FILE
+            | SYNTHETIC_TOOL_WRITE_FILE_BEGIN
+            | SYNTHETIC_TOOL_WRITE_FILE_CHUNK
+            | SYNTHETIC_TOOL_WRITE_FILE_END
+    );
+    if !is_synthetic {
         return None;
     }
+    // Telemetry: every synthetic tool call gets a structured log line
+    // with the model's emit shape so we can answer "what did the
+    // model actually ask us to do?" without re-reading the codex
+    // session log. Fields:
+    //   - args_bytes: length of the JSON args string emitted by the
+    //     model
+    //   - args_parsed: whether the args parsed as a JSON object
+    //   - raw_path / normalized_path: visible whitespace mangling, if any
+    //   - content_bytes: size of write_file content
+    //   - content_starts_with: first 80 chars of content (for sanity)
+    //
+    // Emitted at info level — every synthetic call is meaningful work
+    // and the volume is bounded by the model's iteration count.
+    let parsed_result: Result<serde_json::Value, _> = serde_json::from_str(arguments_json);
+    let args_parsed = parsed_result.is_ok();
     let args: serde_json::Value =
-        serde_json::from_str(arguments_json).unwrap_or(serde_json::Value::Null);
-    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        parsed_result.unwrap_or(serde_json::Value::Null);
+    let raw_path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+    let path_owned = normalize_path_segments(raw_path);
+    let path = path_owned.as_str();
+    // `content` for write_file, `chunk` for write_file_chunk; absent
+    // for the other shapes.
+    let content = args
+        .get("content")
+        .or_else(|| args.get("chunk"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let content_starts_with: String = content.chars().take(80).collect();
+    tracing::info!(
+        tool = %name,
+        args_bytes = arguments_json.len(),
+        args_parsed,
+        raw_path = %raw_path,
+        normalized_path = %path,
+        path_was_mangled = (raw_path != path),
+        content_bytes = content.len(),
+        content_starts_with = %content_starts_with,
+        "responses: synthetic tool call inbound"
+    );
+
     let cmd = if path.is_empty() {
         // Malformed: emit a noisy shell error so the model can self-
         // correct on the next turn. Never let codex see the synthetic
         // name.
+        tracing::warn!(
+            tool = %name,
+            args_bytes = arguments_json.len(),
+            args_parsed,
+            "responses: synthetic call had empty/missing path — emitting shell error"
+        );
         format!(
             "echo 'rewrite_synthetic_tool_call: {} called with empty path' >&2; exit 64",
             name
@@ -1245,21 +1484,112 @@ fn rewrite_synthetic_tool_call(name: &str, arguments_json: &str) -> Option<(Stri
     } else {
         match name {
             SYNTHETIC_TOOL_WRITE_FILE => {
-                let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
-                format!(
-                    "printf '%s' {} > {}",
-                    shell_single_quote(content),
-                    shell_single_quote(path)
-                )
+                // Hard cap: route anything over ~350 bytes through the
+                // chunked protocol. The model's training prior biases
+                // toward single-shot writes regardless of the tool
+                // description's recommendation; without this guard the
+                // local model fails reliably on multi-KB content. The
+                // error message names the exact alternative tools so
+                // the model can self-correct on the next turn.
+                if content.len() > 350 {
+                    tracing::warn!(
+                        tool = %name,
+                        content_bytes = content.len(),
+                        path = %path,
+                        "responses: synthetic write_file content over 350 bytes — routing to chunked-write nudge"
+                    );
+                    format!(
+                        "echo 'write_file refused: content is {} bytes which exceeds the 350-byte single-shot limit. Use write_file_begin(path) then a series of write_file_chunk(path, chunk) calls (150-250 bytes each), then write_file_end(path).' >&2; exit 65",
+                        content.len()
+                    )
+                } else {
+                    // Short write — truncate-and-write in one shell
+                    // statement. Parent dir created on demand.
+                    let dir = parent_dir(path);
+                    format!(
+                        "mkdir -p {} && printf '%s' {} > {}",
+                        shell_single_quote(&dir),
+                        shell_single_quote(content),
+                        shell_single_quote(path)
+                    )
+                }
             }
             SYNTHETIC_TOOL_READ_FILE => {
                 format!("cat {}", shell_single_quote(path))
             }
+            SYNTHETIC_TOOL_WRITE_FILE_BEGIN => {
+                // Truncate the file to empty so subsequent
+                // write_file_chunk calls append from a known state.
+                // Create parent dir on demand.
+                let dir = parent_dir(path);
+                format!(
+                    "mkdir -p {} && : > {} && wc -c < {}",
+                    shell_single_quote(&dir),
+                    shell_single_quote(path),
+                    shell_single_quote(path)
+                )
+            }
+            SYNTHETIC_TOOL_WRITE_FILE_CHUNK => {
+                format!(
+                    "printf '%s' {} >> {} && wc -c < {}",
+                    shell_single_quote(content),
+                    shell_single_quote(path),
+                    shell_single_quote(path)
+                )
+            }
+            SYNTHETIC_TOOL_WRITE_FILE_END => {
+                format!("wc -c < {}", shell_single_quote(path))
+            }
             _ => unreachable!("guarded by name check above"),
         }
     };
+    tracing::info!(
+        tool = %name,
+        cmd_bytes = cmd.len(),
+        path = %path,
+        will_write_to = %path,
+        "responses: synthetic call rewritten to exec_command"
+    );
     let new_args = serde_json::json!({ "cmd": cmd });
     Some(("exec_command".to_string(), new_args.to_string()))
+}
+
+/// Parent directory of `path`. Returns `.` when the path has no
+/// directory component (relative bare filename) or `/` when the path
+/// is just `/<file>`.
+fn parent_dir(path: &str) -> String {
+    match path.rfind('/') {
+        Some(0) => "/".to_string(),
+        Some(i) => path[..i].to_string(),
+        None => ".".to_string(),
+    }
+}
+
+/// Normalize a filesystem path emitted by the model. Splits on `/`,
+/// trims each segment of leading/trailing whitespace, drops empty
+/// segments, rejoins with `/`. Preserves the leading `/` for
+/// absolute paths.
+///
+/// Why: local models occasionally emit `/abs/ project-name /src/lib.rs`
+/// — whitespace around segments — when markdown-emphasis tokens from
+/// the prompt bleed into tool_call arguments. Without normalization
+/// the shell writes to a sibling path that's invisible to the
+/// operator and the agent thinks it succeeded.
+fn normalize_path_segments(p: &str) -> String {
+    let absolute = p.trim_start().starts_with('/');
+    let mut out: Vec<&str> = p
+        .split('/')
+        .map(|seg| seg.trim())
+        .filter(|seg| !seg.is_empty())
+        .collect();
+    let joined = out.join("/");
+    if absolute {
+        // Re-prepend leading slash that the split-and-rejoin stripped.
+        let _ = &mut out;
+        format!("/{}", joined)
+    } else {
+        joined
+    }
 }
 
 /// POSIX sh single-quote quoting. Wraps `s` in `'...'` and replaces
@@ -1437,7 +1767,16 @@ mod tests {
         // when asserting on the translated user-supplied tools.
         let user_tools: Vec<_> = tools
             .iter()
-            .filter(|t| !matches!(t.function.name.as_str(), "write_file" | "read_file"))
+            .filter(|t| {
+                !matches!(
+                    t.function.name.as_str(),
+                    "write_file"
+                        | "read_file"
+                        | "write_file_begin"
+                        | "write_file_chunk"
+                        | "write_file_end"
+                )
+            })
             .collect();
         assert_eq!(user_tools.len(), 1);
         assert_eq!(user_tools[0].kind, "function");
@@ -1520,7 +1859,10 @@ mod tests {
         assert_eq!(name, "exec_command");
         let parsed: serde_json::Value = serde_json::from_str(&cmd_args).unwrap();
         let cmd = parsed["cmd"].as_str().unwrap();
-        assert!(cmd.starts_with("printf '%s' "));
+        // Now prefixed with `mkdir -p <parent>` so the file can land in
+        // a fresh subdirectory.
+        assert!(cmd.starts_with("mkdir -p "));
+        assert!(cmd.contains("printf '%s' "));
         assert!(cmd.contains("'/abs/PLAN.md'"));
         // Newlines survive intact in the shell-quoted content.
         assert!(cmd.contains("\n## step-01"));
@@ -1533,6 +1875,115 @@ mod tests {
         assert_eq!(name, "exec_command");
         let parsed: serde_json::Value = serde_json::from_str(&cmd_args).unwrap();
         assert_eq!(parsed["cmd"].as_str().unwrap(), "cat '/abs/x.rs'");
+    }
+
+    #[test]
+    fn write_file_refuses_oversize_content_and_nudges_chunked() {
+        // Construct content above the 350-byte ceiling.
+        let big_content = "fn x() {}\n".repeat(60); // 600 bytes
+        assert!(big_content.len() > 350);
+        let args =
+            serde_json::json!({"path":"/abs/x.rs","content":big_content}).to_string();
+        let (name, cmd_args) = rewrite_synthetic_tool_call("write_file", &args).unwrap();
+        assert_eq!(name, "exec_command");
+        let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        // Refusal short-circuits — no actual write happens.
+        assert!(cmd.contains("write_file refused"));
+        assert!(cmd.contains("exit 65"));
+        // Explicit alternative tools named in the error so the model
+        // can pick the right path on the next emit.
+        assert!(cmd.contains("write_file_begin"));
+        assert!(cmd.contains("write_file_chunk"));
+    }
+
+    #[test]
+    fn write_file_under_threshold_still_writes() {
+        let args = serde_json::json!({
+            "path":"/abs/x.rs",
+            "content":"fn main() {}\n"
+        })
+        .to_string();
+        let (_, cmd_args) = rewrite_synthetic_tool_call("write_file", &args).unwrap();
+        let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(cmd.contains("printf"));
+        assert!(!cmd.contains("refused"));
+    }
+
+    #[test]
+    fn write_file_begin_truncates_and_creates_parent() {
+        let args = serde_json::json!({"path":"/abs/sub/x.rs"}).to_string();
+        let (name, cmd_args) =
+            rewrite_synthetic_tool_call("write_file_begin", &args).unwrap();
+        assert_eq!(name, "exec_command");
+        let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(cmd.contains("mkdir -p '/abs/sub'"));
+        assert!(cmd.contains(": > '/abs/sub/x.rs'"));
+        // wc -c reports current size — useful as a sanity-check result.
+        assert!(cmd.contains("wc -c < '/abs/sub/x.rs'"));
+    }
+
+    #[test]
+    fn write_file_chunk_appends_and_reports_size() {
+        let args = serde_json::json!({
+            "path":"/abs/x.rs",
+            "chunk":"pub fn hi() {}\n"
+        })
+        .to_string();
+        let (name, cmd_args) =
+            rewrite_synthetic_tool_call("write_file_chunk", &args).unwrap();
+        assert_eq!(name, "exec_command");
+        let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        // Append (not truncate-and-write) is the load-bearing part —
+        // a chunked write would be ruined by a stray `>` (truncate).
+        assert!(cmd.contains("printf '%s' 'pub fn hi() {}\n' >> '/abs/x.rs'"));
+        assert!(cmd.contains("wc -c < '/abs/x.rs'"));
+    }
+
+    #[test]
+    fn write_file_end_reports_final_size() {
+        let args = serde_json::json!({"path":"/abs/x.rs"}).to_string();
+        let (_, cmd_args) =
+            rewrite_synthetic_tool_call("write_file_end", &args).unwrap();
+        let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert_eq!(cmd, "wc -c < '/abs/x.rs'");
+    }
+
+    #[test]
+    fn write_file_creates_parent_dir() {
+        // Single-shot write_file also benefits from on-demand parent
+        // creation — the model can write `/abs/sub/x.rs` even when
+        // `/abs/sub` doesn't exist yet.
+        let args =
+            serde_json::json!({"path":"/abs/sub/x.rs","content":"hi"}).to_string();
+        let (_, cmd_args) = rewrite_synthetic_tool_call("write_file", &args).unwrap();
+        let cmd = serde_json::from_str::<serde_json::Value>(&cmd_args).unwrap()["cmd"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(cmd.starts_with("mkdir -p '/abs/sub' && printf"));
+    }
+
+    #[test]
+    fn parent_dir_handles_edge_cases() {
+        assert_eq!(parent_dir("/a/b/c.txt"), "/a/b");
+        assert_eq!(parent_dir("/c.txt"), "/");
+        assert_eq!(parent_dir("c.txt"), ".");
+        assert_eq!(parent_dir("a/b/c.txt"), "a/b");
     }
 
     #[test]
@@ -1559,6 +2010,59 @@ mod tests {
         let cmd = parsed["cmd"].as_str().unwrap();
         assert!(cmd.contains("empty path"));
         assert!(cmd.contains("exit 64"));
+    }
+
+    #[test]
+    fn normalize_path_segments_strips_whitespace_around_segments() {
+        // Observed 2026-05-12 codex+frontdoor v4 model emit:
+        // /Users/alexsbryan/dev/ atos-experiment-oicp-types /src/lib.rs
+        let input = "/Users/alexsbryan/dev/ atos-experiment-oicp-types /src/lib.rs";
+        assert_eq!(
+            normalize_path_segments(input),
+            "/Users/alexsbryan/dev/atos-experiment-oicp-types/src/lib.rs"
+        );
+    }
+
+    #[test]
+    fn normalize_path_segments_preserves_clean_absolute_path() {
+        assert_eq!(
+            normalize_path_segments("/abs/x/y.rs"),
+            "/abs/x/y.rs"
+        );
+    }
+
+    #[test]
+    fn normalize_path_segments_handles_relative_path() {
+        assert_eq!(
+            normalize_path_segments("foo/bar/baz"),
+            "foo/bar/baz"
+        );
+        assert_eq!(
+            normalize_path_segments(" foo / bar / baz "),
+            "foo/bar/baz"
+        );
+    }
+
+    #[test]
+    fn normalize_path_segments_collapses_redundant_slashes() {
+        // `//a//b/c` becomes `/a/b/c` because empty segments are dropped.
+        assert_eq!(normalize_path_segments("//a//b/c"), "/a/b/c");
+    }
+
+    #[test]
+    fn rewrite_write_file_normalizes_corrupted_path() {
+        let args = serde_json::json!({
+            "path": "/abs/ project /src/lib.rs",
+            "content": "x"
+        })
+        .to_string();
+        let (_, cmd_args) = rewrite_synthetic_tool_call("write_file", &args).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&cmd_args).unwrap();
+        let cmd = parsed["cmd"].as_str().unwrap();
+        // Normalized path appears in the shell-quoted argument; the
+        // raw whitespace-injected form does NOT.
+        assert!(cmd.contains("'/abs/project/src/lib.rs'"));
+        assert!(!cmd.contains("'/abs/ project /src/lib.rs'"));
     }
 
     #[test]
@@ -1606,7 +2110,16 @@ mod tests {
         // file-I/O tools remain.
         let user_tools: Vec<_> = tools
             .iter()
-            .filter(|t| !matches!(t.function.name.as_str(), "write_file" | "read_file"))
+            .filter(|t| {
+                !matches!(
+                    t.function.name.as_str(),
+                    "write_file"
+                        | "read_file"
+                        | "write_file_begin"
+                        | "write_file_chunk"
+                        | "write_file_end"
+                )
+            })
             .collect();
         assert!(user_tools.is_empty());
     }

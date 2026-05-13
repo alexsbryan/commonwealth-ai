@@ -1,6 +1,7 @@
 pub mod auto_recover;
 pub mod headers;
 pub mod middleware;
+pub mod frontdoor;
 pub mod openai_types;
 pub mod responses_types;
 pub mod routes_app_internal;
