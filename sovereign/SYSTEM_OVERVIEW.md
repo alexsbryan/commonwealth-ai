@@ -934,6 +934,85 @@ filename-signalled coders).
 seen on outgoing requests and incoming claims. Consumed by an external
 governance review process (spec §4.3); **not** the scheduler.
 
+### 4.8b Coding-agent harness adapter — /v1/responses + Harness frontdoor
+
+`commonwealth-api` exposes `/v1/chat/completions` (OpenAI chat-completions
+shape) and `/v1/responses` (OpenAI Responses API shape, the path codex
+0.130+ requires). The Responses adapter is a wire-format translator over
+the unmodified chat-completions handler — same slot routing, OICP gating,
+ATOS middleware, grammar-constrained tool calls. Translation lives in
+`commonwealth/crates/commonwealth-api/src/routes_responses.rs`; the wire
+types live in `responses_types.rs`.
+
+**Harness polymorphism** (`frontdoor::Harness`): different agentic
+harnesses have different contracts, and a single reshape strategy that
+works for opencode actively fights codex. The adapter resolves the
+active harness per request from `User-Agent` header (or
+`SOVEREIGN_HARNESS` env override) and applies a per-profile pipeline:
+
+| Profile  | Trigger                                  | Distiller | Catalog filter | Synthetic write_file* | Grammar lock | Coherence baseline |
+|----------|------------------------------------------|-----------|----------------|-----------------------|--------------|--------------------|
+| Codex    | UA: `codex_cli_rs/*`                     |     -     |       -        |          -            |       -      |        yes         |
+| Opencode | UA: `opencode/*` (or legacy `SOVEREIGN_FRONTDOOR=1`) |  yes   |   yes    |       yes             |     yes      |        yes         |
+| Generic  | unknown UA, no env                       |     -     |       -        |          -            |     yes      |        yes         |
+| Bare     | `SOVEREIGN_HARNESS=bare`                 |     -     |       -        |          -            |       -      |         -          |
+
+**Why codex passthrough.** Codex 0.130 teaches the model to write files
+via `exec_command` running heredoc `apply_patch <<'EOF' *** Begin Patch
+... *** End Patch EOF`. The teaching lives in codex's verbose system
+prompt; `include_apply_patch_tool` is `false` by default, so apply_patch
+is NOT a function tool in the catalog. Distilling the prompt or
+injecting synthetic write_file tools strips the contract the model was
+trained against — verified 2026-05-13 v11-v14 oicp-types smokes (18/18
+turns shell-only, 0 file writes). The Codex profile passes the contract
+through untouched; v15 same task → 31 turns, 30/30 tool_calls parsed
+clean, 7 heredoc writes, 1076 bytes of real code landed.
+
+**Coherence baseline** (`frontdoor::apply_baseline`): runs unconditionally
+on every non-Bare profile, regardless of harness.
+- **History compression** (`apply_history_compression`): triggers when
+  `items.len() > 8` OR `total_byte_size > 20480`, whichever first. Folds
+  the older items into a single synthetic `# Conversation so far\n…`
+  user-message via a primary-slot inference pass (cached by SHA-256 of
+  the compressed range), keeps the most recent 4 items verbatim. Pure
+  observability — no contract reshape.
+- **Per-session telemetry JSONL** at
+  `~/.sovereign/codex-sessions/sessions.jsonl`. Every `/v1/responses`
+  turn writes an `inbound` record (response_id, harness, model,
+  chunked_write_active, inbound tool catalog snapshot, input item count)
+  and a `terminal` record (finish_reason, text_buffer_bytes,
+  function_calls[] each with `args_bytes` + `args_parsed_ok`). Joinable
+  by `response_id` with `jq` for post-mortem.
+
+**Opencode-only full reshape** (`frontdoor::apply` + per-profile flags
+in `translate_request`):
+- **Distiller** — primary slot rewrites codex's verbose system prompt
+  into a structured directive (task / constraints / done_when /
+  files_to_touch) plus a tool-usage policy. Cached by SHA-256 of the
+  original instructions + first user message.
+- **Catalog filter** — `CODEX_TOOL_KEEPLIST` (`exec_command`,
+  `web_search`) drops the agent-management / interactive tools that a
+  local model can't usefully dispatch.
+- **Synthetic file tools** — `write_file(path, content)`,
+  `read_file(path)`, `write_file_begin/chunk/end(path)` injected into
+  the catalog. Outgoing tool_calls get rewritten to codex-compatible
+  `exec_command` shell invocations before SSE events reach codex.
+- **Grammar lock** — promotes `tool_choice` to `"required"` so the
+  inference adapter's tool-envelope JSON-Schema grammar engages every
+  turn. Closes the args-as-stringified-JSON over-escape failure class.
+- **Chunked-write state detection** — when the most recent assistant
+  emission was `write_file_begin` or `write_file_chunk`, filters the
+  outbound catalog down to `[write_file_chunk, write_file_end]` to keep
+  the model on protocol.
+
+**Streaming SSE state machine**: one chat-completions chunk →  0..N
+Responses events. Emits the full Responses lifecycle (`response.created`
++ `in_progress` at start; `output_item.added` + `content_part.added` on
+first text; `output_text.delta` per token; `function_call_arguments.delta`
++ `.done` + `output_item.done` for tool calls; `response.completed` at
+terminal). Tool-call lifecycle emits a single full-args delta because
+the local backend extracts tool calls post-generation.
+
 ### 4.9 Frontends
 
 | Frontend            | Purpose                                                                  |
