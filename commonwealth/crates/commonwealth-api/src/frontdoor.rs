@@ -44,12 +44,109 @@ use crate::responses_types::{
 use crate::routes_inference::chat_completions;
 use crate::state::AppState;
 
-/// Env var that enables the frontdoor on a daemon. Read per call so
-/// flipping it at runtime is enough; no daemon restart needed.
+/// Env var that enables the legacy "full frontdoor" reshape. Retained
+/// as a backwards-compat alias — `SOVEREIGN_FRONTDOOR=1` now maps to
+/// the `Opencode` harness profile (the original reshape design).
+/// `SOVEREIGN_HARNESS` overrides this when set.
 pub fn is_enabled() -> bool {
     std::env::var("SOVEREIGN_FRONTDOOR")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
+}
+
+/// Which agentic-harness contract this /v1/responses request is
+/// speaking. Each profile picks a different set of passes — codex's
+/// apply_patch-trained contract resists the full reshape we built
+/// for opencode, while bare drivers (curl scripts, ATOS sandbox)
+/// don't need any of it. See `passes_for` for the per-profile pipe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Harness {
+    /// codex CLI (`codex_cli_rs/*` UA). System prompt teaches
+    /// apply_patch via `exec_command` heredoc; tool catalog excludes
+    /// apply_patch as a function. Touching the prompt or catalog
+    /// breaks the contract. Keep only the coherence baseline.
+    Codex,
+    /// opencode CLI (`opencode/*` UA) — the original frontdoor
+    /// target. Verbose system prompt, missing apply_patch teaching,
+    /// benefits from distillation + synthetic write_file injection +
+    /// grammar lock.
+    Opencode,
+    /// Unknown harness — apply the conservative middle ground:
+    /// coherence baseline + grammar lock when tool_choice="required",
+    /// but DO NOT reshape the prompt or inject synthetic tools.
+    Generic,
+    /// Bare driver (curl smoke, ATOS sandbox loop) — nothing applies.
+    Bare,
+}
+
+impl Harness {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Harness::Codex => "codex",
+            Harness::Opencode => "opencode",
+            Harness::Generic => "generic",
+            Harness::Bare => "bare",
+        }
+    }
+
+    /// Whether the distiller should run on this harness's request.
+    pub fn runs_distiller(self) -> bool {
+        matches!(self, Harness::Opencode)
+    }
+
+    /// Whether the tool catalog should be filtered to
+    /// `CODEX_TOOL_KEEPLIST` + synthetic tools.
+    pub fn runs_catalog_filter(self) -> bool {
+        matches!(self, Harness::Opencode)
+    }
+
+    /// Whether synthetic `write_file*` / `read_file` should be
+    /// injected into the catalog.
+    pub fn runs_synthetic_tools(self) -> bool {
+        matches!(self, Harness::Opencode)
+    }
+
+    /// Whether `tool_choice` should be promoted to `"required"` to
+    /// engage the inference adapter's tool-envelope grammar.
+    pub fn runs_grammar_lock(self) -> bool {
+        matches!(self, Harness::Opencode | Harness::Generic)
+    }
+
+    /// Whether history compression / telemetry baseline should run.
+    /// Every harness except `Bare` benefits.
+    pub fn runs_coherence_baseline(self) -> bool {
+        !matches!(self, Harness::Bare)
+    }
+}
+
+/// Resolve the active harness from (in priority order):
+/// 1. `SOVEREIGN_HARNESS` env var (explicit override)
+/// 2. `User-Agent` header
+/// 3. Legacy `SOVEREIGN_FRONTDOOR=1` → Opencode
+/// 4. Default → Generic
+pub fn detect_harness(headers: &HeaderMap) -> Harness {
+    if let Ok(forced) = std::env::var("SOVEREIGN_HARNESS") {
+        match forced.to_ascii_lowercase().as_str() {
+            "codex" => return Harness::Codex,
+            "opencode" => return Harness::Opencode,
+            "bare" => return Harness::Bare,
+            "generic" => return Harness::Generic,
+            _ => {} // fall through to UA / legacy detection
+        }
+    }
+    if let Some(ua) = headers.get("user-agent").and_then(|v| v.to_str().ok()) {
+        let ua_lower = ua.to_ascii_lowercase();
+        if ua_lower.contains("codex_cli") || ua_lower.contains("codex-cli") {
+            return Harness::Codex;
+        }
+        if ua_lower.contains("opencode") {
+            return Harness::Opencode;
+        }
+    }
+    if is_enabled() {
+        return Harness::Opencode;
+    }
+    Harness::Generic
 }
 
 /// Tool-name allowlist applied to codex's function tool catalog. Anything
@@ -81,25 +178,45 @@ pub fn tool_keeplist_contains(name: &str) -> bool {
     CODEX_TOOL_KEEPLIST.contains(&name)
 }
 
-/// Apply all frontdoor passes to `req` in-place. Safe to call when
-/// disabled — caller is expected to gate via `is_enabled()` first,
-/// but every internal step short-circuits on missing inputs anyway.
+/// Apply ALL frontdoor passes to `req` in-place. Reshapes codex's
+/// verbose harness contract into the local-model-native dialect.
+/// Gated by `is_enabled()` — see module docs for the full rationale.
+///
+/// As of 2026-05-13 (post-v14 review): the full pass is known to
+/// FIGHT codex's training contract (apply_patch teaching, free-text
+/// finalization). Use `apply_baseline` for non-frontdoor sessions
+/// to keep the coherence aids (history compression) without the
+/// re-shaping. Behind the gate the full pass is still useful for
+/// non-codex harnesses (opencode, bare-sandbox-style drivers) where
+/// the verbose shaping is what's required.
 pub async fn apply(state: &AppState, headers: &HeaderMap, req: &mut ResponsesRequest) {
     // Half 1: distiller (instructions rewriting). Cached by hash of
     // the original `instructions` + first user message.
     apply_distiller(state, headers, req).await;
-    // Half 2: history compression. As codex's conversation history
-    // accumulates (every previous tool_call + tool_result is
-    // resent every turn), the model loses coherence. When the input
-    // array exceeds the trigger length, fold the oldest items into a
-    // single summary user-message and keep only the most recent N
-    // items verbatim. Cached by hash of the compressed range.
+    // Half 2: history compression — see apply_baseline for details.
     apply_history_compression(state, headers, req).await;
     // Half 3: catalog filter is applied during request translation,
     // not here — `routes_responses::translate_request` consults
     // `tool_keeplist_contains` directly. Centralising the policy in
     // one place keeps the translation-time path tight and lets tests
     // exercise the filter without spinning up an AppState.
+}
+
+/// Apply ONLY the coherence-preserving passes. Always safe to call:
+/// no harness-shape assumptions, no prompt surgery, no tool catalog
+/// changes. Today this is just history compression; pure observability
+/// (telemetry) lives in the route handler, not here.
+///
+/// Rationale: the bigger frontdoor passes (distiller, catalog filter,
+/// synthetic tools, grammar lock) interfere with codex's training
+/// contract. History compression is orthogonal — it prevents MoE
+/// context-drift on any agentic harness regardless of contract shape.
+pub async fn apply_baseline(
+    state: &AppState,
+    headers: &HeaderMap,
+    req: &mut ResponsesRequest,
+) {
+    apply_history_compression(state, headers, req).await;
 }
 
 /// Distilled directive produced by the fast-slot pass. Wire shape is
@@ -141,6 +258,28 @@ impl DistilledDirective {
             }
             out.push('\n');
         }
+        // Tool-usage policy injected every render. v13 telemetry
+        // 2026-05-13 04:08 showed the grammar-locked MoE picking
+        // exec_command for EVERY emission (16/16 turns, 0 write_file),
+        // because codex's training prior biases shell-first when the
+        // grammar permits both shapes. The model also corrupted paths
+        // in shell args (typo `tos-experiment-…`, sibling dir
+        // `oicp-types`). This policy block anchors the model to
+        // synthetic file tools for file ops and pins absolute paths
+        // verbatim from the `Files likely involved` section.
+        out.push_str("## Tool usage policy\n\n");
+        out.push_str(
+            "- To create or replace a file (any `.rs`, `.toml`, `.md`, `.txt`, `.json`): call `write_file(path, content)`. For content over 350 bytes call `write_file_begin(path)` then a series of `write_file_chunk(path, chunk)` (150-250 bytes each) then `write_file_end(path)`. NEVER use a shell heredoc, `cat > file <<EOF`, `echo > file`, or `printf > file` — those paths break under the grammar and lose content.\n",
+        );
+        out.push_str(
+            "- To read a file: call `read_file(path)`. Do NOT use `cat`, `head`, `tail`, `less`, `ls`, or `find` via `exec_command` — `read_file` is faster and avoids path-corruption typos.\n",
+        );
+        out.push_str(
+            "- Use `exec_command` ONLY for build/test verification: `cargo test`, `cargo build`, `cargo check`, `cargo run`. Do NOT use it for filesystem navigation or file inspection.\n",
+        );
+        out.push_str(
+            "- Use the absolute paths listed under `Files likely involved` VERBATIM. Do NOT invent new directories. Do NOT create sibling paths. The workdir is fixed.\n\n",
+        );
         out
     }
 }
@@ -181,7 +320,11 @@ Hard rules:
 /// Run the distiller pass and overwrite `req.instructions` with the
 /// distilled directive. Cached by SHA of the original instructions +
 /// first user input.
-async fn apply_distiller(state: &AppState, headers: &HeaderMap, req: &mut ResponsesRequest) {
+pub(crate) async fn apply_distiller(
+    state: &AppState,
+    headers: &HeaderMap,
+    req: &mut ResponsesRequest,
+) {
     // Build the cache key from the original system + initial user
     // text. Multi-turn re-prompts of the same session land on the
     // same key.
@@ -370,6 +513,37 @@ fn canonical_source_blob(req: &ResponsesRequest) -> String {
 /// corruption and concatenated tool_calls in late-turn emits.
 const HISTORY_COMPRESS_TRIGGER: usize = 8;
 const HISTORY_KEEP_RECENT: usize = 4;
+/// Byte-size trigger (sum of item content lengths). Catches the case
+/// where item count is below `HISTORY_COMPRESS_TRIGGER` but individual
+/// turns carry heavy tool-results or multi-KB function_call args —
+/// codex shape that the item-count trigger misses. Matches the
+/// arxiv-named "agentic success under 20-30K tokens" working-context
+/// ceiling for MoE coherence.
+const HISTORY_COMPRESS_BYTES: usize = 20_480;
+
+fn items_byte_size(items: &[ResponsesInputItem]) -> usize {
+    items.iter().map(item_byte_size).sum()
+}
+
+fn item_byte_size(item: &ResponsesInputItem) -> usize {
+    match item {
+        ResponsesInputItem::Message(m) => match &m.content {
+            MessageContent::Text(s) => s.len(),
+            MessageContent::Parts(ps) => ps.iter().map(part_byte_size).sum(),
+        },
+        ResponsesInputItem::FunctionCall(c) => c.name.len() + c.arguments.len(),
+        ResponsesInputItem::FunctionCallOutput(o) => o.output.len(),
+    }
+}
+
+fn part_byte_size(p: &ResponsesContentPart) -> usize {
+    match p {
+        ResponsesContentPart::InputText { text } | ResponsesContentPart::OutputText { text } => {
+            text.len()
+        }
+        ResponsesContentPart::Other => 0,
+    }
+}
 
 static HISTORY_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
 
@@ -404,13 +578,34 @@ async fn apply_history_compression(
         ResponsesInput::Items(v) => v,
         ResponsesInput::Text(_) => return,
     };
-    if items.len() <= HISTORY_COMPRESS_TRIGGER {
+    let total_bytes = items_byte_size(items);
+    let items_over = items.len() > HISTORY_COMPRESS_TRIGGER;
+    let bytes_over = total_bytes > HISTORY_COMPRESS_BYTES;
+    if !items_over && !bytes_over {
         return;
     }
-    let split_at = items.len() - HISTORY_KEEP_RECENT;
+    // Need at least 2 items to compress: one to summarize, one to keep.
+    if items.len() < 2 {
+        return;
+    }
+    // Normally keep the last HISTORY_KEEP_RECENT verbatim. When ONLY
+    // the byte trigger fires (small turn count but large bodies), keep
+    // fewer so compression still happens. Reserve at least 1 for the
+    // summary slot.
+    let keep_recent = HISTORY_KEEP_RECENT.min(items.len() - 1);
+    let split_at = items.len() - keep_recent;
     if split_at == 0 {
         return;
     }
+    info!(
+        item_count = items.len(),
+        total_bytes,
+        items_over,
+        bytes_over,
+        split_at,
+        keep_recent,
+        "frontdoor: history compression triggered"
+    );
     let to_compress: Vec<ResponsesInputItem> = items.drain(..split_at).collect();
 
     let history_blob = render_items_for_distill(&to_compress);
@@ -645,6 +840,113 @@ mod tests {
     fn keeplist_keeps_exec_command_and_web_search() {
         assert!(tool_keeplist_contains("exec_command"));
         assert!(tool_keeplist_contains("web_search"));
+    }
+
+    #[test]
+    fn harness_per_profile_pass_pipeline_is_what_we_expect() {
+        // Codex: nothing reshapes its contract. Only coherence
+        // baseline keeps multi-turn sessions sane.
+        assert!(!Harness::Codex.runs_distiller());
+        assert!(!Harness::Codex.runs_catalog_filter());
+        assert!(!Harness::Codex.runs_synthetic_tools());
+        assert!(!Harness::Codex.runs_grammar_lock());
+        assert!(Harness::Codex.runs_coherence_baseline());
+
+        // Opencode: full reshape (original frontdoor target).
+        assert!(Harness::Opencode.runs_distiller());
+        assert!(Harness::Opencode.runs_catalog_filter());
+        assert!(Harness::Opencode.runs_synthetic_tools());
+        assert!(Harness::Opencode.runs_grammar_lock());
+        assert!(Harness::Opencode.runs_coherence_baseline());
+
+        // Generic: middle ground — grammar lock for tool-shape
+        // discipline, no prompt or catalog surgery.
+        assert!(!Harness::Generic.runs_distiller());
+        assert!(!Harness::Generic.runs_catalog_filter());
+        assert!(!Harness::Generic.runs_synthetic_tools());
+        assert!(Harness::Generic.runs_grammar_lock());
+        assert!(Harness::Generic.runs_coherence_baseline());
+
+        // Bare: zero interference.
+        assert!(!Harness::Bare.runs_distiller());
+        assert!(!Harness::Bare.runs_catalog_filter());
+        assert!(!Harness::Bare.runs_synthetic_tools());
+        assert!(!Harness::Bare.runs_grammar_lock());
+        assert!(!Harness::Bare.runs_coherence_baseline());
+    }
+
+    #[test]
+    fn detect_harness_reads_user_agent_first() {
+        use axum::http::HeaderValue;
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", HeaderValue::from_static("codex_cli_rs/0.130.0"));
+        assert_eq!(detect_harness(&h), Harness::Codex);
+
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", HeaderValue::from_static("opencode/2.1.0"));
+        assert_eq!(detect_harness(&h), Harness::Opencode);
+
+        // Empty UA + no env override = Generic (Bare requires explicit opt-in).
+        let h = HeaderMap::new();
+        let prior = std::env::var("SOVEREIGN_HARNESS").ok();
+        let prior_fd = std::env::var("SOVEREIGN_FRONTDOOR").ok();
+        std::env::remove_var("SOVEREIGN_HARNESS");
+        std::env::remove_var("SOVEREIGN_FRONTDOOR");
+        assert_eq!(detect_harness(&h), Harness::Generic);
+
+        // SOVEREIGN_HARNESS env wins over UA.
+        std::env::set_var("SOVEREIGN_HARNESS", "bare");
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", HeaderValue::from_static("codex_cli_rs/0.130.0"));
+        assert_eq!(detect_harness(&h), Harness::Bare);
+
+        // Legacy SOVEREIGN_FRONTDOOR=1 maps to Opencode when no
+        // explicit harness override and no UA hint.
+        std::env::remove_var("SOVEREIGN_HARNESS");
+        std::env::set_var("SOVEREIGN_FRONTDOOR", "1");
+        let h = HeaderMap::new();
+        assert_eq!(detect_harness(&h), Harness::Opencode);
+
+        // Restore prior env values.
+        match prior {
+            Some(v) => std::env::set_var("SOVEREIGN_HARNESS", v),
+            None => std::env::remove_var("SOVEREIGN_HARNESS"),
+        }
+        match prior_fd {
+            Some(v) => std::env::set_var("SOVEREIGN_FRONTDOOR", v),
+            None => std::env::remove_var("SOVEREIGN_FRONTDOOR"),
+        }
+    }
+
+    #[test]
+    fn items_byte_size_counts_text_args_and_outputs() {
+        use crate::responses_types::*;
+        let items = vec![
+            ResponsesInputItem::Message(MessageItem {
+                role: "user".into(),
+                content: MessageContent::Text("abc".into()),
+            }),
+            ResponsesInputItem::Message(MessageItem {
+                role: "assistant".into(),
+                content: MessageContent::Parts(vec![
+                    ResponsesContentPart::InputText { text: "wxyz".into() },
+                    ResponsesContentPart::OutputText { text: "123".into() },
+                    ResponsesContentPart::Other,
+                ]),
+            }),
+            ResponsesInputItem::FunctionCall(FunctionCallItem {
+                call_id: "c1".into(),
+                name: "exec_command".into(),
+                arguments: "{\"cmd\":\"ls\"}".into(),
+                id: None,
+            }),
+            ResponsesInputItem::FunctionCallOutput(FunctionCallOutputItem {
+                call_id: "c1".into(),
+                output: "ok".into(),
+            }),
+        ];
+        // Sum: 3 + (4+3+0) + (12+12) + 2 = 36
+        assert_eq!(items_byte_size(&items), 3 + 7 + 24 + 2);
     }
 
     #[test]
