@@ -34,6 +34,10 @@ toml = { workspace = true }
 thiserror = { workspace = true }
 bytes = { workspace = true }
 hex = "0.4"
+# `libc::kill` for the `pipeline_pause` handler — needs to SIGTERM
+# local `sovereign pipeline run` PIDs found via `/proc/`. Same usage
+# pattern as `sovereign-cli/src/pipeline_cmd.rs`.
+libc = "0.2"
 reqwest = { workspace = true }
 # `LocalInferenceService` is an async trait with streaming return
 # types; needs async-trait for the sugar and futures for the

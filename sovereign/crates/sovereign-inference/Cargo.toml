@@ -23,14 +23,20 @@ reqwest = { workspace = true, features = ["stream"] }
 # running it serially on one core was the dominant Phase-1 latency.
 rayon = "1.10"
 
-# llama.cpp's GPU backend is picked per-OS. If you're on a Vulkan-based
-# toolbox on Linux, swap "rocm" → "vulkan" below (one-line edit; no
-# code changes).
+# llama.cpp's GPU backend is picked per-OS. Linux uses Vulkan because
+# ROCm crashes in `ggml_cpu_extra_work_size` during Qwen3-A3B MoE
+# inference on gfx1151 — a secondary CPU SEGV after a primary GPU
+# memory fault. Upstream regression tracked at
+# https://github.com/ggml-org/llama.cpp/issues/20176 (introduced by
+# PR #20087); maintainer-acknowledged workaround in #19880 is to use
+# the Vulkan backend, which is GPU-accelerated on the same hardware
+# and bypasses the buggy ROCm+MoE path entirely. Revisit once #20176
+# lands a fix in a llama-cpp-2 release we can pin to.
 [target.'cfg(target_os = "macos")'.dependencies]
 llama-cpp-2 = { version = "0.1.145", features = ["metal", "llguidance"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-llama-cpp-2 = { version = "0.1.145", features = ["rocm", "llguidance"] }
+llama-cpp-2 = { version = "0.1.145", features = ["vulkan", "llguidance"] }
 
 [dev-dependencies]
 tempfile = "3"

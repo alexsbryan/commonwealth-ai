@@ -51,9 +51,11 @@ const HELP: Help = Help {
             ),
             (
                 "pause <recipe-id>",
-                "Gracefully stop the active driver for this recipe (SIGTERM → drain → \
-                 exit). Worklist state persists; `sovereign pipeline run` resumes from \
-                 where it left off. Use --force to skip drain (SIGKILL).",
+                "Gracefully stop active drivers for this recipe across the mesh \
+                 (SIGTERM → drain → exit). Worklist state persists; \
+                 `sovereign pipeline run` resumes from where it left off. \
+                 Use --force for SIGKILL. Use --local-only to skip the mesh \
+                 fanout and only signal local PIDs.",
             ),
             (
                 "pod up",
@@ -87,6 +89,13 @@ const HELP: Help = Help {
                 "--key <slug>",
                 "(run) Enqueue just this one key (repeatable). Overrides `[source]`. \
                  Handy for retrying a single failed slug.",
+            ),
+            (
+                "--concurrency <N>",
+                "(run) Override `[dispatch].concurrency` for this invocation. Use to fan out a \
+                 single-laptop recipe across mesh peers — pass `<peers_online>` and let the \
+                 daemon's load balancer distribute units. Adaptive backoff still applies if \
+                 capacity isn't really there.",
             ),
         ]),
         HelpSection::Examples(&[
@@ -138,7 +147,8 @@ async fn cmd_run(args: &[String]) -> i32 {
     let Some(recipe_path) = args.first().map(PathBuf::from) else {
         eprintln!(
             "usage: sovereign pipeline run <recipe.toml> \
-             [--db <path>] [--seed-only] [--slugs <path>] [--key <slug>]"
+             [--db <path>] [--seed-only] [--slugs <path>] [--key <slug>] \
+             [--concurrency <N>]"
         );
         return 2;
     };
@@ -146,6 +156,7 @@ async fn cmd_run(args: &[String]) -> i32 {
     let mut seed_only = false;
     let mut slugs_path: Option<PathBuf> = None;
     let mut keys_override: Vec<String> = Vec::new();
+    let mut concurrency_override: Option<u32> = None;
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {
@@ -161,6 +172,20 @@ async fn cmd_run(args: &[String]) -> i32 {
             "--key" => {
                 i += 1;
                 keys_override.push(args[i].clone());
+            }
+            "--concurrency" => {
+                i += 1;
+                match args[i].parse::<u32>() {
+                    Ok(n) if n >= 1 => concurrency_override = Some(n),
+                    Ok(_) => {
+                        eprintln!("--concurrency must be >= 1");
+                        return 2;
+                    }
+                    Err(_) => {
+                        eprintln!("--concurrency: '{}' is not an integer", args[i]);
+                        return 2;
+                    }
+                }
             }
             other => {
                 eprintln!("unknown flag: {other}");
@@ -187,6 +212,18 @@ async fn cmd_run(args: &[String]) -> i32 {
         // not the recipe dir — clear base_dir so absolute resolution
         // applies. Absolute paths work either way.
         recipe.base_dir = None;
+    }
+
+    // Concurrency override — runtime knob for fanning a single-laptop
+    // recipe across mesh peers without editing the recipe file. The
+    // adaptive layer still backs off on failure signals, so an
+    // optimistic value is safe.
+    if let Some(n) = concurrency_override {
+        let prior = recipe.dispatch.concurrency;
+        if prior != n {
+            eprintln!("concurrency override: recipe {prior} → CLI {n}");
+        }
+        recipe.dispatch.concurrency = n;
     }
     let db_path = db_path.unwrap_or_else(default_db_path);
     if let Some(parent) = db_path.parent() {
@@ -406,13 +443,15 @@ fn find_driver_pids(recipe_id: &str) -> Vec<u32> {
 
 async fn cmd_pause(args: &[String]) -> i32 {
     let Some(recipe_id) = args.first().cloned() else {
-        eprintln!("usage: sovereign pipeline pause <recipe-id> [--force]");
+        eprintln!("usage: sovereign pipeline pause <recipe-id> [--force] [--local-only]");
         return 2;
     };
     let mut force = false;
+    let mut local_only = false;
     for arg in &args[1..] {
         match arg.as_str() {
             "--force" => force = true,
+            "--local-only" => local_only = true,
             other => {
                 eprintln!("unknown flag: {other}");
                 return 2;
@@ -420,9 +459,41 @@ async fn cmd_pause(args: &[String]) -> i32 {
         }
     }
 
+    // Default path: ask the local daemon to fan the pause out over the
+    // mesh. The pipeline driver runs locally on each peer against its
+    // own worklist DB, so a local /proc walk on this host stops only
+    // the driver on this host — peer drivers keep claiming work. The
+    // daemon's handler hits its own /proc + forwards the same request
+    // to every online peer with fanout=false.
+    //
+    // `--local-only` (and the daemon-down fallback) keeps today's
+    // behavior for the rare case where the operator deliberately only
+    // wants to stop this host.
+    if !local_only {
+        match mesh_pause_via_daemon(&recipe_id, force).await {
+            Ok(rendered) => {
+                print!("{rendered}");
+                return 0;
+            }
+            Err(MeshPauseError::DaemonDown) => {
+                eprintln!(
+                    "local daemon unreachable on :9742 — falling back to local-only pause; \
+                     peer drivers will keep running until you restart the daemon or run \
+                     `pipeline pause --local-only` on each peer."
+                );
+                // Fall through to the local-only path below.
+            }
+            Err(MeshPauseError::Other(msg)) => {
+                eprintln!("{msg}");
+                return 1;
+            }
+        }
+    }
+
+    // ── Local-only path (legacy / fallback) ─────────────────────────
     let pids = find_driver_pids(&recipe_id);
     if pids.is_empty() {
-        println!("no active driver for recipe `{recipe_id}` — nothing to pause");
+        println!("no active driver for recipe `{recipe_id}` on this host — nothing to pause");
         return 0;
     }
 
@@ -476,6 +547,120 @@ async fn cmd_pause(args: &[String]) -> i32 {
         }
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
+}
+
+/// Failures from the mesh-pause path that the caller routes
+/// differently. `DaemonDown` falls through to local-only; `Other`
+/// surfaces and exits non-zero.
+enum MeshPauseError {
+    DaemonDown,
+    Other(String),
+}
+
+/// Per-node pause result returned by the daemon's
+/// `/internal/pipeline/pause` aggregate response.
+#[derive(serde::Deserialize)]
+struct PausePerNode {
+    node: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    pids_signaled: Vec<u32>,
+    #[serde(default)]
+    drained: bool,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+/// Aggregate response from the daemon — local result plus per-peer.
+#[derive(serde::Deserialize)]
+struct PauseAggregate {
+    local: PausePerNode,
+    #[serde(default)]
+    peers: Vec<PausePerNode>,
+}
+
+/// POST `/internal/pipeline/pause` on the local daemon (:9742, the
+/// peer-accessible internal router, also reachable from localhost).
+/// The daemon does the local /proc walk + concurrently forwards to
+/// every online peer with `fanout: false`, returning an aggregate.
+/// Render the result for the operator.
+async fn mesh_pause_via_daemon(
+    recipe_id: &str,
+    force: bool,
+) -> std::result::Result<String, MeshPauseError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| MeshPauseError::Other(format!("build http client: {e}")))?;
+
+    let body = serde_json::json!({
+        "recipe_id": recipe_id,
+        "force": force,
+        "fanout": true,
+    });
+
+    let url = "http://127.0.0.1:9742/internal/pipeline/pause";
+    let resp = match client.post(url).json(&body).send().await {
+        Ok(r) => r,
+        Err(e) if e.is_connect() || e.is_timeout() => {
+            return Err(MeshPauseError::DaemonDown);
+        }
+        Err(e) => return Err(MeshPauseError::Other(format!("POST {url}: {e}"))),
+    };
+
+    let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Err(MeshPauseError::Other(format!(
+            "local daemon doesn't expose /internal/pipeline/pause — rebuild + restart it to \
+             enable mesh-aware pause, or pass --local-only to use the legacy path"
+        )));
+    }
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(MeshPauseError::Other(format!(
+            "{url} returned {status}: {body}"
+        )));
+    }
+
+    let agg: PauseAggregate = resp
+        .json()
+        .await
+        .map_err(|e| MeshPauseError::Other(format!("parse response: {e}")))?;
+
+    let mut out = String::new();
+    out.push_str(&render_pause_node(&agg.local, recipe_id, force));
+    if agg.peers.is_empty() {
+        out.push_str("(no other peers online — local pause only)\n");
+    } else {
+        for peer in &agg.peers {
+            out.push_str(&render_pause_node(peer, recipe_id, force));
+        }
+    }
+    Ok(out)
+}
+
+fn render_pause_node(n: &PausePerNode, recipe_id: &str, force: bool) -> String {
+    let label = match n.name.as_deref() {
+        Some(name) => format!("{name} ({})", n.node),
+        None => n.node.clone(),
+    };
+    if let Some(err) = n.error.as_deref() {
+        return format!("✗ {label}: {err}\n");
+    }
+    if n.pids_signaled.is_empty() {
+        return format!("· {label}: no active `{recipe_id}` driver — nothing to pause\n");
+    }
+    let signame = if force { "SIGKILL" } else { "SIGTERM" };
+    let drained_note = if n.drained {
+        "drained cleanly"
+    } else {
+        "drain timed out — driver may be wedged; retry with --force"
+    };
+    format!(
+        "✓ {label}: {signame} pids {:?} ({drained_note})\n",
+        n.pids_signaled
+    )
 }
 
 async fn cmd_pod(args: &[String]) -> i32 {
