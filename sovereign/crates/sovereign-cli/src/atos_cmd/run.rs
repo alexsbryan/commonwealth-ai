@@ -107,6 +107,7 @@ struct RunCfg {
 enum DriverKind {
     Opencode,
     Claude,
+    Codex,
 }
 
 impl DriverKind {
@@ -114,6 +115,7 @@ impl DriverKind {
         match self {
             Self::Opencode => "opencode",
             Self::Claude => "claude",
+            Self::Codex => "codex",
         }
     }
 }
@@ -131,7 +133,10 @@ impl RunCfg {
         let driver = match get_flag(&flags, "--driver").as_deref() {
             None | Some("") | Some("opencode") => DriverKind::Opencode,
             Some("claude") => DriverKind::Claude,
-            Some(other) => return Err(format!("unknown --driver '{other}' (use opencode|claude)")),
+            Some("codex") => DriverKind::Codex,
+            Some(other) => return Err(format!(
+                "unknown --driver '{other}' (use opencode|claude|codex)"
+            )),
         };
 
         let max_iters = match get_flag(&flags, "--max-iters") {
@@ -846,6 +851,20 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                         ));
                         plan = Some(p);
                         steps_since_reassess = 0;
+                        // Clear the carried-over rejection memo from
+                        // any prior plan_invalid iteration. Without
+                        // this, `decide_phase` keeps routing to
+                        // Reassess(ReviewerReject) after a successful
+                        // plan emit — the agent never gets to Execute
+                        // because the FSM still thinks "the reviewer
+                        // rejected your last plan" (it didn't; the
+                        // PARSER did, two iters ago, and we just fixed
+                        // it). Observed on 2026-05-12 codex smoke:
+                        // iter 1 plan_invalid → iter 2 plan_written →
+                        // iter 3 reassess(ReviewerReject) loop instead
+                        // of execute. Max-iters=3 ran out before any
+                        // step ever ran.
+                        last_rejection = None;
                     }
                     Err(e) => {
                         eprintln!("atos run: plan agent did not produce a valid plan ({e})");
@@ -855,6 +874,20 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                         // plan-phase prompt. Without this the next
                         // iteration sends the exact same prompt and
                         // the agent makes the exact same mistake.
+                        //
+                        // Cap the prior-attempt paste at 4 KB so we
+                        // don't run away with the plan-phase prompt
+                        // when an agent emits a giant malformed dump.
+                        // Models pattern-match shape from the first
+                        // dozen lines; the cap protects context-window
+                        // budget without losing signal.
+                        let prior_text = std::fs::read_to_string(&workdir_plan_md)
+                            .ok()
+                            .map(|s| truncate(&s, 4096));
+                        let prior_count = last_rejection
+                            .as_ref()
+                            .map(|m| m.attempt_count)
+                            .unwrap_or(0);
                         last_rejection = Some(RejectionMemo {
                             summary: format!(
                                 "Your last PLAN.md was rejected by the runner's parser. Error: {e}"
@@ -864,6 +897,8 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                                 what_missing: e,
                                 suggested_action: "Rewrite PLAN.md from scratch using exactly the `## step-NN: <goal> [PENDING]` heading shape shown in the Required structure section. Do NOT preserve the operator's draft numbered-list format — restructure entirely.".into(),
                             }],
+                            prior_attempt_text: prior_text,
+                            attempt_count: prior_count + 1,
                         });
                     }
                 }
@@ -1302,6 +1337,10 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                 record.done_present = Some(done_present);
                 if !done_present {
                     record.verdict = "no_done".into();
+                    let prior_count = last_rejection
+                        .as_ref()
+                        .map(|m| m.attempt_count)
+                        .unwrap_or(0);
                     last_rejection = Some(RejectionMemo {
                         summary: format!(
                             "FINAL phase ended without {} written. Reassess and retry.",
@@ -1312,6 +1351,8 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                             what_missing: format!("{} not written", cfg.done_marker),
                             suggested_action: format!("Write {}.", cfg.done_marker),
                         }],
+                        prior_attempt_text: None,
+                        attempt_count: prior_count + 1,
                     });
                     record.wall_seconds = iter_start.elapsed().as_secs();
                     record.ended_at = chrono::Utc::now().to_rfc3339();
@@ -1342,6 +1383,10 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                         let _ = std::fs::rename(&done_path, &archived);
                         let tail = truncate(&outcome.stderr, 2000);
                         let stdout_tail = truncate(&outcome.stdout, 2000);
+                        let prior_count = last_rejection
+                            .as_ref()
+                            .map(|m| m.attempt_count)
+                            .unwrap_or(0);
                         last_rejection = Some(RejectionMemo {
                             summary: format!(
                                 "Charter stop_condition `{cmd}` exited {}. Reviewer was not consulted. Fix the failing check and rewrite DONE.md.",
@@ -1357,6 +1402,8 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                                     "Investigate the failure and re-run. Last stderr (truncated): {tail}\nLast stdout (truncated): {stdout_tail}"
                                 ),
                             }],
+                            prior_attempt_text: None,
+                            attempt_count: prior_count + 1,
                         });
                         record.wall_seconds = iter_start.elapsed().as_secs();
                         record.ended_at = chrono::Utc::now().to_rfc3339();
@@ -1415,16 +1462,37 @@ async fn drive(cfg: RunCfg) -> Result<LoopOutcome, String> {
                         let archived = iter_dir.join("DONE.rejected.md");
                         let _ = std::fs::rename(&done_path, &archived);
                         record.verdict = "reject".into();
+                        // Snapshot DONE.md the agent just wrote so the
+                        // next prompt can show it back and pattern-
+                        // match the rejection — same idea as the
+                        // plan-phase prior_attempt_text but for the
+                        // execute artifact. Read from the archived
+                        // copy since we just renamed it.
+                        let prior_text = std::fs::read_to_string(&archived)
+                            .ok()
+                            .map(|s| truncate(&s, 4096));
+                        let prior_count = last_rejection
+                            .as_ref()
+                            .map(|m| m.attempt_count)
+                            .unwrap_or(0);
                         last_rejection = Some(RejectionMemo {
                             summary: verdict.summary.clone(),
                             gaps: verdict.gaps.clone(),
+                            prior_attempt_text: prior_text,
+                            attempt_count: prior_count + 1,
                         });
                     }
                     other => {
                         record.verdict = format!("unknown:{other}");
+                        let prior_count = last_rejection
+                            .as_ref()
+                            .map(|m| m.attempt_count)
+                            .unwrap_or(0);
                         last_rejection = Some(RejectionMemo {
                             summary: format!("Reviewer returned '{other}'; reassessing"),
                             gaps: verdict.gaps.clone(),
+                            prior_attempt_text: None,
+                            attempt_count: prior_count + 1,
                         });
                     }
                 }
@@ -1691,6 +1759,20 @@ struct Gap {
 struct RejectionMemo {
     summary: String,
     gaps: Vec<Gap>,
+    /// The actual artifact text the agent produced last iter (e.g.,
+    /// the PLAN.md it wrote). Pasted back into the next-iter prompt
+    /// so the model can pattern-match its own mistake against the
+    /// required shape, rather than just being told "you got it
+    /// wrong". Without this, deterministic-ish local-model inference
+    /// produces the same wrong output every iter when the rejection
+    /// summary is identical — observed 2026-05-12 codex smoke
+    /// (prompt_sha unchanged across iters 2 + 3).
+    prior_attempt_text: Option<String>,
+    /// "Attempt N of max-iters". Escalates the prompt's seriousness
+    /// across retries — a fresh "your last attempt was wrong" reads
+    /// the same on attempt 1 and attempt 5; tagging the count gives
+    /// the model an unambiguous signal.
+    attempt_count: u32,
 }
 
 struct ReviewerInputs<'a> {
@@ -1866,10 +1948,47 @@ fn build_plan_prompt(
     // Surface the prior iteration's rejection BEFORE the framing so
     // the agent sees feedback first. Without this the next iteration
     // sends the same prompt and makes the same mistake.
+    //
+    // What goes in the block (in order of pattern-match strength for
+    // local models):
+    //   1. Attempt counter — escalates seriousness across retries.
+    //   2. The agent's OWN PRIOR OUTPUT — verbatim. Without this the
+    //      model is told "you got it wrong" without seeing what wrong
+    //      looked like. With temperature ≈ 0 it then deterministically
+    //      reproduces the same wrong output every iter.
+    //   3. The structured gap list — what was missing + suggested
+    //      action per gap.
+    //   4. A one-line "do not repeat" hammer at the end.
+    //
+    // The literal example of the required shape comes later in the
+    // "Required structure" code block — the rejection block is the
+    // contrast pass: "you wrote X; the required shape is shown below;
+    // emit it as below, not as X".
     if let Some(memo) = last_rejection {
         out.push_str("## PREVIOUS ATTEMPT REJECTED — read this first\n\n");
+        out.push_str(&format!(
+            "**Attempt {}** — your last PLAN.md was rejected.\n\n",
+            memo.attempt_count
+        ));
         out.push_str(&memo.summary);
         out.push_str("\n\n");
+        if let Some(prior) = &memo.prior_attempt_text {
+            // Fence the prior emit so its markdown can't break out of
+            // the prompt's own markdown frame. Use a backtick fence
+            // wide enough to escape any reasonable nesting.
+            out.push_str("### What you wrote last time (pasted back so you can see the shape problem)\n\n");
+            out.push_str("````markdown\n");
+            out.push_str(prior);
+            if !prior.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str("````\n\n");
+            out.push_str(
+                "That shape does NOT match the Required structure below. \
+                 Read both, identify the surface-format difference, and write \
+                 PLAN.md in the Required structure shape — not the shape above.\n\n",
+            );
+        }
         if !memo.gaps.is_empty() {
             out.push_str("Specific gaps:\n\n");
             for gap in &memo.gaps {
@@ -1887,10 +2006,16 @@ fn build_plan_prompt(
     }
 
     out.push_str(&format!(
-        "You are planning the implementation. **Write `{0}/PLAN.md`** \
-         using your `write` tool — markdown is the medium, not JSON. \
-         The runner reads `PLAN.md` after you exit and acts on the \
-         step list.\n\n",
+        "You are planning the implementation. **Write `{0}/PLAN.md`** to disk \
+         — markdown is the medium, not JSON. Use whatever file-write tool \
+         your harness exposes: in claude / opencode that's the `write` tool; \
+         in codex that's `apply_patch` (or, if simpler, the `shell` / \
+         `exec_command` tool with `cat > PLAN.md <<'EOF' … EOF`). The runner \
+         reads `PLAN.md` after you exit and acts on the step list. The file \
+         MUST exist on disk before you exit — if your last tool call \
+         returned `unsupported call: <name>`, the file did not write and you \
+         must retry with a different tool. Do not just describe the plan in \
+         your message body; the runner reads the file, not the chat.\n\n",
         workdir.display(),
     ));
     out.push_str(&format!(
@@ -3129,10 +3254,12 @@ fn build_reassess_prompt(
         }
     ));
     out.push_str(&format!(
-        "Your job: rewrite `{0}/PLAN.md` (using your `write` or `edit` \
-         tool) with an updated plan. **Bump the revision** in the top \
-         heading (e.g. `revision 2`). The runner reads the file after \
-         you exit and merges execution state from the prior revision \
+        "Your job: rewrite `{0}/PLAN.md` with an updated plan. Use whatever \
+         file-write tool your harness exposes: claude/opencode's `write` or \
+         `edit`, codex's `apply_patch`, or a `shell`/`exec_command` heredoc — \
+         the file MUST exist on disk before you exit. **Bump the revision** \
+         in the top heading (e.g. `revision 2`). The runner reads the file \
+         after you exit and merges execution state from the prior revision \
          (Done steps stay Done; Failed step counts carry over).\n\n\
          Allowed edits:\n\
          - Add new `## step-NN:` headings before/after existing ones\n\
@@ -3265,6 +3392,39 @@ fn spawn_driver(
             .env("ATOS_RUN_ID", run_id)
             .env("ATOS_DRIVER", "opencode")
             .env("ATOS_MODE", "normal")
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status(),
+        // Codex (openai/codex 0.130+) talks the OpenAI Responses API.
+        // `--profile commonwealth` selects the local-mesh provider
+        // declared in ~/.codex/config.toml (see invariant note on
+        // /v1/responses adapter). `--skip-git-repo-check` lets the
+        // ATOS run treat a sub-tree of a repo as the workdir; the
+        // safety the check provides is already covered by the ATOS
+        // runner's own workdir guard. Tool-loop fix prerequisite:
+        // daemon `force_tool_calls=false` (else every turn forces a
+        // grammar-locked tool envelope and codex never terminates).
+        // `--dangerous-bypass-approval-and-sandbox` (codex 0.130 alias
+        // for the older `--full-auto` flag) is required for a hands-
+        // off run; manual approval blocks at the first tool call.
+        DriverKind::Codex => std::process::Command::new("codex")
+            .arg("exec")
+            .arg("--profile")
+            .arg("commonwealth")
+            .arg("--skip-git-repo-check")
+            .arg("--dangerously-bypass-approvals-and-sandbox")
+            .arg(prompt)
+            .current_dir(workdir)
+            .env("SOVEREIGN_FEATURE_ID", feature_id)
+            .env("ATOS_RUN_ID", run_id)
+            .env("ATOS_DRIVER", "codex")
+            .env("ATOS_MODE", "normal")
+            // `COMMONWEALTH_API_KEY` matches the `env_key` declared on
+            // the `commonwealth` provider in ~/.codex/config.toml; the
+            // value is unused (local mesh doesn't auth) but codex
+            // refuses to start without it.
+            .env("COMMONWEALTH_API_KEY", "local")
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -3436,7 +3596,7 @@ fn print_help() {
         \x20   --charter <path>            Charter path. Default: workdir/CHARTER.md (auto).\n\
         \x20   --plan <path>               Plan path. Default: workdir/IMPLEMENTATION_PLAN.md (auto).\n\
         \x20   --feature-id <id>           Bind to this feature row. Default: workdir basename.\n\
-        \x20   --driver opencode|claude    Default: opencode.\n\
+        \x20   --driver opencode|claude|codex  Default: opencode.\n\
         \x20   --driver-model <id>         Model passed to opencode/claude --model. Default: commonwealth/FINAL-Bench_Darwin-35B-A3B-Opus-Q6_K_L.\n\
         \x20   --max-iters <n>             Safety cap. Default: 20.\n\
         \x20   --daemon-url <url>          Default: http://localhost:9741.\n\
@@ -3496,6 +3656,8 @@ mod tests {
                 what_missing: "score_request not implemented".into(),
                 suggested_action: "add a free function in src/score.rs".into(),
             }],
+            prior_attempt_text: None,
+            attempt_count: 1,
         };
         let prompt = compose_agent_prompt(3, &mk_artifacts(), Some(&memo));
         assert!(prompt.contains("Iteration:** 3"));

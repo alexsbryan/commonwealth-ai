@@ -211,6 +211,25 @@ impl FeatureStore {
                 .map_err(sqlite_err)?;
         }
 
+        // Codex-driver migration: pre-2026-05-12 schemas constrained
+        // `atos_runs.driver` to `('claude','opencode')`. Adding a third
+        // driver requires a table-rebuild because SQLite doesn't
+        // support `ALTER TABLE … DROP CONSTRAINT`. Detect by looking
+        // for `'codex'` in the recorded SQL; idempotent — fresh DBs
+        // take SCHEMA above with the new CHECK already in place.
+        let atos_runs_needs_codex: bool = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='atos_runs'",
+                [],
+                |r| r.get::<_, String>(0),
+            )
+            .map(|sql| !sql.contains("'codex'"))
+            .unwrap_or(false);
+        if atos_runs_needs_codex {
+            conn.execute_batch(MIGRATION_ATOS_RUNS_CODEX_DRIVER)
+                .map_err(sqlite_err)?;
+        }
+
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
         })
@@ -854,6 +873,50 @@ fn map_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AtosToolEvent> {
 /// that rewrite (per SQLite docs at lang_altertable.html), so the
 /// FK string `REFERENCES features(id)` stays textual and resolves
 /// back to the rebuilt table after the swap.
+/// Rebuilds `atos_runs` to include 'codex' in the driver CHECK
+/// constraint. SQLite has no `DROP CONSTRAINT`, so the only path is
+/// rename → CREATE TABLE with the new constraint → copy → DROP old.
+/// Order matters: this migration runs AFTER the additive column
+/// migrations above, so `mode` / `stop_stdout` / any future column
+/// gets carried over by the rename-copy.
+///
+/// Idempotent via the `'codex'`-in-SQL probe in `open()`.
+const MIGRATION_ATOS_RUNS_CODEX_DRIVER: &str = "
+PRAGMA foreign_keys = OFF;
+BEGIN;
+
+ALTER TABLE atos_runs RENAME TO atos_runs_pre_codex;
+
+CREATE TABLE atos_runs (
+    id            TEXT PRIMARY KEY,
+    feature_id    TEXT NOT NULL,
+    milestone_id  TEXT NOT NULL,
+    driver        TEXT NOT NULL CHECK(driver IN ('claude','opencode','codex')),
+    session_id    TEXT,
+    started_at    INTEGER NOT NULL,
+    ended_at      INTEGER,
+    exit_code     INTEGER,
+    stop_passed   INTEGER,
+    mode          TEXT NOT NULL DEFAULT 'normal'
+                  CHECK(mode IN ('normal','redteam')),
+    stop_stdout   TEXT
+);
+
+INSERT INTO atos_runs (
+    id, feature_id, milestone_id, driver, session_id, started_at,
+    ended_at, exit_code, stop_passed, mode, stop_stdout
+)
+SELECT
+    id, feature_id, milestone_id, driver, session_id, started_at,
+    ended_at, exit_code, stop_passed, mode, stop_stdout
+FROM atos_runs_pre_codex;
+
+DROP TABLE atos_runs_pre_codex;
+
+COMMIT;
+PRAGMA foreign_keys = ON;
+";
+
 const MIGRATION_FEATURES_RECIPE_AUTHORING: &str = "
 PRAGMA foreign_keys = OFF;
 BEGIN;
@@ -938,7 +1001,7 @@ CREATE TABLE IF NOT EXISTS atos_runs (
     id            TEXT PRIMARY KEY,
     feature_id    TEXT NOT NULL,
     milestone_id  TEXT NOT NULL,
-    driver        TEXT NOT NULL CHECK(driver IN ('claude','opencode')),
+    driver        TEXT NOT NULL CHECK(driver IN ('claude','opencode','codex')),
     session_id    TEXT,
     started_at    INTEGER NOT NULL,
     ended_at      INTEGER,

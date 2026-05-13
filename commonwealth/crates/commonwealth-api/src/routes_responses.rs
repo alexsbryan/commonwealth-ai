@@ -101,6 +101,51 @@ pub async fn responses(
     let model_label = req.model.clone().unwrap_or_else(|| "local".to_string());
     let metadata = req.metadata.clone();
 
+    // Inbound tool catalog telemetry: 2026-05-12 codex+local-model
+    // smokes showed the model hallucinating tool names (`write`,
+    // `read_file`) instead of picking from the registered catalog —
+    // even though the cognitive bank shows the same model selecting
+    // tools correctly from a 13-item curated menu. Hypothesis: codex's
+    // catalog (apply_patch + exec_command + web_search + file_search +
+    // mcp + … + plugin tools) is too verbose / too many options for
+    // the model to pattern-match. Log the count + names so we can
+    // confirm before designing a transformer.
+    let tool_count = req.tools.as_ref().map(|v| v.len()).unwrap_or(0);
+    let tool_names: Vec<String> = req
+        .tools
+        .as_ref()
+        .map(|v| {
+            v.iter()
+                .map(|t| {
+                    let n = t.name.as_deref().unwrap_or("");
+                    if n.is_empty() {
+                        t.kind.clone()
+                    } else {
+                        format!("{}={}", t.kind, n)
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let parameters_total_bytes: usize = req
+        .tools
+        .as_ref()
+        .map(|v| {
+            v.iter()
+                .map(|t| t.parameters.as_ref().map(|p| p.to_string().len()).unwrap_or(0))
+                .sum()
+        })
+        .unwrap_or(0);
+    tracing::info!(
+        response_id = %response_id,
+        model = %model_label,
+        stream = stream_mode,
+        tool_count,
+        parameters_total_bytes,
+        tool_names = ?tool_names,
+        "responses: inbound request catalog snapshot"
+    );
+
     debug!(
         response_id = %response_id,
         model = %model_label,
@@ -154,33 +199,66 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
 
     // Tools: flat → nested.
     //
-    // Codex's tool list contains both function tools and built-in
-    // tools (`web_search`, `file_search`, `local_shell`,
-    // `image_generation_call`, `computer_use_preview`, `mcp`). Local
-    // models can't dispatch the built-ins, so we drop anything that
-    // isn't a `function` with a `name`. Logged at debug so the operator
-    // can see which built-ins codex shipped and we silently elided.
+    // Codex's tool list contains:
+    //   - `type:"function"` tools with top-level `name` (custom
+    //     functions, MCP tools, …). These map directly to
+    //     chat.completions function tools.
+    //   - Built-in non-function tools: `local_shell`, `web_search`,
+    //     `file_search`, `image_generation_call`,
+    //     `computer_use_preview`, `mcp`. These have no top-level
+    //     `name` and a different parameters shape. Most local models
+    //     can't dispatch them, BUT — critically — `apply_patch` and
+    //     `local_shell` are precisely how codex expects file writes
+    //     and shell commands to land. Filtering them out leaves the
+    //     model with zero tools, at which point it hallucinates tool
+    //     names (`write`, `read_file`, …) and codex rejects every
+    //     emit with `unsupported call: <name>`. Observed on the v7
+    //     codex smoke 2026-05-12.
+    //
+    // Fix: pass non-function tools through as synthetic function tools.
+    // Use the `type` value as the function name; chat.completions
+    // doesn't care what shape `parameters` has so long as it's a
+    // JSON object. Local models that pattern-match the registered
+    // tool list will then emit `apply_patch` / `local_shell` / etc.
+    // and codex's router will accept the call against its real
+    // handler.
     let tools = req.tools.map(|tools_in| {
         tools_in
             .into_iter()
             .filter_map(|t| {
-                if t.kind != "function" {
-                    debug!(kind = %t.kind, "responses: dropping non-function tool");
-                    return None;
+                // Function tool with explicit name — straight pass-through.
+                if t.kind == "function" {
+                    let Some(name) = t.name else {
+                        debug!("responses: dropping function tool with no name");
+                        return None;
+                    };
+                    return Some(ToolDefinition {
+                        kind: "function".to_string(),
+                        function: ToolFunction {
+                            name,
+                            description: t.description,
+                            parameters: t.parameters.unwrap_or_else(|| {
+                                serde_json::json!({"type":"object","properties":{}})
+                            }),
+                        },
+                    });
                 }
-                let Some(name) = t.name else {
-                    debug!(kind = %t.kind, "responses: dropping function tool with no name");
-                    return None;
-                };
+                // Built-in tool — wrap under its `type` name so the
+                // model emits a chat.completions tool_call with that
+                // name, and codex's tool router resolves it back to
+                // the built-in handler when it receives the function
+                // call.
+                let synthetic_name = t.name.unwrap_or_else(|| t.kind.clone());
+                debug!(
+                    kind = %t.kind,
+                    name = %synthetic_name,
+                    "responses: bridging built-in tool as function"
+                );
                 Some(ToolDefinition {
-                    kind: t.kind,
+                    kind: "function".to_string(),
                     function: ToolFunction {
-                        name,
+                        name: synthetic_name,
                         description: t.description,
-                        // Responses lets `parameters` be omitted for
-                        // zero-arg tools; chat.completions requires an
-                        // object schema, so we synthesize
-                        // `{type:"object",properties:{}}` when missing.
                         parameters: t.parameters.unwrap_or_else(|| {
                             serde_json::json!({"type":"object","properties":{}})
                         }),
@@ -189,6 +267,20 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
             })
             .collect::<Vec<_>>()
     });
+
+    // Augment with synthetic file-I/O tools — see SYNTHETIC_TOOL_NAMES
+    // module doc. These appear in the model's catalog as
+    // `write_file(path, content)` / `read_file(path)`; the streaming +
+    // non-streaming response paths rewrite outgoing tool_calls to
+    // their codex-compatible `exec_command` equivalents before the
+    // events reach codex's router.
+    let tools = match tools {
+        Some(mut existing) => {
+            existing.extend(synthetic_file_tools());
+            Some(existing)
+        }
+        None => Some(synthetic_file_tools()),
+    };
 
     Ok(ChatCompletionRequest {
         model: req.model,
@@ -358,11 +450,22 @@ fn build_non_streaming_response(
             for tc in tool_calls {
                 tool_call_id_counter += 1;
                 let fc_id = format!("fc_{}_{}", response_id, tool_call_id_counter);
+                // Rewrite synthetic file-I/O tools — same logic as
+                // the streaming path. The model's emit was a clean
+                // {path, content} envelope; codex expects an
+                // exec_command call.
+                let (name, arguments) = match rewrite_synthetic_tool_call(
+                    &tc.function.name,
+                    &tc.function.arguments,
+                ) {
+                    Some(pair) => pair,
+                    None => (tc.function.name, tc.function.arguments),
+                };
                 output.push(ResponsesOutputItem::FunctionCall(OutputFunctionCall {
                     id: fc_id,
                     call_id: tc.id,
-                    name: tc.function.name,
-                    arguments: tc.function.arguments,
+                    name,
+                    arguments,
                     status: "completed",
                 }));
             }
@@ -709,16 +812,32 @@ impl ResponsesStreamState {
                     }
                 };
                 let func = tc.get("function").cloned().unwrap_or(serde_json::json!({}));
-                let name = func
+                let raw_name = func
                     .get("name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
-                let arguments = func
+                let raw_arguments = func
                     .get("arguments")
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
+                // Rewrite synthetic file-I/O tools into codex-compatible
+                // exec_command before emitting events. The model emitted
+                // a clean envelope (path/content); the wire to codex
+                // carries a shell command codex can dispatch.
+                let (name, arguments) =
+                    match rewrite_synthetic_tool_call(&raw_name, &raw_arguments) {
+                        Some((rewritten_name, rewritten_args)) => {
+                            tracing::info!(
+                                from = %raw_name,
+                                to = %rewritten_name,
+                                "responses: rewrote synthetic tool call"
+                            );
+                            (rewritten_name, rewritten_args)
+                        }
+                        None => (raw_name, raw_arguments),
+                    };
 
                 self.fc_id_counter += 1;
                 let item_id = format!("fc_{}_{}", self.response_id, self.fc_id_counter);
@@ -1008,6 +1127,160 @@ fn sse_event(event_name: &'static str, payload: &serde_json::Value) -> Event {
     Event::default().event(event_name).data(payload.to_string())
 }
 
+// ─── Synthetic file-I/O tools ───────────────────────────────────────
+//
+// Why this exists: codex 0.130 ships an 11-tool catalog whose only
+// file-write path is `exec_command` (shell). Local 35B-A3B models
+// pass 77/80 on the cognitive bank with a curated 13-tool menu that
+// includes Read/Edit/Write/Grep, but on codex's catalog they
+// hallucinate names (`write`, `read_file`) because their training
+// prior expects those primitives. Two consequences:
+//
+//   1. The model's first emit picks a hallucinated tool name; codex's
+//      router rejects with `unsupported call: <name>`.
+//   2. When the model falls back to `exec_command` with a heredoc to
+//      write a multi-KB plan, the JSON-escape of the inner shell
+//      script breaks (`error=failed to parse function arguments:
+//      invalid escape at line 1 column 23`).
+//
+// The fix is *catalog augmentation*. We inject `write_file(path,
+// content)` and `read_file(path)` into the catalog the model sees.
+// The model emits clean JSON envelopes (no shell escapes, no
+// heredocs). The adapter then rewrites the tool_call into an
+// equivalent `exec_command` call before the SSE event reaches codex's
+// router, which dispatches against its real handler.
+//
+// The shell synthesis for `write_file` uses POSIX single-quote
+// quoting on both path and content — newlines and special chars
+// survive intact because everything inside `'...'` is literal in sh,
+// and any literal `'` in the content is escaped via the standard
+// `'\''` sequence.
+
+const SYNTHETIC_TOOL_WRITE_FILE: &str = "write_file";
+const SYNTHETIC_TOOL_READ_FILE: &str = "read_file";
+
+fn synthetic_file_tools() -> Vec<ToolDefinition> {
+    vec![
+        ToolDefinition {
+            kind: "function".to_string(),
+            function: ToolFunction {
+                name: SYNTHETIC_TOOL_WRITE_FILE.to_string(),
+                description: Some(
+                    "Write text content to a file on disk. Overwrites if the file exists. \
+                     Use this for any file-create or file-replace operation — do NOT use \
+                     exec_command with heredoc or printf for file writes; this tool handles \
+                     escaping correctly. Returns the number of bytes written."
+                        .to_string(),
+                ),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Absolute path of the file to write."
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Exact file contents. Newlines and special characters are preserved verbatim."
+                        }
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": false
+                }),
+            },
+        },
+        ToolDefinition {
+            kind: "function".to_string(),
+            function: ToolFunction {
+                name: SYNTHETIC_TOOL_READ_FILE.to_string(),
+                description: Some(
+                    "Read the entire contents of a file from disk. Returns the file's text."
+                        .to_string(),
+                ),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Absolute path of the file to read."
+                        }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                }),
+            },
+        },
+    ]
+}
+
+/// If `name` matches a synthetic tool, returns the rewritten
+/// `(name, arguments_json)` pair to forward to codex. The new name is
+/// always `exec_command`; the arguments encode the file op as a shell
+/// command using POSIX single-quote quoting.
+///
+/// Returns `None` ONLY when the tool name is not synthetic — caller
+/// emits the original tool_call unchanged in that case. When `name`
+/// IS synthetic but the args are malformed (parse fails, no `path`,
+/// empty `path`), we still rewrite to a safe fallback so codex never
+/// sees a `write_file` / `read_file` function-call name it can't
+/// route. Letting the original name leak through caused `unsupported
+/// call: write_file` errors in the 2026-05-12 codex smoke when the
+/// model emitted a fourth, badly-shaped attempt after three good
+/// ones.
+fn rewrite_synthetic_tool_call(name: &str, arguments_json: &str) -> Option<(String, String)> {
+    if name != SYNTHETIC_TOOL_WRITE_FILE && name != SYNTHETIC_TOOL_READ_FILE {
+        return None;
+    }
+    let args: serde_json::Value =
+        serde_json::from_str(arguments_json).unwrap_or(serde_json::Value::Null);
+    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+    let cmd = if path.is_empty() {
+        // Malformed: emit a noisy shell error so the model can self-
+        // correct on the next turn. Never let codex see the synthetic
+        // name.
+        format!(
+            "echo 'rewrite_synthetic_tool_call: {} called with empty path' >&2; exit 64",
+            name
+        )
+    } else {
+        match name {
+            SYNTHETIC_TOOL_WRITE_FILE => {
+                let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                format!(
+                    "printf '%s' {} > {}",
+                    shell_single_quote(content),
+                    shell_single_quote(path)
+                )
+            }
+            SYNTHETIC_TOOL_READ_FILE => {
+                format!("cat {}", shell_single_quote(path))
+            }
+            _ => unreachable!("guarded by name check above"),
+        }
+    };
+    let new_args = serde_json::json!({ "cmd": cmd });
+    Some(("exec_command".to_string(), new_args.to_string()))
+}
+
+/// POSIX sh single-quote quoting. Wraps `s` in `'...'` and replaces
+/// any embedded `'` with `'\''` (close-quote, escaped-quote,
+/// reopen-quote) — the standard idiom for embedding arbitrary bytes
+/// inside a shell single-quoted string with no possibility of
+/// interpolation.
+fn shell_single_quote(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('\'');
+    for ch in s.chars() {
+        if ch == '\'' {
+            out.push_str("'\\''");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push('\'');
+    out
+}
+
 // ─── Generic helpers ────────────────────────────────────────────────
 
 fn mk_response_id() -> String {
@@ -1160,19 +1433,34 @@ mod tests {
         }]);
         let chat = translate_request(req).unwrap();
         let tools = chat.tools.expect("tools translated");
-        assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].kind, "function");
-        assert_eq!(tools[0].function.name, "shell");
-        assert_eq!(tools[0].function.description.as_deref(), Some("run a command"));
-        assert_eq!(tools[0].function.parameters["type"], "object");
+        // Synthetic file-I/O tools are always appended; ignore them
+        // when asserting on the translated user-supplied tools.
+        let user_tools: Vec<_> = tools
+            .iter()
+            .filter(|t| !matches!(t.function.name.as_str(), "write_file" | "read_file"))
+            .collect();
+        assert_eq!(user_tools.len(), 1);
+        assert_eq!(user_tools[0].kind, "function");
+        assert_eq!(user_tools[0].function.name, "shell");
+        assert_eq!(
+            user_tools[0].function.description.as_deref(),
+            Some("run a command")
+        );
+        assert_eq!(user_tools[0].function.parameters["type"], "object");
     }
 
     #[test]
-    fn translate_request_drops_non_function_tools() {
+    fn translate_request_bridges_builtin_tools_as_functions() {
         // Codex's tool list mixes function tools with built-ins
-        // (web_search, file_search, local_shell, etc.). Built-ins
-        // have no `name` and a different parameters shape; local
-        // models can't dispatch them, so the adapter drops them.
+        // (apply_patch, local_shell, web_search, …). The built-ins
+        // have no top-level `name` and a different parameters shape,
+        // but they ARE the only file-write / shell paths codex
+        // exposes — filtering them out leaves the model with zero
+        // tools and it hallucinates names. We bridge each built-in
+        // through as a synthetic function tool whose name is the
+        // built-in's `type` discriminator, so the model emits a
+        // tool_call that codex's router can route back to its real
+        // handler.
         let mut req = req_with_input(ResponsesInput::Text("go".into()));
         req.tools = Some(vec![
             ResponsesTool {
@@ -1198,9 +1486,105 @@ mod tests {
             },
         ]);
         let chat = translate_request(req).unwrap();
-        let tools = chat.tools.expect("function tool survives");
-        assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, "shell");
+        let tools = chat.tools.expect("tools survive translation");
+        let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
+        assert!(names.contains(&"shell"));
+        assert!(names.contains(&"web_search"));
+        assert!(names.contains(&"local_shell"));
+        // Synthetic tools also present.
+        assert!(names.contains(&"write_file"));
+        assert!(names.contains(&"read_file"));
+        // All emitted as `type:"function"` on the chat.completions wire,
+        // even though the source had non-function `type` values.
+        assert!(tools.iter().all(|t| t.kind == "function"));
+    }
+
+    #[test]
+    fn translate_request_appends_synthetic_file_tools() {
+        let req = req_with_input(ResponsesInput::Text("go".into()));
+        let chat = translate_request(req).unwrap();
+        let tools = chat.tools.expect("synthetic tools always present");
+        let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
+        assert!(names.contains(&"write_file"));
+        assert!(names.contains(&"read_file"));
+    }
+
+    #[test]
+    fn rewrite_write_file_emits_exec_command_with_printf() {
+        let args = serde_json::json!({
+            "path": "/abs/PLAN.md",
+            "content": "# Plan\n## step-01: x [PENDING]\n"
+        })
+        .to_string();
+        let (name, cmd_args) = rewrite_synthetic_tool_call("write_file", &args).unwrap();
+        assert_eq!(name, "exec_command");
+        let parsed: serde_json::Value = serde_json::from_str(&cmd_args).unwrap();
+        let cmd = parsed["cmd"].as_str().unwrap();
+        assert!(cmd.starts_with("printf '%s' "));
+        assert!(cmd.contains("'/abs/PLAN.md'"));
+        // Newlines survive intact in the shell-quoted content.
+        assert!(cmd.contains("\n## step-01"));
+    }
+
+    #[test]
+    fn rewrite_read_file_emits_cat() {
+        let args = serde_json::json!({ "path": "/abs/x.rs" }).to_string();
+        let (name, cmd_args) = rewrite_synthetic_tool_call("read_file", &args).unwrap();
+        assert_eq!(name, "exec_command");
+        let parsed: serde_json::Value = serde_json::from_str(&cmd_args).unwrap();
+        assert_eq!(parsed["cmd"].as_str().unwrap(), "cat '/abs/x.rs'");
+    }
+
+    #[test]
+    fn rewrite_passes_through_non_synthetic_names() {
+        let args = serde_json::json!({ "cmd": "ls" }).to_string();
+        assert!(rewrite_synthetic_tool_call("exec_command", &args).is_none());
+        assert!(rewrite_synthetic_tool_call("web_search", &args).is_none());
+    }
+
+    #[test]
+    fn rewrite_always_rewrites_synthetic_names_even_on_bad_args() {
+        // Defense-in-depth: if the model emits a synthetic name with
+        // malformed arguments (parse failure, no path, empty path),
+        // we MUST still rewrite to exec_command. Letting "write_file"
+        // leak through causes codex `unsupported call: write_file`.
+        let (name, _) = rewrite_synthetic_tool_call("write_file", "not json").unwrap();
+        assert_eq!(name, "exec_command");
+        let (name, _) = rewrite_synthetic_tool_call("write_file", "{}").unwrap();
+        assert_eq!(name, "exec_command");
+        let (name, args) =
+            rewrite_synthetic_tool_call("write_file", r#"{"path":""}"#).unwrap();
+        assert_eq!(name, "exec_command");
+        let parsed: serde_json::Value = serde_json::from_str(&args).unwrap();
+        let cmd = parsed["cmd"].as_str().unwrap();
+        assert!(cmd.contains("empty path"));
+        assert!(cmd.contains("exit 64"));
+    }
+
+    #[test]
+    fn shell_single_quote_escapes_embedded_quotes() {
+        // The standard POSIX idiom: close-quote, escaped-quote, reopen-quote.
+        assert_eq!(shell_single_quote("ab'cd"), "'ab'\\''cd'");
+        assert_eq!(shell_single_quote(""), "''");
+        assert_eq!(shell_single_quote("plain"), "'plain'");
+    }
+
+    #[test]
+    fn rewrite_write_file_handles_content_with_quotes_and_newlines() {
+        let args = serde_json::json!({
+            "path": "/abs/x.rs",
+            "content": "let s = 'hello';\nlet t = \"world\";\n"
+        })
+        .to_string();
+        let (_, cmd_args) = rewrite_synthetic_tool_call("write_file", &args).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&cmd_args).unwrap();
+        let cmd = parsed["cmd"].as_str().unwrap();
+        // Single-quoted shell string with the embedded apostrophe
+        // escaped via close-quote / backslash-quote / reopen-quote.
+        assert!(cmd.contains("'\\''"));
+        // Double quotes survive verbatim (no shell-escape needed
+        // inside single quotes).
+        assert!(cmd.contains("\"world\""));
     }
 
     #[test]
@@ -1217,10 +1601,14 @@ mod tests {
             strict: None,
         }]);
         let chat = translate_request(req).unwrap();
-        // Empty Vec, NOT None — translate still emits an empty list
-        // because the source request had `tools: [...]` shape.
         let tools = chat.tools.expect("tools field present");
-        assert!(tools.is_empty());
+        // The unnamed user tool is dropped; only the synthetic
+        // file-I/O tools remain.
+        let user_tools: Vec<_> = tools
+            .iter()
+            .filter(|t| !matches!(t.function.name.as_str(), "write_file" | "read_file"))
+            .collect();
+        assert!(user_tools.is_empty());
     }
 
     #[test]
