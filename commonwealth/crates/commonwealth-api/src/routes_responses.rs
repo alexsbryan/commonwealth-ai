@@ -81,19 +81,31 @@ pub async fn responses(
     headers: HeaderMap,
     Json(mut req): Json<ResponsesRequest>,
 ) -> Response {
-    // ── Frontdoor normalization ───────────────────────────────────────
+    // ── Harness-aware frontdoor passes ────────────────────────────────
     //
-    // Codex (and other coding harnesses) send a verbose tool catalog
-    // and elaborate system framing tuned for a frontier model that can
-    // filter noise from signal. Local 35B-A3B-class models can't do
-    // that filtering; they need pre-distilled task prose and a small,
-    // relevant tool catalog. The frontdoor pass simulates the
-    // "situating" step. See `frontdoor::distill_via_fast_slot` and
-    // `frontdoor::tool_keeplist` for the two halves.
-    //
-    // Gated behind `SOVEREIGN_FRONTDOOR=1` env until baselined.
-    if frontdoor::is_enabled() {
-        frontdoor::apply(&state, &headers, &mut req).await;
+    // The active harness is resolved from User-Agent (codex_cli_rs,
+    // opencode, …) or the `SOVEREIGN_HARNESS` env override. Different
+    // harnesses get different pass pipelines — codex's apply_patch
+    // training contract resists prompt/catalog reshape (v11-v14
+    // smokes 2026-05-13), while opencode benefits from the full
+    // reshape. See `frontdoor::Harness` doc for the per-profile
+    // selection table.
+    let harness = frontdoor::detect_harness(&headers);
+    tracing::info!(
+        harness = %harness.as_str(),
+        "responses: harness profile resolved"
+    );
+    if harness.runs_coherence_baseline() {
+        frontdoor::apply_baseline(&state, &headers, &mut req).await;
+    }
+    if harness.runs_distiller() {
+        // The "full" frontdoor only runs the distiller half here —
+        // the other passes (catalog filter, synthetic tools, grammar
+        // lock) are applied inside translate_request which consults
+        // the harness flags directly. We don't call frontdoor::apply()
+        // because its history-compression half already ran via
+        // apply_baseline above.
+        frontdoor::apply_distiller(&state, &headers, &mut req).await;
     }
 
     // ── Hard rejections ───────────────────────────────────────────────
@@ -169,8 +181,37 @@ pub async fn responses(
         "responses: translating to chat.completions"
     );
 
+    // Detect chunked-write mid-state from the incoming input items
+    // BEFORE consuming `req` in translate_request. Used both for the
+    // grammar lock and for the session-telemetry record.
+    let chunked_write_active = match &req.input {
+        ResponsesInput::Items(items) => in_chunked_write_state(items),
+        ResponsesInput::Text(_) => false,
+    };
+    let input_item_count = match &req.input {
+        ResponsesInput::Items(items) => items.len(),
+        ResponsesInput::Text(_) => 1,
+    };
+
+    let frontdoor_on = frontdoor::is_enabled();
+
+    // ── Inbound telemetry record ─────────────────────────────────────
+    write_session_telemetry(serde_json::json!({
+        "kind": "inbound",
+        "response_id": response_id,
+        "ts_unix": created_at,
+        "model": model_label,
+        "stream": stream_mode,
+        "frontdoor_on": frontdoor_on,
+        "chunked_write_active": chunked_write_active,
+        "inbound_tool_count": tool_count,
+        "inbound_tool_names": tool_names,
+        "input_item_count": input_item_count,
+        "parameters_total_bytes": parameters_total_bytes,
+    }));
+
     // ── Request translation ───────────────────────────────────────────
-    let chat_req = match translate_request(req) {
+    let chat_req = match translate_request(req, chunked_write_active, harness) {
         Ok(r) => r,
         Err(msg) => {
             return error_response(StatusCode::BAD_REQUEST, "invalid_request_error", &msg);
@@ -191,7 +232,21 @@ pub async fn responses(
 
 // ─── Request translation ────────────────────────────────────────────
 
-fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, String> {
+fn translate_request(
+    req: ResponsesRequest,
+    chunked_write_active: bool,
+    harness: frontdoor::Harness,
+) -> Result<ChatCompletionRequest, String> {
+    // Derive per-harness flags up front so the rest of the function
+    // reads cleanly. The `frontdoor_on` legacy name maps onto
+    // "Opencode-style full reshape" semantics — see Harness doc.
+    let runs_catalog_filter = harness.runs_catalog_filter();
+    let runs_synthetic_tools = harness.runs_synthetic_tools();
+    let runs_grammar_lock = harness.runs_grammar_lock();
+    // For the catalog-filter log we keep emitting `frontdoor=<bool>`
+    // because that's the field name long-standing tooling greps for;
+    // it's true when the catalog gets reshaped (Opencode profile).
+    let frontdoor_on = runs_catalog_filter;
     let mut messages: Vec<ChatMessage> = Vec::new();
 
     // `instructions` becomes a leading system message — semantically
@@ -243,7 +298,10 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
     // synthetic file-I/O tools appended below. This is the
     // deterministic half of the frontdoor (see `frontdoor` module
     // docs). When off, all tools pass through.
-    let frontdoor_on = frontdoor::is_enabled();
+    //
+    // Caller (`responses()`) reads `frontdoor::is_enabled()` once and
+    // passes it down so unit tests can drive both paths without
+    // racing on a shared env var.
     let tools = req.tools.map(|tools_in| {
         tools_in
             .into_iter()
@@ -255,7 +313,7 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
                         debug!("responses: dropping function tool with no name");
                         return None;
                     };
-                    if frontdoor_on && !frontdoor::tool_keeplist_contains(&name) {
+                    if runs_catalog_filter && !frontdoor::tool_keeplist_contains(&name) {
                         debug!(
                             name = %name,
                             "frontdoor: dropping function tool not in keeplist"
@@ -306,26 +364,83 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
             .collect::<Vec<_>>()
     });
 
-    // Augment with synthetic file-I/O tools — see SYNTHETIC_TOOL_NAMES
-    // module doc. These appear in the model's catalog as
-    // `write_file(path, content)` / `read_file(path)`; the streaming +
-    // non-streaming response paths rewrite outgoing tool_calls to
-    // their codex-compatible `exec_command` equivalents before the
-    // events reach codex's router.
-    let tools = match tools {
-        Some(mut existing) => {
-            existing.extend(synthetic_file_tools());
-            Some(existing)
+    // Augment with synthetic file-I/O tools (frontdoor-on only).
+    // These appear in the model's catalog as `write_file(path, content)`
+    // / `read_file(path)`; the streaming + non-streaming response
+    // paths rewrite outgoing tool_calls to their codex-compatible
+    // `exec_command` equivalents before the events reach codex's
+    // router.
+    //
+    // Gated on `frontdoor_on` because codex's training contract
+    // (v11-v14 evidence, 2026-05-13) teaches the model to write files
+    // via `exec_command` running `apply_patch <<'EOF' *** Begin Patch
+    // ... EOF` — not via custom function tools. Injecting our synthetic
+    // tools polluted the catalog without shifting the model's prior,
+    // so the model used neither. When frontdoor is off we leave the
+    // catalog untouched and trust codex's path.
+    let tools = if runs_synthetic_tools {
+        match tools {
+            Some(mut existing) => {
+                existing.extend(synthetic_file_tools());
+                Some(existing)
+            }
+            None => Some(synthetic_file_tools()),
         }
-        None => Some(synthetic_file_tools()),
+    } else {
+        tools
     };
-    // Emit the post-filter, post-synthetic tool list so the catalog
-    // shrinkage is visible at info-level (the per-tool drop logs are
-    // debug-level and get filtered out in the deployed log threshold).
+
+    // Frontdoor grammar lock. Promote `tool_choice` to `"required"`
+    // whenever the frontdoor is on so the inference adapter installs
+    // its JSON-Schema grammar over the tool envelope on EVERY turn,
+    // not just chunked-write turns. Decoder physically cannot emit:
+    //   - args as a stringified JSON (grammar forces an object)
+    //   - over-escaped inner quotes that break the outer envelope
+    //   - tools outside the synthetic+keeplist catalog
+    //
+    // v12 telemetry (2026-05-13 04:01) showed the MoE emitting
+    // `{"name":"write_file","arguments":"{\"path\":..."\\\\\\\"math\\\\\\\"..."}"}`
+    // on T02 — args-as-string with broken inner escapes → outer JSON
+    // parse fail → 1222 bytes lost as orphaned text. The chunked-write
+    // gate did not engage (cw=False — no prior write_file_begin),
+    // so dropping that gate makes the lock universal across frontdoor
+    // turns. Catalog filter additionally engages in chunked-write
+    // state to keep the model on protocol.
+    let (tools, tool_choice_override) = if runs_grammar_lock {
+        let filtered: Vec<ToolDefinition> = if chunked_write_active {
+            tools
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|t| {
+                    matches!(
+                        t.function.name.as_str(),
+                        SYNTHETIC_TOOL_WRITE_FILE_CHUNK | SYNTHETIC_TOOL_WRITE_FILE_END
+                    )
+                })
+                .collect()
+        } else {
+            tools.unwrap_or_default()
+        };
+        let names: Vec<&str> = filtered.iter().map(|td| td.function.name.as_str()).collect();
+        tracing::info!(
+            chunked_write_active,
+            outbound_tool_count = filtered.len(),
+            outbound_tools = ?names,
+            "translate_request: frontdoor grammar lock — tool_choice=required"
+        );
+        (Some(filtered), Some(serde_json::json!("required")))
+    } else {
+        (tools, None)
+    };
+
+    // Emit the post-filter, post-synthetic, post-lock tool list at
+    // info-level (per-tool drop logs are debug and filtered out in
+    // deployed log threshold).
     if let Some(t) = &tools {
         let names: Vec<&str> = t.iter().map(|td| td.function.name.as_str()).collect();
         tracing::info!(
             frontdoor = frontdoor_on,
+            chunked_write_active,
             outbound_tool_count = t.len(),
             outbound_tools = ?names,
             "translate_request: tool catalog after filter + synthetic-append"
@@ -364,7 +479,7 @@ fn translate_request(req: ResponsesRequest) -> Result<ChatCompletionRequest, Str
         presence_penalty: None,
         stop: None,
         tools,
-        tool_choice: req.tool_choice,
+        tool_choice: tool_choice_override.or(req.tool_choice),
         response_format: None,
         oicp: None,
         chat_template_kwargs,
@@ -499,9 +614,14 @@ fn build_non_streaming_response(
     // emit one message (text, if any) followed by one function_call per
     // tool_call. Multi-choice (`n>1`) is unsupported and ignored beyond
     // index 0 — codex never sets `n>1`.
+    let mut terminal_finish_reason: Option<String> = None;
+    let mut terminal_text_bytes: usize = 0;
+    let mut terminal_fcs: Vec<serde_json::Value> = Vec::new();
     if let Some(choice) = chat.choices.into_iter().next() {
+        terminal_finish_reason = choice.finish_reason.clone();
         let msg = choice.message;
         let text = msg.content;
+        terminal_text_bytes = text.len();
 
         if !text.is_empty() {
             message_id_counter += 1;
@@ -525,6 +645,8 @@ fn build_non_streaming_response(
                 // the streaming path. The model's emit was a clean
                 // {path, content} envelope; codex expects an
                 // exec_command call.
+                let raw_name = tc.function.name.clone();
+                let raw_args = tc.function.arguments.clone();
                 let (name, arguments) = match rewrite_synthetic_tool_call(
                     &tc.function.name,
                     &tc.function.arguments,
@@ -532,6 +654,12 @@ fn build_non_streaming_response(
                     Some(pair) => pair,
                     None => (tc.function.name, tc.function.arguments),
                 };
+                let parsed_ok = serde_json::from_str::<serde_json::Value>(&raw_args).is_ok();
+                terminal_fcs.push(serde_json::json!({
+                    "name": raw_name,
+                    "args_bytes": raw_args.len(),
+                    "args_parsed_ok": parsed_ok,
+                }));
                 output.push(ResponsesOutputItem::FunctionCall(OutputFunctionCall {
                     id: fc_id,
                     call_id: tc.id,
@@ -542,6 +670,16 @@ fn build_non_streaming_response(
             }
         }
     }
+
+    write_session_telemetry(serde_json::json!({
+        "kind": "terminal",
+        "stream": false,
+        "response_id": response_id,
+        "ts_unix": now_unix_secs(),
+        "finish_reason": terminal_finish_reason,
+        "text_buffer_bytes": terminal_text_bytes,
+        "function_calls": terminal_fcs,
+    }));
 
     let usage = chat.usage.map(|u| ResponsesUsage {
         input_tokens: u.prompt_tokens,
@@ -1008,6 +1146,28 @@ impl ResponsesStreamState {
                     function_calls_emitted = self.function_calls.len(),
                     "responses: stream turn terminal"
                 );
+                let fc_summary: Vec<serde_json::Value> = self
+                    .function_calls
+                    .iter()
+                    .map(|fc| {
+                        let parsed_ok = serde_json::from_str::<serde_json::Value>(&fc.arguments)
+                            .is_ok();
+                        serde_json::json!({
+                            "name": fc.name,
+                            "args_bytes": fc.arguments.len(),
+                            "args_parsed_ok": parsed_ok,
+                        })
+                    })
+                    .collect();
+                write_session_telemetry(serde_json::json!({
+                    "kind": "terminal",
+                    "stream": true,
+                    "response_id": self.response_id,
+                    "ts_unix": now_unix_secs(),
+                    "finish_reason": reason,
+                    "text_buffer_bytes": text_bytes,
+                    "function_calls": fc_summary,
+                }));
                 if reason == "length" {
                     tracing::warn!(
                         response_id = %self.response_id,
@@ -1256,6 +1416,31 @@ const SYNTHETIC_TOOL_READ_FILE: &str = "read_file";
 const SYNTHETIC_TOOL_WRITE_FILE_BEGIN: &str = "write_file_begin";
 const SYNTHETIC_TOOL_WRITE_FILE_CHUNK: &str = "write_file_chunk";
 const SYNTHETIC_TOOL_WRITE_FILE_END: &str = "write_file_end";
+
+/// True when the most recent assistant tool emission in `items` was
+/// `write_file_begin` or `write_file_chunk` — i.e. the model is
+/// mid-chunked-write and the next turn should produce another chunk
+/// or `write_file_end`. Walks backwards from the end so prior
+/// chunked-write sessions earlier in the conversation don't trigger.
+///
+/// Used by `translate_request` to filter the outbound tool catalog
+/// down to `[write_file_chunk, write_file_end]` and promote
+/// `tool_choice` to `"required"`, which engages the inference
+/// adapter's tool-envelope grammar over the next emission. The
+/// decoder physically cannot emit malformed JSON args under that
+/// constraint, closing the over-escape / mid-string-control-char
+/// failure class observed on multi-KB chunked writes.
+pub(crate) fn in_chunked_write_state(items: &[ResponsesInputItem]) -> bool {
+    for item in items.iter().rev() {
+        if let ResponsesInputItem::FunctionCall(fc) = item {
+            return matches!(
+                fc.name.as_str(),
+                SYNTHETIC_TOOL_WRITE_FILE_BEGIN | SYNTHETIC_TOOL_WRITE_FILE_CHUNK
+            );
+        }
+    }
+    false
+}
 
 fn synthetic_file_tools() -> Vec<ToolDefinition> {
     vec![
@@ -1652,6 +1837,58 @@ fn error_response(status: StatusCode, error_type: &str, message: &str) -> Respon
     (status, Json(body)).into_response()
 }
 
+/// Append a single JSON record to today's per-session telemetry log
+/// at `~/.sovereign/codex-sessions/<YYYY-MM-DD>.jsonl`.
+///
+/// Two record kinds are written per /v1/responses call:
+///   1. `kind:"inbound"` at request entry — captures the surface
+///      the adapter is about to translate (catalog, item count,
+///      mid-chunked-write state, frontdoor toggle).
+///   2. `kind:"terminal"` at finish-reason — captures what the
+///      model actually produced (finish_reason, text bytes, per-tool
+///      args bytes, parsed_ok flag, synthetic-tool counts).
+///
+/// Records share a `response_id` so an operator can join them with
+/// `jq` for post-mortem analysis. Best-effort: write failures log a
+/// warn and otherwise do not affect the response path.
+fn write_session_telemetry(record: serde_json::Value) {
+    let Some(home) = dirs::home_dir() else {
+        warn!("session telemetry: no HOME — dropping record");
+        return;
+    };
+    let dir = home.join(".sovereign").join("codex-sessions");
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        warn!(error = %e, dir = %dir.display(), "session telemetry: mkdir failed");
+        return;
+    }
+    // Single rolling file. Each record carries `ts_unix` so the
+    // operator can split by day with `jq` if needed — we avoid a
+    // chrono dep here. Rotate by hand when it gets large.
+    let path = dir.join("sessions.jsonl");
+    let line = match serde_json::to_string(&record) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(error = %e, "session telemetry: serialize failed");
+            return;
+        }
+    };
+    use std::io::Write;
+    let mut file = match std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            warn!(error = %e, path = %path.display(), "session telemetry: open failed");
+            return;
+        }
+    };
+    if let Err(e) = writeln!(file, "{}", line) {
+        warn!(error = %e, path = %path.display(), "session telemetry: write failed");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1683,17 +1920,118 @@ mod tests {
     #[test]
     fn translate_request_string_input() {
         let req = req_with_input(ResponsesInput::Text("hello".into()));
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         assert_eq!(chat.messages.len(), 1);
         assert_eq!(chat.messages[0].role, "user");
         assert_eq!(chat.messages[0].content, "hello");
     }
 
     #[test]
+    fn in_chunked_write_state_detects_recent_write_file_begin() {
+        let items = vec![
+            ResponsesInputItem::FunctionCall(RFnCall {
+                call_id: "c1".into(),
+                name: "write_file_begin".into(),
+                arguments: "{\"path\":\"/x\"}".into(),
+                id: None,
+            }),
+            ResponsesInputItem::FunctionCallOutput(RFnOut {
+                call_id: "c1".into(),
+                output: "0".into(),
+            }),
+        ];
+        assert!(in_chunked_write_state(&items));
+    }
+
+    #[test]
+    fn in_chunked_write_state_false_when_last_call_is_other_tool() {
+        let items = vec![
+            ResponsesInputItem::FunctionCall(RFnCall {
+                call_id: "c1".into(),
+                name: "exec_command".into(),
+                arguments: "{}".into(),
+                id: None,
+            }),
+        ];
+        assert!(!in_chunked_write_state(&items));
+    }
+
+    #[test]
+    fn translate_request_chunked_write_locks_catalog_and_forces_required() {
+        let mut req = req_with_input(ResponsesInput::Text("go".into()));
+        req.tools = Some(vec![ResponsesTool {
+            kind: "function".into(),
+            name: Some("exec_command".into()),
+            description: None,
+            parameters: Some(serde_json::json!({"type":"object","properties":{}})),
+            strict: None,
+        }]);
+        let chat = translate_request(req, true, frontdoor::Harness::Opencode).unwrap();
+        let names: Vec<&str> = chat
+            .tools
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|t| t.function.name.as_str())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["write_file_chunk", "write_file_end"],
+            "chunked-write state should lock catalog to chunk+end"
+        );
+        assert_eq!(
+            chat.tool_choice.as_ref().and_then(|v| v.as_str()),
+            Some("required"),
+            "tool_choice should be promoted to required"
+        );
+    }
+
+    #[test]
+    fn translate_request_frontdoor_on_forces_required_even_without_chunked_write() {
+        let mut req = req_with_input(ResponsesInput::Text("go".into()));
+        req.tools = Some(vec![ResponsesTool {
+            kind: "function".into(),
+            name: Some("exec_command".into()),
+            description: None,
+            parameters: Some(serde_json::json!({"type":"object","properties":{}})),
+            strict: None,
+        }]);
+        // chunked_write_active=false, frontdoor_on=true: full catalog
+        // kept, but tool_choice promoted so grammar engages on T01.
+        let chat = translate_request(req, false, frontdoor::Harness::Opencode).unwrap();
+        let names: Vec<&str> = chat
+            .tools
+            .as_ref()
+            .unwrap()
+            .iter()
+            .map(|t| t.function.name.as_str())
+            .collect();
+        assert!(names.contains(&"exec_command"), "exec_command kept");
+        assert!(names.contains(&"write_file"), "write_file kept");
+        assert_eq!(
+            chat.tool_choice.as_ref().and_then(|v| v.as_str()),
+            Some("required"),
+            "tool_choice should be promoted on every frontdoor turn"
+        );
+    }
+
+    #[test]
+    fn translate_request_frontdoor_off_preserves_tool_choice() {
+        let mut req = req_with_input(ResponsesInput::Text("go".into()));
+        req.tool_choice = Some(serde_json::json!("auto"));
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        assert_eq!(
+            chat.tool_choice.as_ref().and_then(|v| v.as_str()),
+            Some("auto"),
+            "non-frontdoor mode must not override caller's tool_choice"
+        );
+    }
+
+    #[test]
     fn translate_request_instructions_prepends_system_message() {
         let mut req = req_with_input(ResponsesInput::Text("go".into()));
         req.instructions = Some("be terse".into());
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         assert_eq!(chat.messages.len(), 2);
         assert_eq!(chat.messages[0].role, "system");
         assert_eq!(chat.messages[0].content, "be terse");
@@ -1713,7 +2051,7 @@ mod tests {
                 content: MessageContent::Parts(parts),
             },
         )]));
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         assert_eq!(chat.messages[0].content, "first\nsecond");
     }
 
@@ -1725,7 +2063,7 @@ mod tests {
                 output: "42".into(),
             }),
         ]));
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         assert_eq!(chat.messages[0].role, "tool");
         assert_eq!(chat.messages[0].tool_call_id.as_deref(), Some("c1"));
         assert_eq!(chat.messages[0].content, "42");
@@ -1741,7 +2079,7 @@ mod tests {
                 id: None,
             }),
         ]));
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         let msg = &chat.messages[0];
         assert_eq!(msg.role, "assistant");
         let calls = msg.tool_calls.as_ref().unwrap();
@@ -1761,7 +2099,7 @@ mod tests {
             parameters: Some(serde_json::json!({"type":"object","properties":{}})),
             strict: None,
         }]);
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         let tools = chat.tools.expect("tools translated");
         // Synthetic file-I/O tools are always appended; ignore them
         // when asserting on the translated user-supplied tools.
@@ -1824,15 +2162,14 @@ mod tests {
                 strict: None,
             },
         ]);
-        let chat = translate_request(req).unwrap();
+        // Codex harness: NO catalog filter, NO synthetic injection —
+        // bridging still happens for non-function builtin shapes.
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         let tools = chat.tools.expect("tools survive translation");
         let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
         assert!(names.contains(&"shell"));
         assert!(names.contains(&"web_search"));
         assert!(names.contains(&"local_shell"));
-        // Synthetic tools also present.
-        assert!(names.contains(&"write_file"));
-        assert!(names.contains(&"read_file"));
         // All emitted as `type:"function"` on the chat.completions wire,
         // even though the source had non-function `type` values.
         assert!(tools.iter().all(|t| t.kind == "function"));
@@ -1841,11 +2178,35 @@ mod tests {
     #[test]
     fn translate_request_appends_synthetic_file_tools() {
         let req = req_with_input(ResponsesInput::Text("go".into()));
-        let chat = translate_request(req).unwrap();
-        let tools = chat.tools.expect("synthetic tools always present");
+        // Synthetic tools are gated on frontdoor_on as of 2026-05-13.
+        let chat = translate_request(req, false, frontdoor::Harness::Opencode).unwrap();
+        let tools = chat.tools.expect("synthetic tools present when frontdoor on");
         let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
         assert!(names.contains(&"write_file"));
         assert!(names.contains(&"read_file"));
+    }
+
+    #[test]
+    fn translate_request_frontdoor_off_omits_synthetic_tools() {
+        let mut req = req_with_input(ResponsesInput::Text("go".into()));
+        req.tools = Some(vec![ResponsesTool {
+            kind: "function".into(),
+            name: Some("exec_command".into()),
+            description: None,
+            parameters: Some(serde_json::json!({"type":"object","properties":{}})),
+            strict: None,
+        }]);
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        let tools = chat.tools.expect("caller tools preserved");
+        let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
+        assert!(names.contains(&"exec_command"));
+        assert!(
+            !names.iter().any(|n| n.starts_with("write_file")
+                || *n == "read_file"),
+            "synthetic tools must NOT be injected when frontdoor off — \
+             they pollute codex's apply_patch-trained tool prior. names={:?}",
+            names
+        );
     }
 
     #[test]
@@ -2104,7 +2465,7 @@ mod tests {
             parameters: None,
             strict: None,
         }]);
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         let tools = chat.tools.expect("tools field present");
         // The unnamed user tool is dropped; only the synthetic
         // file-I/O tools remain.
@@ -2134,7 +2495,7 @@ mod tests {
             parameters: None,
             strict: None,
         }]);
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         let tools = chat.tools.unwrap();
         assert_eq!(tools[0].function.parameters["type"], "object");
         assert!(tools[0].function.parameters.get("properties").is_some());
@@ -2144,7 +2505,7 @@ mod tests {
     fn translate_request_max_output_tokens_maps_to_max_tokens() {
         let mut req = req_with_input(ResponsesInput::Text("go".into()));
         req.max_output_tokens = Some(1234);
-        let chat = translate_request(req).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         assert_eq!(chat.max_tokens, Some(1234));
     }
 
