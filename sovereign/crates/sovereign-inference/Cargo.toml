@@ -46,3 +46,6 @@ name = "bench_decode"
 
 [[example]]
 name = "grammar_smoke"
+
+[[example]]
+name = "sd_smoke"
