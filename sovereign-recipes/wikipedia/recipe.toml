@@ -63,6 +63,23 @@ vector = true
 # embedding_model and embedding_dimensions are auto-detected from the
 # loaded model at ingest time.
 
+# Pre-built snapshot — cold-start onboarding short-circuit. When a
+# user's node loads `qwen-embedding-0.6b` and runs
+# `sovereign corpus install wikipedia`, the engine downloads the
+# 8.74 GB .tar.zst from HuggingFace and extracts it into
+# ~/.sovereign/indexes/wikipedia/ instead of running the full
+# acquire → extract → chunk → embed pipeline (~5–8 min on M-series,
+# longer on other hardware). Atlas is included in the archive under
+# indexes/wikipedia/atlas/.
+#
+# On embedding-model mismatch the restore is skipped with a clear log
+# line and the normal pipeline runs — Option B is automatic.
+[prebuilt]
+hf_repo = "svrnmesh/wikipedia-index"
+hf_filename = "wikipedia-qwen-embedding-0.6b-2026-05-13.tar.zst"
+sha256 = "65fa045c95d6ffdaa92b7634ea95acb2d9d4bac6c9f6cd20bc831c098c10c6bd"
+compatible_embedding_model = "qwen-embedding-0.6b"
+
 # Delta updates: the manifest at manifest_url maps article URL → revision_id.
 # A manifest-generation job reads omarkamali/wikipedia-monthly (latest.en,
 # ~7M articles) and publishes the manifest. CorpusUpdater uses it to

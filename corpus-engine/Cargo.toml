@@ -33,6 +33,15 @@ reqwest-eventsource = "0.6"
 
 # Vector database
 lancedb = "0.27"
+# Lance is the on-disk format under lancedb. We pull it in directly
+# so `snapshot::publish_snapshot` can enumerate fragments from the
+# manifest (transactional view) instead of via a `readdir` of
+# `chunks.lance/data/`. readdir races with LanceDB background
+# compaction — empirically dropped 9/3021 fragments on the first
+# wikipedia publish. See `project_snapshot_publish_consistency.md`.
+lance = "4"
+lance-index = "4"
+lance-table = "4"
 
 # Arrow (version driven by lancedb)
 arrow = "57"
