@@ -9,7 +9,7 @@ registry_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/m
 [[recipes]]
 id = "wikipedia"
 name = "Wikipedia (English)"
-description = "Wikipedia Core scope: ~51K Vital Articles Level 5 (community-curated, ~2.5 GB indexed). Indexes in ~5–8 min on M-series MacBook. Expandable to the full 6.7M-article dump in-place via Settings → Knowledge."
+description = "Wikipedia Core scope: ~51K Vital Articles Level 5 (community-curated, ~2.5 GB indexed). Cold-start onboarding now downloads an 8.7 GB pre-built snapshot from HuggingFace and extracts in seconds — no local embedding. Expandable to the full 6.7M-article dump in-place via Settings → Knowledge."
 license = "CC-BY-SA-4.0"
 size_compressed_gb = 13.0
 size_indexed_gb = 2.5
@@ -17,6 +17,12 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/wikipedia/recipe.toml"
 sha256 = ""
+
+[recipes.prebuilt]
+hf_repo = "svrnmesh/wikipedia-index"
+hf_filename = "wikipedia-qwen-embedding-0.6b-2026-05-13.tar.zst"
+sha256 = "65fa045c95d6ffdaa92b7634ea95acb2d9d4bac6c9f6cd20bc831c098c10c6bd"
+compatible_embedding_model = "qwen-embedding-0.6b"
 
 [[recipes]]
 id = "wikipedia-simple"

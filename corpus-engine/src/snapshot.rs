@@ -349,9 +349,32 @@ pub struct PublishOutcome {
 /// and `archive_sha256=None` — the archive cannot contain its own
 /// hash. The post-seal hash returned in [`PublishOutcome::archive_sha256`]
 /// is what callers paste into the recipe's `[prebuilt].sha256`.
-pub fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
+///
+/// ## Consistency under concurrent LanceDB writes
+///
+/// Naively walking `index_dir/chunks.lance/` with tar's `readdir`-based
+/// `append_dir_all` is racy: if LanceDB writes a new fragment + new
+/// manifest pointer during the (slow) zstd pass, the walker can see
+/// the new manifest but miss the new fragment file — empirically
+/// dropped 9/3021 fragments on the first wikipedia publish.
+///
+/// To make the capture transactional, this function opens
+/// `chunks.lance/` as a `lance::Dataset` before tar starts, snapshots
+/// the fragment list + index UUIDs at that version, and tars exactly
+/// those files (plus the manifest file for that version). Subsequent
+/// writes by LanceDB land in *later* versions whose pointers we don't
+/// include, so the restored archive is internally consistent.
+pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     let index_meta = read_local_index_meta(&opts.index_dir)?;
-    let atlas_included = opts.enrichment_dir.is_some();
+    // `atlas_included` reflects whether atlas data ends up *anywhere*
+    // in the archive — either as a separate `enrichment/<id>/` subtree
+    // (the legacy location) or as `<index_dir>/atlas/` (the in-place
+    // layout wikipedia uses). The flag is the contract a restorer
+    // reads to know whether to expect atlas-driven retrieval; the
+    // physical location of the bytes is a publisher detail.
+    let atlas_in_index = opts.index_dir.join("atlas").is_dir();
+    let atlas_in_enrichment = opts.enrichment_dir.is_some();
+    let atlas_included = atlas_in_index || atlas_in_enrichment;
 
     let mut manifest = SnapshotManifest::new(
         index_meta.corpus_id.clone(),
@@ -369,7 +392,27 @@ pub fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     manifest.residual_gap_pct = opts.residual_gap_pct;
     manifest.notes = opts.notes.clone();
 
-    write_snapshot_archive(&manifest, &opts)?;
+    // Anchor a transactional view of any LanceDB datasets under
+    // index_dir BEFORE the (slow) tar pass. The view is just a list of
+    // file paths + manifest version — cheap to hold, cheap to clone
+    // into the blocking task.
+    let chunks_lance_path = opts.index_dir.join("chunks.lance");
+    let lance_view = if chunks_lance_path.is_dir() {
+        Some(LanceSnapshotView::open(&chunks_lance_path).await?)
+    } else {
+        None
+    };
+
+    // Tar + zstd are blocking I/O over multi-GB data; offload from the
+    // tokio reactor so the runtime stays responsive.
+    let opts_for_tar = opts.clone();
+    let manifest_for_tar = manifest.clone();
+    let lance_for_tar = lance_view.clone();
+    tokio::task::spawn_blocking(move || {
+        write_snapshot_archive(&manifest_for_tar, &opts_for_tar, lance_for_tar.as_ref())
+    })
+    .await
+    .map_err(|e| Error::Database(format!("snapshot tar task panicked: {e}")))??;
 
     let (archive_sha256, archive_size_bytes) = hash_and_size(&opts.output_path)?;
     manifest.archive_size_bytes = Some(archive_size_bytes);
@@ -383,11 +426,135 @@ pub fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     })
 }
 
-fn write_snapshot_archive(manifest: &SnapshotManifest, opts: &PublishOptions) -> Result<()> {
+/// Transactional anchor for one LanceDB dataset's on-disk state at a
+/// specific version. Captured before tar starts; safe to clone into a
+/// `spawn_blocking` task. The strings here are paths relative to the
+/// lance dataset root (i.e. relative to `chunks.lance/`).
+#[derive(Clone, Debug)]
+struct LanceSnapshotView {
+    /// Lance manifest version number, for logging.
+    version: u64,
+    /// Filename of the manifest file on disk (e.g.
+    /// `00000000000000000001.manifest` for V2 scheme,
+    /// `1.manifest` for V1).
+    manifest_filename: String,
+    /// Data file paths referenced by this version's manifest, relative
+    /// to the lance dataset root.
+    data_files: Vec<String>,
+    /// Index UUIDs referenced by this version's manifest. Each maps
+    /// to `_indices/<uuid>/` on disk.
+    index_uuids: Vec<String>,
+}
+
+impl LanceSnapshotView {
+    async fn open(lance_dir: &Path) -> Result<Self> {
+        // `load_indices` is a trait method; bring DatasetIndexExt into
+        // scope so the call below resolves on a `lance::Dataset`.
+        use lance_index::DatasetIndexExt;
+
+        let path_str = lance_dir.to_str().ok_or_else(|| {
+            Error::InvalidInput(format!("non-utf8 lance path: {}", lance_dir.display()))
+        })?;
+        let ds = lance::Dataset::open(path_str)
+            .await
+            .map_err(|e| Error::Database(format!("lance::Dataset::open({path_str}): {e}")))?;
+        let version = ds.manifest().version;
+        let fragments = ds.fragments();
+        // Lance stores `df.path` as just the filename (e.g.
+        // `000...abc.lance`); the dataset reader resolves it via
+        // `dataset.data_dir().child(path)`. We mirror that by prefixing
+        // `data/` so the strings here are relative to the lance dataset
+        // root and can be used directly with `Path::join`.
+        let mut data_files: Vec<String> = fragments
+            .iter()
+            .flat_map(|f| f.files.iter().map(|df| format!("data/{}", df.path)))
+            .collect();
+        // Deterministic order, helps when comparing two tars built
+        // from the same version.
+        data_files.sort();
+        let indices = ds
+            .load_indices()
+            .await
+            .map_err(|e| Error::Database(format!("lance::Dataset::load_indices: {e}")))?;
+        let mut index_uuids: Vec<String> = indices.iter().map(|i| i.uuid.to_string()).collect();
+        index_uuids.sort();
+
+        let manifest_filename = detect_lance_manifest_filename(lance_dir, version)?;
+
+        tracing::info!(
+            lance_dir = %lance_dir.display(),
+            version,
+            fragments = data_files.len(),
+            indices = index_uuids.len(),
+            manifest = %manifest_filename,
+            "snapshot: anchored lance dataset for transactional capture"
+        );
+        Ok(LanceSnapshotView {
+            version,
+            manifest_filename,
+            data_files,
+            index_uuids,
+        })
+    }
+}
+
+/// Find which manifest filename Lance wrote for a given version.
+/// Tries the V2 (zero-padded, `u64::MAX - version`) scheme first since
+/// it's the modern default, falls back to V1 (`{version}.manifest`)
+/// for older datasets.
+fn detect_lance_manifest_filename(lance_dir: &Path, version: u64) -> Result<String> {
+    let versions_dir = lance_dir.join("_versions");
+    let inverted = u64::MAX - version;
+    let v2 = format!("{inverted:020}.manifest");
+    if versions_dir.join(&v2).is_file() {
+        return Ok(v2);
+    }
+    let v1 = format!("{version}.manifest");
+    if versions_dir.join(&v1).is_file() {
+        return Ok(v1);
+    }
+    Err(Error::Database(format!(
+        "no manifest file on disk for lance dataset at {} version {version}; \
+         looked for `{v2}` (V2 scheme) and `{v1}` (V1 scheme) under _versions/",
+        lance_dir.display()
+    )))
+}
+
+fn write_snapshot_archive(
+    manifest: &SnapshotManifest,
+    opts: &PublishOptions,
+    lance_view: Option<&LanceSnapshotView>,
+) -> Result<()> {
     if let Some(parent) = opts.output_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let file = File::create(&opts.output_path)?;
+    // Write to a sidecar `.part` file; atomic-rename to the final
+    // path only after the tar finishes cleanly. Resumable-publish
+    // relies on this: presence of `<output_path>` without a sibling
+    // `.part` is the signal "archive is complete; skip rebuild."
+    // An interrupted build (SIGTERM during tar/zstd) leaves a
+    // `<output_path>.part` which a subsequent run discards before
+    // re-building.
+    let part_path = opts.output_path.with_extension(
+        opts.output_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| format!("{e}.part"))
+            .unwrap_or_else(|| "part".into()),
+    );
+    // If a stale `.part` is lying around from a prior crash, remove it
+    // before opening — File::create would truncate anyway, but rm is
+    // explicit about the intent.
+    if part_path.exists() {
+        if let Err(e) = std::fs::remove_file(&part_path) {
+            tracing::warn!(
+                path = %part_path.display(),
+                error = %e,
+                "snapshot: stale .part removal failed; will overwrite"
+            );
+        }
+    }
+    let file = File::create(&part_path)?;
     let zstd_writer = zstd::stream::Encoder::new(file, opts.zstd_level)
         .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, format!("zstd init: {e}"))))?
         .auto_finish();
@@ -407,7 +574,20 @@ fn write_snapshot_archive(manifest: &SnapshotManifest, opts: &PublishOptions) ->
     )?;
 
     let index_prefix = snapshot_index_path(&manifest.corpus_id);
-    tar.append_dir_all(&index_prefix, &opts.index_dir)?;
+
+    if let Some(view) = lance_view {
+        // Walk index_dir top-level entries, deferring chunks.lance to
+        // the Lance-aware path below for transactional consistency.
+        append_dir_skipping(&mut tar, &index_prefix, &opts.index_dir, &["chunks.lance"])?;
+        let lance_archive_prefix = format!("{index_prefix}/chunks.lance");
+        let chunks_lance_dir = opts.index_dir.join("chunks.lance");
+        append_lance_snapshot(&mut tar, &lance_archive_prefix, &chunks_lance_dir, view)?;
+    } else {
+        // No lance dataset present (catalog corpora, etc.) — fall back
+        // to the naive walk. Safe because there's no LanceDB writer
+        // racing with us.
+        tar.append_dir_all(&index_prefix, &opts.index_dir)?;
+    }
 
     if let Some(enrichment_dir) = opts.enrichment_dir.as_ref() {
         let enrichment_prefix = snapshot_enrichment_path(&manifest.corpus_id);
@@ -415,6 +595,100 @@ fn write_snapshot_archive(manifest: &SnapshotManifest, opts: &PublishOptions) ->
     }
 
     tar.finish()?;
+    // Tar succeeded — promote .part to the final path atomically.
+    std::fs::rename(&part_path, &opts.output_path)?;
+    Ok(())
+}
+
+/// Append every top-level entry of `src` to `tar` under `prefix`,
+/// except those whose top-level name is in `skip`. Directories below
+/// the skipped names are not walked. Used to defer `chunks.lance/`
+/// (Lance-aware capture) while still grabbing siblings like
+/// `_corpus_meta.json`, `atlas/`, `wikipedia_graph.db`.
+fn append_dir_skipping<W: io::Write>(
+    tar: &mut tar::Builder<W>,
+    prefix: &str,
+    src: &Path,
+    skip: &[&str],
+) -> Result<()> {
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let name_owned = entry.file_name();
+        let name = name_owned.to_string_lossy();
+        if skip.iter().any(|s| *s == name.as_ref()) {
+            continue;
+        }
+        let path = entry.path();
+        let archive_path = format!("{prefix}/{name}");
+        let file_type = entry.file_type()?;
+        if file_type.is_dir() {
+            tar.append_dir_all(&archive_path, &path)?;
+        } else if file_type.is_file() {
+            tar.append_path_with_name(&path, &archive_path)?;
+        } else {
+            tracing::debug!(path = %path.display(), "snapshot: skipping non-regular entry");
+        }
+    }
+    Ok(())
+}
+
+/// Tar exactly the Lance files referenced by `view`'s manifest, plus
+/// the manifest file itself, plus any index subtrees referenced by
+/// UUID. This is the consistency-correct replacement for
+/// `tar.append_dir_all(prefix, chunks_lance_dir)`.
+///
+/// The set is closed under the manifest: every file we write is
+/// referenced by the manifest, and every file the manifest references
+/// is present. Lance opening the restored dataset reads the same
+/// manifest and finds all its dependencies.
+fn append_lance_snapshot<W: io::Write>(
+    tar: &mut tar::Builder<W>,
+    archive_prefix: &str,
+    lance_dir: &Path,
+    view: &LanceSnapshotView,
+) -> Result<()> {
+    // 1. Manifest file. Lance reads `_versions/` alphabetically; since
+    //    this is the only file there in the restored archive, it wins
+    //    the "latest version" race trivially.
+    let manifest_rel = format!("_versions/{}", view.manifest_filename);
+    let manifest_abs = lance_dir.join("_versions").join(&view.manifest_filename);
+    tar.append_path_with_name(
+        &manifest_abs,
+        format!("{archive_prefix}/{manifest_rel}"),
+    )?;
+
+    // 2. Fragment data files. These are content-addressed and immutable
+    //    on disk per Lance's storage model, so we can rely on their
+    //    paths matching the manifest's expectations.
+    for rel in &view.data_files {
+        let abs = lance_dir.join(rel);
+        if !abs.is_file() {
+            return Err(Error::Database(format!(
+                "lance manifest version {} references missing data file {}",
+                view.version,
+                abs.display()
+            )));
+        }
+        tar.append_path_with_name(&abs, format!("{archive_prefix}/{rel}"))?;
+    }
+
+    // 3. Index subtrees. Lance writes each index under
+    //    `_indices/<uuid>/<files>`; the manifest's index_section names
+    //    the live indexes by UUID. New index builds create new UUIDs,
+    //    so the directory we read here corresponds to this version.
+    for uuid in &view.index_uuids {
+        let idx_dir = lance_dir.join("_indices").join(uuid);
+        if idx_dir.is_dir() {
+            let idx_archive = format!("{archive_prefix}/_indices/{uuid}");
+            tar.append_dir_all(&idx_archive, &idx_dir)?;
+        } else {
+            tracing::warn!(
+                uuid,
+                "snapshot: lance manifest references index uuid with no on-disk directory — skipping"
+            );
+        }
+    }
+
     Ok(())
 }
 
@@ -516,6 +790,15 @@ pub struct RestoreOutcome {
 /// these subdirectory prefixes, so extracting under that root places
 /// each piece in the right place.
 ///
+/// `target_corpus_id` lets the caller rename the corpus on restore:
+/// tar entries with prefix `indexes/<archive_corpus_id>/` are rewritten
+/// to `indexes/<target_corpus_id>/` during extraction, and the
+/// on-disk `_corpus_meta.json::corpus_id` is patched to match. Pass
+/// `manifest.corpus_id` (or any equal value) to preserve the original
+/// id. Renaming enables side-by-side installs (testing, branches),
+/// and also prevents a "sibling" recipe pointing at the same
+/// published snapshot from silently clobbering the original install.
+///
 /// `expected_sha256`, when set, gates restore on a streaming hash of
 /// the archive before any tar entry is extracted. This is the
 /// authoritative integrity check; the in-archive manifest carries a
@@ -530,6 +813,7 @@ pub struct RestoreOutcome {
 pub fn restore_snapshot_archive(
     archive_path: &Path,
     sovereign_data_dir: &Path,
+    target_corpus_id: &str,
     expected_sha256: Option<&str>,
     local_embedding_model: &str,
     local_embedding_dimensions: usize,
@@ -554,13 +838,27 @@ pub fn restore_snapshot_archive(
 
     let manifest = read_manifest_from_archive(archive_path)?;
     manifest.check_embedding_compatibility(local_embedding_model, local_embedding_dimensions)?;
+    let archive_corpus_id = manifest.corpus_id.clone();
+    let renaming = archive_corpus_id != target_corpus_id;
+    if renaming {
+        tracing::info!(
+            archive_corpus_id = %archive_corpus_id,
+            target_corpus_id = %target_corpus_id,
+            "snapshot: extracting with rename"
+        );
+    }
 
     std::fs::create_dir_all(sovereign_data_dir)?;
-    let archive_size_bytes = extract_snapshot_entries(archive_path, sovereign_data_dir)?;
+    let archive_size_bytes = extract_snapshot_entries(
+        archive_path,
+        sovereign_data_dir,
+        &archive_corpus_id,
+        target_corpus_id,
+    )?;
 
-    let index_dir = sovereign_data_dir.join(snapshot_index_path(&manifest.corpus_id));
+    let index_dir = sovereign_data_dir.join(snapshot_index_path(target_corpus_id));
     let enrichment_dir = if manifest.atlas_included {
-        let p = sovereign_data_dir.join(snapshot_enrichment_path(&manifest.corpus_id));
+        let p = sovereign_data_dir.join(snapshot_enrichment_path(target_corpus_id));
         if p.exists() {
             Some(p)
         } else {
@@ -576,6 +874,10 @@ pub fn restore_snapshot_archive(
         )));
     }
 
+    if renaming {
+        patch_meta_corpus_id(&index_dir, target_corpus_id)?;
+    }
+
     Ok(RestoreOutcome {
         manifest,
         index_dir,
@@ -584,12 +886,56 @@ pub fn restore_snapshot_archive(
     })
 }
 
+/// Read the restored `_corpus_meta.json`, overwrite its `corpus_id`
+/// field (and `corpus_name` to a sensible default if it still matches
+/// the archive's) with `target_corpus_id`, and write the file back.
+/// Preserves every other field byte-for-byte by going through
+/// `serde_json::Value` instead of a typed struct.
+fn patch_meta_corpus_id(index_dir: &Path, target_corpus_id: &str) -> Result<()> {
+    let meta_path = index_dir.join("_corpus_meta.json");
+    let bytes = std::fs::read(&meta_path)?;
+    let mut value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
+        Error::Serialization(format!("parse {}: {e}", meta_path.display()))
+    })?;
+    let obj = value.as_object_mut().ok_or_else(|| {
+        Error::Serialization(format!("{} is not a JSON object", meta_path.display()))
+    })?;
+    obj.insert(
+        "corpus_id".to_string(),
+        serde_json::Value::String(target_corpus_id.to_string()),
+    );
+    let serialised = serde_json::to_vec_pretty(&value).map_err(|e| {
+        Error::Serialization(format!("re-serialise {}: {e}", meta_path.display()))
+    })?;
+    std::fs::write(&meta_path, serialised)?;
+    tracing::info!(
+        meta = %meta_path.display(),
+        corpus_id = %target_corpus_id,
+        "snapshot: patched _corpus_meta.json::corpus_id"
+    );
+    Ok(())
+}
+
 /// Stream entries out of the archive into `dest`, skipping the
 /// manifest (which is an archive-internal artifact, not part of the
 /// on-disk index layout). Returns the total uncompressed bytes
-/// written. Path-traversal entries (`..`, absolute paths) are
-/// rejected — the `tar` crate's `Entry::unpack_in` enforces this.
-fn extract_snapshot_entries(archive_path: &Path, dest: &Path) -> Result<u64> {
+/// written.
+///
+/// When `archive_corpus_id != target_corpus_id`, tar entry paths of
+/// the form `indexes/<archive_id>/...` and `enrichment/<archive_id>/...`
+/// are rewritten to use `<target_id>/...` before extraction. This lets
+/// a caller restore the archive under a different corpus id without
+/// post-hoc directory renaming.
+///
+/// Path-traversal entries (`..`, absolute paths) are rejected — both
+/// because we constrain the rewritten path ourselves and because the
+/// `tar` crate's unpack path enforces it as a defence in depth.
+fn extract_snapshot_entries(
+    archive_path: &Path,
+    dest: &Path,
+    archive_corpus_id: &str,
+    target_corpus_id: &str,
+) -> Result<u64> {
     let file = File::open(archive_path)?;
     let zstd_reader = zstd::stream::Decoder::new(file)
         .map_err(|e| Error::Io(io::Error::new(io::ErrorKind::Other, format!("zstd open: {e}"))))?;
@@ -598,27 +944,83 @@ fn extract_snapshot_entries(archive_path: &Path, dest: &Path) -> Result<u64> {
     archive.set_preserve_mtime(true);
     archive.set_overwrite(true);
 
+    let needs_rewrite = archive_corpus_id != target_corpus_id;
     let mut total: u64 = 0;
     for entry in archive.entries()? {
         let mut entry = entry?;
-        let path = entry.path()?.into_owned();
-        if path.to_str() == Some(SNAPSHOT_MANIFEST_FILENAME) {
+        let original_path = entry.path()?.into_owned();
+        if original_path.to_str() == Some(SNAPSHOT_MANIFEST_FILENAME) {
             continue;
         }
-        let size = entry.size();
-        // `unpack_in` is path-traversal-safe: rejects absolute paths
-        // and `..` components.
-        let unpacked = entry.unpack_in(dest)?;
-        if unpacked {
-            total += size;
+        let rewritten = if needs_rewrite {
+            rewrite_corpus_id_in_path(&original_path, archive_corpus_id, target_corpus_id)
         } else {
+            original_path.clone()
+        };
+        // Reject anything that would escape `dest`. `unpack` will
+        // also enforce this, but doing it ourselves gives a clearer
+        // error message and avoids partially-written state when the
+        // rewrite produces a path the caller didn't intend.
+        if rewritten.is_absolute() || rewritten.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
             tracing::warn!(
-                entry = %path.display(),
-                "snapshot extract: tar crate refused unsafe entry (rejected)"
+                entry = %original_path.display(),
+                rewritten = %rewritten.display(),
+                "snapshot extract: refusing unsafe path"
             );
+            continue;
         }
+        let target = dest.join(&rewritten);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let size = entry.size();
+        // `unpack` writes the entry at the absolute target path we
+        // built. It still enforces tar-level safety (header checks,
+        // mode bits, link rejection on bad paths).
+        entry.unpack(&target)?;
+        total += size;
     }
     Ok(total)
+}
+
+/// Rewrite the leading `<prefix>/<archive_id>/...` of a tar entry path
+/// to `<prefix>/<target_id>/...` for the two known prefix dirs
+/// (`indexes/`, `enrichment/`). Returns the input unchanged if it
+/// doesn't match the expected layout — defensive: an archive that
+/// added new top-level dirs in a future schema would pass through
+/// without surprise rewrites.
+fn rewrite_corpus_id_in_path(
+    path: &Path,
+    archive_corpus_id: &str,
+    target_corpus_id: &str,
+) -> PathBuf {
+    let mut components = path.components();
+    let Some(first) = components.next() else {
+        return path.to_path_buf();
+    };
+    let prefix = match first {
+        std::path::Component::Normal(s) => s.to_string_lossy().to_string(),
+        _ => return path.to_path_buf(),
+    };
+    if prefix != SNAPSHOT_INDEX_PREFIX && prefix != SNAPSHOT_ENRICHMENT_PREFIX {
+        return path.to_path_buf();
+    }
+    let Some(second) = components.next() else {
+        return path.to_path_buf();
+    };
+    let archive_id_component = match second {
+        std::path::Component::Normal(s) => s.to_string_lossy().to_string(),
+        _ => return path.to_path_buf(),
+    };
+    if archive_id_component != archive_corpus_id {
+        return path.to_path_buf();
+    }
+    let mut out = PathBuf::from(&prefix);
+    out.push(target_corpus_id);
+    for c in components {
+        out.push(c.as_os_str());
+    }
+    out
 }
 
 #[cfg(test)]
@@ -737,8 +1139,8 @@ mod tests {
         std::fs::write(root.join("cache/_tokens.json"), b"{}").unwrap();
     }
 
-    #[test]
-    fn publish_roundtrip_includes_manifest_and_index_subtree() {
+    #[tokio::test]
+    async fn publish_roundtrip_includes_manifest_and_index_subtree() {
         let tmp = tempfile::tempdir().unwrap();
         let index_dir = tmp.path().join("indexes/wikitest");
         let enrichment_dir = tmp.path().join("enrichment/wikitest");
@@ -758,6 +1160,7 @@ mod tests {
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
         })
+        .await
         .unwrap();
 
         assert!(outcome.archive_size_bytes > 0);
@@ -782,8 +1185,13 @@ mod tests {
         assert!(snippet.contains("compatible_embedding_model = \"qwen3-embedding-0.6b\""));
     }
 
-    #[test]
-    fn publish_without_enrichment_marks_atlas_not_included() {
+    #[tokio::test]
+    async fn publish_without_enrichment_but_with_atlas_in_index_marks_atlas_included() {
+        // `write_fake_index_dir` always writes a tiny `atlas/` subdir
+        // inside the index dir (the wikipedia-style in-place layout).
+        // Even with `enrichment_dir: None`, atlas_included must be
+        // `true` because the data IS in the archive — it just comes
+        // from indexes/<id>/atlas/ rather than enrichment/<id>/.
         let tmp = tempfile::tempdir().unwrap();
         let index_dir = tmp.path().join("indexes/wikitest");
         let output_path = tmp.path().join("out.tar.zst");
@@ -801,6 +1209,48 @@ mod tests {
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
         })
+        .await
+        .unwrap();
+
+        assert!(outcome.manifest.atlas_included);
+        let read_back = read_manifest_from_archive(&output_path).unwrap();
+        assert!(read_back.atlas_included);
+    }
+
+    #[tokio::test]
+    async fn publish_with_neither_atlas_location_marks_not_included() {
+        let tmp = tempfile::tempdir().unwrap();
+        let index_dir = tmp.path().join("indexes/wikitest");
+        let output_path = tmp.path().join("out.tar.zst");
+        // Write the index dir WITHOUT an atlas subdir.
+        std::fs::create_dir_all(&index_dir).unwrap();
+        let meta = serde_json::json!({
+            "corpus_id": "wikitest",
+            "corpus_name": "Test",
+            "embedding_model": "qwen3-embedding-0.6b",
+            "embedding_dimensions": 1024,
+            "scope": { "filter_signature": "sig" },
+        });
+        std::fs::write(
+            index_dir.join("_corpus_meta.json"),
+            serde_json::to_vec_pretty(&meta).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(index_dir.join("chunks.lance"), b"fake lance bytes").unwrap();
+
+        let outcome = publish_snapshot(PublishOptions {
+            index_dir,
+            enrichment_dir: None,
+            output_path: output_path.clone(),
+            snapshot_id: "wikitest-2026-05-12".into(),
+            chunk_count: 7,
+            residual_gap_pct: None,
+            notes: None,
+            source_recipe_sha256: None,
+            producer_version: "sovereign-cli/test".into(),
+            zstd_level: 3,
+        })
+        .await
         .unwrap();
 
         assert!(!outcome.manifest.atlas_included);
@@ -808,7 +1258,7 @@ mod tests {
         assert!(!read_back.atlas_included);
     }
 
-    fn publish_to(tmp: &Path) -> (PathBuf, PublishOutcome) {
+    async fn publish_to(tmp: &Path) -> (PathBuf, PublishOutcome) {
         let index_dir = tmp.join("indexes/wikitest");
         let enrichment_dir = tmp.join("enrichment/wikitest");
         let output_path = tmp.join("out.tar.zst");
@@ -826,19 +1276,21 @@ mod tests {
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
         })
+        .await
         .unwrap();
         (output_path, outcome)
     }
 
-    #[test]
-    fn restore_roundtrip_recovers_index_and_enrichment() {
+    #[tokio::test]
+    async fn restore_roundtrip_recovers_index_and_enrichment() {
         let pub_tmp = tempfile::tempdir().unwrap();
-        let (archive_path, outcome) = publish_to(pub_tmp.path());
+        let (archive_path, outcome) = publish_to(pub_tmp.path()).await;
 
         let restore_tmp = tempfile::tempdir().unwrap();
         let result = restore_snapshot_archive(
             &archive_path,
             restore_tmp.path(),
+            "wikitest",
             Some(&outcome.archive_sha256),
             "qwen3-embedding-0.6b",
             1024,
@@ -854,14 +1306,49 @@ mod tests {
         assert!(!restore_tmp.path().join(SNAPSHOT_MANIFEST_FILENAME).exists());
     }
 
-    #[test]
-    fn restore_refuses_sha256_mismatch() {
+    #[tokio::test]
+    async fn restore_with_rename_lands_under_new_corpus_id_and_patches_meta() {
         let pub_tmp = tempfile::tempdir().unwrap();
-        let (archive_path, _) = publish_to(pub_tmp.path());
+        let (archive_path, outcome) = publish_to(pub_tmp.path()).await;
+
+        let restore_tmp = tempfile::tempdir().unwrap();
+        let result = restore_snapshot_archive(
+            &archive_path,
+            restore_tmp.path(),
+            "wikitest-sibling",
+            Some(&outcome.archive_sha256),
+            "qwen3-embedding-0.6b",
+            1024,
+        )
+        .unwrap();
+
+        // Rename lands under the target id, not the archive's.
+        assert_eq!(result.index_dir, restore_tmp.path().join("indexes/wikitest-sibling"));
+        assert!(restore_tmp.path().join("indexes/wikitest-sibling/_corpus_meta.json").exists());
+        assert!(restore_tmp.path().join("indexes/wikitest-sibling/atlas/_summary.json").exists());
+        // Original archive_corpus_id path must NOT be created.
+        assert!(!restore_tmp.path().join("indexes/wikitest").exists());
+        // Enrichment subtree renamed too.
+        assert!(restore_tmp.path().join("enrichment/wikitest-sibling/config.json").exists());
+        assert!(!restore_tmp.path().join("enrichment/wikitest").exists());
+        // Patched _corpus_meta.json points at the new id.
+        let meta = std::fs::read_to_string(result.index_dir.join("_corpus_meta.json")).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&meta).unwrap();
+        assert_eq!(v.get("corpus_id").and_then(|x| x.as_str()), Some("wikitest-sibling"));
+        // The returned manifest still reflects the archive's original id —
+        // it's a description of the archive, not of the on-disk state.
+        assert_eq!(result.manifest.corpus_id, "wikitest");
+    }
+
+    #[tokio::test]
+    async fn restore_refuses_sha256_mismatch() {
+        let pub_tmp = tempfile::tempdir().unwrap();
+        let (archive_path, _) = publish_to(pub_tmp.path()).await;
         let restore_tmp = tempfile::tempdir().unwrap();
         let err = restore_snapshot_archive(
             &archive_path,
             restore_tmp.path(),
+            "wikitest",
             Some("0000000000000000000000000000000000000000000000000000000000000000"),
             "qwen3-embedding-0.6b",
             1024,
@@ -872,14 +1359,15 @@ mod tests {
         assert!(!restore_tmp.path().join("indexes/wikitest").exists());
     }
 
-    #[test]
-    fn restore_refuses_embedding_model_mismatch() {
+    #[tokio::test]
+    async fn restore_refuses_embedding_model_mismatch() {
         let pub_tmp = tempfile::tempdir().unwrap();
-        let (archive_path, outcome) = publish_to(pub_tmp.path());
+        let (archive_path, outcome) = publish_to(pub_tmp.path()).await;
         let restore_tmp = tempfile::tempdir().unwrap();
         let err = restore_snapshot_archive(
             &archive_path,
             restore_tmp.path(),
+            "wikitest",
             Some(&outcome.archive_sha256),
             "jina-v2-en",
             1024,

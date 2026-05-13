@@ -497,6 +497,7 @@ impl CorpusEngine {
         let outcome = restore_snapshot_archive(
             &archive_path,
             &sovereign_data_dir,
+            &corpus_id,
             expected_sha,
             &self.expected_embedding_model,
             recipe.index.embedding_dimensions,

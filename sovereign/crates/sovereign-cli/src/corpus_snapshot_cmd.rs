@@ -11,8 +11,8 @@ use std::process::Command;
 
 use chrono::Utc;
 use corpus_engine::snapshot::{
-    prebuilt_toml_snippet, publish_snapshot, read_manifest_from_archive, PublishOptions,
-    SnapshotManifest,
+    prebuilt_toml_snippet, publish_snapshot, read_manifest_from_archive,
+    restore_snapshot_archive, PublishOptions, SnapshotManifest,
 };
 use corpus_engine::CorpusIndex;
 
@@ -26,12 +26,13 @@ const PRODUCER_VERSION: &str = concat!("sovereign-cli/", env!("CARGO_PKG_VERSION
 
 const HELP_SNAPSHOT: Help = Help {
     command: "sovereign corpus snapshot",
-    summary: "Publish and inspect prebuilt-index tarballs for cold-start onboarding.",
+    summary: "Publish, inspect, and restore prebuilt-index tarballs for cold-start onboarding.",
     sections: &[
         HelpSection::Usage("sovereign corpus snapshot <subcommand> [args]"),
         HelpSection::Subcommands(&[
             ("publish <id>", "Build a .tar.zst snapshot of an installed corpus and (optionally) upload to HuggingFace"),
             ("inspect <archive>", "Print the manifest from an existing snapshot archive"),
+            ("restore <ref>", "Download (HF) and extract a snapshot. Used to validate the cold-start path before promoting it via the recipe's [prebuilt] block."),
         ]),
         HelpSection::Notes(
             "`publish` writes to ~/.sovereign/snapshots/<filename>.tar.zst by default.\n\
@@ -40,9 +41,33 @@ const HELP_SNAPSHOT: Help = Help {
     ],
 };
 
+const HELP_SNAPSHOT_RESTORE: Help = Help {
+    command: "sovereign corpus snapshot restore",
+    summary: "Download a snapshot from HuggingFace (or use a local file) and extract it under `~/.sovereign/`.",
+    sections: &[
+        HelpSection::Usage(
+            "sovereign corpus snapshot restore <hf_repo>/<filename> [flags]\n\
+             sovereign corpus snapshot restore --archive <path> [flags]",
+        ),
+        HelpSection::Flags(&[
+            ("--archive <path>", "Use a local .tar.zst instead of fetching from HF"),
+            ("--as <corpus_id>", "Rename the corpus on restore (lands under indexes/<this id>/). Default: archive's manifest.corpus_id."),
+            ("--into <dir>", "Sovereign data root (default ~/.sovereign/)"),
+            ("--expected-sha256 <hex>", "Gate restore on this archive sha256 (recommended for the production path)"),
+            ("--embedding-model <name>", "Compatibility check against this model name (default: qwen-embedding-0.6b)"),
+            ("--embedding-dim <n>", "Compatibility check against this vector dimensionality (default: 1024)"),
+        ]),
+        HelpSection::Notes(
+            "After a successful restore, validate with `sovereign corpus diag <corpus_id>`.\n\
+             For empirical testing of the cold-start path, use `--as <something>-prebuilt-test`\n\
+             so the existing install isn't touched.",
+        ),
+    ],
+};
+
 const HELP_SNAPSHOT_PUBLISH: Help = Help {
     command: "sovereign corpus snapshot publish",
-    summary: "Package an installed corpus into a .tar.zst snapshot for distribution.",
+    summary: "Package an installed corpus into a .tar.zst snapshot for distribution. Build is resumable; upload retries with backoff.",
     sections: &[
         HelpSection::Usage("sovereign corpus snapshot publish <corpus_id> [flags]"),
         HelpSection::Flags(&[
@@ -53,12 +78,20 @@ const HELP_SNAPSHOT_PUBLISH: Help = Help {
             ("--residual-gap-pct <f>", "Known incompleteness percent (e.g. 2.81 for wikipedia)"),
             ("--zstd-level <int>", "Zstd compression level (default 19 — high ratio, slower; use 3 for fast)"),
             ("--upload <repo>", "Upload to HuggingFace via `hf upload` (e.g. svrnmesh/wikipedia-index)"),
+            ("--upload-max-attempts <n>", "Retry the HF upload up to N times with exponential backoff (default 5)"),
+            ("--rebuild", "Force a fresh tar even if a complete archive is already at the output path"),
+            ("--upload-only", "Skip the build entirely; require an existing archive at the output path"),
             ("--dry-run", "Print the upload command instead of running it"),
         ]),
         HelpSection::Notes(
-            "Pre-flight: run `sovereign corpus diag <id>` first to confirm completeness;\n\
-             the resulting count goes into the manifest. After publish, paste the\n\
-             printed [prebuilt] block into sovereign-recipes/<id>/recipe.toml.",
+            "Resumable: an interrupted build leaves `<output>.part`; a complete build leaves\n\
+             `<output>`. Re-running the same command skips a complete build and retries the\n\
+             upload (HF's multipart resume handles already-sent chunks). For an upload-only\n\
+             retry after a frozen `hf upload`, just re-run the same command — the build is\n\
+             skipped automatically.\n\n\
+             Pre-flight: run `sovereign corpus diag <id>` first to confirm completeness;\n\
+             the resulting count goes into the manifest. After publish, paste the printed\n\
+             [prebuilt] block into sovereign-recipes/<id>/recipe.toml.",
         ),
     ],
 };
@@ -79,6 +112,7 @@ pub async fn run_snapshot(args: &[String]) -> i32 {
     match args[0].as_str() {
         "publish" => cmd_publish(&args[1..]).await,
         "inspect" => cmd_inspect(&args[1..]),
+        "restore" => cmd_restore(&args[1..]).await,
         other => {
             eprintln!("Unknown snapshot subcommand: {other}");
             crate::util::help::print(&HELP_SNAPSHOT);
@@ -98,12 +132,24 @@ struct PublishArgs {
     zstd_level: i32,
     upload_repo: Option<String>,
     dry_run: bool,
+    /// Force rebuild even when a complete archive is already on disk.
+    /// Without this, an existing archive at the resolved output path
+    /// is reused (sha re-verified) and the upload phase retries —
+    /// this is the resumable-after-frozen-HF-upload happy path.
+    rebuild: bool,
+    /// Skip the build entirely; only run the upload. Errors if the
+    /// archive isn't already at the resolved output path.
+    upload_only: bool,
+    /// How many times to retry `hf upload` on failure, with
+    /// exponential backoff between attempts.
+    upload_max_attempts: u32,
 }
 
 fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, String> {
     let mut out = PublishArgs {
         include_atlas: true,
         zstd_level: 19,
+        upload_max_attempts: 5,
         ..Default::default()
     };
     let mut iter = args.iter();
@@ -140,6 +186,19 @@ fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, Strin
                 out.upload_repo = Some(v.clone());
             }
             "--dry-run" => out.dry_run = true,
+            "--rebuild" => out.rebuild = true,
+            "--upload-only" => out.upload_only = true,
+            "--upload-max-attempts" => {
+                let v = iter
+                    .next()
+                    .ok_or("--upload-max-attempts requires an integer")?;
+                out.upload_max_attempts = v
+                    .parse()
+                    .map_err(|_| format!("--upload-max-attempts: '{v}' is not an integer"))?;
+                if out.upload_max_attempts == 0 {
+                    return Err("--upload-max-attempts must be >= 1".into());
+                }
+            }
             "--help" | "-h" => return Err("__help__".into()),
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));
@@ -151,6 +210,9 @@ fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, Strin
                 out.corpus_id = Some(other.to_string());
             }
         }
+    }
+    if out.rebuild && out.upload_only {
+        return Err("--rebuild and --upload-only are mutually exclusive".into());
     }
     Ok(out)
 }
@@ -182,16 +244,40 @@ async fn cmd_publish(args: &[String]) -> i32 {
         return 1;
     }
     let enrichment_root = home_dir().join(".sovereign/enrichment").join(&corpus_id);
+    let atlas_in_index = index_dir.join("atlas").is_dir();
     let enrichment_dir = if parsed.include_atlas && enrichment_root.exists() {
         Some(enrichment_root.clone())
     } else {
         None
     };
-    if parsed.include_atlas && enrichment_dir.is_none() {
-        eprintln!(
-            "Note: --no-atlas not set, but {} does not exist — publishing without an atlas subtree.",
-            enrichment_root.display()
-        );
+    match (atlas_in_index, enrichment_dir.is_some(), parsed.include_atlas) {
+        (true, true, true) => {
+            println!(
+                "Atlas: capturing from both {}/atlas/ and {}",
+                index_dir.display(),
+                enrichment_root.display()
+            );
+        }
+        (true, false, true) => {
+            println!(
+                "Atlas: capturing from {}/atlas/ (in-index location; no separate enrichment dir at {})",
+                index_dir.display(),
+                enrichment_root.display()
+            );
+        }
+        (false, true, true) => {
+            println!("Atlas: capturing from {}", enrichment_root.display());
+        }
+        (false, false, true) => {
+            println!(
+                "Atlas: not found at {}/atlas/ or {} — publishing without atlas data",
+                index_dir.display(),
+                enrichment_root.display()
+            );
+        }
+        (_, _, false) => {
+            println!("Atlas: skipped (--no-atlas)");
+        }
     }
 
     println!("Counting chunks in {} ...", index_dir.display());
@@ -220,36 +306,92 @@ async fn cmd_publish(args: &[String]) -> i32 {
             .join(format!("{snapshot_id}.tar.zst"))
     });
 
-    println!("Building archive at {} (zstd level {}) ...", output_path.display(), parsed.zstd_level);
-    println!("  this can take several minutes for multi-GB indexes");
+    // Resumable-publish: an existing archive at output_path is reused
+    // unless --rebuild was passed. A sibling `.part` is the marker for
+    // an interrupted build — the engine's write_snapshot_archive
+    // tar-renames atomically, so if `.part` exists alongside (or
+    // without) the final file, the prior build crashed and we must
+    // rebuild.
+    let part_marker = part_path_for(&output_path);
+    let archive_complete = output_path.is_file() && !part_marker.exists();
+    let skip_build = parsed.upload_only || (archive_complete && !parsed.rebuild);
 
-    let opts = PublishOptions {
-        index_dir,
-        enrichment_dir,
-        output_path: output_path.clone(),
-        snapshot_id: snapshot_id.clone(),
-        chunk_count,
-        residual_gap_pct: parsed.residual_gap_pct,
-        notes: parsed.notes.clone(),
-        source_recipe_sha256: None,
-        producer_version: PRODUCER_VERSION.to_string(),
-        zstd_level: parsed.zstd_level,
-    };
-
-    let outcome = match publish_snapshot(opts) {
-        Ok(o) => o,
-        Err(e) => {
-            eprintln!("Publish failed: {e}");
-            let _ = std::fs::remove_file(&output_path);
+    let outcome = if skip_build {
+        if !output_path.is_file() {
+            eprintln!(
+                "--upload-only requires an existing archive at {} — not found",
+                output_path.display()
+            );
             return 1;
+        }
+        println!(
+            "Reusing existing archive at {} (skipping build; pass --rebuild to force)",
+            output_path.display()
+        );
+        match reconstruct_outcome(&output_path) {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("Cannot read existing archive: {e}");
+                return 1;
+            }
+        }
+    } else {
+        if part_marker.exists() {
+            println!(
+                "Discarding stale partial archive at {} (prior build interrupted)",
+                part_marker.display()
+            );
+            if let Err(e) = std::fs::remove_file(&part_marker) {
+                eprintln!("Warning: could not remove {}: {e}", part_marker.display());
+            }
+        }
+        println!(
+            "Building archive at {} (zstd level {}) ...",
+            output_path.display(),
+            parsed.zstd_level
+        );
+        println!("  this can take several minutes for multi-GB indexes");
+
+        let opts = PublishOptions {
+            index_dir,
+            enrichment_dir,
+            output_path: output_path.clone(),
+            snapshot_id: snapshot_id.clone(),
+            chunk_count,
+            residual_gap_pct: parsed.residual_gap_pct,
+            notes: parsed.notes.clone(),
+            source_recipe_sha256: None,
+            producer_version: PRODUCER_VERSION.to_string(),
+            zstd_level: parsed.zstd_level,
+        };
+
+        match publish_snapshot(opts).await {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("Publish failed: {e}");
+                // Leave .part on disk so the operator can inspect; the
+                // next invocation will discard it before retrying.
+                return 1;
+            }
         }
     };
 
     println!();
     println!("  archive: {}", outcome.archive_path.display());
-    println!("  size:    {:.2} GB ({} bytes)", outcome.archive_size_bytes as f64 / 1.073e9_f64, outcome.archive_size_bytes);
+    println!(
+        "  size:    {:.2} GB ({} bytes)",
+        outcome.archive_size_bytes as f64 / 1.073e9_f64,
+        outcome.archive_size_bytes
+    );
     println!("  sha256:  {}", outcome.archive_sha256);
-    println!("  atlas:   {}", if outcome.manifest.atlas_included { "included" } else { "not included" });
+    println!(
+        "  atlas:   {}",
+        if outcome.manifest.atlas_included {
+            "included"
+        } else {
+            "not included"
+        }
+    );
 
     if let Some(repo) = parsed.upload_repo.as_deref() {
         let filename = outcome
@@ -270,12 +412,20 @@ async fn cmd_publish(args: &[String]) -> i32 {
             println!("  {cmd_str}");
         } else {
             println!();
-            println!("Uploading to {target} ...");
-            match run_hf_upload(repo, &outcome.archive_path) {
+            println!(
+                "Uploading to {target} (max {} attempts) ...",
+                parsed.upload_max_attempts
+            );
+            match run_hf_upload_with_retry(repo, &outcome.archive_path, parsed.upload_max_attempts)
+                .await
+            {
                 Ok(()) => println!("Upload complete."),
                 Err(msg) => {
-                    eprintln!("Upload failed: {msg}");
-                    eprintln!("You can retry manually:");
+                    eprintln!("Upload failed after {} attempts: {msg}", parsed.upload_max_attempts);
+                    eprintln!(
+                        "The archive is still on disk; re-run the same command to retry just the upload \
+                         (the build phase will be skipped). Or run manually:"
+                    );
                     eprintln!("  {cmd_str}");
                     return 1;
                 }
@@ -335,6 +485,94 @@ fn run_hf_upload(repo: &str, archive: &Path) -> std::result::Result<(), String> 
     ))
 }
 
+/// Retry `run_hf_upload` up to `max_attempts` with exponential backoff
+/// (15s, 30s, 60s, 120s, 240s capped at 5min). `hf upload` does its
+/// own multipart-resume internally — already-uploaded chunks aren't
+/// re-sent — so retrying is cheap when an upload merely froze.
+async fn run_hf_upload_with_retry(
+    repo: &str,
+    archive: &Path,
+    max_attempts: u32,
+) -> std::result::Result<(), String> {
+    let mut last_err = String::new();
+    for attempt in 1..=max_attempts {
+        if attempt > 1 {
+            let backoff_secs = (15u64 * (1 << (attempt - 2))).min(300);
+            eprintln!(
+                "Attempt {attempt}/{max_attempts}: waiting {backoff_secs}s before retry \
+                 (previous error: {last_err}) …"
+            );
+            tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
+        }
+        eprintln!("Attempt {attempt}/{max_attempts}: hf upload …");
+        match run_hf_upload(repo, archive) {
+            Ok(()) => return Ok(()),
+            Err(msg) => {
+                last_err = msg;
+            }
+        }
+    }
+    Err(last_err)
+}
+
+/// Compute the sibling `.part` path for an output archive. Mirrors
+/// the same convention `corpus-engine::snapshot::write_snapshot_archive`
+/// writes to.
+fn part_path_for(output: &Path) -> PathBuf {
+    output.with_extension(
+        output
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| format!("{e}.part"))
+            .unwrap_or_else(|| "part".into()),
+    )
+}
+
+/// Reconstruct a `PublishOutcome`-shaped view from an archive file
+/// already on disk. Used in the `--upload-only` and skip-build resume
+/// paths so the rest of `cmd_publish` (the upload + snippet phase)
+/// doesn't need to know whether the archive was just produced or
+/// reused from a prior run. Reads the in-archive manifest, recomputes
+/// sha256, returns sizes.
+fn reconstruct_outcome(archive: &Path) -> std::result::Result<corpus_engine::snapshot::PublishOutcome, String> {
+    use corpus_engine::snapshot::{read_manifest_from_archive, PublishOutcome};
+
+    let manifest = read_manifest_from_archive(archive)
+        .map_err(|e| format!("read manifest from {}: {e}", archive.display()))?;
+    let (sha, size) = hash_file_sha256(archive)?;
+    Ok(PublishOutcome {
+        manifest,
+        archive_path: archive.to_path_buf(),
+        archive_sha256: sha,
+        archive_size_bytes: size,
+    })
+}
+
+/// Compute SHA-256 of a file in 1-MiB blocks. Returns `(hex_digest, size)`.
+fn hash_file_sha256(path: &Path) -> std::result::Result<(String, u64), String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    let mut total: u64 = 0;
+    loop {
+        let n = file.read(&mut buf).map_err(|e| format!("read {}: {e}", path.display()))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+        total += n as u64;
+    }
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest.iter() {
+        use std::fmt::Write;
+        let _ = write!(hex, "{byte:02x}");
+    }
+    Ok((hex, total))
+}
+
 fn cmd_inspect(args: &[String]) -> i32 {
     if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h") {
         crate::util::help::print(&HELP_SNAPSHOT_INSPECT);
@@ -379,4 +617,357 @@ fn print_manifest(m: &SnapshotManifest) {
     }
     println!("  producer_version:       {}", m.producer_version);
     println!("  created_at:             {} (unix)", m.created_at);
+}
+
+// ─── restore ────────────────────────────────────────────────────────────────
+
+#[derive(Default)]
+struct RestoreArgs {
+    /// HuggingFace ref `<repo>/<filename>` (positional, mutually exclusive with --archive).
+    hf_ref: Option<String>,
+    archive: Option<PathBuf>,
+    as_id: Option<String>,
+    into: Option<PathBuf>,
+    expected_sha256: Option<String>,
+    embedding_model: String,
+    embedding_dim: usize,
+}
+
+fn parse_restore_args(args: &[String]) -> std::result::Result<RestoreArgs, String> {
+    let mut out = RestoreArgs {
+        embedding_model: "qwen-embedding-0.6b".to_string(),
+        embedding_dim: 1024,
+        ..Default::default()
+    };
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--archive" => {
+                let v = iter.next().ok_or("--archive requires a path")?;
+                out.archive = Some(PathBuf::from(v));
+            }
+            "--as" => {
+                let v = iter.next().ok_or("--as requires a corpus id")?;
+                out.as_id = Some(v.clone());
+            }
+            "--into" => {
+                let v = iter.next().ok_or("--into requires a path")?;
+                out.into = Some(PathBuf::from(v));
+            }
+            "--expected-sha256" => {
+                let v = iter.next().ok_or("--expected-sha256 requires a hex string")?;
+                out.expected_sha256 = Some(v.clone());
+            }
+            "--embedding-model" => {
+                let v = iter.next().ok_or("--embedding-model requires a name")?;
+                out.embedding_model = v.clone();
+            }
+            "--embedding-dim" => {
+                let v = iter.next().ok_or("--embedding-dim requires an integer")?;
+                out.embedding_dim = v
+                    .parse()
+                    .map_err(|_| format!("--embedding-dim: '{v}' is not an integer"))?;
+            }
+            "--help" | "-h" => return Err("__help__".into()),
+            other if other.starts_with("--") => return Err(format!("unknown flag: {other}")),
+            other => {
+                if out.hf_ref.is_some() {
+                    return Err(format!("unexpected positional argument: {other}"));
+                }
+                out.hf_ref = Some(other.to_string());
+            }
+        }
+    }
+    Ok(out)
+}
+
+async fn cmd_restore(args: &[String]) -> i32 {
+    let parsed = match parse_restore_args(args) {
+        Ok(p) => p,
+        Err(msg) if msg == "__help__" => {
+            crate::util::help::print(&HELP_SNAPSHOT_RESTORE);
+            return 0;
+        }
+        Err(msg) => {
+            eprintln!("{msg}");
+            return 2;
+        }
+    };
+
+    if parsed.hf_ref.is_some() == parsed.archive.is_some() {
+        eprintln!(
+            "exactly one of <hf_repo>/<filename> (positional) or --archive <path> is required"
+        );
+        return 2;
+    }
+
+    let sovereign_data_dir = parsed.into.clone().unwrap_or_else(|| home_dir().join(".sovereign"));
+    if !sovereign_data_dir.exists() {
+        if let Err(e) = std::fs::create_dir_all(&sovereign_data_dir) {
+            eprintln!("cannot create {}: {e}", sovereign_data_dir.display());
+            return 1;
+        }
+    }
+
+    // Resolve the archive — either local or HF fetch.
+    let archive_path = if let Some(local) = parsed.archive.clone() {
+        if !local.is_file() {
+            eprintln!("--archive {} does not exist or is not a file", local.display());
+            return 1;
+        }
+        local
+    } else {
+        let hf_ref = parsed.hf_ref.as_deref().unwrap();
+        let Some((repo, filename)) = split_hf_ref(hf_ref) else {
+            eprintln!(
+                "expected <hf_repo>/<filename> (e.g. svrnmesh/wikipedia-index/wikipedia-...tar.zst); got: {hf_ref}"
+            );
+            return 2;
+        };
+        let url = format!("https://huggingface.co/datasets/{repo}/resolve/main/{filename}");
+        let download_dir = sovereign_data_dir.join("snapshots/_downloads");
+        if let Err(e) = std::fs::create_dir_all(&download_dir) {
+            eprintln!("cannot create {}: {e}", download_dir.display());
+            return 1;
+        }
+        println!("Downloading {url} ...");
+        match fetch_hf_archive(&url, &download_dir, &filename).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Download failed: {e}");
+                return 1;
+            }
+        }
+    };
+
+    // Peek the manifest so we can default --as to the archive's id and
+    // surface the headline stats before the (possibly slow) extract.
+    let preview = match read_manifest_from_archive(&archive_path) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Cannot read manifest from {}: {e}", archive_path.display());
+            return 1;
+        }
+    };
+    println!();
+    println!("archive manifest:");
+    println!("  archive_corpus_id:    {}", preview.corpus_id);
+    println!("  snapshot_id:          {}", preview.snapshot_id);
+    println!("  embedding_model:      {} ({}d)", preview.embedding_model, preview.embedding_dimensions);
+    println!("  chunk_count:          {}", preview.chunk_count);
+    println!("  atlas_included:       {}", preview.atlas_included);
+    if let Some(p) = preview.residual_gap_pct {
+        println!("  residual_gap_pct:     {p:.2}%");
+    }
+
+    let target_id = parsed.as_id.clone().unwrap_or_else(|| preview.corpus_id.clone());
+    println!();
+    if target_id != preview.corpus_id {
+        println!("Extracting under target corpus id: {target_id} (renaming from {})", preview.corpus_id);
+    } else {
+        println!("Extracting under archive's corpus id: {target_id}");
+    }
+
+    let expected_sha = parsed.expected_sha256.as_deref();
+    if expected_sha.is_none() {
+        eprintln!(
+            "Note: --expected-sha256 not set. Restore will run without integrity verification; \
+             for the production path always pass the sha256 from the recipe's [prebuilt] block."
+        );
+    }
+
+    let outcome = match restore_snapshot_archive(
+        &archive_path,
+        &sovereign_data_dir,
+        &target_id,
+        expected_sha,
+        &parsed.embedding_model,
+        parsed.embedding_dim,
+    ) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("Restore failed: {e}");
+            return 1;
+        }
+    };
+
+    println!();
+    println!("✓ Restored");
+    println!("  index_dir:    {}", outcome.index_dir.display());
+    if let Some(p) = outcome.enrichment_dir.as_ref() {
+        println!("  enrichment:   {}", p.display());
+    }
+    println!("  bytes:        {} ({:.2} GB)", outcome.archive_size_bytes, outcome.archive_size_bytes as f64 / 1.073e9_f64);
+    println!();
+    println!("Next: `sovereign corpus diag {target_id}` to confirm chunk count + L5 coverage.");
+    0
+}
+
+/// Split a HuggingFace ref of the form `<org>/<dataset>/<filename>`
+/// into `(repo, filename)`. Returns None if the ref has fewer than
+/// three slash-separated components (we always need at least
+/// org/dataset/file). Trailing slashes are tolerated; filename can
+/// contain slashes too if the user uploaded into a subdirectory.
+fn split_hf_ref(s: &str) -> Option<(String, String)> {
+    // HF repo ids are exactly "<org>/<name>" — first two segments.
+    // Everything after is the path-in-repo.
+    let mut parts = s.splitn(3, '/');
+    let org = parts.next()?;
+    let name = parts.next()?;
+    let filename = parts.next()?;
+    if org.is_empty() || name.is_empty() || filename.is_empty() {
+        return None;
+    }
+    Some((format!("{org}/{name}"), filename.to_string()))
+}
+
+/// Download `url` to `<download_dir>/<filename>` with HTTP Range
+/// resume and bounded retries. Streams to `<dest>.part`; renames to
+/// `<dest>` on completion. On a partial download (network drop,
+/// `stream: error decoding response body`, etc.) the partial bytes
+/// are kept and the next attempt continues from the existing offset
+/// via `Range: bytes=<existing_len>-`.
+///
+/// Retries up to `max_attempts` times with exponential backoff,
+/// mirroring the upload retry policy. The total wall time is bounded
+/// by `attempts × per_attempt_timeout`.
+async fn fetch_hf_archive(
+    url: &str,
+    download_dir: &Path,
+    filename: &str,
+) -> std::result::Result<PathBuf, String> {
+    let max_attempts: u32 = 5;
+    let dest = download_dir.join(filename);
+    if dest.exists() {
+        // Already fully downloaded on a prior run — sha verify inside
+        // restore is the integrity gate.
+        return Ok(dest);
+    }
+    let part = download_dir.join(format!("{filename}.part"));
+    let mut last_err = String::new();
+    for attempt in 1..=max_attempts {
+        if attempt > 1 {
+            let backoff_secs = (15u64 * (1 << (attempt - 2))).min(300);
+            let resume_offset = std::fs::metadata(&part)
+                .map(|m| m.len())
+                .unwrap_or(0);
+            eprintln!(
+                "Attempt {attempt}/{max_attempts}: waiting {backoff_secs}s before resuming \
+                 from {:.2} GB (previous error: {last_err}) …",
+                resume_offset as f64 / 1.073e9_f64
+            );
+            tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
+        }
+        match fetch_hf_archive_attempt(url, &part).await {
+            Ok(()) => {
+                std::fs::rename(&part, &dest).map_err(|e| {
+                    format!("rename {} -> {}: {e}", part.display(), dest.display())
+                })?;
+                return Ok(dest);
+            }
+            Err(msg) => {
+                last_err = msg;
+            }
+        }
+    }
+    Err(format!(
+        "download failed after {max_attempts} attempts: {last_err}"
+    ))
+}
+
+/// One attempt at the download. Uses `Range: bytes=<existing>-` when
+/// `<dest>.part` already has bytes from a prior interrupted attempt,
+/// and appends to the same file. Returns Ok when the stream ends
+/// cleanly with the expected total size, Err otherwise — leaving the
+/// `.part` file in place for the next retry to pick up.
+async fn fetch_hf_archive_attempt(url: &str, part: &Path) -> std::result::Result<(), String> {
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    let existing_len: u64 = std::fs::metadata(part).map(|m| m.len()).unwrap_or(0);
+
+    let client = reqwest::Client::builder()
+        .user_agent("sovereign-cli snapshot-restore")
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+    let mut req = client.get(url);
+    if existing_len > 0 {
+        req = req.header("Range", format!("bytes={existing_len}-"));
+    }
+    let resp = req.send().await.map_err(|e| format!("GET {url}: {e}"))?;
+    let status = resp.status();
+    // 200 OK = fresh full body; 206 Partial Content = Range honoured.
+    // Anything else (including 416 Range Not Satisfiable when the
+    // server already has all bytes — rare for HF but possible) is a
+    // hard error for this attempt; the retry loop will try again.
+    if existing_len > 0 && status == reqwest::StatusCode::OK {
+        // Server ignored Range (returns full body) — restart from 0
+        // by truncating the existing .part.
+        eprintln!("  server ignored Range; restarting download from 0");
+        if let Some(parent) = part.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
+        std::fs::File::create(part)
+            .map_err(|e| format!("truncate {}: {e}", part.display()))?;
+    } else if !status.is_success() && status != reqwest::StatusCode::PARTIAL_CONTENT {
+        return Err(format!("{url} returned {status}"));
+    }
+
+    let content_length = resp.content_length();
+    let total_expected = if status == reqwest::StatusCode::PARTIAL_CONTENT {
+        // For 206, content_length is the remaining bytes — total is
+        // existing + remaining.
+        content_length.map(|c| existing_len + c)
+    } else {
+        content_length
+    };
+
+    let mut out = tokio::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(part)
+        .await
+        .map_err(|e| format!("open {} for append: {e}", part.display()))?;
+    // If status was 200 OK with existing_len > 0, we truncated above —
+    // re-open in write mode to ensure offset is 0.
+    let mut written: u64 = if status == reqwest::StatusCode::OK {
+        out.set_len(0).await.ok();
+        0
+    } else {
+        existing_len
+    };
+
+    let mut stream = resp.bytes_stream();
+    let mut last_logged: u64 = written;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("stream: {e}"))?;
+        out.write_all(&chunk).await.map_err(|e| format!("write: {e}"))?;
+        written += chunk.len() as u64;
+        if written - last_logged > (1 << 28) {
+            // ~256 MiB tick.
+            if let Some(total) = total_expected {
+                eprintln!(
+                    "  downloaded {:.2} / {:.2} GB",
+                    written as f64 / 1.073e9_f64,
+                    total as f64 / 1.073e9_f64
+                );
+            } else {
+                eprintln!("  downloaded {:.2} GB", written as f64 / 1.073e9_f64);
+            }
+            last_logged = written;
+        }
+    }
+    out.flush().await.map_err(|e| format!("flush: {e}"))?;
+    drop(out);
+
+    // Validate length matches Content-Length when the server told us.
+    if let Some(expected) = total_expected {
+        if written != expected {
+            return Err(format!(
+                "incomplete stream: wrote {written} bytes, expected {expected}"
+            ));
+        }
+    }
+    Ok(())
 }
