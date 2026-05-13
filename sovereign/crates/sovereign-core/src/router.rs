@@ -185,25 +185,6 @@ pub(crate) fn suggest_alternatives(
     out
 }
 
-/// Returns true when the message contains surface signals that the answer
-/// involves specific enumerable facts — names, rosters, lists, statistics —
-/// where weight-only answers commonly hallucinate.
-fn has_enumerable_markers(message: &str) -> bool {
-    let lower = message.to_lowercase();
-    [
-        "who was", "who were", "who played", "who scored", "who won",
-        "which players", "starting lineup", "starting 11", "starting xi",
-        "full squad", "full cast", "full list", "list of",
-        "how many", "what year", "what date", "when was", "when did",
-        "how tall", "how far", "what is the population",
-        "what was the score", "what were the results",
-        "episodes in", "seasons of", "members of",
-        "ingredients in", "steps to", "requirements for",
-    ]
-    .iter()
-    .any(|marker| lower.contains(marker))
-}
-
 fn parse_self_assessment(raw: &str) -> SelfAssessment {
     let upper = raw.trim().to_uppercase();
     if upper.contains("UNCERTAIN") {
@@ -433,7 +414,7 @@ EXPRESSIVE
 User message: "{message}"{corrections_note}{skill_hints}
 
 Respond with JSON only:
-{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE", "confidence": 0.0, "rationale": "one short clause"}}"#,
+{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE"}}"#,
         )
     }
 
@@ -1190,9 +1171,16 @@ Reply with JSON only:
     /// masks logits to force the model to emit only schema-conforming
     /// bytes. Without this, small fast-slot models (Qwen3.5-2B) write
     /// reasoning prose ("Let me analyse this message carefully…")
-    /// instead of JSON, which `parse_coarse` can't recover from. The
-    /// schema mirrors `CoarseClassification` (line 26): `intent` enum
-    /// + `confidence` number + optional `rationale` string.
+    /// instead of JSON, which `parse_coarse` can't recover from.
+    ///
+    /// The schema is `{"intent": <enum>}` only — the decode cost of
+    /// every extra schema field is paid on every routing turn. A
+    /// `rationale` field invites the model to chain-of-thought in
+    /// JSON before committing to the intent, which both costs ~20-30
+    /// tokens and biases the answer toward analytical labels on
+    /// emotive inputs. A `confidence` field has nowhere to land —
+    /// `assess_simple_query` always runs self_assess on the SIMPLE
+    /// branch, so there's no threshold to gate.
     async fn classify_call_json(&self, prompt: String, max_tokens: usize) -> Result<String> {
         let schema = serde_json::json!({
             "type": "object",
@@ -1211,10 +1199,8 @@ Reply with JSON only:
                         "METALINGUAL",
                     ],
                 },
-                "confidence": {"type": "number"},
-                "rationale": {"type": "string"},
             },
-            "required": ["intent", "confidence"],
+            "required": ["intent"],
         });
         let request = CompletionRequest {
             prompt,
@@ -1344,18 +1330,19 @@ Reply with JSON only:
 
     /// Called when Pass 1 returns SIMPLE. Runs a fast self-assessment to decide
     /// whether to answer directly from weights or escalate to KnowledgeQuery.
+    ///
+    /// The `_confidence` parameter is vestigial: Pass 1's schema no
+    /// longer emits a confidence field (it cost ~20 decode tokens
+    /// per turn and had no use beyond a fast-path here). With no
+    /// signal to gate on, every SIMPLE classification falls through
+    /// to self_assess — ~100ms extra on the SIMPLE branch only.
     async fn assess_simple_query(
         &self,
         message: &str,
         context: &ConversationContext,
-        confidence: f32,
+        _confidence: f32,
     ) -> Result<(Intent, Option<String>)> {
-        // Fast path: high-confidence, no enumerable-fact markers → commit to SimpleQuery.
-        if confidence >= 0.92 && !has_enumerable_markers(message) {
-            return Ok((Intent::SimpleQuery, None));
-        }
-
-        // Slow path: run a self-assessment on the Fast slot (~100ms extra latency).
+        // Always run self-assessment on the Fast slot (~100ms extra latency).
         let assessment = self.self_assess(message, context).await?;
         let label = format!("{assessment:?}");
         let intent = match assessment {
@@ -1835,7 +1822,11 @@ impl Router for LlmRouter {
             // bumped value via a knob if/when we wire one up).
             used_llm = true;
             let llm_start = Instant::now();
-            let pass1_response = self.classify_call_json(pass1_prompt, 60).await?;
+            // 16-token budget. Schema is `{"intent": "<enum>"}` —
+            // masker forces structural tokens; longest enum value is
+            // "EXPRESSIVE" (5 tokens for most BPEs) plus 4 wrapper
+            // tokens. 16 is generous slack.
+            let pass1_response = self.classify_call_json(pass1_prompt, 16).await?;
             llm_ms = llm_start.elapsed().as_millis() as u64;
             let parse_start = Instant::now();
             let parsed = Self::parse_coarse(&pass1_response);
@@ -2193,34 +2184,6 @@ mod tests {
         assert!(!LlmRouter::looks_like_content_processing(
             "what is the capital of France"
         ));
-    }
-
-    // ── has_enumerable_markers ──────────────────────────────────
-
-    #[test]
-    fn enumerable_markers_arsenal_invincibles() {
-        assert!(has_enumerable_markers(
-            "Who was in the starting 11 for the Arsenal Invincibles?"
-        ));
-    }
-
-    #[test]
-    fn enumerable_markers_math_question() {
-        assert!(!has_enumerable_markers("What is 12 × 14?"));
-    }
-
-    #[test]
-    fn enumerable_markers_definition() {
-        assert!(!has_enumerable_markers("What does ephemeral mean?"));
-    }
-
-    #[test]
-    fn enumerable_markers_various_positives() {
-        assert!(has_enumerable_markers("Who won the Premier League in 2004?"));
-        assert!(has_enumerable_markers("List of countries in the EU"));
-        assert!(has_enumerable_markers("How many seasons of Breaking Bad are there?"));
-        assert!(has_enumerable_markers("What year was the Eiffel Tower built?"));
-        assert!(has_enumerable_markers("Members of the Beatles"));
     }
 
     // ── parse_coarse ────────────────────────────────────────────
