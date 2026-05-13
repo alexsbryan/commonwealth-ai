@@ -3858,6 +3858,7 @@ impl Runtime {
                     limit,
                     self.rerank_fn.as_ref(),
                     &self.rerank_config,
+                    None,
                 )
                 .await
             {
@@ -3972,6 +3973,7 @@ impl Runtime {
                     limit,
                     self.rerank_fn.as_ref(),
                     &self.rerank_config,
+                    None,
                 )
                 .await
             {

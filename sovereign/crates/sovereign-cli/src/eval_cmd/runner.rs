@@ -32,7 +32,7 @@ use std::collections::{HashMap, HashSet};
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use sovereign_core::atlas_context::{
-    atlas_top_k_across, AtlasContext, AtlasEntry,
+    atlas_top_k_across, cosine, AtlasContext, AtlasEntry,
 };
 
 use crate::chat_cmd::bootstrap::ChatSession;
@@ -1072,7 +1072,51 @@ async fn run_question(
     };
     let embed_ms = t_embed.elapsed().as_millis() as u64;
 
-    // 2. Search every matching corpus index.
+    // 2. Compute per-article atlas relevance scores once, before the
+    // search loop. These flow into `search_with_rerank` as a third
+    // signal alongside the cross-encoder logit and the hybrid fusion
+    // score. The map is `article_slug → max_cosine` across every atlas
+    // atom (atoms come from many atom types, all carry an embedding).
+    // Cheap: ~few thousand cosines per question for the SEP 57-atlas
+    // workload. Skipped entirely when the runtime config opts atlas
+    // weight to zero (the default) or when no atlases are loaded —
+    // baseline-A/B remains byte-equivalent to prior runs.
+    let atlas_article_scores: HashMap<String, f32> =
+        if session.runtime.rerank_config.atlas_weight.abs() > f32::EPSILON
+            && !atlases.is_empty()
+            && !embedding.is_empty()
+        {
+            let mut by_slug: HashMap<String, f32> = HashMap::new();
+            for ctx in atlases {
+                let slug = ctx
+                    .atlas_corpus_id
+                    .strip_prefix("sep-")
+                    .unwrap_or(&ctx.atlas_corpus_id)
+                    .to_string();
+                let mut best: f32 = 0.0;
+                for entry in &ctx.entries {
+                    let s = cosine(&embedding, &entry.embedding);
+                    if s > best {
+                        best = s;
+                    }
+                }
+                if best > 0.0 {
+                    by_slug
+                        .entry(slug)
+                        .and_modify(|cur| {
+                            if best > *cur {
+                                *cur = best;
+                            }
+                        })
+                        .or_insert(best);
+                }
+            }
+            by_slug
+        } else {
+            HashMap::new()
+        };
+
+    // 3. Search every matching corpus index.
     let t_search = Instant::now();
     let mut all_hits: Vec<ScoredChunk> = Vec::new();
     let mut any_vector_eligible = false;
@@ -1106,6 +1150,11 @@ async fn run_question(
         // the call is byte-identical to `search()` — same overfetch,
         // same ordering, same threshold semantics — so the
         // baseline-vs-rerank A/B is honest.
+        let atlas_scores_opt = if atlas_article_scores.is_empty() {
+            None
+        } else {
+            Some(&atlas_article_scores)
+        };
         match idx
             .search_with_rerank(
                 query_vec,
@@ -1113,6 +1162,7 @@ async fn run_question(
                 search_limit,
                 session.runtime.rerank_fn.as_ref(),
                 &session.runtime.rerank_config,
+                atlas_scores_opt,
             )
             .await
         {

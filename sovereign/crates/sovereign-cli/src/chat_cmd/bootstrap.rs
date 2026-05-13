@@ -495,14 +495,20 @@ pub async fn build_session_with_skills(
                     cfg.per_article =
                         s == "1" || s.eq_ignore_ascii_case("true");
                 }
+                if let Ok(s) = std::env::var("SOVEREIGN_RERANK_ATLAS_WEIGHT") {
+                    if let Ok(f) = s.parse::<f32>() {
+                        cfg.atlas_weight = f;
+                    }
+                }
                 cfg.dedup_corpus_filter = dedup_filter.clone();
                 cfg.dedup_picker = dedup_picker;
                 eprintln!(
-                    "Reranker:    {} (candidates_k={}, alpha={:.2}, per_article={}, dedup_corpora={:?}, min_score={:?})",
+                    "Reranker:    {} (candidates_k={}, alpha={:.2}, per_article={}, atlas_weight={:.2}, dedup_corpora={:?}, min_score={:?})",
                     path.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
                     cfg.candidates_k,
                     cfg.alpha,
                     cfg.per_article,
+                    cfg.atlas_weight,
                     cfg.dedup_corpus_filter.as_ref().map(|s| {
                         let mut v: Vec<&String> = s.iter().collect();
                         v.sort();

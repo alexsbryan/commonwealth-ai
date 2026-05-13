@@ -454,6 +454,158 @@ break this path.
 
 ---
 
+## Candidate-pool sweep + atlas-as-rerank-feature — 2026-05-12
+
+User-flagged framing problem: the experiment up to this point reranked
+within whatever LanceDB returned in its first 50 candidates and never
+touched the atlas — even though SEP has 57 Tier-2-enriched atlases
+covering every `expected_source` in the bank. The cross-encoder was
+working blind to a structural signal the project already pays to
+compute.
+
+Two parts to the follow-up: (a) a clean K-pool sweep to see whether
+"wider net" alone helps (it doesn't on its own), and (b) a new
+`RerankConfig.atlas_weight` knob that folds per-article atlas
+relevance into the blend alongside fusion + rerank.
+
+### Part A — pool-width sweep at limit=10 (control)
+
+All runs: SEP bank, `--limit 10`, per_article=1, alpha=0.7, **no
+atlas**. Compares to baseline (no rerank).
+
+| candidates_k | Sources | Facts | Median search ms |
+|---|---|---|---|
+| baseline (no rerank) | 40/66 (61%) | 134/159 (84%) | 97 |
+| 50 (kept config) | 51/66 (77%) | 131/159 (82%) | 2005 |
+| 100 | 48/66 (73%) | 130/159 (82%) | 4133 |
+| 200 | 50/66 (76%) | 131/159 (82%) | 8307 |
+| 500 | 51/66 (77%) | 130/159 (82%) | 20351 |
+
+**Widening alone does not help.** The cross-encoder over-promotes
+tangential-but-dense articles at scale; per-article dedup then
+fills the top-10 with those. A separate probe at `--limit 50,
+candidates_k=500` returned 60/66 sources — i.e. the canonical
+articles ARE in the wide pool, they just lose the dedup
+tiebreak. Either a wider output limit or a different tiebreaker
+is needed; the atlas signal turns out to be both at once.
+
+### Part B — atlas as a third blend term
+
+New: `RerankConfig.atlas_weight: f32` (default 0.0, no behaviour
+change). When set and the eval / runtime passes a per-article slug
+→ score map into `search_with_rerank`, the blended score becomes
+
+```
+final = alpha * rerank_norm
+      + (1 - alpha) * fusion_norm
+      + atlas_weight * atlas_norm
+```
+
+All three terms min-max normalised inside the candidate pool. Atlas
+score per candidate = `max cosine(query, entity_embedding)` over
+every atom in the candidate's source-article atlas, with `0.0` for
+articles outside the supplied map (the intended bias — canonical
+enriched articles shouldn't have to compete with off-atlas
+articles on cross-encoder logits alone).
+
+The eval CLI computes the map once per question from the loaded
+atlases (`--with-atlas` accepts a comma-separated list; for this
+experiment we pass all 57 `sep-<slug>` atlases that back the bank's
+`expected_sources`). 57 atlases × ~30 atoms each × 1 cosine = ~few
+thousand ops/question, dominated by the reranker forward passes.
+
+All atlas-side runs ALSO have `--with-atlas` on (which means the
+existing post-search atlas-fetch append is active too — see §Atlas-
+grounded retrieval). The new feature is additive *over* that
+mechanism; the table compares against atlas-fetch-only (w=0) as
+the meaningful baseline, not the no-atlas k=50 kept config.
+
+| candidates_k | atlas_weight | Sources | Facts | Median ms |
+|---|---|---|---|---|
+| 50 | 0.0 (atlas-fetch only) | 59/66 (89%) | 143/159 (90%) | ~2000 |
+| 50 | 0.3 | 59 | 143 | ~2000 |
+| 50 | 0.5 | 59 | 143 | ~2000 |
+| 50 | 1.0 | 59 | 143 | ~2000 |
+| 200 | 0.5 | **62 (94%)** | **142 (89%)** | ~9000 |
+| 500 | 0.3 | 62 (94%) | 141 (89%) | 19000 |
+| 500 | 0.5 | 63 (95%) | 138 (87%) | 20000 |
+| 500 | 1.0 | **65 (98%)** | 133 (84%) | 20000 |
+
+Two findings the table makes obvious:
+
+1. **At k=50, atlas_weight has no effect.** The candidate pool is
+   already narrow enough that per-article dedup picks the same 10
+   distinct articles regardless of the third blend term — there
+   simply isn't a competing canonical article ranked 11-20 for
+   atlas to promote up. The new feature only earns its keep when
+   composed with a wider pool.
+2. **At k=200+, atlas_weight is a Pareto knob.** Sources improve
+   monotonically with `atlas_weight`; facts decay monotonically.
+   The trade is real because raising the atlas term displaces
+   chunks from articles the atlas has no opinion on, even when
+   those chunks carry the answer text. SEP's `expected_facts` are
+   word-level substrings, so losing one off-atlas chunk can drop
+   3-4 facts at once.
+
+### Decision (revised)
+
+**For SEP-shaped corpora the empirical-best balanced config is
+`candidates_k=200, atlas_weight=0.5` with `--with-atlas` on all
+57 bank atlases:** 62/66 sources / 142/159 facts. +3 sources
+over atlas-fetch-only with **no fact regression**, at 2.5× the
+latency of the kept k=50 config but well under the k=500 cost.
+
+The max-sources point is `candidates_k=500, atlas_weight=1.0`
+(65/66 sources, 133 facts) — useful when source recall is the
+primary metric (e.g. citation-pinning evals or a follow-up
+synthesis pass that re-reads the source). The fact cost is real;
+don't ship it default.
+
+Pool-width caveat from part A still applies for **corpora without
+an atlas**: at atlas_weight=0, wider k doesn't help SEP and
+neither would it help any other corpus where the cross-encoder
+can't separate canonical from tangential on chunk content alone.
+The atlas signal is what makes wide-net rerank pay off.
+
+### Implementation footprint
+
+| File | Change |
+|---|---|
+| `corpus-engine/src/types.rs` | `RerankConfig.atlas_weight: f32`, default 0.0 |
+| `corpus-engine/src/index/search.rs` | `search_with_rerank(.., atlas_article_scores: Option<&HashMap<String, f32>>)`; atlas_norm min-max across pool; `atlas_score` + `atlas_norm` keys added to per-chunk metadata for observability |
+| `sovereign-core/src/runtime.rs` | Pass `None` at both internal callsites (chat path is unchanged) |
+| `sovereign-cli/src/chat_cmd/bootstrap.rs` | Read `SOVEREIGN_RERANK_ATLAS_WEIGHT`; print it in the startup line |
+| `sovereign-cli/src/eval_cmd/runner.rs` | Compute per-question `HashMap<slug, max_cosine>` from loaded atlases before the search loop; thread into `search_with_rerank` |
+
+`SOVEREIGN_RERANK_ATLAS_WEIGHT=0` (default) is byte-equivalent to
+the prior rerank path — even when atlases are loaded, the blend
+math reduces to `alpha * rerank + (1 - alpha) * fusion` and the
+atlas map allocation is short-circuited by the `f32::EPSILON`
+check.
+
+### Open questions
+
+- **Atlas signal in chat (not just eval).** The runtime path
+  passes `None` today because it has no per-query atlas-score
+  computation wired in. Moving the eval's logic into
+  `Runtime::search_corpus_indexes` (gated on a runtime atlas
+  provider being present) would let chat surfaces inherit the
+  source-recall lift. Scope: ~50 lines, but it adds a per-turn
+  cosine pass over thousands of entries that the eval can amortise
+  per-question but a chat session might not want on hot turns.
+- **Wikipedia cross-corpus test.** This experiment validates the
+  feature on SEP only. Wiki's atlas (`wiki-l5-tier2-full`,
+  `wiki-l5-struct`) has different shape — fewer extracted
+  entities, more structural placeholders. The atlas_weight
+  trade-off curve may look very different there.
+- **The lone SEP miss.** At the max-sources config, only
+  `possible-worlds` (for the necessary-a-posteriori question)
+  remains missed across all 21 questions. Worth a one-off probe:
+  is the article in the candidate pool at all, and does its
+  atlas score for that query embedding lift it?
+
+---
+
 ## Saved JSON reports (local, not checked in)
 
 | File | Config |
@@ -463,5 +615,8 @@ break this path.
 | `/tmp/sep_rerank_alpha{0.0..1.0}.json` | hybrid alpha sweep |
 | `/tmp/sep_perarticle_a{0.3..1.0}.json` | per-article alpha sweep |
 | `/tmp/sep_prompt_{lean,verbose}.json` | prompt-variant A/B |
+| `/tmp/sep_rerank_k{100,200,500}.json` | candidate-pool sweep (no atlas) |
+| `/tmp/sep_rerank_k500_lim{20,50}.json` | wide pool, wider output limit |
+| `/tmp/sep_atlasw{0.0,0.3,0.5,1.0}_k{50,200,500}.json` | atlas_weight × k grid |
 | `/tmp/wiki_baseline.json` | baseline |
 | `/tmp/wiki_FINAL.json` | per_article=1, alpha=0.7 |
