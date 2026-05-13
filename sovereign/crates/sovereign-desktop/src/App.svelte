@@ -24,7 +24,10 @@
   import InsightsPanel from "./lib/components/InsightsPanel.svelte";
   import ReadingSurface from "./lib/components/reading/ReadingSurface.svelte";
   import AtomPanel from "./lib/components/reading/AtomPanel.svelte";
+  import AtlasSurface from "./lib/components/atlas/AtlasSurface.svelte";
   import { readingSession } from "./lib/stores/readingSession.svelte";
+  import { atlasNavigation } from "./lib/stores/atlasNavigation.svelte";
+  import { readingNavigation } from "./lib/stores/readingNavigation.svelte";
   import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
   import SetupFlow from "./lib/setup/SetupFlow.svelte";
   import WelcomeThreshold from "./lib/setup/WelcomeThreshold.svelte";
@@ -38,9 +41,10 @@
     | "chat"
     | "settings"
     | "recipe_author"
-    | "inner_work";
+    | "inner_work"
+    | "atlas";
 
-  type RailMode = "chat" | "inner_work" | "settings";
+  type RailMode = "chat" | "inner_work" | "atlas" | "settings";
 
   let view: AppView = $state("loading");
 
@@ -48,6 +52,7 @@
   // maps to "chat" on the rail since it's a sub-surface of outer work.
   let railMode: RailMode = $derived(
     view === "inner_work" ? "inner_work"
+    : view === "atlas" ? "atlas"
     : view === "settings" ? "settings"
     : "chat"
   );
@@ -90,6 +95,34 @@
   let innerWorkMounted = $state(false);
   $effect(() => {
     if (view === "inner_work") innerWorkMounted = true;
+  });
+
+  // Atlas bridge — when the ReadingSurface's AtomPanel requests
+  // "Open in atlas", the chat view can't switch its own host's
+  // view. Watch the store here, flip the rail to atlas, and let
+  // AtlasSurface consume the pending atom on mount. The store
+  // self-clears via `take()` on the receiver side.
+  $effect(() => {
+    if (atlasNavigation.pendingAtom && view !== "atlas") {
+      view = "atlas";
+    }
+  });
+
+  // Reading bridge — the symmetric hop in the other direction.
+  // When AtomDetail (atlas view) clicks "Open in reading" on an
+  // evidence row, this effect flips back to chat and asks the
+  // readingSession to open the citation. Consumes the pending
+  // request so re-entering atlas → chat doesn't replay it.
+  $effect(() => {
+    const pending = readingNavigation.pendingChunk;
+    if (!pending) return;
+    readingNavigation.take();
+    view = "chat";
+    void readingSession.openCitation(
+      pending.corpusId,
+      pending.chunkId,
+      pending.originLabel,
+    );
   });
 
   // Reading surface visibility — driven entirely by the
@@ -276,7 +309,7 @@
     conversationListRef?.loadConversations?.();
   }
 
-  function handleRailNavigate(mode: "chat" | "inner_work" | "settings") {
+  function handleRailNavigate(mode: "chat" | "inner_work" | "atlas" | "settings") {
     // Close reading surface when leaving outer work to keep layout clean.
     if (mode !== "chat" && readingSession.isOpen) {
       readingSession.close();
@@ -302,6 +335,10 @@
         handleRailNavigate("inner_work");
         break;
       case "3":
+        e.preventDefault();
+        handleRailNavigate("atlas");
+        break;
+      case "4":
         e.preventDefault();
         handleRailNavigate("settings");
         break;
@@ -373,6 +410,10 @@
 
       {#if view === "recipe_author"}
         <RecipeAuthorWorkspace onExit={() => (view = "chat")} />
+      {:else if view === "atlas"}
+        <div class="atlas-surface">
+          <AtlasSurface />
+        </div>
       {:else if view === "settings"}
         <div class="settings-surface">
           <SettingsPanel
@@ -820,6 +861,18 @@
     flex-direction: column;
     height: 100%;
     overflow: hidden;
+    background: var(--bg-primary);
+  }
+
+  /* Atlas surface — full-width inspection view, no sidebar. AtlasIndex
+     and its descendants (corpus list in Step 2, browse view in Step 3,
+     atom detail in Step 4) own their own internal layout. Scrolls
+     internally so the header stays in view. */
+  .atlas-surface {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow-y: auto;
     background: var(--bg-primary);
   }
 </style>

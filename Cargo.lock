@@ -8884,6 +8884,7 @@ dependencies = [
  "arrow-array",
  "async-trait",
  "axum",
+ "blake3",
  "bzip2 0.5.2",
  "chrono",
  "commonwealth-core",

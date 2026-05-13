@@ -1,7 +1,7 @@
 <script lang="ts">
   import { fade } from "svelte/transition";
 
-  type RailMode = "chat" | "inner_work" | "settings";
+  type RailMode = "chat" | "inner_work" | "atlas" | "settings";
 
   interface Props {
     active: RailMode;
@@ -15,6 +15,7 @@
   const marks: { id: RailMode; label: string; testid: string }[] = [
     { id: "chat", label: "Outer Work", testid: "nav-chat" },
     { id: "inner_work", label: "Inner Work", testid: "open-inner-work" },
+    { id: "atlas", label: "Atlas", testid: "nav-atlas" },
     { id: "settings", label: "Settings", testid: "nav-settings" },
   ];
 </script>
@@ -46,6 +47,15 @@
           <!-- Lucide: moon — calm and introspective -->
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>
+          </svg>
+        {:else if mark.id === "atlas"}
+          <!-- Lucide: network — the atom graph -->
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="16" y="16" width="6" height="6" rx="1"/>
+            <rect x="2" y="16" width="6" height="6" rx="1"/>
+            <rect x="9" y="2" width="6" height="6" rx="1"/>
+            <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/>
+            <path d="M12 12V8"/>
           </svg>
         {:else}
           <!-- Lucide: settings (cog) -->

@@ -432,7 +432,11 @@ pub struct Configuration {
 /// Discriminated atom-type tag. Matches the `"atom_type"` string in
 /// the on-disk JSON. Spec §2 enumerates the seven atom types; Step
 /// 3a emits only `Entity` and `Event`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Hash` + `Ord` derives let downstream consumers (e.g.
+/// `sovereign-tools::atlas_view`) key maps by atom type for counts
+/// and grouping — trivially correct on a payload-free enum.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AtomType {
     Entity,
     Event,

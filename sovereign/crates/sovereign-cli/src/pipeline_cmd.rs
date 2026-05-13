@@ -6,6 +6,7 @@
 //! sovereign pipeline run    <recipe.toml> [--db <path>] [--seed-only]
 //! sovereign pipeline status <recipe-id>   [--db <path>]
 //! sovereign pipeline list   [--db <path>]
+//! sovereign pipeline pause  <recipe-id>   [--force]
 //! ```
 //!
 //! State lives in `--db` (defaults to `~/.sovereign/pipeline.db`).
@@ -47,6 +48,12 @@ const HELP: Help = Help {
             (
                 "list",
                 "List every recipe-id known to the worklist DB.",
+            ),
+            (
+                "pause <recipe-id>",
+                "Gracefully stop the active driver for this recipe (SIGTERM → drain → \
+                 exit). Worklist state persists; `sovereign pipeline run` resumes from \
+                 where it left off. Use --force to skip drain (SIGKILL).",
             ),
             (
                 "pod up",
@@ -91,6 +98,11 @@ const HELP: Help = Help {
                 "sovereign pipeline status sep-core-v1",
                 "Read-only summary — useful while a driver is running or after it paused.",
             ),
+            (
+                "sovereign pipeline pause sep-core-v1",
+                "Pause the SEP ingest mid-run. In-flight slugs drain, then the driver exits; \
+                 resume with the same `run` invocation.",
+            ),
         ]),
         HelpSection::Notes(
             "The driver shells out to the recipe's `[enrich].command` for each work unit, \
@@ -112,6 +124,7 @@ pub async fn run_pipeline(args: &[String]) -> i32 {
         "run" => cmd_run(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
         "list" => cmd_list(&args[1..]).await,
+        "pause" => cmd_pause(&args[1..]).await,
         "pod" => cmd_pod(&args[1..]).await,
         other => {
             eprintln!("unknown subcommand: {other}");
@@ -326,6 +339,143 @@ async fn cmd_list(args: &[String]) -> i32 {
         }
     }
     0
+}
+
+/// Identify the live driver(s) for a given recipe-id by walking
+/// `/proc/<pid>/cmdline`. Robust to driver invocation shape: we
+/// recognize either the explicit recipe-id form (rare) or the
+/// recipe-toml-path form (common, since `pipeline run` takes a
+/// path). For the latter we parse the recipe's `[recipe].id` and
+/// match.
+///
+/// Returns every PID running that recipe so multiple drivers
+/// (operator misuse — but it happens) all get the signal.
+fn find_driver_pids(recipe_id: &str) -> Vec<u32> {
+    let proc_dir = match std::fs::read_dir("/proc") {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+    let mut pids = Vec::new();
+    for entry in proc_dir.flatten() {
+        let Some(name) = entry.file_name().to_str().map(|s| s.to_string()) else {
+            continue;
+        };
+        let Ok(pid) = name.parse::<u32>() else {
+            continue;
+        };
+        let cmdline_path = format!("/proc/{pid}/cmdline");
+        let Ok(raw) = std::fs::read(&cmdline_path) else {
+            continue;
+        };
+        // /proc/<pid>/cmdline is NUL-separated argv.
+        let argv: Vec<String> = raw
+            .split(|b| *b == 0)
+            .filter(|s| !s.is_empty())
+            .map(|s| String::from_utf8_lossy(s).to_string())
+            .collect();
+        // Match shape: `... sovereign pipeline run <recipe-path>`.
+        // Anything else isn't a pipeline driver we care about.
+        let is_driver = argv.windows(3).any(|w| {
+            (w[0].ends_with("sovereign") || w[0].ends_with("sovereign-cli"))
+                && w[1] == "pipeline"
+                && w[2] == "run"
+        });
+        if !is_driver {
+            continue;
+        }
+        // The argument after `run` is the recipe path. Read it
+        // and check the `[recipe].id` matches.
+        let recipe_arg_idx = argv.iter().position(|s| s == "run").map(|i| i + 1);
+        let Some(idx) = recipe_arg_idx else {
+            continue;
+        };
+        let Some(recipe_arg) = argv.get(idx) else {
+            continue;
+        };
+        let candidate = PathBuf::from(recipe_arg);
+        if !candidate.exists() {
+            continue;
+        }
+        match Recipe::load(&candidate) {
+            Ok(r) if r.recipe.id == recipe_id => pids.push(pid),
+            _ => {}
+        }
+    }
+    pids
+}
+
+async fn cmd_pause(args: &[String]) -> i32 {
+    let Some(recipe_id) = args.first().cloned() else {
+        eprintln!("usage: sovereign pipeline pause <recipe-id> [--force]");
+        return 2;
+    };
+    let mut force = false;
+    for arg in &args[1..] {
+        match arg.as_str() {
+            "--force" => force = true,
+            other => {
+                eprintln!("unknown flag: {other}");
+                return 2;
+            }
+        }
+    }
+
+    let pids = find_driver_pids(&recipe_id);
+    if pids.is_empty() {
+        println!("no active driver for recipe `{recipe_id}` — nothing to pause");
+        return 0;
+    }
+
+    let signum = if force { libc::SIGKILL } else { libc::SIGTERM };
+    let signame = if force { "SIGKILL" } else { "SIGTERM" };
+    for pid in &pids {
+        println!("{signame} driver pid {pid} for recipe `{recipe_id}`");
+        // Safety: libc::kill is just a syscall — no Rust invariants
+        // to uphold. A bad pid returns -1 and sets errno; we read
+        // errno separately rather than unwrap.
+        let rc = unsafe { libc::kill(*pid as libc::pid_t, signum) };
+        if rc != 0 {
+            let err = std::io::Error::last_os_error();
+            eprintln!("  ✗ kill({pid}, {signame}) failed: {err}");
+            // Carry on — other pids may still be killable.
+        }
+    }
+
+    if force {
+        // SIGKILL is immediate; in-flight enrich subprocesses
+        // become orphans (their parent shell `/bin/sh -c …` dies
+        // with the driver). We don't wait — caller knows what they
+        // asked for.
+        return 0;
+    }
+
+    // SIGTERM path: wait for the driver(s) to drain. The driver's
+    // shutdown handler finishes any in-flight unit before exiting
+    // — that's the whole point of `pause` vs `--force`. Poll
+    // /proc once a second; cap the wait at 10 minutes so a wedged
+    // driver doesn't hang the operator's terminal forever (any
+    // longer than that and they'll want --force anyway).
+    println!("waiting for drain (Ctrl-C if you'd rather --force) …");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
+    loop {
+        let alive: Vec<u32> = pids
+            .iter()
+            .copied()
+            .filter(|pid| std::path::Path::new(&format!("/proc/{pid}")).exists())
+            .collect();
+        if alive.is_empty() {
+            println!("✓ paused cleanly");
+            return 0;
+        }
+        if std::time::Instant::now() >= deadline {
+            eprintln!(
+                "drain timed out after 10m; still alive: {alive:?}. Retry with --force \
+                 or send SIGKILL manually."
+            );
+            return 1;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
 }
 
 async fn cmd_pod(args: &[String]) -> i32 {
