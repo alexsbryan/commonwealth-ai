@@ -144,6 +144,25 @@ pub struct RerankConfig {
     /// uses cosine-to-query as the within-article signal, which is
     /// what a cross-encoder approximates without the cost.
     pub dedup_picker: DedupPicker,
+    /// Weight on a per-candidate atlas signal added to the blend.
+    /// `0.0` (default) reproduces baseline rerank+fusion ordering —
+    /// the atlas-scores parameter, even when populated, drops out of
+    /// the math.
+    ///
+    /// When `> 0.0` and `search_with_rerank` is passed a
+    /// per-article-slug score map, the final blend becomes
+    /// `final = alpha * rerank_norm + (1 - alpha) * fusion_norm
+    ///          + atlas_weight * atlas_norm` with all three terms
+    /// min-max normalised inside the candidate pool. Additive — the
+    /// atlas term doesn't steal budget from rerank+fusion, it raises
+    /// the floor for articles the atlas considers canonical.
+    ///
+    /// Candidates whose source article is absent from the atlas map
+    /// score `0.0` for this term, i.e. the pool's floor. That is the
+    /// intended bias for SEP-shaped corpora: articles outside the
+    /// curated atlas shouldn't out-rank enriched canonical entries
+    /// when the cross-encoder logit alone can't separate them.
+    pub atlas_weight: f32,
 }
 
 /// Which signal the per-article dedup pass uses to pick the
@@ -179,6 +198,7 @@ impl Default for RerankConfig {
             per_article: false,
             dedup_corpus_filter: None,
             dedup_picker: DedupPicker::FusedScore,
+            atlas_weight: 0.0,
         }
     }
 }

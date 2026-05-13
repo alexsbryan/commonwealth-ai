@@ -380,6 +380,7 @@ impl CorpusIndex {
         limit: usize,
         rerank_fn: Option<&RerankFn>,
         config: &RerankConfig,
+        atlas_article_scores: Option<&std::collections::HashMap<String, f32>>,
     ) -> Result<Vec<ScoredChunk>> {
         // Per-corpus dedup filter — when set, dedup only fires for
         // corpora whose id is in the allowlist. SEP wins from dedup;
@@ -488,6 +489,35 @@ impl CorpusIndex {
             });
         let alpha = config.alpha.clamp(0.0, 1.0);
 
+        // Atlas-as-rerank-feature: when the caller has computed a
+        // per-article atlas relevance map for this query, and the
+        // config opts a non-zero weight on it, we min-max normalise
+        // the per-candidate atlas score across the pool the same way
+        // we do for rerank/fusion and add it as a third blend term.
+        // Candidates whose source title isn't in the map score `0.0`
+        // pre-normalisation — the intended bias: the atlas should
+        // pull canonical-enriched articles up, not just reorder
+        // among them.
+        let atlas_active = config.atlas_weight.abs() > f32::EPSILON
+            && atlas_article_scores.is_some()
+            && has_reranker;
+        let atlas_lookup = |chunk: &ScoredChunk| -> f32 {
+            atlas_article_scores
+                .and_then(|m| chunk.title.as_deref().and_then(|t| m.get(t)).copied())
+                .unwrap_or(0.0)
+        };
+        let (atlas_min, atlas_max) = if atlas_active {
+            candidates
+                .iter()
+                .map(atlas_lookup)
+                .fold((f32::INFINITY, f32::NEG_INFINITY), |(mn, mx), s| {
+                    (mn.min(s), mx.max(s))
+                })
+        } else {
+            (0.0, 0.0)
+        };
+        let atlas_span = (atlas_max - atlas_min).max(1e-6);
+
         // Promote blended score (or keep fusion score if no reranker);
         // preserve raw fusion + rerank in metadata.
         let mut reranked: Vec<ScoredChunk> = match scores {
@@ -506,7 +536,15 @@ impl CorpusIndex {
                     .map(|(mut chunk, logit)| {
                         let fusion_norm = (chunk.score - fusion_min) / fusion_span;
                         let rerank_norm = (logit - rerank_min) / rerank_span;
-                        let blended = alpha * rerank_norm + (1.0 - alpha) * fusion_norm;
+                        let raw_atlas = atlas_lookup(&chunk);
+                        let atlas_norm = if atlas_active {
+                            (raw_atlas - atlas_min) / atlas_span
+                        } else {
+                            0.0
+                        };
+                        let blended = alpha * rerank_norm
+                            + (1.0 - alpha) * fusion_norm
+                            + config.atlas_weight * atlas_norm;
                         chunk.metadata.insert(
                             "fusion_score".to_string(),
                             format!("{:.6}", chunk.score),
@@ -515,6 +553,16 @@ impl CorpusIndex {
                             "rerank_score".to_string(),
                             format!("{:.6}", logit),
                         );
+                        if atlas_active {
+                            chunk.metadata.insert(
+                                "atlas_score".to_string(),
+                                format!("{:.6}", raw_atlas),
+                            );
+                            chunk.metadata.insert(
+                                "atlas_norm".to_string(),
+                                format!("{:.6}", atlas_norm),
+                            );
+                        }
                         chunk.metadata.insert(
                             "blended_score".to_string(),
                             format!("{:.6}", blended),
@@ -619,6 +667,9 @@ impl CorpusIndex {
             returned = reranked.len(),
             has_reranker,
             alpha,
+            atlas_weight = config.atlas_weight,
+            atlas_active,
+            atlas_articles_scored = atlas_article_scores.map(|m| m.len()).unwrap_or(0),
             per_article_requested = config.per_article,
             per_article_applied = effective_per_article,
             min_score = ?config.min_score,
