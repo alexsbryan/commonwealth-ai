@@ -26,12 +26,16 @@ type = "huggingface_dataset"
 repo = "wikimedia/wikipedia"
 subset = "20231101.simple"
 
-# Simple English HF parquet has the same column shape as the full English
-# parquet — `wikipedia_structured` extractor handles it. (We don't need
-# wikipedia_jsonl here because we're not pulling from the structured-zip
-# distribution.)
+# `wikimedia/wikipedia` ships a *flat* parquet schema (id, url, title,
+# text) — distinct from `wikimedia/structured-wikipedia` which carries
+# nested sections + abstract + identifier columns. We use the generic
+# `parquet` extractor here; `wikipedia_structured` would silently
+# produce zero chunks against the flat schema.
 [extract]
-type = "wikipedia_structured"
+type = "parquet"
+content_column = "text"
+label_column = "title"
+url_column = "url"
 
 [chunk]
 type = "paragraph"

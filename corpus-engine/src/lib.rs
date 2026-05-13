@@ -29,6 +29,7 @@ pub mod registry;
 pub mod rough_edges;
 pub mod safety;
 pub mod sharding;
+pub mod snapshot;
 pub mod sovereign_config;
 pub mod testing;
 pub mod types;
@@ -119,6 +120,13 @@ pub use testing::{
 pub use sharding::{
     append_partition_to_canonical, merge_partitions_into_canonical, AppendReport,
     MergePhaseProgress, PartitionMergeReport,
+};
+pub use snapshot::{
+    default_snapshot_filename, prebuilt_toml_snippet, publish_snapshot, read_local_index_meta,
+    read_manifest_from_archive, restore_snapshot_archive, snapshot_enrichment_path,
+    snapshot_index_path, LocalIndexMetaSummary, PublishOptions, PublishOutcome, RestoreOutcome,
+    SnapshotManifest, SNAPSHOT_ENRICHMENT_PREFIX, SNAPSHOT_INDEX_PREFIX,
+    SNAPSHOT_MANIFEST_FILENAME, SNAPSHOT_SCHEMA_VERSION,
 };
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use types::{
