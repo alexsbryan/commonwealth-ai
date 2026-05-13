@@ -23,6 +23,7 @@ mod git_archaeology_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod corpus_catalog_cmd;
+mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
 mod doc_fetcher;
 mod alignment_cmd;
