@@ -21,6 +21,7 @@
 //! gains.
 
 pub mod budget;
+pub mod inspect;
 pub mod status;
 pub mod wikipedia;
 
@@ -43,6 +44,18 @@ const HELP: Help = Help {
             (
                 "status",
                 "Per-corpus atlas readiness — atom counts, Tier-2 progress, token spend.",
+            ),
+            (
+                "list-corpora",
+                "List installed corpora that have an atlas, with per-type atom counts.",
+            ),
+            (
+                "list-atoms",
+                "Browse atoms in one corpus, filterable by type and name substring.",
+            ),
+            (
+                "show-atom",
+                "Full inspector record for one atom — type body, evidence, related, cross-corpus.",
             ),
         ]),
         HelpSection::Notes(
@@ -68,6 +81,9 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "wikipedia" => wikipedia::run(&args[1..]).await,
         "budget" => budget::run(&args[1..]).await,
         "status" => status::run(&args[1..]).await,
+        "list-corpora" => inspect::run_list_corpora(&args[1..]).await,
+        "list-atoms" => inspect::run_list_atoms(&args[1..]).await,
+        "show-atom" => inspect::run_show_atom(&args[1..]).await,
         other => {
             eprintln!("error: unknown atlas subcommand `{other}`");
             help::print(&HELP);

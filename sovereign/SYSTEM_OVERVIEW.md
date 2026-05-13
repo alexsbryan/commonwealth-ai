@@ -388,13 +388,14 @@ Two coexisting systems. Both opt-in per recipe.
   `philosophy` (full), `multi` (Wikipedia), `personal` /
   `conversational` / `institutional` (KnowledgeView, see §4.12), and
   four stubs.
-- **v2 atlas (`enrichment/pipeline/`)** — typed atom graph (7 atom types ×
-  7 edge types). `Pipeline` trait + `PipelineRegistry` + `ExemplarBank`
-  + `PhaseCache`. Four pipelines: `literary`, `literary_atlas`,
-  `philosophy_atlas`, `referential_atlas` (encyclopedias / wikis /
-  reference works — same scaffolding, referential-tuned prompt assets,
-  Phase 8 skipped). Atlas state stored at
-  `~/.sovereign/indexes/<corpus>/atlas/`.
+- **v2 atlas (`enrichment/pipeline/`)** — typed atom graph (8 atom types ×
+  7 edge types — `ArgumentReconstruction` was added in 2026 to lift
+  named philosophical arguments). `Pipeline` trait + `PipelineRegistry`
+  + `ExemplarBank` + `PhaseCache`. Four pipelines: `literary`,
+  `literary_atlas`, `philosophy_atlas`, `referential_atlas`
+  (encyclopedias / wikis / reference works — same scaffolding,
+  referential-tuned prompt assets, Phase 8 skipped). Atlas state stored
+  at `~/.sovereign/indexes/<corpus>/atlas/`.
 
 See `corpus-engine/ENRICHMENT_V2.md` for the v2 plan of record (status table,
 landing-by-landing scope, schema validation targets).
@@ -1090,6 +1091,39 @@ corpora (plaintext) get a chunk-only reading surface — the atom
 layer no-ops gracefully. Section-bounded layer-2 reading is
 deferred until extractors emit section structure as a queryable
 column.
+
+### 4.10c Atlas Inspector (desktop + CLI)
+
+A read-only inspection surface over the atlas atoms + edges files
+that the extraction pipeline writes. Different concern from the
+reading surface: that one is "follow citations from chat"; this one
+is "browse all enrichments for a corpus."
+
+Three layers:
+
+- **`sovereign-tools::atlas_view`** — module with `FileAtlasReader`
+  (one struct, no traits — Phase 2 grows overlay-merging branches
+  inside it), `StableAtomKey` (content-derived blake3 hash that
+  survives `AtomId` renumbering on re-extraction), and the
+  `atom_browse` + `atom_detail` submodules. In-memory atoms cache is
+  global and keyed by `(atlas_dir mtime, size)` so repeated
+  list/filter calls don't re-deserialise atoms.json.
+- **Desktop** (`sovereign-desktop`) — top-level "Atlas" rail entry
+  (Cmd+3). `AtlasSurface.svelte` routes index → corpus browse →
+  atom detail. Per-type tabs + debounced search at the corpus
+  level. AtomDetail dispatches to 8 type-body subcomponents
+  (`types/EntityBody.svelte`, …, `types/ArgumentReconstructionBody.svelte`).
+  ReadingSurface's `AtomPanel` has an "Open in Atlas" button that
+  bridges via the `atlasNavigation` store.
+- **CLI** — `sovereign atlas list-corpora`, `sovereign atlas list-atoms
+  <corpus> [--type] [--query]`, `sovereign atlas show-atom <corpus>
+  <atom_id>`. Same `FileAtlasReader`; `--format=json` for `jq`.
+
+Read-only today. Phase 2 (curation overlay) is scoped in NoteStore
+todo "Atlas inspector Phase 2 — curation overlay" and §10.1 below.
+Forward-compat `curation_status` / `overlay_supports` / `stable_key`
+fields are already on the wire so the UI gates flip on without a
+schema migration.
 
 ### 4.11 Knowledge integration
 
@@ -1929,7 +1963,7 @@ Default ports:
 - **FilterPipeline / ScopeMeta** — A recipe's filter set + its hash. Stored in `_corpus_meta.json`; lets a corpus expand in place by relaxing filters and delta-ingesting.
 - **Field Model (v1)** — Five-phase enrichment (skeleton → cluster → align → fault lines → open questions) that analyses a corpus holistically rather than per-chunk.
 - **Domain (v1)** — Trait encoding the epistemic conventions of a knowledge field (philosophy, science, …). The single extension point for v1.
-- **Atlas (v2)** — Typed atom graph (7 atom types × 7 edge types) + `Pipeline` trait + `PipelineRegistry` + `ExemplarBank` + `PhaseCache`. See `corpus-engine/ENRICHMENT_V2.md`.
+- **Atlas (v2)** — Typed atom graph (8 atom types × 7 edge types — `ArgumentReconstruction` joined in 2026) + `Pipeline` trait + `PipelineRegistry` + `ExemplarBank` + `PhaseCache`. See `corpus-engine/ENRICHMENT_V2.md`.
 - **SCIP** — Source Code Intelligence Protocol. `scip_graph.rs` stores SCIP data in SQLite; `scip_export.rs` dispatches to language-specific analyzers.
 - **CodeWatcher** — `notify`-crate filesystem watcher. Re-indexes modified files via `CorpusEngine::reindex_file` and marks them stale in the call graph (800 ms debounce).
 - **Shard** — A `corpus-engine` index containing only a contiguous chunk-ID range. Structurally identical to a complete index.
@@ -1965,6 +1999,7 @@ file or gap with an entry is sequenced work.
 | `atos_cmd/run.rs` split | `sovereign-cli/src/atos_cmd/run.rs` (~4300 lines) | ATOS runner loop (§4.13). Subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, done-marker accept, run-record persistence all cohere as one state machine today. Split is one-file-per-stage when the stage boundaries stabilise. Landed 2026-05-06 in commits 032a0ad + 0229adb; the audit pass that produced this entry caught it. |
 | `mesh_cmd.rs` split | `sovereign-cli/src/mesh_cmd.rs` (~3000 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under mesh self-heal + cloud peering work. |
 | `json_constraint.rs` split | `sovereign-inference/src/json_constraint.rs` (~3100 lines) | LLGuidance JSON-Schema constraint integration. The grammar layer + tokenizer glue + diff coalescer cohere tightly; splitting requires the grammar API to stabilise upstream. |
+| Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` (Phase 1 shipped 2026-05-12) | Phase 1 ships read-only inspection (§4.10c). Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash, not the volatile sequential `AtomId`) so user edits and approval state survive re-extraction. Overlay-merging branches go inside the existing `FileAtlasReader` — no new trait. The forward-compat `curation_status` / `overlay_supports` fields are already on every DTO; flipping them lights up `<CurationStatusBadge>` and `<EditAffordances>` slots already present in `AtomDetail.svelte`. Design notes: NoteStore decision "Atlas inspector: stable_key by content hash" + todo "Atlas inspector Phase 2 — curation overlay". |
 
 (`atos_cmd.rs` and `local.rs` were the prior tenants of this list; both
 were split into folders in the spring 2026 refactor pass.)

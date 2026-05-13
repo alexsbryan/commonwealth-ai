@@ -14,6 +14,7 @@
   import { fly } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { readingSession } from "../../stores/readingSession.svelte";
+  import { atlasNavigation } from "../../stores/atlasNavigation.svelte";
 
   let panel = $derived(readingSession.atomPanel);
 
@@ -29,6 +30,14 @@
 
   function handleClose() {
     readingSession.closeAtom();
+  }
+
+  function handleOpenInAtlas() {
+    // Bridges chat-view (where AtomPanel lives) to atlas-view via a
+    // small store: App.svelte observes the pending request, flips
+    // the rail, and AtlasSurface picks it up on mount.
+    if (!panel?.card) return;
+    atlasNavigation.requestAtom(panel.card.corpus_id, panel.card.atom_id);
   }
 
   function handleJump(
@@ -58,6 +67,23 @@
         {/if}
       {:else}
         <h2 class="title placeholder">Loading atom…</h2>
+      {/if}
+      {#if panel.card}
+        <button
+          type="button"
+          class="open-in-atlas"
+          onclick={handleOpenInAtlas}
+          aria-label="Open this atom in the Atlas inspector"
+          title="Open in Atlas inspector"
+        >
+          <!-- Lucide: external-link -->
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 3h6v6"/>
+            <path d="M10 14 21 3"/>
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+          </svg>
+          <span>Atlas</span>
+        </button>
       {/if}
       <button
         type="button"
@@ -237,6 +263,28 @@
 
   .close:hover {
     background: var(--bg-surface);
+    color: var(--text-primary);
+  }
+
+  .open-in-atlas {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+    border-radius: 4px;
+    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+
+  .open-in-atlas:hover {
+    background: var(--bg-surface);
+    border-color: var(--border-mid, var(--border));
     color: var(--text-primary);
   }
 

@@ -1597,3 +1597,274 @@ export interface RestoreCheckpointOutcome {
   new_checkpoint_id: string;
   source_checkpoint_id: string;
 }
+
+// ─── Atlas Inspector (Phase 1) ───────────────────────────────
+//
+// One row per installed corpus that has an atlas on disk. Drives the
+// /atlas index route. Mirrors `sovereign_tools::atlas_view::reader::
+// AtlasCorpusSummary` — keep in sync.
+
+export type AtomType =
+  | "Entity"
+  | "Event"
+  | "State"
+  | "Relation"
+  | "Claim"
+  | "Question"
+  | "Configuration"
+  | "ArgumentReconstruction";
+
+export interface AtlasCorpusSummary {
+  corpus_id: string;
+  display_name: string;
+  total_atoms: number;
+  /** Per-type atom counts. Keys are a subset of `AtomType`; absent
+   *  keys mean zero atoms of that type. */
+  atom_counts: Partial<Record<AtomType, number>>;
+  /** atoms.json mtime in unix seconds. Closest proxy for "last
+   *  extracted at" until provenance metadata lands on the atom. */
+  last_extracted_unix?: number;
+}
+
+/** Server-side filter for `atlas_list_atoms`. All fields are
+ *  independent — unset = "match anything". */
+export interface AtomFilter {
+  atom_type?: AtomType;
+  /** Case-insensitive substring on display_name. */
+  name_query?: string;
+  /** Inclusive lower bound. Only Entity and Configuration carry a
+   *  scalar score; other atom types are filtered out when set. */
+  min_salience?: number;
+}
+
+export interface PageCursor {
+  offset: number;
+  limit: number;
+}
+
+export type CurationStatus = "generated";
+
+/** Compact per-atom record returned by `atlas_list_atoms`. The full
+ *  type-specific shape (premises[], evidence chunk previews, …)
+ *  lives in `atlas_get_atom_detail` (Step 4). */
+export interface AtomSummary {
+  atom_id: string;
+  stable_key: string;
+  atom_type: AtomType;
+  display_name: string;
+  salience?: number;
+  enrichment_depth: "structural" | "extracted" | "structural_classified";
+  evidence_chunk_count: number;
+  /** Phase 2 forward-compat — always "generated" in Phase 1. */
+  curation_status: CurationStatus;
+  /** Phase 2 forward-compat — always `false` in Phase 1. */
+  overlay_supports: boolean;
+}
+
+export interface AtomListPage {
+  items: AtomSummary[];
+  total_matching: number;
+  next_offset?: number;
+}
+
+// ─── Atom Detail (Phase 1 Step 4) ────────────────────────────
+//
+// Full inspector record. Mirrors `sovereign_tools::atlas_view::
+// atom_detail::AtomDetail` — keep in sync. The `atom` field is the
+// raw AtomEnvelope tagged shape, same as on-disk atoms.json: one of
+// 8 variants discriminated by `atom_type`.
+
+export interface ChunkRefData {
+  chunk_id: string;
+  passage_preview?: string;
+}
+
+export interface SectionRangeData {
+  start: string;
+  end: string;
+}
+
+export interface SectionPositionData {
+  section_id: string;
+  paragraph_index?: number;
+}
+
+/** Loose typing of per-variant payloads. Each type-body Svelte
+ *  component (`EntityBody`, `ClaimBody`, …) narrows the shape it
+ *  needs at render time. Avoids modeling all 8 corpus-engine
+ *  structs in TS just to render fields — Phase 1 pragma. */
+export type AtomEnvelope =
+  | { atom_type: "Entity"; data: EntityData }
+  | { atom_type: "Event"; data: EventData }
+  | { atom_type: "State"; data: StateData }
+  | { atom_type: "Relation"; data: RelationData }
+  | { atom_type: "Claim"; data: ClaimData }
+  | { atom_type: "Question"; data: QuestionData }
+  | { atom_type: "Configuration"; data: ConfigurationData }
+  | { atom_type: "ArgumentReconstruction"; data: ArgumentReconstructionData };
+
+// NOTE: Vec<>/Option<> fields on the corpus-engine atom structs use
+// `#[serde(default, skip_serializing_if = "...")]`, so empty / None
+// values are **omitted from the wire** rather than serialized as
+// `[]` / `null`. The TS types mark those fields optional so render
+// code uses `?? []` or `?.length` and doesn't crash on undefined.
+
+export interface EntityData {
+  id: string;
+  canonical_name: string;
+  aliases?: string[];
+  entity_type: string;
+  first_appearance: ChunkRefData;
+  description: string;
+  defining_quote?: string;
+  salience: number;
+  enrichment_depth: string;
+  affiliation?: string;
+  role?: string;
+  participants?: string[];
+}
+
+export interface EventData {
+  id: string;
+  description: string;
+  event_type: string;
+  participants?: string[];
+  evidence?: ChunkRefData[];
+  section_position: SectionPositionData;
+  causal_antecedents?: string[];
+  enrichment_depth: string;
+}
+
+export interface StateData {
+  id: string;
+  entity_id: string;
+  label: string;
+  state_type: string;
+  evidence?: ChunkRefData[];
+  section_range: SectionRangeData;
+  confidence?: number;
+  enrichment_depth: string;
+}
+
+export interface RelationData {
+  id: string;
+  label: string;
+  participants: string[];
+  relation_type: string;
+  evidence?: ChunkRefData[];
+  section_range: SectionRangeData;
+  enrichment_depth: string;
+}
+
+export interface ClaimData {
+  id: string;
+  content: string;
+  discourse_act: string;
+  epistemic_status: string;
+  scope: string;
+  evidence?: ChunkRefData[];
+  quotable_excerpt?: string;
+  attributed_to?: string;
+  confidence?: number;
+  enrichment_depth: string;
+}
+
+export interface QuestionData {
+  id: string;
+  content: string;
+  question_type: string;
+  addressed_by?: string[];
+  raised_at?: ChunkRefData[];
+  /** Tagged union — `kind` is `"resolved" | "contested" | "open" | "dissolved"`. */
+  resolution_status: { kind: string; claim_id?: string; claim_ids?: string[] };
+  enrichment_depth: string;
+}
+
+export interface ConfigurationData {
+  id: string;
+  label: string;
+  description: string;
+  constituent_atoms: string[];
+  evidence?: ChunkRefData[];
+  confidence: number;
+  interpretive_note: string;
+  enrichment_depth: string;
+}
+
+export interface ObjectionData {
+  name: string;
+  /** Legacy atoms.json files (pre-2026) carried bare strings for
+   *  objections; the deserialiser fills `content: ""` in that case. */
+  content?: string;
+}
+
+export interface ArgumentReconstructionData {
+  id: string;
+  name: string;
+  proponent?: string;
+  premises: string[];
+  conclusion: string;
+  objections?: ObjectionData[];
+  evidence?: ChunkRefData[];
+  section_position: SectionPositionData;
+  enrichment_depth: string;
+}
+
+export interface EvidenceExcerpt {
+  section_id: string;
+  /** Numeric chunk id from `index.resolve_sections_to_chunks`,
+   *  populated by `atlas_get_atom_detail` at the Tauri boundary.
+   *  Present → the evidence row is clickable and deep-links into
+   *  ReadingSurface. Absent → resolution failed (missing chunk,
+   *  index not loaded), row stays read-only. */
+  chunk_id?: number;
+  passage_preview?: string;
+}
+
+export interface RelatedAtom {
+  atom_id: string;
+  atom_type: AtomType;
+  display_name: string;
+  edge_type: string;
+  role: string;
+  confidence: number;
+}
+
+export interface CrossCorpusLink {
+  peer_corpus_id: string;
+  peer_atom_id: string;
+  peer_canonical_name: string;
+  edge_type: string;
+  signal: string;
+  confidence: number;
+}
+
+/** Display label for an atom referenced by the focal atom's body
+ *  fields (`Claim.attributed_to`, `State.entity_id`, etc.). The
+ *  desktop uses this to render `<AtomLink>` chips instead of opaque
+ *  `entity-0042` mono-text. Dangling references (atom_id not found
+ *  in atoms.json) are omitted from the map entirely. */
+export interface ReferencedAtom {
+  display_name: string;
+  atom_type: AtomType;
+}
+
+export interface AtomDetail {
+  corpus_id: string;
+  atom_id: string;
+  stable_key: string;
+  atom_type: AtomType;
+  display_name: string;
+  salience?: number;
+  atom: AtomEnvelope;
+  evidence_excerpts: EvidenceExcerpt[];
+  related: RelatedAtom[];
+  cross_corpus: CrossCorpusLink[];
+  /** Per-`atom_id` labels for every reference inside the focal
+   *  atom's payload. Keys are atom_ids; values are the display
+   *  label + type. Use via the `atomLinkResolver` Svelte context. */
+  referenced_atoms: Record<string, ReferencedAtom>;
+  extraction_run?: string;
+  curation_status: CurationStatus;
+  overlay_supports: boolean;
+}

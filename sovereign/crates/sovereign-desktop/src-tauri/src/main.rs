@@ -1,4 +1,5 @@
 mod approval;
+mod atlas_commands;
 mod bootstrap;
 mod commands;
 mod enrich_commands;
@@ -332,6 +333,9 @@ fn main() -> ExitCode {
             commands::read_get_chunk_neighbors,
             commands::read_get_atom_card,
             commands::read_get_atom_elsewhere,
+            atlas_commands::atlas_list_corpora,
+            atlas_commands::atlas_list_atoms,
+            atlas_commands::atlas_get_atom_detail,
             commands::recipe_validate,
             commands::recipe_test,
             recipe_commands::corpus_import_recipe,

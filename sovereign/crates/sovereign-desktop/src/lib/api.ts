@@ -27,6 +27,11 @@ import type {
   DocumentAskResponse,
   LegacyDocumentEntry,
   BootstrapSnapshot,
+  AtlasCorpusSummary,
+  AtomFilter,
+  AtomListPage,
+  PageCursor,
+  AtomDetail,
 } from "./types";
 
 export async function sendMessage(
@@ -1226,4 +1231,39 @@ export async function recipeAuthorSetWorkspaceActive(
   active: boolean,
 ): Promise<boolean> {
   return invoke("recipe_author_set_workspace_active", { active });
+}
+
+// ─── Atlas Inspector (Phase 1) ───────────────────────────────
+
+/** List every installed corpus that has an atlas on disk. Returns
+ *  empty array when no atlases exist (fresh install). Sorted by
+ *  corpus_id for stable rendering. */
+export async function atlasListCorpora(): Promise<AtlasCorpusSummary[]> {
+  return invoke("atlas_list_corpora");
+}
+
+/** Browse atoms within one corpus. Filter + paginate server-side.
+ *  Pass `undefined` for filter/page to use defaults (no filter,
+ *  first 200 atoms). */
+export async function atlasListAtoms(
+  corpusId: string,
+  filter?: AtomFilter,
+  page?: PageCursor,
+): Promise<AtomListPage> {
+  return invoke("atlas_list_atoms", {
+    corpusId,
+    filter,
+    page,
+  });
+}
+
+/** Full inspector record for one atom — type-specific atom body,
+ *  one-hop related atoms, cross-corpus bridges, and evidence
+ *  excerpts. Returns `null` when the atom id isn't in the corpus
+ *  (e.g., stale link after re-extraction renumbered ids). */
+export async function atlasGetAtomDetail(
+  corpusId: string,
+  atomId: string,
+): Promise<AtomDetail | null> {
+  return invoke("atlas_get_atom_detail", { corpusId, atomId });
 }

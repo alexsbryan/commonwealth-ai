@@ -28,17 +28,23 @@
 //! [`read_or_compute_summary`] which transparently rewrites the
 //! sidecar on cache miss.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::io;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use super::atoms::AtomType;
 use super::{atoms_content_hash, read_atlas_atoms, AtomEnvelope};
 use crate::enrichment::pipeline::atlas::EnrichmentDepth;
 
 const SUMMARY_FILE: &str = "_summary.json";
-const SCHEMA_VERSION: u32 = 1;
+// v2 (2026-05-12) adds `atom_counts` so consumers can render per-type
+// breakdowns without re-reading atoms.json. v1 caches are auto-
+// invalidated by `read_or_compute_summary`'s schema_version check and
+// transparently recomputed on next read.
+const SCHEMA_VERSION: u32 = 2;
 
 /// Atlas-level statistics carried in mesh gossip and shown in
 /// `sovereign corpus status` / `sovereign mesh status`.
@@ -61,6 +67,15 @@ pub struct AtlasSummary {
     /// pair size + mtime because mtime alone can collide on
     /// fast-rebuilt atlases.
     pub atoms_size_bytes: u64,
+    /// Per-`AtomType` atom counts. Lets consumers render type
+    /// breakdowns (e.g. the desktop's atlas inspector) without
+    /// re-reading atoms.json. Added in schema v2. `#[serde(default)]`
+    /// keeps v1 caches that lack the field deserialising — the
+    /// schema_version check below will still reject them and force
+    /// a recompute, but defensive defaulting protects against
+    /// partially-written or hand-edited files.
+    #[serde(default)]
+    pub atom_counts: BTreeMap<AtomType, u64>,
 }
 
 impl AtlasSummary {
@@ -75,6 +90,7 @@ impl AtlasSummary {
             fingerprint: String::new(),
             atoms_mtime_ms: 0,
             atoms_size_bytes: 0,
+            atom_counts: BTreeMap::new(),
         }
     }
 }
@@ -96,15 +112,31 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
     let fingerprint = atoms_content_hash(atlas_dir)?;
     let atoms = read_atlas_atoms(atlas_dir)?;
     let atom_count = atoms.atoms.len() as u64;
-    let tier2_count = atoms
-        .atoms
-        .iter()
-        .filter_map(|a| match a {
-            AtomEnvelope::Entity(e) => Some(e.enrichment_depth),
-            _ => None,
-        })
-        .filter(|d| matches!(d, EnrichmentDepth::Extracted))
-        .count() as u64;
+
+    // Single pass over atoms — count tier-2 (extracted entities) and
+    // per-type totals together. The previous code iterated only
+    // entities for tier2; the type-counter folds in the other seven
+    // variants without a second pass.
+    let mut tier2_count: u64 = 0;
+    let mut atom_counts: BTreeMap<AtomType, u64> = BTreeMap::new();
+    for a in &atoms.atoms {
+        let t = match a {
+            AtomEnvelope::Entity(e) => {
+                if matches!(e.enrichment_depth, EnrichmentDepth::Extracted) {
+                    tier2_count += 1;
+                }
+                AtomType::Entity
+            }
+            AtomEnvelope::Event(_) => AtomType::Event,
+            AtomEnvelope::State(_) => AtomType::State,
+            AtomEnvelope::Relation(_) => AtomType::Relation,
+            AtomEnvelope::Claim(_) => AtomType::Claim,
+            AtomEnvelope::Question(_) => AtomType::Question,
+            AtomEnvelope::Configuration(_) => AtomType::Configuration,
+            AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
+        };
+        *atom_counts.entry(t).or_insert(0) += 1;
+    }
 
     Ok(AtlasSummary {
         schema_version: SCHEMA_VERSION,
@@ -113,6 +145,7 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
         fingerprint,
         atoms_mtime_ms,
         atoms_size_bytes,
+        atom_counts,
     })
 }
 
@@ -231,6 +264,50 @@ mod tests {
         assert_eq!(s.atom_count, 4);
         assert_eq!(s.tier2_count, 2);
         assert!(!s.fingerprint.is_empty());
+        // v2 — per-type counts. All four atoms are Entities in this
+        // fixture; the map should record that without burning a
+        // separate atoms.json pass.
+        assert_eq!(s.atom_counts.get(&AtomType::Entity).copied(), Some(4));
+        assert_eq!(s.atom_counts.get(&AtomType::Claim).copied(), None);
+    }
+
+    #[test]
+    fn v1_cache_is_invalidated_and_recomputed_with_atom_counts() {
+        // Simulate an old v1 _summary.json on disk (schema_version=1,
+        // no atom_counts field). The cache-key check rejects it on
+        // SCHEMA_VERSION mismatch and recomputes — the recomputed
+        // v2 summary must include atom_counts.
+        let tmp = tempfile::tempdir().unwrap();
+        write_atoms(tmp.path(), &[EnrichmentDepth::Extracted, EnrichmentDepth::Extracted]);
+
+        let live_meta = std::fs::metadata(tmp.path().join("atoms.json")).unwrap();
+        let live_mtime_ms = live_meta
+            .modified()
+            .unwrap()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        // Hand-craft a v1 sidecar that would otherwise be a cache hit
+        // (matching mtime + size). Only schema_version=1 should make
+        // it miss.
+        let v1_sidecar = serde_json::json!({
+            "schema_version": 1,
+            "atom_count": 2,
+            "tier2_count": 2,
+            "fingerprint": "stale",
+            "atoms_mtime_ms": live_mtime_ms,
+            "atoms_size_bytes": live_meta.len(),
+        });
+        std::fs::write(
+            tmp.path().join(SUMMARY_FILE),
+            serde_json::to_vec_pretty(&v1_sidecar).unwrap(),
+        )
+        .unwrap();
+
+        let fresh = read_or_compute_summary(tmp.path()).unwrap().unwrap();
+        assert_eq!(fresh.schema_version, SCHEMA_VERSION);
+        assert_eq!(fresh.atom_counts.get(&AtomType::Entity).copied(), Some(2));
+        assert_ne!(fresh.fingerprint, "stale");
     }
 
     #[test]

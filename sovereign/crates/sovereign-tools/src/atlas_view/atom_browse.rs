@@ -1,0 +1,694 @@
+//! Atom browse + filter API for the desktop's per-corpus inspector.
+//!
+//! `list_corpora` (in `reader.rs`) answers "which corpora have an
+//! atlas?". This module answers the next question: "within one
+//! corpus, show me atoms — filterable by type, searchable by name,
+//! paginated." The cache below means that once a user opens a
+//! wikipedia-scale atlas, subsequent keystrokes in the search box
+//! don't re-deserialise the ~50 MB atoms.json.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock, RwLock};
+
+use corpus_engine::enrichment::atlas::atoms::{
+    AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef,
+};
+use corpus_engine::enrichment::atlas::read_atlas_atoms;
+use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
+use serde::{Deserialize, Serialize};
+
+use super::reader::{CurationStatus, FileAtlasReader};
+use super::stable_key::{compute_stable_key, StableAtomKey};
+
+/// Server-side filter the desktop's `AtlasCorpusView` posts on every
+/// keystroke / tab switch. All fields are independent — an unset
+/// field is "match anything". Filtering is case-insensitive on
+/// `name_query` and substring (not regex).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AtomFilter {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub atom_type: Option<AtomType>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name_query: Option<String>,
+    /// Inclusive lower bound. `None` = no minimum.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_salience: Option<f32>,
+}
+
+/// Pagination cursor. Phase 1: simple offset+limit. Future-proof for
+/// a real cursor (e.g. opaque token) if disk-side pagination lands;
+/// the wire shape can grow a `next_token: Option<String>` field
+/// without breaking existing clients.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct PageCursor {
+    pub offset: usize,
+    pub limit: usize,
+}
+
+impl PageCursor {
+    pub fn first(limit: usize) -> Self {
+        Self { offset: 0, limit }
+    }
+}
+
+impl Default for PageCursor {
+    /// 200 atoms is enough to fill a scroll-virtualised viewport
+    /// twice over without sending wiki-scale payloads on every
+    /// keystroke. Matches the Phase 1 plan.
+    fn default() -> Self {
+        Self { offset: 0, limit: 200 }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtomListPage {
+    pub items: Vec<AtomSummary>,
+    /// Total atoms that matched the filter across the whole atlas
+    /// (not just this page). Drives "1–200 of 14,732" labels.
+    pub total_matching: u64,
+    /// Offset to pass back in the next request for the following
+    /// page, or `None` when this page exhausted the filter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<usize>,
+}
+
+/// Compact per-atom record for the browse list. The full atom shape
+/// (type-specific fields, full evidence, related edges) lives in
+/// Step 4's `AtomDetail`. `AtomSummary` is what fits one row in the
+/// virtualised list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtomSummary {
+    pub atom_id: AtomId,
+    pub stable_key: StableAtomKey,
+    pub atom_type: AtomType,
+    /// Best human-facing label for the row — `canonical_name` /
+    /// `label` / `name` depending on type; `content` (truncated) for
+    /// Claim and Question which lack a short name.
+    pub display_name: String,
+    /// `Some` only for Entity (`salience`) and Configuration
+    /// (`confidence`). Other atom types don't carry a single scalar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub salience: Option<f32>,
+    pub enrichment_depth: EnrichmentDepth,
+    /// How many chunks of evidence the atom carries. `Entity` always
+    /// reports 1 (its `first_appearance` is a single `ChunkRef`).
+    pub evidence_chunk_count: u32,
+    /// Phase 2 forward-compat — always `Generated` today. Once the
+    /// overlay lands the wire shape doesn't change.
+    pub curation_status: CurationStatus,
+    /// Phase 2 forward-compat — `false` today. UIs can already
+    /// branch on this to hide the (empty) edit affordances slot.
+    pub overlay_supports: bool,
+}
+
+const DISPLAY_NAME_TRUNCATION: usize = 120;
+
+impl FileAtlasReader {
+    /// Browse atoms within one corpus.
+    ///
+    /// First call per atlas pays the atoms.json deserialisation cost
+    /// (cached after that). Each subsequent call — filter changes,
+    /// search keystrokes — walks the cached `Vec<AtomEnvelope>` in
+    /// memory. Cache invalidates when atoms.json's mtime + size
+    /// change (matching the v2 summary cache key).
+    pub async fn list_atoms(
+        &self,
+        corpus_id: &str,
+        filter: AtomFilter,
+        page: PageCursor,
+    ) -> Result<AtomListPage, AtomBrowseError> {
+        let atlas_dir = self
+            .atlas_dir(corpus_id)
+            .ok_or_else(|| AtomBrowseError::UnknownCorpus(corpus_id.to_string()))?;
+
+        let corpus_id_owned = corpus_id.to_string();
+        let filter_for_task = filter.clone();
+        // Cache hit returns instantly; cache miss pays the
+        // serde-deserialise cost on the blocking pool so we don't
+        // freeze the runtime for wiki-scale reads.
+        let page = tokio::task::spawn_blocking(move || -> Result<AtomListPage, AtomBrowseError> {
+            let atoms = cached_atoms(&atlas_dir).map_err(AtomBrowseError::ReadAtoms)?;
+            Ok(filter_and_page(
+                &corpus_id_owned,
+                &atoms,
+                &filter_for_task,
+                page,
+            ))
+        })
+        .await
+        .map_err(|join_err| AtomBrowseError::Task(join_err.to_string()))??;
+
+        tracing::debug!(
+            corpus_id,
+            atom_type = ?filter.atom_type,
+            name_query = filter.name_query.as_deref().unwrap_or(""),
+            offset = page.next_offset.map(|o| o.saturating_sub(page.items.len())).unwrap_or(0),
+            returned = page.items.len(),
+            total_matching = page.total_matching,
+            "atlas_view:list_atoms",
+        );
+        Ok(page)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AtomBrowseError {
+    #[error("corpus `{0}` has no atlas")]
+    UnknownCorpus(String),
+    #[error("read atoms.json: {0}")]
+    ReadAtoms(#[source] std::io::Error),
+    #[error("background task: {0}")]
+    Task(String),
+}
+
+// ── Cache ────────────────────────────────────────────────────
+
+/// One atlas's deserialised atoms vec, keyed by atoms.json mtime+size
+/// so an external mutation invalidates the cache.
+#[derive(Debug)]
+struct CachedAtoms {
+    mtime_ms: u64,
+    size_bytes: u64,
+    atoms: Arc<Vec<AtomEnvelope>>,
+}
+
+fn cache() -> &'static RwLock<HashMap<PathBuf, CachedAtoms>> {
+    static CACHE: OnceLock<RwLock<HashMap<PathBuf, CachedAtoms>>> = OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// Return the atoms vec for an atlas. Hot path: read-lock + Arc clone.
+/// Cold path: re-read atoms.json, write the cache, return. Shared
+/// with [`super::atom_detail`] — both browse and detail want the
+/// same in-memory copy.
+pub(super) fn cached_atoms(atlas_dir: &Path) -> std::io::Result<Arc<Vec<AtomEnvelope>>> {
+    let atoms_path = atlas_dir.join("atoms.json");
+    let meta = std::fs::metadata(&atoms_path)?;
+    let mtime_ms = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let size_bytes = meta.len();
+
+    // Fast path — read lock, return Arc clone if key matches.
+    {
+        let read = cache().read().expect("atoms cache rwlock poisoned");
+        if let Some(entry) = read.get(atlas_dir) {
+            if entry.mtime_ms == mtime_ms && entry.size_bytes == size_bytes {
+                return Ok(Arc::clone(&entry.atoms));
+            }
+        }
+    }
+
+    // Slow path — read + parse + insert. Another writer may race;
+    // last-writer-wins is fine because all writers produce the same
+    // Arc target for the same mtime/size.
+    let file: AtomsFile = read_atlas_atoms(atlas_dir)?;
+    let atoms = Arc::new(file.atoms);
+    let mut write = cache().write().expect("atoms cache rwlock poisoned");
+    write.insert(
+        atlas_dir.to_path_buf(),
+        CachedAtoms {
+            mtime_ms,
+            size_bytes,
+            atoms: Arc::clone(&atoms),
+        },
+    );
+    Ok(atoms)
+}
+
+// ── Filter + paginate (pure) ─────────────────────────────────
+
+fn filter_and_page(
+    corpus_id: &str,
+    atoms: &[AtomEnvelope],
+    filter: &AtomFilter,
+    page: PageCursor,
+) -> AtomListPage {
+    let name_needle = filter
+        .name_query
+        .as_deref()
+        .filter(|q| !q.is_empty())
+        .map(|q| q.to_lowercase());
+
+    // First pass — count + collect references. Storing references
+    // avoids cloning AtomEnvelope just to throw most of them away.
+    let mut matches: Vec<&AtomEnvelope> = Vec::new();
+    for atom in atoms {
+        if let Some(target) = filter.atom_type {
+            if atom_type_of(atom) != target {
+                continue;
+            }
+        }
+        if let Some(min) = filter.min_salience {
+            match scalar_score(atom) {
+                Some(s) if s >= min => {}
+                _ => continue,
+            }
+        }
+        if let Some(needle) = &name_needle {
+            if !display_name_of(atom).to_lowercase().contains(needle.as_str()) {
+                continue;
+            }
+        }
+        matches.push(atom);
+    }
+
+    let total_matching = matches.len() as u64;
+    let end = page.offset.saturating_add(page.limit).min(matches.len());
+    let slice = if page.offset >= matches.len() {
+        &[][..]
+    } else {
+        &matches[page.offset..end]
+    };
+
+    let items: Vec<AtomSummary> = slice
+        .iter()
+        .map(|a| build_summary(corpus_id, a))
+        .collect();
+
+    let next_offset = if end < matches.len() {
+        Some(end)
+    } else {
+        None
+    };
+
+    AtomListPage {
+        items,
+        total_matching,
+        next_offset,
+    }
+}
+
+fn build_summary(corpus_id: &str, atom: &AtomEnvelope) -> AtomSummary {
+    AtomSummary {
+        atom_id: atom.id().clone(),
+        stable_key: compute_stable_key(corpus_id, atom),
+        atom_type: atom_type_of(atom),
+        display_name: display_name_of(atom).to_string(),
+        salience: scalar_score(atom),
+        enrichment_depth: atom.enrichment_depth(),
+        evidence_chunk_count: evidence_count(atom),
+        curation_status: CurationStatus::Generated,
+        overlay_supports: false,
+    }
+}
+
+fn atom_type_of(atom: &AtomEnvelope) -> AtomType {
+    match atom {
+        AtomEnvelope::Entity(_) => AtomType::Entity,
+        AtomEnvelope::Event(_) => AtomType::Event,
+        AtomEnvelope::State(_) => AtomType::State,
+        AtomEnvelope::Relation(_) => AtomType::Relation,
+        AtomEnvelope::Claim(_) => AtomType::Claim,
+        AtomEnvelope::Question(_) => AtomType::Question,
+        AtomEnvelope::Configuration(_) => AtomType::Configuration,
+        AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
+    }
+}
+
+/// Best short label for the row. Claim and Question carry only
+/// `content` (potentially a full sentence), so we truncate; named
+/// atom types (Entity, ArgumentReconstruction, etc.) return their
+/// natural label untruncated.
+fn display_name_of(atom: &AtomEnvelope) -> String {
+    match atom {
+        AtomEnvelope::Entity(a) => a.canonical_name.clone(),
+        AtomEnvelope::Event(a) => truncate_for_display(&a.description),
+        AtomEnvelope::State(a) => a.label.clone(),
+        AtomEnvelope::Relation(a) => a.label.clone(),
+        AtomEnvelope::Claim(a) => truncate_for_display(&a.content),
+        AtomEnvelope::Question(a) => truncate_for_display(&a.content),
+        AtomEnvelope::Configuration(a) => a.label.clone(),
+        AtomEnvelope::ArgumentReconstruction(a) => a.name.clone(),
+    }
+}
+
+fn truncate_for_display(s: &str) -> String {
+    if s.chars().count() <= DISPLAY_NAME_TRUNCATION {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(DISPLAY_NAME_TRUNCATION).collect();
+    out.push('…');
+    out
+}
+
+fn scalar_score(atom: &AtomEnvelope) -> Option<f32> {
+    match atom {
+        AtomEnvelope::Entity(a) => Some(a.salience),
+        AtomEnvelope::Configuration(a) => Some(a.confidence),
+        _ => None,
+    }
+}
+
+fn evidence_count(atom: &AtomEnvelope) -> u32 {
+    match atom {
+        // `Entity.first_appearance` is a single ChunkRef, not a Vec.
+        AtomEnvelope::Entity(_) => 1,
+        AtomEnvelope::Event(a) => a.evidence.len() as u32,
+        AtomEnvelope::State(a) => a.evidence.len() as u32,
+        AtomEnvelope::Relation(a) => a.evidence.len() as u32,
+        AtomEnvelope::Claim(a) => a.evidence.len() as u32,
+        AtomEnvelope::Question(a) => a.raised_at.len() as u32,
+        AtomEnvelope::Configuration(a) => a.evidence.len() as u32,
+        AtomEnvelope::ArgumentReconstruction(a) => a.evidence.len() as u32,
+    }
+}
+
+// Silence `unused` on ChunkRef — it's referenced through the atom
+// variants but not directly in this file's call graph after the
+// helpers above. Keeps the explicit import obvious for future readers.
+#[allow(dead_code)]
+fn _ensure_chunk_ref_in_scope(_: &ChunkRef) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use corpus_engine::enrichment::atlas::atoms::{
+        AtomId, AtomsFile, ChunkRef, Claim, Entity, SectionPosition, SectionRange, State,
+    };
+    use corpus_engine::enrichment::pipeline::atlas::{
+        ClaimScope, DiscourseAct, EnrichmentDepth, EntityType, EpistemicStatus, EventType,
+        StateType,
+    };
+    use tempfile::TempDir;
+
+    fn entity(id: usize, name: &str, salience: f32) -> AtomEnvelope {
+        AtomEnvelope::Entity(Entity {
+            id: AtomId::entity(id),
+            canonical_name: name.into(),
+            aliases: vec![],
+            entity_type: EntityType::Concept,
+            first_appearance: ChunkRef::new("sec_0001", None),
+            description: "x".into(),
+            defining_quote: None,
+            salience,
+            enrichment_depth: EnrichmentDepth::Extracted,
+            affiliation: None,
+            role: None,
+            participants: vec![],
+        })
+    }
+
+    fn claim(id: usize, content: &str) -> AtomEnvelope {
+        AtomEnvelope::Claim(Claim {
+            id: AtomId::claim(id),
+            content: content.into(),
+            discourse_act: DiscourseAct::Assert,
+            epistemic_status: EpistemicStatus::Confident,
+            scope: ClaimScope::Universal,
+            evidence: vec![
+                ChunkRef::new("sec_0001", None),
+                ChunkRef::new("sec_0002", None),
+            ],
+            quotable_excerpt: None,
+            attributed_to: None,
+            confidence: None,
+            enrichment_depth: EnrichmentDepth::Extracted,
+        })
+    }
+
+    fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {
+        std::fs::create_dir_all(atlas_dir).unwrap();
+        let file = AtomsFile::new(atoms);
+        std::fs::write(
+            atlas_dir.join("atoms.json"),
+            serde_json::to_vec_pretty(&file).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn make_atlas() -> (TempDir, FileAtlasReader) {
+        let tmp = tempfile::tempdir().unwrap();
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        write_atoms(
+            &tmp.path().join("wiki").join("atlas"),
+            vec![
+                entity(1, "Knowledge", 0.9),
+                entity(2, "Belief", 0.6),
+                entity(3, "Justification", 0.3),
+                claim(1, "Knowledge is justified true belief."),
+                claim(2, "Belief without justification is not knowledge."),
+            ],
+        );
+        (tmp, reader)
+    }
+
+    #[tokio::test]
+    async fn list_atoms_unfiltered_returns_all() {
+        let (_tmp, reader) = make_atlas();
+        let page = reader
+            .list_atoms("wiki", AtomFilter::default(), PageCursor::default())
+            .await
+            .unwrap();
+        assert_eq!(page.total_matching, 5);
+        assert_eq!(page.items.len(), 5);
+        assert!(page.next_offset.is_none());
+    }
+
+    #[tokio::test]
+    async fn list_atoms_filters_by_type() {
+        let (_tmp, reader) = make_atlas();
+        let only_entities = reader
+            .list_atoms(
+                "wiki",
+                AtomFilter {
+                    atom_type: Some(AtomType::Entity),
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(only_entities.total_matching, 3);
+        for item in &only_entities.items {
+            assert_eq!(item.atom_type, AtomType::Entity);
+        }
+    }
+
+    #[tokio::test]
+    async fn list_atoms_filters_by_name_substring_case_insensitive() {
+        let (_tmp, reader) = make_atlas();
+        let page = reader
+            .list_atoms(
+                "wiki",
+                AtomFilter {
+                    name_query: Some("BELIEF".into()),
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        // Matches: entity "Belief", claim 1 ("...true belief..."),
+        // claim 2 ("Belief without...").
+        assert_eq!(page.total_matching, 3);
+    }
+
+    #[tokio::test]
+    async fn list_atoms_filters_by_min_salience() {
+        let (_tmp, reader) = make_atlas();
+        let page = reader
+            .list_atoms(
+                "wiki",
+                AtomFilter {
+                    min_salience: Some(0.5),
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        // Only Entities have salience; Knowledge (0.9) and Belief
+        // (0.6) clear the bar. Justification (0.3) doesn't. Claims
+        // have no scalar score and are filtered out.
+        assert_eq!(page.total_matching, 2);
+        let names: Vec<&str> = page.items.iter().map(|i| i.display_name.as_str()).collect();
+        assert!(names.contains(&"Knowledge"));
+        assert!(names.contains(&"Belief"));
+    }
+
+    #[tokio::test]
+    async fn list_atoms_paginates() {
+        let (_tmp, reader) = make_atlas();
+        let first = reader
+            .list_atoms("wiki", AtomFilter::default(), PageCursor { offset: 0, limit: 2 })
+            .await
+            .unwrap();
+        assert_eq!(first.items.len(), 2);
+        assert_eq!(first.total_matching, 5);
+        assert_eq!(first.next_offset, Some(2));
+
+        let second = reader
+            .list_atoms("wiki", AtomFilter::default(), PageCursor { offset: 2, limit: 2 })
+            .await
+            .unwrap();
+        assert_eq!(second.items.len(), 2);
+        assert_eq!(second.next_offset, Some(4));
+
+        let third = reader
+            .list_atoms("wiki", AtomFilter::default(), PageCursor { offset: 4, limit: 2 })
+            .await
+            .unwrap();
+        assert_eq!(third.items.len(), 1);
+        assert!(third.next_offset.is_none());
+
+        let past_end = reader
+            .list_atoms("wiki", AtomFilter::default(), PageCursor { offset: 99, limit: 10 })
+            .await
+            .unwrap();
+        assert!(past_end.items.is_empty());
+        assert_eq!(past_end.total_matching, 5);
+    }
+
+    #[tokio::test]
+    async fn list_atoms_combines_type_and_name_filters() {
+        let (_tmp, reader) = make_atlas();
+        let page = reader
+            .list_atoms(
+                "wiki",
+                AtomFilter {
+                    atom_type: Some(AtomType::Claim),
+                    name_query: Some("justified".into()),
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        // Type AND name both apply: only claim 1
+        // ("Knowledge is justified true belief.") contains "justified"
+        // among the Claims. Entity "Justification" would match by
+        // name but is excluded by the type filter.
+        assert_eq!(page.total_matching, 1);
+        assert_eq!(page.items[0].atom_type, AtomType::Claim);
+    }
+
+    #[tokio::test]
+    async fn list_atoms_unknown_corpus_returns_error() {
+        let (_tmp, reader) = make_atlas();
+        let err = reader
+            .list_atoms("nonexistent", AtomFilter::default(), PageCursor::default())
+            .await
+            .unwrap_err();
+        match err {
+            AtomBrowseError::UnknownCorpus(id) => assert_eq!(id, "nonexistent"),
+            other => panic!("expected UnknownCorpus, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn list_atoms_truncates_long_content_in_display_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let reader = FileAtlasReader::new(tmp.path().to_path_buf());
+        let long = "x".repeat(200);
+        write_atoms(
+            &tmp.path().join("c").join("atlas"),
+            vec![claim(1, &long)],
+        );
+        let page = reader
+            .list_atoms("c", AtomFilter::default(), PageCursor::default())
+            .await
+            .unwrap();
+        assert_eq!(page.items.len(), 1);
+        let name = &page.items[0].display_name;
+        // Truncated to DISPLAY_NAME_TRUNCATION chars + ellipsis.
+        assert!(name.chars().count() <= DISPLAY_NAME_TRUNCATION + 1);
+        assert!(name.ends_with('…'));
+    }
+
+    #[tokio::test]
+    async fn list_atoms_summary_carries_stable_key_and_phase2_fields() {
+        let (_tmp, reader) = make_atlas();
+        let page = reader
+            .list_atoms(
+                "wiki",
+                AtomFilter {
+                    atom_type: Some(AtomType::Entity),
+                    name_query: Some("Knowledge".into()),
+                    ..Default::default()
+                },
+                PageCursor::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.items.len(), 1);
+        let s = &page.items[0];
+        // Phase-2 fields exist in the wire shape with their Phase-1
+        // hardcoded values.
+        assert_eq!(s.curation_status, CurationStatus::Generated);
+        assert!(!s.overlay_supports);
+        // stable_key is a 64-char blake3 hex.
+        assert_eq!(s.stable_key.as_str().len(), 64);
+        // Entity-specific fields.
+        assert_eq!(s.salience, Some(0.9));
+        assert_eq!(s.evidence_chunk_count, 1);
+    }
+
+    #[tokio::test]
+    async fn list_atoms_cache_hit_after_first_call() {
+        // This test deliberately corrupts atoms.json after seeding the
+        // cache to prove the in-memory copy is the data source on the
+        // second call. Each test gets a unique tempdir path, which is
+        // the cache key — so this test's entries can't collide with
+        // (or be evicted by) tests running in parallel.
+        let (tmp, reader) = make_atlas();
+        let atlas_dir = tmp.path().join("wiki").join("atlas");
+        let first = reader
+            .list_atoms("wiki", AtomFilter::default(), PageCursor::default())
+            .await
+            .unwrap();
+        assert_eq!(first.total_matching, 5);
+        // Render atoms.json unreadable but keep the cache key
+        // (mtime + size) intact — the cache should still serve.
+        let atoms_path = atlas_dir.join("atoms.json");
+        let original_meta = std::fs::metadata(&atoms_path).unwrap();
+        std::fs::write(&atoms_path, vec![0u8; original_meta.len() as usize]).unwrap();
+        filetime::set_file_mtime(
+            &atoms_path,
+            filetime::FileTime::from_system_time(original_meta.modified().unwrap()),
+        )
+        .unwrap();
+        let second = reader
+            .list_atoms("wiki", AtomFilter::default(), PageCursor::default())
+            .await
+            .unwrap();
+        assert_eq!(second.total_matching, 5);
+        assert_eq!(second.items.len(), 5);
+    }
+
+    #[test]
+    fn evidence_count_matches_per_type_field() {
+        // State has its own evidence shape; pin that we count it.
+        let s = AtomEnvelope::State(State {
+            id: AtomId::state(1),
+            entity_id: AtomId::entity(1),
+            label: "Anxious".into(),
+            state_type: StateType::Psychological,
+            evidence: vec![
+                ChunkRef::new("a", None),
+                ChunkRef::new("b", None),
+                ChunkRef::new("c", None),
+            ],
+            section_range: SectionRange::point("ch001"),
+            confidence: None,
+            enrichment_depth: EnrichmentDepth::Extracted,
+        });
+        assert_eq!(evidence_count(&s), 3);
+        // Event also has evidence + section_position; pin the shape.
+        let e = AtomEnvelope::Event(corpus_engine::enrichment::atlas::atoms::Event {
+            id: AtomId::event(1),
+            description: "x".into(),
+            event_type: EventType::Action,
+            participants: vec![],
+            evidence: vec![ChunkRef::new("a", None)],
+            section_position: SectionPosition::section("ch001"),
+            causal_antecedents: vec![],
+            enrichment_depth: EnrichmentDepth::Extracted,
+        });
+        assert_eq!(evidence_count(&e), 1);
+    }
+}

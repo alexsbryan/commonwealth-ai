@@ -1,0 +1,264 @@
+# Routing eval — paraphrases of cells_v1 designed to defeat the
+# heuristic floor.
+#
+# Each row holds the same expected_intent as the cells_v1 sibling,
+# but phrased to NOT match any of the heuristic trigger lists in
+# router.rs (`looks_like_conation`, `looks_like_commissive`,
+# `looks_like_expressive`, `looks_like_factual_lookup`,
+# `looks_like_comparison`, `looks_like_memory_reference`,
+# `needs_deep_reasoning`, `looks_like_content_processing`).
+#
+# When this bank is run with --routing-only, ~all questions should
+# fall through to the LLM Pass 1 classifier. That is the point:
+# this bank measures Pass-1 quality, not heuristic coverage. The
+# `cells_v1` bench, by contrast, mostly measures whether the
+# heuristic floor still fires on the surface forms it was tuned
+# against (~22 of 27 questions on the 2026-05-12 baseline).
+#
+# Per `feedback_no_teaching_to_test.md`, these paraphrases are
+# written without consulting the heuristic trigger lists for
+# wording — only their negation. If a paraphrase accidentally
+# matches a trigger phrase, the bench will surface it as a sub-second
+# response time and we'll rephrase.
+
+[bank]
+name = "routing-cells-v1-paraphrases"
+corpus = "wikipedia"
+description = """
+Paraphrase variants of cells_v1. Same intents; surfaces designed to
+fall through the heuristic floor and exercise Pass 1.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 30000
+max_per_question_ms = 60000
+
+# ─── Conation paraphrases (act on prior turn) ─────────────────────
+
+[[questions]]
+id = "conation_p_nevermind"
+category = "conation"
+question = "actually, never mind that"
+expected_intent = "conation_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "conation_p_redo"
+category = "conation"
+question = "give that another shot"
+expected_intent = "conation_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "conation_p_tighten"
+category = "conation"
+question = "could you tighten that up"
+expected_intent = "conation_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "conation_p_unpack"
+category = "conation"
+question = "unpack that a bit more"
+expected_intent = "conation_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "conation_p_slow_it_down"
+category = "conation"
+question = "slow it down for me"
+expected_intent = "conation_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Commissive paraphrases (first-person future commitment) ──────
+
+[[questions]]
+id = "commissive_p_on_my_list"
+category = "commissive"
+question = "Fixing the migration is on my list for tomorrow morning."
+expected_intent = "commissive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "commissive_p_up_next"
+category = "commissive"
+question = "Refactoring the auth middleware is up next this week."
+expected_intent = "commissive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "commissive_p_flag_for_friday"
+category = "commissive"
+question = "I want to put a flag on reviewing this come Friday."
+expected_intent = "commissive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "commissive_p_mine_to_write"
+category = "commissive"
+question = "Before this merges, the integration test is mine to write."
+expected_intent = "commissive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "commissive_p_dont_let_me_forget"
+category = "commissive"
+question = "Don't let me forget the audit when we pick this back up."
+expected_intent = "commissive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Expressive paraphrases (feeling + implicit help-request) ─────
+
+[[questions]]
+id = "expressive_p_not_moving"
+category = "expressive"
+question = "This bug just isn't moving."
+expected_intent = "expressive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "expressive_p_no_starting_point"
+category = "expressive"
+question = "Honestly nothing about this looks like a starting point."
+expected_intent = "expressive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "expressive_p_wearing_me_out"
+category = "expressive"
+question = "yeah this whole thing is wearing me out."
+expected_intent = "expressive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "expressive_p_square_one"
+category = "expressive"
+question = "back to square one, and I'm running on fumes."
+expected_intent = "expressive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "expressive_p_writing_off"
+category = "expressive"
+question = "writing this approach off — it's not working."
+expected_intent = "expressive_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Metalingual paraphrases ──────────────────────────────────────
+
+[[questions]]
+id = "metalingual_p_defined_here"
+category = "metalingual"
+question = "Where is the term 'session_id' defined here, conceptually?"
+expected_intent = "metalingual_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "metalingual_p_seps_framing"
+category = "metalingual"
+question = "In SEP's framing, where does eudaimonia point?"
+expected_intent = "metalingual_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "metalingual_p_lookup_a_term"
+category = "metalingual"
+question = "In this repo, the identifier 'tenant_scope' — what's it standing for?"
+expected_intent = "metalingual_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Comparative paraphrases (bounded two-entity contrast) ────────
+
+[[questions]]
+id = "comparative_p_stack_up"
+category = "comparative"
+question = "TCP's guarantees stack up against UDP's how, exactly?"
+expected_intent = "comparison_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "comparative_p_when_each_beats"
+category = "comparative"
+question = "List or tuple in Python — when does each beat the other?"
+expected_intent = "comparison_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "comparative_p_next_to"
+category = "comparative"
+question = "Lincoln's leadership style next to FDR's — what's the contrast?"
+expected_intent = "comparison_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Factual recall paraphrases (atomic fact, defeat opener) ──────
+
+[[questions]]
+id = "factual_p_came_down_year"
+category = "factual_recall"
+question = "The Berlin Wall came down in what year?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "factual_p_author_name"
+category = "factual_recall"
+question = "'The Selfish Gene' — author's name?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "factual_p_planet_count"
+category = "factual_recall"
+question = "Our solar system has how many planets?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Multi-article synthesis paraphrases (deep reasoning) ─────────
+
+[[questions]]
+id = "synth_p_crash_drivers"
+category = "multi_article_synthesis"
+question = "The 2008 crash — what set it off and how did it cascade?"
+expected_intent = "deep_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "synth_p_trade_lanes"
+category = "multi_article_synthesis"
+question = "Trace the way Roman trade lanes carried early Christianity outward."
+expected_intent = "deep_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "synth_p_via_tectonics"
+category = "multi_article_synthesis"
+question = "Mountain ranges sit where they do — explain via plate tectonics."
+expected_intent = "deep_query"
+expected_facts = ["stub"]
+expected_sources = []
