@@ -126,6 +126,15 @@ pub fn internal_router(state: AppState) -> Router {
             post(routes_internal::corpus_pause),
         )
         .route(
+            // Mesh-aware pause of `sovereign pipeline run` drivers.
+            // Local CLI sets `fanout: true`; the receiving daemon
+            // forwards to each online peer with `fanout: false` so
+            // peers run only their own /proc walk and the message
+            // can't loop. See routes_internal/pipeline_pause.rs.
+            "/internal/pipeline/pause",
+            post(routes_internal::pipeline_pause),
+        )
+        .route(
             "/internal/corpus/install",
             post(routes_internal::corpus_install),
         )

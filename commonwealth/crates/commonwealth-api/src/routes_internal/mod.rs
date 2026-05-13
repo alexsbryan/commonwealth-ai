@@ -23,6 +23,7 @@ mod gossip;
 mod knowledge;
 mod mesh_admin;
 mod model_files;
+mod pipeline_pause;
 
 pub use atlas_status::{atlas_status, AtlasStatusResponse};
 pub use corpus_collaborate::{corpus_collaborate, CollaborateRequest};
@@ -47,6 +48,9 @@ pub use gossip::{
     SchedulingIntent, SchedulingIntentResponse,
 };
 pub use knowledge::{knowledge_search, latency_probe};
+pub use pipeline_pause::{
+    pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,
+};
 pub use mesh_admin::{
     foreground_state, inference_warmup, ingest_budget_get, ingest_budget_set, join,
     mesh_quiesce_get, mesh_quiesce_set, models_inventory, models_load, models_unload,
