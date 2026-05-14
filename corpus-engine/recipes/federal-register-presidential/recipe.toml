@@ -1,0 +1,169 @@
+[corpus]
+id = "federal-register-presidential"
+name = "Federal Register — Presidential Documents and Significant Rules"
+description = """
+Presidential Documents (executive orders, proclamations, determinations, \
+memoranda, notices) and OIRA-significant Final Rules from the Federal \
+Register, retrieved from federalregister.gov's documented v1 API. The \
+canonical 'what executive action was taken' surface for legal-analysis \
+work. License: 17 USC §105 — federal works are not subject to copyright \
+in the United States.\
+"""
+license = "Public Domain (17 USC §105)"
+# Mesh-shareable: the underlying documents are public-domain federal works,
+# and the Federal Register's developer guidance permits redistribution.
+mesh_sharing = true
+query_sharing = true
+size_compressed_gb = 0.30
+size_indexed_gb = 0.50
+
+# ─── Build-time parameters ───────────────────────────────────────────
+#
+# Year list is parameterised because the Federal Register's
+# `documents.json` endpoint caps each query at 2,000 results.
+# Per-year counts for the two types we ingest combine to ~700–900
+# documents/year, comfortably under the ceiling. Using `for_each =
+# ["years"]` on each request, the acquirer issues one paginated
+# sequence per year — never tripping the cap. Add or remove years to
+# scope the corpus.
+[parameters.year]
+type = "list"
+description = "Years to ingest. One paginated sequence per year keeps each query under FedReg's 2,000-result-per-query ceiling. The placeholder `{year}` in the request URLs is rebound to a single year on each iteration via `for_each = [\"year\"]`."
+default = ["2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"]
+
+# ─── Acquisition ─────────────────────────────────────────────────────
+#
+# The Federal Register's REST API is the canonical, designed-for-access
+# surface for these documents. We use it rather than scraping the public
+# site because the API is stable, documented, and explicitly contracted
+# for programmatic consumption.
+#
+# Per-page response shape (abbreviated):
+#   { "count": <int>,
+#     "total_pages": <int>,
+#     "next_page_url": "https://www.federalregister.gov/api/v1/documents?...&page=2",
+#     "results": [
+#       { "document_number": "2026-09624",
+#         "title": "...",
+#         "type": "Presidential Document",
+#         "subtype": "Determination",
+#         "publication_date": "2026-05-13",
+#         "president": { "identifier": "...", "name": "..." },
+#         "executive_order_number": null,
+#         "raw_text_url": "https://www.federalregister.gov/documents/full_text/text/2026/05/13/2026-09624.txt",
+#         "html_url": "https://www.federalregister.gov/documents/2026/05/13/..."
+#       }, ... ]
+#   }
+#
+# We `follow` each result's `raw_text_url` — the GPO's canonical
+# machine-readable plain-text format. (The API also exposes
+# `full_text_xml_url`, which is more structurally clean; switching to it
+# is a follow-up once a generic XML extractor lands. `body_html_url` is
+# rejected on principle — that's display HTML, not designed for access.)
+#
+# Rate limit: 1 req/sec is conservative. The FR API has no documented
+# hard cap but courtesy traffic should stay polite to a public service.
+[acquire]
+type = "http_api"
+base_url = "https://www.federalregister.gov/api/v1"
+user_agent = "commonwealth-ai/0.1 (federal-register-presidential)"
+rate_limit_per_second = 1.0
+
+# Request 1: Presidential Documents (executive orders, proclamations,
+# determinations, notices, memoranda). Bracket characters in query
+# parameters are percent-encoded (`%5B` / `%5D`) so the URL template is
+# unambiguous regardless of how the HTTP client handles raw brackets.
+# `for_each = ["year"]` cross-products one paginated sequence per
+# year listed in `[parameters.years]`.
+[[acquire.requests]]
+url = "{base_url}/documents.json?conditions%5Btype%5D%5B%5D=PRESDOCU&conditions%5Bpublication_date%5D%5Bgte%5D={year}-01-01&conditions%5Bpublication_date%5D%5Blte%5D={year}-12-31&fields%5B%5D=document_number&fields%5B%5D=title&fields%5B%5D=type&fields%5B%5D=subtype&fields%5B%5D=publication_date&fields%5B%5D=president&fields%5B%5D=executive_order_number&fields%5B%5D=presidential_document_number&fields%5B%5D=raw_text_url&fields%5B%5D=html_url&per_page=1000"
+for_each = ["year"]
+
+# Request 2: OIRA-significant Final Rules. The set the user actually
+# means when they ask "is this regulation legal" — the small fraction of
+# rules OIRA designates significant under EO 12866 (typically a few
+# hundred per year vs. tens of thousands of non-significant rules).
+[[acquire.requests]]
+url = "{base_url}/documents.json?conditions%5Btype%5D%5B%5D=RULE&conditions%5Bsignificant%5D=1&conditions%5Bpublication_date%5D%5Bgte%5D={year}-01-01&conditions%5Bpublication_date%5D%5Blte%5D={year}-12-31&fields%5B%5D=document_number&fields%5B%5D=title&fields%5B%5D=type&fields%5B%5D=publication_date&fields%5B%5D=agencies&fields%5B%5D=significant&fields%5B%5D=raw_text_url&fields%5B%5D=html_url&per_page=1000"
+for_each = ["year"]
+
+# Pagination: the API ships a whole-URL next pointer in
+# `next_page_url`. Follow it verbatim; the loop terminates when the
+# field is absent (last page).
+[acquire.pagination]
+type = "next_url"
+response_path = "$.next_page_url"
+
+# Each result page is treated as an index of document URLs. The follow
+# step fetches every `raw_text_url` in parallel (capped concurrency to
+# stay polite). Bodies land at <acquired-dir>/docs/<sha>.html — the
+# `.html` extension is intentional: `raw_text_url` returns the canonical
+# GPO plain text wrapped in a minimal `<html><body><pre>…</pre></body></html>`
+# envelope, and routing it through the `html` extractor's tag stripper
+# is the cleanest way to drop that envelope without scripting a
+# special-purpose extractor.
+[acquire.follow]
+document_url_path = "$.results[*].raw_text_url"
+document_format = "html"
+max_concurrency = 4
+
+# ─── Extraction ──────────────────────────────────────────────────────
+#
+# `raw_text_url` payloads are GPO plain text wrapped in trivial HTML.
+# `strip_html` removes the wrapper and decodes the few entities the
+# wrapper contains, leaving the underlying GPO text intact. We do not
+# use the JSON metadata sidecar — `_chunk_metadata` propagation per
+# document is a future enhancement; for now, the document_number is
+# recoverable from the title prelude in each GPO text dump.
+[extract]
+type = "html"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+# embedding_model + embedding_dimensions are auto-detected from the
+# loaded Embed slot at ingest time. No `[prebuilt]` block yet — once a
+# build produces a publishable snapshot and lands on HuggingFace under
+# `svrnmesh/federal-register-presidential`, add a `[prebuilt]` block
+# pointing at it so end-users can install without re-running the API
+# pull.
+
+# ─── Enrichment ──────────────────────────────────────────────────────
+#
+# `referential_atlas` is the right pipeline for reference works that
+# carry cross-references (statute citations, EO numbers, CFR sections,
+# agency names). Phase 1 entity/relationship extraction picks up
+# IEEPA / 19 USC §1701 / 50 USC §1701 / etc. as Entity atoms and the
+# operative authority claim as a Relation atom. `domain = "legal"`
+# tags the corpus for any future domain-aware retrieval routing.
+#
+# Off by default — Layer-1 time-to-grounded matters more than atom-
+# level depth for the first install. ~17k documents × paragraph
+# chunking = ~200k chunks; atlas enrichment is hours of LLM work on
+# typical hardware. Re-enable by setting `enabled = true` before the
+# first install, or run the atlas pass separately after ingest via
+# `sovereign enrich build federal-register-presidential`.
+[enrichment]
+enabled = false
+type = "atlas"
+pipeline = "referential_atlas"
+domain = "legal"
+prompt_version = "1.0.0-legal"
+
+[enrichment.clustering]
+min_cluster_size = 50
+epsilon = 0.10
+label_sample_size = 5
+
+[enrichment.alignment]
+alignment_threshold = 0.65
+min_chunks_for_discovery = 80
+
+[enrichment.fault_lines]
+proximity_threshold = 0.60
+min_confidence = 0.70

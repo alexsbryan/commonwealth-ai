@@ -1791,7 +1791,30 @@ impl CorpusEngine {
     ) -> Result<PathBuf> {
         match &recipe.acquire {
             AcquirerConfig::BulkDownload { url, urls, resume } => {
-                let downloader = match (url.as_deref(), urls.as_ref()) {
+                // Interpolate `{name}` placeholders in URL(s) against
+                // resolved recipe parameters so `urls = [".../USCODE-{year}-title15.zip"]`
+                // can pick up a `[parameters.year]` install-time value.
+                // Empty placeholder set is a clean no-op for legacy
+                // recipes that never declare parameters.
+                let bindings: std::collections::BTreeMap<String, String> = recipe
+                    .resolved_parameters
+                    .values
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.as_interpolation()))
+                    .collect();
+                let render =
+                    |tpl: &str| crate::acquirers::http_api::template::render_template(
+                        tpl, "", &bindings,
+                    );
+                let url_rendered = url
+                    .as_deref()
+                    .map(render)
+                    .transpose()?;
+                let urls_rendered = urls
+                    .as_ref()
+                    .map(|v| v.iter().map(|u| render(u)).collect::<Result<Vec<_>>>())
+                    .transpose()?;
+                let downloader = match (url_rendered.as_deref(), urls_rendered.as_ref()) {
                     (Some(u), None) => BulkDownloader::new(u, *resume),
                     (None, Some(us)) if !us.is_empty() => {
                         BulkDownloader::with_urls(us.clone(), *resume)
@@ -2043,6 +2066,28 @@ impl CorpusEngine {
             }
             ExtractorConfig::AlignmentWorkspace {} => {
                 Box::new(extractors::alignment_workspace::AlignmentWorkspaceExtractor::default())
+            }
+            ExtractorConfig::XmlSections {
+                element,
+                title_attr,
+            } => Box::new(extractors::xml_sections::XmlSectionsExtractor {
+                element: element.clone(),
+                title_attr: title_attr.clone(),
+            }),
+            ExtractorConfig::Custom { kind, extension, params: _params } => {
+                let registered = self.custom_extractor(kind).unwrap_or_else(|| {
+                    panic!(
+                        "No custom extractor registered for kind '{kind}'. \
+                         Call CorpusEngine::register_extractor before ingest \
+                         (sovereign-tools registers \"pdf\" at daemon startup; \
+                         bare-CLI flows need to register it explicitly)."
+                    )
+                });
+                Box::new(extractors::custom_file::CustomFileExtractor {
+                    extension: extension.clone(),
+                    kind: kind.clone(),
+                    extractor: registered,
+                })
             }
         }
     }

@@ -504,6 +504,7 @@ mod tests {
             quotable_excerpt: Some("a quotable excerpt".into()),
             attributed_to: None,
             confidence: Some(0.8),
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         })
     }
@@ -741,6 +742,7 @@ mod tests {
             quotable_excerpt: None,
             attributed_to: Some(hume_id.clone()),
             confidence: None,
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
         // Drop unused Initiative-style fields on the entity so the
@@ -781,6 +783,7 @@ mod tests {
             quotable_excerpt: None,
             attributed_to: Some(AtomId::from_raw("entity-9999".to_string())),
             confidence: None,
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
         write_atoms(&atlas_dir, vec![dangling_claim]);

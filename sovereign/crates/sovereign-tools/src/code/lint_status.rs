@@ -139,6 +139,26 @@ impl Tool for LintStatusTool {
                     "warnings":        { "type": "array" },
                     "run_id":          { "type": "integer" },
                     "output_truncated":{ "type": "boolean" },
+                    // `previous_run` is populated whenever `status` is
+                    // `running` and a prior completed run exists. Lets
+                    // callers see "in flight, but the last completed
+                    // run failed with these errors" rather than polling
+                    // `null` indefinitely on a watcher wedged against a
+                    // stable compile error.
+                    "previous_run":    {
+                        "type": "object",
+                        "properties": {
+                            "status":           { "type": "string", "enum": ["fresh_passing","fresh_failing"] },
+                            "run_id":           { "type": "integer" },
+                            "pass_count":       { "type": "integer" },
+                            "fail_count":       { "type": "integer" },
+                            "warn_count":       { "type": "integer" },
+                            "exit_code":        { "type": "integer" },
+                            "age_seconds":      { "type": "integer" },
+                            "looks_like_compile_failure": { "type": "boolean" },
+                            "errors":           { "type": "array" }
+                        }
+                    },
                     "files": {
                         "type": "array",
                         "description": "Per-file freshness, populated when the call passes `files` or `changed`. Each entry: { path, status, checked_at_unix, mtime_unix, errors, warnings }. `status` uses the same vocabulary as the top-level workspace status: `fresh_passing | fresh_failing | stale | never_checked`.",
@@ -214,6 +234,16 @@ impl Tool for LintStatusTool {
             // last completed run (if any) — answer the kill query
             // "are my files clean as of the most recent finish?"
             // while the workspace check trundles on.
+            //
+            // The `previous_run` block additionally surfaces the prior
+            // run's summary + errors so a watcher perpetually
+            // re-failing on the same compile error is observable from
+            // a single call instead of looking like an infinite
+            // "running, summary: null". The interesting flag is
+            // `looks_like_compile_failure`: exit_code != 0 AND zero
+            // diagnostics emitted (pass+fail+warn == 0) — the signature
+            // of `cargo check` aborting before producing any
+            // file-shaped output.
             let prior = self.store.latest_run().await.ok().flatten();
             let files_block = if let (Some(paths), Some(run)) = (&query_paths, &prior) {
                 Some(self.build_files_block(paths, run).await)
@@ -222,6 +252,7 @@ impl Tool for LintStatusTool {
                     .as_ref()
                     .map(|paths| paths.iter().map(|p| never_checked_entry(p)).collect())
             };
+            let previous_run = build_previous_run(&self.store, prior.as_ref()).await;
             return Ok(StepOutput::Json(json!({
                 "status": "running",
                 "summary": null,
@@ -232,6 +263,7 @@ impl Tool for LintStatusTool {
                 "watched_scope": self.watched_scope,
                 "watcher_active": derive_watcher_active(explicit_active, None, true),
                 "files": files_block,
+                "previous_run": previous_run,
             })));
         }
 
@@ -610,6 +642,65 @@ fn paths_match(a: &Path, b: &Path) -> bool {
     }
 }
 
+/// Build the `previous_run` payload returned alongside `status:
+/// running`. Returns `Value::Null` when no prior run exists.
+///
+/// `looks_like_compile_failure` flips to true when the prior run
+/// exited non-zero AND produced zero diagnostics
+/// (pass+fail+warn = 0) — the signature of `cargo check` aborting
+/// in the build phase before any file-shaped output. That's the
+/// failure mode that previously showed up as a perpetual
+/// `{status: running, summary: null}` because the watcher kept
+/// re-launching against the same broken workspace.
+async fn build_previous_run(
+    store: &LintResultStore,
+    prior: Option<&LintRunSummary>,
+) -> serde_json::Value {
+    let Some(run) = prior else {
+        return serde_json::Value::Null;
+    };
+    let age_seconds = SystemTime::now()
+        .duration_since(run.finished_at)
+        .unwrap_or_default()
+        .as_secs();
+    let status = if run.passed() {
+        "fresh_passing"
+    } else {
+        "fresh_failing"
+    };
+    let looks_like_compile_failure = run.exit_code != 0
+        && run.pass_count == 0
+        && run.fail_count == 0
+        && run.warn_count == 0;
+    let errors = store
+        .latest_failures(10)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| {
+            json!({
+                "file": f.file,
+                "output": f.output,
+                "output_truncated": f.output_truncated,
+                "line": f.line,
+                "col": f.col,
+                "run_id": f.run_id,
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "status": status,
+        "run_id": run.run_id,
+        "pass_count": run.pass_count,
+        "fail_count": run.fail_count,
+        "warn_count": run.warn_count,
+        "exit_code": run.exit_code,
+        "age_seconds": age_seconds,
+        "looks_like_compile_failure": looks_like_compile_failure,
+        "errors": errors,
+    })
+}
+
 /// How recently a run must have completed for the CLI-mode
 /// fallback to consider the watcher "live" (no explicit flag wired).
 /// 10 minutes is comfortably longer than any single watcher
@@ -718,5 +809,83 @@ mod tests {
         );
         let tool = LintStatusTool::new(store);
         assert!(tool.resolve_query_paths(&json!({})).is_none());
+    }
+
+    fn ctx() -> ToolContext {
+        ToolContext {
+            conversation_id: "lint-status-test".into(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+        }
+    }
+
+    /// When the watcher is mid-run AND the last completed lint run was
+    /// a compile failure (exit_code != 0, zero diagnostics emitted —
+    /// `cargo check` aborted before any file output), the running-branch
+    /// response must surface the previous run via `previous_run` with
+    /// `looks_like_compile_failure: true`. Otherwise a watcher
+    /// repeatedly retrying the same broken workspace looks identical
+    /// (`{status: running, summary: null}`) to a freshly-kicked-off
+    /// healthy run.
+    #[tokio::test]
+    async fn running_branch_surfaces_compile_failed_previous_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            LintResultStore::open(&dir.path().join("lint.db")).unwrap(),
+        );
+
+        // Run 1: compile-failure shape — non-zero exit, no diagnostics.
+        let r1 = store.begin_run().await.unwrap();
+        store.finish_run(r1, 101, 1234).await.unwrap();
+
+        // Run 2: in-flight. Marks run_in_progress true in execute().
+        let _r2 = store.begin_run().await.unwrap();
+
+        let tool = LintStatusTool::new(Arc::clone(&store));
+        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let v = match out {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {other:?}"),
+        };
+
+        assert_eq!(v["status"], "running");
+        assert!(v["summary"].is_null());
+
+        let prev = &v["previous_run"];
+        assert!(!prev.is_null(), "previous_run must be populated");
+        assert_eq!(prev["status"], "fresh_failing");
+        assert_eq!(prev["exit_code"], 101);
+        assert_eq!(prev["pass_count"], 0);
+        assert_eq!(prev["fail_count"], 0);
+        assert_eq!(prev["warn_count"], 0);
+        assert_eq!(
+            prev["looks_like_compile_failure"], true,
+            "non-zero exit with zero diagnostics is the compile-failure signature"
+        );
+    }
+
+    /// No completed run yet → previous_run is JSON null. Lets callers
+    /// distinguish "no history" from "history says everything's fine".
+    #[tokio::test]
+    async fn running_branch_with_no_prior_run_returns_null_previous() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            LintResultStore::open(&dir.path().join("lint.db")).unwrap(),
+        );
+        let _r = store.begin_run().await.unwrap();
+
+        let tool = LintStatusTool::new(Arc::clone(&store));
+        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let v = match out {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {other:?}"),
+        };
+        assert_eq!(v["status"], "running");
+        assert!(
+            v["previous_run"].is_null(),
+            "previous_run must be null when no completed run exists"
+        );
     }
 }

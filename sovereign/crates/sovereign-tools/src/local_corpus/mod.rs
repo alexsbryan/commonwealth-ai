@@ -33,6 +33,7 @@ pub mod manager;
 pub mod ocr;
 pub mod pre_scanner;
 pub mod preview;
+pub mod recipe_extractor;
 pub mod progress;
 pub mod watched;
 pub mod writeback;

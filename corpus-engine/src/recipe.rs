@@ -1414,6 +1414,48 @@ pub enum ExtractorConfig {
     /// accepted spec.md files). Requires the `markdown` Cargo feature.
     #[serde(rename = "markdown")]
     Markdown {},
+    /// Runtime-registered per-file extractor. The engine walks
+    /// `source_path` collecting files with `extension`, then calls a
+    /// closure registered via
+    /// [`CorpusEngine::register_extractor`](crate::engine::CorpusEngine::register_extractor)
+    /// on each. Used by recipes whose source format requires a heavy
+    /// dep (pdf-extract, lopdf, …) that corpus-engine declines to
+    /// bundle. `sovereign-tools` registers `"pdf"` at daemon startup.
+    /// Ingest fails loudly if no extractor is registered for `kind` —
+    /// the operator gets a clear "register before install" message
+    /// rather than a silent empty corpus.
+    #[serde(rename = "custom")]
+    Custom {
+        /// Key the engine looks up in its custom-extractor map.
+        kind: String,
+        /// File extension to walk (case-insensitive, no leading dot:
+        /// `"pdf"`, `"epub"`, …).
+        extension: String,
+        /// Unstructured params forwarded to the closure's bookkeeping
+        /// layer if needed (currently unused — reserved for per-recipe
+        /// PDF settings like `ocr_fallback: true`).
+        #[serde(default)]
+        params: serde_json::Value,
+    },
+    /// Section-aware XML extractor. Walks a directory of `.xml`
+    /// files and emits one
+    /// [`ExtractedDoc`](crate::extractors::ExtractedDoc) per element
+    /// whose **local-name** matches `element`. Namespace-agnostic on
+    /// purpose so USLM 1.x and USLM 2.0 (different namespace URLs,
+    /// same `<section>` semantics) both round-trip through the same
+    /// recipe. `title_attr` reads a title off the matched element
+    /// (e.g. `identifier` on USLM sections yields titles like
+    /// `/us/usc/t15/s1`). See
+    /// [`crate::extractors::xml_sections::XmlSectionsExtractor`].
+    #[serde(rename = "xml_sections")]
+    XmlSections {
+        /// Local-name of the element whose body becomes one `ExtractedDoc`.
+        element: String,
+        /// Optional attribute (local-name) on the matched element used
+        /// as the document title.
+        #[serde(default)]
+        title_attr: Option<String>,
+    },
     /// Walks the user's `~/.claude/plans/` and
     /// `~/.claude/projects/-Users-*/memory/` trees plus
     /// `~/.claude/plans/_TEMPLATE.md`, yielding one `ExtractedDoc` per
@@ -1964,6 +2006,10 @@ pub enum RecipeId {
     Alignment,
     Sep,
     CrsReports,
+    FederalRegisterPresidential,
+    UsCode,
+    OlcOpinions,
+    ScotusOpinions,
 }
 
 impl RecipeId {
@@ -1987,6 +2033,10 @@ impl RecipeId {
             Self::Alignment => "alignment",
             Self::Sep => "sep",
             Self::CrsReports => "crs_reports",
+            Self::FederalRegisterPresidential => "federal-register-presidential",
+            Self::UsCode => "us-code",
+            Self::OlcOpinions => "olc-opinions",
+            Self::ScotusOpinions => "scotus-opinions",
         }
     }
 
@@ -2007,6 +2057,10 @@ impl RecipeId {
             "alignment" => Some(Self::Alignment),
             "sep" => Some(Self::Sep),
             "crs_reports" => Some(Self::CrsReports),
+            "federal-register-presidential" => Some(Self::FederalRegisterPresidential),
+            "us-code" => Some(Self::UsCode),
+            "olc-opinions" => Some(Self::OlcOpinions),
+            "scotus-opinions" => Some(Self::ScotusOpinions),
             _ => None,
         }
     }
@@ -2032,6 +2086,14 @@ impl RecipeId {
             Self::Alignment => include_str!("../recipes/alignment/recipe.toml"),
             Self::Sep => include_str!("../recipes/sep/recipe.toml"),
             Self::CrsReports => include_str!("../recipes/crs_reports/recipe.toml"),
+            Self::FederalRegisterPresidential => {
+                include_str!("../recipes/federal-register-presidential/recipe.toml")
+            }
+            Self::UsCode => include_str!("../recipes/us-code/recipe.toml"),
+            Self::OlcOpinions => include_str!("../recipes/olc-opinions/recipe.toml"),
+            Self::ScotusOpinions => {
+                include_str!("../recipes/scotus-opinions/recipe.toml")
+            }
         }
     }
 
@@ -2052,6 +2114,10 @@ impl RecipeId {
         Self::Alignment,
         Self::Sep,
         Self::CrsReports,
+        Self::FederalRegisterPresidential,
+        Self::UsCode,
+        Self::OlcOpinions,
+        Self::ScotusOpinions,
     ];
 }
 
@@ -2837,8 +2903,16 @@ type = "paragraph"
             other => panic!("expected HuggingFaceDataset, got {other:?}"),
         }
         match &simple.extract {
-            ExtractorConfig::WikipediaStructured { .. } => {}
-            other => panic!("expected WikipediaStructured, got {other:?}"),
+            // Recipe was migrated from the WikipediaStructured
+            // section-aware extractor to the simpler Parquet
+            // extractor in 57a6205 (the `wikimedia/wikipedia`
+            // parquet snapshot is already article-grained, so
+            // section-splitting buys nothing for Layer 0). Keep the
+            // shape assertion pinned to the current form.
+            ExtractorConfig::Parquet { content_column, .. } => {
+                assert_eq!(content_column, "text");
+            }
+            other => panic!("expected Parquet, got {other:?}"),
         }
         // Layer 0 is intentionally unfiltered and unenriched.
         assert!(simple.filters.is_empty(), "Simple English should not have filters");
@@ -3204,6 +3278,343 @@ type = "paragraph"
                 assert_eq!(user_agent.as_deref(), Some("CW-Test admin@example.com"));
             }
             other => panic!("expected HttpApi, got {other:?}"),
+        }
+    }
+
+    /// The federal-register-presidential bundled recipe must parse and
+    /// declare the shape the legal-analysis use case depends on:
+    ///   - http_api acquirer with two RequestTemplates (PRESDOCU + significant Rules)
+    ///   - NextUrl pagination keyed on `$.next_page_url`
+    ///   - Follow configured to fetch each result's raw_text_url with html format
+    ///   - html extractor + paragraph chunker
+    ///   - referential_atlas enrichment configured but disabled by default
+    ///   - start_date + end_date install-time parameters with sensible defaults
+    /// Regression-pinned: a future change that silently drops the second
+    /// request template, flips enrichment on (bloating first-install time),
+    /// or renames a parameter would all fail here.
+    #[test]
+    fn federal_register_presidential_recipe_shape() {
+        let toml = bundled_recipe_toml("federal-register-presidential")
+            .expect("federal-register-presidential must be a bundled recipe");
+        let r = Recipe::from_toml(toml)
+            .expect("federal-register-presidential recipe.toml must parse");
+
+        assert_eq!(r.corpus.id, "federal-register-presidential");
+
+        // Acquirer: http_api with two requests, NextUrl pagination, html follow.
+        match &r.acquire {
+            AcquirerConfig::HttpApi {
+                base_url,
+                requests,
+                pagination,
+                follow,
+                rate_limit_per_second,
+                ..
+            } => {
+                assert!(
+                    base_url.contains("federalregister.gov/api/v1"),
+                    "base_url should point at the FedReg v1 API, got {base_url}"
+                );
+                assert_eq!(
+                    requests.len(),
+                    2,
+                    "expected 2 request templates (PRESDOCU + significant Rules)"
+                );
+                assert!(
+                    requests.iter().any(|t| t.url.contains("PRESDOCU")),
+                    "one request must filter to Presidential Documents"
+                );
+                assert!(
+                    requests.iter().any(|t| {
+                        t.url.contains("type%5D%5B%5D=RULE")
+                            && t.url.contains("significant%5D=1")
+                    }),
+                    "one request must filter to significant Final Rules"
+                );
+                match pagination.as_ref().expect("pagination declared") {
+                    PaginationStrategy::NextUrl { response_path } => {
+                        assert_eq!(response_path, "$.next_page_url");
+                    }
+                    other => panic!("expected NextUrl pagination, got {other:?}"),
+                }
+                let f = follow.as_ref().expect("follow declared");
+                assert!(
+                    f.document_url_path.contains("raw_text_url"),
+                    "follow must target raw_text_url (designed-for-access GPO format), \
+                     not body_html_url (display chrome)"
+                );
+                assert_eq!(
+                    f.document_format,
+                    DocFormat::Html,
+                    "raw_text_url payloads are HTML-wrapped plaintext; .html routes \
+                     them through the html extractor's tag stripper"
+                );
+                assert!(
+                    rate_limit_per_second.unwrap_or(99.0) <= 2.0,
+                    "stay polite to a public-service API"
+                );
+            }
+            other => panic!("expected HttpApi acquirer, got {other:?}"),
+        }
+
+        // Extractor + chunker.
+        assert!(
+            matches!(r.extract, ExtractorConfig::Html { .. }),
+            "expected html extractor; raw_text_url's HTML envelope strips cleanly"
+        );
+        match &r.chunk {
+            ChunkerConfig::Paragraph { max_chars, overlap_chars } => {
+                assert!(*max_chars >= 1024, "paragraph max_chars should leave headroom for legal prose");
+                assert!(*overlap_chars > 0, "paragraph chunker should overlap for citation continuity");
+            }
+            other => panic!("expected Paragraph chunker, got {other:?}"),
+        }
+
+        // Enrichment block declared, but disabled by default — atlas
+        // enrichment over ~200k chunks is hours of LLM work and the
+        // first install should produce a usable index without it.
+        let enrichment = r.enrichment.as_ref().expect("enrichment block declared");
+        assert!(
+            !enrichment.enabled,
+            "enrichment must default to disabled for first-install latency"
+        );
+        assert_eq!(enrichment.enrichment_type, "atlas");
+        assert_eq!(enrichment.domain.as_deref(), Some("legal"));
+
+        // Parameters: install-time year list. Each request template
+        // cross-products over years via for_each so each API query
+        // stays under FedReg's 2,000-result-per-query ceiling.
+        let year = r
+            .parameters
+            .get("year")
+            .expect("year parameter declared");
+        assert_eq!(year.kind, ParameterKind::List);
+        assert!(year.default.is_some(), "year should have a default list");
+        if let Some(toml::Value::Array(items)) = &year.default {
+            assert!(
+                items.len() >= 5,
+                "year default should span a multi-year window"
+            );
+        } else {
+            panic!("year default must be a TOML array");
+        }
+        // Both request templates must declare `for_each = ["year"]`
+        // or the 2k-cap ceiling re-emerges.
+        match &r.acquire {
+            AcquirerConfig::HttpApi { requests, .. } => {
+                for req in requests {
+                    assert!(
+                        req.for_each.iter().any(|p| p == "year"),
+                        "each request template must for_each over year to stay under the 2,000-result cap"
+                    );
+                    assert!(
+                        req.url.contains("{year}"),
+                        "request URL must reference the {{year}} placeholder"
+                    );
+                }
+            }
+            _ => unreachable!("acquirer asserted above"),
+        }
+
+        // No [prebuilt] block: no one has built and uploaded a snapshot
+        // yet. When the first build lands on HuggingFace under
+        // `svrnmesh/federal-register-presidential`, this assertion gets
+        // inverted (and the test grows a check on the hf_repo).
+        assert!(
+            r.prebuilt.is_none(),
+            "no [prebuilt] block yet — add one after the first build is published"
+        );
+    }
+
+    /// The us-code bundled recipe must parse and declare the shape
+    /// the legal-analysis stack depends on:
+    ///   - bulk_download with the per-title govinfo URL list
+    ///   - `{year}` placeholder interpolation against
+    ///     `[parameters.year]` so `--param year=2023` swaps editions
+    ///   - xml_sections extractor matching USLM `<section>` local-name
+    ///   - paragraph chunker
+    ///   - referential_atlas enrichment declared but off-by-default
+    /// Regression-pinned: a future change that drops the year
+    /// parameter (re-pinning the recipe to a single edition), removes
+    /// the title-26 URL (Internal Revenue Code, the heavyweight), or
+    /// flips enrichment on by default would all fail here.
+    #[test]
+    fn us_code_recipe_shape() {
+        let toml = bundled_recipe_toml("us-code")
+            .expect("us-code must be a bundled recipe");
+        let r = Recipe::from_toml(toml)
+            .expect("us-code recipe.toml must parse");
+
+        assert_eq!(r.corpus.id, "us-code");
+
+        // Acquirer: bulk_download with 50+ URLs (one per title) using
+        // {year} interpolation. Title 26 must be present — without it,
+        // tax / IRC questions silently fall through to nothing.
+        match &r.acquire {
+            AcquirerConfig::BulkDownload { url, urls, resume } => {
+                assert!(url.is_none(), "expected `urls` list, not single `url`");
+                let urls = urls.as_ref().expect("urls declared");
+                assert!(
+                    urls.len() >= 50,
+                    "expected ~54 title URLs, got {}",
+                    urls.len()
+                );
+                assert!(
+                    urls.iter().all(|u| u.contains("{year}")),
+                    "every URL must use {{year}} interpolation"
+                );
+                assert!(
+                    urls.iter().any(|u| u.contains("title26")),
+                    "Title 26 (Internal Revenue Code) must be in the URL list"
+                );
+                assert!(*resume, "bulk_download should resume to survive partial downloads");
+            }
+            other => panic!("expected BulkDownload acquirer, got {other:?}"),
+        }
+
+        // Extractor: xml_sections matching USLM <section> by local
+        // name with `identifier` as title.
+        match &r.extract {
+            ExtractorConfig::XmlSections { element, title_attr } => {
+                assert_eq!(element, "section");
+                assert_eq!(title_attr.as_deref(), Some("identifier"));
+            }
+            other => panic!("expected XmlSections extractor, got {other:?}"),
+        }
+
+        // Chunker.
+        assert!(matches!(r.chunk, ChunkerConfig::Paragraph { .. }));
+
+        // Enrichment declared but disabled by default — ~150k sections
+        // × paragraph chunking is hours of LLM work.
+        let enrichment = r.enrichment.as_ref().expect("enrichment block declared");
+        assert!(
+            !enrichment.enabled,
+            "us-code enrichment must default to disabled — atlas over 150k sections is hours of LLM work"
+        );
+        assert_eq!(enrichment.domain.as_deref(), Some("legal"));
+
+        // Parameter: year for swapping annual editions.
+        let year = r
+            .parameters
+            .get("year")
+            .expect("[parameters.year] declared");
+        assert!(year.default.is_some(), "year must have a default edition");
+
+        // No [prebuilt] yet.
+        assert!(r.prebuilt.is_none(), "no [prebuilt] until the first build is published");
+    }
+
+    /// olc-opinions + scotus-opinions both ride on CourtListener.
+    /// Verify both bundle recipes parse with the same http_api shape:
+    ///   - Authorization: Token {api_token} header
+    ///   - NextUrl pagination on `$.next`
+    ///   - `json` extractor with `plain_text` content field
+    ///   - `[parameters.api_token]` required install-time param
+    #[test]
+    fn courtlistener_recipes_shape() {
+        for (id, court_filter) in [
+            ("olc-opinions", "cluster__docket__court=olc"),
+            ("scotus-opinions", "cluster__docket__court=scotus"),
+        ] {
+            let toml =
+                bundled_recipe_toml(id).unwrap_or_else(|| panic!("{id} is bundled"));
+            let r = Recipe::from_toml(toml)
+                .unwrap_or_else(|e| panic!("{id} recipe parses: {e}"));
+
+            assert_eq!(r.corpus.id, id);
+
+            match &r.acquire {
+                AcquirerConfig::HttpApi {
+                    base_url,
+                    requests,
+                    pagination,
+                    follow,
+                    headers,
+                    ..
+                } => {
+                    assert!(
+                        base_url.contains("courtlistener.com/api/rest/v4"),
+                        "{id}: base_url should point at CourtListener v4 REST"
+                    );
+                    assert_eq!(requests.len(), 1, "{id}: one request template");
+                    assert!(
+                        requests[0].url.contains(court_filter),
+                        "{id}: request must filter court via `{court_filter}`"
+                    );
+                    let auth = headers
+                        .as_ref()
+                        .and_then(|h| h.get("Authorization"))
+                        .expect("Authorization header declared");
+                    assert!(
+                        auth.contains("Token {api_token}"),
+                        "{id}: Authorization must interpolate {{api_token}} as `Token <value>`, got `{auth}`"
+                    );
+                    match pagination.as_ref().expect("pagination") {
+                        PaginationStrategy::NextUrl { response_path } => {
+                            assert_eq!(response_path, "$.next");
+                        }
+                        other => panic!("{id}: expected NextUrl, got {other:?}"),
+                    }
+                    assert!(
+                        follow.is_none(),
+                        "{id}: no follow — plain_text is inline in the page response"
+                    );
+                }
+                other => panic!("{id}: expected HttpApi, got {other:?}"),
+            }
+
+            // Extractor: directory-aware json walking per-page files.
+            match &r.extract {
+                ExtractorConfig::Json {
+                    document_path,
+                    content_field,
+                    ..
+                } => {
+                    assert_eq!(document_path, "$.results[*]");
+                    assert_eq!(content_field, "plain_text");
+                }
+                other => panic!("{id}: expected Json extractor, got {other:?}"),
+            }
+
+            // Required api_token install-time parameter.
+            let token = r
+                .parameters
+                .get("api_token")
+                .unwrap_or_else(|| panic!("{id} must declare [parameters.api_token]"));
+            assert!(
+                token.required,
+                "{id}: api_token must be required so empty installs fail loudly"
+            );
+
+            // SCOTUS declares an optional `start_date` knob so power
+            // users can slice the corpus locally without paying for a
+            // CourtListener subscription (e.g. recent ~10y fits the
+            // free-tier 125-req/day cap). The default is the
+            // comprehensive scope (1791) that the maintainer's
+            // `[prebuilt]` build uses.
+            if id == "scotus-opinions" {
+                let start = r
+                    .parameters
+                    .get("start_date")
+                    .expect("scotus-opinions must declare start_date for optional local slicing");
+                assert_eq!(start.kind, ParameterKind::Date);
+                assert!(
+                    start.default.is_some(),
+                    "scotus-opinions start_date must have a default"
+                );
+                assert!(
+                    requests_url_of(&r).contains("cluster__date_filed__gte={start_date}"),
+                    "scotus-opinions request must filter by cluster.date_filed >= {{start_date}}"
+                );
+            }
+        }
+    }
+
+    fn requests_url_of(r: &Recipe) -> &str {
+        match &r.acquire {
+            AcquirerConfig::HttpApi { requests, .. } => requests[0].url.as_str(),
+            _ => "",
         }
     }
 

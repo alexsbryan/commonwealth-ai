@@ -154,6 +154,54 @@ toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/
 sha256 = ""
 
 [[recipes]]
+id = "us-code"
+name = "United States Code"
+description = "The codification of federal statutes — every active title of the U.S. Code as a citable annual edition. Sourced from govinfo's USCODE bulk data (USLM XML). Public domain under 17 USC §105. Default `--param year=2024`; install side-by-side editions for historical citation work. No `[prebuilt]` snapshot yet — first install runs the full bulk pull (~30–60 min)."
+license = "Public Domain"
+size_compressed_gb = 1.0
+size_indexed_gb = 0.5
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/us-code/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "olc-opinions"
+name = "DOJ Office of Legal Counsel — Published & FOIA Opinions"
+description = "DOJ OLC opinions — the executive branch's published legal reasoning. Sourced from CourtListener (Free Law Project), which aggregates DOJ-published opinions with FOIA-released opinions that DOJ did not publish. Opinions are public domain (17 USC §105); CourtListener's bulk-data files are Public Domain Mark certified. Requires a free CourtListener API token: `--param api_token=<token>`."
+license = "Public Domain"
+size_compressed_gb = 0.10
+size_indexed_gb = 0.30
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/olc-opinions/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "scotus-opinions"
+name = "Supreme Court of the United States — Opinions"
+description = "Comprehensive Supreme Court opinions, 1791-present (~37k cases), sourced from CourtListener (Free Law Project). Public path is `[prebuilt]` download from HuggingFace — end users install in seconds with no API token and no rate limit. Building locally from scratch requires a paid CourtListener membership tier (~$25/mo for one month) and ~6 min of API time. Opinions are public domain (17 USC §105)."
+license = "Public Domain"
+size_compressed_gb = 0.50
+size_indexed_gb = 1.50
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/scotus-opinions/recipe.toml"
+sha256 = ""
+
+[[recipes]]
+id = "federal-register-presidential"
+name = "Federal Register — Presidential Documents and Significant Rules"
+description = "Presidential Documents (executive orders, proclamations, determinations, memoranda, notices) and OIRA-significant Final Rules from federalregister.gov's documented v1 API. Public domain under 17 USC §105. The 'what executive action was taken' surface for legal-analysis work. No `[prebuilt]` snapshot yet — first install runs the full API pull (~30 min on a developer workstation with enrichment off)."
+license = "Public Domain"
+size_compressed_gb = 0.30
+size_indexed_gb = 0.50
+enrichment_enabled = false
+mesh_sharing = true
+toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/federal-register-presidential/recipe.toml"
+sha256 = ""
+
+[[recipes]]
 id = "wikipedia-newsworthy"
 name = "Wikipedia — Newsworthy"
 description = "Daily ingest of Portal:Current_events, chunked at the event-bullet grain. Companion freshness daemon reconciles outbound wikilinks against the parent `wikipedia` corpus, refreshing in-place when revisions diverge. Mesh-shared — public derivative of public Wikipedia signals."

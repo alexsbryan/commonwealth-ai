@@ -61,57 +61,146 @@ impl Extractor for JsonApiExtractor {
         source_path: &Path,
     ) -> Result<Box<dyn Iterator<Item = Result<ExtractedDoc>> + Send>> {
         // Pre-validate the JSONPath so a bad recipe surfaces with a
-        // useful error instead of opaquely yielding zero docs.
-        let path = JsonPath::try_from(self.document_path.as_str()).map_err(|e| {
-            Error::Extraction(format!(
-                "extract.document_path `{}` is not a valid JSONPath: {e}",
-                self.document_path
-            ))
-        })?;
+        // useful error at extract() time instead of opaquely yielding
+        // zero docs (or only erroring on the first per-file open).
+        let _jpath: JsonPath<Value> =
+            JsonPath::try_from(self.document_path.as_str()).map_err(|e| {
+                Error::Extraction(format!(
+                    "extract.document_path `{}` is not a valid JSONPath: {e}",
+                    self.document_path
+                ))
+            })?;
 
-        let mut file = File::open(source_path).map_err(|e| {
-            Error::Extraction(format!(
-                "Failed to open {}: {e}",
-                source_path.display()
-            ))
-        })?;
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes).map_err(|e| {
-            Error::Extraction(format!(
-                "Failed to read {}: {e}",
-                source_path.display()
-            ))
-        })?;
-        let body: Value = serde_json::from_slice(&bytes).map_err(|e| {
-            Error::Extraction(format!(
-                "{} is not valid JSON: {e}",
-                source_path.display()
-            ))
-        })?;
-
-        // `JsonPath::find` always returns a `Value::Array` of matches
-        // (empty when no match) — never panics.
-        let matches = match path.find(&body) {
-            Value::Array(arr) => arr,
-            other => vec![other],
-        };
-
-        let stem = source_path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("page")
-            .to_string();
-
-        Ok(Box::new(JsonApiIter {
-            matches: matches.into_iter(),
+        // `source_path` can be a single file (the historical single-
+        // request shape: one acquirer-persisted JSON file) OR a
+        // directory of `<sha>.json` files (the paginated shape:
+        // `http_api` with no follow writes one file per page). Walk
+        // either and chain the matches across all of them.
+        let files = collect_json_files(source_path)?;
+        let iter = JsonApiMultiFileIter {
+            files: files.into_iter(),
+            current: None,
+            document_path: self.document_path.clone(),
             content_field: self.content_field.clone(),
             title_field: self.title_field.clone(),
             url_field: self.url_field.clone(),
             id_field: self.id_field.clone(),
-            stem,
-            position: 0,
-        }))
+        };
+        Ok(Box::new(iter))
     }
+}
+
+/// Walk a JSON source path. Single-file: just that file. Directory:
+/// every `*.json` (recursively) sorted for stability.
+fn collect_json_files(path: &Path) -> Result<Vec<std::path::PathBuf>> {
+    if path.is_file() {
+        return Ok(vec![path.to_path_buf()]);
+    }
+    let mut out = Vec::new();
+    collect_recursive(path, &mut out)?;
+    out.sort();
+    Ok(out)
+}
+
+fn collect_recursive(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        Error::Extraction(format!("read_dir {}: {e}", dir.display()))
+    })?;
+    for entry in entries {
+        let entry = entry.map_err(|e| Error::Extraction(format!("dir entry: {e}")))?;
+        let p = entry.path();
+        if p.is_dir() {
+            collect_recursive(&p, out)?;
+        } else if p
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.eq_ignore_ascii_case("json"))
+            .unwrap_or(false)
+        {
+            out.push(p);
+        }
+    }
+    Ok(())
+}
+
+struct JsonApiMultiFileIter {
+    files: std::vec::IntoIter<std::path::PathBuf>,
+    current: Option<JsonApiIter>,
+    document_path: String,
+    content_field: String,
+    title_field: Option<String>,
+    url_field: Option<String>,
+    id_field: Option<String>,
+}
+
+impl Iterator for JsonApiMultiFileIter {
+    type Item = Result<ExtractedDoc>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(iter) = self.current.as_mut() {
+                if let Some(doc) = iter.next() {
+                    return Some(doc);
+                }
+                self.current = None;
+            }
+            let path = self.files.next()?;
+            match open_one_file(
+                &path,
+                &self.document_path,
+                &self.content_field,
+                &self.title_field,
+                &self.url_field,
+                &self.id_field,
+            ) {
+                Ok(iter) => self.current = Some(iter),
+                Err(e) => return Some(Err(e)),
+            }
+        }
+    }
+}
+
+fn open_one_file(
+    path: &Path,
+    document_path: &str,
+    content_field: &str,
+    title_field: &Option<String>,
+    url_field: &Option<String>,
+    id_field: &Option<String>,
+) -> Result<JsonApiIter> {
+    let jpath = JsonPath::try_from(document_path).map_err(|e| {
+        Error::Extraction(format!(
+            "extract.document_path `{document_path}` is not a valid JSONPath: {e}"
+        ))
+    })?;
+    let mut file = File::open(path).map_err(|e| {
+        Error::Extraction(format!("Failed to open {}: {e}", path.display()))
+    })?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(|e| {
+        Error::Extraction(format!("Failed to read {}: {e}", path.display()))
+    })?;
+    let body: Value = serde_json::from_slice(&bytes).map_err(|e| {
+        Error::Extraction(format!("{} is not valid JSON: {e}", path.display()))
+    })?;
+    let matches = match jpath.find(&body) {
+        Value::Array(arr) => arr,
+        other => vec![other],
+    };
+    let stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("page")
+        .to_string();
+    Ok(JsonApiIter {
+        matches: matches.into_iter(),
+        content_field: content_field.to_string(),
+        title_field: title_field.clone(),
+        url_field: url_field.clone(),
+        id_field: id_field.clone(),
+        stem,
+        position: 0,
+    })
 }
 
 struct JsonApiIter {
