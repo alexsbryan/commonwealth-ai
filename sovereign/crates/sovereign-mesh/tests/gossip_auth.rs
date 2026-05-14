@@ -24,52 +24,16 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use serde_json::json;
 
 use commonwealth_api::server::internal_router;
 use commonwealth_api::state::AppState;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
 use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
+use commonwealth_core::mesh::{MemberRecord, Mesh};
 
-fn empty_capabilities() -> NodeCapabilities {
-    NodeCapabilities {
-        hardware: HardwareProfile {
-            gpus: vec![],
-            system_ram_gb: 0,
-            cpu_cores: 0,
-            total_storage_gb: 0,
-            free_storage_gb: 0,
-            network_bandwidth_mbps: None,
-        },
-        available: AvailableResources::default(),
-        active_processes: vec![],
-        hosted_corpora: vec![],
-        reported_at: 0,
-        inference_availability: 1.0,
-        inference_capable: false,
-        loaded_models: vec![],
-        embed_model: None,
-        benchmark: None,
-    }
-}
-
-fn member(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> MemberRecord {
-    MemberRecord {
-        node_id: id,
-        name: name.into(),
-        invited_by: id,
-        joined_at: 0,
-        last_seen,
-        status: NodeStatus::Online,
-        capabilities: empty_capabilities(),
-        addresses: vec![addr],
-    }
-}
+mod common;
+use common::{member_with_last_seen as member, spawn_router};
 
 /// Build a founder AppState pinned to (mesh_id, join_key_hash) +
 /// install a counter-incrementing mesh-mutation hook so the test
@@ -110,13 +74,7 @@ fn build_founder(
 }
 
 async fn spawn_internal(state: AppState) -> SocketAddr {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        let _ = axum::serve(listener, internal_router(state)).await;
-    });
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    addr
+    spawn_router(internal_router(state)).await
 }
 
 /// Build a MeshWire-shaped JSON payload from explicit parameters,

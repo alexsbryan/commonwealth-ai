@@ -30,56 +30,25 @@ use commonwealth_core::ids::NodeId;
 use commonwealth_state::{ContributionEmitter, MeshStore};
 use futures::StreamExt;
 use serde::Deserialize;
-use sovereign_core::error::{Error, Result};
 use sovereign_core::oicp::{
     CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass, ModelStatus,
     ProviderManifest, ProviderModel, OICP_VERSION,
 };
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, CompletionResponse, ProviderCapabilities, Speed};
+use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_mesh::daemon::PeerInferenceEndpoint;
 use sovereign_mesh::peer_inference::{MeshInferenceProvider, PeerEndpointSource};
 use sovereign_mesh::throughput_tracking::LedgerEmission;
 
-// ── Stub `InferenceProvider` (local side) ───────────────────────
-//
-// Identical shape to the local stub in `chat_completion_e2e.rs` —
-// a weak BYOM-class model that loses OICP scoring against the
-// mock peer's 9B claim, so routing flows to the peer.
-struct LocalStub;
+mod common;
+use common::TestProvider;
 
-#[async_trait]
-impl InferenceProvider for LocalStub {
-    async fn complete(&self, _: &CompletionRequest) -> Result<CompletionResponse> {
-        Err(Error::NotImplemented("local must not be reached".into()))
-    }
-    async fn complete_stream(
-        &self,
-        _: &CompletionRequest,
-    ) -> Result<std::pin::Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>> {
-        Err(Error::NotImplemented("local must not be reached".into()))
-    }
-    async fn embed(&self, _: &str) -> Result<Vec<f32>> {
-        Err(Error::NotImplemented("no embed".into()))
-    }
-    async fn embed_batch(&self, _: &[String]) -> Result<Vec<Vec<f32>>> {
-        Err(Error::NotImplemented("no embed".into()))
-    }
-    async fn embed_query(&self, _: &str) -> Result<Vec<f32>> {
-        Err(Error::NotImplemented("no embed".into()))
-    }
-    fn model_id_for(&self, _: Speed) -> String {
-        "qwen2.5-3b-instruct-q4_k_m".into()
-    }
-    fn capabilities(&self) -> ProviderCapabilities {
-        ProviderCapabilities {
-            max_context_tokens: 32_768,
-            supports_structured_output: false,
-            relative_speed: Speed::Fast,
-            relative_reasoning: sovereign_core::types::Depth::Moderate,
-        }
-    }
-}
+// ── `PeerEndpointSource` stub with a real `ContributionEmitter` ──
+//
+// Wires a captured ContributionEmitter through `ledger_emission_for`
+// so the routing path attaches it to the stream wrapper. After the
+// stream drops, the emitter's MeshStore retains the event for the
+// assertion to read back.
 
 // ── `PeerEndpointSource` stub with a real `ContributionEmitter` ──
 //
@@ -237,7 +206,9 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
     });
 
     // 4. Local stub that loses OICP scoring → request routes to peer.
-    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub);
+    let local: Arc<dyn InferenceProvider> = Arc::new(
+        TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"),
+    );
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
     // 5. DeepQuery-shaped request opted into mesh routing.
@@ -357,7 +328,9 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
         peers: dead_peer,
         emitter: emitter.clone(),
     });
-    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub);
+    let local: Arc<dyn InferenceProvider> = Arc::new(
+        TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"),
+    );
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
     let envelope = InferenceRequirements::new()

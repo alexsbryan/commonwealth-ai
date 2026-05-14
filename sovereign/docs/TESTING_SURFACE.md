@@ -1,6 +1,6 @@
 # Daemon Testing Surface — Audit + Priority Matrix
 
-**Last audited:** 2026-05-13 (rounds 1+2+3 of test landings). Refresh whenever a row's coverage changes,
+**Last audited:** 2026-05-13 (rounds 1+2+3 + harness extraction). Refresh whenever a row's coverage changes,
 a capability lands, or a deferral resolves. Out-of-date rows are a bug
 per ARCH §1.1 — feature docs describe *intent*, and this doc's intent
 is to drive the next test.
@@ -335,51 +335,42 @@ After these, the matrix's remaining `·` cells are L4 territory
 - In-memory `MeshStore::in_memory()` for ledger / state.
 - Refresh this doc in the same PR as the test landing.
 
-## Test harness consolidation (owed before Round 3)
+## Test harness consolidation — **landed 2026-05-13**
 
-The threshold for `tests/common/mod.rs` extraction is now met per
-ARCH §10.3. As of round-2 landing, **seven** test files contain
-their own `impl InferenceProvider` block (`spec_gate_e2e`,
-`chat_completion_e2e`, `daemon_wiring`, `embeddings_e2e`,
-`throughput_ledger_emission`, `injection_order`,
-`pattern_observation_e2e`). The shapes vary in small ways (which
-methods return real data vs. `unreachable!`), but the boilerplate
-duplicates substantially.
+`tests/common/mod.rs` (353 lines) exposes `TestProvider` (builder-
+shaped configurable `InferenceProvider` stub), plus helpers
+`empty_capabilities`, `member`, `member_with_last_seen`,
+`solo_mesh`, `id_to_hex`, and `spawn_router`. Migrated:
 
-Recommended extraction:
+- `injection_order` — `NoopProvider` → `TestProvider::new()`
+- `embeddings_e2e` — `EmbedStub` → `TestProvider::new().with_embed_marker(...)`
+- `daemon_wiring` — `StubProvider` → `TestProvider::new().with_complete_text("ok").with_stream_chunks(...).with_embed_marker(...)`
+- `throughput_ledger_emission` — `LocalStub` → `TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m")`
+- `chat_completion_e2e` — `LocalStub` (×5 call sites) → `local_byom()` thin wrapper around `TestProvider`
+- `gossip_auth` — helpers only (`member_with_last_seen`, `spawn_router`)
+- `peer_preference_manifest` — `ManifestProvider` → `TestProvider::new().with_model_id("manifest-stub")`; `id_to_hex` also extracted
+- `finish_reason_streaming` — `FixedFinishProvider` + `LegacyStreamProvider` → `TestProvider::new().with_typed_frames(...)` + `TestProvider::new().with_stream_chunks(...)`
 
-```rust
-// tests/common/mod.rs
-pub struct TestProvider { /* configurable builder */ }
-impl TestProvider {
-    pub fn new() -> Self;
-    pub fn with_model_id(self, id: &str) -> Self;
-    pub fn with_complete_text(self, text: &str) -> Self;
-    pub fn with_stream_chunks(self, chunks: Vec<String>) -> Self;
-    pub fn with_embed_marker(self, f: impl Fn(&str) -> Vec<f32> + ...) -> Self;
-}
-impl InferenceProvider for TestProvider { /* dispatches to builder fields, NotImplemented on unconfigured methods */ }
+**Not migrated** (different stub trait): `spec_gate_e2e` and
+`pattern_observation_e2e` use `ToolRegistry` stubs (`StubTool`),
+not `InferenceProvider` — different concern, separate extraction
+story.
 
-pub fn empty_capabilities() -> NodeCapabilities;
-pub fn member_record(id, name, last_seen, addr) -> MemberRecord;
-pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh;
-pub async fn spawn_router(router: Router) -> SocketAddr;
-```
+**Outcome:** all 287 tests still green. ARCH §10.3 threshold
+discharged; new tests in subsequent rounds can declare
+`TestProvider::new().with_*(...)` instead of hand-rolling a
+40+ LOC stub.
 
-Migration order (smallest blast radius first):
-1. Drop into `tests/common/mod.rs`.
-2. Migrate `injection_order` and `embeddings_e2e` (newest, least
-   ceremony around the existing stubs).
-3. Migrate `daemon_wiring`, `chat_completion_e2e`,
-   `throughput_ledger_emission` (these share the most shape).
-4. Migrate `spec_gate_e2e` and `pattern_observation_e2e` last
-   (they exercise the MCP wire and may need additional helpers).
+**TestProvider design notes** (worth knowing before extending):
 
-Net effect at completion: ~250 LOC removed from existing tests,
-~150 LOC added to `common`. The next batch of tests (Round 3:
-items 3, 5, 6, 7) will land on top of the consolidated harness
-and pay no setup tax.
-
-Until consolidation lands, new test authors should keep using the
-inline per-file stub pattern — adding the eighth `impl
-InferenceProvider` is cheaper than half-migrating.
+- All methods return `NotImplemented` by default. Each `with_*`
+  builder opts into specific behaviour. This is intentional: a
+  future regression that starts calling an unconfigured method
+  surfaces as a clear error, not silent success.
+- `with_typed_frames(...)` overrides `complete_stream_with_finish`
+  directly (used to pin non-Stop finish reasons). When None, the
+  default impl runs on top of `complete_stream` — that's why the
+  default-impl logic is **reproduced inline** rather than
+  delegated, to avoid infinite recursion.
+- Bar for adding a new `with_*` method: two callers need it.
+  Avoid premature flexibility per ARCH §10.3.

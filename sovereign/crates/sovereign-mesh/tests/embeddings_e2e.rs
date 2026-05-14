@@ -21,103 +21,21 @@
 //!    does).
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 
-use async_trait::async_trait;
-use futures::Stream;
 use serde_json::json;
 
 use commonwealth_api::server::client_router;
 use commonwealth_api::state::{AppState, LocalInferenceService};
 use commonwealth_app::registry::AppRegistry;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
-use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
+use commonwealth_core::ids::NodeId;
+use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_core::error::Result as SovResult;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
-    CompletionRequest, CompletionResponse, ProviderCapabilities, Speed,
-};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 
-/// Minimal `InferenceProvider` whose `embed` returns a length-encoded
-/// vector so the test can verify per-input distinctness and ordering.
-/// `embed[i] = [i as f32; 8]` keeps the assertion sharp: a wrong
-/// index → wrong content → caught at the index check.
-struct EmbedStub;
-
-#[async_trait]
-impl InferenceProvider for EmbedStub {
-    async fn complete(&self, _req: &CompletionRequest) -> SovResult<CompletionResponse> {
-        // Not exercised by this test surface.
-        unreachable!("/v1/embeddings does not call complete()")
-    }
-    async fn complete_stream(
-        &self,
-        _req: &CompletionRequest,
-    ) -> SovResult<Pin<Box<dyn Stream<Item = SovResult<String>> + Send>>> {
-        unreachable!("/v1/embeddings does not call complete_stream()")
-    }
-    async fn embed(&self, input: &str) -> SovResult<Vec<f32>> {
-        // Mark the vector with the input length so the test can
-        // verify per-input ordering survives. Real embedding models
-        // produce a fixed-dim vector regardless of input length;
-        // we abuse the dim for a sharper signal.
-        let marker = input.len() as f32;
-        Ok(vec![marker; 8])
-    }
-    fn model_id_for(&self, _speed: Speed) -> String {
-        "stub-embed".into()
-    }
-    fn capabilities(&self) -> ProviderCapabilities {
-        ProviderCapabilities {
-            max_context_tokens: 4_096,
-            supports_structured_output: false,
-            relative_speed: Speed::Fast,
-            relative_reasoning: sovereign_core::types::Depth::Moderate,
-        }
-    }
-}
-
-fn empty_capabilities() -> NodeCapabilities {
-    NodeCapabilities {
-        hardware: HardwareProfile {
-            gpus: vec![],
-            system_ram_gb: 0,
-            cpu_cores: 0,
-            total_storage_gb: 0,
-            free_storage_gb: 0,
-            network_bandwidth_mbps: None,
-        },
-        available: AvailableResources::default(),
-        active_processes: vec![],
-        hosted_corpora: vec![],
-        reported_at: 0,
-        inference_availability: 1.0,
-        inference_capable: false,
-        loaded_models: vec![],
-        embed_model: None,
-        benchmark: None,
-    }
-}
-
-fn member(id: NodeId, name: &str, last_seen: u64, addr: SocketAddr) -> MemberRecord {
-    MemberRecord {
-        node_id: id,
-        name: name.into(),
-        invited_by: id,
-        joined_at: 0,
-        last_seen,
-        status: NodeStatus::Online,
-        capabilities: empty_capabilities(),
-        addresses: vec![addr],
-    }
-}
+mod common;
+use common::{member, spawn_router, TestProvider};
 
 /// Build an `AppState` with the stub `LocalInferenceService` installed
 /// (`with_embed=true`) or without (`with_embed=false`, to pin the
@@ -127,10 +45,10 @@ fn build_app_state(with_embed: bool) -> AppState {
     let mut members = HashMap::new();
     members.insert(
         self_id,
-        member(self_id, "self", 100, "127.0.0.1:9742".parse().unwrap()),
+        member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
     );
     let mesh = Mesh {
-        id: MeshId::from_u128(7),
+        id: commonwealth_core::ids::MeshId::from_u128(7),
         name: "embeddings-test".into(),
         join_key_hash: [3u8; 32],
         members,
@@ -148,20 +66,20 @@ fn build_app_state(with_embed: bool) -> AppState {
     if !with_embed {
         return app_state;
     }
-    let provider: Arc<dyn InferenceProvider> = Arc::new(EmbedStub);
+    // Marker-encoded vector: `embed("foo") = [3.0; 8]`. Lets the
+    // test verify per-input ordering survives the fan-out.
+    let provider: Arc<dyn InferenceProvider> = Arc::new(
+        TestProvider::new()
+            .with_model_id("stub-embed")
+            .with_embed_marker(|input| vec![input.len() as f32; 8]),
+    );
     let adapter: Arc<dyn LocalInferenceService> =
         Arc::new(SovereignInferenceAdapter::new(provider));
     app_state.with_local_inference(adapter)
 }
 
 async fn spawn(state: AppState) -> SocketAddr {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        let _ = axum::serve(listener, client_router(state)).await;
-    });
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    addr
+    spawn_router(client_router(state)).await
 }
 
 #[tokio::test]
