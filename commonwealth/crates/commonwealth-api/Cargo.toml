@@ -48,7 +48,7 @@ futures = "0.3"
 # adopts a founder-assigned ID. Cheap reads (Arc clone), single
 # atomic swap on adoption, no async lock contention.
 arc-swap = "1.7"
-sha2 = "0.10"
+sha2 = { workspace = true }
 # Phase 6 canonical-sync: server side packs the canonical index dir
 # into a tar.zst stream, client side unpacks and validates fingerprint
 # before atomic rename. Both crates have stable C/Rust impls.

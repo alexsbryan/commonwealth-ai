@@ -30,8 +30,8 @@ glob = "0.3"
 quick-xml = "0.37"
 flate2 = "1"
 bzip2 = "0.5"
-parquet = { version = "57", default-features = false, features = ["arrow"] }
-arrow = { version = "57", default-features = false, features = ["json"] }
+parquet = { workspace = true }
+arrow = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -45,8 +45,8 @@ chrono = { version = "0.4", features = ["clock"] }
 # enrich_cmd uses; pinning `dirs` here keeps the resolver
 # colocated with its only caller.
 dirs = "5"
-lancedb = "0.27"
-arrow-array = "57"
+lancedb = { workspace = true }
+arrow-array = { workspace = true }
 # Document parsing (RAG pipeline)
 pdf-extract = "0.7"
 # HTML body-text extraction for `.html` / `.htm` / `.mhtml` watched
@@ -88,7 +88,7 @@ image = "0.25"
 # canonicalised root path. Used by local_corpus::config and by the
 # splice-extension module's CHARTER.md drift detector (mirroring
 # sovereign-atos::approval::detect_drift without the cross-crate dep).
-sha2 = "0.10"
+sha2 = { workspace = true }
 # Content-derived stable keys for atlas atoms in `atlas_view`. Lets
 # Phase 2's curation overlay key edits by content hash instead of the
 # volatile sequential AtomId — see decision note "Atlas inspector:

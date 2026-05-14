@@ -25,7 +25,7 @@ tracing-subscriber.workspace = true
 reqwest = { workspace = true, features = ["blocking", "json", "rustls-tls"] }
 clap = { version = "4", features = ["derive"] }
 rusqlite = { version = "0.35", features = ["bundled"] }
-sha2 = "0.10"
+sha2 = { workspace = true }
 hex = "0.4"
 anyhow = "1"
 toml = { workspace = true }

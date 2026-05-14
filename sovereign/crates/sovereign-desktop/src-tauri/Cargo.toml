@@ -38,7 +38,7 @@ dirs = "6"
 # Used by `recipe_commands::corpus_import_recipe` to record a
 # tamper-evident sha256 alongside each imported recipe in the
 # user's local registry.
-sha2 = "0.10"
+sha2 = { workspace = true }
 hostname = { workspace = true }
 # Used only by friendly_names.rs — entropy seed for the
 # adjective+mascot generator. Workspace already pins this for

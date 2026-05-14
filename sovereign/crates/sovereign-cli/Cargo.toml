@@ -36,7 +36,7 @@ hostname = { workspace = true }
 # second version seam that serde round-trip can't catch.
 tempfile = "3"
 which = "7"
-sha2 = "0.10"
+sha2 = { workspace = true }
 chrono = { workspace = true }
 # Used by `awareness_cmd` (gated behind the `dev-tools` feature) for
 # direct SQLite reads — chunk-id → memory.body lookups for the

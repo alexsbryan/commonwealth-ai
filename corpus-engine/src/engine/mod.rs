@@ -5,6 +5,9 @@ pub mod article_stats;
 mod cancel;
 mod expand;
 mod ingest;
+mod ingest_factories;
+mod ingest_helpers;
+mod ingest_prebuilt;
 
 pub mod reindex;
 
