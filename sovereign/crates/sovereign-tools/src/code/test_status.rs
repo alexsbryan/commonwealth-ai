@@ -117,7 +117,27 @@ impl Tool for TestStatusTool {
                     "watched_scope":   { "type": "string" },
                     "failures":        { "type": "array" },
                     "run_id":          { "type": "integer" },
-                    "output_truncated":{ "type": "boolean" }
+                    "output_truncated":{ "type": "boolean" },
+                    // `previous_run` is populated whenever `status` is
+                    // `running` and a prior completed run exists. Lets
+                    // callers see "in flight, but the last completed
+                    // run failed with these errors" rather than polling
+                    // `null` indefinitely on a watcher wedged against
+                    // a stable compile error. Mirrors the prior_run
+                    // surface on `lint_status`.
+                    "previous_run":    {
+                        "type": "object",
+                        "properties": {
+                            "status":           { "type": "string", "enum": ["fresh_passing","fresh_failing"] },
+                            "run_id":           { "type": "integer" },
+                            "pass_count":       { "type": "integer" },
+                            "fail_count":       { "type": "integer" },
+                            "exit_code":        { "type": "integer" },
+                            "age_seconds":      { "type": "integer" },
+                            "looks_like_compile_failure": { "type": "boolean" },
+                            "failures":         { "type": "array" }
+                        }
+                    }
                 }
             })),
         }
@@ -164,6 +184,17 @@ impl Tool for TestStatusTool {
         };
 
         if is_running {
+            // Surface the previous completed run so a watcher
+            // perpetually re-failing on the same compile error is
+            // observable from a single `test_status` call, instead of
+            // showing `{status: running, summary: null}` indefinitely.
+            // The interesting case is `looks_like_compile_failure`:
+            // exit_code != 0 AND zero tests reported (pass+fail = 0),
+            // which is the signature of `cargo test` failing in the
+            // compile phase before any test executes. That's the
+            // failure mode the in-flight watcher will keep hitting
+            // until someone fixes the build.
+            let previous_run = build_previous_run(&self.store).await;
             return Ok(StepOutput::Json(json!({
                 "status": "running",
                 "summary": null,
@@ -172,6 +203,7 @@ impl Tool for TestStatusTool {
                 "age_seconds": null,
                 "watched_scope": self.watched_scope,
                 "watcher_active": derive_watcher_active(explicit_active, None, true),
+                "previous_run": previous_run,
             })));
         }
 
@@ -249,6 +281,58 @@ impl Tool for TestStatusTool {
     }
 }
 
+/// Build the `previous_run` payload returned alongside `status:
+/// running`. Returns `Value::Null` when no prior run exists.
+///
+/// The block makes a watcher that's been wedged on a compile error
+/// observable from one call: `looks_like_compile_failure` flips to
+/// true when the prior run exited non-zero AND reported zero tests
+/// (pass+fail = 0). That's the exact signature of `cargo test`
+/// failing in the build phase before any test could execute — the
+/// state that previously presented as "running, summary: null" for
+/// hours because the watcher kept relaunching against the same
+/// broken workspace.
+async fn build_previous_run(store: &TestResultStore) -> serde_json::Value {
+    let Some(run) = store.latest_run().await.ok().flatten() else {
+        return serde_json::Value::Null;
+    };
+    let age_seconds = SystemTime::now()
+        .duration_since(run.finished_at)
+        .unwrap_or_default()
+        .as_secs();
+    let status = if run.passed() {
+        "fresh_passing"
+    } else {
+        "fresh_failing"
+    };
+    let looks_like_compile_failure =
+        run.exit_code != 0 && run.pass_count == 0 && run.fail_count == 0;
+    let failures = store
+        .latest_failures(10)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| {
+            json!({
+                "name": f.name,
+                "output": f.output,
+                "output_truncated": f.output_truncated,
+                "run_id": f.run_id,
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "status": status,
+        "run_id": run.run_id,
+        "pass_count": run.pass_count,
+        "fail_count": run.fail_count,
+        "exit_code": run.exit_code,
+        "age_seconds": age_seconds,
+        "looks_like_compile_failure": looks_like_compile_failure,
+        "failures": failures,
+    })
+}
+
 /// Same shape and rationale as the helper in `lint_status.rs`. See
 /// that module's doc-comment on `derive_watcher_active` for the
 /// daemon-vs-CLI fallback logic.
@@ -266,4 +350,132 @@ fn derive_watcher_active(
         return true;
     }
     matches!(last_run_age_secs, Some(age) if age < WATCHER_FRESH_SECS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use corpus_engine::test_results::{TestResultKind, TestResultStore};
+    use sovereign_core::types::ToolContext;
+
+    fn ctx() -> ToolContext {
+        ToolContext {
+            conversation_id: "test-status-test".into(),
+            task_id: None,
+            working_directory: None,
+            in_reasoning_loop: false,
+            agent_session_token: None,
+        }
+    }
+
+    /// When the watcher is mid-run AND the last completed run was a
+    /// compile failure (exit_code != 0, zero tests reported), the
+    /// response must expose the previous run with
+    /// `looks_like_compile_failure: true` so the caller can diagnose
+    /// a wedged-on-compile state from a single call. Regression-pins
+    /// the previously-observable behaviour of returning
+    /// `{status: "running", summary: null}` indefinitely with no
+    /// signal about WHY the watcher kept relaunching against the same
+    /// broken workspace.
+    #[tokio::test]
+    async fn running_branch_surfaces_compile_failed_previous_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
+        );
+
+        // Run 1: completed, compile-failure shape (no test results,
+        // non-zero exit).
+        let r1 = store.begin_run().await.unwrap();
+        store.finish_run(r1, 101).await.unwrap();
+
+        // Run 2: in-flight (never finished). Triggers run_in_progress
+        // in execute().
+        let _r2 = store.begin_run().await.unwrap();
+
+        let tool = TestStatusTool::new(Arc::clone(&store));
+        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let v = match out {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {other:?}"),
+        };
+
+        assert_eq!(v["status"], "running");
+        assert!(v["summary"].is_null(), "summary stays null while running");
+
+        let prev = &v["previous_run"];
+        assert!(!prev.is_null(), "previous_run must be populated");
+        assert_eq!(prev["status"], "fresh_failing");
+        assert_eq!(prev["exit_code"], 101);
+        assert_eq!(prev["pass_count"], 0);
+        assert_eq!(prev["fail_count"], 0);
+        assert_eq!(
+            prev["looks_like_compile_failure"], true,
+            "exit_code != 0 with zero tests is the compile-failure signature"
+        );
+    }
+
+    /// `previous_run` is `null` (not omitted, not an empty object)
+    /// when no prior completed run exists. Callers should be able to
+    /// distinguish "no history" from "history says everything's fine."
+    #[tokio::test]
+    async fn running_branch_with_no_prior_run_returns_null_previous() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
+        );
+
+        // Only an in-flight run; no completed history.
+        let _r = store.begin_run().await.unwrap();
+
+        let tool = TestStatusTool::new(Arc::clone(&store));
+        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let v = match out {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {other:?}"),
+        };
+
+        assert_eq!(v["status"], "running");
+        assert!(
+            v["previous_run"].is_null(),
+            "previous_run must be null when no completed run exists"
+        );
+    }
+
+    /// A passing previous run should NOT flag as compile failure
+    /// even when the current run is in progress.
+    #[tokio::test]
+    async fn running_branch_passing_prior_does_not_flag_compile_failure() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(
+            TestResultStore::open(&dir.path().join("test.db")).unwrap(),
+        );
+
+        // Completed run: one passing test, exit_code 0.
+        let r1 = store.begin_run().await.unwrap();
+        store
+            .record_result(r1, TestResultKind::Pass, "demo::ok", None)
+            .await
+            .unwrap();
+        store.finish_run(r1, 0).await.unwrap();
+
+        // In-flight run.
+        let _r2 = store.begin_run().await.unwrap();
+
+        let tool = TestStatusTool::new(Arc::clone(&store));
+        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let v = match out {
+            StepOutput::Json(v) => v,
+            other => panic!("expected Json, got {other:?}"),
+        };
+
+        let prev = &v["previous_run"];
+        assert_eq!(prev["status"], "fresh_passing");
+        assert_eq!(prev["pass_count"], 1);
+        assert_eq!(prev["exit_code"], 0);
+        assert_eq!(
+            prev["looks_like_compile_failure"], false,
+            "exit 0 with passing tests must never look like a compile failure"
+        );
+    }
 }

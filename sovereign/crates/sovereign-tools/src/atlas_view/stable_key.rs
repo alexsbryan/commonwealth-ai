@@ -231,6 +231,7 @@ mod tests {
             quotable_excerpt: None,
             attributed_to: None,
             confidence: None,
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
         let claim_b = AtomEnvelope::Claim(Claim {
@@ -243,6 +244,7 @@ mod tests {
             quotable_excerpt: None,
             attributed_to: None,
             confidence: None,
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
         let k_a = compute_stable_key("sep-epistemology", &claim_a);

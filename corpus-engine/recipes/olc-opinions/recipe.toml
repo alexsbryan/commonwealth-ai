@@ -1,0 +1,124 @@
+[corpus]
+id = "olc-opinions"
+name = "DOJ Office of Legal Counsel — Published & FOIA Opinions"
+description = """
+The Department of Justice Office of Legal Counsel's published \
+opinions — the executive branch's published legal reasoning. Sourced \
+from CourtListener (Free Law Project), which aggregates DOJ-published \
+opinions with FOIA-released opinions that DOJ did not publish, \
+materially reducing the structural bias of a publication-only set. \
+The opinions themselves are federal works in the public domain \
+(17 USC §105); CourtListener's bulk-data files carry a Public Domain \
+Mark. License OK for redistribution.\
+"""
+license = "Public Domain (17 USC §105)"
+mesh_sharing = true
+query_sharing = true
+size_compressed_gb = 0.10
+size_indexed_gb = 0.30
+
+# ─── Build-time parameters ───────────────────────────────────────────
+#
+# CourtListener's REST API requires a free API token for the opinions
+# endpoint. Register at https://www.courtlistener.com/sign-in/ and
+# pass the token at install time:
+#
+#   sovereign corpus install olc-opinions --param api_token=<your-token>
+#
+# The token is read into the Authorization header at request time;
+# never persisted to the index.
+[parameters.api_token]
+type = "string"
+description = "CourtListener API token. Free; register at https://www.courtlistener.com/sign-in/. Required — the opinions endpoint rejects unauthenticated requests."
+required = true
+
+# ─── Acquisition ─────────────────────────────────────────────────────
+#
+# CourtListener v4 REST: /opinions/ filtered by court=olc. Each result
+# carries `plain_text` (full opinion text) inline, so no follow step
+# is needed. Pagination is NextUrl: response `.next` carries a full
+# next-page URL; the loop terminates when null.
+#
+# Why CourtListener over scraping justice.gov/olc directly: (1) the
+# Drupal listing requires HTML-follow plumbing http_api doesn't have
+# today; (2) CourtListener's OLC corpus includes FOIA-released
+# opinions DOJ chose not to publish — the same "non-random subset"
+# gap the ERD's known-limitations section flagged. Net result is a
+# more honest "what does OLC say" corpus.
+#
+# Rate limit: 1 req/sec. CourtListener's documented limit is higher
+# (~5,000 req/day on the free tier), but courtesy traffic against a
+# nonprofit-operated service stays conservative.
+[acquire]
+type = "http_api"
+base_url = "https://www.courtlistener.com/api/rest/v4"
+user_agent = "commonwealth-ai/0.1 (olc-opinions via CourtListener)"
+rate_limit_per_second = 1.0
+
+[acquire.headers]
+Authorization = "Token {api_token}"
+
+[[acquire.requests]]
+url = "{base_url}/opinions/?cluster__docket__court=olc&page_size=100&order_by=date_created"
+
+[acquire.pagination]
+type = "next_url"
+response_path = "$.next"
+
+# ─── Extraction ──────────────────────────────────────────────────────
+#
+# Each persisted page is a JSON object `{count, next, previous, results: [...]}`.
+# The `json` extractor walks every per-page file in the acquired
+# directory and emits one ExtractedDoc per result.
+#
+# `content_field = "plain_text"`: CourtListener's full extracted text
+# from the PDF / HTML source. Empty plain_text (older scanned-only
+# items where OCR hasn't run) is skipped — JsonApiExtractor's
+# documented posture.
+#
+# `title_field = "absolute_url"`: stable per-opinion URL, used until
+# a follow-up enrichment pass joins case_name from the cluster
+# resource. The URL is the canonical citation anchor anyway.
+[extract]
+type = "json"
+document_path = "$.results[*]"
+content_field = "plain_text"
+title_field = "absolute_url"
+url_field = "absolute_url"
+id_field = "id"
+
+[chunk]
+type = "paragraph"
+max_chars = 2048
+overlap_chars = 256
+
+[index]
+fts = true
+vector = true
+
+# ─── Enrichment ──────────────────────────────────────────────────────
+#
+# Atlas enrichment is the right shape for OLC opinions — entities are
+# constitutional provisions, statutes, prior OLC opinions; relations
+# are the operative authority claims. But it's hours of LLM work, so
+# off by default. Re-enable in a derived recipe or run separately via
+# `sovereign enrich build olc-opinions`.
+[enrichment]
+enabled = false
+type = "atlas"
+pipeline = "referential_atlas"
+domain = "legal"
+prompt_version = "1.0.0-legal"
+
+[enrichment.clustering]
+min_cluster_size = 30
+epsilon = 0.10
+label_sample_size = 5
+
+[enrichment.alignment]
+alignment_threshold = 0.65
+min_chunks_for_discovery = 50
+
+[enrichment.fault_lines]
+proximity_threshold = 0.60
+min_confidence = 0.70

@@ -1,7 +1,9 @@
 pub mod alignment_workspace;
 pub mod json;
 pub mod json_api;
+pub mod custom_file;
 pub mod xml;
+pub mod xml_sections;
 pub mod html;
 pub mod html_sections;
 pub mod csv;

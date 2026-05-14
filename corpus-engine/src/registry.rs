@@ -461,7 +461,7 @@ mod tests {
         // wikipedia-article (chat-with-everything surface) +
         // alignment (mesh-replicated workspace) +
         // wikipedia-newsworthy (Portal:Current_events freshness daemon).
-        assert_eq!(entries.len(), 13, "snapshot should have 13 entries");
+        assert_eq!(entries.len(), 17, "snapshot should have 17 entries");
     }
 
     #[test]
@@ -563,7 +563,7 @@ sha256 = ""
         //      + wikipedia-catalog / wikipedia-article (chat-with-everything)
         //      + alignment (mesh-replicated workspace)
         //      + wikipedia-newsworthy (Portal:Current_events daemon).
-        assert_eq!(catalog.len(), 13);
+        assert_eq!(catalog.len(), 17);
         assert!(catalog.iter().any(|c| c.id == "wikipedia"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia-simple"));
         assert!(catalog.iter().any(|c| c.id == "wikipedia-catalog"));

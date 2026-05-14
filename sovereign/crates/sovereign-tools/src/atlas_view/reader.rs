@@ -285,6 +285,7 @@ mod tests {
             quotable_excerpt: None,
             attributed_to: None,
             confidence: None,
+            anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         })
     }

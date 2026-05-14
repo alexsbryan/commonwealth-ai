@@ -856,6 +856,16 @@ async fn async_main() {
             .with_inference_fn(inference_fn.clone()),
     );
 
+    // Register the "pdf" custom extractor so recipes declaring
+    // `extract = { type = "custom", kind = "pdf" }` can ingest PDF
+    // documents downloaded by `http_api + follow`. Implementation
+    // lives in sovereign-tools (uses pdf-extract) so corpus-engine
+    // stays free of the heavy PDF dep. Required by olc-opinions and
+    // scotus-opinions; harmless when no PDF recipe runs.
+    sovereign_tools::local_corpus::recipe_extractor::register_pdf_extractor(
+        corpus_engine.as_ref(),
+    );
+
     // KnowledgeView: register the SQLite acquirer, construct the
     // manager (excluding inner-work conversations from the
     // conversational view), install it as the post-commit observer,

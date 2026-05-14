@@ -105,6 +105,21 @@ pub type CustomAcquirerFn = Arc<
         + Sync,
 >;
 
+/// Closure type for a runtime-registered per-file text extractor.
+///
+/// Recipe sets `extract = { type = "custom", kind = "<key>", extension = "<ext>" }`;
+/// the engine walks the acquired directory, collects files with the
+/// configured extension, and calls this closure on each to produce
+/// `ExtractedDoc.content`. The registered implementation typically
+/// lives in `sovereign-tools` so corpus-engine stays free of heavy
+/// per-format dependencies (pdf-extract, lopdf, libreoffice, …).
+///
+/// Returning `Ok("")` skips the file (treated as empty). Returning
+/// `Err(_)` propagates as a per-file extraction failure that bubbles
+/// through the standard ingest error path.
+pub type CustomExtractorFn =
+    Arc<dyn Fn(&Path) -> Result<String> + Send + Sync>;
+
 /// Default partition-suffix for engines constructed without a mesh
 /// node id (standalone CLI / tests). Mesh daemons override via
 /// [`CorpusEngine::with_self_node_id`] at startup.
@@ -159,6 +174,11 @@ pub struct CorpusEngine {
     /// `sovereign-tools` via [`CorpusEngine::register_acquirer`]) so
     /// DB-reading acquirers can live outside this crate.
     custom_acquirers: Arc<RwLock<HashMap<String, CustomAcquirerFn>>>,
+    /// Runtime-registered per-file extractors, keyed by the `kind`
+    /// string on [`ExtractorConfig::Custom`]. Populated by callers
+    /// (typically `sovereign-tools`, which ships `pdf-extract` etc.)
+    /// so corpus-engine stays free of per-format heavy deps.
+    custom_extractors: Arc<RwLock<HashMap<String, CustomExtractorFn>>>,
     /// Optional cooperative-yield hook polled at embed-batch and
     /// enrichment-phase boundaries. When `Some` and `should_yield()`
     /// returns true, ingest workers sleep briefly and re-poll so the
@@ -279,6 +299,7 @@ impl CorpusEngine {
             self_node_id: DEFAULT_LOCAL_NODE_SUFFIX.to_string(),
             cancel_registry: CancellationRegistry::new(),
             custom_acquirers: Arc::new(RwLock::new(HashMap::new())),
+            custom_extractors: Arc::new(RwLock::new(HashMap::new())),
             yield_hook: std::sync::RwLock::new(None),
             partition_locks: Arc::new(std::sync::Mutex::new(HashMap::new())),
         }
@@ -369,6 +390,33 @@ impl CorpusEngine {
             .custom_acquirers
             .read()
             .expect("custom_acquirers RwLock poisoned");
+        guard.get(kind).cloned()
+    }
+
+    /// Register a custom per-file extractor keyed by `kind`. Recipes
+    /// declaring `extract = { type = "custom", kind = "<kind>", extension = "<ext>" }`
+    /// will dispatch each file to this closure at ingest time.
+    /// Overwrites any previously registered extractor with the same
+    /// `kind`. Call before [`CorpusEngine::ingest`].
+    pub fn register_extractor(
+        &self,
+        kind: impl Into<String>,
+        extractor: CustomExtractorFn,
+    ) {
+        let mut guard = self
+            .custom_extractors
+            .write()
+            .expect("custom_extractors RwLock poisoned");
+        guard.insert(kind.into(), extractor);
+    }
+
+    /// Look up a registered custom extractor by `kind`. Used by the
+    /// extractor dispatch in [`make_extractor`].
+    pub(crate) fn custom_extractor(&self, kind: &str) -> Option<CustomExtractorFn> {
+        let guard = self
+            .custom_extractors
+            .read()
+            .expect("custom_extractors RwLock poisoned");
         guard.get(kind).cloned()
     }
 
