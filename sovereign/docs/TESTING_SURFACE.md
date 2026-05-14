@@ -1,6 +1,6 @@
 # Daemon Testing Surface — Audit + Priority Matrix
 
-**Last audited:** 2026-05-13 (rounds 1+2+3 + harness extraction). Refresh whenever a row's coverage changes,
+**Last audited:** 2026-05-13 (rounds 1+2+3+4 + harness extraction + fan-out bugfix). Refresh whenever a row's coverage changes,
 a capability lands, or a deferral resolves. Out-of-date rows are a bug
 per ARCH §1.1 — feature docs describe *intent*, and this doc's intent
 is to drive the next test.
@@ -68,14 +68,16 @@ test should come from.
 
 |                  | **·** (no test)   | **~** (unit only) | **✓** (integration+)  |
 |------------------|-------------------|-------------------|-----------------------|
-| **P0** silent    | **4**             | 5                 | 17                    |
-| **P1** visible   | 7                 | 7                 | 8                     |
-| **P2** degraded  | 5                 | 4                 | 2                     |
+| **P0** silent    | **2**             | 5                 | 20                    |
+| **P1** visible   | 7                 | 6                 | 9                     |
+| **P2** degraded  | 4                 | 4                 | 3                     |
 | **P3** cosmetic  | 4                 | 2                 | 1                     |
 
-Rounds 1+2+3 landed 27 tests across 11 files. Net P0-uncovered
-moved 12 → 4. Files added: `embeddings_e2e` (4), `injection_order` (3),
-`node_id_persistence` (2), `loopback_parity` (7), `gossip_auth` (3),
+Rounds 1+2+3+4 + fan-out bugfix landed 37 tests across 14 files
+plus a 1-line fix to `routes_knowledge::fanout_one_peer`. Net
+P0-uncovered moved 12 → 2. Files added: `embeddings_e2e` (4),
+`injection_order` (3), `node_id_persistence` (2), `loopback_parity` (7),
+`gossip_auth` (3),
 `storage_snapshot_e2e` (2), `peer_preference_manifest` (3),
 `finish_reason_streaming` (3). One audit correction in round 3:
 `/v1/admin/reload` HTTP route was marked `·` but was already covered
@@ -149,8 +151,9 @@ step. Buckets follow the daemon's structural layout.
 
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
-| `/v1/knowledge/search` local (corpus-engine + grounding) | · | P1 | **Gap.** Round-trip from HTTP to a real `CorpusIndex` |
-| `/v1/knowledge/search` mesh fan-out + merge + rerank | · | **P0** | **Gap.** High-leverage — spans corpus-engine + commonwealth-api + sovereign-mesh. The knowledge-fan-out path is what makes "ask my mesh about X" work |
+| `/v1/knowledge/search` local (corpus-engine + grounding) | ~ | P1 | `knowledge_served_e2e` exercises `/internal/knowledge/search` against a real `CorpusIndex`; the public-side `/v1/knowledge/search` with `corpus_engine=Some(...)` is exercised in `knowledge_fanout_e2e` as the joiner's local-first path |
+| `/v1/knowledge/search` mesh fan-out + merge + rerank | ✓ | **P0** | `knowledge_fanout_e2e::{joiner_fans_out_to_peer_when_corpus_not_local, offline_peer_is_excluded_from_fan_out_plan}` |
+| `/v1/knowledge/search` fan-out stamps `X-Node-Id` | ✓ | **P0** | **Fixed 2026-05-13.** `fanout_one_peer` now threads `self_id` through and sets `X-Node-Id: <self_hex>` on every outbound `/internal/knowledge/search` POST. Pinned by `knowledge_fanout_e2e::fan_out_stamps_x_node_id_so_peer_emits_ledger` which asserts A's `ContributionEmitter` records the expected `KnowledgeQueryServed { for_node: id_b, corpus_id, chunks_returned }` after a real B→A fan-out. |
 | `/v1/knowledge/landscape_digest` | · | P1 | **Gap.** KnowledgeView is structurally local (§7) — a wire test pinning that 200 returns the digest *and* never leaks to the mesh path is the right shape |
 | Canonical pull (peer fetches sharded corpus tar) | ✓ | P1 | `canonical_pull_e2e` (4 tests) |
 | Knowledge query ledger emission (`KnowledgeQueryServed`) | ~ | **P0** | Spec §10 wires this in `routes_internal::knowledge_search`; no test that a fan-out actually emits one event per contributing corpus |
@@ -223,8 +226,8 @@ step. Buckets follow the daemon's structural layout.
 
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
-| `/reading/chunks` (load + neighbor window) | · | P2 | **Gap.** Glass-box surface for atlas inspector |
-| `/reading/atoms` card assembly | · | P2 | **Gap.** Atom formatter covered post-extraction by unit tests; HTTP surface untested |
+| `/reading/chunks` (load + neighbor window) | ✓ | P2 | `reading_http_e2e::{get_chunk_returns_inserted_content, get_chunk_returns_404_for_unknown_corpus, get_chunk_returns_404_for_unknown_chunk_id, get_neighbors_returns_center_with_empty_prev_and_next_for_single_chunk_corpus}` |
+| `/reading/atoms` card assembly | ~ | P2 | Atom formatter covered post-extraction by `reading_formatters` unit tests; HTTP surface for `/atoms/{id}` + `/atoms/{id}/elsewhere` still uncovered (atlas-enriched corpus required to exercise). |
 | Cross-corpus link enumeration | · | P2 | **Gap.** |
 | Loopback enforcement | · | **P0** | **Gap.** Same as project_http — needs the cross-router parity test |
 
@@ -241,7 +244,7 @@ step. Buckets follow the daemon's structural layout.
 |---|---|---|---|
 | `InferenceServed` emission on local serve | ~ | **P0** | Wired in `routes_inference::serve_local_*`; no end-to-end |
 | `InferenceReceived` emission on peer-routed stream | ✓ | **P0** | `throughput_ledger_emission` |
-| `KnowledgeQueryServed` per contributing corpus | · | **P0** | **Gap.** §10 contract; emission site untested |
+| `KnowledgeQueryServed` per contributing corpus | ✓ | **P0** | `knowledge_served_e2e::{peer_request_emits_one_knowledge_query_served_per_contributing_corpus, local_origin_request_with_no_x_node_id_emits_nothing, unavailable_corpus_filter_emits_no_event_and_lists_unavailable}` covers the single-daemon emission contract; `knowledge_fanout_e2e::fan_out_stamps_x_node_id_so_peer_emits_ledger` covers the two-daemon path end-to-end after the X-Node-Id stamping fix. |
 | `ShardTransferred` on `coordinate_merge` | ~ | P1 | `commonwealth-knowledge::ShardManager` unit tests; daemon-level untested |
 | `StorageSnapshot` hourly emission | ✓ | P1 | `storage_snapshot_e2e::{first_tick_emits_only_mesh_shared_corpora_to_ledger, snapshot_emits_nothing_when_no_corpus_engine_attached}` |
 | `current_contributions` aggregator | ~ | P2 | `commonwealth-state::contributions` unit tests |
@@ -290,23 +293,47 @@ inline. Numbers in brackets index back to the matrix bucket.row.
 2. **[A.try_resume] `try_resume` → mesh reconstruction → first gossip round.** Pins the daemon-restart-overnight invariant. *Partial:* `node_id_persistence::node_id_survives_daemon_restart_against_same_data_dir` exercises `try_resume`; the "first gossip round after resume" half is still uncovered.
 3. ~~**[H.admin reload] `/v1/admin/reload` end-to-end with provider swap.**~~ **Already covered** by `admin_http::tests::{reload_is_noop_when_nothing_changed, reload_swaps_inference_provider_when_models_change, reload_port_change_requires_restart}` — the lib tests spawn a real HTTP listener and use reqwest. Audit correction.
 4. ~~**[N.node_id persistence] Daemon restart preserves `self_node_id`.**~~ **Landed** as `node_id_persistence` (2 tests).
-5. **[D.knowledge fan-out] `/v1/knowledge/search` two-daemon fan-out + merge + per-corpus ledger emission.** Spans three crates; pins the "ask my mesh about X" path.
+5. ~~**[D.knowledge fan-out] `/v1/knowledge/search` two-daemon fan-out + merge + per-corpus ledger emission.**~~ **Landed** as `knowledge_fanout_e2e` (2 tests). The fan-out routes through correctly and offline-peer exclusion is pinned. **Caveat:** the ledger-emission half exposed a real bug — `fanout_one_peer` doesn't stamp `X-Node-Id`, so peer-side `KnowledgeQueryServed` stays silent during real fan-out traffic. Documented as a separate P0 cell; small follow-up fix.
 6. ~~**[C.gossip auth] Foreign-mesh gossip payload doesn't pollute local state.**~~ **Landed** as `gossip_auth` (3 tests).
 7. ~~**[E.manifest stamping] Peer-preference manifest stamping over `/oicp/v1/capabilities`.**~~ **Landed** as `peer_preference_manifest` (3 tests).
 8. ~~**[B.finish_reason] End-to-end test that a `Length`-truncated stream surfaces `"length"` on the SSE chunk.**~~ **Landed** as `finish_reason_streaming` (3 tests, including `legacy_provider_default_impl_surfaces_stop` as negative control).
-9. **[M.KnowledgeQueryServed] Fan-out emits one ledger event per contributing corpus.** §10 contract.
+9. ~~**[M.KnowledgeQueryServed] Fan-out emits one ledger event per contributing corpus.**~~ **Landed** as `knowledge_served_e2e` (3 tests covering peer request, local-origin gating, and zero-chunk no-emission). See caveat under #5.
 10. ~~**[M.StorageSnapshot] First-tick-immediate behavior + mesh_sharing filter.**~~ **Landed** as `storage_snapshot_e2e` (2 tests, real CorpusEngine with mesh-shared + local-only corpora).
 11. ~~**[B.embeddings] `/v1/embeddings` smoke + multi-input batch.**~~ **Landed** as `embeddings_e2e` (4 tests).
 12. **[B.responses adapter] `/v1/responses` translation contract.** `codex` clients depend on it.
 13. **[F.corpus_watch happy path] Register → pause → resume → status round-trip.** Single test against the 14-route surface; closes the biggest single bucket gap.
 14. **[F.corpus_watch enrichment] Enable → rebuild → details.** Sister test to (13).
 15. **[I.auto-collaborate handoff] Register handoff → partition plan → state transitions.** Pins the state machine.
-16. **[K.reading_http] Chunks + atoms over wire.** Single coverage test for a 1000+ LOC surface.
+16. ~~**[K.reading_http] Chunks + atoms over wire.**~~ **Partially landed** as `reading_http_e2e` (4 tests covering chunk fetch happy + 404-corpus + 404-chunk + neighbors window). Atom-card endpoints (`/atoms/{id}` + `/atoms/{id}/elsewhere`) still uncovered — they require an atlas-enriched corpus and so didn't fit Round 4's scope.
 17. ~~**[A.injection ordering] Tracing-capture test catching the silent-no-op `Arc::get_mut` failure.**~~ **Landed** as `injection_order` (3 tests).
 18. **[B.tools end-to-end] Grammar-constrained tool call through `/v1/chat/completions`.** Currently unit-tested only.
 
 After these, the matrix's remaining `·` cells are L4 territory
 (mDNS, real GPU, launchd) or low-impact polish.
+
+## Bugs surfaced by writing the tests
+
+The priority queue's claim is "writing tests reveals bugs the
+matrix didn't know about." Three so far across this work:
+
+- **Round 4 — `X-Node-Id` not stamped on knowledge fan-out.**
+  `routes_knowledge::fanout_one_peer` issued `/internal/knowledge/search`
+  without the header, so the peer-side `KnowledgeQueryServed`
+  emission path was permanently inactive for real fan-out
+  traffic — the §10 intra-mesh accounting promise was silently
+  broken in the most common case. **Fixed same day:** threaded
+  `self_id` through the function, stamped `X-Node-Id: <self_hex>`
+  on every outbound POST. Regression-pinned by
+  `knowledge_fanout_e2e::fan_out_stamps_x_node_id_so_peer_emits_ledger`.
+  Discovered while writing the two-daemon fan-out test — exactly
+  the failure mode the matrix-driven test plan is designed to
+  catch.
+- **Pre-port-fix — `EmbeddedDaemon` hardcoded 9741/9742.**
+  Caught by the desire to spin up two `EmbeddedDaemon`s in-process.
+  Fixed in the pre-Round-1 batch.
+- **Pre-Round-1 — `LedgerEmission` had `pub(crate)` fields**, so
+  test impls of `PeerEndpointSource` couldn't construct it.
+  Resolved by adding `LedgerEmission::new` constructor.
 
 ## Out-of-scope (intentional)
 
