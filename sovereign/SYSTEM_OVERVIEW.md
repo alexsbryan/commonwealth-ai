@@ -147,6 +147,18 @@ crates/
 │   ├── lib.rs charter.rs approval.rs report.rs session.rs
 │   └── local/                #   LocalAtosOrchestrator + helpers
 │
+├── sovereign-work-atlas/     # Coordination atlas for agents on the mesh (see docs/WORK_ATLAS.md)
+│   src/
+│   ├── lib.rs model.rs       #   SessionRecord, ClaimRecord, ObservationRecord, AgentKind/Privacy enums
+│   ├── store.rs              #   WorkAtlasStore — typed MeshStore facade (app_ids: work-atlas, work-atlas-private)
+│   ├── observer.rs           #   AtlasObserver (BackgroundWatcher impl, Phase 2 — passive observations from CodeWatcher edits)
+│   ├── repo_id.rs            #   SHA-256(canonical origin URL); MUST per spec §10
+│   ├── gc.rs                 #   60s TTL eviction loop (claims past ttl_expires_at, idle sessions w/ cascade)
+│   ├── config.rs             #   ~/.sovereign/work-atlas.toml (default TTL 4h, idle 4h)
+│   ├── confidence.rs         #   ConfidenceGrade enum + observation_grade() (Phase 2: Active ≤5min, Recent ≤30min)
+│   └── tools/                #   MCP tools (declare_scope/release_scope/work_in_flight) + DeferredBroadcaster seam
+│   assets/work_atlas_default_config.toml
+│
 ├── sovereign-cli/            # REPL + named subcommands (see §4.9)
 │   src/
 │   ├── main.rs setup_cmd.rs daemon_cmd.rs doctor_cmd.rs mesh_cmd.rs
@@ -811,7 +823,7 @@ Local tools (`sovereign-tools/src/`):
 | `McpClient` + `McpToolAdapter` | stdio JSON-RPC + HTTP+SSE; wrap remote MCP servers as native tools |
 
 Code-intelligence MCP server (`sovereign project serve` ad-hoc, `sovereign
-daemon` long-running). 24 tools across eight groups:
+daemon` long-running). 27 tools across nine groups:
 
 | Group                 | Tools                                                     |
 |-----------------------|-----------------------------------------------------------|
@@ -823,6 +835,7 @@ daemon` long-running). 24 tools across eight groups:
 | ATOS feature lifecycle| `provision_feature`, `archive_feature`, `read_note_by_id`, `promote_note`, `read_note_digest`, `record_atos_event`, `write_redteam_finding` |
 | Project context       | `project_context`                                         |
 | Session reflection / doc health | `session_reflection`, `check_doc_paths`         |
+| Work atlas (coordination) | `declare_scope`, `release_scope`, `work_in_flight` (see `docs/WORK_ATLAS.md`) |
 
 A filesystem watcher (`CodeWatcher`) re-indexes modified files and marks
 them stale in the call graph. Staleness levels carry calibrated confidence:

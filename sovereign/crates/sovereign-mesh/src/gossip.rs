@@ -514,6 +514,135 @@ pub async fn run_one_round(
     Ok(())
 }
 
+/// Fire-and-forget broadcast of a single mesh_store entry to every
+/// online peer. Used by latency-sensitive writers (e.g. the work
+/// atlas's `declare_scope`) that need a claim visible across the
+/// mesh in the same round-trip rather than waiting up to one full
+/// `DEFAULT_GOSSIP_INTERVAL` for the next anti-entropy round.
+///
+/// Best-effort: unreachable peers are logged at `warn` (one line per
+/// failure) and skipped. The next gossip round will pick the entry
+/// up via the normal anti-entropy path anyway, so a transient peer
+/// outage doesn't lose the write.
+///
+/// Privacy: the caller is responsible for ensuring `app_id` is not
+/// in `GOSSIP_EXCLUDED_APP_IDS`. The store's own `set` already
+/// permits writes to excluded namespaces (the exclusion happens at
+/// the gossip-read boundary, not the write boundary), so a sloppy
+/// caller could in principle broadcast a Private record. The work
+/// atlas's typed facade only calls `broadcast_now` for Public claims
+/// — Private claims skip this entirely.
+pub async fn broadcast_now(
+    app_state: &AppState,
+    app_id: &str,
+    key: &str,
+) {
+    if commonwealth_state::is_gossip_excluded(app_id) {
+        // Defence-in-depth: even if a caller passed a private app_id,
+        // refuse to broadcast it. This is the third privacy layer
+        // for the work atlas — store-level mapping + gossip filter +
+        // this guard.
+        tracing::warn!(
+            app_id,
+            "work_atlas:broadcast_now refused private app_id"
+        );
+        return;
+    }
+
+    let entry = match app_state.inner.mesh_store.get(app_id, key) {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            tracing::debug!(app_id, key, "broadcast_now: no entry");
+            return;
+        }
+        Err(e) => {
+            tracing::warn!(app_id, key, error = %e, "broadcast_now: store read failed");
+            return;
+        }
+    };
+
+    let self_id = app_state
+        .inner
+        .self_node_id_swap
+        .load_full()
+        .as_ref()
+        .clone();
+    let wire = serde_json::json!({
+        "entries": [{
+            "app_id": entry.app_id,
+            "key": entry.key,
+            "value_b64": String::from_utf8_lossy(&entry.value).into_owned(),
+            "timestamp": entry.timestamp,
+            "origin_hex": hex::encode(entry.origin.as_bytes()),
+        }]
+    });
+
+    let targets: Vec<(NodeId, Vec<SocketAddr>)> = {
+        let mesh = app_state.inner.mesh.read().await;
+        mesh.members
+            .values()
+            .filter(|m| m.node_id != self_id && m.status == NodeStatus::Online)
+            .map(|m| {
+                let addrs = commonwealth_core::peer_addr::sorted_addresses(
+                    &m.addresses.iter().copied().collect::<Vec<_>>(),
+                );
+                (m.node_id, addrs)
+            })
+            .collect()
+    };
+
+    if targets.is_empty() {
+        return;
+    }
+
+    let http = match reqwest::Client::builder().timeout(PEER_TIMEOUT).build() {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(error = %e, "broadcast_now: client build failed");
+            return;
+        }
+    };
+
+    // Fan out concurrently — claim writers shouldn't pay
+    // serial latency for slow peers.
+    let mut handles = Vec::with_capacity(targets.len());
+    for (peer_id, addrs) in targets {
+        let http = http.clone();
+        let body = wire.clone();
+        handles.push(tokio::spawn(async move {
+            for addr in addrs {
+                let url = format!("http://{addr}/internal/app/state");
+                match http.post(&url).json(&body).send().await {
+                    Ok(resp) if resp.status().is_success() => return,
+                    Ok(resp) => {
+                        tracing::debug!(
+                            peer = %peer_id,
+                            url = %url,
+                            status = %resp.status(),
+                            "work_atlas:broadcast_now peer rejected"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::debug!(
+                            peer = %peer_id,
+                            url = %url,
+                            error = %e,
+                            "work_atlas:broadcast_now peer unreachable, trying next addr"
+                        );
+                    }
+                }
+            }
+            tracing::warn!(
+                peer = %peer_id,
+                "work_atlas:broadcast_now_failed (all addrs exhausted)"
+            );
+        }));
+    }
+    for h in handles {
+        let _ = h.await;
+    }
+}
+
 async fn gossip_with_peer(
     http: &reqwest::Client,
     addr: std::net::SocketAddr,

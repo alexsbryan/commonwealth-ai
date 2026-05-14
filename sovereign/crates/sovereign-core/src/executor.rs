@@ -631,6 +631,7 @@ impl Executor {
                     task_id: Some(task.id.clone()),
                     working_directory: None,
                     in_reasoning_loop: false,
+                    agent_session_token: None,
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();
@@ -895,6 +896,7 @@ impl Executor {
                             task_id: Some(task.id.clone()),
                             working_directory: None,
                             in_reasoning_loop: true,
+                            agent_session_token: None,
                         };
                         match tool.execute(&params, &ctx).await {
                             Ok(output) => match output {
@@ -1151,6 +1153,7 @@ When ready to answer (without a <tool_call>):
                     task_id: None,
                     working_directory: None,
                     in_reasoning_loop: false,
+                    agent_session_token: None,
                 };
                 for candidate in candidates {
                     let params = serde_json::json!({"input": candidate});

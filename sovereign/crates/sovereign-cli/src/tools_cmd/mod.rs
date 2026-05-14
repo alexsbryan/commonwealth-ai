@@ -330,6 +330,7 @@ async fn cmd_call(args: &[String]) -> i32 {
             .ok()
             .map(|p| p.display().to_string()),
         in_reasoning_loop: false,
+        agent_session_token: None,
     };
 
     match tool.execute(&params_value, &ctx).await {

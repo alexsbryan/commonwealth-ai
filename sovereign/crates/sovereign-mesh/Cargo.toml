@@ -34,6 +34,12 @@ sovereign-inference = { workspace = true }
 # sovereign-server share this so they advertise the same surface
 # to clients without drifting.
 sovereign-tools = { workspace = true }
+# Work atlas — `MeshBroadcaster` adapter implements
+# `sovereign_work_atlas::tools::ClaimBroadcaster` using `AppState`
+# + `gossip::broadcast_now`. Lives here (not in work-atlas) so the
+# trait stays free of `AppState` and the cmd_serve wire-up is the
+# single place that pairs the two.
+sovereign-work-atlas = { workspace = true }
 # async_trait is needed to impl the (async) MeshKnowledgeSource
 # trait on MeshKnowledgeClient. sovereign-core already uses it.
 async-trait = { workspace = true }

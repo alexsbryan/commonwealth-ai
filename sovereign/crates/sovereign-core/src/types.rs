@@ -545,6 +545,17 @@ pub struct ToolContext {
     /// Tools may format results differently for reasoning vs. synthesis.
     #[serde(default)]
     pub in_reasoning_loop: bool,
+    /// Identifier for the calling agent's session, used by the work
+    /// atlas to group successive tool calls into a single
+    /// coordination session. Populated by `mcp_router` from the
+    /// `X-Agent-Session` HTTP header; falls back to a synthetic
+    /// `conn:<mcp_session>` per-connection token when no header is
+    /// present, and is `None` for in-process callers (CLI, tests,
+    /// runtime-internal tool execution) that don't go through the
+    /// MCP transport. `#[serde(default)]` so older serialized
+    /// contexts decode cleanly.
+    #[serde(default)]
+    pub agent_session_token: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

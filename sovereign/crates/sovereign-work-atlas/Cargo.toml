@@ -1,0 +1,36 @@
+[package]
+name = "sovereign-work-atlas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+
+[dependencies]
+# Mesh KV store + node identity — atlas records live here.
+commonwealth-state = { workspace = true }
+commonwealth-core  = { workspace = true }
+
+# Tool trait, ToolContext, StepOutput. The three MCP tools live in this crate.
+sovereign-core = { workspace = true }
+
+# repo_root discovery (reused from corpus-engine — ARCH §11.1).
+corpus-engine = { workspace = true, features = ["treesitter"] }
+
+# Origin URL → repo_id hash.
+sha2 = "0.10"
+hex = "0.4"
+
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+arc-swap = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

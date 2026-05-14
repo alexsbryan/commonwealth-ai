@@ -586,7 +586,7 @@ fn resolve_cwd_repo_root() -> Result<PathBuf, String> {
     ))
 }
 
-fn current_branch(repo_root: &Path) -> Option<String> {
+pub(crate) fn current_branch(repo_root: &Path) -> Option<String> {
     let out = std::process::Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .current_dir(repo_root)

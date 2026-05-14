@@ -496,6 +496,58 @@ async fn run_daemon(args: &[String]) -> i32 {
     // watcher's spawned tasks. Underscored because we never read it
     // back; the value is the side effect of holding the handle alive.
     let mut _coordinator_handle: Option<corpus_engine::CoordinatorHandle> = None;
+
+    // ── Work atlas wiring (Phase 2) ────────────────────────────────────
+    // Single shared `Arc<MeshStore>`: handed into the EmbeddedDaemon
+    // via `set_mesh_store` so `AppState.inner.mesh_store` IS this
+    // instance, and also handed into the `WorkAtlasStore` so claims
+    // and observations land in the same store gossip publishes from.
+    // In-memory is intentional — matches the daemon's existing
+    // long-term-persistence-via-mesh.json design. The atlas-relevant
+    // records have TTLs measured in hours; restart cost is acceptable.
+    let work_atlas_mesh_store: Arc<commonwealth_state::MeshStore> = Arc::new(
+        commonwealth_state::MeshStore::in_memory()
+            .expect("in-memory MeshStore for work atlas"),
+    );
+    // Node identity — same resolution order EmbeddedDaemon uses when
+    // it starts (file-on-disk → mesh.json → generate). Resolved early
+    // so `WorkAtlasStore::node_id` matches the daemon's `self_id`.
+    let work_atlas_node_id = match sovereign_mesh::persist::load_node_id(&data_dir) {
+        Ok(Some(id)) => id,
+        _ => match sovereign_mesh::persist::load(&data_dir) {
+            Ok(Some(persisted)) => persisted.self_node_id,
+            _ => sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir),
+        },
+    };
+    let work_atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
+        Arc::clone(&work_atlas_mesh_store),
+        work_atlas_node_id,
+    ));
+    // Deferred broadcaster — `MeshBroadcaster` needs `AppState`, which
+    // isn't reachable until `daemon.try_resume()`. The MCP tools and
+    // the AtlasObserver hold this handle now; we swap the real
+    // broadcaster in once `app_state` is available.
+    let work_atlas_broadcaster = Arc::new(sovereign_work_atlas::tools::DeferredBroadcaster::new());
+    let work_atlas_cfg = {
+        let path = dirs::home_dir()
+            .map(|h| h.join(".sovereign").join("work-atlas.toml"))
+            .unwrap_or_else(|| data_dir.join("work-atlas.toml"));
+        sovereign_work_atlas::WorkAtlasConfig::load_or_default(&path)
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    error = %e,
+                    path = %path.display(),
+                    "work_atlas: config load failed, using defaults"
+                );
+                sovereign_work_atlas::WorkAtlasConfig::defaults()
+            })
+    };
+    // Resolved later if the workspace has an `origin` remote.
+    let mut work_atlas_observer: Option<Arc<sovereign_work_atlas::AtlasObserver>> = None;
+    let mut work_atlas_repo_root: Option<std::path::PathBuf> = None;
+    let mut work_atlas_repo_id: Option<String> = None;
+    let mut work_atlas_branch: Option<String> = None;
+
     if let Some(ref ws) = workspace_dir {
         let sov_cfg = corpus_engine::SovereignConfig::load_or_default(
             &ws.join(".sovereign"),
@@ -551,7 +603,42 @@ async fn run_daemon(args: &[String]) -> i32 {
             );
         }
 
-        if lint_watcher.is_some() || test_watcher.is_some() {
+        // Work-atlas observer (Phase 2). Requires the workspace to
+        // resolve a `repo_id` (SHA-256 of canonical origin URL). When
+        // the repo has no origin remote, the observer becomes a
+        // no-op rather than crashing the daemon — same posture as
+        // `declare_scope`, which errors on `repo_id_missing`.
+        match sovereign_work_atlas::resolve_repo_id(ws) {
+            Ok((repo_root, repo_id)) => {
+                let branch = crate::code_cmd::current_branch(&repo_root);
+                let observer = Arc::new(sovereign_work_atlas::AtlasObserver::new(
+                    Arc::clone(&work_atlas_store),
+                    work_atlas_cfg.clone(),
+                    Arc::clone(&work_atlas_broadcaster)
+                        as Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster>,
+                    repo_root.clone(),
+                    repo_id.clone(),
+                    branch.clone(),
+                ));
+                work_atlas_observer = Some(Arc::clone(&observer));
+                work_atlas_repo_root = Some(repo_root);
+                work_atlas_repo_id = Some(repo_id);
+                work_atlas_branch = branch;
+                eprintln!(
+                    "sovereign daemon: work-atlas observer wired on {}",
+                    ws.display()
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    workspace = %ws.display(),
+                    "work_atlas:repo_id_missing — atlas observer disabled (no origin remote)"
+                );
+            }
+        }
+
+        if lint_watcher.is_some() || test_watcher.is_some() || work_atlas_observer.is_some() {
             let debounce_ms = sov_cfg
                 .lint_runner
                 .as_ref()
@@ -569,12 +656,17 @@ async fn run_daemon(args: &[String]) -> i32 {
                     Arc::clone(w) as Arc<dyn corpus_engine::BackgroundWatcher>,
                 );
             }
+            if let Some(ref obs) = work_atlas_observer {
+                coordinator.register(
+                    Arc::clone(obs) as Arc<dyn corpus_engine::BackgroundWatcher>,
+                );
+            }
             match coordinator.start(vec![ws.clone()]).await {
                 Ok(handle) => {
                     watcher_active_flag.store(true, Ordering::Release);
                     _coordinator_handle = Some(handle);
                     eprintln!(
-                        "sovereign daemon: lint/test watcher live on {}",
+                        "sovereign daemon: watcher coordinator live on {}",
                         ws.display()
                     );
                 }
@@ -714,6 +806,12 @@ async fn run_daemon(args: &[String]) -> i32 {
         watched_test_scope.clone(),
         Arc::clone(&watcher_active_flag),
         workspace_dir.clone(),
+        Arc::clone(&work_atlas_store),
+        work_atlas_cfg.clone(),
+        Arc::clone(&work_atlas_broadcaster),
+        work_atlas_repo_root.clone(),
+        work_atlas_repo_id.clone(),
+        work_atlas_branch.clone(),
     )
     .await;
 
@@ -810,6 +908,20 @@ async fn run_daemon(args: &[String]) -> i32 {
     // wikipedia/etc. ingests. See engine block above for the
     // diagnostic story.
     daemon.set_corpus_engine(Arc::clone(&engine)).await;
+
+    // Wire the work-atlas's shared `MeshStore` into the daemon BEFORE
+    // `try_resume`. Once the daemon transitions to Running its
+    // `AppState.mesh_store` is this exact `Arc<MeshStore>`, so:
+    //   - the work-atlas tools (`declare_scope`, etc.) write into
+    //     the store gossip's `all_entries_for_gossip` enumerates;
+    //   - peer broadcasts arriving at `/internal/app/state` merge
+    //     into the same instance the atlas reads from.
+    // Without this, the daemon would have constructed its own
+    // independent in-memory store and atlas data would be invisible
+    // across the mesh.
+    daemon
+        .set_mesh_store(Arc::clone(&work_atlas_mesh_store))
+        .await;
 
     // Lazy-stamp canonical fingerprints for any installed
     // canonicals that don't yet carry one (legacy ingests pre-
@@ -1210,6 +1322,49 @@ async fn run_daemon(args: &[String]) -> i32 {
         internal_port = config.daemon.internal_port,
         "sovereign daemon is running"
     );
+
+    // ── Work atlas (Phase 2) finalisation ─────────────────────────────
+    //
+    // 1. Swap the real `MeshBroadcaster` into the `DeferredBroadcaster`
+    //    now that `daemon.app_state()` returns `Some`. After this,
+    //    work-atlas writes broadcast to peers within the round-trip
+    //    rather than waiting up to one full 10s gossip interval.
+    // 2. Spawn the TTL eviction loop so expired claims and idle
+    //    sessions are reaped on a 60s cadence.
+    {
+        let daemon_for_atlas = Arc::clone(&daemon);
+        let broadcaster_for_atlas = Arc::clone(&work_atlas_broadcaster);
+        tokio::spawn(async move {
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            loop {
+                if let Some(state) = daemon_for_atlas.app_state().await {
+                    let real: Box<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
+                        Box::new(sovereign_mesh::MeshBroadcaster::new(state));
+                    broadcaster_for_atlas.set(real);
+                    tracing::info!(
+                        "work_atlas: real broadcaster wired (peer fan-out active)"
+                    );
+                    return;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    tracing::warn!(
+                        "work_atlas: broadcaster wire-up timed out — \
+                         claims/observations will only reach peers via the \
+                         10s gossip round (still functional, just slower)"
+                    );
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+        });
+    }
+    let _work_atlas_gc_handle =
+        sovereign_work_atlas::gc::WorkAtlasGc::new(
+            Arc::clone(&work_atlas_store),
+            work_atlas_cfg.clone(),
+        )
+        .spawn();
     eprintln!(
         "sovereign daemon running — http://localhost:{}/v1 + /mcp",
         config.daemon.client_port
@@ -1285,6 +1440,12 @@ async fn build_tool_registry(
     watched_test_scope: Option<String>,
     watcher_active_flag: Arc<AtomicBool>,
     workspace_dir: Option<PathBuf>,
+    work_atlas_store: Arc<sovereign_work_atlas::WorkAtlasStore>,
+    work_atlas_cfg: sovereign_work_atlas::WorkAtlasConfig,
+    work_atlas_broadcaster: Arc<sovereign_work_atlas::tools::DeferredBroadcaster>,
+    work_atlas_repo_root: Option<PathBuf>,
+    work_atlas_repo_id: Option<String>,
+    work_atlas_branch: Option<String>,
 ) -> ToolRegistry {
     let indexes_dir = data_dir.join("indexes");
 
@@ -1328,7 +1489,40 @@ async fn build_tool_registry(
     ));
     tools.register(Box::new(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .with_atlas(Arc::clone(&work_atlas_store)),
+    ));
+
+    // ── Work atlas tools (Phase 2) ──────────────────────────────
+    // Always registered so MCP clients see them even on a repo
+    // without an origin remote — `declare_scope` rejects with an
+    // actionable error in that case. `work_in_flight` is read-only
+    // and works without an origin (it just returns what the daemon
+    // has heard from peers).
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::DeclareScopeTool::new(
+            Arc::clone(&work_atlas_store),
+            work_atlas_cfg.clone(),
+            Arc::clone(&work_atlas_broadcaster)
+                as Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster>,
+            work_atlas_repo_root
+                .clone()
+                .unwrap_or_else(|| data_dir.to_path_buf()),
+            work_atlas_repo_id.clone().unwrap_or_default(),
+            work_atlas_branch.clone(),
+        ),
+    ));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::ReleaseScopeTool::new(
+            Arc::clone(&work_atlas_store),
+            Arc::clone(&work_atlas_broadcaster)
+                as Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster>,
+        ),
+    ));
+    tools.register(Box::new(
+        sovereign_work_atlas::tools::WorkInFlightTool::new(
+            Arc::clone(&work_atlas_store),
+        ),
     ));
 
     // ── Lint / test watcher tools ───────────────────────────────

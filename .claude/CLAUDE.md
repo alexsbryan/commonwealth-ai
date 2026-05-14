@@ -43,6 +43,7 @@ Every tool declares behavioural properties (Effect · Scope · Latency) and an o
 3. `project_context("<user's stated task>")` — pull relevant conventions and architecture docs
 4. `notes(query: "<task area>")` — surface decisions and invariants from prior sessions
 5. `drift_posture()` — answer "is the latest drift report still current against the narrative docs?" Returns top critical findings + age. If `status=stale`, the architecture docs have been edited since the last drift run; cite findings carefully. If `status=fresh`, the drift findings (and `drift_findings()` queries below) reflect current state.
+6. `work_in_flight(scope="<task area>", match_mode="file")` — **when the task names a file or symbol**, check whether a peer agent or human on the mesh is already there. A non-empty result means another node is active; surface that to the user before proceeding rather than silently colliding. See the "Coordination — work atlas" section below for grades and what to do on overlap.
 
 ### Precision tools — use these instead of reading files
 
@@ -79,6 +80,43 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "How many things depend on this?" | `blast("symbol_name")` |
 | "What does the narrative say about THIS symbol/file?" | `drift_findings(query: "name")` |
 | "Is the latest drift report still current?" | `drift_posture()` |
+| "Is anyone else on the mesh touching this?" | `work_in_flight(scope, match_mode)` |
+| "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
+| "Done with what I claimed" | `release_scope(claim_id)` |
+
+### Coordination — work atlas (cross-mesh peer awareness)
+
+This repo runs on a Commonwealth mesh. Other agents (Claude instances on peer workstations, humans editing in their IDE) may be active in the same codebase. The work atlas (`docs/WORK_ATLAS.md`) gives you a view of what they're doing — and lets you publish what *you're* doing so they don't collide.
+
+**`work_in_flight` is the read surface.** It returns two arrays:
+
+- `claims[]` — explicit declarations from `declare_scope` (grade `declared`).
+- `observations[]` — passive signal from CodeWatcher edits, surfaced by the daemon's `AtlasObserver`. Grade `active` (≤5 min since last edit), `recent` (≤30 min), then dropped.
+
+Each entry carries `node_id` and `session_id`. Cross-reference the node_id against `sovereign mesh status` to identify the peer.
+
+**When to query before acting.** Before non-trivial work — refactoring a function, modifying a public API, touching a hot file — call:
+
+```
+work_in_flight(scope="<symbol-or-path>", match_mode="symbol" | "file")
+```
+
+Symbol mode matches SCIP symbol IDs and explicit claims. File mode matches file paths (with prefix matching) and is the right pick for "is anyone editing this file right now?" — observations are file-level in Phase 2.
+
+If the result has live `claims` or `active`-grade `observations`: STOP and tell the user "node <X> is currently working on <scope> with intent <Y>." Don't silently proceed — the whole point of the atlas is to surface this before duplicate work happens.
+
+**When to declare.** Use `declare_scope(symbols, intent, ttl_seconds?)` whenever you start work that:
+- Will take longer than ~5 minutes (peers querying within that window need to see your claim).
+- Touches a symbol or file other agents are likely to also touch.
+- Is part of a multi-step plan where you want peers to see the overall intent, not just the file edits the atlas observer will catch automatically.
+
+`intent` is the load-bearing field — write it as a short sentence a colleague could read and immediately know whether your work overlaps theirs. Default TTL is 4h; raise it for longer features (max 24h).
+
+**When to release.** Call `release_scope(claim_id)` when the work is genuinely done — committed, merged, or abandoned. Spec §3 forbids history: a released claim is gone, no surface records it. That's the point — peers see live state, not a log of everything ever attempted.
+
+If you forget, the TTL drops it. But explicit release is the courtesy.
+
+**Privacy.** Sessions inherit `node.default_privacy` from `~/.sovereign/work-atlas.toml` (default `public`). Private claims/observations are written to `work-atlas-private` and structurally never gossip — peers never see them. The daemon enforces this at three layers (store, gossip, read). Toggling to private mid-session does NOT retroactively unpublish prior records.
 
 ### Mandatory pre-flight checks
 
@@ -86,9 +124,10 @@ These are hard to undo when skipped. Do not proceed without them.
 
 - **Before adding a method to a trait:** `callers("TraitName")` to find ALL implementors. Every impl block must be updated or the build breaks.
 - **Before modifying a function signature:** `callers("function_name")` for code-side blast + `drift_findings(query: "function_name")` for narrative-side claims. The latter surfaces normative claims like "X always returns Y" — change the function and you may also need to update the narrative doc.
-- **Before any non-trivial change to an existing function:** `blast("function_name", max_depth: 2)`. Know the transitive impact before touching it.
+- **Before any non-trivial change to an existing function:** `blast("function_name", max_depth: 2)`. Know the transitive impact before touching it. The `concurrent` field in the response lists peer claims on this symbol from the work atlas — treat a non-empty `concurrent` as a collision warning, not an FYI.
 - **Before renaming a public symbol or HTTP route:** `drift_findings(query: "old_name", kind: "any")`. If any normative claim references it, the rename must update the narrative atomically. Skip this and the next drift run will surface an "anchor not in atlas" finding pointing at the rename.
 - **Before using a type from another crate:** `symbols("TypeName")` to confirm it exists and check its fields.
+- **Before non-trivial edits to a hot file:** `work_in_flight(scope="<path>", match_mode="file")` to catch peer agents and humans editing the same file. Active-grade observations within the last 5 minutes mean someone is right there — coordinate, don't race. Skip this only when the change is local, mechanical, and unlikely to merge-conflict (typo, comment, isolated module).
 
 ### Writing notes — mandatory triggers
 
@@ -114,6 +153,8 @@ session_reflection(
 ```
 
 All fields except `task_summary` are optional. Be specific — vague reflections are not useful.
+
+**Also at task end: release any claims you declared.** If you called `declare_scope` during the work, call `release_scope(claim_id)` now. The TTL would drop it eventually, but peers querying `work_in_flight` in the meantime would still see a stale claim. Use the `claim_id` returned by the original `declare_scope` call (or list them with `sovereign claim list --mine`).
 
 **Before using `blast` or `project_context` on a large task**, first check for known limitations:
 ```

@@ -20,6 +20,7 @@ members = [
     "sovereign/crates/sovereign-atos",
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-pipeline",
+    "sovereign/crates/sovereign-work-atlas",
 
     # Commonwealth — symmetric mesh daemon.
     "commonwealth/crates/commonwealth-core",
@@ -53,6 +54,7 @@ sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
+sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
 commonwealth-inference = { path = "commonwealth/crates/commonwealth-inference" }

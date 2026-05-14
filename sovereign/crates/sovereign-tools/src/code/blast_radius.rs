@@ -45,11 +45,18 @@ pub struct BlastRadiusTool {
     /// Optional project root for the supplementary macro text scan.
     project_root: Option<PathBuf>,
     checker: Option<Arc<IndexHealthChecker>>,
+    /// Optional work-atlas handle. When present, every response
+    /// gains a `concurrent` field listing live claims overlapping
+    /// the queried symbol. When absent, `concurrent` is an empty
+    /// array (the field is always present per the spec §8 —
+    /// "present-but-possibly-empty on every response, never
+    /// conditionally omitted").
+    atlas: Option<Arc<sovereign_work_atlas::WorkAtlasStore>>,
 }
 
 impl BlastRadiusTool {
     pub fn new(graph: ScipGraphHandleRef) -> Self {
-        Self { graph, project_root: None, checker: None }
+        Self { graph, project_root: None, checker: None, atlas: None }
     }
 
     /// Enable the supplementary macro text scan. Call this when the project
@@ -66,6 +73,51 @@ impl BlastRadiusTool {
     pub fn with_health_checker(mut self, checker: Arc<IndexHealthChecker>) -> Self {
         self.checker = Some(checker);
         self
+    }
+
+    /// Attach the work-atlas store. When present, blast responses
+    /// gain a `concurrent` field listing live claims on the queried
+    /// symbol — spec §8.
+    pub fn with_atlas(mut self, atlas: Arc<sovereign_work_atlas::WorkAtlasStore>) -> Self {
+        self.atlas = Some(atlas);
+        self
+    }
+
+    /// Look up live claims on `symbol` from the work atlas. Returns
+    /// an empty array when no atlas is wired, when no claims match,
+    /// or when the store errors — this enrichment must never fail
+    /// the main blast call. Past-TTL claims are filtered out.
+    fn atlas_concurrent_claims(&self, symbol: &str) -> Vec<serde_json::Value> {
+        let Some(atlas) = self.atlas.as_ref() else {
+            return Vec::new();
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        match atlas.list_claims_for_scope(symbol, sovereign_work_atlas::store::ScopeMatch::Symbol) {
+            Ok(claims) => claims
+                .into_iter()
+                .filter(|c| c.ttl_expires_at >= now)
+                .map(|c| {
+                    let node_id = atlas
+                        .get_session(c.session_id)
+                        .ok()
+                        .flatten()
+                        .map(|s| s.node_id.to_string());
+                    json!({
+                        "claim_id":   c.claim_id.to_string(),
+                        "session_id": c.session_id.to_string(),
+                        "intent":     c.intent,
+                        "node_id":    node_id,
+                    })
+                })
+                .collect(),
+            Err(e) => {
+                tracing::debug!(error = %e, "blast: atlas lookup failed; emitting empty concurrent");
+                Vec::new()
+            }
+        }
     }
 }
 
@@ -132,6 +184,8 @@ impl Tool for BlastRadiusTool {
                     "total_callers":  { "type": "integer" },
                     "levels":         { "type": "array", "items": { "type": "object" } },
                     "macro_hints":    { "type": "array", "items": { "type": "string" } },
+                    "concurrent":     { "type": "array", "items": { "type": "object" },
+                                        "description": "Live work-atlas claims on this symbol (present-but-possibly-empty)." },
                     "health":         { "type": "string", "enum": ["ok", "stale", "missing"] }
                 }
             })),
@@ -188,6 +242,11 @@ impl Tool for BlastRadiusTool {
         let macro_hints = self.project_root.as_ref()
             .map(|root| macro_scan(symbol, root, 20));
 
+        // Spec §8: every blast response carries a `concurrent` field,
+        // possibly empty, listing live claims on this symbol from the
+        // work atlas. Read-only — never errors out the main response.
+        let concurrent = self.atlas_concurrent_claims(symbol);
+
         if result.entries.is_empty() {
             let mut obj = json!({
                 "symbol": symbol,
@@ -197,6 +256,7 @@ impl Tool for BlastRadiusTool {
                 "capped": false,
                 "depth_reached": 0,
                 "staleness": staleness_label(&result.caution),
+                "concurrent": concurrent.clone(),
                 "hint": "No SCIP callers found — symbol may be unused, unexported, \
                          or not yet in the call graph. Public symbols with zero SCIP callers \
                          are often referenced through macros: check macro_hints below, or \
@@ -231,7 +291,8 @@ impl Tool for BlastRadiusTool {
             "capped": result.capped,
             "depth_reached": result.depth_reached,
             "staleness": staleness_label(&result.caution),
-            "staleness_note": result.caution.format_note().trim().to_string()
+            "staleness_note": result.caution.format_note().trim().to_string(),
+            "concurrent": concurrent,
         });
         if let Some(hints) = macro_hints {
             if !hints.is_empty() {

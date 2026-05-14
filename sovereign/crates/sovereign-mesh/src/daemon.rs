@@ -143,6 +143,14 @@ pub struct EmbeddedDaemon {
     /// rendering. `None` means conversation chunks render with no
     /// title metadata; the surface still shows the chunk text.
     state_store: RwLock<Option<Arc<dyn StateStore>>>,
+    /// Optional `MeshStore` injected by the bootstrap. When set, the
+    /// daemon uses this for `AppState.mesh_store` instead of building
+    /// its own in-memory instance — letting other subsystems (e.g.
+    /// the work atlas) write into the SAME store the gossip layer
+    /// publishes from. Same injection timing as `set_corpus_engine`:
+    /// set during bootstrap before `start_daemon`. When `None`,
+    /// `start_daemon` falls back to the legacy in-memory MeshStore.
+    mesh_store: RwLock<Option<Arc<commonwealth_state::MeshStore>>>,
 }
 
 enum DaemonState {
@@ -213,7 +221,17 @@ impl EmbeddedDaemon {
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
+            mesh_store: RwLock::new(None),
         }
+    }
+
+    /// Inject a `MeshStore` for the daemon to use as `AppState.mesh_store`.
+    /// Call before `start_daemon`. Lets the bootstrap pre-construct a
+    /// shared `Arc<MeshStore>` and hand the same handle to other
+    /// subsystems (e.g. the work atlas) so writes from those modules
+    /// reach the gossip layer's `all_entries_for_gossip` enumeration.
+    pub async fn set_mesh_store(&self, store: Arc<commonwealth_state::MeshStore>) {
+        *self.mesh_store.write().await = Some(store);
     }
 
     /// Legacy constructor that doesn't persist — use only in tests
@@ -237,6 +255,7 @@ impl EmbeddedDaemon {
             provider_factory: RwLock::new(None),
             join_key_plaintext: RwLock::new(None),
             state_store: RwLock::new(None),
+            mesh_store: RwLock::new(None),
         }
     }
 
@@ -1154,14 +1173,19 @@ impl EmbeddedDaemon {
         // (if one was installed via `set_corpus_engine`). Without
         // this, Commonwealth's knowledge handlers can only return
         // stubs — the whole reason Peer A couldn't see Peer B's SEP
-        // corpus. The MeshStore is in-memory here; the desktop's
-        // long-term persistence story for mesh state still goes
-        // through `mesh.json` on disk, not through MeshStore.
+        // corpus. The MeshStore defaults to in-memory; bootstraps
+        // that want shared access (e.g. the work atlas reading from
+        // the same store gossip publishes from) inject one via
+        // `set_mesh_store` before this point. Long-term persistence
+        // for the legacy mesh state still flows through `mesh.json`.
         let corpus_engine = self.corpus_engine.read().await.clone();
-        let mesh_store = Arc::new(
-            commonwealth_state::MeshStore::in_memory()
-                .expect("in-memory MeshStore failed"),
-        );
+        let mesh_store = match self.mesh_store.read().await.clone() {
+            Some(provided) => provided,
+            None => Arc::new(
+                commonwealth_state::MeshStore::in_memory()
+                    .expect("in-memory MeshStore failed"),
+            ),
+        };
         let app_registry = Arc::new(commonwealth_app::registry::AppRegistry::new());
         let app_state = AppState::new_with_platform_and_engine(
             node_id,

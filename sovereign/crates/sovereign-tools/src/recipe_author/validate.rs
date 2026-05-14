@@ -145,6 +145,7 @@ mod tests {
             task_id: None,
             working_directory: None,
             in_reasoning_loop: false,
+            agent_session_token: None,
         }
     }
 

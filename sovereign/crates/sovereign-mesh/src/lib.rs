@@ -45,8 +45,10 @@ pub mod state;
 pub mod types;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
+pub mod work_atlas_broadcaster;
 
 pub use daemon::EmbeddedDaemon;
+pub use work_atlas_broadcaster::MeshBroadcaster;
 pub use deep_link::{DeepLink, parse_deep_link};
 pub use state::MeshState;
 pub use types::*;
