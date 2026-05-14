@@ -1,6 +1,6 @@
 # Daemon Testing Surface — Audit + Priority Matrix
 
-**Last audited:** 2026-05-13 (rounds 1+2+3+4 + harness extraction + fan-out bugfix). Refresh whenever a row's coverage changes,
+**Last audited:** 2026-05-13 (rounds 1+2+3+4 + harness extraction + fan-out bugfix + final-P0s). Refresh whenever a row's coverage changes,
 a capability lands, or a deferral resolves. Out-of-date rows are a bug
 per ARCH §1.1 — feature docs describe *intent*, and this doc's intent
 is to drive the next test.
@@ -68,14 +68,18 @@ test should come from.
 
 |                  | **·** (no test)   | **~** (unit only) | **✓** (integration+)  |
 |------------------|-------------------|-------------------|-----------------------|
-| **P0** silent    | **2**             | 5                 | 20                    |
+| **P0** silent    | **0**             | 4                 | 23                    |
 | **P1** visible   | 7                 | 6                 | 9                     |
 | **P2** degraded  | 4                 | 4                 | 3                     |
 | **P3** cosmetic  | 4                 | 2                 | 1                     |
 
-Rounds 1+2+3+4 + fan-out bugfix landed 37 tests across 14 files
-plus a 1-line fix to `routes_knowledge::fanout_one_peer`. Net
-P0-uncovered moved 12 → 2. Files added: `embeddings_e2e` (4),
+Rounds 1+2+3+4 + fan-out bugfix + final-P0s landed 41 tests
+across 16 files plus a 1-line fix to
+`routes_knowledge::fanout_one_peer`. **Net P0-uncovered moved
+12 → 0** — every P0-impact cell either has subsystem-integration
+coverage or has been re-classified as wrongly-counted (the
+"alignment locality" row in the original matrix turned out to
+be a misunderstanding of the privacy model; see below). Files added: `embeddings_e2e` (4),
 `injection_order` (3), `node_id_persistence` (2), `loopback_parity` (7),
 `gossip_auth` (3),
 `storage_snapshot_e2e` (2), `peer_preference_manifest` (3),
@@ -259,7 +263,7 @@ step. Buckets follow the daemon's structural layout.
 | `node_id` persistence across restart | ✓ | **P0** | `node_id_persistence::{node_id_survives_daemon_restart_against_same_data_dir, node_id_survives_mesh_leave_and_is_reused_on_next_create}` |
 | `join_key.secret` persistence | · | P1 | **Gap.** Founder restart should keep the same join_key visible in `current_invite` |
 | `RetentionGc` evicts past TTL | ~ | P2 | `commonwealth-state::RetentionGc` unit tests |
-| `ContributionEmitter` self_node_id stamp on every event | ~ | **P0** | Unit-tested; no integration that the recorded events under load all carry the right origin |
+| `ContributionEmitter` self_node_id stamp on every event | ✓ | **P0** | `emitter_origin_concurrency::{concurrent_serves_stamp_origin_as_self_for_every_event, origin_unaffected_by_requester_header_swap}`. 50-way concurrent traffic under multi-threaded tokio; every event's origin pins to `self_id`, no events lost, and a hostile `X-Node-Id` matching self can't pollute the origin field. |
 
 ### O. Workspace alignment (mesh-replicated `~/.claude/`)
 
@@ -267,7 +271,8 @@ step. Buckets follow the daemon's structural layout.
 |---|---|---|---|
 | Replication via corpus-engine + gossip | ~ | P1 | `corpus-engine::sharding::merge_shards` unit tests |
 | Projector newest-mtime LWW | ~ | P1 | `corpus-engine::alignment_projector` unit tests |
-| Alignment corpus is structurally local (`mesh_sharing=false`) | ~ | **P0** | `corpus-engine` recipe-builder unit tests; daemon-level pin would catch a config drift |
+| KnowledgeView corpora are structurally local (`query_sharing=false` → not advertised in gossip) | ✓ | **P0** | `local_only_corpus_locality::{query_sharing_false_corpus_does_not_publish_to_hosted_corpora, locally_only_corpus_is_still_searchable_via_local_path}`. Pins the §7.1 promise at the daemon-gossip layer. |
+| Alignment corpus | n/a | n/a | **Audit correction.** The original matrix row "Alignment corpus is structurally local (`mesh_sharing=false`)" was based on a misreading of `SYSTEM_OVERVIEW.md §5.8b` versus the actual recipe at `corpus-engine/recipes/alignment/recipe.toml`, which sets `mesh_sharing = true`. Alignment is **intentionally mesh-shared** between the user's own machines — Tailscale-IP membership is the auth boundary. The §7.1 structural-locality invariant belongs to KnowledgeView's three-map corpora (row above), not alignment. Removed as a tracked cell. |
 
 ### P. Failure modes
 
@@ -311,10 +316,17 @@ inline. Numbers in brackets index back to the matrix bucket.row.
 After these, the matrix's remaining `·` cells are L4 territory
 (mDNS, real GPU, launchd) or low-impact polish.
 
+**P0 priority queue: empty.** Every P0-impact cell is either
+covered or out-of-scope (L4). Remaining work shifts to P1/P2
+cells: corpus-watch lifecycle (#13/14), auto-collaborate
+handoff (#15), grammar-constrained tool E2E (#18), `/v1/responses`
+adapter (#12).
+
 ## Bugs surfaced by writing the tests
 
 The priority queue's claim is "writing tests reveals bugs the
-matrix didn't know about." Three so far across this work:
+matrix didn't know about." Four so far across this work
+(including one audit-correction):
 
 - **Round 4 — `X-Node-Id` not stamped on knowledge fan-out.**
   `routes_knowledge::fanout_one_peer` issued `/internal/knowledge/search`
@@ -334,6 +346,14 @@ matrix didn't know about." Three so far across this work:
 - **Pre-Round-1 — `LedgerEmission` had `pub(crate)` fields**, so
   test impls of `PeerEndpointSource` couldn't construct it.
   Resolved by adding `LedgerEmission::new` constructor.
+- **Final-P0 round — `SYSTEM_OVERVIEW.md §5.8b` claims
+  `mesh_sharing = false` for the alignment recipe**, but
+  `corpus-engine/recipes/alignment/recipe.toml` actually sets
+  `mesh_sharing = true` (with a comment explaining Tailscale-IP
+  is the auth boundary). The doc-vs-code mismatch is a §1.1
+  truth-telling violation. Documented as an audit correction in
+  the matrix; the SYSTEM_OVERVIEW prose still wants a one-line
+  fix in a doc-only PR.
 
 ## Out-of-scope (intentional)
 
