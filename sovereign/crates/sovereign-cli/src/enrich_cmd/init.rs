@@ -28,7 +28,7 @@ use super::inference_client::{probe_daemon, resolve_default_models};
 use super::paths;
 use super::templates;
 use crate::util::help::{self, Help, HelpSection};
-use crate::util::prompts::confirm;
+use crate::util::prompts::{confirm, stdin_is_tty};
 use crate::util::urls::DEFAULT_CLIENT_PORT;
 
 const HELP: Help = Help {
@@ -291,6 +291,22 @@ pub async fn cmd_init(args: &[String]) -> i32 {
             "      but `sovereign enrich extract` will fail until the daemon is up."
         );
         if parsed.chat_model.is_none() || parsed.embed_model.is_none() {
+            // Non-interactive context (pipeline driver, CI, redirected
+            // stdin): never prompt — there's no human to answer, and
+            // two concurrent pipeline children sharing a tty would
+            // each block forever in `n_tty_read`. Fail cleanly with a
+            // non-zero exit so the orchestrator's retry loop can
+            // re-claim the unit when the daemon is up; the probe has
+            // a 500ms timeout and momentary CPU contention (two
+            // parallel parquet loads) is enough to trip it
+            // intermittently.
+            if !stdin_is_tty() {
+                eprintln!(
+                    "      stdin is not a terminal — refusing to prompt. Either start \
+                     the daemon and retry, or re-invoke with --chat-model + --embed-model."
+                );
+                return 2;
+            }
             if !confirm(
                 "  Continue without a running daemon and pick sensible defaults?",
                 false,
