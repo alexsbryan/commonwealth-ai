@@ -257,9 +257,11 @@ pub async fn knowledge_search(
             let query_embedding = request.query_embedding.clone();
             let query_text = request.query_text.clone();
             let limit_u32 = request.effective_limit();
+            let requester_id = self_id;
             futures.push(tokio::spawn(async move {
                 fanout_one_peer(
                     http,
+                    requester_id,
                     node_id,
                     node_name,
                     addrs,
@@ -346,8 +348,21 @@ enum PeerOutcome {
 /// gossip and the join handshake). Any successful response is
 /// annotated with the peer's id/name so the caller's merge step
 /// can surface attribution to the UI.
+///
+/// `requester_id` is THIS daemon's `self_node_id`. It rides on the
+/// outbound `X-Node-Id` header so the peer's
+/// `routes_internal::knowledge_search` can stamp emitted
+/// `KnowledgeQueryServed` events with the correct `for_node`.
+/// Without this stamp, peer-side ledger emission silently skips
+/// every fan-out request (`parse_x_node_id` returns `None` →
+/// emission gated off) and the §10 intra-mesh accounting contract
+/// is broken in the most common case. The single-daemon test
+/// `knowledge_served_e2e` exercises the post-stamp emission path;
+/// the two-daemon `knowledge_fanout_e2e::fan_out_stamps_x_node_id_so_peer_emits_ledger`
+/// test pins this header-stamping contract end-to-end.
 async fn fanout_one_peer(
     http: reqwest::Client,
+    requester_id: NodeId,
     node_id: NodeId,
     node_name: String,
     addresses: Vec<SocketAddr>,
@@ -362,6 +377,15 @@ async fn fanout_one_peer(
         corpora: Some(corpora.clone()),
         limit: Some(limit),
     };
+    // Hex-encode the requester id for the `X-Node-Id` header.
+    // Matches the format `commonwealth_api::headers::parse_x_node_id`
+    // expects (32 hex chars, lowercase). One small allocation per
+    // peer per query; the OICP wire shape already costs more.
+    let requester_hex: String = requester_id
+        .as_bytes()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     // Reorder the peer's addresses to put the most-recently-working
     // one first. Mirrors gossip's `last_working_address_cache` (we
     // can't import it directly without a cyclic dep, so this cache
@@ -381,7 +405,13 @@ async fn fanout_one_peer(
     };
     for addr in &ordered {
         let url = format!("http://{addr}/internal/knowledge/search");
-        match http.post(&url).json(&body).send().await {
+        match http
+            .post(&url)
+            .header("X-Node-Id", &requester_hex)
+            .json(&body)
+            .send()
+            .await
+        {
             Ok(resp) if resp.status().is_success() => {
                 match resp.json::<KnowledgeSearchResponse>().await {
                     Ok(parsed) => {
