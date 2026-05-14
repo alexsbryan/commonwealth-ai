@@ -26,7 +26,18 @@ use std::path::PathBuf;
 /// Returns `default_yes` on EOF or read error — the user has no way to
 /// tell us "cancel" without typing, so we fall back to the polite
 /// default.
+///
+/// Non-tty stdin (pipeline driver, CI, `< /dev/null`) is treated as
+/// EOF and returns `default_yes` *without* attempting to read. The
+/// original contract ("callers should pre-check is_terminal") was
+/// load-bearing — when two pipeline children inherited the same
+/// `/dev/pts/0` and both fell into this call, both blocked in
+/// `n_tty_read` forever instead of seeing an EOF. Self-enforcing
+/// the contract here makes that deadlock structurally impossible.
 pub fn confirm(prompt: &str, default_yes: bool) -> bool {
+    if !io::stdin().is_terminal() {
+        return default_yes;
+    }
     let hint = if default_yes { "[Y/n]" } else { "[y/N]" };
     eprint!("{prompt} {hint} ");
     io::stderr().flush().ok();
@@ -166,5 +177,19 @@ mod tests {
     fn strip_quoting_handles_empty_input() {
         assert_eq!(strip_quoting(""), "");
         assert_eq!(strip_quoting("'"), "'");
+    }
+
+    #[test]
+    fn confirm_returns_default_without_reading_in_non_tty() {
+        // `cargo test` always runs with stdin redirected (non-tty), so
+        // entering `confirm()` here would historically have hit
+        // `read_line(...) == 0` and returned the default after an EOF.
+        // The fix short-circuits the read entirely when stdin isn't a
+        // terminal — what we're pinning is the no-deadlock property:
+        // this test would never finish if `confirm()` blocked on tty
+        // input. The return value matches the documented contract
+        // ("EOF or read error → default_yes").
+        assert!(confirm("ignored", true));
+        assert!(!confirm("ignored", false));
     }
 }

@@ -768,6 +768,20 @@ Code specialist shares the Main slot's lazy chat mutex (hot-swap on hint
 switch); only one of {Main, Code} resident at a time. The Embed slot stays
 on its own `Arc<EmbedSlot>` (cross-peer contract; never folded into chat).
 
+**Optional Main sibling pool (experimental, off by default).** Setting
+`SOVEREIGN_PRIMARY_SIBLINGS=N` (N≥2) eager-loads N independent Main
+`LlamaContext`s sharing one `Arc<LlamaModel>` — weights are loaded once;
+each sibling pays only its own KV cache. Non-streaming chat-completion
+dispatch then round-robins across siblings so `N` callers can be in
+`generate_sync` concurrently instead of serialising on a single
+`Mutex<SlotContext>`. Streaming, embed, rerank, and the warm-load helper
+continue to use the single lazy slot. Incompatible with a configured Code
+specialist (which expects to hot-swap one resident model); construction
+refuses to start when both are configured. Intended for measuring
+throughput on a single fat node (e.g., Strix Halo's 124 GiB GTT) without
+relying on mesh peers — see `embedded.rs::primary_siblings_env` and the
+`PrimarySiblingPool` struct for the contract.
+
 `models.toml` — five hardware profiles (`cpu_only`, `low_mem`, `default`,
 `high`, `very_high`) each declare `repo`, `file`, `family`, `quant`,
 `size_gb`, `thinking`. Per-slot `quirks_override` tunes family defaults.

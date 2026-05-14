@@ -107,6 +107,75 @@ fn inference_deadline_secs() -> u64 {
     })
 }
 
+/// Operator-declared primary-slot sibling count.
+///
+/// Set `SOVEREIGN_PRIMARY_SIBLINGS=N` with N≥2 to eager-load N
+/// independent primary `LlamaContext`s sharing one `Arc<LlamaModel>`
+/// (weights are not duplicated; each sibling pays only its own KV
+/// cache). Non-streaming chat-completion dispatch then round-robins
+/// across siblings so two callers can actually generate in parallel
+/// instead of serialising on the lazy slot's single `Mutex<Context>`.
+///
+/// Returns `None` for absent / unparseable / `0` / `1` — in any of
+/// those cases the daemon keeps its single-context lazy behaviour
+/// and the change is a no-op.
+///
+/// Scope (intentional, experimental):
+///   - Sibling pool covers `SlotTarget::Primary` non-streaming
+///     completion only. Streaming, embed, rerank, and the lazy
+///     warm-load helper continue to use the single lazy slot.
+///   - Incompatible with `code_path`: the Code specialist relies on
+///     hot-swapping the lazy slot's one resident model. Mixing the
+///     two would require hot-swapping every sibling on a hint
+///     transition. Startup fails with a clear message when both are
+///     configured.
+fn parse_primary_siblings(raw: Option<&str>) -> Option<std::num::NonZeroU32> {
+    let n: u32 = raw?.trim().parse().ok()?;
+    if n <= 1 {
+        return None;
+    }
+    std::num::NonZeroU32::new(n)
+}
+
+fn primary_siblings_env() -> Option<std::num::NonZeroU32> {
+    parse_primary_siblings(std::env::var("SOVEREIGN_PRIMARY_SIBLINGS").ok().as_deref())
+}
+
+/// Eager-loaded pool of primary contexts. All siblings share one
+/// `Arc<LlamaModel>` (no weight duplication); each owns its own
+/// `LlamaContext` + `Mutex<SlotContext>` + `inflight` permit, so
+/// `pool.len()` callers can be in `generate_sync` concurrently.
+///
+/// Memory cost is therefore additive in KV cache only — for a
+/// 35B-A3B Q4 at `n_ctx=32768`, that's a few GB per sibling on top
+/// of the one-time ~22 GB weight load. On Strix Halo Vulkan
+/// (124 GiB GTT) 2–4 siblings is comfortable; tighter hardware
+/// should keep N low and watch resident-size in `daemon.out`.
+///
+/// Dispatch picks siblings round-robin. A more sophisticated
+/// "least-loaded" policy could read each sibling's
+/// `inflight.available_permits()`, but for the SEP-ingest workload
+/// (uniform per-call cost) round-robin is already optimal and the
+/// atomic counter is wait-free.
+struct PrimarySiblingPool {
+    slots: Vec<Arc<ModelSlot>>,
+    next: std::sync::atomic::AtomicUsize,
+}
+
+impl PrimarySiblingPool {
+    fn pick(&self) -> (usize, Arc<ModelSlot>) {
+        let i = self
+            .next
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            % self.slots.len();
+        (i, Arc::clone(&self.slots[i]))
+    }
+
+    fn len(&self) -> usize {
+        self.slots.len()
+    }
+}
+
 impl ModelSlot {
     fn load(
         backend: &Arc<LlamaBackend>,
@@ -2683,6 +2752,17 @@ pub struct EmbeddedLlamaCpp {
     /// hot-swap and generation. See `ModelSlot::inflight` for the
     /// rationale.
     lazy_inflight: Arc<tokio::sync::Semaphore>,
+    /// Optional eager-loaded sibling pool for `SlotTarget::Primary`
+    /// non-streaming completion. `None` (the default) leaves
+    /// dispatch on the single-context lazy path — behaviour is
+    /// byte-identical to pre-sibling builds. `Some(pool)` short-
+    /// circuits the lazy path: each call picks a sibling round-
+    /// robin and acquires that sibling's own per-slot `inflight`
+    /// permit, so two callers can be in `generate_sync` at once.
+    /// Built only when `SOVEREIGN_PRIMARY_SIBLINGS=N` (N≥2) is set
+    /// at process start. See `primary_siblings_env` for the
+    /// rationale and incompatibility with `code_path`.
+    primary_pool: Option<Arc<PrimarySiblingPool>>,
 }
 
 /// Internal state for the operator-declared extras lineup. Held
@@ -3012,6 +3092,75 @@ impl EmbeddedLlamaCpp {
             );
         }
 
+        // Optional primary-slot sibling pool — see
+        // `primary_siblings_env` for the rationale. Build at most
+        // once, eagerly, before assembling the struct so any failure
+        // surfaces during daemon startup rather than on first
+        // chat-completion.
+        let primary_pool = if let Some(n) = primary_siblings_env() {
+            let n = n.get() as usize;
+            // Guard rails: siblings only make sense with a real
+            // primary GGUF, and they don't compose with the Code
+            // specialist's hot-swap (which expects to mutate one
+            // resident model).
+            let primary_path = primary_model_path.ok_or_else(|| {
+                Error::Inference(
+                    "SOVEREIGN_PRIMARY_SIBLINGS set but no primary model configured \
+                     — siblings pool requires a primary GGUF to share weights from."
+                        .into(),
+                )
+            })?;
+            if code_model_path.is_some() {
+                return Err(Error::Inference(
+                    "SOVEREIGN_PRIMARY_SIBLINGS is incompatible with a configured \
+                     code specialist (the code slot relies on hot-swapping the lazy \
+                     primary slot, which a sibling pool can't satisfy without \
+                     swapping every sibling at once). Unset one of the two."
+                        .into(),
+                ));
+            }
+            tracing::info!(
+                slot = "primary",
+                siblings = n,
+                path = %primary_path.display(),
+                "building primary sibling pool — loading weights once + N contexts"
+            );
+            let primary_0 = ModelSlot::load(
+                &backend,
+                primary_path,
+                context_size,
+                n_gpu_layers,
+            )?;
+            let shared_model = Arc::clone(&primary_0.model);
+            let shared_id = primary_0.model_id.clone();
+            let shared_size = primary_0.size_bytes;
+            let mut slots: Vec<Arc<ModelSlot>> = Vec::with_capacity(n);
+            slots.push(Arc::new(primary_0));
+            for i in 1..n {
+                let sibling = ModelSlot::from_existing_model(
+                    &backend,
+                    Arc::clone(&shared_model),
+                    shared_id.clone(),
+                    shared_size,
+                    context_size,
+                    /* n_seq_max */ 1,
+                    /* n_ubatch */ 512,
+                )?;
+                tracing::info!(
+                    slot = "primary",
+                    sibling_idx = i,
+                    "primary sibling context ready"
+                );
+                slots.push(Arc::new(sibling));
+            }
+            Some(Arc::new(PrimarySiblingPool {
+                slots,
+                next: std::sync::atomic::AtomicUsize::new(0),
+            }))
+        } else {
+            None
+        };
+
         Ok(Self {
             backend: Arc::clone(&backend),
             fast,
@@ -3033,6 +3182,7 @@ impl EmbeddedLlamaCpp {
             primary_quirks,
             extras: Arc::new(std::sync::RwLock::new(ExtrasState::new())),
             lazy_inflight: Arc::new(tokio::sync::Semaphore::new(1)),
+            primary_pool,
         })
     }
 
@@ -3889,6 +4039,101 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 );
             }
             return result;
+        }
+
+        // Primary sibling pool — opt-in via `SOVEREIGN_PRIMARY_SIBLINGS`.
+        // When present, short-circuits the lazy slot entirely for
+        // `SlotTarget::Primary`: each call picks a sibling round-
+        // robin and runs against its own `Mutex<SlotContext>`, so
+        // `pool.len()` calls can be in `generate_sync` at once.
+        // Construction guarantees the pool is `None` whenever
+        // `code_path` is configured (see `load_full_with_families`),
+        // so `SlotTarget::Code` is never observed on this branch.
+        if matches!(target, SlotTarget::Primary) {
+            if let Some(pool) = self.primary_pool.as_ref() {
+                let (sibling_idx, slot) = pool.pick();
+                let pool_size = pool.len();
+                let quirks = self.primary_quirks.clone();
+                tracing::debug!(
+                    slot = "primary",
+                    sibling_idx,
+                    pool_size,
+                    "dispatching to primary sibling"
+                );
+                let _permit = slot
+                    .inflight
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .map_err(|e| {
+                        Error::Inference(format!("primary sibling permit closed: {e}"))
+                    })?;
+                let request = request.clone();
+                let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
+                    let _permit = _permit;
+                    let start = Instant::now();
+                    slot.last_used
+                        .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                    let mut ctx_lock = slot.context.blocking_lock();
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        ModelSlot::generate_sync(
+                            &slot.model,
+                            &slot.model_id,
+                            &mut ctx_lock.ctx,
+                            &request,
+                            &quirks,
+                        )
+                    }));
+                    let (text, prompt_tokens, completion_tokens) = match result {
+                        Ok(Ok(r)) => r,
+                        Ok(Err(e)) => {
+                            tracing::warn!(
+                                slot = "primary",
+                                sibling_idx,
+                                error = %e,
+                                "inference error"
+                            );
+                            return Err(e);
+                        }
+                        Err(_) => {
+                            tracing::error!(
+                                slot = "primary",
+                                sibling_idx,
+                                "inference panicked — likely context overflow"
+                            );
+                            return Err(Error::Inference(
+                                "Model inference failed: prompt may exceed the model's context window. \
+                                 Try a shorter message or reduce conversation history."
+                                    .to_string(),
+                            ));
+                        }
+                    };
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    Ok(CompletionResponse {
+                        text,
+                        tokens_used: prompt_tokens + completion_tokens,
+                        prompt_tokens,
+                        model_id: slot.model_id.clone(),
+                        latency_ms,
+                        oicp_meta: None,
+                    })
+                })
+                .await
+                .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+                if let Ok(ref resp) = result {
+                    tracing::info!(
+                        slot = "primary",
+                        sibling_idx,
+                        pool_size,
+                        model = %resp.model_id,
+                        latency_ms = resp.latency_ms,
+                        tokens_used = resp.tokens_used,
+                        response_chars = resp.text.len(),
+                        "inference.complete: done"
+                    );
+                }
+                return result;
+            }
         }
 
         // Primary + Code share the lazy slot (hot-swap). Fast uses
@@ -5838,6 +6083,54 @@ fn prop_type_rule(schema: &serde_json::Value) -> &'static str {
         Some("number") => "number",
         Some("boolean") => "boolean",
         _ => "string", // default to string for unknown types
+    }
+}
+
+#[cfg(test)]
+mod primary_siblings_env_tests {
+    //! Pin `SOVEREIGN_PRIMARY_SIBLINGS` parsing — env access is split
+    //! out so this test is pure (no process-env mutation that would
+    //! race with other tests).
+    use super::parse_primary_siblings;
+
+    #[test]
+    fn absent_returns_none() {
+        assert!(parse_primary_siblings(None).is_none());
+    }
+
+    #[test]
+    fn empty_returns_none() {
+        assert!(parse_primary_siblings(Some("")).is_none());
+    }
+
+    #[test]
+    fn zero_and_one_are_treated_as_disabled() {
+        // 0 and 1 both mean "no parallel siblings" — caller stays on
+        // the single-context lazy path. Anything else would be a
+        // confusing footgun for operators who type "1".
+        assert!(parse_primary_siblings(Some("0")).is_none());
+        assert!(parse_primary_siblings(Some("1")).is_none());
+    }
+
+    #[test]
+    fn n_two_and_above_returns_count() {
+        let two = parse_primary_siblings(Some("2")).expect("N=2 should parse");
+        assert_eq!(two.get(), 2);
+        let four = parse_primary_siblings(Some("4")).expect("N=4 should parse");
+        assert_eq!(four.get(), 4);
+    }
+
+    #[test]
+    fn whitespace_is_trimmed() {
+        let n = parse_primary_siblings(Some("  3  ")).expect("N=3 with padding");
+        assert_eq!(n.get(), 3);
+    }
+
+    #[test]
+    fn garbage_returns_none() {
+        assert!(parse_primary_siblings(Some("two")).is_none());
+        assert!(parse_primary_siblings(Some("-1")).is_none());
+        assert!(parse_primary_siblings(Some("3.5")).is_none());
     }
 }
 
