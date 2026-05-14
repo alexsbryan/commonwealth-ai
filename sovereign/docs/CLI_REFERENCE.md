@@ -27,6 +27,7 @@ When invoked without a subcommand, `sovereign` starts an interactive terminal RE
 | `--ingest <path>` | — | Ingest documents from a directory before REPL |
 | `--brave-api-key <key>` | — | Use Brave Search |
 | `--tavily-api-key <key>` | — | Use Tavily Search |
+| `--no-knowledge-view` | enabled | Disable KnowledgeView landscape digests |
 
 Without `--router`, every message gets a direct response. With it, Sovereign classifies intent — simple questions use the fast model, complex requests trigger multi-step planning.
 
@@ -62,7 +63,12 @@ Per-project code intelligence **and** the project-layer half of ATOS (charter + 
 | `phase pass [N]` | Run phase N's stop condition from `PHASES.md`; write `phase-N.md` on green |
 | `audit` | One-page reviewer rollup: founding state, phases passed, notes by kind, open questions, drift status |
 | `register` | Register the project with the sovereign daemon for FS-watch + auto-refresh |
-| `watch status` | Inspect the daemon's watcher state for this project |
+| `unregister` | Remove a project from the daemon's watch list |
+| `list` | List every project the daemon is watching |
+| `watch status\|restart\|logs` | Inspect or control the daemon's watcher for this project |
+| `install-hooks` | **Deprecated** — daemon now owns freshness. Still installs the post-commit hook for legacy workflows |
+
+> `sovereign project status` now forwards to top-level `sovereign status` (old name still works; set `SOVEREIGN_QUIET_DEPRECATIONS=1` to silence the hint).
 
 ### `sovereign mesh`
 
@@ -135,9 +141,13 @@ Diagnose setup and daemon health across Sovereign / Commonwealth / OmO layers.
 | `--watch` | Re-run periodically (every 5s) |
 | `--json` | Emit structured JSON for scripting |
 
-### `sovereign reflect`
+### `sovereign status`
 
-Review session reflections and retire ones that are no longer relevant.
+Top-level health rollup for the current project: code intelligence, daemon, watcher state, drift posture. Replaces `sovereign project status` (old name still forwards here).
+
+### `sovereign reflect` (alias: `sovereign notes`)
+
+Review session reflections and retire ones that are no longer relevant. The canonical name is now `notes`; `reflect` still works.
 
 | Flag | Description |
 |---|---|
@@ -149,13 +159,110 @@ Review session reflections and retire ones that are no longer relevant.
 
 ### `sovereign recipe`
 
-Run corpus ingestion recipes.
+Run and curate corpus ingestion recipes.
 
 | Subcommand | Description |
 |---|---|
-| `list` | List all corpora available in the registry |
-| `test <path>` | Run the full test harness against a recipe file |
-| `validate <path>` | Validate recipe fields without downloading data |
+| `list` | List all corpora available in the registry. `--offline` skips live registry refresh |
+| `test <path>` | Run the full test harness against a recipe file. Flags: `--sample-size N`, `--output <path>`, `--offline`, `--verbose`, `--params k=v[,...]`, `--params-file <json>` |
+| `validate <path>` | Validate recipe fields without downloading data. `--offline` skips registry fetch |
+| `publish <path>` | Add a recipe to `~/.sovereign/recipes/registry.toml`. `--submit-pr` also drafts a community-registry PR via `gh` |
+
+### `sovereign pipeline`
+
+Generic ingestion-pipeline driver — durable worklist + retry + pause-resume. Drives any recipe whose `[enrich].command` is a `{key}`-templated shell command.
+
+| Subcommand | Description |
+|---|---|
+| `run <recipe.toml>` | Seed + sweep + drive the recipe to completion. SIGINT/SIGTERM drains in-flight units, then exits cleanly. Re-running picks up where the previous run left off |
+| `status <recipe-id>` | Print pending/done/failed counts, last-hour throughput, ETA, failure buckets |
+| `list` | List every recipe-id known to the worklist DB |
+| `pod up` | Launch a Vast.ai pod with the sovereign CUDA image, join the mesh, register in the cost ledger |
+| `pod list` | Show every pod the ledger knows about with accrued cost |
+| `pod down <vast-id>` | Destroy a Vast pod, close its ledger entry, print final cost |
+
+Global flags: `--db <path>` (default `~/.sovereign/pipeline.db`), `--seed-only`, `--slugs <path>`, `--key <slug>` (repeatable). Failures bucket into `timeout` / `refused` / `vram_thrash` / `mismatch` / `model_missing` / `unknown` and retry up to `[dispatch].max_attempts` before landing in `failed`. Add an `[schedule]` block with `active_hours = "HH:MM-HH:MM"` to auto-pause outside that window.
+
+### `sovereign atlas`
+
+Atlas-style structural enrichment of an installed corpus (Wikipedia today). Operates against an already-installed corpus index; install first via `sovereign corpus install <id>` or `sovereign recipe`.
+
+| Subcommand | Description |
+|---|---|
+| `wikipedia` | Layer 0: build the link graph from Wikipedia extractor metadata |
+| `budget` | Show or set the per-corpus Tier-2 enrichment budget (top-N articles) |
+| `status` | Per-corpus atlas readiness — atom counts, Tier-2 progress, token spend |
+
+The graph DB lives at `<data-dir>/indexes/<corpus-id>/wikipedia_graph.db`.
+
+### `sovereign bench`
+
+Throughput + correctness benchmarks for enrichment LLM tasks. Operates against the running daemon at `localhost:9741`; the model under test is whichever `[models].primary` the daemon was started with.
+
+| Subcommand | Description |
+|---|---|
+| `atlas` | Run atlas Phase 1 + short-call tasks against the loaded primary model |
+
+See [BENCHMARKING.md](BENCHMARKING.md) for the broader embed-throughput runbook.
+
+### `sovereign eval`
+
+Run a question bank against a corpus and measure retrieval quality. Retrieval-only — does not call the chat model.
+
+| Subcommand | Description |
+|---|---|
+| `run` | Execute a bank and print per-question + rollup scores |
+
+Bank format lives at `sovereign-recipes/<corpus>/eval/*.toml`. Daemon at `localhost:9741` required; override with `--daemon`.
+
+### `sovereign git-archaeology`
+
+Walk a code corpus' git history and emit per-atom provenance + co-evolution edges. Standalone surface; also called from `sovereign drift detect` to fold provenance into the unified drift digest. See [GIT_ARCHAEOLOGY.md](GIT_ARCHAEOLOGY.md).
+
+```
+sovereign git-archaeology <corpus-id> [--source-path <dir>] [--output <md>] [--threshold N] [--min-joint N]
+```
+
+| Flag | Description |
+|---|---|
+| `--source-path <dir>` | Override the source path stamped in `_corpus_meta.json`. Must live inside a git repository |
+| `--output <md>` | Write markdown digest here; JSON sidecar lands at `<output>.json`. Default: stdout for markdown, `~/.sovereign/indexes/<corpus>/atlas/git_archaeology.json` for JSON |
+| `--threshold N` | Co-evolution jaccard threshold in `[0.0, 1.0]`. Default `0.5` |
+| `--min-joint N` | Minimum joint-commit count for a co-evolution pair. Default `5` — drops scaffolding-era false positives |
+
+Reads the structural atlas from `~/.sovereign/indexes/<corpus>/atlas/atoms.json` — build it first via `sovereign enrich ingest <id> --source-corpus <id>`.
+
+### `sovereign archaeology-eval`
+
+Re-verify the claims `git-archaeology` makes against git itself. Witness checks + baseline diff + curated regression cases (inquiries). See [ARCHAEOLOGY_EVAL.md](ARCHAEOLOGY_EVAL.md).
+
+```
+sovereign archaeology-eval <atlas-corpus-id> [--inquiry <toml>...] [--baseline <path>] [--output <md>] [--save-baseline]
+```
+
+| Flag | Description |
+|---|---|
+| `--inquiry <toml>` | Curated regression case (TOML). Repeatable. `file_globs` selects atoms; `keywords` / `authors` / `date_range` add inquiry-specific witnesses |
+| `--baseline <path>` | Previous run's eval report (JSON). Default `~/.sovereign/eval/baselines/<atlas>.eval.json` |
+| `--output <md>` | Markdown report path. Default `~/.sovereign/eval/<atlas>.eval.md` |
+| `--save-baseline` | After running, save current report as new baseline |
+
+Appends one CSV row per run to `~/.sovereign/eval/history.csv`. Exit code is non-zero on any inquiry failure or fabrication — CI-friendly.
+
+### `sovereign drift`
+
+Two surfaces under one verb:
+
+- **`sovereign drift <feature-id>`** / **`sovereign drift accept <feature-id> --reason X`** — ATOS spec drift. Diff approved vs. on-disk `spec.md`; accept current spec as new approved content. Replaces `sovereign atos spec diff` / `spec accept`.
+- **`sovereign drift detect --code <path> --narrative <doc>...`** — narrative-vs-code architectural drift. Produces a unified drift digest. See [DRIFT_DETECTION.md](DRIFT_DETECTION.md).
+
+| `drift detect` flag | Description |
+|---|---|
+| `--code <path>` | **Required.** Path to codebase. Indexed if not cached |
+| `--narrative <doc>` | **Required, repeatable.** Markdown narrative doc; each becomes its own atlas |
+| `--output <md>` | Markdown report path |
+| `--project-id <id>` | Override the project id (default: derived from `--code`) |
+| `--chat-model <slot>` | Chat-slot probe. Default `fast` (scales without primary); pass `primary` for peak quality at ~5–10× wall time |
 
 ### `sovereign mcp`
 

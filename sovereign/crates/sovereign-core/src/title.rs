@@ -97,6 +97,7 @@ pub async fn generate_title_from_messages(
                 tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+    sampling_mode: None,
     };
 
     let response = inference.complete(&request).await?;

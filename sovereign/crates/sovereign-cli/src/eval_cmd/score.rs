@@ -277,6 +277,7 @@ pub async fn score_facts_judge(
             tool_choice: None,
             model_id: None,
             enable_thinking: None,
+        sampling_mode: None,
         };
 
         match inference.complete(&request).await {
@@ -490,6 +491,7 @@ pub async fn score_sources_loose(
         tool_choice: None,
         model_id: None,
         enable_thinking: None,
+    sampling_mode: None,
     };
 
     let mut all_matched = rigid.matched.clone();
@@ -809,6 +811,7 @@ pub async fn score_essay_readiness(
         tool_choice: None,
         model_id: judge_model_override,
         enable_thinking: None,
+    sampling_mode: None,
     };
 
     match inference.complete(&request).await {

@@ -76,6 +76,13 @@ pub struct ChatCompletionRequest {
     /// every turn. See `sovereign_mesh::tool_profile` for semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_profile: Option<String>,
+    /// Commonwealth extension: explicit sampler-profile selector
+    /// (`"instruct"` / `"code"` / `"think"`). Lets callers override
+    /// the inference layer's auto-picker (which infers mode from
+    /// `tools` + `chat_template_kwargs.enable_thinking`). Maps onto
+    /// `sovereign_core::types::SamplingMode` via serde rename.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampling_mode: Option<sovereign_core::types::SamplingMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

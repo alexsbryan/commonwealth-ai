@@ -512,6 +512,7 @@ impl Executor {
                     tool_choice: None,
                                     model_id: None,
                                     enable_thinking: None,
+                sampling_mode: None,
                 };
 
                 // Best-of-N sampling or single completion.
@@ -880,6 +881,7 @@ impl Executor {
                 tool_choice: None,
                             model_id: None,
                             enable_thinking: None,
+            sampling_mode: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -960,6 +962,7 @@ impl Executor {
                 tool_choice: None,
                                     model_id: None,
                                     enable_thinking: None,
+                    sampling_mode: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;
 

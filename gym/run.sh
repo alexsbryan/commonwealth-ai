@@ -98,6 +98,7 @@ score_response() {
         if [[ "$line" =~ ^must_contain: ]]; then in_section="must"; continue; fi
         if [[ "$line" =~ ^must_not_contain: ]]; then in_section="not"; continue; fi
         if [[ "$line" =~ ^content_must_contain_regex: ]]; then in_section="re"; continue; fi
+        if [[ "$line" =~ ^content_must_not_contain_regex: ]]; then in_section="nre"; continue; fi
         if [[ "$line" =~ ^[a-z_]+: ]]; then in_section=""; continue; fi
         if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then continue; fi
         # Item line: `  - "<value>"`
@@ -122,6 +123,12 @@ score_response() {
                 re)
                     if ! echo "$cmd" | grep -qE "$val"; then
                         echo "fail|regex_miss:$val"
+                        return
+                    fi
+                    ;;
+                nre)
+                    if printf '%s' "$cmd" | grep -qE "$val"; then
+                        echo "fail|regex_forbidden:$val"
                         return
                     fi
                     ;;

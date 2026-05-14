@@ -1158,6 +1158,7 @@ Reply with JSON only:
                 tool_choice: None,
                         model_id: None,
                         enable_thinking: None,
+        sampling_mode: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify raw output: {:?}", response.text);
@@ -1219,6 +1220,7 @@ Reply with JSON only:
                 tool_choice: None,
                         model_id: None,
                         enable_thinking: None,
+        sampling_mode: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify_json raw output: {:?}", response.text);
@@ -1260,6 +1262,7 @@ Reply with JSON only:
                 tool_choice: None,
                         model_id: None,
                         enable_thinking: None,
+        sampling_mode: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] tool_select raw output: {:?}", response.text);

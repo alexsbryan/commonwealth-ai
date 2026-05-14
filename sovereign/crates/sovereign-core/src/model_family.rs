@@ -59,13 +59,64 @@ pub struct ModelQuirks {
     /// How thinking mode is controlled for this family, if at all.
     pub thinking: ThinkingControl,
 
-    /// Sampling defaults used when the caller does not specify overrides.
-    /// The Fast slot always receives temperature=0.0, top_k=1 regardless
-    /// of these defaults — those are slot-level, not family-level.
+    /// Sampling defaults — **think** profile (thinking-general).
+    /// Used when the caller has thinking enabled AND no tools are
+    /// present in the request (no coding signal). The Fast slot
+    /// always receives temperature=0.0, top_k=1 regardless of
+    /// these defaults — those are slot-level, not family-level.
     pub default_temperature: f32,
     pub default_top_k: Option<u32>,
     pub default_top_p: f32,
     pub default_presence_penalty: f32,
+    /// Min-p threshold. Qwen card recommends 0.0 (disabled). Older
+    /// llama-cpp tradition was 0.05. Defaults to 0.05 for backwards
+    /// compatibility on families that haven't published a value;
+    /// per-family overrides land here.
+    #[serde(default = "default_min_p_compat")]
+    pub default_min_p: f32,
+    /// Repetition penalty applied to the `LlamaSampler::penalties`
+    /// stage. Qwen card recommends 1.0 (disabled — relies on DRY
+    /// + presence_penalty instead). Older llama-cpp tradition was
+    /// 1.15.
+    #[serde(default = "default_repetition_penalty_compat")]
+    pub default_repetition_penalty: f32,
+    /// Frequency penalty applied to the `LlamaSampler::penalties`
+    /// stage. Qwen card recommends 0.0. Older tradition was 0.1.
+    #[serde(default = "default_frequency_penalty_compat")]
+    pub default_frequency_penalty: f32,
+
+    /// **Instruct** profile (non-thinking). Used when the request
+    /// sets `enable_thinking: false` regardless of whether tools
+    /// are present (codex CLI traffic, atlas Phase 1, etc). Each
+    /// field falls back to its `default_*` sibling when `None`.
+    ///
+    /// Why a separate profile: model cards (Qwen 3.6) publish
+    /// substantively different recommendations per mode — thinking
+    /// uses higher temperature + wider top_p than instruct does.
+    /// Forcing one profile across both wastes capability.
+    #[serde(default)]
+    pub instruct_temperature: Option<f32>,
+    #[serde(default)]
+    pub instruct_top_k: Option<u32>,
+    #[serde(default)]
+    pub instruct_top_p: Option<f32>,
+    #[serde(default)]
+    pub instruct_presence_penalty: Option<f32>,
+
+    /// **Code** profile (thinking + tools). Used when the request
+    /// has both `enable_thinking: true` AND tools present — a
+    /// coding-with-reasoning task. Qwen 3.6 recommends a tighter
+    /// temperature (0.6) and zero presence-penalty for this mode
+    /// vs. thinking-general. Each field falls back to its
+    /// `default_*` sibling when `None`.
+    #[serde(default)]
+    pub code_temperature: Option<f32>,
+    #[serde(default)]
+    pub code_top_k: Option<u32>,
+    #[serde(default)]
+    pub code_top_p: Option<f32>,
+    #[serde(default)]
+    pub code_presence_penalty: Option<f32>,
 
     /// Embedding-specific configuration. None for generative-only families.
     /// Populated only when the slot is the Embed slot.
@@ -129,6 +180,19 @@ pub struct EmbedQuirks {
     pub output_dimensions: usize,
 }
 
+// Backwards-compatible defaults for the three sampler-stage params
+// we just added to ModelQuirks. Used by serde when an existing
+// `models.toml` quirks_override doesn't mention them.
+fn default_min_p_compat() -> f32 {
+    0.05
+}
+fn default_repetition_penalty_compat() -> f32 {
+    1.15
+}
+fn default_frequency_penalty_compat() -> f32 {
+    0.1
+}
+
 impl ModelFamily {
     /// Returns the canonical quirks for this family.
     /// Callers apply quirks_override fields on top of this after parsing.
@@ -139,10 +203,25 @@ impl ModelFamily {
                     enable:  "/think".into(),
                     disable: "/no_think".into(),
                 },
-                default_temperature:      0.6,
+                // Think profile (thinking-general).
+                default_temperature:      1.0,
                 default_top_k:            Some(20),
                 default_top_p:            0.95,
                 default_presence_penalty: 1.5,
+                // Qwen card recommends these across all three modes.
+                default_min_p:             0.0,
+                default_repetition_penalty: 1.0,
+                default_frequency_penalty:  0.0,
+                // Instruct profile (thinking off).
+                instruct_temperature:      Some(0.7),
+                instruct_top_k:            Some(20),
+                instruct_top_p:            Some(0.80),
+                instruct_presence_penalty: Some(1.5),
+                // Code profile (thinking + tools).
+                code_temperature:      Some(0.6),
+                code_top_k:            Some(20),
+                code_top_p:            Some(0.95),
+                code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
             },
@@ -159,6 +238,17 @@ impl ModelFamily {
                 default_top_k:            Some(20),
                 default_top_p:            0.95,
                 default_presence_penalty: 1.5,
+                default_min_p:              0.0,
+                default_repetition_penalty: 1.0,
+                default_frequency_penalty:  0.0,
+                instruct_temperature:      Some(0.7),
+                instruct_top_k:            Some(20),
+                instruct_top_p:            Some(0.80),
+                instruct_presence_penalty: Some(1.5),
+                code_temperature:      Some(0.6),
+                code_top_k:            Some(20),
+                code_top_p:            Some(0.95),
+                code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
             },
@@ -174,6 +264,19 @@ impl ModelFamily {
                 default_top_k:            Option::None,
                 default_top_p:            1.0,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: Some(EmbedQuirks {
                     pooling:              PoolingStrategy::Last,
                     normalize:            NormalizationStrategy::Application,
@@ -193,6 +296,19 @@ impl ModelFamily {
                 default_top_k:            Some(64),
                 default_top_p:            0.95,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: None,
                 rerank: None,
             },
@@ -207,6 +323,19 @@ impl ModelFamily {
                 default_top_k:            Some(64),
                 default_top_p:            0.95,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: None,
                 rerank: None,
             },
@@ -217,6 +346,19 @@ impl ModelFamily {
                 default_top_k:            Option::None,
                 default_top_p:            0.9,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: None,
                 rerank: None,
             },
@@ -227,6 +369,19 @@ impl ModelFamily {
                 default_top_k:            Option::None,
                 default_top_p:            1.0,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: None,
                 rerank: None,
             },
@@ -241,6 +396,19 @@ impl ModelFamily {
                 default_top_k:            Option::None,
                 default_top_p:            0.95,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: None,
                 rerank: None,
             },
@@ -258,6 +426,19 @@ impl ModelFamily {
                 default_top_k:            Option::None,
                 default_top_p:            1.0,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: None,
                 rerank: Some(RerankQuirks {
                     max_context: 8192,
@@ -276,6 +457,19 @@ impl ModelFamily {
                 default_top_k:            Option::None,
                 default_top_p:            0.9,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: None,
                 rerank: None,
             },
@@ -289,6 +483,19 @@ impl ModelFamily {
                 default_top_k:            Option::None,
                 default_top_p:            0.9,
                 default_presence_penalty: 0.0,
+                // llama-cpp tradition defaults for sampler-stage
+                // params not on this family's card.
+                default_min_p:              0.05,
+                default_repetition_penalty: 1.15,
+                default_frequency_penalty:  0.1,
+                instruct_temperature:      None,
+                instruct_top_k:            None,
+                instruct_top_p:            None,
+                instruct_presence_penalty: None,
+                code_temperature:      None,
+                code_top_k:            None,
+                code_top_p:            None,
+                code_presence_penalty: None,
                 embed: None,
                 rerank: None,
             },

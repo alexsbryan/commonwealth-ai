@@ -158,6 +158,7 @@ impl DocumentOperationTool {
             tool_choice: None,
                                 model_id: None,
                                 enable_thinking: None,
+                    sampling_mode: None,
                     }
                 })
                 .collect();
@@ -304,6 +305,7 @@ impl DocumentOperationTool {
             tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+        sampling_mode: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -343,6 +345,7 @@ impl DocumentOperationTool {
             tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+        sampling_mode: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -586,6 +589,7 @@ impl DocumentOperationTool {
             tool_choice: None,
                         model_id: None,
                         enable_thinking: None,
+            sampling_mode: None,
             };
 
             self.inference.complete(&request).await?.text

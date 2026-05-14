@@ -148,6 +148,37 @@ pub struct CompletionRequest {
     /// applied at `embedded::apply_chat_template_oaicompat` time.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub enable_thinking: Option<bool>,
+
+    /// Explicit sampler-profile override. When set, takes precedence
+    /// over the inference layer's mode picker (which infers from
+    /// `enable_thinking` + tools presence). Lets non-codex callers
+    /// (atlas pipelines, ATOS, eval harnesses) declare exactly which
+    /// profile they want without spoofing the inference-layer signals.
+    ///
+    /// Wire path: serialized as `"sampling_mode": "instruct"` / `"code"`
+    /// / `"think"` on the request body. Inference layer maps this
+    /// onto `ModelQuirks.instruct_*` / `code_*` / `default_*` blocks
+    /// in `build_sampler`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sampling_mode: Option<SamplingMode>,
+}
+
+/// Sampler-profile selector. Mirrored in the inference layer's
+/// internal enum — when `CompletionRequest.sampling_mode` is set,
+/// `build_sampler` reads this value and picks the matching
+/// `ModelQuirks.<mode>_*` block, overriding the auto-picker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SamplingMode {
+    /// Tool-picking / non-thinking general work. Qwen instruct
+    /// profile (T=0.7, top_p=0.80, presence=1.5 on Qwen3).
+    Instruct,
+    /// Composing code or structured output. Qwen thinking-coding
+    /// profile (T=0.6, top_p=0.95, presence=0.0 on Qwen3).
+    Code,
+    /// General reasoning. Qwen thinking-general profile (T=1.0,
+    /// top_p=0.95, presence=1.5 on Qwen3).
+    Think,
 }
 
 /// JSON-Schema view of a function the model may call. Mirrors
@@ -179,6 +210,7 @@ impl CompletionRequest {
             tool_choice: None,
             model_id: None,
             enable_thinking: None,
+            sampling_mode: None,
         }
     }
 
@@ -224,6 +256,7 @@ impl CompletionRequest {
             tool_choice: None,
             model_id: None,
             enable_thinking: None,
+            sampling_mode: None,
         }
     }
 }

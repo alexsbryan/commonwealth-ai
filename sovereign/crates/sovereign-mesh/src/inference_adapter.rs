@@ -337,6 +337,7 @@ impl SovereignInferenceAdapter {
         req.max_tokens = request.max_tokens.map(|n| n as usize);
         req.temperature = request.temperature;
         req.top_p = request.top_p;
+        req.sampling_mode = request.sampling_mode;
         // Forward the Commonwealth `think_budget` extension. The
         // daemon's `format_prompt` reads `req.think_budget == Some(0)`
         // to inject `/no_think` for SystemPromptToken thinking
@@ -1163,6 +1164,7 @@ mod adapter_translation_tests {
                     chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
+        sampling_mode: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -1195,6 +1197,7 @@ mod adapter_translation_tests {
                     chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
+        sampling_mode: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -1222,6 +1225,7 @@ mod adapter_translation_tests {
                     chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
+        sampling_mode: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
@@ -1274,6 +1278,7 @@ mod adapter_translation_tests {
             chat_template_kwargs: None,
             think_budget,
             tool_profile: None,
+        sampling_mode: None,
         }
     }
 
@@ -1332,6 +1337,7 @@ mod adapter_translation_tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
+        sampling_mode: None,
         }
     }
 

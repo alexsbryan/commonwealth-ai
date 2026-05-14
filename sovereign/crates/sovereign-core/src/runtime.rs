@@ -2370,6 +2370,7 @@ pub(crate) async fn run_collaboration(
                 tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+    sampling_mode: None,
     };
 
     match inference.complete(&refine_req).await {
@@ -6437,6 +6438,7 @@ impl Runtime {
                     tool_choice: None,
                             model_id: None,
                             enable_thinking: None,
+        sampling_mode: None,
         };
 
         let search_method = kc.search_method;
@@ -7731,6 +7733,7 @@ impl Runtime {
                     tool_choice: None,
                             model_id: None,
                             enable_thinking: final_enable_thinking,
+        sampling_mode: None,
         };
 
         let synth_start = std::time::Instant::now();
@@ -8044,6 +8047,7 @@ impl Runtime {
                 tool_choice: None,
                             model_id: None,
                             enable_thinking: None,
+            sampling_mode: None,
             };
             return KnowledgeQueryPlan {
                 request,
@@ -8217,6 +8221,7 @@ impl Runtime {
                     tool_choice: None,
                                     model_id: None,
                                     enable_thinking: None,
+                sampling_mode: None,
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -8241,6 +8246,7 @@ impl Runtime {
                     tool_choice: None,
                                     model_id: None,
                                     enable_thinking: None,
+                sampling_mode: None,
                 }
             }
         };
@@ -8421,6 +8427,7 @@ impl Runtime {
             tool_choice: None,
             model_id: None,
             enable_thinking: None,
+        sampling_mode: None,
         };
         let completion = self.inference.complete(&request).await?;
         let response_msg = Message {
@@ -8772,6 +8779,7 @@ impl Runtime {
             tool_choice: None,
             model_id: None,
             enable_thinking,
+            sampling_mode: None,
         };
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
@@ -8989,6 +8997,7 @@ impl Runtime {
             tool_choice: None,
             model_id: None,
             enable_thinking,
+            sampling_mode: None,
         };
 
         let _synth_start = std::time::Instant::now();
@@ -9352,6 +9361,7 @@ impl Runtime {
             tool_choice: None,
             model_id: None,
             enable_thinking: None,
+        sampling_mode: None,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -9632,6 +9642,7 @@ impl Runtime {
             tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+        sampling_mode: None,
         };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
@@ -9928,6 +9939,7 @@ impl Runtime {
             tool_choice: None,
                         model_id: None,
                         enable_thinking: None,
+            sampling_mode: None,
             })
             .await?;
 

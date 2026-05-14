@@ -1,0 +1,23 @@
+expected_tool: exec_command
+args_parseable: true
+must_contain:
+  - "apply_patch"
+content_must_contain_regex:
+  - "\\*\\*\\* Begin Patch"
+  - "\\*\\*\\* End Patch"
+  - "\\*\\*\\* Add File:"
+must_not_contain:
+  - "cat "
+  - "find "
+  - "ls "
+# Structural body discipline: after the heredoc canonicalizer runs,
+# every non-empty body line inside an Add File section must start with
+# `+`. These regex check the post-canonicalizer output. If they fire,
+# the canonicalizer let an unprefixed body line through.
+content_must_not_contain_regex:
+  - "(?m)^edition = "
+  - "(?m)^description = "
+  - "(?m)^license = "
+  - "(?m)^name = "
+  - "(?m)^\\[dependencies\\]"
+  - "(?m)^\\[\\[dependencies\\]\\]"
