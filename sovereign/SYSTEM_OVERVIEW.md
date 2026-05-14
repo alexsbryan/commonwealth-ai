@@ -1963,6 +1963,7 @@ Default ports:
 | Rotate daemon logs                               | `sovereign-cli/src/util/log_rotation.rs` (copy-truncate; preserves inode for launchd-held FDs) |
 | Understand the loopback guard                    | `sovereign-mesh/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
+| Pick the next daemon test to write               | `sovereign/docs/TESTING_SURFACE.md` (capability × coverage matrix + priority queue) |
 
 ---
 

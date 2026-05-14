@@ -118,3 +118,8 @@ bytes = "1"
 
 [dev-dependencies]
 tempfile = "3"
+# `tracing-subscriber` is used in integration tests (e.g.
+# `injection_order.rs`) to capture tracing events emitted by the
+# library under test and assert on them. Keeping it scoped to
+# dev-deps so the production binary doesn't pay the inclusion cost.
+tracing-subscriber = { workspace = true }
