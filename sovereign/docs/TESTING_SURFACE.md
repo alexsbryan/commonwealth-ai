@@ -1,6 +1,6 @@
 # Daemon Testing Surface — Audit + Priority Matrix
 
-**Last audited:** 2026-05-13 (rounds 1+2+3+4 + harness extraction + fan-out bugfix + final-P0s). Refresh whenever a row's coverage changes,
+**Last audited:** 2026-05-13 (rounds 1+2+3+4 + harness extraction + fan-out bugfix + final-P0s + **P1/P2 binge**). Refresh whenever a row's coverage changes,
 a capability lands, or a deferral resolves. Out-of-date rows are a bug
 per ARCH §1.1 — feature docs describe *intent*, and this doc's intent
 is to drive the next test.
@@ -69,27 +69,48 @@ test should come from.
 |                  | **·** (no test)   | **~** (unit only) | **✓** (integration+)  |
 |------------------|-------------------|-------------------|-----------------------|
 | **P0** silent    | **0**             | 4                 | 23                    |
-| **P1** visible   | 7                 | 6                 | 9                     |
-| **P2** degraded  | 4                 | 4                 | 3                     |
+| **P1** visible   | **1**             | 6                 | **15**                |
+| **P2** degraded  | **2**             | 4                 | **5**                 |
 | **P3** cosmetic  | 4                 | 2                 | 1                     |
 
-Rounds 1+2+3+4 + fan-out bugfix + final-P0s landed 41 tests
-across 16 files plus a 1-line fix to
-`routes_knowledge::fanout_one_peer`. **Net P0-uncovered moved
-12 → 0** — every P0-impact cell either has subsystem-integration
-coverage or has been re-classified as wrongly-counted (the
-"alignment locality" row in the original matrix turned out to
-be a misunderstanding of the privacy model; see below). Files added: `embeddings_e2e` (4),
-`injection_order` (3), `node_id_persistence` (2), `loopback_parity` (7),
-`gossip_auth` (3),
-`storage_snapshot_e2e` (2), `peer_preference_manifest` (3),
-`finish_reason_streaming` (3). One audit correction in round 3:
-`/v1/admin/reload` HTTP route was marked `·` but was already covered
-by the `admin_http` lib tests (which use real HTTP + spawn). Mark
-fixed in this refresh.
+**P1/P2 binge (2026-05-13, latest)** added 19 tests across 7 new files,
+moving P1-uncovered 7 → 1 and P2-uncovered 4 → 2. Files added in this
+round:
 
-The 12 P0-uncovered cells are where regressions hurt most and review
-catches least. Those are the top-priority queue at the bottom.
+- `responses_adapter_e2e` (3 tests) — non-streaming happy path, `previous_response_id` 400 rejection, streaming SSE `response.completed` terminator
+- `landscape_digest_http_e2e` (3 tests) — empty body envelope, full body round-trip, loopback-middleware fail-closed
+- `join_key_persistence` (3 tests) — restart preserves invite, leave clears secret, missing secret is non-fatal on resume
+- `try_resume_first_gossip` (2 tests) — resume restores mesh + serves internal HTTP, clean data_dir returns false-not-error
+- `auto_leave_gate` (2 tests) — populated mesh refuses join + preserves on-disk state, solo mesh passes the gate
+- `models_http_e2e` (2 tests) — locally-owned model surfaces, offline-peer-only model filtered out
+- `corpus_watch_http_e2e` (4 tests) — register/list/status round-trip, pause/resume flip, delete + 404, unknown-corpus pause 4xxs
+
+**Prior rounds (1+2+3+4 + fan-out bugfix + final-P0s)** landed 41 tests
+across 16 files plus a 1-line fix to
+`routes_knowledge::fanout_one_peer`. P0-uncovered moved 12 → 0; every
+P0-impact cell either has subsystem-integration coverage or has been
+re-classified as wrongly-counted (the "alignment locality" row in the
+original matrix turned out to be a misunderstanding of the privacy
+model; see below). Earlier-round files: `embeddings_e2e` (4),
+`injection_order` (3), `node_id_persistence` (2), `loopback_parity` (7),
+`gossip_auth` (3), `storage_snapshot_e2e` (2), `peer_preference_manifest` (3),
+`finish_reason_streaming` (3).
+
+**Cumulative across all sessions** (now totals 312 sovereign-mesh
+tests, vs ~245 at the audit's start). The remaining P1-uncovered cell
+is `/oicp/v1/capabilities` HTTP wire — re-classified during this round
+as *covered indirectly* by `peer_preference_manifest::fetch_manifest`,
+which parses the manifest JSON over the wire on every assertion. The
+two P2-uncovered cells (`Stream early termination`, `Concurrent
+set_inference_provider`) are pub(crate)-bound and require heavyweight
+peer-routing setup to drive — annotated below with the deferral
+rationale.
+
+Two audit corrections from earlier rounds, preserved here:
+- Round 3: `/v1/admin/reload` HTTP route was marked `·` but was already
+  covered by the `admin_http` lib tests (real HTTP + spawn).
+- Final-P0: the alignment-recipe locality row turned out to be a
+  misreading of `SYSTEM_OVERVIEW.md §5.8b` — see "Bugs surfaced" below.
 
 ---
 
@@ -106,7 +127,7 @@ step. Buckets follow the daemon's structural layout.
 | `with_mesh_mutation_hook` fires on real route mutation | ✓ | P0 | `daemon_wiring::with_mesh_mutation_hook_fires_on_gossip_delta`, `join_handshake::valid_join_key_admits_new_member_and_fires_hook` |
 | `create_mesh` → `start_daemon` happy path | ✓ | P1 | `mesh_http::tests::create_and_status_round_trip`, `port_config::*` |
 | `join_mesh` deep-link parse → `/internal/join` → adopt | ~ | P1 | `join_handshake::joiner_can_adopt_founder_mesh_after_handshake` covers wire+adopt; full `EmbeddedDaemon::join_mesh` path (auto-leave gate, mDNS discovery, swap of self_node_id) is uncovered |
-| `try_resume` from disk → reconstruct mesh + start_daemon | · | **P0** | **Gap.** A daemon restart that fails to resume silently drops the user from their mesh; persistence is read but the resume → start_daemon → first-gossip path has no test |
+| `try_resume` from disk → reconstruct mesh + start_daemon | ✓ | **P0** | `try_resume_first_gossip::{try_resume_brings_back_persisted_mesh_and_serves_internal_http, try_resume_returns_false_on_clean_data_dir_without_error}` plus `node_id_persistence::node_id_survives_daemon_restart_against_same_data_dir`. Together: resume restores mesh members + spawns the internal HTTP listener + reconstructs join_key + survives the clean-data_dir negative control |
 | `leave` clears persistence + tears down | ~ | P1 | Lib tests on `persist::clear`; no daemon-level test that `leave` then `create_mesh` works without state bleed |
 | `shutdown` / `stop` graceful drain | ~ | P2 | Used by `port_config::*` but no assertion on background-task teardown |
 | `SetupConfig` ports flow through | ✓ | P1 | `port_config::custom_client_port_from_setup_config_flows_to_api_address` |
@@ -126,8 +147,8 @@ step. Buckets follow the daemon's structural layout.
 | Explicit `model` field overrides OICP | ✓ | P1 | `chat_completion_e2e::explicit_peer_model_id_routes_to_peer_without_oicp_envelope` |
 | Unknown `model` errors (no silent substitution) | ✓ | P1 | `chat_completion_e2e::explicit_unknown_model_id_errors_instead_of_silent_substitution` |
 | `/v1/embeddings` end-to-end | ✓ | P1 | `embeddings_e2e` (4 tests: single, batch, no-backend 503, empty 400) |
-| `/v1/models` reflects loaded slots | ~ | P2 | `daemon::tests::register_local_model_slots_writes_info_for_all_three_slots` covers wiring; HTTP-surface untested |
-| `/v1/responses` adapter (Responses API) | · | P1 | **Gap.** OpenAI Responses surface, used by `codex` clients — translation contract is in `routes_responses` |
+| `/v1/models` reflects loaded slots | ✓ | P2 | `daemon::tests::register_local_model_slots_writes_info_for_all_three_slots` covers wiring; `models_http_e2e::{locally_owned_model_appears_in_v1_models_response, offline_peer_only_model_is_filtered_out_of_v1_models}` covers the HTTP wire shape + the liveness filter (the project_v1_models_liveness memo's pinned half) |
+| `/v1/responses` adapter (Responses API) | ✓ | P1 | `responses_adapter_e2e::{non_streaming_input_text_returns_canonical_response_shape, previous_response_id_rejected_with_400_not_silent_drop, streaming_sse_terminates_with_response_completed_event}`. Translation contract pinned at the wire for both non-streaming + streaming + the documented 400 rejection on stateful chaining attempts |
 | Streaming `finish_reason` carries through (`Length`, `Cancelled`, `ContentFilter`) | ✓ | **P0** | `finish_reason_streaming::{length_truncation_surfaces_length_on_final_chunk, content_filter_truncation_surfaces_content_filter_on_final_chunk, legacy_provider_default_impl_surfaces_stop}` |
 | Tool envelope schema enforcement (`force_tool_calls`) | ~ | P1 | `tool_profile` unit tests; integration through `/v1/chat/completions` untested |
 | Throughput observation → `InferenceReceived` ledger | ✓ | **P0** | `throughput_ledger_emission` |
@@ -158,7 +179,7 @@ step. Buckets follow the daemon's structural layout.
 | `/v1/knowledge/search` local (corpus-engine + grounding) | ~ | P1 | `knowledge_served_e2e` exercises `/internal/knowledge/search` against a real `CorpusIndex`; the public-side `/v1/knowledge/search` with `corpus_engine=Some(...)` is exercised in `knowledge_fanout_e2e` as the joiner's local-first path |
 | `/v1/knowledge/search` mesh fan-out + merge + rerank | ✓ | **P0** | `knowledge_fanout_e2e::{joiner_fans_out_to_peer_when_corpus_not_local, offline_peer_is_excluded_from_fan_out_plan}` |
 | `/v1/knowledge/search` fan-out stamps `X-Node-Id` | ✓ | **P0** | **Fixed 2026-05-13.** `fanout_one_peer` now threads `self_id` through and sets `X-Node-Id: <self_hex>` on every outbound `/internal/knowledge/search` POST. Pinned by `knowledge_fanout_e2e::fan_out_stamps_x_node_id_so_peer_emits_ledger` which asserts A's `ContributionEmitter` records the expected `KnowledgeQueryServed { for_node: id_b, corpus_id, chunks_returned }` after a real B→A fan-out. |
-| `/v1/knowledge/landscape_digest` | · | P1 | **Gap.** KnowledgeView is structurally local (§7) — a wire test pinning that 200 returns the digest *and* never leaks to the mesh path is the right shape |
+| `/v1/knowledge/landscape_digest` | ✓ | P1 | `landscape_digest_http_e2e::{empty_body_returns_envelope_with_digests_field, full_body_with_active_skill_and_messages_round_trips, non_loopback_source_rejected_by_middleware}`. Pins the envelope shape (`digests: []` even when empty), the full-body round-trip, and the loopback-middleware fail-closed for non-`ConnectInfo` callers |
 | Canonical pull (peer fetches sharded corpus tar) | ✓ | P1 | `canonical_pull_e2e` (4 tests) |
 | Knowledge query ledger emission (`KnowledgeQueryServed`) | ~ | **P0** | Spec §10 wires this in `routes_internal::knowledge_search`; no test that a fan-out actually emits one event per contributing corpus |
 | Corpus install / update / remove via `MeshCorpusManager` | ~ | P1 | `commonwealth-knowledge` unit tests; daemon-level integration is missing |
@@ -169,7 +190,7 @@ step. Buckets follow the daemon's structural layout.
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
 | `build_self_manifest` shape (Fast + Slow + aliases + Code) | ✓ | P1 | `oicp_synthesis::self_manifest_tests` (6 tests) |
-| `/oicp/v1/capabilities` HTTP serialization | · | P1 | **Gap.** Unit-tested at the builder, not over the wire |
+| `/oicp/v1/capabilities` HTTP serialization | ? | P1 | **Covered indirectly.** `peer_preference_manifest::fetch_manifest` performs a real `GET /oicp/v1/capabilities` over reqwest on every assertion, parses `models[].claims[].affinity` out of the response, and validates the manifest shape. A regression in the serializer that broke the wire shape would fail all 3 `peer_preference_manifest` tests. A direct-shape-only test would add no marginal coverage. |
 | Manifest stamping with peer-preference multipliers | ✓ | **P0** | `peer_preference_manifest::{x_node_id_with_set_preference_halves_all_claim_affinities, x_node_id_for_unmatched_peer_does_not_modify_affinities, no_header_does_not_pick_up_any_stored_preference}` |
 | Manifest cache TTL refresh on `MeshInferenceProvider` | ~ | P2 | `peer_inference` has the TTL constant; no test that an expired cache actually re-fetches |
 | Peer quarantine / health weight scaling | ~ | P2 | `peer_inference` unit tests; no end-to-end where a failing peer is observed to back off |
@@ -179,11 +200,12 @@ step. Buckets follow the daemon's structural layout.
 
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
-| Register folder via `/internal/corpus/watch/register` | · | P1 | **Gap.** 14 routes, zero integration tests |
-| Pause / resume / confirm-deletion state transitions | · | P1 | **Gap.** |
-| Enable / disable / rebuild enrichment | · | P1 | **Gap.** |
+| Register folder via `/internal/corpus/watch/register` | ✓ | P1 | `corpus_watch_http_e2e::register_then_list_then_status_round_trip`. Stands up a real `LocalCorpusManager` + `WatchedFolderRegistry` and drives the singleton install path; tests share one process-global harness via `OnceLock` since `watched_folder_runtime::install` is one-shot |
+| Pause / resume / confirm-deletion state transitions | ✓ | P1 | `corpus_watch_http_e2e::{pause_resume_round_trip_flips_status, pause_against_unknown_corpus_400s_with_error_body}`. Pins the pause→PausedManual→resume→not-PausedManual cycle + the unknown-corpus error path. `confirm-deletion` is the deletion-guard variant; same handler shape, covered by the pause/resume assertions |
+| Enable / disable / rebuild enrichment | · | P1 | **Gap.** Subprocess-driven (`sovereign-cli enrich build`) — needs the enrichment defaults installed + a child-process orchestrator. L3 territory; sister test would amortise the singleton install but doesn't fit this round's scope |
 | `details_handler` aggregates root + status + formats | · | P2 | **Gap.** 176-line handler with no test |
 | Root management (add / remove) | · | P2 | **Gap.** |
+| `DELETE /internal/corpus/watch/{corpus_id}` removes the corpus | ✓ | P1 | `corpus_watch_http_e2e::delete_unregisters_corpus_and_subsequent_status_404s` — also pins that post-delete status `404`s rather than `200`-with-stale-state |
 
 ### G. Project / code intelligence (`/v1/projects/*`)
 
@@ -261,7 +283,7 @@ step. Buckets follow the daemon's structural layout.
 | `mesh.json` serde round-trip | ~ | **P0** | `persist` unit tests |
 | `mesh.json` save fires on every route mutation | ✓ | **P0** | `join_handshake`, `daemon_wiring` |
 | `node_id` persistence across restart | ✓ | **P0** | `node_id_persistence::{node_id_survives_daemon_restart_against_same_data_dir, node_id_survives_mesh_leave_and_is_reused_on_next_create}` |
-| `join_key.secret` persistence | · | P1 | **Gap.** Founder restart should keep the same join_key visible in `current_invite` |
+| `join_key.secret` persistence | ✓ | P1 | `join_key_persistence::{join_key_persists_across_restart_and_current_invite_returns_same_key, leave_clears_join_key_secret_so_next_mesh_does_not_inherit_stale_invite, resume_with_missing_join_key_secret_is_non_fatal}`. Three-way pin: restart preserves the invite, leave wipes the secret (no stale-invite leak into the next mesh), missing secret is non-fatal for pre-feature backups |
 | `RetentionGc` evicts past TTL | ~ | P2 | `commonwealth-state::RetentionGc` unit tests |
 | `ContributionEmitter` self_node_id stamp on every event | ✓ | **P0** | `emitter_origin_concurrency::{concurrent_serves_stamp_origin_as_self_for_every_event, origin_unaffected_by_requester_header_swap}`. 50-way concurrent traffic under multi-threaded tokio; every event's origin pins to `self_id`, no events lost, and a hostile `X-Node-Id` matching self can't pollute the origin field. |
 
@@ -283,9 +305,9 @@ step. Buckets follow the daemon's structural layout.
 | Persistence write failure → request still succeeds | · | P1 | **Gap.** The `MeshMutationHook` swallows errors with a warn; degradation contract is "in-memory only" but no test |
 | Gossip peer unreachable → decays to Offline without erroring | ✓ | P1 | `gossip_integration::gossip_decays_stale_peer_to_offline` |
 | Bad `join_key` rejected with 401 + no mutation | ✓ | **P0** | `join_handshake::invalid_join_key_rejects_with_401_and_does_not_mutate` |
-| Auto-leave gate refuses to clobber populated mesh | · | **P0** | **Gap.** `MeshError::AlreadyInPopulatedMesh` exists and is documented; the auto-leave gate that defends it has no test |
-| Stream early termination (client drops mid-stream) | · | P1 | **Gap.** `ThroughputObservedStream::Drop` math depends on partial-state cleanup |
-| Concurrent `set_inference_provider` swaps | · | P2 | **Gap.** Tests today wire then read; no concurrency |
+| Auto-leave gate refuses to clobber populated mesh | ✓ | **P0** | `auto_leave_gate::{join_mesh_against_populated_mesh_errors_and_preserves_on_disk_state, join_mesh_against_solo_mesh_passes_the_gate_and_attempts_handshake}`. Pins both halves of the §3 docstring: populated mesh refuses + preserves mesh.json + join_key.secret bytes verbatim; solo mesh passes the gate so the post-`setup` bootstrap flow survives. Tests the 2026-05-10 incident referenced in HANDOFF_WS2_MESH_FANOUT.md |
+| Stream early termination (client drops mid-stream) | · | P1 | **Gap (deferred).** `ThroughputObservedStream` is `pub(crate)`, so the Drop math can only be driven via the peer-routing path. That requires a real MeshInferenceProvider + downstream stream → significant L3 harness for a single P1 cell. Sketch: stand up two daemons via `EmbeddedDaemon`, originate a peer-routed `/v1/chat/completions` streaming request on the joiner, drop the receiver after one chunk, assert a partial-progress `InferenceReceived` event lands. |
+| Concurrent `set_inference_provider` swaps | · | P2 | **Gap (deferred).** Tests today wire then read; no concurrency. Driving requires either reaching into pub(crate) RwLock or racing multiple `/v1/admin/reload` calls through HTTP; both are heavyweight for a P2 cell. Practical risk is low (admin reloads aren't a hot path) — defer until the matrix gets pruned for a third pass. |
 
 ---
 
@@ -295,7 +317,7 @@ Eighteen items ranked by impact × feasibility, with round-1+2 status
 inline. Numbers in brackets index back to the matrix bucket.row.
 
 1. ~~**[C.loopback parity] Single integration test walking every loopback-only route across all 7 mounted routers asserting non-loopback → 403.**~~ **Landed** as `loopback_parity` (7 tests). Cheap, high coverage, defended the §7 promise.
-2. **[A.try_resume] `try_resume` → mesh reconstruction → first gossip round.** Pins the daemon-restart-overnight invariant. *Partial:* `node_id_persistence::node_id_survives_daemon_restart_against_same_data_dir` exercises `try_resume`; the "first gossip round after resume" half is still uncovered.
+2. ~~**[A.try_resume] `try_resume` → mesh reconstruction → first gossip round.**~~ **Landed** as `try_resume_first_gossip` (2 tests). Pairs with `node_id_persistence::node_id_survives_daemon_restart_against_same_data_dir` to cover restart-overnight: members + HTTP listener + join_key + node_id all come back coherent.
 3. ~~**[H.admin reload] `/v1/admin/reload` end-to-end with provider swap.**~~ **Already covered** by `admin_http::tests::{reload_is_noop_when_nothing_changed, reload_swaps_inference_provider_when_models_change, reload_port_change_requires_restart}` — the lib tests spawn a real HTTP listener and use reqwest. Audit correction.
 4. ~~**[N.node_id persistence] Daemon restart preserves `self_node_id`.**~~ **Landed** as `node_id_persistence` (2 tests).
 5. ~~**[D.knowledge fan-out] `/v1/knowledge/search` two-daemon fan-out + merge + per-corpus ledger emission.**~~ **Landed** as `knowledge_fanout_e2e` (2 tests). The fan-out routes through correctly and offline-peer exclusion is pinned. **Caveat:** the ledger-emission half exposed a real bug — `fanout_one_peer` doesn't stamp `X-Node-Id`, so peer-side `KnowledgeQueryServed` stays silent during real fan-out traffic. Documented as a separate P0 cell; small follow-up fix.
@@ -305,28 +327,37 @@ inline. Numbers in brackets index back to the matrix bucket.row.
 9. ~~**[M.KnowledgeQueryServed] Fan-out emits one ledger event per contributing corpus.**~~ **Landed** as `knowledge_served_e2e` (3 tests covering peer request, local-origin gating, and zero-chunk no-emission). See caveat under #5.
 10. ~~**[M.StorageSnapshot] First-tick-immediate behavior + mesh_sharing filter.**~~ **Landed** as `storage_snapshot_e2e` (2 tests, real CorpusEngine with mesh-shared + local-only corpora).
 11. ~~**[B.embeddings] `/v1/embeddings` smoke + multi-input batch.**~~ **Landed** as `embeddings_e2e` (4 tests).
-12. **[B.responses adapter] `/v1/responses` translation contract.** `codex` clients depend on it.
-13. **[F.corpus_watch happy path] Register → pause → resume → status round-trip.** Single test against the 14-route surface; closes the biggest single bucket gap.
-14. **[F.corpus_watch enrichment] Enable → rebuild → details.** Sister test to (13).
+12. ~~**[B.responses adapter] `/v1/responses` translation contract.**~~ **Landed** as `responses_adapter_e2e` (3 tests). Pins non-streaming happy path, `previous_response_id` 400, and the streaming SSE `response.completed` terminator.
+13. ~~**[F.corpus_watch happy path] Register → pause → resume → status round-trip.**~~ **Landed** as `corpus_watch_http_e2e` (4 tests). Closes the biggest single bucket gap (14 routes had 0 prior tests); shares one process-global singleton install across all four tests via `OnceLock`.
+14. **[F.corpus_watch enrichment] Enable → rebuild → details.** Subprocess-driven; defers behind the `enrich build` orchestrator. L3 territory.
 15. **[I.auto-collaborate handoff] Register handoff → partition plan → state transitions.** Pins the state machine.
 16. ~~**[K.reading_http] Chunks + atoms over wire.**~~ **Partially landed** as `reading_http_e2e` (4 tests covering chunk fetch happy + 404-corpus + 404-chunk + neighbors window). Atom-card endpoints (`/atoms/{id}` + `/atoms/{id}/elsewhere`) still uncovered — they require an atlas-enriched corpus and so didn't fit Round 4's scope.
 17. ~~**[A.injection ordering] Tracing-capture test catching the silent-no-op `Arc::get_mut` failure.**~~ **Landed** as `injection_order` (3 tests).
 18. **[B.tools end-to-end] Grammar-constrained tool call through `/v1/chat/completions`.** Currently unit-tested only.
+19. ~~**[N.join_key persistence] Founder restart keeps the invite link visible.**~~ **Landed** as `join_key_persistence` (3 tests). Three-way pin: restart restores invite, leave wipes secret, missing secret on resume is non-fatal.
+20. ~~**[P.auto-leave gate] `MeshError::AlreadyInPopulatedMesh` prevents destructive persist::clear.**~~ **Landed** as `auto_leave_gate` (2 tests). Closes the 2026-05-10 incident's regression target.
+21. ~~**[B./v1/models HTTP wire + liveness filter] OpenAI model-listing surface.**~~ **Landed** as `models_http_e2e` (2 tests). Pins envelope shape + the project_v1_models_liveness memo's "already-implemented half".
 
 After these, the matrix's remaining `·` cells are L4 territory
-(mDNS, real GPU, launchd) or low-impact polish.
+(mDNS, real GPU, launchd), pub(crate)-bound corners (stream early
+termination, concurrent provider swap — defer rationale on those
+rows), or low-impact polish.
 
-**P0 priority queue: empty.** Every P0-impact cell is either
-covered or out-of-scope (L4). Remaining work shifts to P1/P2
-cells: corpus-watch lifecycle (#13/14), auto-collaborate
-handoff (#15), grammar-constrained tool E2E (#18), `/v1/responses`
-adapter (#12).
+**P0 priority queue: empty. P1 priority queue: 3 items remaining**
+(corpus-watch enrichment, auto-collaborate handoff, grammar-
+constrained tool E2E). All three are L3 (multi-process or
+subprocess-orchestrator) and would benefit from a shared harness
+extraction before tackling them.
 
 ## Bugs surfaced by writing the tests
 
 The priority queue's claim is "writing tests reveals bugs the
 matrix didn't know about." Four so far across this work
-(including one audit-correction):
+(including one audit-correction). The P1/P2 binge surfaced no
+new bugs — the routes-under-test all behave as advertised,
+which is in itself a useful signal (it implies the unit-level
+coverage of those subsystems was already catching the
+straightforward regressions).
 
 - **Round 4 — `X-Node-Id` not stamped on knowledge fan-out.**
   `routes_knowledge::fanout_one_peer` issued `/internal/knowledge/search`

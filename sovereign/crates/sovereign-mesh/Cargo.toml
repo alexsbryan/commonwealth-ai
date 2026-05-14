@@ -123,3 +123,8 @@ tempfile = "3"
 # library under test and assert on them. Keeping it scoped to
 # dev-deps so the production binary doesn't pay the inclusion cost.
 tracing-subscriber = { workspace = true }
+# `sovereign-store` provides `InMemoryStateStore`, used by the
+# corpus-watch integration test to stand up a `LocalCorpusManager`
+# without an on-disk SQLite file. Same pattern as the
+# `sovereign-tools/tests/local_corpus_e2e.rs` harness.
+sovereign-store = { workspace = true }
