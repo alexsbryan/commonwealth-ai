@@ -162,6 +162,27 @@ pub async fn chat_completions(
     // forward-to-mesh / forward-to-Commonwealth paths where a
     // request *would* leave this machine.
     if let Some(service) = state.inner.local_inference.as_ref() {
+        // Pre-generation chat-side reshape. Three surgical nudges,
+        // each targeting a distinct failure mode observed in the
+        // gym fixtures:
+        //   1. Failure-recovery: tail is a tool result with non-zero
+        //      exit → delete the failed call from history, inject
+        //      banner + nudge with concrete alternatives. Targets
+        //      verbatim retry attractor (gym 002).
+        //   2. Anti-repetition: tail shows N+ identical exec_command
+        //      emissions → nudge for strategy change. Targets the
+        //      multi-turn loop attractor (gym 004).
+        //   3. Read-attractor: ≥3 read-only commands in history and
+        //      zero action commands → nudge naming apply_patch as
+        //      the required next emission. Targets exploration-mode
+        //      lock-in (gym 006).
+        // All three share an idempotency gate so only one fires at a
+        // time. Order matters: failure-recovery is most specific (a
+        // single recent failure), anti-rep is intermediate (a pattern),
+        // read-attractor is the most general (a mode).
+        crate::frontdoor::apply_failure_nudge_chat(&mut request);
+        crate::frontdoor::apply_anti_repetition_chat(&mut request);
+        crate::frontdoor::apply_read_attractor_nudge_chat(&mut request);
         let want_stream = request.stream.unwrap_or(false);
         info!(
             want_stream,
@@ -691,14 +712,46 @@ async fn serve_local_non_stream(
     requester: Option<NodeId>,
     model_id: String,
 ) -> Response {
+    // Snapshot the path-component frequencies BEFORE moving `request`
+    // into the backend call. The post-emission path canonicalizer
+    // uses this map to detect tokenizer-drift typos: when an emitted
+    // path component is similar to a more-frequent component in
+    // context, rewrite to the canonical (frequent) form.
+    let context_components = crate::frontdoor::gather_context_components(&request.messages);
     let started = Instant::now();
     match service.chat_completion(request).await {
-        Ok(resp) => {
-            // Emit `InferenceServed` only when the request was
-            // attributed to a remote mesh peer via `X-Node-Id`. The
-            // ledger explicitly tracks intra-mesh activity (spec §10
-            // scope exclusion: cross-mesh / desktop-local requests
-            // do not accumulate dimensional contribution data).
+        Ok(mut resp) => {
+            // Post-generation canonicalization, two passes:
+            //   1. Heredoc canonicalizer — repairs malformed
+            //      apply_patch shapes (extra `***`, missing line
+            //      breaks). No-op for non-heredoc cmds.
+            //   2. Path canonicalizer — rewrites tokenizer-drifted
+            //      absolute paths to their canonical form when a
+            //      similar path appears in the request context.
+            //      No-op when emitted path is already canonical OR
+            //      no similar path exists.
+            for choice in resp.choices.iter_mut() {
+                if let Some(tcs) = choice.message.tool_calls.as_mut() {
+                    let heredoc_fixed =
+                        crate::frontdoor::canonicalize_chat_response_tool_calls(tcs);
+                    if heredoc_fixed > 0 {
+                        debug!(
+                            count = heredoc_fixed,
+                            "apply_patch heredoc canonicalized in tool_calls"
+                        );
+                    }
+                    let path_fixed = crate::frontdoor::canonicalize_chat_response_paths(
+                        tcs,
+                        &context_components,
+                    );
+                    if path_fixed > 0 {
+                        info!(
+                            count = path_fixed,
+                            "absolute paths canonicalized in tool_calls"
+                        );
+                    }
+                }
+            }
             if let Some(for_node) = requester {
                 let tokens =
                     resp.usage.as_ref().map(|u| u.completion_tokens as u64).unwrap_or(0);

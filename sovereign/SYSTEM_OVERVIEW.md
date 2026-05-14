@@ -966,7 +966,7 @@ active harness per request from `User-Agent` header (or
 
 | Profile  | Trigger                                  | Distiller | Catalog filter | Synthetic write_file* | Grammar lock | Coherence baseline |
 |----------|------------------------------------------|-----------|----------------|-----------------------|--------------|--------------------|
-| Codex    | UA: `codex_cli_rs/*`                     |     -     |       -        |          -            |       -      |        yes         |
+| Codex    | UA: `codex_cli_rs/*`                     |     -     |      yes       |          -            |     yes      |        yes         |
 | Opencode | UA: `opencode/*` (or legacy `SOVEREIGN_FRONTDOOR=1`) |  yes   |   yes    |       yes             |     yes      |        yes         |
 | Generic  | unknown UA, no env                       |     -     |       -        |          -            |     yes      |        yes         |
 | Bare     | `SOVEREIGN_HARNESS=bare`                 |     -     |       -        |          -            |       -      |         -          |
@@ -991,12 +991,12 @@ on every non-Bare profile, regardless of harness.
   the compressed range), keeps the most recent 4 items verbatim. Pure
   observability — no contract reshape.
 - **Per-session telemetry JSONL** at
-  `~/.sovereign/codex-sessions/sessions.jsonl`. Every `/v1/responses`
-  turn writes an `inbound` record (response_id, harness, model,
-  chunked_write_active, inbound tool catalog snapshot, input item count)
-  and a `terminal` record (finish_reason, text_buffer_bytes,
-  function_calls[] each with `args_bytes` + `args_parsed_ok`). Joinable
-  by `response_id` with `jq` for post-mortem.
+  `~/.sovereign/codex-sessions/sessions.jsonl`. `inbound` + `terminal`
+  records per turn, joinable by `response_id`. Terminal `function_calls[]`
+  carry `args_bytes` + `args_parsed_ok`; `apply_patch` heredoc calls
+  also carry a `heredoc` sub-object (body markers, file-op counts,
+  escape-coherence smell counters) for triple-nested escape post-mortem
+  — extractor at `frontdoor::extract_heredoc_diagnostics`.
 
 **Opencode-only full reshape** (`frontdoor::apply` + per-profile flags
 in `translate_request`):
@@ -1018,6 +1018,14 @@ in `translate_request`):
   emission was `write_file_begin` or `write_file_chunk`, filters the
   outbound catalog down to `[write_file_chunk, write_file_end]` to keep
   the model on protocol.
+
+**Operator-supplied harness brief**
+(`frontdoor::apply_brief_from_env_path`): generic prepend-from-file
+pass. A per-harness env var (`SOVEREIGN_CODEX_BRIEF` for Codex)
+points at a UTF-8 file whose contents prepend to `req.instructions`.
+Brief lives on the operator's filesystem so upstream-contract drift
+is a one-file edit, not a rebuild. Re-read every turn; idempotent;
+no-op on unset / missing / whitespace-only. Off by default.
 
 **Streaming SSE state machine**: one chat-completions chunk →  0..N
 Responses events. Emits the full Responses lifecycle (`response.created`

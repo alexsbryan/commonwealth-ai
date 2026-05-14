@@ -95,8 +95,24 @@ pub async fn responses(
         harness = %harness.as_str(),
         "responses: harness profile resolved"
     );
+    // Anti-repetition (Investment #15, 2026-05-13) MUST run before
+    // history compression — compression keeps only the last few items
+    // verbatim, dropping older identical calls below the repetition
+    // threshold. Anti-rep needs the full conversation tail to see the
+    // run length.
+    if harness != frontdoor::Harness::Bare {
+        frontdoor::apply_anti_repetition(&mut req);
+    }
     if harness.runs_coherence_baseline() {
         frontdoor::apply_baseline(&state, &headers, &mut req).await;
+    }
+    if harness == frontdoor::Harness::Codex {
+        // Narrow-framing brief — gated by `SOVEREIGN_CODEX_BRIEF=1`.
+        // No-op when the env is unset; runs ONLY on the Codex profile
+        // so opencode / generic / bare are never touched. Pairs with
+        // the heredoc-body diagnostics in the terminal telemetry
+        // record — A/B with `escape_quote_count` as the witness.
+        frontdoor::apply_codex_brief(&mut req);
     }
     if harness.runs_distiller() {
         // The "full" frontdoor only runs the distiller half here —
@@ -105,7 +121,7 @@ pub async fn responses(
         // the harness flags directly. We don't call frontdoor::apply()
         // because its history-compression half already ran via
         // apply_baseline above.
-        frontdoor::apply_distiller(&state, &headers, &mut req).await;
+        frontdoor::apply_distiller(&state, &headers, &mut req, harness).await;
     }
 
     // ── Hard rejections ───────────────────────────────────────────────
@@ -217,6 +233,21 @@ pub async fn responses(
             return error_response(StatusCode::BAD_REQUEST, "invalid_request_error", &msg);
         }
     };
+
+    // ── Per-turn input capture ────────────────────────────────────────
+    // Mirrors the raw_emission output capture (terminal record) so
+    // post-mortem has the full `(input, output)` pair on disk and the
+    // replay rig can drive the inference adapter offline. Writes the
+    // post-translation ChatCompletionRequest — what the inference
+    // backend actually receives. Best-effort: failures log warn, do
+    // not affect the response path.
+    let raw_input_summary = capture_raw_input(&response_id, &chat_req);
+    write_session_telemetry(serde_json::json!({
+        "kind": "input_capture",
+        "response_id": response_id,
+        "ts_unix": now_unix_secs(),
+        "raw_input": raw_input_summary,
+    }));
 
     // ── Inner invocation ──────────────────────────────────────────────
     let inner = chat_completions(State(state), headers, Json(chat_req)).await;
@@ -454,6 +485,15 @@ fn translate_request(
     // exhaust the budget before the close `}` lands and the daemon's
     // marker parser drops the truncated call. Floor at 16K (well
     // within primary's 50K context) and explicitly disable thinking.
+    //
+    // Codex profile (Investment #11, 2026-05-13): same `enable_thinking:
+    // false` treatment without the max_tokens floor. Codex 0.130 sets
+    // its own output cap and the empirical smoke 2026-05-13 showed
+    // ~85% of each turn's tokens spent inside `<think>` blocks adding
+    // zero value for routine read-then-decide tool turns. Codex
+    // envelope grammar already prevents truncation issues, so we just
+    // turn thinking off.
+    let suppress_thinking = frontdoor_on || matches!(harness, frontdoor::Harness::Codex);
     let (chat_template_kwargs, think_budget, max_tokens) = if frontdoor_on {
         let floored = req
             .max_output_tokens
@@ -464,14 +504,43 @@ fn translate_request(
             Some(0u32),
             floored,
         )
+    } else if suppress_thinking {
+        (
+            Some(serde_json::json!({"enable_thinking": false})),
+            Some(0u32),
+            req.max_output_tokens,
+        )
     } else {
         (None, None, req.max_output_tokens)
     };
 
+    // Codex profile temperature default (Investment #14, 2026-05-13).
+    // Empirical bench on the rg-loop fixture (resp_1778694147285) ran a
+    // 4-point sweep against the same frozen input × 10 replays:
+    //
+    //   T = 0.0 → 10/10 emit the exact failing command (greedy lock)
+    //   T = 0.3 →  5/10 exact loop, 5 minor variants
+    //   T = 0.7 →  2/10 exact loop, varied recovery strategies
+    //   T = 1.0 →  1/10 exact loop, strongest diversity
+    //
+    // Codex CLI sends no `temperature` field; the daemon's ModelQuirks
+    // default behaves like T=0.0 on this attractor. Pin to 0.7 for the
+    // Codex profile — the 5× loop reduction without destabilising
+    // envelope discipline (grammar lock at Inv 3 still holds args
+    // shape at any T) is the cheapest win we have. Caller-set
+    // temperature still wins so an operator can override.
+    let temperature = req.temperature.or_else(|| {
+        if matches!(harness, frontdoor::Harness::Codex) {
+            Some(0.7)
+        } else {
+            None
+        }
+    });
+
     Ok(ChatCompletionRequest {
         model: req.model,
         messages,
-        temperature: req.temperature,
+        temperature,
         max_tokens,
         stream: req.stream,
         top_p: req.top_p,
@@ -616,12 +685,14 @@ fn build_non_streaming_response(
     // index 0 — codex never sets `n>1`.
     let mut terminal_finish_reason: Option<String> = None;
     let mut terminal_text_bytes: usize = 0;
+    let mut terminal_text_capture = String::new();
     let mut terminal_fcs: Vec<serde_json::Value> = Vec::new();
     if let Some(choice) = chat.choices.into_iter().next() {
         terminal_finish_reason = choice.finish_reason.clone();
         let msg = choice.message;
         let text = msg.content;
         terminal_text_bytes = text.len();
+        terminal_text_capture = text.clone();
 
         if !text.is_empty() {
             message_id_counter += 1;
@@ -655,11 +726,23 @@ fn build_non_streaming_response(
                     None => (tc.function.name, tc.function.arguments),
                 };
                 let parsed_ok = serde_json::from_str::<serde_json::Value>(&raw_args).is_ok();
-                terminal_fcs.push(serde_json::json!({
-                    "name": raw_name,
-                    "args_bytes": raw_args.len(),
-                    "args_parsed_ok": parsed_ok,
-                }));
+                let mut fc_rec = serde_json::Map::new();
+                fc_rec.insert("name".into(), serde_json::Value::String(raw_name.clone()));
+                fc_rec.insert(
+                    "args_bytes".into(),
+                    serde_json::Value::Number(raw_args.len().into()),
+                );
+                fc_rec.insert("args_parsed_ok".into(), serde_json::Value::Bool(parsed_ok));
+                fc_rec.insert(
+                    "args_sample".into(),
+                    serde_json::Value::String(args_sample(&raw_args)),
+                );
+                if let Some(h) = frontdoor::extract_heredoc_diagnostics(&raw_args) {
+                    if let Ok(v) = serde_json::to_value(&h) {
+                        fc_rec.insert("heredoc".into(), v);
+                    }
+                }
+                terminal_fcs.push(serde_json::Value::Object(fc_rec));
                 output.push(ResponsesOutputItem::FunctionCall(OutputFunctionCall {
                     id: fc_id,
                     call_id: tc.id,
@@ -671,6 +754,7 @@ fn build_non_streaming_response(
         }
     }
 
+    let raw_emission = capture_raw_emission(&response_id, &terminal_text_capture);
     write_session_telemetry(serde_json::json!({
         "kind": "terminal",
         "stream": false,
@@ -679,6 +763,7 @@ fn build_non_streaming_response(
         "finish_reason": terminal_finish_reason,
         "text_buffer_bytes": terminal_text_bytes,
         "function_calls": terminal_fcs,
+        "raw_emission": raw_emission,
     }));
 
     let usage = chat.usage.map(|u| ResponsesUsage {
@@ -1152,13 +1237,31 @@ impl ResponsesStreamState {
                     .map(|fc| {
                         let parsed_ok = serde_json::from_str::<serde_json::Value>(&fc.arguments)
                             .is_ok();
-                        serde_json::json!({
-                            "name": fc.name,
-                            "args_bytes": fc.arguments.len(),
-                            "args_parsed_ok": parsed_ok,
-                        })
+                        let mut rec = serde_json::Map::new();
+                        rec.insert("name".into(), serde_json::Value::String(fc.name.clone()));
+                        rec.insert(
+                            "args_bytes".into(),
+                            serde_json::Value::Number(fc.arguments.len().into()),
+                        );
+                        rec.insert("args_parsed_ok".into(), serde_json::Value::Bool(parsed_ok));
+                        rec.insert(
+                            "args_sample".into(),
+                            serde_json::Value::String(args_sample(&fc.arguments)),
+                        );
+                        if let Some(h) = frontdoor::extract_heredoc_diagnostics(&fc.arguments) {
+                            if let Ok(v) = serde_json::to_value(&h) {
+                                rec.insert("heredoc".into(), v);
+                            }
+                        }
+                        serde_json::Value::Object(rec)
                     })
                     .collect();
+                let raw_text = self
+                    .message
+                    .as_ref()
+                    .map(|m| m.text_buffer.clone())
+                    .unwrap_or_default();
+                let raw_emission = capture_raw_emission(&self.response_id, &raw_text);
                 write_session_telemetry(serde_json::json!({
                     "kind": "terminal",
                     "stream": true,
@@ -1167,6 +1270,7 @@ impl ResponsesStreamState {
                     "finish_reason": reason,
                     "text_buffer_bytes": text_bytes,
                     "function_calls": fc_summary,
+                    "raw_emission": raw_emission,
                 }));
                 if reason == "length" {
                     tracing::warn!(
@@ -1837,6 +1941,181 @@ fn error_response(status: StatusCode, error_type: &str, message: &str) -> Respon
     (status, Json(body)).into_response()
 }
 
+/// Capture a per-turn raw model emission to disk and return a small
+/// JSON object summarising it for the terminal telemetry record.
+///
+/// Investment 1 (2026-05-13): without seeing the actual bytes the
+/// model produced, every shape-regression debugging session devolves
+/// into scraping `codex exec` stdout. Now the full text emission
+/// lands at `~/.sovereign/codex-sessions/raw/<response_id>.txt` (one
+/// file per turn, joinable by response_id) and a 16-char SHA prefix
+/// + head/tail sample rides on the terminal record itself.
+///
+/// Returned shape:
+/// ```ignore
+/// {
+///   "sha256_prefix": "ab12cd34ef567890",
+///   "head": "<first 400 chars>",
+///   "tail": "<last 400 chars when len>800>",
+///   "len": <total bytes>,
+///   "file_path": "/Users/.../raw/<response_id>.txt"
+/// }
+/// ```
+///
+/// Best-effort: file write failures log a `warn!` and the returned
+/// object still carries the in-memory diagnostics. Suitable for
+/// merging into the terminal record via
+/// `rec.insert("raw_emission", capture_raw_emission(...))`.
+fn capture_raw_emission(response_id: &str, text: &str) -> serde_json::Value {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(text.as_bytes());
+    let sha_full = hex::encode(hasher.finalize());
+    let sha_prefix = sha_full[..16].to_string();
+    let len = text.len();
+    let head_n = char_boundary_le(text, 400);
+    let head = &text[..head_n];
+    let tail_text: Option<&str> = if len > 800 {
+        let tail_start = char_boundary_ge(text, len - 400);
+        Some(&text[tail_start..])
+    } else {
+        None
+    };
+
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "sha256_prefix".into(),
+        serde_json::Value::String(sha_prefix),
+    );
+    obj.insert("len".into(), serde_json::Value::Number(len.into()));
+    obj.insert("head".into(), serde_json::Value::String(head.to_string()));
+    if let Some(t) = tail_text {
+        obj.insert("tail".into(), serde_json::Value::String(t.to_string()));
+    }
+
+    if let Some(home) = dirs::home_dir() {
+        let dir = home.join(".sovereign").join("codex-sessions").join("raw");
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            warn!(error = %e, dir = %dir.display(), "raw emission: mkdir failed");
+        } else {
+            let path = dir.join(format!("{}.txt", response_id));
+            match std::fs::write(&path, text.as_bytes()) {
+                Ok(()) => {
+                    obj.insert(
+                        "file_path".into(),
+                        serde_json::Value::String(path.to_string_lossy().into_owned()),
+                    );
+                }
+                Err(e) => {
+                    warn!(error = %e, path = %path.display(), "raw emission: write failed");
+                }
+            }
+        }
+    }
+
+    serde_json::Value::Object(obj)
+}
+
+/// Return the largest char-boundary index `<= max_bytes`. Used to
+/// slice UTF-8 text safely for sampling.
+fn char_boundary_le(s: &str, max_bytes: usize) -> usize {
+    if max_bytes >= s.len() {
+        return s.len();
+    }
+    let mut i = max_bytes;
+    while i > 0 && !s.is_char_boundary(i) {
+        i -= 1;
+    }
+    i
+}
+
+/// Return the smallest char-boundary index `>= min_bytes`. Used to
+/// slice UTF-8 text safely for sampling.
+fn char_boundary_ge(s: &str, min_bytes: usize) -> usize {
+    if min_bytes >= s.len() {
+        return s.len();
+    }
+    let mut i = min_bytes;
+    while i < s.len() && !s.is_char_boundary(i) {
+        i += 1;
+    }
+    i
+}
+
+/// Capture the per-turn input prompt the inference adapter is about
+/// to see. Mirrors `capture_raw_emission` for the request side so
+/// every smoke turn produces a complete `(in, out)` pair on disk,
+/// joinable by `response_id`. Returns a summary object for the
+/// inbound telemetry record (sha + len + file_path).
+///
+/// File location: `~/.sovereign/codex-sessions/raw/<response_id>.input.json`.
+/// Content: the fully-translated `ChatCompletionRequest` (post-
+/// frontdoor passes — distiller, grammar lock, brief, history
+/// compression). This is the EXACT shape the inference adapter
+/// receives; closes the gap between "what we sent" and "what the
+/// model saw".
+fn capture_raw_input(response_id: &str, chat_req: &ChatCompletionRequest) -> serde_json::Value {
+    use sha2::{Digest, Sha256};
+    let serialized = match serde_json::to_vec_pretty(chat_req) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(error = %e, "raw input: serialize failed");
+            return serde_json::Value::Null;
+        }
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(&serialized);
+    let sha_full = hex::encode(hasher.finalize());
+    let sha_prefix = sha_full[..16].to_string();
+    let len = serialized.len();
+
+    let mut obj = serde_json::Map::new();
+    obj.insert(
+        "sha256_prefix".into(),
+        serde_json::Value::String(sha_prefix),
+    );
+    obj.insert("len".into(), serde_json::Value::Number(len.into()));
+
+    if let Some(home) = dirs::home_dir() {
+        let dir = home.join(".sovereign").join("codex-sessions").join("raw");
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            warn!(error = %e, dir = %dir.display(), "raw input: mkdir failed");
+        } else {
+            let path = dir.join(format!("{}.input.json", response_id));
+            match std::fs::write(&path, &serialized) {
+                Ok(()) => {
+                    obj.insert(
+                        "file_path".into(),
+                        serde_json::Value::String(path.to_string_lossy().into_owned()),
+                    );
+                }
+                Err(e) => {
+                    warn!(error = %e, path = %path.display(), "raw input: write failed");
+                }
+            }
+        }
+    }
+
+    serde_json::Value::Object(obj)
+}
+
+/// Sample an argument string for telemetry: returns up to 200 chars
+/// from each end with `… [N bytes elided]` in the middle when long.
+fn args_sample(args: &str) -> String {
+    let len = args.len();
+    if len <= 400 {
+        return args.to_string();
+    }
+    let head_end = char_boundary_le(args, 200);
+    let tail_start = char_boundary_ge(args, len - 200);
+    format!(
+        "{}… [{} bytes elided] …{}",
+        &args[..head_end],
+        tail_start - head_end,
+        &args[tail_start..]
+    )
+}
+
 /// Append a single JSON record to today's per-session telemetry log
 /// at `~/.sovereign/codex-sessions/<YYYY-MM-DD>.jsonl`.
 ///
@@ -1897,6 +2176,60 @@ mod tests {
         MessageItem as RMsg, ResponsesContentPart, ResponsesInput, ResponsesInputItem,
         ResponsesTool,
     };
+
+    #[test]
+    fn args_sample_returns_short_strings_verbatim() {
+        assert_eq!(args_sample("{}"), "{}");
+        let s = "x".repeat(400);
+        assert_eq!(args_sample(&s), s);
+    }
+
+    #[test]
+    fn args_sample_elides_middle_for_long_strings() {
+        let s = format!("{}{}{}", "A".repeat(200), "M".repeat(200), "Z".repeat(200));
+        let out = args_sample(&s);
+        assert!(out.starts_with(&"A".repeat(200)));
+        assert!(out.ends_with(&"Z".repeat(200)));
+        assert!(out.contains("bytes elided"));
+        assert!(out.len() < s.len());
+    }
+
+    #[test]
+    fn char_boundary_helpers_respect_utf8() {
+        // Three-byte char `€` straddles boundaries; helpers must not split it.
+        let s = "abc€def";
+        assert!(char_boundary_le(s, 4) <= s.len());
+        let i = char_boundary_le(s, 4);
+        assert!(s.is_char_boundary(i));
+        let j = char_boundary_ge(s, 4);
+        assert!(s.is_char_boundary(j));
+    }
+
+    #[test]
+    fn capture_raw_emission_returns_sha_head_and_len() {
+        let v = capture_raw_emission("resp_test_abc", "hello world");
+        let obj = v.as_object().expect("object");
+        assert_eq!(obj.get("len").and_then(|x| x.as_u64()), Some(11));
+        let sha = obj.get("sha256_prefix").and_then(|x| x.as_str()).unwrap();
+        assert_eq!(sha.len(), 16);
+        assert_eq!(
+            obj.get("head").and_then(|x| x.as_str()),
+            Some("hello world")
+        );
+        // No tail for strings under 800 bytes.
+        assert!(obj.get("tail").is_none());
+    }
+
+    #[test]
+    fn capture_raw_emission_emits_tail_for_long_inputs() {
+        let body = format!("{}{}", "S".repeat(500), "E".repeat(500));
+        let v = capture_raw_emission("resp_test_long", &body);
+        let obj = v.as_object().expect("object");
+        assert_eq!(obj.get("len").and_then(|x| x.as_u64()), Some(1000));
+        assert!(obj.get("tail").is_some());
+        let tail = obj.get("tail").and_then(|x| x.as_str()).unwrap();
+        assert!(tail.ends_with(&"E".repeat(100)));
+    }
 
     fn req_with_input(input: ResponsesInput) -> ResponsesRequest {
         ResponsesRequest {
@@ -2016,14 +2349,93 @@ mod tests {
     }
 
     #[test]
-    fn translate_request_frontdoor_off_preserves_tool_choice() {
+    fn translate_request_bare_harness_preserves_tool_choice() {
+        // Bare is the only profile that does NOT engage grammar lock,
+        // so the caller's tool_choice flows through unchanged.
+        let mut req = req_with_input(ResponsesInput::Text("go".into()));
+        req.tool_choice = Some(serde_json::json!("auto"));
+        let chat = translate_request(req, false, frontdoor::Harness::Bare).unwrap();
+        assert_eq!(
+            chat.tool_choice.as_ref().and_then(|v| v.as_str()),
+            Some("auto"),
+            "Bare harness must not override caller's tool_choice"
+        );
+    }
+
+    #[test]
+    fn translate_request_codex_pins_temperature_default() {
+        // Investment #14 (2026-05-13): bench showed daemon default
+        // (greedy-equivalent) locks Codex into 10/10 loop on the rg
+        // fixture; T=0.7 dropped that to 2/10. Pin the default to 0.7
+        // when caller didn't set one.
+        let req = req_with_input(ResponsesInput::Text("go".into()));
+        assert!(req.temperature.is_none(), "test premise: caller sent no T");
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        assert_eq!(
+            chat.temperature,
+            Some(0.7),
+            "Codex profile pins default T=0.7"
+        );
+    }
+
+    #[test]
+    fn translate_request_codex_preserves_caller_temperature() {
+        // Operator override wins. The Codex default only applies when
+        // the inbound request didn't ship a temperature.
+        let mut req = req_with_input(ResponsesInput::Text("go".into()));
+        req.temperature = Some(0.2);
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        assert_eq!(chat.temperature, Some(0.2));
+    }
+
+    #[test]
+    fn translate_request_bare_does_not_pin_temperature() {
+        let req = req_with_input(ResponsesInput::Text("go".into()));
+        let chat = translate_request(req, false, frontdoor::Harness::Bare).unwrap();
+        assert!(chat.temperature.is_none());
+    }
+
+    #[test]
+    fn translate_request_codex_disables_thinking() {
+        // Investment #11 (2026-05-13): Codex profile sets
+        // enable_thinking=false + think_budget=0 to drop the ~85%
+        // of per-turn tokens the model otherwise spends on
+        // `<think>` blocks for routine codex tool turns.
+        let req = req_with_input(ResponsesInput::Text("go".into()));
+        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        let kwargs = chat
+            .chat_template_kwargs
+            .as_ref()
+            .expect("chat_template_kwargs should be set on Codex");
+        assert_eq!(
+            kwargs.get("enable_thinking").and_then(|v| v.as_bool()),
+            Some(false),
+            "Codex must request enable_thinking=false"
+        );
+        assert_eq!(chat.think_budget, Some(0));
+    }
+
+    #[test]
+    fn translate_request_bare_does_not_touch_thinking() {
+        let req = req_with_input(ResponsesInput::Text("go".into()));
+        let chat = translate_request(req, false, frontdoor::Harness::Bare).unwrap();
+        assert!(chat.chat_template_kwargs.is_none());
+        assert!(chat.think_budget.is_none());
+    }
+
+    #[test]
+    fn translate_request_codex_harness_promotes_tool_choice() {
+        // Investment 3 (2026-05-13): Codex profile engages envelope
+        // grammar lock to prevent the model from emitting malformed
+        // `{name, cmd}` envelopes (args flattened to root). See
+        // frontdoor::Harness::runs_grammar_lock doc.
         let mut req = req_with_input(ResponsesInput::Text("go".into()));
         req.tool_choice = Some(serde_json::json!("auto"));
         let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
         assert_eq!(
             chat.tool_choice.as_ref().and_then(|v| v.as_str()),
-            Some("auto"),
-            "non-frontdoor mode must not override caller's tool_choice"
+            Some("required"),
+            "Codex harness promotes tool_choice to required for envelope grammar"
         );
     }
 
@@ -2091,6 +2503,8 @@ mod tests {
 
     #[test]
     fn translate_request_flat_tool_wraps_into_nested_shape() {
+        // Uses Bare profile to isolate the flat→nested wrapping
+        // logic from the catalog-filter pass that Codex now applies.
         let mut req = req_with_input(ResponsesInput::Text("go".into()));
         req.tools = Some(vec![ResponsesTool {
             kind: "function".into(),
@@ -2099,7 +2513,7 @@ mod tests {
             parameters: Some(serde_json::json!({"type":"object","properties":{}})),
             strict: None,
         }]);
-        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Bare).unwrap();
         let tools = chat.tools.expect("tools translated");
         // Synthetic file-I/O tools are always appended; ignore them
         // when asserting on the translated user-supplied tools.
@@ -2162,9 +2576,11 @@ mod tests {
                 strict: None,
             },
         ]);
-        // Codex harness: NO catalog filter, NO synthetic injection —
+        // Bare harness: NO catalog filter, NO synthetic injection —
         // bridging still happens for non-function builtin shapes.
-        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        // (Codex profile now filters via CODEX_TOOL_KEEPLIST and
+        // would drop `shell` + `local_shell`, defeating this test.)
+        let chat = translate_request(req, false, frontdoor::Harness::Bare).unwrap();
         let tools = chat.tools.expect("tools survive translation");
         let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
         assert!(names.contains(&"shell"));
@@ -2487,6 +2903,8 @@ mod tests {
 
     #[test]
     fn translate_request_tool_with_no_parameters_synthesizes_empty_object() {
+        // Bare profile to isolate the parameters-synthesis logic from
+        // Codex's catalog filter (which would drop "now").
         let mut req = req_with_input(ResponsesInput::Text("go".into()));
         req.tools = Some(vec![ResponsesTool {
             kind: "function".into(),
@@ -2495,7 +2913,7 @@ mod tests {
             parameters: None,
             strict: None,
         }]);
-        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Bare).unwrap();
         let tools = chat.tools.unwrap();
         assert_eq!(tools[0].function.parameters["type"], "object");
         assert!(tools[0].function.parameters.get("properties").is_some());
@@ -2503,9 +2921,13 @@ mod tests {
 
     #[test]
     fn translate_request_max_output_tokens_maps_to_max_tokens() {
+        // Bare profile to isolate the literal max_output_tokens →
+        // max_tokens mapping from the frontdoor's 16K floor (Codex /
+        // Opencode profiles bump small caps to 16K to leave room for
+        // the entire `<tool_call>` envelope).
         let mut req = req_with_input(ResponsesInput::Text("go".into()));
         req.max_output_tokens = Some(1234);
-        let chat = translate_request(req, false, frontdoor::Harness::Codex).unwrap();
+        let chat = translate_request(req, false, frontdoor::Harness::Bare).unwrap();
         assert_eq!(chat.max_tokens, Some(1234));
     }
 

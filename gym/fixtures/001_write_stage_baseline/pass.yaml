@@ -1,0 +1,8 @@
+expected_tool: exec_command
+args_parseable: true
+must_contain:
+  - "apply_patch"
+  - "*** Add File: src/lib.rs"
+  - "pub fn answer"
+content_must_contain_regex:
+  - "apply_patch +<<'EOF'"
