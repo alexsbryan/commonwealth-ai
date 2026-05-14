@@ -35,6 +35,7 @@ pub mod progress;
 pub mod registry;
 pub mod run_output;
 pub mod runner;
+pub mod text_helpers;
 pub mod trait_def;
 pub mod types;
 pub mod validation;

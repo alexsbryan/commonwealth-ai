@@ -95,7 +95,7 @@ chrono = { workspace = true }
 dirs = "6"
 # Streaming SHA-256 in `model_fetch` so the file is hashed
 # while the bytes pass through — no second pass over disk.
-sha2 = "0.10"
+sha2 = { workspace = true }
 # Percent-encode model file names in the peer-fetch URL so a
 # filename with characters that would otherwise need encoding
 # (spaces, plus signs) reaches the server intact.

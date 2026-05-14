@@ -25,11 +25,14 @@ pub mod git_archaeology;
 pub mod index;
 pub mod progress;
 pub mod recipe;
+pub mod recipe_builtin;
+mod recipe_parsing;
 pub mod registry;
 pub mod rough_edges;
 pub mod safety;
 pub mod sharding;
 pub mod snapshot;
+mod snapshot_restore;
 pub mod sovereign_config;
 pub mod testing;
 pub mod types;
@@ -59,6 +62,8 @@ pub mod lint_results;
 // Working notes and project documentation stores.
 #[cfg(feature = "treesitter")]
 pub mod notes;
+#[cfg(feature = "treesitter")]
+mod notes_schema;
 // NoteStore ↔ alignment-corpus sync. Lives behind the same gate as
 // `notes` since it talks to the same SQLite schema.
 #[cfg(feature = "treesitter")]
@@ -124,11 +129,12 @@ pub use sharding::{
 };
 pub use snapshot::{
     default_snapshot_filename, prebuilt_toml_snippet, publish_snapshot, read_local_index_meta,
-    read_manifest_from_archive, restore_snapshot_archive, snapshot_enrichment_path,
-    snapshot_index_path, LocalIndexMetaSummary, PublishOptions, PublishOutcome, RestoreOutcome,
-    SnapshotManifest, SNAPSHOT_ENRICHMENT_PREFIX, SNAPSHOT_INDEX_PREFIX,
-    SNAPSHOT_MANIFEST_FILENAME, SNAPSHOT_SCHEMA_VERSION,
+    read_manifest_from_archive, snapshot_enrichment_path, snapshot_index_path,
+    LocalIndexMetaSummary, PublishOptions, PublishOutcome, SnapshotManifest,
+    SNAPSHOT_ENRICHMENT_PREFIX, SNAPSHOT_INDEX_PREFIX, SNAPSHOT_MANIFEST_FILENAME,
+    SNAPSHOT_SCHEMA_VERSION,
 };
+pub use snapshot_restore::{restore_snapshot_archive, RestoreOutcome};
 pub use sovereign_config::{RunnerConfig, SovereignConfig};
 pub use types::{
     BatchEmbedFn, BuiltinCorpus, ChunkRange, CorpusKind, CorpusSpec, DedupPicker, EmbedFn,

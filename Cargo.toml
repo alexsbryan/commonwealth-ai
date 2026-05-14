@@ -108,6 +108,20 @@ hostname = "0.4"
 # Persistence
 rusqlite = { version = "0.35", features = ["bundled"] }
 
+# Hashing — used by 9+ crates (sha2 specifically); hoisted to lock
+# one version per ARCH §8.2.
+sha2 = "0.10"
+
+# Columnar / vector storage — corpus-engine is the primary consumer
+# but sovereign-tools also reaches into arrow + parquet directly. The
+# arrow 55-vs-57 cross-crate skew was the exact failure mode cited in
+# ARCH §8.2; hoisting these locks one version per workspace.
+arrow = "57"
+arrow-array = "57"
+arrow-schema = "57"
+parquet = "57"
+lancedb = "0.27"
+
 # Markdown (sovereign-atos charter parsing)
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
 

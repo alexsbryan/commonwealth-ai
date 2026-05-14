@@ -22,7 +22,7 @@ commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" 
 commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
 bytes = "1"
 # SHA-256 for spec content hashing.
-sha2 = "0.10"
+sha2 = { workspace = true }
 
 serde = { workspace = true }
 serde_json = { workspace = true }

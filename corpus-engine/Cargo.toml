@@ -7,23 +7,23 @@ description = "Shared corpus ingestion and index management for Sovereign and Co
 
 [dependencies]
 # Serialization
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-toml = "0.8"
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
 
 # Error handling
-thiserror = "2"
+thiserror = { workspace = true }
 
 # Async runtime
-tokio = { version = "1", features = ["full"] }
-futures = "0.3"
-async-trait = "0.1"
+tokio = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
 
 # Logging
-tracing = "0.1"
+tracing = { workspace = true }
 
-# HTTP
-reqwest = { version = "0.12", features = ["gzip", "brotli", "stream", "json"] }
+# HTTP — workspace baseline ["json", "rustls-tls"]; engine adds streaming + compression.
+reqwest = { workspace = true, features = ["gzip", "brotli", "stream"] }
 
 # Server-Sent Events client — used by the newsworthy watcher to
 # subscribe to Wikimedia EventStreams (`stream.wikimedia.org`) for
@@ -32,21 +32,22 @@ reqwest = { version = "0.12", features = ["gzip", "brotli", "stream", "json"] }
 reqwest-eventsource = "0.6"
 
 # Vector database
-lancedb = "0.27"
+lancedb = { workspace = true }
 # Lance is the on-disk format under lancedb. We pull it in directly
 # so `snapshot::publish_snapshot` can enumerate fragments from the
 # manifest (transactional view) instead of via a `readdir` of
 # `chunks.lance/data/`. readdir races with LanceDB background
 # compaction — empirically dropped 9/3021 fragments on the first
 # wikipedia publish. See `project_snapshot_publish_consistency.md`.
+# `lance` itself stays inline — corpus-engine is the only consumer.
 lance = "4"
 lance-index = "4"
 lance-table = "4"
 
 # Arrow (version driven by lancedb)
-arrow = "57"
-arrow-array = "57"
-arrow-schema = "57"
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
 
 # XML
 quick-xml = "0.36"
@@ -64,7 +65,7 @@ jsonpath-rust = "0.7"
 petgraph = "0.6"
 
 # Data formats
-parquet = "57"
+parquet = { workspace = true }
 csv = "1.3"
 
 # Compression
@@ -88,7 +89,7 @@ tempfile = "3"
 
 # Hashing
 blake3 = "1"
-sha2 = "0.10"
+sha2 = { workspace = true }
 
 # Canonical-sync packing: tar over zstd for cross-peer canonical
 # transfers. Both are mature pure-Rust impls; tar handles directory
@@ -101,7 +102,7 @@ zstd = "0.13"
 hdbscan = "0.12"
 
 # Time
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { workspace = true }
 
 # Unicode normalization — used by the atlas resolver's `fold()` to
 # strip Latin combining diacritics so `Karámazov` and `Karamazov`
@@ -110,8 +111,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # afterwards yields plain a. Small, pure-Rust, widely used.
 unicode-normalization = "0.1"
 
-# Unique IDs (used by NoteStore)
-uuid = { version = "1", features = ["v4"] }
+# Unique IDs (used by NoteStore). Workspace declares ["v4", "serde"];
+# the extra `serde` feature is harmless here.
+uuid = { workspace = true }
 
 # Code intelligence (gated on `treesitter` feature). Tree-sitter and its
 # grammar crates are heavy, so default builds skip them. Enable with
@@ -165,7 +167,7 @@ treesitter = [
 ]
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full", "test-util"] }
+tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"
 # In-process HTTP fake for the http_api acquirer e2e tests. Pinned
 # at 0.6 (current stable as of 2026-04). Used only in tests.

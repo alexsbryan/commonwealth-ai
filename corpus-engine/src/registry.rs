@@ -313,7 +313,7 @@ impl RecipeRegistry {
     /// Resolution order:
     /// 1. `<overrides_dir>/<id>.toml` — local file, no network.
     /// 2. `toml_url` from the registry entry — fetched via HTTP, SHA-256 verified.
-    /// 3. Compile-time bundled TOML via [`crate::recipe::bundled_recipe_toml`]
+    /// 3. Compile-time bundled TOML via [`crate::recipe_builtin::bundled_recipe_toml`]
     ///    — last-resort fallback. Lets a corpus install without the
     ///    network when the recipe is part of the bundled snapshot but
     ///    the live URL is unreachable (e.g. recipe not yet pushed to
@@ -370,7 +370,7 @@ impl RecipeRegistry {
         }
 
         // 3. Bundled compile-time fallback.
-        if let Some(toml) = crate::recipe::bundled_recipe_toml(id) {
+        if let Some(toml) = crate::recipe_builtin::bundled_recipe_toml(id) {
             tracing::debug!(corpus = %id, "Loading recipe from bundled compile-time TOML");
             return Recipe::from_toml(toml);
         }
@@ -586,7 +586,7 @@ sha256 = ""
         let registry = RecipeRegistry::from_bundled(None);
         for entry in registry.list_entries() {
             assert!(
-                crate::recipe::bundled_recipe_toml(&entry.id).is_some(),
+                crate::recipe_builtin::bundled_recipe_toml(&entry.id).is_some(),
                 "snapshot entry '{}' has no compile-time bundled recipe TOML",
                 entry.id,
             );
