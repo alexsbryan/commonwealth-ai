@@ -31,6 +31,32 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 
+/// Per-handler loopback check. Returns `Ok(())` if `addr` is a
+/// loopback peer; otherwise a pre-built 403 `Response` ready to
+/// `return` from the handler.
+///
+/// Why this lives alongside the middleware: every route file
+/// previously hand-rolled its own copy of this check with a slightly
+/// different return shape — five definitions, ~24 call sites, four
+/// distinct response types. ARCH §5 "defence in depth" wants both
+/// layers, but it doesn't want five copies of the same body.
+///
+/// The middleware ([`loopback_only`]) is the primary guard; this
+/// helper is the per-handler belt-and-suspenders check defended in
+/// `SYSTEM_OVERVIEW.md` §5.4 ("router middleware + per-handler
+/// enforce_localhost").
+pub(crate) fn enforce_localhost(addr: &SocketAddr) -> Result<(), Response> {
+    if addr.ip().is_loopback() {
+        Ok(())
+    } else {
+        Err((
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({ "error": "local-only" })),
+        )
+            .into_response())
+    }
+}
+
 /// `axum::middleware::from_fn`-compatible loopback guard. Apply with
 /// `.layer(axum::middleware::from_fn(loopback_only))` when building a
 /// router that serves localhost-only routes.
@@ -178,6 +204,45 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    /// Per-handler helper: loopback in any form (127.x, ::1) passes;
+    /// every routable IP (LAN, Tailscale CGNAT, public v4/v6) rejects
+    /// with a 403. The middleware test above pins the layer-level
+    /// contract; this test pins the per-handler half of §5.4's
+    /// "router middleware + per-handler enforce_localhost" pair.
+    #[test]
+    fn enforce_localhost_accepts_loopback_rejects_others() {
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+        let allowed = [
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 9741),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 1, 2, 3)), 9741),
+            SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 9741),
+        ];
+        for addr in allowed {
+            assert!(
+                enforce_localhost(&addr).is_ok(),
+                "loopback {addr} must pass"
+            );
+        }
+
+        // Attack scenarios: LAN, Tailscale CGNAT, public v4/v6.
+        let denied = [
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 1, 7)), 9741),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(100, 64, 0, 2)), 9741),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 9741),
+            SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(0x2606, 0, 0, 0, 0, 0, 0, 1)),
+                9741,
+            ),
+        ];
+        for addr in denied {
+            let Err(resp) = enforce_localhost(&addr) else {
+                panic!("non-loopback {addr} must be rejected");
+            };
+            assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        }
     }
 
     /// If the listener forgets to wire ConnectInfo, the middleware

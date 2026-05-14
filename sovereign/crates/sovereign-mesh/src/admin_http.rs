@@ -39,6 +39,7 @@ use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 
 use crate::daemon::EmbeddedDaemon;
+use crate::loopback_guard::enforce_localhost;
 
 /// How the admin handler rebuilds an `InferenceProvider` from a new
 /// `SetupConfig`. Implemented by whoever owns the model-loading code —
@@ -98,26 +99,13 @@ pub struct ReloadResponse {
     pub restart_required: bool,
 }
 
-fn enforce_localhost(
-    addr: &SocketAddr,
-) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-    if addr.ip().is_loopback() {
-        Ok(())
-    } else {
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({ "error": "local-only" })),
-        ))
-    }
-}
-
 async fn admin_reload(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
     body: Option<Json<ReloadRequest>>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let req = body.map(|Json(b)| b).unwrap_or_default();
 
@@ -318,10 +306,10 @@ mod tests {
             ),
         ];
         for addr in denied {
-            let Err((status, _)) = enforce_localhost(&addr) else {
+            let Err(resp) = enforce_localhost(&addr) else {
                 panic!("non-loopback {addr} must be rejected");
             };
-            assert_eq!(status, axum::http::StatusCode::FORBIDDEN);
+            assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
         }
     }
 

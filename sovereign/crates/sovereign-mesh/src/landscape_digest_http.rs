@@ -28,6 +28,8 @@ use commonwealth_inference::oicp::{
 
 use sovereign_tools::knowledge_view::KnowledgeViewManager;
 
+use crate::loopback_guard::enforce_localhost;
+
 /// Build the landscape-digest router. Caller must hand an
 /// `Arc<KnowledgeViewManager>` cloned from the manager that
 /// owns the daemon's enrichment state — the manager's view
@@ -42,24 +44,13 @@ pub fn landscape_digest_router(manager: Arc<KnowledgeViewManager>) -> Router {
         .layer(Extension(manager))
 }
 
-fn enforce_localhost(addr: &SocketAddr) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-    if addr.ip().is_loopback() {
-        Ok(())
-    } else {
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({ "error": "local-only" })),
-        ))
-    }
-}
-
 async fn landscape_digest_handler(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
     Extension(manager): Extension<Arc<KnowledgeViewManager>>,
     body: Option<Json<LandscapeDigestRequest>>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let req = body.map(|Json(b)| b).unwrap_or_default();
 

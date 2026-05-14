@@ -25,6 +25,7 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::daemon::EmbeddedDaemon;
+use crate::loopback_guard::enforce_localhost;
 
 /// Build the mesh HTTP router. Merged into the daemon's client router
 /// next to `mcp_router`. Call once at `start_daemon` time and hand the
@@ -119,19 +120,6 @@ pub struct MemberDto {
     pub status: String,
 }
 
-// ─── Localhost guard ──────────────────────────────────────────────
-
-fn enforce_localhost(addr: &SocketAddr) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-    if addr.ip().is_loopback() {
-        Ok(())
-    } else {
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(serde_json::json!({ "error": "local-only" })),
-        ))
-    }
-}
-
 fn default_node_name(override_name: Option<String>) -> String {
     override_name.unwrap_or_else(|| {
         hostname::get()
@@ -149,7 +137,7 @@ async fn mesh_status(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
 
     let running = daemon.is_running().await;
@@ -220,7 +208,7 @@ async fn mesh_create(
     body: Option<Json<CreateRequest>>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let req = body.map(|Json(b)| b).unwrap_or_default();
     let node_name = default_node_name(req.node_name);
@@ -253,7 +241,7 @@ async fn mesh_join(
     Json(req): Json<JoinRequest>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     // Accept bare key, https URL, or sovereign:// deep link — matches
     // what the CLI's `sovereign mesh join` takes.
@@ -298,7 +286,7 @@ async fn mesh_rotate(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     // Pull data_dir via a new accessor — rotate_join_key works on disk
     // state, independent of the running daemon.
@@ -343,13 +331,13 @@ async fn mesh_relay_candidates(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     // Internal port is fixed at 9742 today (matches what the daemon
     // binds in start_daemon and what the gossip handshake targets).
     // Plumbing this through config is a follow-up; for now the
     // single source of truth lives next to the binder.
-    let candidates = crate::daemon::relay_candidates(9742);
+    let candidates = crate::mesh_discovery::relay_candidates(9742);
     (StatusCode::OK, Json(serde_json::json!({ "candidates": candidates })))
         .into_response()
 }
@@ -361,7 +349,7 @@ async fn mesh_leave(
     Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     match daemon.leave().await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),

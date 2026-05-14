@@ -44,7 +44,7 @@
 //!     guessing at opencode's prompt markers; opencode-specific trims
 //!     will land once `PromptSizeReport` data from real loops is in.
 
-use commonwealth_api::openai_types::ChatCompletionRequest;
+use commonwealth_api::openai_types::{ChatCompletionRequest, Role};
 
 /// Per-message-class character accounting for one chat-completion
 /// request. Computed at the entry point of `chat_completion` and
@@ -82,12 +82,12 @@ impl PromptSizeReport {
         };
         for m in &req.messages {
             let n = m.content.len();
-            match m.role.as_str() {
-                "system" => r.system_chars += n,
-                "user" => r.user_chars += n,
-                "assistant" => r.assistant_chars += n,
-                "tool" => r.tool_chars += n,
-                _ => r.other_chars += n,
+            match Role::from_openai_str(m.role.as_str()) {
+                Role::System => r.system_chars += n,
+                Role::User => r.user_chars += n,
+                Role::Assistant => r.assistant_chars += n,
+                Role::Tool => r.tool_chars += n,
+                Role::Other(_) => r.other_chars += n,
             }
         }
         if let Some(tools) = req.tools.as_ref() {

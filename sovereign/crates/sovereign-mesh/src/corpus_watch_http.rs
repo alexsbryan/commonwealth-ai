@@ -35,6 +35,7 @@ use sovereign_tools::local_corpus::watched::state::FailedFile;
 use sovereign_tools::local_corpus::watched::status::WatchedFolderStatus;
 use sovereign_tools::local_corpus::WatchedIncompleteJob;
 
+use crate::loopback_guard::enforce_localhost;
 use crate::watched_folder_runtime;
 
 /// Build the watched-folder router. Mounts under
@@ -393,7 +394,7 @@ async fn register_handler(
     Json(req): Json<RegisterRequest>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -469,7 +470,7 @@ async fn register_handler(
 
 async fn list_handler(ConnectInfo(peer): ConnectInfo<SocketAddr>) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -513,7 +514,7 @@ async fn status_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -529,7 +530,7 @@ async fn state_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -556,7 +557,7 @@ async fn details_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -737,7 +738,7 @@ async fn document_handler(
     Path((corpus_id, doc_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -788,7 +789,7 @@ async fn incomplete_jobs_handler(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -803,7 +804,7 @@ async fn pause_handler(
     body: Option<Json<PauseRequest>>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -823,7 +824,7 @@ async fn resume_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -839,7 +840,7 @@ async fn confirm_deletion_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -860,7 +861,7 @@ async fn add_root_handler(
     Json(req): Json<AddRootRequest>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -881,7 +882,7 @@ async fn remove_root_handler(
     Path((corpus_id, idx)): Path<(String, usize)>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -903,7 +904,7 @@ async fn enrich_enable_handler(
     Json(req): Json<EnrichEnableRequest>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -923,7 +924,7 @@ async fn enrich_disable_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -944,7 +945,7 @@ async fn enrich_rebuild_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -968,7 +969,7 @@ async fn sync_now_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -1008,7 +1009,7 @@ async fn remove_handler(
     Path(corpus_id): Path<String>,
 ) -> impl IntoResponse {
     if let Err(r) = enforce_localhost(&peer) {
-        return r.into_response();
+        return r;
     }
     let Some(manager) = watched_folder_runtime::manager() else {
         return service_unavailable("watched-folder runtime not installed").into_response();
@@ -1024,19 +1025,6 @@ async fn remove_handler(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
-
-fn enforce_localhost(addr: &SocketAddr) -> Result<(), (StatusCode, Json<ErrorBody>)> {
-    if addr.ip().is_loopback() {
-        Ok(())
-    } else {
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(ErrorBody {
-                error: "local-only".into(),
-            }),
-        ))
-    }
-}
 
 fn service_unavailable(msg: &str) -> (StatusCode, Json<ErrorBody>) {
     (

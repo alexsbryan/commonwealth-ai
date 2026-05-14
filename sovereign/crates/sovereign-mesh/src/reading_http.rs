@@ -36,11 +36,12 @@ use serde::{Deserialize, Serialize};
 use corpus_engine::atlas_traversal::{detect_atom_spans, AtomSpan as DetectorAtomSpan};
 use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, read_atlas_cross_corpus_edges, read_atlas_edges, AtomEnvelope, AtomId,
-    CrossCorpusEdge, Edge, EdgeType,
+    CrossCorpusEdge, Edge,
 };
 use corpus_engine::EnrichmentChunkRow;
 
 use crate::daemon::EmbeddedDaemon;
+use crate::loopback_guard::enforce_localhost;
 
 // ─── Response shapes ───────────────────────────────────────────
 
@@ -281,17 +282,6 @@ pub fn reading_router(daemon: Arc<EmbeddedDaemon>) -> Router {
         .layer(Extension(daemon))
 }
 
-fn enforce_localhost(addr: &SocketAddr) -> Result<(), axum::response::Response> {
-    if addr.ip().is_loopback() {
-        Ok(())
-    } else {
-        Err((
-            StatusCode::FORBIDDEN,
-            Json(ErrorBody { error: "local-only".into() }),
-        )
-            .into_response())
-    }
-}
 
 // ─── Handlers ──────────────────────────────────────────────────
 
@@ -587,167 +577,9 @@ fn build_atom_card(
     }
 }
 
-fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
-    match atom {
-        AtomEnvelope::Entity(_) => "entity",
-        AtomEnvelope::Event(_) => "event",
-        AtomEnvelope::State(_) => "state",
-        AtomEnvelope::Relation(_) => "relation",
-        AtomEnvelope::Claim(_) => "claim",
-        AtomEnvelope::Question(_) => "question",
-        AtomEnvelope::Configuration(_) => "configuration",
-        AtomEnvelope::ArgumentReconstruction(_) => "argument",
-    }
-}
-
-fn edge_type_label(t: EdgeType) -> &'static str {
-    match t {
-        EdgeType::Transition => "transition",
-        EdgeType::Causes => "causes",
-        EdgeType::Grounds => "grounds",
-        EdgeType::Tension => "tension",
-        EdgeType::Involves => "involves",
-        EdgeType::Composes => "composes",
-        EdgeType::Configures => "configures",
-        EdgeType::Grounding => "grounding",
-        EdgeType::Framing => "framing",
-        EdgeType::Provenance => "provenance",
-    }
-}
-
-/// Pull the human-readable fields for any atom type. Not every
-/// type has every field — for atoms without a clean canonical name
-/// we synthesize from the most descriptive available text so the
-/// panel still shows something sensible.
-fn atom_surface_fields(
-    atom: &AtomEnvelope,
-) -> (String, Vec<String>, String, Option<f32>) {
-    match atom {
-        AtomEnvelope::Entity(e) => (
-            e.canonical_name.clone(),
-            e.aliases.clone(),
-            e.description.clone(),
-            Some(e.salience),
-        ),
-        AtomEnvelope::Event(e) => (
-            truncate(&e.description, 80),
-            Vec::new(),
-            e.description.clone(),
-            None,
-        ),
-        AtomEnvelope::State(s) => (
-            s.label.clone(),
-            Vec::new(),
-            format!("State of {}: {}", s.entity_id.as_str(), s.label),
-            s.confidence,
-        ),
-        AtomEnvelope::Relation(r) => (
-            r.label.clone(),
-            Vec::new(),
-            r.label.clone(),
-            None,
-        ),
-        AtomEnvelope::Claim(c) => (
-            truncate(&c.content, 80),
-            Vec::new(),
-            c.content.clone(),
-            c.confidence,
-        ),
-        AtomEnvelope::Question(q) => (
-            truncate(&q.content, 80),
-            Vec::new(),
-            q.content.clone(),
-            None,
-        ),
-        AtomEnvelope::Configuration(c) => (
-            c.label.clone(),
-            Vec::new(),
-            c.description.clone(),
-            Some(c.confidence),
-        ),
-        AtomEnvelope::ArgumentReconstruction(a) => (
-            a.name.clone(),
-            Vec::new(),
-            format!(
-                "{}{}{}",
-                a.premises
-                    .iter()
-                    .enumerate()
-                    .map(|(i, p)| format!("P{}. {}", i + 1, p))
-                    .collect::<Vec<_>>()
-                    .join(" "),
-                if !a.premises.is_empty() { " " } else { "" },
-                if !a.conclusion.is_empty() {
-                    format!("C. {}", a.conclusion)
-                } else {
-                    String::new()
-                }
-            ),
-            None,
-        ),
-    }
-}
-
-fn truncate(s: &str, max_chars: usize) -> String {
-    let trimmed: String = s.chars().take(max_chars).collect();
-    if trimmed.chars().count() < s.chars().count() {
-        format!("{trimmed}…")
-    } else {
-        trimmed
-    }
-}
-
-/// Extract every `(section_id, optional_preview)` pair from an
-/// atom's evidence (or `first_appearance` for entities, or
-/// `section_position` for events). Order preserves the order
-/// evidence was written.
-fn atom_evidence_section_refs(atom: &AtomEnvelope) -> Vec<(String, Option<String>)> {
-    match atom {
-        AtomEnvelope::Entity(e) => vec![(
-            e.first_appearance.chunk_id.clone(),
-            e.first_appearance.passage_preview.clone(),
-        )],
-        AtomEnvelope::Event(e) => {
-            let mut out = vec![(e.section_position.section_id.clone(), None)];
-            for c in &e.evidence {
-                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
-            }
-            out
-        }
-        AtomEnvelope::State(s) => s
-            .evidence
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Relation(r) => r
-            .evidence
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Claim(c) => c
-            .evidence
-            .iter()
-            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Question(q) => q
-            .raised_at
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Configuration(c) => c
-            .evidence
-            .iter()
-            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::ArgumentReconstruction(a) => {
-            let mut out = vec![(a.section_position.section_id.clone(), None)];
-            for c in &a.evidence {
-                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
-            }
-            out
-        }
-    }
-}
+use crate::reading_formatters::{
+    atom_evidence_section_refs, atom_surface_fields, atom_type_label, edge_type_label,
+};
 
 fn cross_corpus_links_for_atom(
     atom_id: &AtomId,
