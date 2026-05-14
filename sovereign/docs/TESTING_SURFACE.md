@@ -1,6 +1,6 @@
 # Daemon Testing Surface — Audit + Priority Matrix
 
-**Last audited:** 2026-05-13 (round 1+2 of test landings). Refresh whenever a row's coverage changes,
+**Last audited:** 2026-05-13 (rounds 1+2+3 of test landings). Refresh whenever a row's coverage changes,
 a capability lands, or a deferral resolves. Out-of-date rows are a bug
 per ARCH §1.1 — feature docs describe *intent*, and this doc's intent
 is to drive the next test.
@@ -68,15 +68,19 @@ test should come from.
 
 |                  | **·** (no test)   | **~** (unit only) | **✓** (integration+)  |
 |------------------|-------------------|-------------------|-----------------------|
-| **P0** silent    | **8**             | 6                 | 12                    |
-| **P1** visible   | 8                 | 7                 | 7                     |
+| **P0** silent    | **4**             | 5                 | 17                    |
+| **P1** visible   | 7                 | 7                 | 8                     |
 | **P2** degraded  | 5                 | 4                 | 2                     |
 | **P3** cosmetic  | 4                 | 2                 | 1                     |
 
-Round 1+2 landed 16 tests across 4 files: `embeddings_e2e` (4),
-`injection_order` (3), `node_id_persistence` (2), `loopback_parity`
-(7). Net: 4 P0 cells moved from `·` to `✓`, 1 P1 cell from `·`,
-1 P0 from `~` to `✓` (loopback parity).
+Rounds 1+2+3 landed 27 tests across 11 files. Net P0-uncovered
+moved 12 → 4. Files added: `embeddings_e2e` (4), `injection_order` (3),
+`node_id_persistence` (2), `loopback_parity` (7), `gossip_auth` (3),
+`storage_snapshot_e2e` (2), `peer_preference_manifest` (3),
+`finish_reason_streaming` (3). One audit correction in round 3:
+`/v1/admin/reload` HTTP route was marked `·` but was already covered
+by the `admin_http` lib tests (which use real HTTP + spawn). Mark
+fixed in this refresh.
 
 The 12 P0-uncovered cells are where regressions hurt most and review
 catches least. Those are the top-priority queue at the bottom.
@@ -118,7 +122,7 @@ step. Buckets follow the daemon's structural layout.
 | `/v1/embeddings` end-to-end | ✓ | P1 | `embeddings_e2e` (4 tests: single, batch, no-backend 503, empty 400) |
 | `/v1/models` reflects loaded slots | ~ | P2 | `daemon::tests::register_local_model_slots_writes_info_for_all_three_slots` covers wiring; HTTP-surface untested |
 | `/v1/responses` adapter (Responses API) | · | P1 | **Gap.** OpenAI Responses surface, used by `codex` clients — translation contract is in `routes_responses` |
-| Streaming `finish_reason` carries through (`Length`, `Cancelled`, `ContentFilter`) | ~ | **P0** | Unit tests in `inference_adapter::translate_finish_reason`; no end-to-end where a real stream truncates and the wire chunk shows the right reason. **Silent because client renders truncation identically to clean stop today** |
+| Streaming `finish_reason` carries through (`Length`, `Cancelled`, `ContentFilter`) | ✓ | **P0** | `finish_reason_streaming::{length_truncation_surfaces_length_on_final_chunk, content_filter_truncation_surfaces_content_filter_on_final_chunk, legacy_provider_default_impl_surfaces_stop}` |
 | Tool envelope schema enforcement (`force_tool_calls`) | ~ | P1 | `tool_profile` unit tests; integration through `/v1/chat/completions` untested |
 | Throughput observation → `InferenceReceived` ledger | ✓ | **P0** | `throughput_ledger_emission` |
 | Zero-chunk peer route — no ledger event | ✓ | **P0** | `throughput_ledger_emission::peer_route_failure_without_chunks_does_not_emit_ledger_event` |
@@ -129,7 +133,7 @@ step. Buckets follow the daemon's structural layout.
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
 | Gossip merge convergence (two AppStates) | ✓ | P1 | `gossip_integration::two_peers_converge_via_one_gossip_round` |
-| Gossip auth (mesh_id / join_key_hash mismatch) | · | **P0** | **Gap.** A 401 from the route is asserted indirectly; no test that a foreign mesh's payload doesn't pollute the local view |
+| Gossip auth (mesh_id / join_key_hash mismatch) | ✓ | **P0** | `gossip_auth::{wrong_mesh_id_rejects_with_401_and_no_mutation, wrong_join_key_hash_rejects_with_401_and_no_mutation, matching_credentials_accept_new_member_and_fire_hook}` |
 | Gossip refresh of `hosted_corpora` | ✓ | P1 | `capabilities_published::gossip_round_publishes_live_hosted_corpora` |
 | Offline decay of stale peer | ✓ | P2 | `gossip_integration::gossip_decays_stale_peer_to_offline` |
 | Latency probing (UDP, EWMA) | ~ | P2 | `commonwealth-discovery` unit tests; no daemon-level |
@@ -159,7 +163,7 @@ step. Buckets follow the daemon's structural layout.
 |---|---|---|---|
 | `build_self_manifest` shape (Fast + Slow + aliases + Code) | ✓ | P1 | `oicp_synthesis::self_manifest_tests` (6 tests) |
 | `/oicp/v1/capabilities` HTTP serialization | · | P1 | **Gap.** Unit-tested at the builder, not over the wire |
-| Manifest stamping with peer-preference multipliers | · | **P0** | **Gap.** §7 structural privacy promise. The `X-Node-Id` header → preference lookup → affinity multiply path needs an HTTP-surface test |
+| Manifest stamping with peer-preference multipliers | ✓ | **P0** | `peer_preference_manifest::{x_node_id_with_set_preference_halves_all_claim_affinities, x_node_id_for_unmatched_peer_does_not_modify_affinities, no_header_does_not_pick_up_any_stored_preference}` |
 | Manifest cache TTL refresh on `MeshInferenceProvider` | ~ | P2 | `peer_inference` has the TTL constant; no test that an expired cache actually re-fetches |
 | Peer quarantine / health weight scaling | ~ | P2 | `peer_inference` unit tests; no end-to-end where a failing peer is observed to back off |
 | Effective in-flight scaling under health weight | ✓ | P2 | `peer_inference::effective_inflight` unit tests |
@@ -189,9 +193,9 @@ step. Buckets follow the daemon's structural layout.
 | Capability | Coverage | Impact | Test / Next step |
 |---|---|---|---|
 | `ConfigDiff::diff` field semantics | ~ | P1 | `admin_http::tests::config_diff_*` |
-| `/v1/admin/reload` HTTP route happy path | · | **P0** | **Gap.** Hot-reload is a high-frequency production action. `reload_is_noop_when_nothing_changed` is in lib tests; no over-the-wire test |
-| `/v1/admin/reload` swaps `InferenceProvider` | · | **P0** | **Gap.** The provider-rebuild path is the highest-blast-radius reload action |
-| `/v1/admin/reload` reports `restart_required: true` correctly | · | P1 | **Gap.** Operator depends on this to know whether `launchctl kickstart` is needed |
+| `/v1/admin/reload` HTTP route happy path | ✓ | **P0** | `admin_http::tests::reload_is_noop_when_nothing_changed` (spawns real HTTP listener via reqwest — lib tests at L2) |
+| `/v1/admin/reload` swaps `InferenceProvider` | ✓ | **P0** | `admin_http::tests::reload_swaps_inference_provider_when_models_change` (asserts `ProviderFactory.build_provider` invoked + reloaded_fields populated) |
+| `/v1/admin/reload` reports `restart_required: true` correctly | ✓ | P1 | `admin_http::tests::reload_port_change_requires_restart` |
 | Loopback enforcement on `/v1/admin/reload` | ✓ | **P0** | `loopback_guard::enforce_localhost_accepts_loopback_rejects_others`, `admin_http::tests::enforce_localhost_rejects_non_loopback` |
 
 ### I. Auto-collaborate orchestration
@@ -239,7 +243,7 @@ step. Buckets follow the daemon's structural layout.
 | `InferenceReceived` emission on peer-routed stream | ✓ | **P0** | `throughput_ledger_emission` |
 | `KnowledgeQueryServed` per contributing corpus | · | **P0** | **Gap.** §10 contract; emission site untested |
 | `ShardTransferred` on `coordinate_merge` | ~ | P1 | `commonwealth-knowledge::ShardManager` unit tests; daemon-level untested |
-| `StorageSnapshot` hourly emission | · | P1 | **Gap.** Spawned in `start_daemon`; the first-tick-immediate behavior + storage filter (mesh_sharing only) needs a test |
+| `StorageSnapshot` hourly emission | ✓ | P1 | `storage_snapshot_e2e::{first_tick_emits_only_mesh_shared_corpora_to_ledger, snapshot_emits_nothing_when_no_corpus_engine_attached}` |
 | `current_contributions` aggregator | ~ | P2 | `commonwealth-state::contributions` unit tests |
 | `peer_preferences` gossip exclusion | ✓ | **P0** | `commonwealth-state::peer_preferences::tests::gossip_excludes_peer_preferences_app_id` + `store::tests::all_entries_for_gossip_excludes_peer_preferences_namespace` |
 
@@ -284,14 +288,14 @@ inline. Numbers in brackets index back to the matrix bucket.row.
 
 1. ~~**[C.loopback parity] Single integration test walking every loopback-only route across all 7 mounted routers asserting non-loopback → 403.**~~ **Landed** as `loopback_parity` (7 tests). Cheap, high coverage, defended the §7 promise.
 2. **[A.try_resume] `try_resume` → mesh reconstruction → first gossip round.** Pins the daemon-restart-overnight invariant. *Partial:* `node_id_persistence::node_id_survives_daemon_restart_against_same_data_dir` exercises `try_resume`; the "first gossip round after resume" half is still uncovered.
-3. **[H.admin reload] `/v1/admin/reload` end-to-end with provider swap.** Touches the highest-blast-radius hot-reload path.
+3. ~~**[H.admin reload] `/v1/admin/reload` end-to-end with provider swap.**~~ **Already covered** by `admin_http::tests::{reload_is_noop_when_nothing_changed, reload_swaps_inference_provider_when_models_change, reload_port_change_requires_restart}` — the lib tests spawn a real HTTP listener and use reqwest. Audit correction.
 4. ~~**[N.node_id persistence] Daemon restart preserves `self_node_id`.**~~ **Landed** as `node_id_persistence` (2 tests).
 5. **[D.knowledge fan-out] `/v1/knowledge/search` two-daemon fan-out + merge + per-corpus ledger emission.** Spans three crates; pins the "ask my mesh about X" path.
-6. **[C.gossip auth] Foreign-mesh gossip payload doesn't pollute local state.** §7 promise.
-7. **[E.manifest stamping] Peer-preference manifest stamping over `/oicp/v1/capabilities`.** §7 promise.
-8. **[B.finish_reason] End-to-end test that a `Length`-truncated stream surfaces `"length"` on the SSE chunk.** Pins the typed-stream-framing fix.
+6. ~~**[C.gossip auth] Foreign-mesh gossip payload doesn't pollute local state.**~~ **Landed** as `gossip_auth` (3 tests).
+7. ~~**[E.manifest stamping] Peer-preference manifest stamping over `/oicp/v1/capabilities`.**~~ **Landed** as `peer_preference_manifest` (3 tests).
+8. ~~**[B.finish_reason] End-to-end test that a `Length`-truncated stream surfaces `"length"` on the SSE chunk.**~~ **Landed** as `finish_reason_streaming` (3 tests, including `legacy_provider_default_impl_surfaces_stop` as negative control).
 9. **[M.KnowledgeQueryServed] Fan-out emits one ledger event per contributing corpus.** §10 contract.
-10. **[M.StorageSnapshot] First-tick-immediate behavior + mesh_sharing filter.** Verifies the spawn site we documented in §5.
+10. ~~**[M.StorageSnapshot] First-tick-immediate behavior + mesh_sharing filter.**~~ **Landed** as `storage_snapshot_e2e` (2 tests, real CorpusEngine with mesh-shared + local-only corpora).
 11. ~~**[B.embeddings] `/v1/embeddings` smoke + multi-input batch.**~~ **Landed** as `embeddings_e2e` (4 tests).
 12. **[B.responses adapter] `/v1/responses` translation contract.** `codex` clients depend on it.
 13. **[F.corpus_watch happy path] Register → pause → resume → status round-trip.** Single test against the 14-route surface; closes the biggest single bucket gap.
