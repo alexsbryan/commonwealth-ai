@@ -71,6 +71,7 @@ impl HybridProvider {
             tool_choice: None,
                                 model_id: None,
                                 enable_thinking: None,
+                    sampling_mode: None,
                     };
 
                     match provider.complete(&probe).await {

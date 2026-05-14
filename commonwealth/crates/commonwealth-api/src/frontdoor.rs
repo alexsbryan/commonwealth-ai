@@ -601,9 +601,30 @@ pub fn canonicalize_apply_patch_heredoc(cmd: &str) -> Option<String> {
     // marker (canonical) — we treat `End Patch` as the structural end,
     // not the literal `\nTAG\n` closer, since malformed emissions often
     // inline the closer (`*** End Patch EOF`).
+    //
+    // Fallback: if `End Patch` is entirely missing (gym 008 / real
+    // codex smoke 2026-05-13: model emits the heredoc body then just
+    // `EOF` with no End Patch marker), treat the heredoc closer
+    // (`\nTAG\n` or `\nTAG` at end-of-string) as the body boundary.
+    // Both repairs land in the canonical re-emission.
     let body_input = after_tag.trim_start_matches(|c: char| c == '\n' || c == '\r');
-    let end_idx = find_end_patch_marker(body_input)?;
-    let pre_end = &body_input[..end_idx];
+    let pre_end: &str = match find_end_patch_marker(body_input) {
+        Some(end_idx) => &body_input[..end_idx],
+        None => {
+            // Strip the trailing heredoc closer if present so it
+            // doesn't end up in the body. Match `\n<tag>` followed
+            // by end-of-string or whitespace.
+            let mut body = body_input;
+            let needle_with_nl = format!("\n{tag}");
+            if let Some(idx) = body.rfind(&needle_with_nl) {
+                let tail = &body[idx + needle_with_nl.len()..];
+                if tail.trim().is_empty() {
+                    body = &body[..idx];
+                }
+            }
+            body
+        }
+    };
 
     let canonical_inner = canonicalize_patch_body_lines(pre_end)?;
     let mut out = String::new();
@@ -675,9 +696,24 @@ fn find_end_patch_marker(s: &str) -> Option<usize> {
 /// Walk lines, identify each one's structural role (Begin Patch /
 /// Add File / Update File / Delete File / Move to / body line),
 /// re-emit in canonical form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PatchSection {
+    /// Outside any file operation.
+    None,
+    /// Inside an `Add File:` body — every line is an addition. Lines
+    /// lacking a `+` prefix are repaired to have one.
+    AddFile,
+    /// Inside an `Update File:` body — lines may be `+`, `-`, ` `, or
+    /// `@@`. Unprefixed lines default to `+` (an addition) since
+    /// that's the most common malformation pattern from observed
+    /// smokes (gym 008, 2026-05-13).
+    UpdateFile,
+}
+
 fn canonicalize_patch_body_lines(body: &str) -> Option<String> {
     let mut out = String::new();
     let mut saw_op = false;
+    let mut section = PatchSection::None;
     for raw_line in body.lines() {
         let cleaned = strip_triple_star(raw_line);
         if cleaned.eq_ignore_ascii_case("Begin Patch") {
@@ -688,6 +724,7 @@ fn canonicalize_patch_body_lines(body: &str) -> Option<String> {
             out.push_str(path.trim());
             out.push('\n');
             saw_op = true;
+            section = PatchSection::AddFile;
             continue;
         }
         if let Some(path) = strip_op_prefix(&cleaned, "Update File:") {
@@ -695,6 +732,7 @@ fn canonicalize_patch_body_lines(body: &str) -> Option<String> {
             out.push_str(path.trim());
             out.push('\n');
             saw_op = true;
+            section = PatchSection::UpdateFile;
             continue;
         }
         if let Some(path) = strip_op_prefix(&cleaned, "Delete File:") {
@@ -702,6 +740,7 @@ fn canonicalize_patch_body_lines(body: &str) -> Option<String> {
             out.push_str(path.trim());
             out.push('\n');
             saw_op = true;
+            section = PatchSection::None;
             continue;
         }
         if let Some(target) = strip_op_prefix(&cleaned, "Move to:") {
@@ -710,14 +749,38 @@ fn canonicalize_patch_body_lines(body: &str) -> Option<String> {
             out.push('\n');
             continue;
         }
-        // Default: preserve verbatim (additions `+...`, deletions
-        // `-...`, hunk headers `@@...`, context lines). We DO NOT
-        // strip `***` from these — they are user content.
+        // Body line. Preserve verbatim when it already has a valid
+        // prefix (`+`, `-`, ` `, `@@`). Otherwise — and this is the
+        // gym 008 repair — synthesise the prefix based on the
+        // current section. Models trained on the apply_patch
+        // protocol sometimes lose the `+` discipline mid-body
+        // (especially for TOML / config files whose syntax visually
+        // resembles a hunk header).
         let line_trimmed_end = raw_line.trim_end_matches(['\r', '\n']);
-        // Skip lines that became empty after stripping stray markers
-        // (e.g. a stray `***` line with nothing else on it).
         if line_trimmed_end.trim().is_empty() && cleaned.is_empty() {
             continue;
+        }
+        // Prefix rules differ by section:
+        //   AddFile  — every body line is an addition. The ONLY
+        //              acceptable line-start is `+`; a leading space
+        //              is content indentation, not a hunk prefix.
+        //              Codex's apply_patch parser rejects `<space>foo`
+        //              inside an Add File section ("not a valid hunk
+        //              header"). Repair: always prepend `+`.
+        //   UpdateFile — `+/-/space/@@` are all legal (context lines,
+        //              additions, deletions, hunk headers).
+        let first_char = line_trimmed_end.chars().next();
+        let needs_prefix = match section {
+            PatchSection::AddFile => !matches!(first_char, Some('+')),
+            PatchSection::UpdateFile => match first_char {
+                Some('+') | Some('-') | Some(' ') => false,
+                Some('@') if line_trimmed_end.starts_with("@@") => false,
+                _ => true,
+            },
+            PatchSection::None => false,
+        };
+        if needs_prefix && section != PatchSection::None {
+            out.push('+');
         }
         out.push_str(line_trimmed_end);
         out.push('\n');
@@ -725,7 +788,198 @@ fn canonicalize_patch_body_lines(body: &str) -> Option<String> {
     if !saw_op {
         return None;
     }
-    Some(out)
+    Some(repair_per_file_content(&out))
+}
+
+/// Post-process the canonicalized patch body: walk file sections,
+/// apply per-file-type content repairs. Currently handles `.toml`
+/// files (Cargo.toml shape).
+///
+/// Why mechanical instead of better prompting: per the user's
+/// philosophy (2026-05-13), the model will never be 100% on
+/// formatting. Detect well-known config-file malformations and
+/// repair them post-emission. Same pattern as the heredoc structural
+/// canonicalizer, applied at the file-content level.
+fn repair_per_file_content(canonical_body: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut current_path: Option<String> = None;
+    let mut buffer: Vec<String> = Vec::new();
+    for line in canonical_body.lines() {
+        // Section boundary: `*** Add File:` / `*** Update File:` /
+        // `*** Delete File:` / `*** End Patch` / `*** Begin Patch`.
+        if line.starts_with("*** Add File:") {
+            // Flush previous section, then enter new one.
+            flush_section(&mut out, current_path.as_deref(), &buffer);
+            buffer.clear();
+            let path = line.trim_start_matches("*** Add File:").trim().to_string();
+            current_path = Some(path);
+            out.push(line.to_string());
+            continue;
+        }
+        if line.starts_with("*** Update File:")
+            || line.starts_with("*** Delete File:")
+            || line.starts_with("*** Move to:")
+            || line.starts_with("*** End Patch")
+            || line.starts_with("*** Begin Patch")
+        {
+            flush_section(&mut out, current_path.as_deref(), &buffer);
+            buffer.clear();
+            current_path = None;
+            out.push(line.to_string());
+            continue;
+        }
+        // Inside a section — buffer until next boundary.
+        if current_path.is_some() {
+            buffer.push(line.to_string());
+        } else {
+            out.push(line.to_string());
+        }
+    }
+    // Trailing section (shouldn't happen if End Patch is present,
+    // but cover the path for safety).
+    if !buffer.is_empty() {
+        flush_section(&mut out, current_path.as_deref(), &buffer);
+    }
+    let mut joined = out.join("\n");
+    if canonical_body.ends_with('\n') && !joined.ends_with('\n') {
+        joined.push('\n');
+    }
+    joined
+}
+
+fn flush_section(out: &mut Vec<String>, path: Option<&str>, buffer: &[String]) {
+    let Some(path) = path else {
+        // No active section (or it was non-AddFile) — emit buffer verbatim.
+        out.extend(buffer.iter().cloned());
+        return;
+    };
+    if path.ends_with(".toml") || path.ends_with("/Cargo.toml") {
+        let repaired = repair_toml_body(buffer);
+        out.extend(repaired);
+    } else {
+        out.extend(buffer.iter().cloned());
+    }
+}
+
+/// Repair a TOML body that was emitted in JSON-ish shape.
+///
+/// Three passes:
+/// 1. Strip wrapper `+{` / `+}` lines that enclosed the whole body.
+/// 2. Detect multi-line inline-table opens (`+    dependencies = {`)
+///    and convert to TOML section headers (`+[dependencies]`). TOML
+///    inline tables MUST be single-line; multi-line inline tables
+///    are invalid syntax. Drop the matching close `+}` after.
+/// 3. Strip trailing commas on key=value lines (TOML doesn't use
+///    trailing commas — JSON habit slipping through).
+/// 4. Prepend `[package]` if the body starts with key=value lines
+///    without any preceding section header.
+fn repair_toml_body(buffer: &[String]) -> Vec<String> {
+    // Pass 1 — strip outer wrapper braces.
+    let kept: Vec<String> = buffer
+        .iter()
+        .filter(|line| {
+            let stripped = line.trim_start_matches('+').trim();
+            stripped != "{" && stripped != "}"
+        })
+        .cloned()
+        .collect();
+    // Pass 2 — multi-line inline-table → section header. A line that
+    // matches `+<indent><name> = {` with NO closing `}` on the same
+    // line is a malformed multi-line inline-table open. Rewrite to
+    // `+[<name>]` and remember to drop the corresponding close.
+    let mut pass2: Vec<String> = Vec::new();
+    let mut depth: i32 = 0;
+    for line in &kept {
+        let inner = line.strip_prefix('+').unwrap_or(line);
+        let trimmed = inner.trim();
+        if depth > 0 {
+            // Inside a malformed multi-line table — emit lines as-is
+            // until the matching close brace.
+            let open_count = inner.matches('{').count() as i32;
+            let close_count = inner.matches('}').count() as i32;
+            depth += open_count - close_count;
+            if depth <= 0 {
+                depth = 0;
+                if trimmed == "}" {
+                    continue; // drop standalone close
+                }
+                // Drop trailing `}` from a real content line, if any.
+                let cleaned_line = if trimmed.ends_with('}') {
+                    let without_close = inner.trim_end().trim_end_matches('}').trim_end();
+                    format!("+{without_close}")
+                } else {
+                    line.clone()
+                };
+                pass2.push(cleaned_line);
+                continue;
+            }
+            pass2.push(line.clone());
+            continue;
+        }
+        // Look for `<name> = {` with no closing `}` on same line.
+        if let Some(name) = parse_inline_table_open(trimmed) {
+            pass2.push(format!("+[{}]", name));
+            depth = 1;
+            continue;
+        }
+        pass2.push(line.clone());
+    }
+    // Pass 3 — strip trailing commas on key=value lines.
+    let stripped_commas: Vec<String> = pass2
+        .iter()
+        .map(|line| {
+            let inner = line.strip_prefix('+').unwrap_or(line);
+            let inner_trim_end = inner.trim_end();
+            if let Some(rest) = inner_trim_end.strip_suffix(',') {
+                if rest.contains('=') && !rest.trim_start().starts_with('[') {
+                    return format!("+{rest}");
+                }
+            }
+            line.to_string()
+        })
+        .collect();
+    // Pass 4 — ensure a `[package]` header before the first key=value.
+    let mut out: Vec<String> = Vec::new();
+    let mut header_seen = false;
+    let mut header_injected = false;
+    for line in stripped_commas {
+        let inner = line.strip_prefix('+').unwrap_or(&line).trim_start();
+        if inner.starts_with('[') {
+            header_seen = true;
+        }
+        let is_kv =
+            !inner.is_empty() && inner.contains('=') && !inner.starts_with('[');
+        if !header_seen && !header_injected && is_kv {
+            out.push("+[package]".to_string());
+            header_injected = true;
+        }
+        out.push(line);
+    }
+    out
+}
+
+/// If `s` looks like `<name> = {` with no matching `}` on the same
+/// line, return `<name>`. Used to detect malformed multi-line inline-
+/// table opens that should be section headers.
+fn parse_inline_table_open(s: &str) -> Option<String> {
+    let trimmed = s.trim();
+    let (name_part, rest) = trimmed.split_once('=')?;
+    let name = name_part.trim();
+    if name.is_empty() {
+        return None;
+    }
+    // Name must look like a TOML key — alphanum + `_-.`.
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    {
+        return None;
+    }
+    let rest = rest.trim();
+    if rest != "{" {
+        return None; // would be a closed inline table if `{ ... }` on same line
+    }
+    Some(name.to_string())
 }
 
 /// Strip leading and trailing `***` runs (with adjacent whitespace).
@@ -947,20 +1201,76 @@ pub fn apply_read_attractor_nudge_chat(
     //
     // What we delete: every read-classified assistant tool_call /
     // envelope-shadow pair AND the immediately-following tool
-    // result. The model retains everything else: system prompt,
-    // initial user task, the trailing user pivot directive, the
-    // appended nudge.
+    // result. Plus — and this is the gym 007 fix, captured from
+    // a real codex smoke 2026-05-13 — the frontdoor-generated
+    // compressed-history user message, when present. Its
+    // LLM-written narrative ("Shell commands executed: cat on the
+    // spec file succeeded three times", "No actual source files
+    // have been written yet") self-reinforces the read pattern,
+    // and the trim of raw tool_calls is moot if the summary
+    // re-injects the same evidence in prose form.
     //
-    // Risk: model loses the spec content it had read. For 006 the
-    // pivot directive frames the write as a placeholder
-    // (`pub fn answer() -> u32 { 42 }`) which doesn't need spec
-    // knowledge. For a real production task where reads carried
-    // load-bearing content, the model can re-issue a read in the
-    // next turn — anti-rep won't fire because the deleted reads
-    // are no longer in context.
+    // The model retains: codex system prompt, the trailing user
+    // pivot directive (if any), the appended system-role nudge.
+    // Risk: model loses the spec content it had read. The nudge
+    // tells it to write a placeholder regardless; iteration is
+    // expected. If the spec is load-bearing the model can re-issue
+    // a read in the next turn.
     let read_indices = collect_read_turn_indices(messages);
     for idx in read_indices.into_iter().rev() {
         messages.remove(idx);
+    }
+    // Replace codex's 20K explore-first system prompt with a focused
+    // write-mandate. The codex CLI's system prompt is HEAVILY trained
+    // to encourage exploration before action ("Add a preamble for
+    // every non-trivial action", "explore the codebase", etc.). When
+    // the model is already locked in a read loop, that bias is the
+    // proximate cause — every nudge we layer on top is being out-
+    // voted by the 20K-token directive at the top of the prompt.
+    // Replacing it per-turn isolates the model from the bias; codex
+    // resends the original next turn, so the override is scoped to
+    // exactly when we need it.
+    for msg in messages.iter_mut() {
+        if msg.role != "system" {
+            continue;
+        }
+        if msg
+            .content
+            .starts_with("You are a coding agent running in the Codex CLI")
+        {
+            msg.content = "You are a code-writing assistant. Your only legal next \
+                 action is a single `exec_command` tool call whose `cmd` begins \
+                 with `apply_patch <<'EOF'`. Do NOT emit any other shell command \
+                 (no cat, ls, rg, find, pwd, head, tail, grep). Commit to writing \
+                 the deliverable now."
+                .to_string();
+            break;
+        }
+    }
+    // The compressed-history user message: keep the task framing
+    // (extracted from Block 1's first sentence), drop the rest.
+    // Deleting the whole message strips the task signal — model
+    // then emits `pwd && ls` to orient itself, defeating the
+    // pivot. Rewriting preserves "what to do" while removing the
+    // "how I've been doing it" recap that reinforces reading.
+    for msg in messages.iter_mut() {
+        if msg.role != "user" {
+            continue;
+        }
+        if !msg
+            .content
+            .starts_with("# Conversation so far (compressed by frontdoor)")
+        {
+            continue;
+        }
+        let task_seed = extract_task_seed_from_compressed_history(&msg.content);
+        msg.content = format!(
+            "## Task\n\n{}\n\nYou have gathered enough context. The NEXT emission \
+             MUST be a write action via `apply_patch <<'EOF'\\n*** Begin Patch\\n\
+             *** Add File: <path>\\n+<content>\\n*** End Patch\\nEOF`. Do NOT \
+             read another file.",
+            task_seed
+        );
     }
 
     messages.push(crate::openai_types::ChatMessage {
@@ -969,6 +1279,41 @@ pub fn apply_read_attractor_nudge_chat(
         tool_call_id: None,
         tool_calls: None,
     });
+}
+
+/// Pull the task seed (what the user originally asked for) out of a
+/// frontdoor compressed-history user message.
+///
+/// The compressed history's Block 1 opens with "The user wants me to
+/// ..." — the rest of the document is the model's running narrative
+/// of HOW it's been working on the task. We want only the WHAT.
+///
+/// Returns either the first sentence after "The user wants me to" or
+/// a generic fallback when the format doesn't match.
+fn extract_task_seed_from_compressed_history(content: &str) -> String {
+    const ANCHOR: &str = "The user wants me to ";
+    if let Some(start) = content.find(ANCHOR) {
+        let rest = &content[start + ANCHOR.len()..];
+        // Take up to the first sentence boundary (period + space or
+        // newline). Cap at 600 bytes so very long opening sentences
+        // don't slip the read-recap back in.
+        let mut end_byte = rest.len();
+        for boundary in [". ", ".\n", "\n\n"] {
+            if let Some(idx) = rest.find(boundary) {
+                end_byte = end_byte.min(idx + 1); // include the period
+            }
+        }
+        let mut snippet = &rest[..end_byte];
+        if snippet.len() > 600 {
+            let mut cap = 600;
+            while cap > 0 && !snippet.is_char_boundary(cap) {
+                cap -= 1;
+            }
+            snippet = &snippet[..cap];
+        }
+        return format!("The user wants you to {}", snippet.trim());
+    }
+    "The user wants you to complete the implementation task.".to_string()
 }
 
 /// Collect indices of all messages that participate in read-classified
@@ -1757,6 +2102,29 @@ pub fn gather_context_components(
     context_path_components(messages)
 }
 
+/// Scalar canonicalizer used by both the non-streaming chat response
+/// path and the SSE streaming-response translator in
+/// `routes_responses`. Takes the function `name` and serialized
+/// `arguments` (JSON object containing `cmd`); if the call is an
+/// `exec_command` whose `cmd` is an apply_patch heredoc that needs
+/// repair, returns the rewritten arguments JSON. Returns `None` for
+/// any case where no rewrite applies (different tool, non-JSON args,
+/// no apply_patch heredoc, already canonical).
+pub fn canonicalize_exec_command_arguments(name: &str, arguments: &str) -> Option<String> {
+    if name != "exec_command" {
+        return None;
+    }
+    let parsed: serde_json::Value = serde_json::from_str(arguments).ok()?;
+    let cmd = parsed.get("cmd").and_then(|v| v.as_str())?;
+    let canonical = canonicalize_apply_patch_heredoc(cmd)?;
+    if canonical == cmd {
+        return None;
+    }
+    let mut new_obj = parsed.clone();
+    new_obj["cmd"] = serde_json::Value::String(canonical);
+    serde_json::to_string(&new_obj).ok()
+}
+
 /// Walk the `tool_calls` in a chat-completions message; for any
 /// `exec_command` call whose `cmd` is an apply_patch heredoc, replace
 /// it with the canonical form. Returns the number of canonicalizations
@@ -1766,27 +2134,11 @@ pub fn canonicalize_chat_response_tool_calls(
 ) -> usize {
     let mut fixed = 0usize;
     for tc in tool_calls.iter_mut() {
-        if tc.function.name != "exec_command" {
-            continue;
-        }
-        let args = &tc.function.arguments;
-        let parsed: serde_json::Value = match serde_json::from_str(args) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let cmd = match parsed.get("cmd").and_then(|v| v.as_str()) {
-            Some(s) => s,
-            None => continue,
-        };
-        if let Some(canonical) = canonicalize_apply_patch_heredoc(cmd) {
-            if canonical != cmd {
-                let mut new_obj = parsed.clone();
-                new_obj["cmd"] = serde_json::Value::String(canonical);
-                if let Ok(reser) = serde_json::to_string(&new_obj) {
-                    tc.function.arguments = reser;
-                    fixed += 1;
-                }
-            }
+        if let Some(rewritten) =
+            canonicalize_exec_command_arguments(&tc.function.name, &tc.function.arguments)
+        {
+            tc.function.arguments = rewritten;
+            fixed += 1;
         }
     }
     fixed
@@ -1989,6 +2341,7 @@ pub(crate) async fn apply_distiller(
         chat_template_kwargs: Some(serde_json::json!({"enable_thinking": false})),
         think_budget: Some(0),
         tool_profile: None,
+    sampling_mode: None,
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -2495,6 +2848,7 @@ async fn summarise_block(
         chat_template_kwargs: Some(serde_json::json!({"enable_thinking": false})),
         think_budget: Some(0),
         tool_profile: None,
+    sampling_mode: None,
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();
@@ -2902,6 +3256,227 @@ mod tests {
     }
 
     #[test]
+    fn canonicalize_apply_patch_injects_missing_end_patch_marker() {
+        // Real codex emission (gym 008 / smoke 2026-05-13): model
+        // forgets the `*** End Patch` line before the EOF closer.
+        let bad = "apply_patch <<'EOF'\n\
+                   *** Begin Patch\n\
+                   *** Add File: a.rs\n\
+                   +pub fn x() {}\n\
+                   EOF";
+        let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
+        assert!(canonical.contains("*** Begin Patch\n"));
+        assert!(canonical.contains("*** End Patch\n"));
+        assert!(canonical.contains("+pub fn x()"));
+        assert!(canonical.ends_with("EOF\n"));
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_adds_plus_prefix_to_body_lines() {
+        // Real codex emission: TOML body lines missing `+` prefix.
+        // The canonicalizer prepends `+` to any non-prefixed body
+        // line inside an Add File section.
+        let bad = "apply_patch <<'EOF'\n\
+                   *** Begin Patch\n\
+                   *** Add File: Cargo.toml\n\
+                   +[package]\n\
+                   +name = \"x\"\n\
+                   edition = \"2021\"\n\
+                   description = \"foo\"\n\
+                   +[dependencies]\n\
+                   serde = \"1\"\n\
+                   *** End Patch\n\
+                   EOF";
+        let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
+        assert!(canonical.contains("+edition = \"2021\""), "edition gained +");
+        assert!(canonical.contains("+description = \"foo\""), "description gained +");
+        assert!(canonical.contains("+serde = \"1\""), "serde gained +");
+        // Lines already prefixed are not double-prefixed.
+        assert!(!canonical.contains("++"));
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_repairs_both_missing_end_and_prefixes() {
+        let bad = "apply_patch <<'EOF'\n\
+                   *** Begin Patch\n\
+                   *** Add File: oicp-types/Cargo.toml\n\
+                   +[package]\n\
+                   +name = \"oicp-types\"\n\
+                   +version = \"0.1.0\"\n\
+                   edition = \"2021\"\n\
+                   description = \"OICP types\"\n\
+                   license = \"MIT OR Apache-2.0\"\n\
+                   +[dependencies]\n\
+                   +serde = { version = \"1\" }\n\
+                   EOF";
+        let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
+        // Structural markers present
+        assert!(canonical.contains("*** Begin Patch\n"));
+        assert!(canonical.contains("*** End Patch\n"));
+        // Repair landed on every unprefixed line
+        assert!(canonical.contains("+edition"));
+        assert!(canonical.contains("+description"));
+        assert!(canonical.contains("+license"));
+        // Closer present, body comes BEFORE End Patch
+        let end_idx = canonical.find("*** End Patch").expect("End Patch present");
+        let pre_end = &canonical[..end_idx];
+        assert!(pre_end.contains("+license"));
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_addfile_space_prefix_repaired() {
+        // Real codex emission (smoke v4, 2026-05-13): inside an
+        // Add File section, body lines emitted with leading
+        // whitespace (indentation) were getting through as
+        // context lines. Codex's parser rejects context lines
+        // in an Add File section. Repair: always force `+`.
+        let bad = "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: src/lib.rs\n+pub struct Foo {\n    pub bar: bool,\n    pub baz: f64,\n+}\n*** End Patch\nEOF";
+        let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
+        // Content preserved with `+` prepended; indentation lives
+        // after the `+`.
+        assert!(
+            canonical.contains("+    pub bar: bool,"),
+            "expected `+    pub bar: bool,`; got:\n{canonical}"
+        );
+        assert!(canonical.contains("+    pub baz: f64,"));
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_updatefile_space_prefix_kept() {
+        // For Update File sections, space-prefix is a context line
+        // (codex apply_patch convention) and must be preserved.
+        let good = "apply_patch <<'EOF'\n*** Begin Patch\n*** Update File: src/lib.rs\n@@ pub fn foo()\n let x = 1;\n-let y = 2;\n+let y = 3;\n*** End Patch\nEOF";
+        let canonical = canonicalize_apply_patch_heredoc(good).expect("should canonicalize");
+        // Space-prefixed context line preserved verbatim.
+        assert!(canonical.contains("\n let x = 1;\n"), "got:\n{canonical}");
+        assert!(canonical.contains("\n-let y = 2;\n"));
+        assert!(canonical.contains("\n+let y = 3;\n"));
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_repairs_json_shape_cargo_toml() {
+        // Real codex emission (smoke v5, 2026-05-13): model wraps
+        // Cargo.toml body in JSON-style braces with trailing commas.
+        // Canonicalizer strips the wrappers, commas, and inserts the
+        // missing [package] header.
+        let bad = "apply_patch <<'EOF'\n\
+                   *** Begin Patch\n\
+                   *** Add File: oicp-types/Cargo.toml\n\
+                   +{\n\
+                   +name = \"oicp-types\",\n\
+                   +version = \"0.1.0\",\n\
+                   +edition = \"2021\",\n\
+                   +\n\
+                   +[dependencies]\n\
+                   +serde = { version = \"1\" }\n\
+                   +}\n\
+                   *** End Patch\n\
+                   EOF";
+        let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
+        // Wrapper `+{` and `+}` lines removed.
+        assert!(!canonical.contains("+{\n"), "wrapper open-brace not stripped:\n{canonical}");
+        assert!(!canonical.contains("+}\n"));
+        // Trailing commas stripped.
+        assert!(canonical.contains("+name = \"oicp-types\"\n"));
+        assert!(canonical.contains("+version = \"0.1.0\"\n"));
+        assert!(canonical.contains("+edition = \"2021\"\n"));
+        assert!(!canonical.contains("\","));
+        // [package] header injected.
+        assert!(canonical.contains("+[package]\n"));
+        // [dependencies] preserved.
+        assert!(canonical.contains("+[dependencies]\n"));
+        // Structural envelope intact.
+        assert!(canonical.contains("*** Add File: oicp-types/Cargo.toml\n"));
+        assert!(canonical.contains("*** End Patch\n"));
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_repairs_multiline_inline_table() {
+        // Real codex emission (smoke v5, 2026-05-13): model uses
+        // multi-line inline-table syntax for `dependencies`, which
+        // is invalid TOML. Canonicalizer must rewrite to a section
+        // header and drop the wrapping `{`/`}`.
+        let bad = "apply_patch <<'EOF'\n\
+                   *** Begin Patch\n\
+                   *** Add File: oicp-types/Cargo.toml\n\
+                   +[package]\n\
+                   +name = \"oicp-types\"\n\
+                   +version = \"0.1.0\"\n\
+                   +\n\
+                   +dependencies = {\n\
+                   +    serde = { workspace = true }\n\
+                   +    thiserror = { workspace = true }\n\
+                   +}\n\
+                   *** End Patch\n\
+                   EOF";
+        let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
+        // Multi-line inline-table replaced with section header.
+        assert!(
+            canonical.contains("+[dependencies]\n"),
+            "[dependencies] section header missing:\n{canonical}"
+        );
+        // Original `+dependencies = {` gone.
+        assert!(
+            !canonical.contains("+dependencies = {"),
+            "malformed multi-line inline-table still present:\n{canonical}"
+        );
+        // Inline-tables for individual entries preserved (valid TOML).
+        assert!(canonical.contains("+    serde = { workspace = true }"));
+        assert!(canonical.contains("+    thiserror = { workspace = true }"));
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_preserves_single_line_inline_table() {
+        // A single-line inline table is valid TOML and must NOT be
+        // rewritten as a section header.
+        let good = "apply_patch <<'EOF'\n\
+                    *** Begin Patch\n\
+                    *** Add File: Cargo.toml\n\
+                    +[package]\n\
+                    +name = \"x\"\n\
+                    +deps = { serde = \"1\", tokio = \"1\" }\n\
+                    *** End Patch\n\
+                    EOF";
+        let canonical = canonicalize_apply_patch_heredoc(good).expect("should canonicalize");
+        // Single-line inline table kept verbatim.
+        assert!(canonical.contains("+deps = { serde = \"1\", tokio = \"1\" }"));
+        // No spurious `[deps]` section header.
+        assert!(!canonical.contains("[deps]"));
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_toml_repair_idempotent_when_already_clean() {
+        // Already-canonical Cargo.toml passes through unchanged.
+        let good = "apply_patch <<'EOF'\n\
+                    *** Begin Patch\n\
+                    *** Add File: Cargo.toml\n\
+                    +[package]\n\
+                    +name = \"x\"\n\
+                    +version = \"0.1.0\"\n\
+                    *** End Patch\n\
+                    EOF";
+        let canonical = canonicalize_apply_patch_heredoc(good).expect("should canonicalize");
+        // No double-injection of [package].
+        let header_count = canonical.matches("+[package]").count();
+        assert_eq!(header_count, 1, "[package] should appear exactly once:\n{canonical}");
+    }
+
+    #[test]
+    fn canonicalize_apply_patch_toml_repair_skips_non_toml() {
+        // A .rs file with key=value-looking content should NOT get
+        // [package] injected.
+        let bad = "apply_patch <<'EOF'\n\
+                   *** Begin Patch\n\
+                   *** Add File: src/lib.rs\n\
+                   +pub const NAME: &str = \"x\";\n\
+                   +pub const VERSION: u32 = 1;\n\
+                   *** End Patch\n\
+                   EOF";
+        let canonical = canonicalize_apply_patch_heredoc(bad).expect("should canonicalize");
+        assert!(!canonical.contains("[package]"));
+    }
+
+    #[test]
     fn canonicalize_apply_patch_idempotent_on_canonical_input() {
         let good = "apply_patch <<'EOF'\n\
                     *** Begin Patch\n\
@@ -3005,6 +3580,7 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
+        sampling_mode: None,
         }
     }
 
@@ -3472,6 +4048,174 @@ mod tests {
         let before = req.messages.len();
         apply_read_attractor_nudge_chat(&mut req);
         assert_eq!(req.messages.len(), before);
+    }
+
+    #[test]
+    fn read_attractor_replaces_codex_system_prompt() {
+        use crate::openai_types::ChatCompletionRequest;
+        let codex_system = crate::openai_types::ChatMessage {
+            role: "system".to_string(),
+            content: "You are a coding agent running in the Codex CLI, a terminal-\
+                      based coding assistant. You should explore the codebase \
+                      thoroughly before taking action..."
+                .to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        };
+        let mut req = ChatCompletionRequest {
+            messages: vec![
+                codex_system,
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat a"}"#),
+                make_tool_result("c", "..."),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat b"}"#),
+                make_tool_result("c", "..."),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat c"}"#),
+                make_tool_result("c", "..."),
+            ],
+            ..chat_req_defaults()
+        };
+        apply_read_attractor_nudge_chat(&mut req);
+        // Codex's explore-first system prompt should be replaced.
+        let first_sys = req.messages.iter().find(|m| m.role == "system").unwrap();
+        assert!(
+            !first_sys.content.starts_with("You are a coding agent running in the Codex CLI"),
+            "codex system prompt should be replaced when read-attractor fires"
+        );
+        assert!(first_sys.content.contains("apply_patch"));
+        assert!(first_sys.content.contains("only legal next action"));
+    }
+
+    #[test]
+    fn read_attractor_leaves_non_codex_system_prompts_alone() {
+        use crate::openai_types::ChatCompletionRequest;
+        let custom_system = crate::openai_types::ChatMessage {
+            role: "system".to_string(),
+            content: "You are a helpful assistant. Be concise.".to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        };
+        let mut req = ChatCompletionRequest {
+            messages: vec![
+                custom_system.clone(),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat a"}"#),
+                make_tool_result("c", "..."),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat b"}"#),
+                make_tool_result("c", "..."),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat c"}"#),
+                make_tool_result("c", "..."),
+            ],
+            ..chat_req_defaults()
+        };
+        apply_read_attractor_nudge_chat(&mut req);
+        // Non-codex system prompt survives.
+        let kept = req
+            .messages
+            .iter()
+            .find(|m| m.role == "system" && m.content.contains("helpful assistant"));
+        assert!(kept.is_some());
+    }
+
+    #[test]
+    fn read_attractor_rewrites_compressed_history_user_msg() {
+        use crate::openai_types::ChatCompletionRequest;
+        let compressed = crate::openai_types::ChatMessage {
+            role: "user".to_string(),
+            content:
+                "# Conversation so far (compressed by frontdoor)\n\n## Block 1 of 3\n\n\
+                 The user wants me to implement the oicp-types crate per spec. The \
+                 agent has executed `cat` on the spec file three times. Now reading \
+                 ARCHITECTURE.md for orientation."
+                    .to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        };
+        let mut req = ChatCompletionRequest {
+            messages: vec![
+                compressed,
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat a.md"}"#),
+                make_tool_result("c", "..."),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat b.md"}"#),
+                make_tool_result("c", "..."),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat c.md"}"#),
+                make_tool_result("c", "..."),
+            ],
+            ..chat_req_defaults()
+        };
+        apply_read_attractor_nudge_chat(&mut req);
+        // No message starts with the frontdoor's compression banner.
+        for msg in &req.messages {
+            assert!(
+                !msg.content.starts_with("# Conversation so far (compressed by frontdoor)"),
+                "compressed-history header should be gone after rewrite"
+            );
+        }
+        // The rewritten message preserves the task seed and adds
+        // pivot directive.
+        let user_with_task = req
+            .messages
+            .iter()
+            .find(|m| m.role == "user" && m.content.contains("apply_patch"))
+            .expect("rewritten user msg should exist");
+        assert!(user_with_task.content.contains("implement the oicp-types"));
+        // Read-recap text is gone.
+        assert!(
+            !user_with_task.content.contains("executed `cat`"),
+            "read-pattern recap should be stripped"
+        );
+        // Trailing system nudge present.
+        let last = req.messages.last().unwrap();
+        assert_eq!(last.role, "system");
+        assert!(last.content.starts_with(READ_ATTRACTOR_NUDGE_PREFIX));
+    }
+
+    #[test]
+    fn extract_task_seed_pulls_first_sentence_after_anchor() {
+        let s = "# Conversation so far (compressed by frontdoor)\n\n## Block 1 of 5\n\n\
+                 The user wants me to implement the oicp-types crate. I have been \
+                 reading the spec.";
+        let seed = extract_task_seed_from_compressed_history(s);
+        assert!(seed.contains("implement the oicp-types crate"));
+        assert!(!seed.contains("I have been reading"));
+    }
+
+    #[test]
+    fn extract_task_seed_fallback_when_anchor_missing() {
+        let s = "Some random text without the anchor phrase.";
+        let seed = extract_task_seed_from_compressed_history(s);
+        assert!(seed.contains("complete the implementation task"));
+    }
+
+    #[test]
+    fn read_attractor_leaves_non_frontdoor_user_msgs_alone() {
+        use crate::openai_types::ChatCompletionRequest;
+        // A user message that mentions "compressed" but isn't ours
+        // must NOT be deleted.
+        let user_real = crate::openai_types::ChatMessage {
+            role: "user".to_string(),
+            content: "I have compressed the file. Now what?".to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        };
+        let mut req = ChatCompletionRequest {
+            messages: vec![
+                user_real.clone(),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat a"}"#),
+                make_tool_result("c", "..."),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat b"}"#),
+                make_tool_result("c", "..."),
+                make_assistant_tool_call("exec_command", r#"{"cmd":"cat c"}"#),
+                make_tool_result("c", "..."),
+            ],
+            ..chat_req_defaults()
+        };
+        apply_read_attractor_nudge_chat(&mut req);
+        // Non-frontdoor user msg survives.
+        let kept_user_count = req
+            .messages
+            .iter()
+            .filter(|m| m.role == "user" && m.content.contains("I have compressed"))
+            .count();
+        assert_eq!(kept_user_count, 1);
     }
 
     #[test]

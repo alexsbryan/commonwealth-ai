@@ -372,6 +372,7 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: None,
+        sampling_mode: None,
         }
     }
 

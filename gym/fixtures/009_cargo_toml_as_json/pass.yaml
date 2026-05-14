@@ -1,0 +1,21 @@
+expected_tool: exec_command
+args_parseable: true
+must_contain:
+  - "apply_patch"
+  - "Cargo.toml"
+content_must_contain_regex:
+  - "\\*\\*\\* Add File:.*Cargo.toml"
+  - "\\[package\\]"
+  # Proper TOML section header for dependencies (not JSON key=table).
+  - "\\[dependencies\\]"
+# Cargo.toml body must be TOML, not JSON. The model emits `+{\n+name = ...}`
+# shape; we mechanically detect and convert. After repair: no JSON braces
+# wrapping the body, no trailing commas, no `dependencies = {` JSON style.
+content_must_not_contain_regex:
+  # JSON-style opening brace as the first body line of a Cargo.toml.
+  - "Cargo.toml\\n\\+\\{"
+  # Trailing commas on key=value lines (TOML doesn't use them).
+  - "= \"[^\"]*\",\\n"
+  - "= true,\\n"
+  # JSON-style `dependencies = {` instead of `[dependencies]` section.
+  - "dependencies = \\{\\s*$"

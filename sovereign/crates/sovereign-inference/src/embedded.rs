@@ -5236,6 +5236,17 @@ impl ConstrainedSampler {
     }
 }
 
+/// Resolved sampling parameters for a single role. Picked from
+/// ModelQuirks based on `SamplingMode` + per-request
+/// overrides.
+struct ResolvedSampling {
+    mode: SamplingMode,
+    temp: f32,
+    top_k: i32,
+    top_p: f32,
+    presence_pen: f32,
+}
+
 fn build_sampler(
     model: &LlamaModel,
     request: &CompletionRequest,
@@ -5274,41 +5285,145 @@ fn build_sampler(
         None
     };
 
-    // Temperature: per-request override → family default.
-    let temp = request.temperature.unwrap_or(quirks.default_temperature);
-    // Top-k: per-request override → family default → hard fallback of 40.
-    let top_k_val = request.top_k
-        .or(quirks.default_top_k)
-        .unwrap_or(40) as i32;
+    // Sampling parameters — picked from `ModelQuirks`. Three modes:
+    //   * **instruct** — enable_thinking=false (any tools state).
+    //                    Used by codex CLI traffic, atlas Phase 1,
+    //                    structured-output extracts.
+    //   * **code**     — enable_thinking=true AND tools present.
+    //                    Reasoning-heavy coding work.
+    //   * **think**    — enable_thinking=true AND no tools.
+    //                    General reasoning (chat, planning, atlas
+    //                    discourse work).
+    // Each mode reads `<mode>_*` quirks fields; missing values fall
+    // back to `default_*` (the think profile). Per-request overrides
+    // (`request.temperature`, `request.top_p`, `request.top_k`)
+    // still win over the picked profile so an operator can poke any
+    // knob without rewriting quirks.
+    // Per-role profile selection. Priority order:
+    //   1. **Explicit caller override** via `request.sampling_mode`.
+    //      Both roles use that mode. Lets non-codex callers (atlas
+    //      pipelines, ATOS, eval harnesses) pin a profile without
+    //      spoofing `enable_thinking` + tools signals.
+    //   2. **Auto-picker** based on the role + request shape:
+    //      * Explore — outside JSON string fields, between tool
+    //        boundaries. Maps to Instruct when tools are present
+    //        (picking what to call); otherwise the no-tools-mode
+    //        below.
+    //      * Content — inside a tool_call JSON string value (the
+    //        `cmd` body of exec_command, where apply_patch lives).
+    //        Maps to Code when tools are present (composing code);
+    //        otherwise the no-tools-mode below.
+    //      No-tools mode falls back to Think unless the request
+    //      sets `enable_thinking: false`, in which case Instruct.
+    //
+    // The model's token-level structure (which role it's currently
+    // in) drives the auto-pick, not any call-site heuristic.
+    let no_tools_mode = match request.enable_thinking {
+        Some(false) => SamplingMode::Instruct,
+        _ => SamplingMode::Think,
+    };
+    let has_tools = request
+        .tools
+        .as_ref()
+        .map(|t| !t.is_empty())
+        .unwrap_or(false);
+    let (explore_mode, content_mode) = match request.sampling_mode {
+        Some(explicit) => (explicit, explicit),
+        None if has_tools => (
+            SamplingMode::Instruct,
+            SamplingMode::Code,
+        ),
+        None => (no_tools_mode, no_tools_mode),
+    };
+    let resolve = |mode: SamplingMode| -> ResolvedSampling {
+        let (m_temp, m_top_k, m_top_p, m_presence) = match mode {
+            SamplingMode::Instruct => (
+                quirks.instruct_temperature,
+                quirks.instruct_top_k,
+                quirks.instruct_top_p,
+                quirks.instruct_presence_penalty,
+            ),
+            SamplingMode::Code => (
+                quirks.code_temperature,
+                quirks.code_top_k,
+                quirks.code_top_p,
+                quirks.code_presence_penalty,
+            ),
+            SamplingMode::Think => (None, None, None, None),
+        };
+        ResolvedSampling {
+            mode,
+            temp: request
+                .temperature
+                .unwrap_or(m_temp.unwrap_or(quirks.default_temperature)),
+            top_k: request
+                .top_k
+                .or(m_top_k)
+                .or(quirks.default_top_k)
+                .unwrap_or(40) as i32,
+            top_p: request
+                .top_p
+                .unwrap_or(m_top_p.unwrap_or(quirks.default_top_p)),
+            presence_pen: m_presence.unwrap_or(quirks.default_presence_penalty),
+        }
+    };
+    let explore = resolve(explore_mode);
+    let content = resolve(content_mode);
+    tracing::debug!(
+        explore_mode = ?explore.mode,
+        explore_temp = explore.temp,
+        explore_top_p = explore.top_p,
+        explore_presence = explore.presence_pen,
+        content_mode = ?content.mode,
+        content_temp = content.temp,
+        content_top_p = content.top_p,
+        content_presence = content.presence_pen,
+        "sampler-profile per-role selection"
+    );
+    // Sampler-stage params (rep / freq / min_p) read from quirks.
+    // Qwen card recommends 1.0 / 0.0 / 0.0 across all modes;
+    // llama-cpp tradition for other families is 1.15 / 0.1 / 0.05
+    // (the historical hardcoded values, now preserved via the
+    // serde-default compat helpers in `sovereign_core::model_family`).
+    let rep_pen: f32 = quirks.default_repetition_penalty;
+    let freq_pen: f32 = quirks.default_frequency_penalty;
+    let min_p_threshold: f32 = quirks.default_min_p;
     // Sequence breakers tell DRY where one "thought unit" ends and another
     // begins — any of these tokens resets the repeated-suffix detector.
     let breakers: &[&[u8]] = &[b"\n", b".", b"?", b"!", b":", b"\"", b"*"];
 
-    // Build per-role inner chains. Both share DRY+penalties (state
-    // is kept in sync by `accept()` advancing both). The difference
-    // is the final sampling stage: Explore uses request T; Content
-    // is greedy unless overridden.
+    // Content-role temperature: defaults to greedy (0.0) so the
+    // apply_patch envelope syntax (markers, delimiters) stays
+    // disciplined. Gym 005/008/009 regression 2026-05-13 confirmed
+    // T=0.6 inside `cmd` strings drops `***` prefixes ~40% of runs
+    // because the model's next-token prob for `***` isn't always
+    // the argmax at T=0.6.
     //
-    // Content-role temperature override: env var
-    // `SOVEREIGN_CONTENT_TEMPERATURE` lets an operator dial Content
-    // up if greedy turns out too tight (e.g. would still pick the
-    // same wrong path every time). Default 0.0 (greedy). Range
-    // [0.0, 2.0].
+    // The OTHER Code-profile knobs (top_p=0.95, presence=0.0,
+    // top_k=20) still apply — those affect token-set shape, not
+    // greedy-vs-sample. So content gets Code's discipline on every
+    // axis except T, where envelope precision wins.
+    //
+    // `SOVEREIGN_CONTENT_TEMPERATURE` env overrides (e.g. for
+    // debugging tokenizer drift on long path strings, where some
+    // sampling temperature might help vs. a tokenizer-locked greedy
+    // path).
     let content_temp = std::env::var("SOVEREIGN_CONTENT_TEMPERATURE")
         .ok()
         .and_then(|s| s.parse::<f32>().ok())
         .filter(|v| (0.0..=2.0).contains(v))
         .unwrap_or(0.0);
 
-    let build_chain = |chain_temp: f32| {
+    let build_chain = |params: &ResolvedSampling, chain_temp: f32| {
         let mut samplers: Vec<LlamaSampler> = Vec::new();
         samplers.push(LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()));
-        samplers.push(LlamaSampler::penalties(128, 1.15, 0.1, 0.1));
+        samplers.push(LlamaSampler::penalties(128, rep_pen, freq_pen, params.presence_pen));
         if chain_temp < 0.01 {
             samplers.push(LlamaSampler::greedy());
         } else {
-            samplers.push(LlamaSampler::top_k(top_k_val));
-            samplers.push(LlamaSampler::min_p(0.05, 1));
+            samplers.push(LlamaSampler::top_k(params.top_k));
+            samplers.push(LlamaSampler::min_p(min_p_threshold, 1));
+            samplers.push(LlamaSampler::top_p(params.top_p, 1));
             samplers.push(LlamaSampler::temp(chain_temp));
             samplers.push(LlamaSampler::dist(rand_seed()));
         }
@@ -5316,8 +5431,8 @@ fn build_sampler(
     };
 
     ConstrainedSampler {
-        inner_explore: build_chain(temp),
-        inner_content: build_chain(content_temp),
+        inner_explore: build_chain(&explore, explore.temp),
+        inner_content: build_chain(&content, content_temp),
         constraint,
         non_latin_denylist,
     }

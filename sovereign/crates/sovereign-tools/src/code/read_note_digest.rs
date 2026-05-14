@@ -341,6 +341,7 @@ async fn summarize_via_fast_slot(
         tool_choice: None,
             model_id: None,
             enable_thinking: None,
+    sampling_mode: None,
     };
     let response = provider.complete(&request).await.map_err(|e| Error::Tool {
         tool_id: "read_note_digest".into(),

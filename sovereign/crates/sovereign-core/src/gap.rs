@@ -139,6 +139,7 @@ pub async fn identify_gap(
                 tool_choice: None,
                         model_id: None,
                         enable_thinking: None,
+        sampling_mode: None,
         })
         .await?;
 

@@ -503,6 +503,7 @@ mod tests {
             tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+        sampling_mode: None,
         };
 
         let body = provider.build_request(&request);
@@ -547,6 +548,7 @@ mod tests {
             tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+        sampling_mode: None,
         };
 
         let body = provider.build_request(&request);

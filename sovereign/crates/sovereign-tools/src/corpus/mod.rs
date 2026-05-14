@@ -104,6 +104,7 @@ pub fn inference_to_inference_fn(
             tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+        sampling_mode: None,
         };
         Box::pin(async move {
             let resp = inf

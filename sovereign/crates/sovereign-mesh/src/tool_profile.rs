@@ -381,6 +381,7 @@ mod tests {
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: profile.map(String::from),
+        sampling_mode: None,
         }
     }
 
@@ -549,6 +550,7 @@ allow_tools = ["write"]
             chat_template_kwargs: None,
             think_budget: None,
             tool_profile: Some("rust-edit".into()),
+        sampling_mode: None,
         };
         apply(&r, &mut req);
         assert!(req.tools.is_none());

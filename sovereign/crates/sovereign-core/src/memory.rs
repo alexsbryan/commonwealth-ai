@@ -210,6 +210,7 @@ pub async fn compress_working_memory(
                 tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+    sampling_mode: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -352,6 +353,7 @@ pub async fn extract_long_term_memories(
                 tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+    sampling_mode: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -751,6 +753,7 @@ pub async fn detect_contradictions(
                 tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+    sampling_mode: None,
     };
 
     let response = inference.complete(&request).await?;

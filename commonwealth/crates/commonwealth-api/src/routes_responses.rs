@@ -515,20 +515,11 @@ fn translate_request(
     };
 
     // Codex profile temperature default (Investment #14, 2026-05-13).
-    // Empirical bench on the rg-loop fixture (resp_1778694147285) ran a
-    // 4-point sweep against the same frozen input × 10 replays:
-    //
-    //   T = 0.0 → 10/10 emit the exact failing command (greedy lock)
-    //   T = 0.3 →  5/10 exact loop, 5 minor variants
-    //   T = 0.7 →  2/10 exact loop, varied recovery strategies
-    //   T = 1.0 →  1/10 exact loop, strongest diversity
-    //
-    // Codex CLI sends no `temperature` field; the daemon's ModelQuirks
-    // default behaves like T=0.0 on this attractor. Pin to 0.7 for the
-    // Codex profile — the 5× loop reduction without destabilising
-    // envelope discipline (grammar lock at Inv 3 still holds args
-    // shape at any T) is the cheapest win we have. Caller-set
-    // temperature still wins so an operator can override.
+    // The rg-loop fixture × 10 replays at T=0.7 reduced exact-loop
+    // emissions 5× vs T=0.0 without destabilising envelope discipline.
+    // Other Qwen-recommended sampling params (top_p, top_k, min_p,
+    // presence_penalty) live in `ModelQuirks` and are applied by the
+    // sampler — no per-route pinning needed.
     let temperature = req.temperature.or_else(|| {
         if matches!(harness, frontdoor::Harness::Codex) {
             Some(0.7)
@@ -554,6 +545,7 @@ fn translate_request(
         chat_template_kwargs,
         think_budget,
         tool_profile: None,
+    sampling_mode: None,
     })
 }
 
@@ -1120,7 +1112,7 @@ impl ResponsesStreamState {
                 // exec_command before emitting events. The model emitted
                 // a clean envelope (path/content); the wire to codex
                 // carries a shell command codex can dispatch.
-                let (name, arguments) =
+                let (name, mut arguments) =
                     match rewrite_synthetic_tool_call(&raw_name, &raw_arguments) {
                         Some((rewritten_name, rewritten_args)) => {
                             tracing::info!(
@@ -1132,6 +1124,23 @@ impl ResponsesStreamState {
                         }
                         None => (raw_name, raw_arguments),
                     };
+                // Post-emission canonicalization on the streaming
+                // path. The non-streaming sibling in routes_inference
+                // runs the same repair, but codex's /v1/responses
+                // adapter sends `stream: true` so the inner chat
+                // request goes through serve_local_stream and bypasses
+                // it. Without this hook, malformed apply_patch
+                // heredocs reach codex's verifier and get rejected
+                // (gym 008 / smoke 2026-05-13).
+                if let Some(rewritten) =
+                    crate::frontdoor::canonicalize_exec_command_arguments(&name, &arguments)
+                {
+                    tracing::info!(
+                        response_id = %self.response_id,
+                        "responses-stream: apply_patch heredoc canonicalized"
+                    );
+                    arguments = rewritten;
+                }
 
                 self.fc_id_counter += 1;
                 let item_id = format!("fc_{}_{}", self.response_id, self.fc_id_counter);

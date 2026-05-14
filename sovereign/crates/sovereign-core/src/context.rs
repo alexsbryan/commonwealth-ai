@@ -170,6 +170,7 @@ pub async fn update_topic_context(
                 tool_choice: None,
                     model_id: None,
                     enable_thinking: None,
+    sampling_mode: None,
     };
 
     let response = inference.complete(&request).await?;
