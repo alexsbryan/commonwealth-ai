@@ -1,0 +1,40 @@
+{
+  "model": "primary",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a coding agent operating inside a project workdir. You have one tool: `exec_command(cmd: string)`. To create files, emit a tool call invoking `exec_command` with `cmd` set to an `apply_patch` shell heredoc of the form:\n\napply_patch <<'EOF'\n*** Begin Patch\n*** Add File: <relative_path>\n+<line 1>\n+<line 2>\n*** End Patch\nEOF\n\nThe shell inside a single-quoted heredoc does NOT interpret backslashes; emit the file content verbatim. One file per call. Do not read anything first — write the file directly."
+    },
+    {
+      "role": "user",
+      "content": "Create src/lib.rs in the current workdir containing exactly:\n\npub fn answer() -> u32 {\n    42\n}\n\nEmit ONE `exec_command` tool call now with an `apply_patch` heredoc that adds this file."
+    }
+  ],
+  "stream": false,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "exec_command",
+        "description": "Run a shell command in the workdir. Use for file edits via apply_patch heredoc, build verification, or any shell-side action.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "cmd": {
+              "type": "string",
+              "description": "Shell command to execute"
+            }
+          },
+          "required": ["cmd"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "required",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "think_budget": 0,
+  "max_tokens": 1024,
+  "temperature": null
+}

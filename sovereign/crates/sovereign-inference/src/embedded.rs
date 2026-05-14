@@ -465,6 +465,37 @@ impl ModelSlot {
         let mut saw_open_tag = false;
         let mut saw_close_tag = false;
 
+        // Tool-emission stop conditions for tools-using turns.
+        //
+        // Two emission shapes exist:
+        //   A. Marker-wrapped — chat-template default, model emits
+        //      `<tool_call>{...}</tool_call>` then continues.
+        //   B. Grammar-locked bare JSON — when `tool_choice=required`
+        //      installs the envelope schema, the model emits one
+        //      balanced JSON object with NO `<tool_call>` markers.
+        //
+        // Both must terminate generation; otherwise the sampler runs
+        // to `max_tokens` or hits the pathological-mask deadline.
+        // The 2026-05-13 codex smoke saw shape B with ~10K tokens
+        // generated per turn for ~80-byte envelopes — every token
+        // past the close `}` was wasted on a grammar mask cycling
+        // through whitespace / preferred-but-masked tokens.
+        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let mut tc_json_depth = 0i32;
+        let mut tc_json_in_string = false;
+        let mut tc_json_escape_next = false;
+        let mut tc_json_ever_opened = false;
+        // Optional per-token sampler-role trace, gated on
+        // SOVEREIGN_TRACE_SAMPLER_ROLES. Used during gym
+        // diagnostics (gym 003 path-typo, 2026-05-13) to confirm
+        // the Content/greedy sampler engages inside JSON-string
+        // fields on /v1/chat/completions ingress. Counters are
+        // summarised at end-of-generation. Cheap when off.
+        let mut role_explore_n = 0usize;
+        let mut role_content_n = 0usize;
+        let mut tokens_in_string_n = 0usize;
+        let role_trace_on = std::env::var("SOVEREIGN_TRACE_SAMPLER_ROLES").is_ok();
+
         while n_generated < max_tokens {
             if Instant::now() > deadline {
                 let elapsed = started_at.elapsed().as_secs();
@@ -484,7 +515,19 @@ impl ModelSlot {
                 )));
             }
 
-            let token = sampler.sample(ctx, -1);
+            let role = if tools_present && tc_json_in_string {
+                SamplerRole::Content
+            } else {
+                SamplerRole::Explore
+            };
+            match role {
+                SamplerRole::Content => role_content_n += 1,
+                SamplerRole::Explore => role_explore_n += 1,
+            }
+            if tc_json_in_string {
+                tokens_in_string_n += 1;
+            }
+            let token = sampler.sample(ctx, -1, role);
             sampler.accept(token);
 
             if model.is_eog_token(token) {
@@ -492,6 +535,15 @@ impl ModelSlot {
             }
 
             if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
+                if role_trace_on && tools_present {
+                    tracing::info!(
+                        role = ?role,
+                        in_string = tc_json_in_string,
+                        depth = tc_json_depth,
+                        piece = %piece.replace('\n', "\\n"),
+                        "sampler_trace token"
+                    );
+                }
                 // Update sliding tail for tag detection.
                 tail.push_str(&piece);
                 if tail.len() > 32 {
@@ -518,6 +570,59 @@ impl ModelSlot {
                 }
 
                 output.push_str(&piece);
+
+                // Tool-emission stop. Two cases, both unconditional
+                // once detected (no `!in_think` guard — see fn-scope
+                // comment): marker-wrapped close-tag, or grammar-
+                // locked balanced JSON envelope. Track brace depth
+                // incrementally on the piece bytes, ignoring braces
+                // inside JSON strings.
+                if tools_present {
+                    if tail.contains("</tool_call>") {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            tail = %tail,
+                            "inference: stopping on </tool_call> marker"
+                        );
+                        n_generated += 1;
+                        break;
+                    }
+                    if !in_think {
+                        for b in piece.bytes() {
+                            if tc_json_escape_next {
+                                tc_json_escape_next = false;
+                                continue;
+                            }
+                            if tc_json_in_string {
+                                match b {
+                                    b'\\' => tc_json_escape_next = true,
+                                    b'"' => tc_json_in_string = false,
+                                    _ => {}
+                                }
+                                continue;
+                            }
+                            match b {
+                                b'"' => tc_json_in_string = true,
+                                b'{' => {
+                                    tc_json_depth += 1;
+                                    tc_json_ever_opened = true;
+                                }
+                                b'}' => tc_json_depth -= 1,
+                                _ => {}
+                            }
+                        }
+                        if tc_json_ever_opened && tc_json_depth == 0 {
+                            tracing::info!(
+                                model = %model_id,
+                                n_generated,
+                                "inference: stopping on balanced JSON envelope"
+                            );
+                            n_generated += 1;
+                            break;
+                        }
+                    }
+                }
             }
 
             n_generated += 1;
@@ -556,13 +661,26 @@ impl ModelSlot {
 
         ctx.clear_kv_cache();
 
-        // Stray `</think>` repair: see plan §1.3. If the model
-        // emitted a close tag without a preceding open, prepend a
-        // synthetic open so downstream parsers (desktop's
-        // `parseAssistantContent`, server-side `strip_thinking_response`)
-        // treat the leading text as thinking. This is the
-        // non-streaming path; the streaming siblings only warn,
-        // since pieces have already been flushed to the receiver.
+        // Sampler-role summary: emitted once per generation so the
+        // operator can spot when Content (greedy) didn't engage.
+        // Healthy shape on a tool-call turn: a sizeable fraction of
+        // tokens carry role=Content (the cmd-string bytes). When
+        // role_content_n is 0 despite tools_present, the JSON-string
+        // boundary tracker never triggered — diagnostic for cases
+        // where the model emits an envelope-content shape without
+        // `<tool_call>` markers but somehow also without entering
+        // a JSON string from the tracker's perspective.
+        if tools_present {
+            tracing::info!(
+                model = %model_id,
+                role_content_n,
+                role_explore_n,
+                tokens_in_string_n,
+                tc_json_ever_opened,
+                "sampler_trace role summary"
+            );
+        }
+
         if saw_close_tag && !saw_open_tag {
             tracing::warn!(
                 model = model_id,
@@ -691,7 +809,9 @@ impl ModelSlot {
                 if !active[seq] {
                     continue;
                 }
-                let token = samplers[seq].sample(ctx, current_logit_idx[seq]);
+                // Batched path doesn't track per-sequence JSON state;
+                // default to Explore (matches pre-Investment-#16 behavior).
+                let token = samplers[seq].sample(ctx, current_logit_idx[seq], SamplerRole::Explore);
                 samplers[seq].accept(token);
 
                 if model.is_eog_token(token) {
@@ -825,6 +945,15 @@ impl ModelSlot {
         let mut saw_open_tag = false;
         let mut saw_close_tag = false;
 
+        // See generate_sync: stop on `</tool_call>` (marker) or
+        // balanced JSON envelope (grammar-locked) when tools were
+        // requested.
+        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let mut tc_json_depth = 0i32;
+        let mut tc_json_in_string = false;
+        let mut tc_json_escape_next = false;
+        let mut tc_json_ever_opened = false;
+
         while n_generated < max_tokens {
             if Instant::now() > deadline {
                 let elapsed = started_at.elapsed().as_secs();
@@ -859,7 +988,12 @@ impl ModelSlot {
                 }
             }
 
-            let token = sampler.sample(ctx, -1);
+            let role = if tools_present && tc_json_in_string {
+                SamplerRole::Content
+            } else {
+                SamplerRole::Explore
+            };
+            let token = sampler.sample(ctx, -1, role);
             sampler.accept(token);
 
             if model.is_eog_token(token) {
@@ -890,12 +1024,66 @@ impl ModelSlot {
                     think_tokens += 1;
                 }
 
+                // Tool-emission JSON-balance bookkeeping — done BEFORE
+                // the send so we don't need to re-borrow piece bytes
+                // after the move into the channel.
+                let mut json_envelope_complete = false;
+                if tools_present && !in_think {
+                    for b in piece.bytes() {
+                        if tc_json_escape_next {
+                            tc_json_escape_next = false;
+                            continue;
+                        }
+                        if tc_json_in_string {
+                            match b {
+                                b'\\' => tc_json_escape_next = true,
+                                b'"' => tc_json_in_string = false,
+                                _ => {}
+                            }
+                            continue;
+                        }
+                        match b {
+                            b'"' => tc_json_in_string = true,
+                            b'{' => {
+                                tc_json_depth += 1;
+                                tc_json_ever_opened = true;
+                            }
+                            b'}' => tc_json_depth -= 1,
+                            _ => {}
+                        }
+                    }
+                    if tc_json_ever_opened && tc_json_depth == 0 {
+                        json_envelope_complete = true;
+                    }
+                }
+
                 if tx.blocking_send(Ok(piece)).is_err() {
                     tracing::warn!(
                         tokens_emitted = n_generated,
                         "inference:cancelled via receiver-drop"
                     );
                     break;
+                }
+
+                // Tool-emission stop — see generate_sync for rationale.
+                if tools_present {
+                    if tail.contains("</tool_call>") {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            tail = %tail,
+                            "inference: stopping on </tool_call> marker (stream)"
+                        );
+                        break;
+                    }
+                    if json_envelope_complete {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on balanced JSON envelope (stream)"
+                        );
+                        break;
+                    }
                 }
             }
 
@@ -1009,6 +1197,15 @@ impl ModelSlot {
         let mut saw_open_tag = false;
         let mut saw_close_tag = false;
 
+        // See generate_sync: stop on `</tool_call>` (marker) or
+        // balanced JSON envelope (grammar-locked) when tools were
+        // requested.
+        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let mut tc_json_depth = 0i32;
+        let mut tc_json_in_string = false;
+        let mut tc_json_escape_next = false;
+        let mut tc_json_ever_opened = false;
+
         // Default to Length: if the loop exits via the `while`
         // condition we hit max_tokens. Each `break` path overwrites
         // this with the more-specific reason.
@@ -1026,7 +1223,12 @@ impl ModelSlot {
                 }
             }
 
-            let token = sampler.sample(ctx, -1);
+            let role = if tools_present && tc_json_in_string {
+                SamplerRole::Content
+            } else {
+                SamplerRole::Explore
+            };
+            let token = sampler.sample(ctx, -1, role);
             sampler.accept(token);
 
             if model.is_eog_token(token) {
@@ -1056,6 +1258,38 @@ impl ModelSlot {
                     think_tokens += 1;
                 }
 
+                // JSON-balance bookkeeping BEFORE the send so we don't
+                // need to re-borrow piece bytes after the move.
+                let mut json_envelope_complete = false;
+                if tools_present && !in_think {
+                    for b in piece.bytes() {
+                        if tc_json_escape_next {
+                            tc_json_escape_next = false;
+                            continue;
+                        }
+                        if tc_json_in_string {
+                            match b {
+                                b'\\' => tc_json_escape_next = true,
+                                b'"' => tc_json_in_string = false,
+                                _ => {}
+                            }
+                            continue;
+                        }
+                        match b {
+                            b'"' => tc_json_in_string = true,
+                            b'{' => {
+                                tc_json_depth += 1;
+                                tc_json_ever_opened = true;
+                            }
+                            b'}' => tc_json_depth -= 1,
+                            _ => {}
+                        }
+                    }
+                    if tc_json_ever_opened && tc_json_depth == 0 {
+                        json_envelope_complete = true;
+                    }
+                }
+
                 if tx.blocking_send(StreamFrame::Token(piece)).is_err() {
                     tracing::warn!(
                         tokens_emitted = n_generated,
@@ -1064,6 +1298,29 @@ impl ModelSlot {
                     // Receiver is gone — don't try to send a Finish
                     // frame either. Caller already knows.
                     return Ok(());
+                }
+
+                // Tool-emission stop — see generate_sync for rationale.
+                if tools_present {
+                    if tail.contains("</tool_call>") {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            tail = %tail,
+                            "inference: stopping on </tool_call> marker (stream-finish)"
+                        );
+                        reason = FinishReason::Stop;
+                        break;
+                    }
+                    if json_envelope_complete {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on balanced JSON envelope (stream-finish)"
+                        );
+                        reason = FinishReason::Stop;
+                        break;
+                    }
                 }
             }
 
@@ -4877,8 +5134,37 @@ const THINK_BUDGET: usize = 512;
 /// (without any grammar sampler), and optionally owns a
 /// `JsonConstraint` that masks token logits in pure Rust before the
 /// chain runs. No call into `llama-grammar.cpp` ever fires.
+/// Which "role" the sampler is currently filling. The same primary
+/// slot serves multiple cognitive tasks per turn — picking the next
+/// tool and authoring its arguments behave very differently from
+/// each other and from filling content inside a JSON string value
+/// (paths, file contents, Rust source). Investment #16 (2026-05-13):
+/// instead of one global temperature, the sampler holds a per-role
+/// `LlamaSampler` chain and the generation loop picks which to pull
+/// each token from based on its position in the emit stream.
+///
+/// Roles are intentionally coarse-grained at v1 — easy to extend
+/// (e.g. add `Decision` for the first K tokens after a `:` in a JSON
+/// envelope), but the two-way split captures the dominant cost:
+/// high-T exploration helps tool selection escape attractors,
+/// low-T content fills paths/code without char-level drift.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SamplerRole {
+    /// Default: tool envelope structure, decision points, anywhere
+    /// outside a JSON string. Per-request `temperature` applies.
+    Explore,
+    /// Inside a JSON string value (path, command text, file
+    /// content). Greedy or low-T to suppress char-level drift like
+    /// `/Users/ale xsbryan` observed in the 2026-05-13 codex smoke.
+    Content,
+}
+
 pub struct ConstrainedSampler {
-    inner: LlamaSampler,
+    /// Per-role inner chains. `accept()` advances both so the DRY /
+    /// penalty trackers stay in sync regardless of which one
+    /// produced any given token.
+    inner_explore: LlamaSampler,
+    inner_content: LlamaSampler,
     constraint: Option<crate::json_constraint::JsonConstraint>,
     /// Vocab-sized bitmap of tokens whose rendered bytes contain a
     /// 3+ byte UTF-8 leading byte (CJK / Devanagari / Hangul / etc.).
@@ -4903,7 +5189,12 @@ impl ConstrainedSampler {
     /// the right fix is a precomputed token-acceptance table per
     /// FSM state (the pattern LM-Format-Enforcer and Outlines use).
     /// Until that lands, the slower-but-correct mask stays.
-    pub fn sample(&mut self, ctx: &llama_cpp_2::context::LlamaContext<'_>, idx: i32) -> LlamaToken {
+    pub fn sample(
+        &mut self,
+        ctx: &llama_cpp_2::context::LlamaContext<'_>,
+        idx: i32,
+        role: SamplerRole,
+    ) -> LlamaToken {
         let mut data = if idx < 0 {
             ctx.token_data_array()
         } else {
@@ -4924,15 +5215,21 @@ impl ConstrainedSampler {
                 }
             }
         }
-        data.apply_sampler(&self.inner);
+        let inner = match role {
+            SamplerRole::Explore => &self.inner_explore,
+            SamplerRole::Content => &self.inner_content,
+        };
+        data.apply_sampler(inner);
         data.selected_token()
             .expect("sampler chain failed to select a token")
     }
 
-    /// Advance both the inner chain (for stateful samplers — DRY,
-    /// penalties) and the constraint state machine.
+    /// Advance both inner chains (DRY / penalties state stays in
+    /// sync regardless of which role produced this token) and the
+    /// constraint state machine.
     pub fn accept(&mut self, token: LlamaToken) {
-        self.inner.accept(token);
+        self.inner_explore.accept(token);
+        self.inner_content.accept(token);
         if let Some(c) = self.constraint.as_mut() {
             c.accept(token);
         }
@@ -4987,23 +5284,40 @@ fn build_sampler(
     // begins — any of these tokens resets the repeated-suffix detector.
     let breakers: &[&[u8]] = &[b"\n", b".", b"?", b"!", b":", b"\"", b"*"];
 
-    // Inner chain: DRY → penalties → (greedy | top_k+min_p+temp+dist).
-    // Grammar masking is OUR responsibility now (in
-    // ConstrainedSampler::sample), not llama.cpp's, so the chain has
-    // no grammar slot.
-    let mut samplers: Vec<LlamaSampler> = Vec::new();
-    samplers.push(LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()));
-    samplers.push(LlamaSampler::penalties(128, 1.15, 0.1, 0.1));
-    if temp < 0.01 {
-        samplers.push(LlamaSampler::greedy());
-    } else {
-        samplers.push(LlamaSampler::top_k(top_k_val));
-        samplers.push(LlamaSampler::min_p(0.05, 1));
-        samplers.push(LlamaSampler::temp(temp));
-        samplers.push(LlamaSampler::dist(rand_seed()));
-    }
+    // Build per-role inner chains. Both share DRY+penalties (state
+    // is kept in sync by `accept()` advancing both). The difference
+    // is the final sampling stage: Explore uses request T; Content
+    // is greedy unless overridden.
+    //
+    // Content-role temperature override: env var
+    // `SOVEREIGN_CONTENT_TEMPERATURE` lets an operator dial Content
+    // up if greedy turns out too tight (e.g. would still pick the
+    // same wrong path every time). Default 0.0 (greedy). Range
+    // [0.0, 2.0].
+    let content_temp = std::env::var("SOVEREIGN_CONTENT_TEMPERATURE")
+        .ok()
+        .and_then(|s| s.parse::<f32>().ok())
+        .filter(|v| (0.0..=2.0).contains(v))
+        .unwrap_or(0.0);
+
+    let build_chain = |chain_temp: f32| {
+        let mut samplers: Vec<LlamaSampler> = Vec::new();
+        samplers.push(LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()));
+        samplers.push(LlamaSampler::penalties(128, 1.15, 0.1, 0.1));
+        if chain_temp < 0.01 {
+            samplers.push(LlamaSampler::greedy());
+        } else {
+            samplers.push(LlamaSampler::top_k(top_k_val));
+            samplers.push(LlamaSampler::min_p(0.05, 1));
+            samplers.push(LlamaSampler::temp(chain_temp));
+            samplers.push(LlamaSampler::dist(rand_seed()));
+        }
+        LlamaSampler::chain_simple(samplers)
+    };
+
     ConstrainedSampler {
-        inner: LlamaSampler::chain_simple(samplers),
+        inner_explore: build_chain(temp),
+        inner_content: build_chain(content_temp),
         constraint,
         non_latin_denylist,
     }
