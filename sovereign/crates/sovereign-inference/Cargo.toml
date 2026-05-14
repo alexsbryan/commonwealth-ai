@@ -40,7 +40,7 @@ llama-cpp-2 = { version = "0.1.145", features = ["metal", "llguidance"] }
 # (this shell can't enter the sovereign-vulkan toolbox where the Vulkan
 # SDK lives). Flip to "vulkan" when restarting the daemon for SEP-grade
 # inference workloads — see issue #20176 commentary above.
-llama-cpp-2 = { version = "0.1.145", features = ["rocm", "llguidance"] }
+llama-cpp-2 = { version = "0.1.145", features = ["vulkan", "llguidance"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -330,6 +330,36 @@ fn step_canonical_output(step: Step, corpus_id: &str) -> Option<std::path::PathB
     }
 }
 
+/// Returns true iff the cached Phase 1 `questions.json` has at least
+/// one chapter carrying a non-null `section_extraction`. Mirrors the
+/// precondition `runner::phase_2_cluster_atlas` enforces — if this
+/// returns false, the cluster step would fail with `phase 1 cache has
+/// no section_extraction payloads`, so the cache is treated as stale
+/// from a legacy (non-atlas) run and re-extracted.
+///
+/// Returns false on any parse error or missing field — re-running
+/// extract is the safe fallback in all of those cases.
+fn extract_cache_has_atlas_payloads(cache_path: &std::path::Path) -> bool {
+    let bytes = match std::fs::read(cache_path) {
+        Ok(b) => b,
+        Err(_) => return false,
+    };
+    let v: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    v.get("questions_by_chapter")
+        .and_then(|c| c.as_array())
+        .map(|chapters| {
+            chapters.iter().any(|c| {
+                c.get("section_extraction")
+                    .map(|s| !s.is_null())
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
 async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
     let corpus = parsed.corpus_id.as_str();
 
@@ -351,16 +381,44 @@ async fn run_step(step: Step, parsed: &ParsedBuild) -> i32 {
     if !chapters_override {
         if let Some(cache_path) = step_canonical_output(step, corpus) {
             if cache_path.exists() {
-                println!(
-                    "  · {} cached — {} exists; skipping.",
-                    step.label(),
-                    cache_path.display()
-                );
-                println!(
-                    "    To force re-run: rm {}",
-                    cache_path.display()
-                );
-                return 0;
+                // For Extract, file-exists alone is not enough: a
+                // `questions.json` left over from a legacy (non-atlas)
+                // pipeline run has no `section_extraction` payloads,
+                // and the downstream cluster step would fail with
+                // "phase 1 cache has no section_extraction payloads".
+                // Since `build` already requires an atlas pipeline
+                // upstream (load_pipeline_capabilities), any cached
+                // Phase 1 here MUST carry section_extraction — if it
+                // doesn't, the cache is stale; re-run extract instead
+                // of silently skipping into a doomed cluster step.
+                if matches!(step, Step::Extract)
+                    && !extract_cache_has_atlas_payloads(&cache_path)
+                {
+                    println!(
+                        "  · {} cached file at {} is from a non-atlas run \
+                         (no section_extraction payloads); invalidating cache.",
+                        step.label(),
+                        cache_path.display()
+                    );
+                    if let Err(e) = std::fs::remove_file(&cache_path) {
+                        eprintln!(
+                            "  warning: could not remove stale cache {}: {}",
+                            cache_path.display(),
+                            e
+                        );
+                    }
+                } else {
+                    println!(
+                        "  · {} cached — {} exists; skipping.",
+                        step.label(),
+                        cache_path.display()
+                    );
+                    println!(
+                        "    To force re-run: rm {}",
+                        cache_path.display()
+                    );
+                    return 0;
+                }
             }
         }
     }
@@ -923,6 +981,53 @@ fn parse_args(args: &[String]) -> Result<ParsedBuild, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extract_cache_atlas_detection() {
+        let tmp = std::env::temp_dir().join(format!(
+            "sov-build-cache-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // Atlas-shaped cache: one chapter with a section_extraction object.
+        let atlas = tmp.join("atlas.json");
+        std::fs::write(
+            &atlas,
+            br#"{"questions_by_chapter":[{"chapter":"sec_0001","section_extraction":{"entities":[]}}]}"#,
+        )
+        .unwrap();
+        assert!(extract_cache_has_atlas_payloads(&atlas));
+
+        // Legacy non-atlas cache: chapters present but section_extraction is null.
+        let legacy = tmp.join("legacy.json");
+        std::fs::write(
+            &legacy,
+            br#"{"questions_by_chapter":[{"chapter":"sec_0001","section_extraction":null}]}"#,
+        )
+        .unwrap();
+        assert!(!extract_cache_has_atlas_payloads(&legacy));
+
+        // Legacy cache without the field at all (pre-atlas shape).
+        let missing = tmp.join("missing.json");
+        std::fs::write(
+            &missing,
+            br#"{"questions_by_chapter":[{"chapter":"sec_0001"}]}"#,
+        )
+        .unwrap();
+        assert!(!extract_cache_has_atlas_payloads(&missing));
+
+        // Malformed JSON → treat as stale.
+        let bad = tmp.join("bad.json");
+        std::fs::write(&bad, b"{not json").unwrap();
+        assert!(!extract_cache_has_atlas_payloads(&bad));
+
+        // Missing file → treat as stale.
+        let gone = tmp.join("gone.json");
+        assert!(!extract_cache_has_atlas_payloads(&gone));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn parse_defaults_to_full_selection() {
