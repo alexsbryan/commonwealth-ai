@@ -9,7 +9,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use sovereign_mesh::daemon::RelayCandidate;
+use sovereign_mesh::mesh_discovery::RelayCandidate;
 use sovereign_mesh::{parse_deep_link, JoinConfirmation, MeshState};
 
 use crate::bootstrap::BootstrapMode;
@@ -351,7 +351,7 @@ pub async fn mesh_relay_candidates(
             .unwrap_or_default());
     }
     // Local mode — call the helper directly, no HTTP round-trip.
-    Ok(sovereign_mesh::daemon::relay_candidates(9742))
+    Ok(sovereign_mesh::mesh_discovery::relay_candidates(9742))
 }
 
 /// Generate a fresh memorable two-word node-name suggestion (e.g.

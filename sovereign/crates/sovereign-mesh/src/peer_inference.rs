@@ -9,7 +9,7 @@
 //! these onto every `CompletionRequest` via `build_oicp`. On the
 //! peer side, each node advertises a `ProviderManifest` at
 //! `/oicp/v1/capabilities` derived from its local inference stack
-//! (`sovereign_mesh::inference_adapter::build_self_manifest`).
+//! (`sovereign_mesh::oicp_synthesis::build_self_manifest`).
 //!
 //! This wrapper is the point where the request's requirements meet
 //! the available manifests and a single best backend is chosen:
@@ -33,7 +33,6 @@
 //!
 //! Embed calls stay local unconditionally — retrieval is latency-
 //! critical and not a capability the selector has visibility into.
-use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -41,7 +40,6 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures::Stream;
-use sovereign_core::oicp::THROUGHPUT_EWMA_ALPHA;
 use sovereign_core::error::Result;
 use sovereign_core::oicp::{
     ExtensionRegistry, ExtensionStats, NodeLocality, NodeObservations,
@@ -53,7 +51,8 @@ use sovereign_inference::remote::RemoteApiProvider;
 use tokio::sync::RwLock;
 
 use crate::daemon::{EmbeddedDaemon, PeerInferenceEndpoint};
-use crate::inference_adapter::build_self_manifest;
+use crate::oicp_synthesis::build_self_manifest;
+use crate::throughput_tracking::{LedgerEmission, ThroughputObservedStream, ThroughputTarget};
 
 /// How long to trust a fetched peer manifest before re-fetching.
 /// OICP capabilities don't change request-to-request — a model
@@ -1610,61 +1609,6 @@ impl InferenceProvider for MeshInferenceProvider {
     }
 }
 
-/// Where a `ThroughputObservedStream` should write its measurements
-/// when it terminates: either onto the local-side single
-/// `NodeObservations` slot, or onto the per-peer map keyed by name.
-/// Mirrors the dual storage already present on
-/// [`MeshInferenceProvider::peer_observations`] /
-/// [`MeshInferenceProvider::local_observations`].
-#[derive(Clone)]
-enum ThroughputTarget {
-    Local(Arc<RwLock<NodeObservations>>),
-    Peer {
-        name: String,
-        map: Arc<RwLock<HashMap<String, NodeObservations>>>,
-    },
-}
-
-/// Stream wrapper that records TTFT (time-to-first-token) and
-/// observed token-generation rate when the stream completes. Both
-/// metrics fold into the per-(local|peer) [`NodeObservations`] EWMA
-/// so [`oicp::throughput_factor`] sees real performance, not just
-/// the advertised benchmark.
-///
-/// Implementation notes:
-///
-/// - Token count is approximated as **stream chunks**. SSE-streamed
-///   output from llama.cpp emits one chunk per token in practice.
-///   This is a coarse proxy for routing — the absolute number may
-///   be off, but the relative ordering across peers is preserved
-///   (every peer is measured the same way).
-/// - We record on `Drop` so that streams aborted mid-completion
-///   still surface their TTFT — abort timing is a useful signal
-///   too. A stream that ended with zero chunks contributes only
-///   the TTFT data.
-/// - Recording is `tokio::spawn`'d because `Drop` runs in a
-///   non-async context. The spawned task uses the same EWMA α as
-///   the latency probe to stay consistent with the rest of the
-///   observation pipeline.
-/// Optional ledger-event emission attached to the stream wrapper.
-/// When `Some`, the stream's `Drop` impl fires an
-/// `InferenceReceived` event on completion with `tokens_generated`
-/// equal to the chunk count. Local-served streams set this to
-/// `None` — the dimensional ledger is intra-mesh-only per spec
-/// §10, and a "received from self" event is meaningless.
-///
-/// `pub` because the [`PeerEndpointSource`] trait method
-/// `ledger_emission_for` returns `Option<LedgerEmission>` —
-/// implementors outside this module need to construct values of
-/// this type. Fields stay `pub(crate)` so the construction shape
-/// is still controlled.
-#[derive(Clone)]
-pub struct LedgerEmission {
-    pub(crate) from_node: commonwealth_core::ids::NodeId,
-    pub(crate) model_id: String,
-    pub(crate) emitter: commonwealth_state::ContributionEmitter,
-}
-
 /// Stream wrapper that holds a [`LocalInflightGuard`] for its
 /// lifetime. The guard's `Drop` decrements the per-model in-flight
 /// counter when the consumer drops the stream — full consumption,
@@ -1695,191 +1639,7 @@ where
     }
 }
 
-struct ThroughputObservedStream {
-    inner: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
-    dispatched_at: Instant,
-    first_chunk_at: Option<Instant>,
-    chunk_count: u64,
-    target: ThroughputTarget,
-    completed: bool,
-    ledger_emission: Option<LedgerEmission>,
-}
-
-impl ThroughputObservedStream {
-    fn new(
-        inner: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
-        target: ThroughputTarget,
-    ) -> Self {
-        Self {
-            inner,
-            dispatched_at: Instant::now(),
-            first_chunk_at: None,
-            chunk_count: 0,
-            target,
-            completed: false,
-            ledger_emission: None,
-        }
-    }
-
-    fn with_ledger_emission(mut self, emission: LedgerEmission) -> Self {
-        self.ledger_emission = Some(emission);
-        self
-    }
-}
-
-impl Stream for ThroughputObservedStream {
-    type Item = Result<String>;
-
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
-        match self.inner.as_mut().poll_next(cx) {
-            Poll::Ready(Some(Ok(chunk))) => {
-                if self.first_chunk_at.is_none() {
-                    self.first_chunk_at = Some(Instant::now());
-                }
-                self.chunk_count += 1;
-                Poll::Ready(Some(Ok(chunk)))
-            }
-            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
-            Poll::Ready(None) => {
-                self.completed = true;
-                Poll::Ready(None)
-            }
-            Poll::Pending => Poll::Pending,
-        }
-    }
-}
-
-impl Drop for ThroughputObservedStream {
-    fn drop(&mut self) {
-        let dispatched = self.dispatched_at;
-        let first_chunk = self.first_chunk_at;
-        let count = self.chunk_count;
-        let target = self.target.clone();
-        let emission = self.ledger_emission.clone();
-
-        // Skip recording if no first token ever arrived AND no
-        // chunks were yielded. Pure-failure case — nothing to
-        // measure, and the failure tracker handles it via
-        // `record_failure`.
-        if first_chunk.is_none() && count == 0 {
-            return;
-        }
-
-        tokio::spawn(async move {
-            let now = Instant::now();
-            let ttft_ms = first_chunk
-                .map(|t| t.duration_since(dispatched).as_secs_f64() * 1000.0);
-            let tg_tok_s = first_chunk.and_then(|fc| {
-                let gen_secs = now.duration_since(fc).as_secs_f64();
-                if gen_secs > 0.0 && count > 0 {
-                    Some(count as f64 / gen_secs)
-                } else {
-                    None
-                }
-            });
-
-            match target {
-                ThroughputTarget::Local(obs) => {
-                    let mut o = obs.write().await;
-                    apply_throughput_observation(
-                        &mut o, ttft_ms, tg_tok_s,
-                    );
-                }
-                ThroughputTarget::Peer { name, map } => {
-                    let mut m = map.write().await;
-                    let entry =
-                        m.entry(name).or_insert_with(NodeObservations::default);
-                    apply_throughput_observation(
-                        entry, ttft_ms, tg_tok_s,
-                    );
-                }
-            }
-
-            // Emit `InferenceReceived` on the completion path —
-            // peer-routed streams that yielded any chunks count as
-            // a received inference. Spec §4.3 docs the symmetric
-            // pair (`InferenceServed` on peer, `InferenceReceived`
-            // here); the aggregator does NOT cross-pollinate, so
-            // we have to emit both halves explicitly.
-            if let Some(em) = emission {
-                if count > 0 {
-                    em.emitter.record(
-                        commonwealth_core::contributions::LedgerEventKind::InferenceReceived {
-                            from_node: em.from_node,
-                            model_id: em.model_id,
-                            tokens_generated: count,
-                        },
-                    );
-                }
-            }
-        });
-    }
-}
-
-/// EWMA update for the throughput-observation fields on
-/// [`NodeObservations`]. α follows
-/// [`THROUGHPUT_EWMA_ALPHA`] so this stays in lock-step with the
-/// latency probe and other observation paths.
-fn apply_throughput_observation(
-    obs: &mut NodeObservations,
-    ttft_ms: Option<f64>,
-    tg_tok_s: Option<f64>,
-) {
-    let alpha = THROUGHPUT_EWMA_ALPHA;
-    if let Some(ttft) = ttft_ms {
-        obs.ttft_ewma_ms = if obs.ttft_ewma_ms == 0.0 {
-            ttft
-        } else {
-            alpha * ttft + (1.0 - alpha) * obs.ttft_ewma_ms
-        };
-    }
-    if let Some(tg) = tg_tok_s {
-        obs.tg_tok_s_ewma = if obs.tg_tok_s_ewma == 0.0 {
-            tg
-        } else {
-            alpha * tg + (1.0 - alpha) * obs.tg_tok_s_ewma
-        };
-    }
-}
-
 // Selection primitive tests live in `crate::oicp_select` alongside
 // the primitives themselves; this file only tests the peer-
 // orchestration logic (HTTP manifest fetch, selection loop, etc.)
 // once we need targeted coverage for that layer.
-
-#[cfg(test)]
-mod throughput_tests {
-    use super::*;
-
-    #[test]
-    fn ewma_seed_takes_first_value_when_zero() {
-        let mut obs = NodeObservations::default();
-        apply_throughput_observation(&mut obs, Some(120.0), Some(15.0));
-        assert!((obs.ttft_ewma_ms - 120.0).abs() < 1e-9);
-        assert!((obs.tg_tok_s_ewma - 15.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn ewma_blends_subsequent_samples_at_alpha() {
-        let mut obs = NodeObservations::default();
-        apply_throughput_observation(&mut obs, Some(100.0), Some(20.0));
-        apply_throughput_observation(&mut obs, Some(200.0), Some(10.0));
-        // alpha=0.3; 0.3*200 + 0.7*100 = 130
-        assert!((obs.ttft_ewma_ms - 130.0).abs() < 1e-9);
-        // 0.3*10 + 0.7*20 = 17
-        assert!((obs.tg_tok_s_ewma - 17.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn ewma_ignores_none_inputs() {
-        let mut obs = NodeObservations::default();
-        apply_throughput_observation(&mut obs, Some(100.0), None);
-        assert_eq!(obs.tg_tok_s_ewma, 0.0);
-        apply_throughput_observation(&mut obs, None, Some(15.0));
-        assert!((obs.ttft_ewma_ms - 100.0).abs() < 1e-9);
-        assert!((obs.tg_tok_s_ewma - 15.0).abs() < 1e-9);
-    }
-}

@@ -262,6 +262,69 @@ impl FinishReason {
             FinishReason::Error(_) => "error",
         }
     }
+
+    /// Parse an OpenAI-compatible `finish_reason` string into a typed
+    /// variant. Unknown strings collapse to `Stop` — matches the
+    /// `inference_adapter::synthesize_tool_stream` fallback, where an
+    /// unrecognised reason from a provider becomes a clean
+    /// `finish_reason: "stop"` rather than a synthetic error variant.
+    ///
+    /// `"error"` round-trips with an empty cause string because the
+    /// wire `finish_reason` field does not itself carry the cause.
+    pub fn from_openai_str(s: &str) -> Self {
+        match s {
+            "stop" => FinishReason::Stop,
+            "length" => FinishReason::Length,
+            "tool_calls" => FinishReason::ToolCalls,
+            "content_filter" => FinishReason::ContentFilter,
+            "cancelled" => FinishReason::Cancelled,
+            "error" => FinishReason::Error(String::new()),
+            _ => FinishReason::Stop,
+        }
+    }
+}
+
+/// Typed view over the OpenAI `role` field on a chat message.
+/// The wire field stays a `String` on `ChatMessage` (legitimate §2.2
+/// exception — OpenAI's `role` vocabulary is open by spec; clients
+/// ship "developer", "function", etc.). Internal dispatch uses this
+/// enum so the closed-set roles get exhaustive matching and the
+/// open-set tail goes through `Other`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Role {
+    System,
+    User,
+    Assistant,
+    Tool,
+    /// Any role outside the OpenAI core vocabulary (`developer`,
+    /// `function`, vendor-specific roles). Carries the original
+    /// string so the adapter can echo it back to the model.
+    Other(String),
+}
+
+impl Role {
+    pub const fn as_openai_str(&self) -> &'static str {
+        match self {
+            Role::System => "system",
+            Role::User => "user",
+            Role::Assistant => "assistant",
+            Role::Tool => "tool",
+            // `Other` carries its own string; the &'static fallback
+            // here is only reached when a caller wants a constant
+            // label for the variant tag (rare).
+            Role::Other(_) => "other",
+        }
+    }
+
+    pub fn from_openai_str(s: &str) -> Self {
+        match s {
+            "system" => Role::System,
+            "user" => Role::User,
+            "assistant" => Role::Assistant,
+            "tool" => Role::Tool,
+            other => Role::Other(other.to_string()),
+        }
+    }
 }
 
 /// Token-usage counters carried on the terminal stream frame.
@@ -621,5 +684,48 @@ mod tests {
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("qwen3-coder-30b"));
+    }
+
+    #[test]
+    fn role_round_trips_core_vocabulary() {
+        for raw in ["system", "user", "assistant", "tool"] {
+            let parsed = Role::from_openai_str(raw);
+            assert_eq!(parsed.as_openai_str(), raw, "round-trip for {raw}");
+        }
+    }
+
+    #[test]
+    fn role_other_preserves_unknown_vocabulary() {
+        let parsed = Role::from_openai_str("developer");
+        assert!(matches!(parsed, Role::Other(ref s) if s == "developer"));
+    }
+
+    #[test]
+    fn finish_reason_round_trips_wire_vocabulary() {
+        for raw in ["stop", "length", "tool_calls", "content_filter", "cancelled"] {
+            let parsed = FinishReason::from_openai_str(raw);
+            assert_eq!(parsed.as_openai_str(), raw, "round-trip for {raw}");
+        }
+    }
+
+    #[test]
+    fn finish_reason_unknown_collapses_to_stop() {
+        // Matches the adapter's behaviour: unrecognised reasons are
+        // treated as a clean stop rather than synthesising an error.
+        assert_eq!(
+            FinishReason::from_openai_str("future_variant"),
+            FinishReason::Stop
+        );
+    }
+
+    #[test]
+    fn finish_reason_error_round_trips_lossy() {
+        // `Error(_)` carries a cause string that the wire field does
+        // not. `from_openai_str("error")` gives back an empty-cause
+        // Error; round-tripping through `as_openai_str` still yields
+        // `"error"`. Pin this so the lossy step is documented in code.
+        let parsed = FinishReason::from_openai_str("error");
+        assert_eq!(parsed, FinishReason::Error(String::new()));
+        assert_eq!(parsed.as_openai_str(), "error");
     }
 }
