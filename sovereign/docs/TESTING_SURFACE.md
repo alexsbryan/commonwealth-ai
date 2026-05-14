@@ -1,0 +1,381 @@
+# Daemon Testing Surface — Audit + Priority Matrix
+
+**Last audited:** 2026-05-13 (round 1+2 of test landings). Refresh whenever a row's coverage changes,
+a capability lands, or a deferral resolves. Out-of-date rows are a bug
+per ARCH §1.1 — feature docs describe *intent*, and this doc's intent
+is to drive the next test.
+
+## What this is
+
+A living inventory of every capability the `EmbeddedDaemon`
+(`sovereign-mesh::daemon`) exposes through HTTP, lifecycle methods, or
+background tasks — with its current test coverage and its
+user-facing impact-of-regression score. Bucketed so engineers can pick
+the next gap with the highest ratio of (impact saved) / (cost to test).
+
+This is the source-of-truth for "what test do I write next?". Reach
+into it before designing a one-off; the matrix may already show that
+a peer test exists or that the gap is intentionally deferred.
+
+## Layering principle
+
+A test belongs at the lowest layer that can catch the failure mode
+it's targeting. Subsystem integration (real HTTP + real SQLite +
+mocked external) is the sweet spot for daemon work — unit tests miss
+wiring bugs, true E2E is slow to write and slow to run. ARCH §12 holds.
+
+The four layers we use:
+
+| Layer | Shape | Lives in | Catches |
+|---|---|---|---|
+| **L1** Unit | Pure function or single struct, no I/O | `src/*.rs` `#[cfg(test)] mod` | Math bugs, type bugs |
+| **L2** Subsystem integration | Real HTTP/SQL/MeshStore on ephemeral port, mocked inference + corpus | `tests/*.rs` | Wiring bugs, route bugs, persistence-on-mutation bugs, OICP decisions |
+| **L3** Multi-daemon E2E | Two+ `EmbeddedDaemon` instances on distinct ports, gossip + handshake over real HTTP | `tests/*.rs` (unblocked by the port-config landing) | Cross-mesh convergence, distributed state, peer-routing decisions |
+| **L4** Real-binary smoke | `cargo run --bin sovereign daemon run` against a curated fixture | manual playbook or `--ignored` tests | mDNS, launchd/systemd, real GPU inference, real Tailscale topology |
+
+Most production bugs in a daemon like this live at **L2 × hard
+failure or restart recovery**. That's where the highest-leverage
+gaps below sit.
+
+## Impact tiers
+
+Impact = "what breaks for the user if this regresses?".
+
+- **P0 — Silent corruption.** Request succeeds, response looks fine,
+  state is wrong. Examples: ledger underreports, persistence drops a
+  member, privacy invariant slips, mutation hook silently no-ops.
+- **P1 — User-facing failure.** Request fails or returns wrong content
+  visibly. Examples: 503 model_not_ready when local inference is wired,
+  auth boundary lets a non-loopback caller through, routing picks the
+  wrong peer.
+- **P2 — Degraded operation.** Functional but slower, hotter, less
+  efficient. Examples: manifest cache doesn't refresh, EWMA biased,
+  partition plan sub-optimal.
+- **P3 — Cosmetic / observability.** Operator pain but no incorrect
+  behaviour. Examples: status fields stale, log noise, stub messages.
+
+## Coverage levels
+
+- **✓ L2+** — Subsystem integration or higher exists.
+- **~ L1** — Unit tests exist, wiring is untested.
+- **·** — No test at any layer.
+- **?** — Covered indirectly; sharper test would be valuable.
+
+## Heatmap
+
+Counts as of audit date. Top-left cell (P0 × ·) is where the next
+test should come from.
+
+|                  | **·** (no test)   | **~** (unit only) | **✓** (integration+)  |
+|------------------|-------------------|-------------------|-----------------------|
+| **P0** silent    | **8**             | 6                 | 12                    |
+| **P1** visible   | 8                 | 7                 | 7                     |
+| **P2** degraded  | 5                 | 4                 | 2                     |
+| **P3** cosmetic  | 4                 | 2                 | 1                     |
+
+Round 1+2 landed 16 tests across 4 files: `embeddings_e2e` (4),
+`injection_order` (3), `node_id_persistence` (2), `loopback_parity`
+(7). Net: 4 P0 cells moved from `·` to `✓`, 1 P1 cell from `·`,
+1 P0 from `~` to `✓` (loopback parity).
+
+The 12 P0-uncovered cells are where regressions hurt most and review
+catches least. Those are the top-priority queue at the bottom.
+
+---
+
+## The matrix
+
+Each row: capability · today's coverage · impact · test pointer / next
+step. Buckets follow the daemon's structural layout.
+
+### A. Lifecycle & wiring
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `EmbeddedDaemon::new` + service injection order | ✓ | P0 | `daemon_wiring::with_local_inference_routes_chat_completions_to_adapter` |
+| `with_mesh_mutation_hook` fires on real route mutation | ✓ | P0 | `daemon_wiring::with_mesh_mutation_hook_fires_on_gossip_delta`, `join_handshake::valid_join_key_admits_new_member_and_fires_hook` |
+| `create_mesh` → `start_daemon` happy path | ✓ | P1 | `mesh_http::tests::create_and_status_round_trip`, `port_config::*` |
+| `join_mesh` deep-link parse → `/internal/join` → adopt | ~ | P1 | `join_handshake::joiner_can_adopt_founder_mesh_after_handshake` covers wire+adopt; full `EmbeddedDaemon::join_mesh` path (auto-leave gate, mDNS discovery, swap of self_node_id) is uncovered |
+| `try_resume` from disk → reconstruct mesh + start_daemon | · | **P0** | **Gap.** A daemon restart that fails to resume silently drops the user from their mesh; persistence is read but the resume → start_daemon → first-gossip path has no test |
+| `leave` clears persistence + tears down | ~ | P1 | Lib tests on `persist::clear`; no daemon-level test that `leave` then `create_mesh` works without state bleed |
+| `shutdown` / `stop` graceful drain | ~ | P2 | Used by `port_config::*` but no assertion on background-task teardown |
+| `SetupConfig` ports flow through | ✓ | P1 | `port_config::custom_client_port_from_setup_config_flows_to_api_address` |
+| Service-injection ordering — `Arc::get_mut` no-op detection | ✓ | **P0** | `injection_order::{with_local_inference_emits_error_when_arc_already_cloned, with_mesh_mutation_hook_emits_error_when_arc_already_cloned, happy_path_does_not_emit_error_when_arc_uncloned}` |
+| Concurrent `create_mesh` rejected with `AlreadyRunning` | ~ | P2 | `mesh_http::tests::create_fails_when_mesh_already_exists` covers HTTP layer; no concurrency-stress test |
+
+### B. Inference path (`/v1/*`)
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `/v1/chat/completions` local non-streaming | ✓ | P1 | `daemon_wiring`, `chat_completion_e2e` |
+| `/v1/chat/completions` local streaming | ✓ | P1 | `chat_completion_e2e::joiner_streams_through_mesh_and_attributes_peer` |
+| `/v1/chat/completions` with tools — grammar-constrained path | ~ | P1 | `inference_adapter::guard_tests` covers tool-on-fast-slot guard; `adapter_translation_tests` covers shape; no integration test through the wire |
+| `/v1/chat/completions` with tools — legacy marker path | ~ | P1 | Unit tests in `inference_adapter`; no integration |
+| `/v1/chat/completions` peer routing (OICP) | ✓ | P1 | `chat_completion_e2e` (5 tests) |
+| `LocalOnly` privacy short-circuit | ✓ | **P0** | `chat_completion_e2e::local_only_sharding_never_routes_to_peer` |
+| Explicit `model` field overrides OICP | ✓ | P1 | `chat_completion_e2e::explicit_peer_model_id_routes_to_peer_without_oicp_envelope` |
+| Unknown `model` errors (no silent substitution) | ✓ | P1 | `chat_completion_e2e::explicit_unknown_model_id_errors_instead_of_silent_substitution` |
+| `/v1/embeddings` end-to-end | ✓ | P1 | `embeddings_e2e` (4 tests: single, batch, no-backend 503, empty 400) |
+| `/v1/models` reflects loaded slots | ~ | P2 | `daemon::tests::register_local_model_slots_writes_info_for_all_three_slots` covers wiring; HTTP-surface untested |
+| `/v1/responses` adapter (Responses API) | · | P1 | **Gap.** OpenAI Responses surface, used by `codex` clients — translation contract is in `routes_responses` |
+| Streaming `finish_reason` carries through (`Length`, `Cancelled`, `ContentFilter`) | ~ | **P0** | Unit tests in `inference_adapter::translate_finish_reason`; no end-to-end where a real stream truncates and the wire chunk shows the right reason. **Silent because client renders truncation identically to clean stop today** |
+| Tool envelope schema enforcement (`force_tool_calls`) | ~ | P1 | `tool_profile` unit tests; integration through `/v1/chat/completions` untested |
+| Throughput observation → `InferenceReceived` ledger | ✓ | **P0** | `throughput_ledger_emission` |
+| Zero-chunk peer route — no ledger event | ✓ | **P0** | `throughput_ledger_emission::peer_route_failure_without_chunks_does_not_emit_ledger_event` |
+| Prompt compactor preserves message order + content | ~ | P1 | `prompt_compactor` unit tests; not integrated |
+
+### C. Mesh coordination
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| Gossip merge convergence (two AppStates) | ✓ | P1 | `gossip_integration::two_peers_converge_via_one_gossip_round` |
+| Gossip auth (mesh_id / join_key_hash mismatch) | · | **P0** | **Gap.** A 401 from the route is asserted indirectly; no test that a foreign mesh's payload doesn't pollute the local view |
+| Gossip refresh of `hosted_corpora` | ✓ | P1 | `capabilities_published::gossip_round_publishes_live_hosted_corpora` |
+| Offline decay of stale peer | ✓ | P2 | `gossip_integration::gossip_decays_stale_peer_to_offline` |
+| Latency probing (UDP, EWMA) | ~ | P2 | `commonwealth-discovery` unit tests; no daemon-level |
+| mDNS advertise + browse | · | P2 | **L4 territory.** In-process tests can't drive real multicast. Either accept the gap or build a mock multicast bus |
+| `mesh.json` persistence hook on mutation | ✓ | **P0** | `join_handshake::valid_join_key_admits_new_member_and_fires_hook`, `daemon_wiring::with_mesh_mutation_hook_fires_on_gossip_delta` |
+| `mesh.json` save/load round-trip via `persist::*` | ~ | **P0** | `persist` unit tests cover serde; no test that `save` → restart → `load` reconstructs a workable Mesh |
+| Peer preference applied to outbound manifest fetch | ~ | **P0** | `peer_preferences` unit tests cover gossip exclusion + clamp; no test of the `X-Node-Id` stamp path through `MeshInferenceProvider` |
+| Loopback parity across all loopback-only routers | ✓ | **P0** | `loopback_parity` (7 tests: 5 routers × non-loopback → 403, loopback negative control, missing-ConnectInfo fail-closed across all 5 routers) |
+| `ConnectInfo` missing → fail-closed | ✓ | P1 | `loopback_guard::middleware_fails_closed_when_connect_info_missing` |
+| `peer_inference_endpoints` URL synthesis under uniform-port assumption | · | P2 | Now config-derived (client_port) post-port-fix; uniform assumption documented in §10.1; no test of the rewrite shape |
+
+### D. Knowledge
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `/v1/knowledge/search` local (corpus-engine + grounding) | · | P1 | **Gap.** Round-trip from HTTP to a real `CorpusIndex` |
+| `/v1/knowledge/search` mesh fan-out + merge + rerank | · | **P0** | **Gap.** High-leverage — spans corpus-engine + commonwealth-api + sovereign-mesh. The knowledge-fan-out path is what makes "ask my mesh about X" work |
+| `/v1/knowledge/landscape_digest` | · | P1 | **Gap.** KnowledgeView is structurally local (§7) — a wire test pinning that 200 returns the digest *and* never leaks to the mesh path is the right shape |
+| Canonical pull (peer fetches sharded corpus tar) | ✓ | P1 | `canonical_pull_e2e` (4 tests) |
+| Knowledge query ledger emission (`KnowledgeQueryServed`) | ~ | **P0** | Spec §10 wires this in `routes_internal::knowledge_search`; no test that a fan-out actually emits one event per contributing corpus |
+| Corpus install / update / remove via `MeshCorpusManager` | ~ | P1 | `commonwealth-knowledge` unit tests; daemon-level integration is missing |
+| Embedding model info publication (collaborative ingest) | · | P2 | **Gap.** `set_local_embed_model` is called in `start_daemon`; collaborate handler reads it; round-trip uncovered |
+
+### E. OICP / capabilities
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `build_self_manifest` shape (Fast + Slow + aliases + Code) | ✓ | P1 | `oicp_synthesis::self_manifest_tests` (6 tests) |
+| `/oicp/v1/capabilities` HTTP serialization | · | P1 | **Gap.** Unit-tested at the builder, not over the wire |
+| Manifest stamping with peer-preference multipliers | · | **P0** | **Gap.** §7 structural privacy promise. The `X-Node-Id` header → preference lookup → affinity multiply path needs an HTTP-surface test |
+| Manifest cache TTL refresh on `MeshInferenceProvider` | ~ | P2 | `peer_inference` has the TTL constant; no test that an expired cache actually re-fetches |
+| Peer quarantine / health weight scaling | ~ | P2 | `peer_inference` unit tests; no end-to-end where a failing peer is observed to back off |
+| Effective in-flight scaling under health weight | ✓ | P2 | `peer_inference::effective_inflight` unit tests |
+
+### F. Watched folders / corpus watch
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| Register folder via `/internal/corpus/watch/register` | · | P1 | **Gap.** 14 routes, zero integration tests |
+| Pause / resume / confirm-deletion state transitions | · | P1 | **Gap.** |
+| Enable / disable / rebuild enrichment | · | P1 | **Gap.** |
+| `details_handler` aggregates root + status + formats | · | P2 | **Gap.** 176-line handler with no test |
+| Root management (add / remove) | · | P2 | **Gap.** |
+
+### G. Project / code intelligence (`/v1/projects/*`)
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `/v1/projects` list | ~ | P3 | `project_http::tests` covers list-empty |
+| `/v1/projects/register` happy + bad-id | ~ | P1 | `project_http::tests::register_rejects_empty_corpus_id` |
+| `/v1/projects/{id}/rebuild` not-found | ~ | P2 | `project_http::tests::rebuild_unregistered_project_returns_404` |
+| `/v1/projects/*` loopback enforcement | ✓ | **P0** | `loopback_parity::{project_http_rejects_non_loopback_via_list_projects, every_router_fails_closed_when_connect_info_absent}` |
+| `Reindexer` state machine (rebuild_in_flight, graph_age) | ~ | P2 | Unit tests in `reindexer` and `projects::ProjectState` |
+
+### H. Admin
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `ConfigDiff::diff` field semantics | ~ | P1 | `admin_http::tests::config_diff_*` |
+| `/v1/admin/reload` HTTP route happy path | · | **P0** | **Gap.** Hot-reload is a high-frequency production action. `reload_is_noop_when_nothing_changed` is in lib tests; no over-the-wire test |
+| `/v1/admin/reload` swaps `InferenceProvider` | · | **P0** | **Gap.** The provider-rebuild path is the highest-blast-radius reload action |
+| `/v1/admin/reload` reports `restart_required: true` correctly | · | P1 | **Gap.** Operator depends on this to know whether `launchctl kickstart` is needed |
+| Loopback enforcement on `/v1/admin/reload` | ✓ | **P0** | `loopback_guard::enforce_localhost_accepts_loopback_rejects_others`, `admin_http::tests::enforce_localhost_rejects_non_loopback` |
+
+### I. Auto-collaborate orchestration
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| Partition planning across peers | ~ | P1 | `auto_ingest` unit tests; no integration |
+| Handoff registration via `/internal/corpus/collaborate` | · | P1 | **Gap.** State machine has many transitions |
+| Pull-based work queue reaper | · | P2 | **Gap.** Dormant-until-handoff design; never exercised end-to-end |
+| Auto-collaborate peer compatibility filter (embed-model match) | · | P1 | **Gap.** Peers with mismatched embed dimensions must be rejected pre-handoff |
+
+### J. MCP server
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `tools/list` dispatch | ✓ | P2 | `spec_gate_e2e::initialize_advertises_tools_list_changed_capability` |
+| `tools/call` dispatch + audit trace | ~ | P1 | `mcp_router` lib tests; integration through MCP wire format |
+| List-changed notifications via SSE | ✓ | P1 | `spec_gate_e2e::sse_pushes_tools_list_changed_via_get_mcp` |
+| Spec-gating of tools by approval state | ✓ | P1 | `spec_gate_e2e::spec_creation_triggers_list_changed_notification_and_gates_tools_in` |
+| `/mcp/message` backwards-compat POST | · | P3 | **Gap.** Legacy surface; risk of regression on rename |
+| `/mcp/stats` | · | P3 | **Gap.** |
+| Live wire pattern observation | ✓ | P1 | `pattern_observation_e2e::blast_then_build_writes_observed_note_via_live_mcp_wire` |
+
+### K. Reading surface (`reading_http`)
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `/reading/chunks` (load + neighbor window) | · | P2 | **Gap.** Glass-box surface for atlas inspector |
+| `/reading/atoms` card assembly | · | P2 | **Gap.** Atom formatter covered post-extraction by unit tests; HTTP surface untested |
+| Cross-corpus link enumeration | · | P2 | **Gap.** |
+| Loopback enforcement | · | **P0** | **Gap.** Same as project_http — needs the cross-router parity test |
+
+### L. Apps platform
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `/v1/apps` list / install / uninstall | · | P2 | **Gap.** Mesh-app manifest gossip; future-facing surface |
+| `/v1/apps/{id}/proxy` reverse proxy | · | P2 | **Gap.** |
+
+### M. Contribution ledger
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `InferenceServed` emission on local serve | ~ | **P0** | Wired in `routes_inference::serve_local_*`; no end-to-end |
+| `InferenceReceived` emission on peer-routed stream | ✓ | **P0** | `throughput_ledger_emission` |
+| `KnowledgeQueryServed` per contributing corpus | · | **P0** | **Gap.** §10 contract; emission site untested |
+| `ShardTransferred` on `coordinate_merge` | ~ | P1 | `commonwealth-knowledge::ShardManager` unit tests; daemon-level untested |
+| `StorageSnapshot` hourly emission | · | P1 | **Gap.** Spawned in `start_daemon`; the first-tick-immediate behavior + storage filter (mesh_sharing only) needs a test |
+| `current_contributions` aggregator | ~ | P2 | `commonwealth-state::contributions` unit tests |
+| `peer_preferences` gossip exclusion | ✓ | **P0** | `commonwealth-state::peer_preferences::tests::gossip_excludes_peer_preferences_app_id` + `store::tests::all_entries_for_gossip_excludes_peer_preferences_namespace` |
+
+### N. Persistence
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| `mesh.json` serde round-trip | ~ | **P0** | `persist` unit tests |
+| `mesh.json` save fires on every route mutation | ✓ | **P0** | `join_handshake`, `daemon_wiring` |
+| `node_id` persistence across restart | ✓ | **P0** | `node_id_persistence::{node_id_survives_daemon_restart_against_same_data_dir, node_id_survives_mesh_leave_and_is_reused_on_next_create}` |
+| `join_key.secret` persistence | · | P1 | **Gap.** Founder restart should keep the same join_key visible in `current_invite` |
+| `RetentionGc` evicts past TTL | ~ | P2 | `commonwealth-state::RetentionGc` unit tests |
+| `ContributionEmitter` self_node_id stamp on every event | ~ | **P0** | Unit-tested; no integration that the recorded events under load all carry the right origin |
+
+### O. Workspace alignment (mesh-replicated `~/.claude/`)
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| Replication via corpus-engine + gossip | ~ | P1 | `corpus-engine::sharding::merge_shards` unit tests |
+| Projector newest-mtime LWW | ~ | P1 | `corpus-engine::alignment_projector` unit tests |
+| Alignment corpus is structurally local (`mesh_sharing=false`) | ~ | **P0** | `corpus-engine` recipe-builder unit tests; daemon-level pin would catch a config drift |
+
+### P. Failure modes
+
+| Capability | Coverage | Impact | Test / Next step |
+|---|---|---|---|
+| Listener bind failure logged but daemon stays in valid state | · | P2 | **Gap.** `start_daemon` spawns the bind in `tokio::spawn`; if it fails the daemon still reports Running |
+| mDNS register failure → daemon doesn't crash | ~ | P2 | Indirect: tests already pass with no real LAN multicast |
+| Persistence write failure → request still succeeds | · | P1 | **Gap.** The `MeshMutationHook` swallows errors with a warn; degradation contract is "in-memory only" but no test |
+| Gossip peer unreachable → decays to Offline without erroring | ✓ | P1 | `gossip_integration::gossip_decays_stale_peer_to_offline` |
+| Bad `join_key` rejected with 401 + no mutation | ✓ | **P0** | `join_handshake::invalid_join_key_rejects_with_401_and_does_not_mutate` |
+| Auto-leave gate refuses to clobber populated mesh | · | **P0** | **Gap.** `MeshError::AlreadyInPopulatedMesh` exists and is documented; the auto-leave gate that defends it has no test |
+| Stream early termination (client drops mid-stream) | · | P1 | **Gap.** `ThroughputObservedStream::Drop` math depends on partial-state cleanup |
+| Concurrent `set_inference_provider` swaps | · | P2 | **Gap.** Tests today wire then read; no concurrency |
+
+---
+
+## Top priority queue
+
+Eighteen items ranked by impact × feasibility, with round-1+2 status
+inline. Numbers in brackets index back to the matrix bucket.row.
+
+1. ~~**[C.loopback parity] Single integration test walking every loopback-only route across all 7 mounted routers asserting non-loopback → 403.**~~ **Landed** as `loopback_parity` (7 tests). Cheap, high coverage, defended the §7 promise.
+2. **[A.try_resume] `try_resume` → mesh reconstruction → first gossip round.** Pins the daemon-restart-overnight invariant. *Partial:* `node_id_persistence::node_id_survives_daemon_restart_against_same_data_dir` exercises `try_resume`; the "first gossip round after resume" half is still uncovered.
+3. **[H.admin reload] `/v1/admin/reload` end-to-end with provider swap.** Touches the highest-blast-radius hot-reload path.
+4. ~~**[N.node_id persistence] Daemon restart preserves `self_node_id`.**~~ **Landed** as `node_id_persistence` (2 tests).
+5. **[D.knowledge fan-out] `/v1/knowledge/search` two-daemon fan-out + merge + per-corpus ledger emission.** Spans three crates; pins the "ask my mesh about X" path.
+6. **[C.gossip auth] Foreign-mesh gossip payload doesn't pollute local state.** §7 promise.
+7. **[E.manifest stamping] Peer-preference manifest stamping over `/oicp/v1/capabilities`.** §7 promise.
+8. **[B.finish_reason] End-to-end test that a `Length`-truncated stream surfaces `"length"` on the SSE chunk.** Pins the typed-stream-framing fix.
+9. **[M.KnowledgeQueryServed] Fan-out emits one ledger event per contributing corpus.** §10 contract.
+10. **[M.StorageSnapshot] First-tick-immediate behavior + mesh_sharing filter.** Verifies the spawn site we documented in §5.
+11. ~~**[B.embeddings] `/v1/embeddings` smoke + multi-input batch.**~~ **Landed** as `embeddings_e2e` (4 tests).
+12. **[B.responses adapter] `/v1/responses` translation contract.** `codex` clients depend on it.
+13. **[F.corpus_watch happy path] Register → pause → resume → status round-trip.** Single test against the 14-route surface; closes the biggest single bucket gap.
+14. **[F.corpus_watch enrichment] Enable → rebuild → details.** Sister test to (13).
+15. **[I.auto-collaborate handoff] Register handoff → partition plan → state transitions.** Pins the state machine.
+16. **[K.reading_http] Chunks + atoms over wire.** Single coverage test for a 1000+ LOC surface.
+17. ~~**[A.injection ordering] Tracing-capture test catching the silent-no-op `Arc::get_mut` failure.**~~ **Landed** as `injection_order` (3 tests).
+18. **[B.tools end-to-end] Grammar-constrained tool call through `/v1/chat/completions`.** Currently unit-tested only.
+
+After these, the matrix's remaining `·` cells are L4 territory
+(mDNS, real GPU, launchd) or low-impact polish.
+
+## Out-of-scope (intentional)
+
+- **mDNS over real LAN.** Requires multicast; either accept the
+  gap or build a mock multicast bus. Currently L4.
+- **Real GPU inference quality.** Determinism-blocking. Manual smoke.
+- **launchd / systemd service install.** Platform-specific. Manual.
+- **Cross-machine real network (Tailscale, NAT).** Test harness
+  exists in `commonwealth-test-harness::SimulatedMesh` for the
+  standalone daemon — applies less cleanly here. Manual.
+- **Standalone `commonwealth-daemon` paths that don't run in the
+  embedded shape** (scheduler, orchestrator, `llama-server`/`rpc-server`
+  spawn). Covered by `commonwealth-test-harness`'s `SimulatedMesh`.
+
+## Conventions
+
+- New tests go in `sovereign-mesh/tests/<concern>.rs` — one file
+  per concern, multiple `#[tokio::test]`s per file.
+- Real HTTP on `127.0.0.1:0` (ephemeral port). Never bind a
+  literal port — collisions break parallel test runs.
+- Mocked inference via small per-test `InferenceProvider` stub
+  (the `LocalStub` / `StubProvider` pattern). See "Test harness
+  consolidation" below.
+- Mocked external HTTP via `axum::Router` mock servers (the
+  `spawn_mock_peer` pattern in `chat_completion_e2e`).
+- In-memory `MeshStore::in_memory()` for ledger / state.
+- Refresh this doc in the same PR as the test landing.
+
+## Test harness consolidation (owed before Round 3)
+
+The threshold for `tests/common/mod.rs` extraction is now met per
+ARCH §10.3. As of round-2 landing, **seven** test files contain
+their own `impl InferenceProvider` block (`spec_gate_e2e`,
+`chat_completion_e2e`, `daemon_wiring`, `embeddings_e2e`,
+`throughput_ledger_emission`, `injection_order`,
+`pattern_observation_e2e`). The shapes vary in small ways (which
+methods return real data vs. `unreachable!`), but the boilerplate
+duplicates substantially.
+
+Recommended extraction:
+
+```rust
+// tests/common/mod.rs
+pub struct TestProvider { /* configurable builder */ }
+impl TestProvider {
+    pub fn new() -> Self;
+    pub fn with_model_id(self, id: &str) -> Self;
+    pub fn with_complete_text(self, text: &str) -> Self;
+    pub fn with_stream_chunks(self, chunks: Vec<String>) -> Self;
+    pub fn with_embed_marker(self, f: impl Fn(&str) -> Vec<f32> + ...) -> Self;
+}
+impl InferenceProvider for TestProvider { /* dispatches to builder fields, NotImplemented on unconfigured methods */ }
+
+pub fn empty_capabilities() -> NodeCapabilities;
+pub fn member_record(id, name, last_seen, addr) -> MemberRecord;
+pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh;
+pub async fn spawn_router(router: Router) -> SocketAddr;
+```
+
+Migration order (smallest blast radius first):
+1. Drop into `tests/common/mod.rs`.
+2. Migrate `injection_order` and `embeddings_e2e` (newest, least
+   ceremony around the existing stubs).
+3. Migrate `daemon_wiring`, `chat_completion_e2e`,
+   `throughput_ledger_emission` (these share the most shape).
+4. Migrate `spec_gate_e2e` and `pattern_observation_e2e` last
+   (they exercise the MCP wire and may need additional helpers).
+
+Net effect at completion: ~250 LOC removed from existing tests,
+~150 LOC added to `common`. The next batch of tests (Round 3:
+items 3, 5, 6, 7) will land on top of the consolidated harness
+and pay no setup tax.
+
+Until consolidation lands, new test authors should keep using the
+inline per-file stub pattern — adding the eighth `impl
+InferenceProvider` is cheaper than half-migrating.
