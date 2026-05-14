@@ -29,98 +29,19 @@
 //!    accidentally pick up some other peer's preference.
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
-
-use async_trait::async_trait;
-use futures::Stream;
 
 use commonwealth_api::server::client_router;
 use commonwealth_api::state::{AppState, LocalInferenceService};
 use commonwealth_app::registry::AppRegistry;
-use commonwealth_core::capabilities::{
-    AvailableResources, HardwareProfile, NodeCapabilities,
-};
 use commonwealth_core::ids::{MeshId, NodeId};
-use commonwealth_core::mesh::{MemberRecord, Mesh, NodeStatus};
+use commonwealth_core::mesh::Mesh;
 use commonwealth_state::{MeshStore, PeerPreference};
-use sovereign_core::error::Result as SovResult;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
-    CompletionRequest, CompletionResponse, ProviderCapabilities, Speed,
-};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 
-/// Lightweight `InferenceProvider` whose `model_id_for` returns a
-/// stable name. `build_self_manifest` consults that to populate
-/// the manifest with at least one `ProviderModel` carrying claims;
-/// the exact affinities don't matter for these tests — we measure
-/// ratios (with-pref vs no-pref) so the multiplication is the
-/// only variable.
-struct ManifestProvider;
-
-#[async_trait]
-impl InferenceProvider for ManifestProvider {
-    async fn complete(&self, _: &CompletionRequest) -> SovResult<CompletionResponse> {
-        unreachable!("manifest test doesn't invoke complete()")
-    }
-    async fn complete_stream(
-        &self,
-        _: &CompletionRequest,
-    ) -> SovResult<Pin<Box<dyn Stream<Item = SovResult<String>> + Send>>> {
-        unreachable!("manifest test doesn't invoke complete_stream()")
-    }
-    async fn embed(&self, _: &str) -> SovResult<Vec<f32>> {
-        unreachable!("manifest test doesn't invoke embed()")
-    }
-    fn model_id_for(&self, _speed: Speed) -> String {
-        "manifest-stub".into()
-    }
-    fn capabilities(&self) -> ProviderCapabilities {
-        ProviderCapabilities {
-            max_context_tokens: 4_096,
-            supports_structured_output: false,
-            relative_speed: Speed::Fast,
-            relative_reasoning: sovereign_core::types::Depth::Moderate,
-        }
-    }
-}
-
-fn empty_capabilities() -> NodeCapabilities {
-    NodeCapabilities {
-        hardware: HardwareProfile {
-            gpus: vec![],
-            system_ram_gb: 0,
-            cpu_cores: 0,
-            total_storage_gb: 0,
-            free_storage_gb: 0,
-            network_bandwidth_mbps: None,
-        },
-        available: AvailableResources::default(),
-        active_processes: vec![],
-        hosted_corpora: vec![],
-        reported_at: 0,
-        inference_availability: 1.0,
-        inference_capable: false,
-        loaded_models: vec![],
-        embed_model: None,
-        benchmark: None,
-    }
-}
-
-fn member(id: NodeId, name: &str, addr: SocketAddr) -> MemberRecord {
-    MemberRecord {
-        node_id: id,
-        name: name.into(),
-        invited_by: id,
-        joined_at: 0,
-        last_seen: 0,
-        status: NodeStatus::Online,
-        capabilities: empty_capabilities(),
-        addresses: vec![addr],
-    }
-}
+mod common;
+use common::{id_to_hex, member, spawn_router, TestProvider};
 
 /// Build an AppState with the manifest-producing adapter wired in.
 fn build_state(self_id: NodeId) -> AppState {
@@ -145,24 +66,15 @@ fn build_state(self_id: NodeId) -> AppState {
         app_registry,
         None,
     );
-    let provider: Arc<dyn InferenceProvider> = Arc::new(ManifestProvider);
+    let provider: Arc<dyn InferenceProvider> =
+        Arc::new(TestProvider::new().with_model_id("manifest-stub"));
     let adapter: Arc<dyn LocalInferenceService> =
         Arc::new(SovereignInferenceAdapter::new(provider));
     state.with_local_inference(adapter)
 }
 
 async fn spawn(state: AppState) -> SocketAddr {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move {
-        let _ = axum::serve(listener, client_router(state)).await;
-    });
-    tokio::time::sleep(Duration::from_millis(20)).await;
-    addr
-}
-
-fn id_to_hex(id: &NodeId) -> String {
-    id.as_bytes().iter().map(|b| format!("{b:02x}")).collect()
+    spawn_router(client_router(state)).await
 }
 
 /// Pull every claim's affinity out of the JSON manifest, in document

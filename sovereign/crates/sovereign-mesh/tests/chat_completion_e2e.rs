@@ -34,76 +34,30 @@ use axum::{Json, Router};
 use commonwealth_core::ids::NodeId;
 use futures::StreamExt;
 use serde::Deserialize;
-use sovereign_core::error::{Error, Result};
 use sovereign_core::oicp::{
     CapabilityClaim, CapabilityHint, InferenceRequirements, LatencyClass,
     ModelStatus, ProviderManifest, ProviderModel, OICP_VERSION,
 };
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
-    CompletionRequest, CompletionResponse, ProviderCapabilities, Speed,
-};
+use sovereign_core::types::{CompletionRequest, Speed};
 use sovereign_mesh::daemon::PeerInferenceEndpoint;
 use sovereign_mesh::peer_inference::{
     MeshInferenceProvider, PeerEndpointSource,
 };
 
-// ── Local provider stub ─────────────────────────────────────
-//
-// A tiny `InferenceProvider` that advertises a very small BYOM-
-// like model via `model_id_for`. The local manifest — built by
-// `build_self_manifest` from this provider — will score below the
-// peer's 9B for a DeepQuery, so routing should flow to the peer.
+mod common;
+use common::TestProvider;
 
-struct LocalStub {
-    fast_id: String,
-}
-
-#[async_trait]
-impl InferenceProvider for LocalStub {
-    async fn complete(&self, _: &CompletionRequest) -> Result<CompletionResponse> {
-        Err(Error::NotImplemented(
-            "LocalStub::complete should never be reached — test expects peer routing"
-                .into(),
-        ))
-    }
-    async fn complete_stream(
-        &self,
-        _: &CompletionRequest,
-    ) -> Result<
-        std::pin::Pin<Box<dyn futures::Stream<Item = Result<String>> + Send>>,
-    > {
-        Err(Error::NotImplemented(
-            "LocalStub::complete_stream should never be reached — test expects peer routing"
-                .into(),
-        ))
-    }
-    async fn embed(&self, _: &str) -> Result<Vec<f32>> {
-        Err(Error::NotImplemented("no embed".into()))
-    }
-    async fn embed_batch(&self, _: &[String]) -> Result<Vec<Vec<f32>>> {
-        Err(Error::NotImplemented("no embed".into()))
-    }
-    async fn embed_query(&self, _: &str) -> Result<Vec<f32>> {
-        Err(Error::NotImplemented("no embed".into()))
-    }
-    fn model_id_for(&self, speed: Speed) -> String {
-        match speed {
-            // Matches `profiles.byom_qwen25.thoughtful` in
-            // models.toml — caps={General:2, Analysis:1,
-            // Instruction:2}, which cannot score 1.0 against a
-            // DeepQuery's {Analysis:3, General:3}. Peer's 9B wins.
-            Speed::Fast | Speed::Slow | Speed::Medium => self.fast_id.clone(),
-        }
-    }
-    fn capabilities(&self) -> ProviderCapabilities {
-        ProviderCapabilities {
-            max_context_tokens: 32_768,
-            supports_structured_output: false,
-            relative_speed: Speed::Fast,
-            relative_reasoning: sovereign_core::types::Depth::Moderate,
-        }
-    }
+// Local provider — a weak BYOM-like model whose `model_id_for`
+// resolves to `profiles.byom_qwen25.thoughtful` in `models.toml`
+// (caps={General:2, Analysis:1, Instruction:2}). It cannot score
+// 1.0 against a DeepQuery's {Analysis:3, General:3}, so the
+// peer's 9B wins and routing flows to the peer. The local stub
+// is left in the unconfigured state — any local-path attempt
+// surfaces `TestProvider::*_not_configured` as the bubbled error,
+// which is what the LocalOnly test asserts on.
+fn local_byom() -> Arc<dyn InferenceProvider> {
+    Arc::new(TestProvider::new().with_model_id("qwen2.5-3b-instruct-q4_k_m"))
 }
 
 // ── Peer endpoint source stub ───────────────────────────────
@@ -280,9 +234,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
     //    1.0. The `Qwen2.5-3B` base_name is annotated in
     //    `models.toml` as `byom_qwen25.thoughtful` so the OICP
     //    scorer sees real (weak) caps.
-    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub {
-        fast_id: "qwen2.5-3b-instruct-q4_k_m".into(),
-    });
+    let local: Arc<dyn InferenceProvider> = local_byom();
 
     // 4. The wrapper under test.
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
@@ -352,9 +304,7 @@ async fn local_only_sharding_never_routes_to_peer() {
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
-    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub {
-        fast_id: "qwen2.5-3b-instruct-q4_k_m".into(),
-    });
+    let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
     let envelope = InferenceRequirements::new()
@@ -366,16 +316,17 @@ async fn local_only_sharding_never_routes_to_peer() {
         .with_speed(Speed::Slow)
         .with_oicp(envelope);
 
-    // Expect the LOCAL stream path to be attempted — our LocalStub
-    // returns NotImplemented there, so the wrapper must surface
-    // that error. If routing had gone to the peer instead, the
-    // mock peer would have returned real SSE and we'd get Ok.
+    // Expect the LOCAL stream path to be attempted — our local
+    // provider is the unconfigured `TestProvider` which surfaces
+    // `NotImplemented` from `complete_stream`. If routing had
+    // gone to the peer instead, the mock peer would have
+    // returned real SSE and we'd get Ok.
     match wrapper.complete_stream_with_id(&request).await {
         Ok(_) => panic!("LocalOnly must not route to a peer"),
         Err(e) => {
             let msg = format!("{e}");
             assert!(
-                msg.contains("LocalStub::complete_stream"),
+                msg.contains("complete_stream"),
                 "expected error to come from the local stream path; got {msg:?}"
             );
         }
@@ -407,9 +358,7 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
-    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub {
-        fast_id: "qwen2.5-3b-instruct-q4_k_m".into(),
-    });
+    let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
     // No OICP envelope, Speed::Fast (which would normally bail
@@ -455,9 +404,7 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
-    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub {
-        fast_id: "qwen2.5-3b-instruct-q4_k_m".into(),
-    });
+    let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
     let request = CompletionRequest::new("hi")
@@ -499,9 +446,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
-    let local: Arc<dyn InferenceProvider> = Arc::new(LocalStub {
-        fast_id: "qwen2.5-3b-instruct-q4_k_m".into(),
-    });
+    let local: Arc<dyn InferenceProvider> = local_byom();
     let wrapper = MeshInferenceProvider::with_peer_source(local, peer_source);
 
     let envelope = InferenceRequirements::new()

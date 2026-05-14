@@ -20,24 +20,19 @@
 //! THEN call the installer), and assert the captured stream
 //! contains the documented error text.
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-
-use async_trait::async_trait;
-use futures::Stream;
 
 use commonwealth_api::state::{AppState, LocalInferenceService};
 use commonwealth_app::registry::AppRegistry;
 use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::Mesh;
 use commonwealth_state::MeshStore;
-use sovereign_core::error::Result as SovResult;
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{
-    CompletionRequest, CompletionResponse, ProviderCapabilities, Speed,
-};
 use sovereign_mesh::inference_adapter::SovereignInferenceAdapter;
 use tracing_subscriber::fmt::MakeWriter;
+
+mod common;
+use common::TestProvider;
 
 /// Thread-shared `std::io::Write` impl that buffers everything for
 /// later inspection. Wrapped behind `MakeWriter` so
@@ -103,38 +98,6 @@ fn fresh_app_state() -> AppState {
     )
 }
 
-/// Trivial `InferenceProvider` stub. Never actually invoked — only
-/// used to construct the `SovereignInferenceAdapter` we hand to
-/// `with_local_inference`.
-struct NoopProvider;
-
-#[async_trait]
-impl InferenceProvider for NoopProvider {
-    async fn complete(&self, _: &CompletionRequest) -> SovResult<CompletionResponse> {
-        unreachable!("test never invokes complete")
-    }
-    async fn complete_stream(
-        &self,
-        _: &CompletionRequest,
-    ) -> SovResult<Pin<Box<dyn Stream<Item = SovResult<String>> + Send>>> {
-        unreachable!("test never invokes complete_stream")
-    }
-    async fn embed(&self, _: &str) -> SovResult<Vec<f32>> {
-        unreachable!("test never invokes embed")
-    }
-    fn model_id_for(&self, _: Speed) -> String {
-        "noop".into()
-    }
-    fn capabilities(&self) -> ProviderCapabilities {
-        ProviderCapabilities {
-            max_context_tokens: 1,
-            supports_structured_output: false,
-            relative_speed: Speed::Fast,
-            relative_reasoning: sovereign_core::types::Depth::Moderate,
-        }
-    }
-}
-
 fn captured(buf: &Arc<Mutex<Vec<u8>>>) -> String {
     String::from_utf8_lossy(&buf.lock().unwrap()).to_string()
 }
@@ -151,7 +114,7 @@ fn with_local_inference_emits_error_when_arc_already_cloned() {
     // sees strong_count == 2 and returns None.
     let _kept = app_state.inner.clone();
 
-    let provider: Arc<dyn InferenceProvider> = Arc::new(NoopProvider);
+    let provider: Arc<dyn InferenceProvider> = Arc::new(TestProvider::new());
     let adapter: Arc<dyn LocalInferenceService> =
         Arc::new(SovereignInferenceAdapter::new(provider));
     let app_state = app_state.with_local_inference(adapter);
@@ -211,7 +174,7 @@ fn happy_path_does_not_emit_error_when_arc_uncloned() {
     let _guard = capture_subscriber(Arc::clone(&buf));
 
     let app_state = fresh_app_state();
-    let provider: Arc<dyn InferenceProvider> = Arc::new(NoopProvider);
+    let provider: Arc<dyn InferenceProvider> = Arc::new(TestProvider::new());
     let adapter: Arc<dyn LocalInferenceService> =
         Arc::new(SovereignInferenceAdapter::new(provider));
     let app_state = app_state.with_local_inference(adapter);
