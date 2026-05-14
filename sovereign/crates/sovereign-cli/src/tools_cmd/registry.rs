@@ -155,10 +155,58 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
         sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
             .with_health_checker(Arc::clone(&health_checker)),
     ));
+    // Work atlas — coordination layer for agents sharing the repo.
+    // Best-effort: the canonical mesh.db (the same one the daemon
+    // writes to) lives at `.sovereign/mesh.db`. Falling back to
+    // in-memory keeps the CLI usable in a fresh checkout, with the
+    // understanding that nothing the CLI writes will be visible to
+    // a separately-running daemon.
+    let mesh_db = sovereign_dir.join("mesh.db");
+    if let Some(parent) = mesh_db.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let mesh_store = Arc::new(
+        commonwealth_state::MeshStore::open(&mesh_db)
+            .or_else(|_| commonwealth_state::MeshStore::in_memory())
+            .map_err(|e| format!("work atlas mesh store: {e}"))?,
+    );
+    let node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
+        Arc::clone(&mesh_store),
+        node_id,
+    ));
+    let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::defaults();
+    let atlas_broadcaster: Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
+        Arc::new(sovereign_work_atlas::tools::NullBroadcaster);
+    // repo_id resolution can hard-fail (no origin remote). The CLI
+    // tools-call path still wants the tools registered so users see
+    // them in `sovereign tools list`; declare_scope just rejects at
+    // execute time. work_in_flight is independent of repo_id.
+    let (atlas_repo_root, atlas_repo_id) =
+        sovereign_work_atlas::resolve_repo_id(&repo_root)
+            .unwrap_or_else(|_| (repo_root.clone(), String::new()));
+    let current_branch = current_branch_for(&atlas_repo_root);
+    tools.register(Box::new(sovereign_work_atlas::tools::DeclareScopeTool::new(
+        Arc::clone(&atlas_store),
+        atlas_cfg.clone(),
+        Arc::clone(&atlas_broadcaster),
+        atlas_repo_root.clone(),
+        atlas_repo_id.clone(),
+        current_branch.clone(),
+    )));
+    tools.register(Box::new(sovereign_work_atlas::tools::ReleaseScopeTool::new(
+        Arc::clone(&atlas_store),
+        Arc::clone(&atlas_broadcaster),
+    )));
+    tools.register(Box::new(sovereign_work_atlas::tools::WorkInFlightTool::new(
+        Arc::clone(&atlas_store),
+    )));
+
     tools.register(Box::new(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
             .with_project_root(repo_root.clone())
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .with_atlas(Arc::clone(&atlas_store)),
     ));
 
     // Watcher tools — no `with_watcher_active` here. The CLI is a
@@ -306,4 +354,25 @@ fn find_git_root(start: &std::path::Path) -> Option<PathBuf> {
 
 fn default_data_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|h| h.join(".sovereign").join("indexes"))
+}
+
+/// Resolve the current branch for `repo_root`, or `None` if not a git
+/// repo / unborn HEAD. Best-effort — atlas sessions just leave the
+/// field empty when unresolvable.
+fn current_branch_for(repo_root: &std::path::Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() || s == "HEAD" {
+        None
+    } else {
+        Some(s)
+    }
 }

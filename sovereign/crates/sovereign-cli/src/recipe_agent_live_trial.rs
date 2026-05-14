@@ -1313,6 +1313,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         task_id: None,
         working_directory: None,
         in_reasoning_loop: false,
+        agent_session_token: None,
     };
     let http = match reqwest::Client::builder()
         .timeout(Duration::from_secs(180))

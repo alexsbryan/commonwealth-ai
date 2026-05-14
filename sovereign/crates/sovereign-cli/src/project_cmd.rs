@@ -2936,10 +2936,82 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(
         Arc::clone(&notes_store),
     )));
+    // Work atlas — coordination layer for agents sharing this repo.
+    // The serve path runs the GC loop and exposes the three claim
+    // tools alongside the code-intel surface. Per spec §10 the
+    // origin-remote MUST gate is checked at *boot*: a repo with no
+    // origin still gets a serve, but every `declare_scope` call
+    // fails with an actionable error rather than silently writing
+    // partial state.
+    let atlas_mesh_db = sovereign_dir.join("mesh.db");
+    if let Some(parent) = atlas_mesh_db.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let atlas_mesh_store = Arc::new(
+        commonwealth_state::MeshStore::open(&atlas_mesh_db)
+            .or_else(|_| commonwealth_state::MeshStore::in_memory())
+            .expect("work atlas mesh store"),
+    );
+    let atlas_node_id =
+        sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
+        Arc::clone(&atlas_mesh_store),
+        atlas_node_id,
+    ));
+    let atlas_cfg_path = dirs::home_dir()
+        .map(|h| h.join(".sovereign").join("work-atlas.toml"))
+        .unwrap_or_else(|| sovereign_dir.join("work-atlas.toml"));
+    let atlas_cfg = sovereign_work_atlas::WorkAtlasConfig::load_or_default(&atlas_cfg_path)
+        .unwrap_or_else(|e| {
+            tracing::warn!(
+                error = %e,
+                path = %atlas_cfg_path.display(),
+                "work_atlas: failed to load config, falling back to defaults"
+            );
+            sovereign_work_atlas::WorkAtlasConfig::defaults()
+        });
+    let atlas_broadcaster: Arc<dyn sovereign_work_atlas::tools::ClaimBroadcaster> =
+        Arc::new(sovereign_work_atlas::tools::NullBroadcaster);
+    let (atlas_repo_root, atlas_repo_id) =
+        match sovereign_work_atlas::resolve_repo_id(&repo_root) {
+            Ok(pair) => pair,
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "work_atlas:repo_id_missing — declare_scope will reject calls"
+                );
+                (repo_root.clone(), String::new())
+            }
+        };
+    let atlas_branch = crate::code_cmd::current_branch(&atlas_repo_root);
+    tools.register(Box::new(sovereign_work_atlas::tools::DeclareScopeTool::new(
+        Arc::clone(&atlas_store),
+        atlas_cfg.clone(),
+        Arc::clone(&atlas_broadcaster),
+        atlas_repo_root.clone(),
+        atlas_repo_id.clone(),
+        atlas_branch.clone(),
+    )));
+    tools.register(Box::new(sovereign_work_atlas::tools::ReleaseScopeTool::new(
+        Arc::clone(&atlas_store),
+        Arc::clone(&atlas_broadcaster),
+    )));
+    tools.register(Box::new(sovereign_work_atlas::tools::WorkInFlightTool::new(
+        Arc::clone(&atlas_store),
+    )));
+    // GC loop. Holds onto the handle so dropping it aborts cleanly
+    // when serve terminates.
+    let _atlas_gc_handle = sovereign_work_atlas::gc::WorkAtlasGc::new(
+        Arc::clone(&atlas_store),
+        atlas_cfg.clone(),
+    )
+    .spawn();
+
     tools.register(Box::new(
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
             .with_project_root(repo_root.clone())
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .with_atlas(Arc::clone(&atlas_store)),
     ));
     if let Some(ref ds) = docs_store {
         tools.register(Box::new(

@@ -365,6 +365,7 @@ pub(crate) async fn handle_tools_call(
         task_id: None,
         working_directory: None,
         in_reasoning_loop: false,
+        agent_session_token: None,
     };
 
     match tool.execute(&arguments, &ctx).await {

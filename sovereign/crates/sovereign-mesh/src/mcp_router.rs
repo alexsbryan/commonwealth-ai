@@ -328,6 +328,7 @@ async fn mcp_handle(
     Extension(pattern_matcher): Extension<
         Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
     >,
+    headers: axum::http::HeaderMap,
     Json(req): Json<JsonRpcRequest>,
 ) -> axum::response::Response {
     if !is_localhost(&peer) {
@@ -339,6 +340,18 @@ async fn mcp_handle(
             .into_response();
     }
 
+    // Agent identity for the work atlas. Prefer the explicit header
+    // the agent supplies (`X-Agent-Session`); fall back to the
+    // per-MCP-connection `session_id` so we still get session
+    // grouping for clients that don't set the header. Used only by
+    // tools that read `ToolContext::agent_session_token`; everything
+    // else ignores it.
+    let agent_session_token = headers
+        .get("x-agent-session")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("conn:{}", session_id.as_str()));
+
     match dispatch(
         req,
         tools,
@@ -347,6 +360,7 @@ async fn mcp_handle(
         call_counter,
         feature_root,
         pattern_matcher,
+        agent_session_token,
     )
     .await
     {
@@ -367,6 +381,7 @@ async fn dispatch(
     call_counter: Arc<AtomicU64>,
     feature_root: FeatureRoot,
     pattern_matcher: Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
+    agent_session_token: String,
 ) -> Option<JsonRpcResponse> {
     // Notifications: no id → no response. We still want to accept the
     // method (e.g. `notifications/initialized`) so the client doesn't see
@@ -415,6 +430,7 @@ async fn dispatch(
                 session_id,
                 call_counter,
                 pattern_matcher,
+                agent_session_token,
             )
             .await
         }
@@ -441,6 +457,7 @@ async fn handle_tool_call(
     session_id: Arc<String>,
     call_counter: Arc<AtomicU64>,
     pattern_matcher: Arc<sovereign_tools::notes::patterns::ToolPatternMatcher>,
+    agent_session_token: String,
 ) -> JsonRpcResponse {
     let Some(params) = params else {
         return JsonRpcResponse::err(id, -32602, "missing params");
@@ -507,11 +524,22 @@ async fn handle_tool_call(
         );
     }
 
+    // Glassbox the dispatch so operators can correlate work-atlas
+    // session creation with the MCP call that triggered it (ARCH §9.1).
+    // Truncate the token to 12 chars per ARCH §9.3 — redact deliberately.
+    let token_redacted: String = agent_session_token.chars().take(12).collect();
+    tracing::debug!(
+        tool = %name,
+        agent_session_token = %token_redacted,
+        "mcp:tool_call dispatched"
+    );
+
     let ctx = ToolContext {
         conversation_id: "mcp".to_string(),
         task_id: None,
         working_directory: None,
         in_reasoning_loop: false,
+        agent_session_token: Some(agent_session_token),
     };
 
     let result = tool.execute(&arguments, &ctx).await;

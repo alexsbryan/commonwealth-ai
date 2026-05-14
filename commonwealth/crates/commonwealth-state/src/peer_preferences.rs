@@ -178,11 +178,23 @@ impl PeerPreferenceStore {
     }
 }
 
-/// Set of `app_id`s that the gossip layer must skip. The
-/// peer-preferences namespace lives here so private operator
-/// adjustments never leak across the wire — pinned by the test
-/// `gossip_excludes_peer_preferences_app_id`.
-pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] = &[PEER_PREFERENCES_APP_ID];
+/// Set of `app_id`s that the gossip layer must skip.
+///
+/// Each entry is a structural privacy invariant (ARCH_PRINCIPLES §7) —
+/// records under these namespaces never leave the local node.
+///
+/// - `peer_preferences` — private operator sanctions that must not
+///   leak to the penalized peer.
+/// - `work-atlas-private` — Private sessions/claims from the work
+///   atlas (see `sovereign-work-atlas`). The work-atlas crate must
+///   never write Public records to this namespace and never write
+///   Private records to `work-atlas`; both halves of the contract
+///   are pinned by `Privacy::app_id()` returning a hardcoded literal.
+///
+/// Each entry is pinned by a test that asserts `is_gossip_excluded`
+/// returns `true` for it.
+pub const GOSSIP_EXCLUDED_APP_IDS: &[&str] =
+    &[PEER_PREFERENCES_APP_ID, "work-atlas-private"];
 
 /// Returns true when the given `app_id` is excluded from gossip
 /// replication. Centralized helper so the gossip path doesn't have
@@ -289,5 +301,16 @@ mod tests {
         assert!(!is_gossip_excluded("contributions"));
         assert!(!is_gossip_excluded("inference"));
         assert!(!is_gossip_excluded("knowledge"));
+        // Public work-atlas records gossip; Private ones don't.
+        assert!(!is_gossip_excluded("work-atlas"));
+    }
+
+    /// **Structural invariant pin** for the work atlas privacy model.
+    /// Mirrored by a test in `sovereign-work-atlas` that asserts the
+    /// other half — `Privacy::Private.app_id()` returns this exact
+    /// literal. If either side drifts, one test fails.
+    #[test]
+    fn gossip_excludes_work_atlas_private_app_id() {
+        assert!(is_gossip_excluded("work-atlas-private"));
     }
 }

@@ -1,0 +1,20 @@
+# Work Atlas — operator-tunable defaults.
+#
+# Override at ~/.sovereign/work-atlas.toml. Reloaded on daemon restart;
+# no live reload in Phase 1.
+
+[node]
+# Default privacy for sessions created on this workstation. "public"
+# records gossip across the mesh; "private" records stay local and
+# cannot leak (enforced structurally — see WORK_ATLAS.md §Privacy).
+default_privacy = "public"
+
+[claims]
+# How long a claim stays alive without being refreshed or released.
+default_ttl_seconds = 14400   # 4h
+# Hard ceiling — a caller cannot ask for more.
+max_ttl_seconds = 86400        # 24h
+
+[sessions]
+# Sessions go away after this much inactivity. Their claims cascade.
+idle_timeout_seconds = 14400   # 4h

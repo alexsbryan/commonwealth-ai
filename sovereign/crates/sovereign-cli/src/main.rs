@@ -11,6 +11,7 @@ mod awareness_cmd;
 mod bench_cmd;
 mod charter_cmd;
 mod chat_cmd;
+mod claim_cmd;
 mod code_cmd;
 mod daemon_cmd;
 mod design_cmd;
@@ -552,6 +553,10 @@ async fn async_main() {
             }
             "charter" => {
                 let code = charter_cmd::run(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "claim" => {
+                let code = claim_cmd::run(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "amend" => {

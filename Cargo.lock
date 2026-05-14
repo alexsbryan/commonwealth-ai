@@ -9751,6 +9751,7 @@ dependencies = [
  "sovereign-pipeline",
  "sovereign-store",
  "sovereign-tools",
+ "sovereign-work-atlas",
  "tempfile",
  "tokio",
  "toml 0.8.2",
@@ -9901,6 +9902,7 @@ dependencies = [
  "sovereign-core",
  "sovereign-inference",
  "sovereign-tools",
+ "sovereign-work-atlas",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -10019,6 +10021,7 @@ dependencies = [
  "sovereign-atos",
  "sovereign-core",
  "sovereign-store",
+ "sovereign-work-atlas",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -10027,6 +10030,29 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 2.4.2",
+]
+
+[[package]]
+name = "sovereign-work-atlas"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "async-trait",
+ "bytes",
+ "commonwealth-core",
+ "commonwealth-state",
+ "corpus-engine",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sovereign-core",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "toml 0.8.2",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
