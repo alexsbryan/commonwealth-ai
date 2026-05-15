@@ -21,6 +21,8 @@
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
   import MeshSettings from "./MeshSettings.svelte";
+  import SharingSection from "./SharingSection.svelte";
+  import ConnectSection from "./ConnectSection.svelte";
   import SkillManager from "./SkillManager.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
   import RecipeTestingPanel from "./RecipeTestingPanel.svelte";
@@ -39,7 +41,9 @@
     | "enrichment"
     | "local-knowledge"
     | "mesh"
+    | "sharing"
     | "tools"
+    | "connect"
     | "paths"
     | "recipes";
   let activeTab: Tab = $state("models");
@@ -327,7 +331,9 @@
     { id: "enrichment",      label: "Enrichment",       keywords: ["atlas", "enrich", "graph", "entity", "knowledge graph"] },
     { id: "local-knowledge", label: "Local Knowledge",  keywords: ["local", "folder", "obsidian", "document", "file", "vault"] },
     { id: "mesh",            label: "Mesh",             keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
+    { id: "sharing",         label: "Sharing",          keywords: ["share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield"] },
     { id: "tools",           label: "Skills",           keywords: ["skill", "tool", "search", "web", "duck", "brave", "tavily"] },
+    { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
     { id: "paths",           label: "Paths",            keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
     { id: "recipes",         label: "Recipes",          keywords: ["recipe", "corpus", "acquire", "pipeline", "toml"] },
   ];
@@ -931,6 +937,15 @@
         </section>
       {/if}
 
+      <!-- ──────────── SHARING (W3) ──────────── -->
+      {#if activeTab === "sharing"}
+        <section class="doc-section">
+          <h2 class="doc-h2">Sharing</h2>
+          <p class="doc-intro">Control how much of your machine the mesh can use, and pause it whenever you want every cycle for yourself.</p>
+          <SharingSection />
+        </section>
+      {/if}
+
       <!-- ──────────── TOOLS / SKILLS ──────────── -->
       {#if activeTab === "tools" && config}
         <section class="doc-section">
@@ -992,6 +1007,15 @@
       {:else if activeTab === "tools"}
         <section class="doc-section">
           <p class="doc-loading">Loading…</p>
+        </section>
+      {/if}
+
+      <!-- ──────────── CONNECT (W5) ──────────── -->
+      {#if activeTab === "connect"}
+        <section class="doc-section">
+          <h2 class="doc-h2">Connect</h2>
+          <p class="doc-intro">Point Codex, Claude Code, or any OpenAI-compatible client at your local daemon. Everything stays on this machine.</p>
+          <ConnectSection />
         </section>
       {/if}
 
