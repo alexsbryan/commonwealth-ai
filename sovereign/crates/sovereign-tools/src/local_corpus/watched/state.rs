@@ -87,6 +87,17 @@ pub struct WatchedFolderState {
     /// `Off`.
     #[serde(default)]
     pub enrichment_status: EnrichmentRuntimeStatus,
+    /// Unix seconds of the most recent successful writeback for an
+    /// obsidian-vault corpus. The worker uses this to debounce
+    /// per-sweep writeback (default 5 minutes) so a user editing a
+    /// note every few seconds doesn't churn through tag files and
+    /// MoC index notes on every sweep. `None` for watched-folder
+    /// corpora (writeback only applies to vaults).
+    ///
+    /// `#[serde(default)]` keeps pre-existing watched-folder state
+    /// files round-tripping as `None`.
+    #[serde(default)]
+    pub last_writeback_unix: Option<u64>,
     pub last_updated_unix: u64,
 }
 
@@ -155,6 +166,7 @@ impl WatchedFolderState {
             manual_sync_pending: false,
             sensitive: false,
             enrichment_status: EnrichmentRuntimeStatus::Off,
+            last_writeback_unix: None,
             last_updated_unix: 0,
         }
     }
@@ -287,6 +299,45 @@ mod tests {
         assert_eq!(back.corpus_id, "c1");
         assert_eq!(back.tombstones.len(), 1);
         assert_eq!(back.tombstones[0].last_known_content_hash, "deadbeef");
+    }
+
+    #[test]
+    fn last_writeback_unix_round_trips_through_default() {
+        // Back-compat: a state file written before the field existed
+        // deserialises with `last_writeback_unix == None`. Round-trip
+        // a fresh-then-saved state to confirm.
+        let dir = tempdir().unwrap();
+        let s = WatchedFolderState::fresh("c1");
+        assert!(s.last_writeback_unix.is_none());
+        s.save(dir.path()).unwrap();
+        let back = WatchedFolderState::load(dir.path()).unwrap().unwrap();
+        assert!(back.last_writeback_unix.is_none());
+
+        // Explicit Some round-trips as expected.
+        let mut s2 = WatchedFolderState::fresh("c2");
+        s2.last_writeback_unix = Some(1_700_000_000);
+        s2.save(dir.path()).unwrap();
+        let back2 = WatchedFolderState::load(dir.path()).unwrap().unwrap();
+        assert_eq!(back2.last_writeback_unix, Some(1_700_000_000));
+    }
+
+    #[test]
+    fn legacy_state_file_without_last_writeback_loads_as_none() {
+        // Simulate a state file written by an older daemon (the field
+        // didn't exist). The `#[serde(default)]` attribute is what
+        // keeps the load from failing.
+        let dir = tempdir().unwrap();
+        let legacy = r#"{
+            "corpus_id": "legacy",
+            "schema_version": 1,
+            "status": { "kind": "idle", "last_sweep_unix": 0, "live_docs": 0, "tombstones": 0 },
+            "entries": {},
+            "tombstones": [],
+            "last_updated_unix": 0
+        }"#;
+        std::fs::write(dir.path().join(STATE_FILENAME), legacy).unwrap();
+        let back = WatchedFolderState::load(dir.path()).unwrap().unwrap();
+        assert!(back.last_writeback_unix.is_none());
     }
 
     #[test]

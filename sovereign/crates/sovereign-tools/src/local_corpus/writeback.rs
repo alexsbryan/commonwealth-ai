@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sovereign_core::error::{Error, Result};
 
 use super::config::WriteBackConfig;
@@ -69,6 +70,38 @@ pub struct WriteBackResult {
     pub index_notes_created: usize,
     pub snapshot_path: PathBuf,
     pub sovereign_version: u32,
+    /// Per-note tag writes that succeeded, with the post-write
+    /// `(mtime, size, content_hash)` of each touched file. The
+    /// reconciliation worker uses this to patch
+    /// `WatchedFolderState.entries` so the very-next sweep's
+    /// fast-path treats these mtime bumps as "no real change"
+    /// rather than re-extracting + re-tagging in a loop.
+    ///
+    /// Index notes under `<index_dir>/...` are deliberately absent —
+    /// they live under a path the walker excludes globbed, so a
+    /// state patch would be a no-op for them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub touched_user_notes: Vec<TouchedNote>,
+}
+
+/// Result of one successful per-note tag write — the post-write
+/// metadata the reconciliation worker patches back onto
+/// `WatchedFolderState.entries`. Mirrors the load-bearing fields of
+/// `watched::walker::EntryRecord` (mtime, size, hash) without depending
+/// on the watched module — keeping `writeback` as a pure-IO leaf.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TouchedNote {
+    /// Relative path under the vault root — same shape the walker uses
+    /// as `doc_id` for primary-root entries.
+    pub relative_path: String,
+    pub absolute_path: PathBuf,
+    pub mtime_unix: i64,
+    pub size_bytes: u64,
+    /// Lowercase hex sha256 of the post-write file contents, truncated
+    /// to 16 chars — matches the walker's `EntryRecord.content_hash`
+    /// shape so the worker's patch is byte-comparable on the next
+    /// fast-path lookup.
+    pub content_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,13 +184,23 @@ impl WriteBack {
         Ok((snapshot, path))
     }
 
-    /// Merge + atomically write one note's frontmatter.
+    /// Merge + atomically write one note's frontmatter. On a
+    /// successful write returns the post-write `(mtime, size,
+    /// content_hash)` so the reconciliation worker can patch
+    /// `WatchedFolderState.entries` and avoid re-detecting the write
+    /// as a user edit on the next sweep.
+    ///
+    /// `Ok(None)` means the merge was a no-op (existing frontmatter
+    /// already contained the same sovereign tags + version) so we
+    /// skipped the disk write entirely — caller treats this the same
+    /// as a successful tag for accounting but doesn't need to patch
+    /// state.entries.
     pub fn write_file_tags(
         &self,
         assignment: &FileAssignment,
         cluster_display_name: &str,
         version: u32,
-    ) -> std::result::Result<(), FailedWrite> {
+    ) -> std::result::Result<Option<TouchedNote>, FailedWrite> {
         let abs = self.absolute_note_path(&assignment.relative_path);
         let existing = std::fs::read_to_string(&abs).map_err(|e| FailedWrite {
             relative_path: assignment.relative_path.clone(),
@@ -173,10 +216,39 @@ impl WriteBack {
         };
         let merged = frontmatter::merge_frontmatter(&existing, &inputs, &self.config.namespace);
 
+        if merged == existing {
+            // No-op: nothing changed on disk, nothing to patch onto
+            // state.entries. Caller still counts this as `files_tagged`
+            // since the desired tag set is present.
+            return Ok(None);
+        }
+
         atomic_write_string(&abs, &merged).map_err(|e| FailedWrite {
             relative_path: assignment.relative_path.clone(),
             reason: format!("write: {e}"),
-        })
+        })?;
+
+        // Recompute (mtime, size, hash) of what we just wrote. The
+        // recompute uses the freshly-merged bytes — re-reading the
+        // file would be racy if the user edits between our write and
+        // our stat, and the bytes we just persisted are by definition
+        // the post-write state.
+        let mtime_unix = std::fs::metadata(&abs)
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let size_bytes = merged.as_bytes().len() as u64;
+        let content_hash = short_sha256_hex(merged.as_bytes());
+
+        Ok(Some(TouchedNote {
+            relative_path: assignment.relative_path.clone(),
+            absolute_path: abs,
+            mtime_unix,
+            size_bytes,
+            content_hash,
+        }))
     }
 
     /// Render + write a Map-of-Content index note for one cluster.
@@ -215,11 +287,21 @@ impl WriteBack {
 
         let mut files_tagged = 0;
         let mut files_skipped = Vec::new();
+        let mut touched_user_notes: Vec<TouchedNote> = Vec::new();
 
         for summary in &preview.clusters {
             for a in &summary.assignments {
                 match self.write_file_tags(a, &summary.cluster.display_name, version) {
-                    Ok(()) => files_tagged += 1,
+                    Ok(Some(touched)) => {
+                        files_tagged += 1;
+                        touched_user_notes.push(touched);
+                    }
+                    Ok(None) => {
+                        // Merge was a no-op — the desired tag set was
+                        // already present. Count as tagged for caller
+                        // accounting; no state.entries patch needed.
+                        files_tagged += 1;
+                    }
                     Err(f) => files_skipped.push(f),
                 }
             }
@@ -239,6 +321,7 @@ impl WriteBack {
             index_notes_created,
             snapshot_path,
             sovereign_version: version,
+            touched_user_notes,
         })
     }
 
@@ -425,6 +508,21 @@ fn entry_from_path(abs: &Path, relative: &str) -> Result<SnapshotEntry> {
     }
 }
 
+/// Compute the lowercase-hex sha256 prefix (16 chars) of a byte
+/// slice — the same shape `watched::walker::EntryRecord.content_hash`
+/// stores. Pulled to a free function so the unit tests can pin the
+/// exact bytes-to-hash mapping without spinning up a full WriteBack.
+pub(crate) fn short_sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let digest = hasher.finalize();
+    let mut out = String::with_capacity(16);
+    for byte in digest.iter().take(8) {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
+}
+
 pub(crate) fn atomic_write_string(path: &Path, contents: &str) -> std::io::Result<()> {
     let parent = path
         .parent()
@@ -582,6 +680,79 @@ mod tests {
             std::fs::create_dir_all(parent).unwrap();
         }
         std::fs::write(abs, body).unwrap();
+    }
+
+    #[tokio::test]
+    async fn execute_surfaces_touched_user_notes_with_post_write_hashes() {
+        // Live-sync regression: the worker patches state.entries from
+        // result.touched_user_notes so the next sweep doesn't
+        // re-detect writeback's own mtime bump as a user edit. Each
+        // touched note's hash must match what the walker would
+        // compute on the post-write bytes.
+        let dir = tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        let snap = dir.path().join("snap");
+        std::fs::create_dir_all(&vault).unwrap();
+        write_note(&vault, "alpha.md", "# Alpha\n\nBody A.\n");
+
+        let wb = make_writeback(&vault, &snap);
+        let preview = simple_preview(&[("alpha", 1, 0.9)]);
+        let result = wb.execute(&preview, 1, None).await.unwrap();
+
+        assert_eq!(
+            result.touched_user_notes.len(),
+            1,
+            "single tagged note → single TouchedNote entry"
+        );
+        let touched = &result.touched_user_notes[0];
+        assert_eq!(touched.relative_path, "alpha.md");
+        // Hash of the bytes now on disk must match `touched.content_hash`.
+        let post = std::fs::read(vault.join("alpha.md")).unwrap();
+        assert_eq!(short_sha256_hex(&post), touched.content_hash);
+        assert_eq!(touched.size_bytes, post.len() as u64);
+        assert!(touched.mtime_unix > 0, "mtime must be populated");
+    }
+
+    #[tokio::test]
+    async fn write_file_tags_returns_none_when_merge_is_noop() {
+        // If a note already carries every sovereign tag at the same
+        // version, the merge produces identical bytes — we must NOT
+        // touch the disk (would burn mtime for no semantic change).
+        let dir = tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        let snap = dir.path().join("snap");
+        std::fs::create_dir_all(&vault).unwrap();
+        write_note(&vault, "alpha.md", "# Alpha\n");
+
+        let wb = make_writeback(&vault, &snap);
+        let preview = simple_preview(&[("alpha", 1, 0.9)]);
+        // First pass writes the tags.
+        let first = wb.execute(&preview, 1, None).await.unwrap();
+        assert_eq!(first.touched_user_notes.len(), 1);
+        let mtime_after_first = std::fs::metadata(vault.join("alpha.md"))
+            .unwrap()
+            .modified()
+            .unwrap();
+
+        // Second pass with identical preview + version should detect
+        // the no-op and skip the disk write — files_tagged stays at
+        // 1 (we still count it as "the desired state is present"),
+        // but touched_user_notes is empty.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        let second = wb.execute(&preview, 1, None).await.unwrap();
+        assert_eq!(second.files_tagged, 1);
+        assert!(
+            second.touched_user_notes.is_empty(),
+            "no-op merge must not patch state.entries"
+        );
+        let mtime_after_second = std::fs::metadata(vault.join("alpha.md"))
+            .unwrap()
+            .modified()
+            .unwrap();
+        assert_eq!(
+            mtime_after_first, mtime_after_second,
+            "no-op merge must not bump mtime"
+        );
     }
 
     #[tokio::test]

@@ -1220,12 +1220,20 @@ async fn run_daemon(args: &[String]) -> i32 {
     let _watched_subsystem = {
         let lc_store: Arc<dyn sovereign_core::traits::StateStore> =
             Arc::new(sovereign_store::memory::InMemoryStateStore::new());
-        match sovereign_tools::local_corpus::LocalCorpusManager::init(
+        // Critical: pass the same `recipes_dir` the `CorpusEngine`
+        // was constructed with (see the `let recipes_dir = …` block
+        // above where the engine is built). Otherwise the manager
+        // writes its generated recipe TOMLs into a directory the
+        // engine never reads from, and the first sweep's apply step
+        // errors `No registry entry for corpus '<id>'`.
+        let lc_recipes_dir = data_dir.join("recipes");
+        match sovereign_tools::local_corpus::LocalCorpusManager::init_with_recipes_dir(
             Arc::clone(&engine),
             lc_store,
             None,
             data_dir.clone(),
             data_dir.join("vault-snapshots"),
+            lc_recipes_dir,
         )
         .await
         {

@@ -27,14 +27,56 @@ fn daemon_base_url() -> String {
     format!("http://127.0.0.1:{port}")
 }
 
+/// Default HTTP timeout for the lightweight metadata routes
+/// (`list`, `status`, `state`, `pause`, `resume`, …). The
+/// register-with-`sync_initial=true` path uses a much longer
+/// timeout because the daemon blocks the response on the entire
+/// initial sweep, which can run for minutes on a sizable folder.
+const METADATA_TIMEOUT_SECS: u64 = 30;
+
+/// Long timeout used by the register path when `sync_initial=true`.
+/// The daemon waits for the full initial sweep (walk + chunk +
+/// embed) before responding — a few hundred markdown files on a
+/// CPU-bound embedding pass can take several minutes. Setting this
+/// to 30 minutes covers the realistic worst case for personal-vault
+/// onboarding without leaving the CLI hanging forever if the daemon
+/// genuinely wedges.
+const SYNC_INITIAL_TIMEOUT_SECS: u64 = 30 * 60;
+
 fn build_client() -> reqwest::Client {
+    build_client_with_timeout(METADATA_TIMEOUT_SECS)
+}
+
+fn build_client_with_timeout(secs: u64) -> reqwest::Client {
     reqwest::Client::builder()
-        // Initial ingest can take a while on big folders even with
-        // sync_initial=false (we still wait for register to commit
-        // the on-disk config); 30s is comfortable.
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(secs))
         .build()
         .expect("reqwest client builds")
+}
+
+/// Format a reqwest error into a human hint, distinguishing the
+/// "couldn't connect at all" case from the "connected but the
+/// response did not arrive in time" case. The historical generic
+/// "Could not contact the daemon" message was actively misleading
+/// on a timed-out register call against a running daemon — it sent
+/// users chasing a launchd issue when the real cause was a slow
+/// initial sweep.
+fn describe_request_error(err: &reqwest::Error, url: &str) -> String {
+    if err.is_timeout() {
+        format!(
+            "Request to {url} timed out — the daemon accepted the connection but did not respond \
+             in time. For a `watch` register with sync_initial=true this usually means the \
+             initial sweep is still running. Try `sovereign corpus watch-status <id>` to check \
+             progress, or re-register without --sync-initial to return immediately."
+        )
+    } else if err.is_connect() {
+        format!(
+            "Could not connect to the daemon at {url}: {err}\n\n\
+             Is `sovereign daemon` running? Try: sovereign daemon status"
+        )
+    } else {
+        format!("Request to {url} failed: {err}")
+    }
 }
 
 // ─── `sovereign corpus watch <PATH> [flags]` ────────────────
@@ -170,13 +212,22 @@ pub async fn run_register(args: &[String]) -> i32 {
     });
 
     let url = format!("{}/internal/corpus/watch/register", daemon_base_url());
-    let resp = match build_client().post(&url).json(&body).send().await {
+    // Pick the timeout based on whether the daemon will block the
+    // response on the initial sweep. The default 30s metadata
+    // timeout is right for every other watched-folder route, but
+    // sync_initial=true on a vault with hundreds of files routinely
+    // takes minutes to embed — the old 30s timeout produced a
+    // misleading "Could not contact the daemon" error even though
+    // the daemon was happily working.
+    let client = if sync_initial {
+        build_client_with_timeout(SYNC_INITIAL_TIMEOUT_SECS)
+    } else {
+        build_client()
+    };
+    let resp = match client.post(&url).json(&body).send().await {
         Ok(r) => r,
         Err(e) => {
-            eprintln!(
-                "Could not contact the daemon at {url}: {e}\n\n\
-                 Is `sovereign daemon` running? Try: sovereign daemon status"
-            );
+            eprintln!("{}", describe_request_error(&e, &url));
             return 1;
         }
     };
@@ -546,10 +597,7 @@ async fn post_ack(url: &str, body: serde_json::Value) -> i32 {
 }
 
 fn contact_failed(url: &str, e: reqwest::Error) -> i32 {
-    eprintln!(
-        "Could not contact the daemon at {url}: {e}\n\n\
-         Is `sovereign daemon` running? Try: sovereign daemon status"
-    );
+    eprintln!("{}", describe_request_error(&e, url));
     1
 }
 
@@ -723,4 +771,74 @@ struct DiffSummary {
 enum TrippedRule {
     Absolute { threshold: usize, observed: usize },
     Fractional { threshold: f32, observed: f32 },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn timeout_error_says_timed_out_not_could_not_contact() {
+        // Regression: previously a 30s register timeout against a
+        // long-running sync_initial sweep produced the generic
+        // "Could not contact the daemon" string, sending users to
+        // debug launchd / firewall issues. The fix uses
+        // `reqwest::Error::is_timeout()` to surface a timeout-
+        // specific hint. We build a 1ms-timeout client and hit a
+        // sleeping local server to materialise the timeout.
+        use std::time::Duration;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                // Hold the connection open without responding so the
+                // client times out. Drop the stream on this thread's
+                // exit; the test only needs one accept.
+                std::thread::sleep(Duration::from_secs(5));
+                drop(stream);
+                break;
+            }
+        });
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(50))
+            .build()
+            .unwrap();
+        let url = format!("http://127.0.0.1:{port}/anything");
+        let err = client
+            .get(&url)
+            .send()
+            .await
+            .expect_err("request must error within the test window");
+        let msg = describe_request_error(&err, &url);
+        assert!(err.is_timeout(), "expected a timeout error, got {err:?}");
+        assert!(
+            msg.contains("timed out"),
+            "timeout message must say 'timed out', got: {msg}"
+        );
+        assert!(
+            !msg.contains("Could not connect"),
+            "timeout must not be reported as a connect failure: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn connect_error_says_could_not_connect() {
+        // Pick a port nothing is listening on. 1 is privileged and
+        // always refused for unprivileged clients on macOS/Linux.
+        let url = "http://127.0.0.1:1/anything";
+        let client = build_client();
+        let err = client
+            .get(url)
+            .send()
+            .await
+            .expect_err("connect must fail");
+        let msg = describe_request_error(&err, url);
+        // We don't require is_connect()==true (reqwest sometimes
+        // returns is_request()==true for refused ports), only that
+        // the message is NOT mislabelled as a timeout.
+        assert!(
+            !msg.contains("timed out"),
+            "connect refusal must not be reported as a timeout: {msg}"
+        );
+    }
 }

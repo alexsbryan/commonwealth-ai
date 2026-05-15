@@ -6,6 +6,9 @@
 //! Subcommands:
 //!   - `atlas`    — atlas Phase 1 + short-call throughput against
 //!                  the running daemon's currently-loaded primary
+//!   - `obsidian` — atlas correctness score for an obsidian-vault
+//!                  corpus against the in-repo fixture golden (or a
+//!                  user-supplied vault + golden via `--corpus`/`--golden`)
 //!
 //! The bench hits the live daemon at `--base-url` (default
 //! localhost:9741) so the model under test is whichever
@@ -21,6 +24,7 @@
 //! tool to those concerns. Keep it dumb: measure what's loaded.
 
 mod atlas;
+mod obsidian;
 
 use crate::util::help::{self, Help, HelpSection};
 
@@ -29,10 +33,16 @@ const HELP: Help = Help {
     summary: "Throughput + correctness benchmarks for enrichment LLM tasks.",
     sections: &[
         HelpSection::Usage("sovereign bench <subcommand> [args]"),
-        HelpSection::Subcommands(&[(
-            "atlas",
-            "Run atlas Phase 1 + short-call tasks against the loaded primary model.",
-        )]),
+        HelpSection::Subcommands(&[
+            (
+                "atlas",
+                "Run atlas Phase 1 + short-call tasks against the loaded primary model.",
+            ),
+            (
+                "obsidian",
+                "Score an obsidian-vault corpus against the in-repo fixture golden (correctness, not throughput).",
+            ),
+        ]),
         HelpSection::Notes(
             "Operates against the running daemon at localhost:9741. The model under \
              test is whichever `[models].primary` the daemon was started with — \
@@ -57,6 +67,7 @@ pub async fn run_bench(args: &[String]) -> i32 {
     }
     match first {
         "atlas" => atlas::cmd_atlas(&args[1..]).await,
+        "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
         other => {
             eprintln!("error: unknown bench subcommand `{other}`");
             eprintln!();
