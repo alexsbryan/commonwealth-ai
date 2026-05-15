@@ -15,6 +15,7 @@ mod setup_flow;
 mod smoketest;
 mod state;
 mod supervisor;
+mod supervisor_setup;
 mod tray;
 
 use std::process::ExitCode;
@@ -138,10 +139,29 @@ fn main() -> ExitCode {
                 tauri::async_runtime::block_on(bootstrap::detect());
             tracing::info!(?bootstrap_mode, "bootstrap mode resolved");
 
+            // If `SOVEREIGN_USE_SUPERVISOR=1`, try to bring the daemon
+            // up as a child process and switch to Attach against it.
+            // Returns the original mode + None when the feature is off
+            // or supervision fails to come up healthy. This is the
+            // PR-2 dogfood path; PR-3 will flip the default. See
+            // supervisor_setup.rs.
+            let (bootstrap_mode, supervisor) =
+                tauri::async_runtime::block_on(supervisor_setup::maybe_start(
+                    bootstrap_mode,
+                    handle.clone(),
+                ));
+            if supervisor.is_some() {
+                tracing::info!(
+                    ?bootstrap_mode,
+                    "supervisor: bootstrap mode after supervision"
+                );
+            }
+
             // Create app state (loads config, no Runtime yet).
             let app_state = AppState::new_with_mode(
                 Arc::clone(&approval),
                 bootstrap_mode,
+                supervisor,
             );
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
