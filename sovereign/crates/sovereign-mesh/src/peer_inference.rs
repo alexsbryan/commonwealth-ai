@@ -34,6 +34,7 @@
 //! Embed calls stay local unconditionally — retrieval is latency-
 //! critical and not a capability the selector has visibility into.
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
@@ -377,6 +378,28 @@ pub struct MeshInferenceProvider {
     /// specific GGUF only happens on the node that actually serves
     /// the request.
     slot_aliases: arc_swap::ArcSwap<std::collections::HashMap<String, String>>,
+    /// Total local in-flight inference count across every local-serve
+    /// path on this node — explicit-model-id Local arm, OICP-routed
+    /// fallback to local, and any other dispatch that ultimately runs
+    /// against the local provider's slots.
+    ///
+    /// Published over gossip in [`commonwealth_core::capabilities::
+    /// NodeCapabilities::current_in_flight`] so a remote scheduler
+    /// (e.g. the founder selecting a peer) can see this node's
+    /// *actual* load — including local-user traffic the remote side
+    /// never originated. Without this, a workstation serving its own
+    /// Claude-desktop inference appears phantom-idle to peers, who
+    /// then route additional work here and contend with the local
+    /// user. See `sovereign/docs/MESH_LOAD_AWARENESS.md` for the
+    /// architectural backstory.
+    ///
+    /// Atomic so the gossip emitter can `.load()` lock-free without
+    /// taking the `local_inflight_by_model` Mutex on every tick. All
+    /// mutations route through `enter_local_total()` (returns an RAII
+    /// guard that decrements on drop) — the only safe way to keep
+    /// the counter in lock-step with reality across panic / stream
+    /// drop / early-return paths.
+    in_flight_publisher: Arc<AtomicU32>,
 }
 
 impl MeshInferenceProvider {
@@ -384,6 +407,13 @@ impl MeshInferenceProvider {
     /// production wiring is unchanged. Internally upcasts to
     /// `Arc<dyn PeerEndpointSource>` via the blanket impl above;
     /// callers don't have to think about the trait.
+    ///
+    /// Creates a private in-flight publisher — fine for tests and
+    /// for the rare daemon path that doesn't share counter state
+    /// with an outer `AppState`. Production code should prefer
+    /// [`MeshInferenceProvider::with_in_flight_publisher`] so the
+    /// gossip emitter reads the same atomic the MIP guards write
+    /// to.
     pub fn new(local: Arc<dyn InferenceProvider>, mesh: Arc<EmbeddedDaemon>) -> Self {
         Self::with_peer_source(local, mesh as Arc<dyn PeerEndpointSource>)
     }
@@ -433,7 +463,37 @@ impl MeshInferenceProvider {
             slot_aliases: arc_swap::ArcSwap::from_pointee(
                 std::collections::HashMap::new(),
             ),
+            in_flight_publisher: Arc::new(AtomicU32::new(0)),
         }
+    }
+
+    /// Production constructor variant that accepts an externally-owned
+    /// in-flight publisher Arc. Daemon bootstrap passes the same Arc
+    /// it holds on `AppState`, so the gossip emitter (reading via
+    /// AppState) sees the same atomic this MIP's guards write to.
+    ///
+    /// Functionally identical to [`new`] except for the publisher
+    /// source. Survives hot-reload: the new MIP receives the same
+    /// Arc, so live guards from the previous MIP that haven't
+    /// dropped yet continue to update the shared counter exactly as
+    /// the new MIP's guards do.
+    pub fn with_in_flight_publisher(
+        local: Arc<dyn InferenceProvider>,
+        mesh: Arc<EmbeddedDaemon>,
+        publisher: Arc<AtomicU32>,
+    ) -> Self {
+        let mut me = Self::with_peer_source(local, mesh as Arc<dyn PeerEndpointSource>);
+        me.in_flight_publisher = publisher;
+        me
+    }
+
+    /// Hand out a shared reference to the gossiped in-flight counter.
+    /// Mostly useful for tests asserting on the published value
+    /// directly. In production the daemon prefers
+    /// [`with_in_flight_publisher`] so the Arc identity is fixed
+    /// across hot reloads.
+    pub fn in_flight_publisher(&self) -> Arc<AtomicU32> {
+        Arc::clone(&self.in_flight_publisher)
     }
 
     /// Install the slot-alias map. Called by the daemon after model
@@ -859,10 +919,37 @@ impl MeshInferenceProvider {
             // trip, no extra probe — so LAN deployments actually
             // see their locality bonus instead of every peer
             // defaulting to `Far`.
-            let obs = peer_obs_snapshot
+            let mut obs = peer_obs_snapshot
                 .get(&peer.name)
                 .cloned()
                 .unwrap_or_default();
+            // Cluster-wide load-awareness override. The founder's
+            // local `peer_observations[name].in_flight` only counts
+            // requests this node dispatched to the peer — it is
+            // structurally blind to traffic the peer served from
+            // its own local user (e.g. a workstation operator
+            // running Claude desktop alongside their daemon). When
+            // the peer gossips its self-reported count, prefer it:
+            // it captures *total* load, including locally-driven
+            // traffic. Without this override, a busy peer with no
+            // founder-originated traffic looks phantom-idle and
+            // wins routing it can't actually serve in time.
+            //
+            // Sample-floor heuristic: keep the founder's local
+            // sample count (used elsewhere in scoring). Only the
+            // in-flight number is swapped — gossiped samples are
+            // not yet plumbed and would muddle the cold-start ramp.
+            //
+            // See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+            if let Some(gossiped) = peer.current_in_flight {
+                tracing::debug!(
+                    peer = %peer.name,
+                    self_observed = obs.in_flight,
+                    gossiped,
+                    "mesh-inference: applying gossiped in-flight override"
+                );
+                obs.in_flight = gossiped;
+            }
             let cand = adjust_for_observations(
                 raw,
                 &obs,
@@ -1138,13 +1225,20 @@ impl MeshInferenceProvider {
                     .first()
                     .map(|c| c.effective_affinity())
                     .unwrap_or(0.0);
-                let peer_inflight = self
+                // Same gossip-override policy as `select_peer`: when
+                // the peer publishes its self-reported in-flight,
+                // trust it over our local view, which sees only
+                // founder-originated dispatches. See
+                // `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+                let self_observed = self
                     .peer_observations
                     .read()
                     .await
                     .get(&peer.name)
                     .map(|o| o.in_flight)
                     .unwrap_or(0);
+                let peer_inflight =
+                    effective_peer_in_flight(self_observed, peer.current_in_flight);
                 let health = self.peer_health.health_weight(&peer.name);
                 let effective = effective_inflight(peer_inflight, health);
                 peer_candidates.push((
@@ -1169,10 +1263,17 @@ impl MeshInferenceProvider {
     /// hold the guard across the whole local dispatch (the `.await`
     /// for `complete()` or the lifetime of the wrapped stream for
     /// `complete_stream()`).
+    ///
+    /// Also bumps the gossiped total counter (`in_flight_publisher`)
+    /// so peers see the load. The two counters are kept in lock-step
+    /// by composition: the returned guard *contains* a
+    /// `LocalTotalGuard` whose Drop runs alongside the HashMap
+    /// decrement.
     fn enter_local_inflight(
         &self,
         model_id: &str,
     ) -> LocalInflightGuard {
+        let total = self.enter_local_total();
         let mut map = self
             .local_inflight_by_model
             .lock()
@@ -1181,6 +1282,25 @@ impl MeshInferenceProvider {
         LocalInflightGuard {
             counter: Arc::clone(&self.local_inflight_by_model),
             model_id: model_id.to_string(),
+            _total: total,
+        }
+    }
+
+    /// Increment the gossiped total in-flight counter and return a
+    /// drop-guard that decrements on Drop. Used by every local-serve
+    /// dispatch path that *isn't* already going through
+    /// [`enter_local_inflight`] (which composes this guard inside).
+    /// Currently that's the OICP-routed fallback-to-local arm: when
+    /// the selector chose a peer but every address failed and we
+    /// served locally, the peer-side counters got decremented but
+    /// nothing bumped the local view. This guard plugs that path.
+    ///
+    /// Saturating subtract in Drop — the counter never underflows
+    /// even if a refactor lands an unbalanced inc/dec pair.
+    fn enter_local_total(&self) -> LocalTotalGuard {
+        self.in_flight_publisher.fetch_add(1, Ordering::Relaxed);
+        LocalTotalGuard {
+            publisher: Arc::clone(&self.in_flight_publisher),
         }
     }
 }
@@ -1188,9 +1308,17 @@ impl MeshInferenceProvider {
 /// RAII guard for the per-model local in-flight counter. Decrements
 /// the counter in `Drop`; safe to drop after the entry has been
 /// pruned to zero (saturating subtract + no-op when absent).
+///
+/// Composes a [`LocalTotalGuard`] in `_total` so the gossiped
+/// publisher decrements in lock-step. Rust's struct-field drop order
+/// (declaration order) means the HashMap-entry decrement runs
+/// before `_total`'s Drop fires — readers that race the decrement
+/// see "either both committed or neither has", never "publisher
+/// decremented while HashMap still high."
 struct LocalInflightGuard {
     counter: Arc<std::sync::Mutex<std::collections::HashMap<String, u32>>>,
     model_id: String,
+    _total: LocalTotalGuard,
 }
 
 impl Drop for LocalInflightGuard {
@@ -1200,6 +1328,37 @@ impl Drop for LocalInflightGuard {
             *v = v.saturating_sub(1);
             if *v == 0 {
                 map.remove(&self.model_id);
+            }
+        }
+    }
+}
+
+/// RAII guard for the gossiped total in-flight counter. Saturating
+/// subtract in Drop — the counter is correctness-best-effort for
+/// scoring purposes, not load-bearing for correctness, so we never
+/// want a bug to underflow it to `u32::MAX`.
+struct LocalTotalGuard {
+    publisher: Arc<AtomicU32>,
+}
+
+impl Drop for LocalTotalGuard {
+    fn drop(&mut self) {
+        // Compare-exchange loop because `fetch_sub` would underflow
+        // on a hypothetical unbalanced drop. The counter starts at 0
+        // and every `enter_local_total` bumps it by 1 before yielding
+        // the guard, so the only way to reach 0 with a live guard is
+        // a logic bug — saturate rather than wrap.
+        let mut cur = self.publisher.load(Ordering::Relaxed);
+        loop {
+            let new = cur.saturating_sub(1);
+            match self.publisher.compare_exchange_weak(
+                cur,
+                new,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(actual) => cur = actual,
             }
         }
     }
@@ -1388,6 +1547,15 @@ impl InferenceProvider for MeshInferenceProvider {
                 "mesh-inference: all peer addresses failed, falling back to local"
             );
         }
+        // Two flows arrive here: (a) `select_peer` returned `None`
+        // and we serve locally without ever trying a peer, (b) we
+        // tried a peer, every address failed, and we fell back. Both
+        // produce load on the local provider and so must increment
+        // the gossiped total counter — otherwise peers see this node
+        // as idle when it isn't. The guard drops at the end of the
+        // await (or on `?` if `complete` errors), keeping the count
+        // in lock-step with reality.
+        let _total = self.enter_local_total();
         self.local.complete(request).await
     }
 
@@ -1564,11 +1732,23 @@ impl InferenceProvider for MeshInferenceProvider {
                 "mesh-inference: all peer addresses failed, falling back to local"
             );
         }
+        // Streaming fallback / direct-local path. Mirrors the
+        // non-streaming `complete()` instrumentation: bump the
+        // gossiped total counter and hold the guard through the
+        // *stream lifetime* (not just the await for the initial
+        // future). Without this, peers see this node as idle even
+        // when it's streaming dozens of tokens-per-second locally
+        // — exactly the BeefyMac-vs-Taiwan-pod scenario this fix
+        // exists to address.
+        let total = self.enter_local_total();
         let stream = self.local.complete_stream(request).await?;
         let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
-            Box::pin(ThroughputObservedStream::new(
-                stream,
-                ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+            Box::pin(TotalGuardedStream::new(
+                ThroughputObservedStream::new(
+                    stream,
+                    ThroughputTarget::Local(Arc::clone(&self.local_observations)),
+                ),
+                total,
             ));
         Ok((observed, self.local.model_id_for(request.preferred_speed)))
     }
@@ -1639,7 +1819,135 @@ where
     }
 }
 
-// Selection primitive tests live in `crate::oicp_select` alongside
-// the primitives themselves; this file only tests the peer-
-// orchestration logic (HTTP manifest fetch, selection loop, etc.)
-// once we need targeted coverage for that layer.
+/// Stream wrapper that holds a [`LocalTotalGuard`] alive for the
+/// stream's lifetime — drops it when the stream ends or is dropped.
+/// Parallel to [`InflightGuardedStream`] but for the OICP-fallback
+/// path where there is no explicit model_id and so no per-model
+/// counter to maintain. Without this, fallback-to-local stream load
+/// would never decrement the gossip publisher.
+struct TotalGuardedStream<S> {
+    inner: S,
+    _guard: LocalTotalGuard,
+}
+
+impl<S> TotalGuardedStream<S> {
+    fn new(inner: S, guard: LocalTotalGuard) -> Self {
+        Self { inner, _guard: guard }
+    }
+}
+
+impl<S> Stream for TotalGuardedStream<S>
+where
+    S: Stream + Unpin,
+{
+    type Item = S::Item;
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.inner).poll_next(cx)
+    }
+}
+
+/// Resolve a peer's effective in-flight count for scoring.
+///
+/// Returns `gossiped` when the peer's `NodeCapabilities` carried a
+/// `current_in_flight` value (modern daemons); falls back to
+/// `self_observed` otherwise (older peers + cold-start window before
+/// the peer's first gossip round). This is the load-bearing rule
+/// behind the gossip-load-awareness fix: the gossiped value reflects
+/// the peer's *actual* serving load, while `self_observed` (from
+/// `peer_observations[name].in_flight`) only counts founder-
+/// originated dispatches and so undercounts peer-local traffic.
+///
+/// Extracted to a free function purely so the precedence rule is
+/// unit-testable without spinning up the full `select_peer` HTTP
+/// machinery. See [`tests::gossiped_in_flight_overrides_self_observed`].
+fn effective_peer_in_flight(self_observed: u32, gossiped: Option<u32>) -> u32 {
+    gossiped.unwrap_or(self_observed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    #[test]
+    fn gossiped_in_flight_overrides_self_observed() {
+        // Founder thinks the peer is idle (it never sent traffic
+        // there); peer gossips that it's actually serving 7 local
+        // requests. Scoring must use 7, not 0.
+        assert_eq!(effective_peer_in_flight(0, Some(7)), 7);
+    }
+
+    #[test]
+    fn gossiped_zero_overrides_nonzero_self_observed() {
+        // Founder thinks 4 requests are in flight to peer (its own
+        // dispatches still being tallied), but peer gossips 0 — a
+        // legitimate signal that those have completed peer-side
+        // and the founder's view is just lagging. The gossiped
+        // value is fresher; trust it.
+        assert_eq!(effective_peer_in_flight(4, Some(0)), 0);
+    }
+
+    #[test]
+    fn falls_back_to_self_observed_when_no_gossip() {
+        // Older peer (no current_in_flight field in its gossip).
+        // The legacy founder-local view is the best we have —
+        // scoring must use it rather than defaulting to 0.
+        assert_eq!(effective_peer_in_flight(3, None), 3);
+    }
+
+    #[test]
+    fn local_total_guard_inc_and_drop_balance() {
+        // RAII guard correctness: every `enter_local_total` bump
+        // must be matched by a Drop-time decrement so the published
+        // counter converges back to its prior value.
+        let publisher = Arc::new(AtomicU32::new(0));
+        {
+            // Simulate three concurrent local-serving dispatches.
+            publisher.fetch_add(1, Ordering::Relaxed);
+            publisher.fetch_add(1, Ordering::Relaxed);
+            publisher.fetch_add(1, Ordering::Relaxed);
+            assert_eq!(publisher.load(Ordering::Relaxed), 3);
+            // Build three guards pointing at the same Arc — they
+            // each decrement on drop.
+            let g1 = LocalTotalGuard { publisher: Arc::clone(&publisher) };
+            let g2 = LocalTotalGuard { publisher: Arc::clone(&publisher) };
+            let g3 = LocalTotalGuard { publisher: Arc::clone(&publisher) };
+            drop(g1);
+            assert_eq!(publisher.load(Ordering::Relaxed), 2);
+            drop(g2);
+            assert_eq!(publisher.load(Ordering::Relaxed), 1);
+            drop(g3);
+            assert_eq!(publisher.load(Ordering::Relaxed), 0);
+        }
+        // A spurious drop on an already-zero counter must NOT
+        // underflow — saturating subtract is the correctness
+        // invariant for the publisher.
+        let g_extra = LocalTotalGuard { publisher: Arc::clone(&publisher) };
+        drop(g_extra);
+        assert_eq!(
+            publisher.load(Ordering::Relaxed),
+            0,
+            "LocalTotalGuard::drop must saturate, never underflow"
+        );
+    }
+
+    #[test]
+    fn published_counter_is_shared_across_clones() {
+        // Acceptance test for the AppState ↔ MIP wire: the gossip
+        // emitter reads via a clone of the same Arc the MIP's
+        // guards write to. Writes on one Arc must be visible
+        // through the clone.
+        let mip_side = Arc::new(AtomicU32::new(0));
+        let app_state_side = Arc::clone(&mip_side);
+        mip_side.fetch_add(5, Ordering::Relaxed);
+        assert_eq!(
+            app_state_side.load(Ordering::Relaxed),
+            5,
+            "AppState reader must see MIP's writes when sharing the same Arc"
+        );
+    }
+}

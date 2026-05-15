@@ -866,6 +866,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // for mesh routing) never lands on a real slot. Done on a
     // spawned task because `daemon.app_state()` only returns
     // `Some` after `start()` transitions DaemonState to Running.
+    //
+    // Same spawned task also installs MIP's in-flight publisher Arc
+    // onto AppState — feeds the gossip-load-awareness path so peers
+    // see this node's true serving load instead of phantom-idle.
+    // See `sovereign/docs/MESH_LOAD_AWARENESS.md` for the design.
     {
         let daemon_for_alias_push = Arc::clone(&daemon);
         let mesh_for_alias_push = mesh_provider.clone();
@@ -876,8 +881,19 @@ async fn run_daemon(args: &[String]) -> i32 {
             // this spawn.
             let deadline =
                 tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            let mut publisher_installed = false;
             loop {
                 if let Some(state) = daemon_for_alias_push.app_state().await {
+                    if !publisher_installed {
+                        state.install_in_flight_publisher(
+                            mesh_for_alias_push.in_flight_publisher(),
+                        );
+                        publisher_installed = true;
+                        tracing::info!(
+                            "daemon_cmd: installed in-flight publisher on AppState \
+                             — gossip will now advertise this node's actual load"
+                        );
+                    }
                     let snapshot = state.inner.slot_aliases.load();
                     let map: std::collections::HashMap<String, String> = snapshot
                         .iter()
@@ -2397,18 +2413,52 @@ impl ProviderFactory for LlamaCppFactory {
         // `run_daemon`. See the comment on the cold-start wiring
         // for why a bare `EmbeddedLlamaCpp` here would re-introduce
         // the silent-substitution bug.
-        let mesh_provider = Arc::new(
-            sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-                raw,
-                Arc::clone(&self.daemon),
-            ),
-        );
+        //
+        // Hot-reload load-awareness invariant: the new MIP must
+        // share the SAME `Arc<AtomicU32>` publisher as the old MIP
+        // (held by AppState's OnceLock). Live `LocalTotalGuard`s
+        // from the old MIP have already captured a clone of that
+        // Arc and will continue to decrement it as their requests
+        // drain. If we let the new MIP create a fresh publisher,
+        // the old guards would write to an Arc nobody reads, and
+        // gossip would see a counter that snaps to zero on reload
+        // and stays there until new traffic flows. See
+        // `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+        let app_state_opt = self.daemon.app_state().await;
+        let mesh_provider = if let Some(state) = app_state_opt.as_ref() {
+            match state.in_flight_publisher() {
+                Some(publisher) => Arc::new(
+                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_in_flight_publisher(
+                        raw,
+                        Arc::clone(&self.daemon),
+                        publisher,
+                    ),
+                ),
+                // OnceLock not yet set means cold-start's spawned
+                // task hasn't run; reload still installs the new
+                // MIP, and the spawned task will install its
+                // publisher when it next polls.
+                None => Arc::new(
+                    sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+                        raw,
+                        Arc::clone(&self.daemon),
+                    ),
+                ),
+            }
+        } else {
+            Arc::new(
+                sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+                    raw,
+                    Arc::clone(&self.daemon),
+                ),
+            )
+        };
         // Push current slot aliases into the freshly-built mesh
         // provider so a reload preserves the deferred-resolution
         // wiring. Mirrors the cold-start spawned task in
         // `run_daemon`; here we run inline because the daemon is
         // already in the Running state at reload time.
-        if let Some(state) = self.daemon.app_state().await {
+        if let Some(state) = app_state_opt {
             let snapshot = state.inner.slot_aliases.load();
             let map: std::collections::HashMap<String, String> = snapshot
                 .iter()

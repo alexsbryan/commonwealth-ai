@@ -718,6 +718,14 @@ yield_to_foreground_secs = 0
         // `~/.sovereign/config.toml`, not `~/sovereign/config.toml`.
         // Path::ends_with matches whole components, so the dotted
         // directory needs the dot literal in the predicate.
+        // `default_path()` resolves to `~/.sovereign/config.toml` —
+        // hidden directory, per the canonical layout consolidated by
+        // the `default_data_dir()` migration (the doc comment on
+        // `default_path` is normative). The earlier assertion used
+        // the bare `sovereign/config.toml` form which only matched
+        // the legacy `~/.config/sovereign/config.toml` layout, so it
+        // failed on any environment that had migrated. Match the
+        // canonical hidden-dir layout instead.
         let p = SetupConfig::default_path();
         assert!(
             p.ends_with(".sovereign/config.toml"),

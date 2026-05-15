@@ -103,6 +103,7 @@ pub fn init_mesh_with_node_id(
 
             embed_model: None,
             benchmark: None,
+            current_in_flight: None,
         },
         addresses,
     };
@@ -227,6 +228,7 @@ pub fn accept_join_with_proposed_id(
 
             embed_model: None,
             benchmark: None,
+            current_in_flight: None,
         },
         addresses: new_node_addresses,
     };

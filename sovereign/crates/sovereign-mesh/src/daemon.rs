@@ -1183,6 +1183,7 @@ impl EmbeddedDaemon {
                 .collect(),
                 system_ram_gb: m.capabilities.hardware.system_ram_gb,
                 benchmark: m.capabilities.benchmark.clone(),
+                current_in_flight: m.capabilities.current_in_flight,
             })
             .collect()
     }
@@ -1981,6 +1982,15 @@ pub struct PeerInferenceEndpoint {
     /// scheduler falls back to observation-only throughput scoring,
     /// which degrades to neutral 1.0 below the sample threshold.
     pub benchmark: Option<sovereign_core::oicp::BenchmarkResult>,
+    /// Peer's gossiped self-reported concurrent inference count.
+    /// Authoritative: peers count requests they serve from their
+    /// own local user — traffic the founder never originated and
+    /// `peer_observations[name].in_flight` is structurally blind
+    /// to. Used by `select_peer` to override the founder-local view
+    /// when present. `None` for older peers (gossip field absent);
+    /// scoring falls back to `peer_observations` in that case.
+    /// See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+    pub current_in_flight: Option<u32>,
 }
 
 impl Default for EmbeddedDaemon {
@@ -2034,7 +2044,7 @@ mod tests {
         let cfg = SetupConfig {
             models: ModelsSection {
                 primary: PathBuf::from("/m/qwen3-coder-30b.gguf"),
-                fast: PathBuf::from("/m/qwen3-1.7b.gguf"),
+                fast: Some(PathBuf::from("/m/qwen3-1.7b.gguf")),
                 embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
                 code: None,
                 context_size: None,

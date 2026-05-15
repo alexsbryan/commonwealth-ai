@@ -373,6 +373,31 @@ pub struct AppStateInner {
     /// invariants. The manifest endpoint reads this on every
     /// fetch to apply per-requester affinity multipliers.
     pub peer_preferences: PeerPreferenceStore,
+
+    /// Shared in-flight counter for local-serve inference. Installed
+    /// once by the daemon bootstrap after `MeshInferenceProvider::new`
+    /// returns. Read by the gossip emitter
+    /// (`sovereign-mesh::capabilities::build_local_capabilities`) on
+    /// every tick to populate
+    /// [`commonwealth_core::capabilities::NodeCapabilities::current_in_flight`].
+    ///
+    /// Lifecycle:
+    /// * Cold start: MIP creates its own private `Arc<AtomicU32>`,
+    ///   then the bootstrap calls
+    ///   [`AppState::install_in_flight_publisher`] with that Arc.
+    ///   `OnceLock::set` succeeds on the first call.
+    /// * Hot reload (`replace_models_and_reload`): the new MIP is
+    ///   constructed via [`MeshInferenceProvider::with_in_flight_publisher`]
+    ///   passing the *already-installed* Arc back in. The OnceLock
+    ///   is unchanged; old MIP guards and new MIP guards share the
+    ///   same atomic, so the counter stays accurate across the swap.
+    ///
+    /// Empty in tests and on storage-only nodes that never construct
+    /// a `MeshInferenceProvider`; gossip then emits
+    /// `current_in_flight: None`, which is the legacy / "no signal"
+    /// behaviour every scoring path handles correctly.
+    pub local_in_flight_publisher:
+        std::sync::OnceLock<Arc<std::sync::atomic::AtomicU32>>,
 }
 
 impl AppState {
@@ -573,8 +598,45 @@ impl AppState {
                 storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
                 contribution_emitter,
                 peer_preferences,
+                local_in_flight_publisher: std::sync::OnceLock::new(),
             }),
         }
+    }
+
+    /// Install the local MIP's in-flight publisher. One-shot: if the
+    /// OnceLock is already set, the new `publisher` is dropped and
+    /// the existing Arc stays in place. This is the load-bearing
+    /// invariant the hot-reload path relies on — it must NOT clobber
+    /// the publisher the cold-start path installed, or live guards
+    /// from the old MIP would decrement an Arc nobody reads.
+    pub fn install_in_flight_publisher(
+        &self,
+        publisher: Arc<std::sync::atomic::AtomicU32>,
+    ) {
+        let _ = self.inner.local_in_flight_publisher.set(publisher);
+    }
+
+    /// Borrow the installed in-flight publisher Arc. Hot-reload path
+    /// calls this to pass the same Arc into
+    /// `MeshInferenceProvider::with_in_flight_publisher`. `None` when
+    /// the bootstrap hasn't run an install yet (test harnesses,
+    /// storage-only nodes).
+    pub fn in_flight_publisher(
+        &self,
+    ) -> Option<Arc<std::sync::atomic::AtomicU32>> {
+        self.inner.local_in_flight_publisher.get().cloned()
+    }
+
+    /// Read the current local in-flight count if a publisher has been
+    /// installed. `None` on nodes that never wired one through
+    /// (storage-only, test harnesses without `MeshInferenceProvider`).
+    /// Gossip serialises this directly into
+    /// `NodeCapabilities.current_in_flight`.
+    pub fn current_local_in_flight(&self) -> Option<u32> {
+        self.inner
+            .local_in_flight_publisher
+            .get()
+            .map(|p| p.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     /// Spawn the coordinator's pull-based work-queue reaper. Must be called

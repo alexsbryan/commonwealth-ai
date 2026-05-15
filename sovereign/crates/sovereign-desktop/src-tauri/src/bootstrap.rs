@@ -235,7 +235,7 @@ mod tests {
         let cfg = SetupConfig {
             models: sovereign_core::setup_config::ModelsSection {
                 primary: "/p".into(),
-                fast: "/f".into(),
+                fast: Some("/f".into()),
                 embed: "/e".into(),
                 code: None,
                 context_size: None,

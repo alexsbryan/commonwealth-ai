@@ -147,6 +147,16 @@ pub async fn build_local_capabilities(
         // through this constructor — the probe runs once and
         // persists, while this builder is called every gossip tick.
         benchmark: None,
+        // Current local in-flight count for load-aware scheduling.
+        // Read directly from the MIP-shared atomic via AppState:
+        // lock-free, fresh as of *this gossip tick*. `None` when the
+        // bootstrap hasn't installed a publisher yet (storage-only
+        // nodes, tests). See `sovereign/docs/MESH_LOAD_AWARENESS.md`
+        // for why this field exists and why gossiping it is the only
+        // way the founder learns BeefyMac is busy serving local
+        // traffic the founder never dispatched.
+        current_in_flight: app_state
+            .and_then(|s| s.current_local_in_flight()),
     }
 }
 

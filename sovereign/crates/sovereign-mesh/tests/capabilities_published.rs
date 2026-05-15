@@ -85,6 +85,7 @@ fn empty_node_capabilities() -> NodeCapabilities {
 
         embed_model: None,
         benchmark: None,
+        current_in_flight: None,
         }
 }
 

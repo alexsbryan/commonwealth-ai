@@ -141,6 +141,13 @@ pub async fn assemble_brief(
     // ("are the narrative docs still anchored to the code?") frames
     // *every* principle the next section would cite — a stale doc
     // means cited principles may not match the current code.
+    //
+    // Gated on `treesitter` because `render_drift_posture` calls into
+    // `crate::code::drift_posture`, which is itself a treesitter-only
+    // module (the posture computation reads SCIP-derived state).
+    // Without this cfg the brief still assembles; the drift section is
+    // simply omitted on non-treesitter builds.
+    #[cfg(feature = "treesitter")]
     if let (Some(drift_dir), Some(repo_root)) = (inputs.drift_dir, inputs.repo_root) {
         let s_drift = render_drift_posture(drift_dir, repo_root);
         if !s_drift.is_empty() {
@@ -240,6 +247,12 @@ fn render_working_set(files: &[PathBuf]) -> String {
 /// Skipped (empty string) when the posture has nothing actionable to
 /// say (`fresh` with no Act-on findings) — a clean drift state is
 /// the default and shouldn't burn brief tokens.
+///
+/// Treesitter-only: depends on the `crate::code::drift_posture` module
+/// which is itself feature-gated. The caller in `assemble()` is
+/// cfg-gated to match so non-treesitter builds compile cleanly without
+/// pulling this section.
+#[cfg(feature = "treesitter")]
 fn render_drift_posture(drift_dir: &Path, repo_root: &Path) -> String {
     use crate::code::drift_posture::{compute_posture, PostureStatus, DEFAULT_NARRATIVES};
 
