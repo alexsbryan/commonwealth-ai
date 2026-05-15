@@ -35,37 +35,73 @@ use crate::error::Result;
 
 // ── Philosophy-specific prompt assets ────────────────────────
 
-const PHASE1_ATLAS_SYSTEM: &str =
-    include_str!("philosophy_atlas_prompts/phase1_system.md");
+static PHASE1_ATLAS_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase1_system.md",
+        include_str!("philosophy_atlas_prompts/phase1_system.md"),
+    ));
 
-const PHASE1_ATLAS_SYSTEM_TERSE: &str =
-    include_str!("philosophy_atlas_prompts/phase1_system_terse.md");
+static PHASE1_ATLAS_SYSTEM_TERSE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase1_system_terse.md",
+        include_str!("philosophy_atlas_prompts/phase1_system_terse.md"),
+    ));
 
-const PHASE1A_SEED_SYSTEM: &str =
-    include_str!("philosophy_atlas_prompts/phase1a_seed_system.md");
+static PHASE1A_SEED_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase1a_seed_system.md",
+        include_str!("philosophy_atlas_prompts/phase1a_seed_system.md"),
+    ));
 
-const PHASE1B_ENTITY_COVERAGE: &str =
-    include_str!("philosophy_atlas_prompts/phase1b_entity_coverage.md");
+static PHASE1B_ENTITY_COVERAGE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase1b_entity_coverage.md",
+        include_str!("philosophy_atlas_prompts/phase1b_entity_coverage.md"),
+    ));
 
-const PHASE1B_CONCEPT_COVERAGE: &str =
-    include_str!("philosophy_atlas_prompts/phase1b_concept_coverage.md");
+static PHASE1B_CONCEPT_COVERAGE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase1b_concept_coverage.md",
+        include_str!("philosophy_atlas_prompts/phase1b_concept_coverage.md"),
+    ));
 
-const PHASE3_QUESTION_NAMING: &str =
-    include_str!("philosophy_atlas_prompts/phase3_question_naming.md");
-const PHASE3_CLAIM_NAMING: &str =
-    include_str!("philosophy_atlas_prompts/phase3_claim_naming.md");
-const PHASE3_ENTITY_STATE_NAMING: &str =
-    include_str!("philosophy_atlas_prompts/phase3_entity_state_trajectory_naming.md");
-const PHASE3_RELATION_STATE_NAMING: &str =
-    include_str!("philosophy_atlas_prompts/phase3_relation_state_trajectory_naming.md");
-const PHASE3_EVENT_NAMING: &str =
-    include_str!("philosophy_atlas_prompts/phase3_event_thread_naming.md");
+static PHASE3_QUESTION_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase3_question_naming.md",
+        include_str!("philosophy_atlas_prompts/phase3_question_naming.md"),
+    ));
+static PHASE3_CLAIM_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase3_claim_naming.md",
+        include_str!("philosophy_atlas_prompts/phase3_claim_naming.md"),
+    ));
+static PHASE3_ENTITY_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase3_entity_state_trajectory_naming.md",
+        include_str!("philosophy_atlas_prompts/phase3_entity_state_trajectory_naming.md"),
+    ));
+static PHASE3_RELATION_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase3_relation_state_trajectory_naming.md",
+        include_str!("philosophy_atlas_prompts/phase3_relation_state_trajectory_naming.md"),
+    ));
+static PHASE3_EVENT_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase3_event_thread_naming.md",
+        include_str!("philosophy_atlas_prompts/phase3_event_thread_naming.md"),
+    ));
 
-const PHASE8_CONFIGURATION_SYSTEM: &str =
-    include_str!("philosophy_atlas_prompts/phase8_configuration.md");
+static PHASE8_CONFIGURATION_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase8_configuration.md",
+        include_str!("philosophy_atlas_prompts/phase8_configuration.md"),
+    ));
 
-const PHASE6_HOLISTIC_SYSTEM: &str =
-    include_str!("philosophy_atlas_prompts/phase6_holistic_system.md");
+static PHASE6_HOLISTIC_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "philosophy_atlas/phase6_holistic_system.md",
+        include_str!("philosophy_atlas_prompts/phase6_holistic_system.md"),
+    ));
 
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "philosophy_atlas";
@@ -110,7 +146,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
     // ── System preambles ──────────────────────────────────────
 
     fn phase1_system(&self) -> &'static str {
-        PHASE1_ATLAS_SYSTEM
+        *PHASE1_ATLAS_SYSTEM
     }
 
     fn phase3_system(&self) -> &'static str {
@@ -158,7 +194,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
             /*seed=*/ None,
         );
         Some(
-            ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user)
+            ChatPrompt::new(*PHASE1_ATLAS_SYSTEM_TERSE, user)
                 .with_response_schema(
                     "phase1_section_extraction",
                     phase1_section_extraction_schema(),
@@ -179,7 +215,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
     ) -> Option<ChatPrompt> {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
-            ChatPrompt::new(PHASE1B_ENTITY_COVERAGE, user)
+            ChatPrompt::new(*PHASE1B_ENTITY_COVERAGE, user)
                 .with_phase_id("phase1b_entity")
                 // Grammar-constrained JSON output. Without it the
                 // model hits the token cap producing prose-then-
@@ -200,7 +236,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
     ) -> Option<ChatPrompt> {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
-            ChatPrompt::new(PHASE1B_CONCEPT_COVERAGE, user)
+            ChatPrompt::new(*PHASE1B_CONCEPT_COVERAGE, user)
                 .with_phase_id("phase1b_concept")
                 .with_response_schema("phase1b_coverage", phase1b_coverage_schema())
                 .with_max_output_tokens(2048),
@@ -262,7 +298,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
              message. Entities only. No prose, no <think> block.",
         );
         Some(
-            ChatPrompt::new(PHASE1A_SEED_SYSTEM, user)
+            ChatPrompt::new(*PHASE1A_SEED_SYSTEM, user)
                 .with_phase_id("phase1_seed")
                 // Grammar-constrain to JSON. Dense first-sections
                 // (e.g. SEP `freewill` opening with a single
@@ -307,11 +343,11 @@ impl Pipeline for PhilosophyAtlasPipeline {
         exemplars: &[&Exemplar],
     ) -> Option<ChatPrompt> {
         let system = match facet {
-            Facet::Question => PHASE3_QUESTION_NAMING,
-            Facet::Claim => PHASE3_CLAIM_NAMING,
-            Facet::EntityState => PHASE3_ENTITY_STATE_NAMING,
-            Facet::RelationState => PHASE3_RELATION_STATE_NAMING,
-            Facet::Event => PHASE3_EVENT_NAMING,
+            Facet::Question => *PHASE3_QUESTION_NAMING,
+            Facet::Claim => *PHASE3_CLAIM_NAMING,
+            Facet::EntityState => *PHASE3_ENTITY_STATE_NAMING,
+            Facet::RelationState => *PHASE3_RELATION_STATE_NAMING,
+            Facet::Event => *PHASE3_EVENT_NAMING,
         };
         let mut user = String::new();
 
@@ -510,7 +546,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
 
         user.push_str("\nReturn 0–3 configurations as strict JSON per the system prompt.");
 
-        Some(ChatPrompt::new(PHASE8_CONFIGURATION_SYSTEM, user).with_phase_id("phase8_configuration"))
+        Some(ChatPrompt::new(*PHASE8_CONFIGURATION_SYSTEM, user).with_phase_id("phase8_configuration"))
     }
 
     fn parse_phase8_configuration(
@@ -550,7 +586,7 @@ impl Pipeline for PhilosophyAtlasPipeline {
     ) -> Option<ChatPrompt> {
         let user_body = crate::enrichment::atlas::analysis::render_holistic_user_body(atoms);
         Some(
-            ChatPrompt::new(PHASE6_HOLISTIC_SYSTEM, user_body)
+            ChatPrompt::new(*PHASE6_HOLISTIC_SYSTEM, user_body)
                 .with_phase_id("phase6_holistic"),
         )
     }
