@@ -2,6 +2,7 @@ mod approval;
 mod atlas_commands;
 mod bootstrap;
 mod commands;
+mod crash_bundle;
 mod enrich_commands;
 mod friendly_names;
 mod insight_commands;
@@ -334,6 +335,12 @@ fn main() -> ExitCode {
             commands::set_ingest_budget,
             commands::get_mesh_quiesced,
             commands::set_mesh_quiesced,
+            commands::get_contribution_status,
+            commands::set_contribution_ceiling,
+            commands::pause_contributions,
+            commands::resume_contributions,
+            commands::get_recent_contributions,
+            commands::prepare_crash_report,
             commands::get_storage_budget,
             commands::set_storage_budget,
             commands::build_corpus_index,
