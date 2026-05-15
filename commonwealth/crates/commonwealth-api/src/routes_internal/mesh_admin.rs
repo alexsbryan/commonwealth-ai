@@ -1295,3 +1295,50 @@ pub async fn contribution_resume(
     }
     contribution_status(State(state)).await
 }
+
+#[derive(Debug, Deserialize)]
+pub struct RecentContributionsParams {
+    /// Max events to return. Defaults to 20; capped at 200 to bound
+    /// the response size (the full ledger can have many thousands of
+    /// events on a long-running node).
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RecentContributionsResponse {
+    /// Most recent ledger events, sorted by timestamp DESC. Each
+    /// entry is a full `LedgerEvent` (origin node + timestamp + kind);
+    /// the UI is responsible for friendly-name resolution and any
+    /// formatting beyond the raw fact.
+    pub events: Vec<commonwealth_core::contributions::LedgerEvent>,
+}
+
+/// `GET /internal/contribution/recent` — recent ledger events, newest
+/// first. Powers the W3 contribution-panel "served feed" without
+/// forcing the UI to aggregate across the full per-node window. Cheap:
+/// reads the MeshStore once and sorts in-memory.
+pub async fn contribution_recent(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<RecentContributionsParams>,
+) -> Result<Json<RecentContributionsResponse>, (StatusCode, String)> {
+    let limit = params.limit.unwrap_or(20).min(200);
+    let entries = state
+        .inner
+        .mesh_store
+        .scan(commonwealth_state::CONTRIBUTIONS_APP_ID, "")
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("contribution_recent: scan failed: {e}"),
+            )
+        })?;
+    let mut events: Vec<commonwealth_core::contributions::LedgerEvent> = entries
+        .into_iter()
+        .filter_map(|e| serde_json::from_slice(e.value.as_ref()).ok())
+        .collect();
+    // Newest first. `LedgerEvent.timestamp` is unix-seconds; ties
+    // are broken by stable_sort order, which is fine for UI display.
+    events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    events.truncate(limit);
+    Ok(Json(RecentContributionsResponse { events }))
+}

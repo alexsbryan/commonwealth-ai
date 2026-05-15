@@ -4897,6 +4897,206 @@ async fn start_tier_installs(
     }
 }
 
+// ─── Contribution controls (W3) ──────────────────────────────
+//
+// Tauri wrappers around the daemon's `/internal/contribution/*` HTTP
+// routes (commonwealth-api::routes_internal::mesh_admin). The Svelte
+// settings panel + tray menu call these; the daemon process owns the
+// authoritative state.
+//
+// Local DTOs mirror the daemon shapes byte-for-byte so the desktop
+// crate doesn't depend on commonwealth-api just for these types
+// (same pattern as MeshQuiesceState above).
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ContributionStatus {
+    pub ceiling: usize,
+    pub in_flight: usize,
+    pub paused_until: Option<i64>,
+    pub pause_remaining_secs: Option<u64>,
+    pub yield_peers_to_foreground: bool,
+    pub yielding_secs_remaining: Option<u64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LedgerEventDto {
+    /// `node_id` is hex-string-encoded by serde (NodeId derives that)
+    /// so the frontend can do friendly-name lookup without parsing.
+    pub node_id: serde_json::Value,
+    pub timestamp: u64,
+    /// Wire kind: serialized with `#[serde(tag = "type")]` so the
+    /// frontend can branch on `kind.type`.
+    pub kind: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct RecentContributionsResp {
+    pub events: Vec<LedgerEventDto>,
+}
+
+#[tauri::command]
+pub async fn get_contribution_status() -> Result<ContributionStatus, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/status");
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/contribution/status: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/status returned {status}: {body}"
+        ));
+    }
+    resp.json::<ContributionStatus>()
+        .await
+        .map_err(|e| format!("decode /internal/contribution/status: {e}"))
+}
+
+#[tauri::command]
+pub async fn set_contribution_ceiling(max: Option<usize>) -> Result<ContributionStatus, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/ceiling");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "max": max }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/contribution/ceiling: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/ceiling returned {status}: {body}"
+        ));
+    }
+    resp.json::<ContributionStatus>()
+        .await
+        .map_err(|e| format!("decode /internal/contribution/ceiling: {e}"))
+}
+
+#[tauri::command]
+pub async fn pause_contributions(duration_secs: u64) -> Result<ContributionStatus, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/pause");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "duration_secs": duration_secs }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/contribution/pause: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/pause returned {status}: {body}"
+        ));
+    }
+    resp.json::<ContributionStatus>()
+        .await
+        .map_err(|e| format!("decode /internal/contribution/pause: {e}"))
+}
+
+#[tauri::command]
+pub async fn resume_contributions() -> Result<ContributionStatus, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/resume");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/contribution/resume: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/resume returned {status}: {body}"
+        ));
+    }
+    resp.json::<ContributionStatus>()
+        .await
+        .map_err(|e| format!("decode /internal/contribution/resume: {e}"))
+}
+
+#[tauri::command]
+pub async fn get_recent_contributions(
+    limit: Option<usize>,
+) -> Result<Vec<LedgerEventDto>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/recent");
+    let mut req = client.get(&url);
+    if let Some(n) = limit {
+        req = req.query(&[("limit", n.to_string())]);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/contribution/recent: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/recent returned {status}: {body}"
+        ));
+    }
+    resp.json::<RecentContributionsResp>()
+        .await
+        .map(|r| r.events)
+        .map_err(|e| format!("decode /internal/contribution/recent: {e}"))
+}
+
+// ─── Crash report (W6) ───────────────────────────────────────
+//
+// Bundles the latest supervisor-written crash log + redacted config
+// into a single markdown file on Desktop, returns a mailto URL the
+// frontend opens via tauri-plugin-shell. NO auto-upload — the user
+// reads the file and attaches it manually. See crash_bundle.rs.
+
+#[derive(Debug, serde::Serialize)]
+pub struct CrashReportInfo {
+    /// Absolute path of the report file on disk. UI shows this so
+    /// the user can copy/open it.
+    pub report_path: String,
+    /// `mailto:` URL pre-filled with subject + body. Frontend passes
+    /// this to `tauri-plugin-shell.open(url)`.
+    pub mailto_url: String,
+}
+
+#[tauri::command]
+pub async fn prepare_crash_report() -> Result<CrashReportInfo, String> {
+    let cfg = sovereign_core::setup_config::SetupConfig::load().ok();
+    let app_version = env!("CARGO_PKG_VERSION");
+    let data_dir = cfg
+        .as_ref()
+        .map(|c| c.data.dir.clone())
+        .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign")))
+        .ok_or_else(|| "could not resolve data dir".to_string())?;
+    let prepared =
+        crate::crash_bundle::prepare_report(&data_dir, cfg.as_ref(), app_version)?;
+    Ok(CrashReportInfo {
+        report_path: prepared.report_path.to_string_lossy().into_owned(),
+        mailto_url: prepared.mailto_url,
+    })
+}
+
 // ─── Tests ───────────────────────────────────────────────────
 
 #[cfg(test)]

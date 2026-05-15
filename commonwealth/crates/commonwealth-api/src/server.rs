@@ -222,6 +222,10 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/contribution/resume",
             post(routes_internal::contribution_resume),
         )
+        .route(
+            "/internal/contribution/recent",
+            get(routes_internal::contribution_recent),
+        )
         // Foreground-yield introspection — read-only snapshot of the
         // atomics that decide whether ingest workers are pausing for
         // chat. No POST: the window is configured at startup via

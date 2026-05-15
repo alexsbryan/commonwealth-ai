@@ -52,17 +52,18 @@ pub use pipeline_pause::{
     pipeline_pause, NodePauseResult, PipelinePauseRequest, PipelinePauseResponse,
 };
 pub use mesh_admin::{
-    contribution_ceiling_set, contribution_pause, contribution_resume,
-    contribution_status, foreground_state, inference_warmup, ingest_budget_get,
-    ingest_budget_set, join, mesh_quiesce_get, mesh_quiesce_set, models_inventory,
-    models_load, models_unload, node_activity, recommended_storage_budget_bytes,
-    storage_budget_get, storage_budget_set, ContributionStatusResponse,
-    ForegroundStateResponse, IngestBudgetState, InventoryEntry, InventoryResponse,
-    JoinRejection, JoinRequest, JoinResponse, LoadModelRequest, LoadModelResponse,
-    MeshQuiesceState, MeshWire, NodeActivityPayload, PauseContributionsRequest,
-    SetContributionCeilingRequest, SetIngestBudgetRequest, SetMeshQuiesceRequest,
-    SetStorageBudgetRequest, StorageBudgetState, UnloadModelRequest, UnloadModelResponse,
-    WarmupResponse,
+    contribution_ceiling_set, contribution_pause, contribution_recent,
+    contribution_resume, contribution_status, foreground_state, inference_warmup,
+    ingest_budget_get, ingest_budget_set, join, mesh_quiesce_get, mesh_quiesce_set,
+    models_inventory, models_load, models_unload, node_activity,
+    recommended_storage_budget_bytes, storage_budget_get, storage_budget_set,
+    ContributionStatusResponse, ForegroundStateResponse, IngestBudgetState,
+    InventoryEntry, InventoryResponse, JoinRejection, JoinRequest, JoinResponse,
+    LoadModelRequest, LoadModelResponse, MeshQuiesceState, MeshWire,
+    NodeActivityPayload, PauseContributionsRequest, RecentContributionsParams,
+    RecentContributionsResponse, SetContributionCeilingRequest,
+    SetIngestBudgetRequest, SetMeshQuiesceRequest, SetStorageBudgetRequest,
+    StorageBudgetState, UnloadModelRequest, UnloadModelResponse, WarmupResponse,
 };
 
 // Queue helpers re-exported intra-module so `corpus_collaborate` can keep
