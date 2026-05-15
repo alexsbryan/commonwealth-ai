@@ -5063,6 +5063,68 @@ pub async fn get_recent_contributions(
         .map_err(|e| format!("decode /internal/contribution/recent: {e}"))
 }
 
+// ─── First-mesh consent (W4) ─────────────────────────────────
+//
+// One-time dialog shown after setup completes, before the user
+// joins a multi-peer mesh: "Share idle GPU with the mesh?" The
+// answer drives the daemon's peer-inflight ceiling and persists in
+// DesktopConfig so we don't re-prompt on every launch.
+//
+// The Svelte side calls get_first_mesh_consent on boot; None means
+// "show the modal". After the user decides, record_first_mesh_consent
+// persists the choice AND applies the ceiling at the daemon, so the
+// next peer-served inference request is gated correctly.
+
+#[tauri::command]
+pub async fn get_first_mesh_consent(
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+) -> Result<Option<crate::state::FirstMeshConsent>, String> {
+    Ok(state.config.read().await.first_mesh_consent.clone())
+}
+
+#[tauri::command]
+pub async fn record_first_mesh_consent(
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+    share_gpu: bool,
+) -> Result<crate::state::FirstMeshConsent, String> {
+    // 1 concurrent peer request is the "Yes, share idle GPU" default
+    // — matches the plan's 25% bucket. The user can lift this later
+    // in Settings without re-prompting consent.
+    let ceiling = if share_gpu { 1 } else { 0 };
+    let recorded_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let decision = crate::state::FirstMeshConsent {
+        share_gpu,
+        ceiling,
+        recorded_at_unix,
+    };
+
+    // Persist FIRST so even if the daemon call fails the decision
+    // survives a restart (and we won't re-prompt the user).
+    {
+        let mut cfg = state.config.write().await;
+        cfg.first_mesh_consent = Some(decision.clone());
+        cfg.save().map_err(|e| format!("save desktop config: {e}"))?;
+    }
+
+    // Apply the ceiling at the daemon. Best-effort: if the daemon
+    // isn't reachable yet (early-boot race), the cfg already records
+    // the user's intent and a follow-up apply_first_mesh_consent at
+    // boot can re-issue. For v1 we just log + continue.
+    if let Err(e) = set_contribution_ceiling(Some(ceiling)).await {
+        tracing::warn!(
+            error = %e,
+            ceiling,
+            "consent recorded but daemon ceiling apply failed; \
+             will be re-applied on next boot"
+        );
+    }
+
+    Ok(decision)
+}
+
 // ─── Crash report (W6) ───────────────────────────────────────
 //
 // Bundles the latest supervisor-written crash log + redacted config
