@@ -32,22 +32,21 @@
 //! is per-`expected_*` block: how many of the listed expectations the
 //! atlas covered.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::analysis::configuration::ConfigurationsOutput;
 use corpus_engine::enrichment::atlas::analysis::gaps::{Gap, GapKind, GapsOutput};
 use corpus_engine::enrichment::atlas::atoms::{
-    AtomEnvelope, AtomId, AtomsFile, Configuration, Entity, Event, Question, Relation, State,
+    AtomEnvelope, AtomId, AtomsFile, Configuration, Entity, Event, Opposition, Position, Question,
+    Relation, State,
+};
+use corpus_engine::enrichment::atlas::axis_catalog::{
+    all_axes, AtomKind, GatingField, TypedAxis,
 };
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType, EdgesFile};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
-use corpus_engine::enrichment::pipeline::atlas::{
-    ConcessionSketch, EntityType, EvidenceInvocationSketch, MechanismSketch, OppositionSketch,
-    PositionSketch, TypeExtension,
-};
-use corpus_engine::enrichment::pipeline::types::Phase1Output;
-use corpus_engine::enrichment::pipeline::PipelinePhase;
-use corpus_engine::enrichment::pipeline::PhaseCache;
+use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use corpus_engine::enrichment::skeleton::{FieldSkeleton, SkeletonPosition};
 use serde::{Deserialize, Serialize};
 
@@ -130,7 +129,7 @@ pub async fn cmd_eval(args: &[String]) -> i32 {
 /// `EvalReport`. Used by both `cmd_eval` (which prints + optionally
 /// persists JSON) and `cmd_eval_median` (which calls this N times
 /// and aggregates).
-pub(super) fn score_corpus(
+pub(crate) fn score_corpus(
     corpus_id: &str,
     golden_path: &Path,
     phase: PhaseFilter,
@@ -139,12 +138,7 @@ pub(super) fn score_corpus(
     let golden = GoldenSet::load(golden_path)?;
     let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
     let skeleton_path = paths::index_root(corpus_id).join("field_skeleton.json");
-    let phase1_cache_dir = paths::cache_dir(corpus_id);
-    let snapshot = AtlasSnapshot::load(
-        &atlas_dir,
-        &skeleton_path,
-        Some(&phase1_cache_dir),
-    )?;
+    let snapshot = AtlasSnapshot::load(&atlas_dir, &skeleton_path)?;
     let mut report = score(&golden, &snapshot, phase);
     report.corpus_id = corpus_id.to_string();
     report.golden_path = golden_path.display().to_string();
@@ -154,7 +148,7 @@ pub(super) fn score_corpus(
 // ── Argument parsing ───────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum PhaseFilter {
+pub(crate) enum PhaseFilter {
     All,
     Positions,
     Atoms,
@@ -164,7 +158,7 @@ pub(super) enum PhaseFilter {
 }
 
 impl PhaseFilter {
-    pub(super) fn parse(s: &str) -> Result<Self, String> {
+    pub(crate) fn parse(s: &str) -> Result<Self, String> {
         match s {
             "all" => Ok(Self::All),
             "positions" | "skeleton" => Ok(Self::Positions),
@@ -331,13 +325,18 @@ impl GoldenSet {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-struct GoldenMeta {
+pub(crate) struct GoldenMeta {
     #[serde(default)]
     #[allow(dead_code)]
     template: String,
     #[serde(default)]
     #[allow(dead_code)]
     description: String,
+    /// Corpus this golden scores against. Authoritative when present;
+    /// `bench all` discovery falls back to the filename stem when
+    /// absent and warn-logs the inference.
+    #[serde(default)]
+    pub corpus_id: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -614,21 +613,10 @@ struct AtlasSnapshot {
     edges: Option<EdgesFile>,
     gaps: Option<GapsOutput>,
     configurations: Option<ConfigurationsOutput>,
-    /// Phase 1 cache — surfaces per-section typed extensions
-    /// (`section_extraction.type_extensions`) so the typed-atom
-    /// scorers can match against the Phase 1 output directly,
-    /// without waiting on resolver projection (Gap B). `None` when
-    /// the corpus hasn't been Phase-1-extracted yet or is on the
-    /// pre-routed pipeline.
-    phase1: Option<Phase1Output>,
 }
 
 impl AtlasSnapshot {
-    fn load(
-        atlas_dir: &Path,
-        skeleton_path: &Path,
-        phase1_cache_dir: Option<&Path>,
-    ) -> Result<Self, String> {
+    fn load(atlas_dir: &Path, skeleton_path: &Path) -> Result<Self, String> {
         let skeleton = if skeleton_path.exists() {
             let raw = std::fs::read_to_string(skeleton_path)
                 .map_err(|e| format!("read {}: {e}", skeleton_path.display()))?;
@@ -664,25 +652,12 @@ impl AtlasSnapshot {
             None
         };
 
-        // Phase 1 cache lookup. Best-effort: the resolved-atlas
-        // surface is the canonical scoring source, so a missing
-        // cache simply means typed-extension scoring lanes return
-        // "no signal" instead of being treated as zero recall.
-        let phase1 = phase1_cache_dir.and_then(|cache_dir| {
-            let cache = PhaseCache::new(cache_dir.to_path_buf());
-            match cache.read::<Phase1Output>(PipelinePhase::Questions) {
-                Ok(Some(p)) => Some(p),
-                _ => None,
-            }
-        });
-
         Ok(Self {
             skeleton,
             atoms,
             edges,
             gaps,
             configurations,
-            phase1,
         })
     }
 
@@ -696,64 +671,10 @@ impl AtlasSnapshot {
     // scorers can attribute hits and misses to specific sections in
     // the report.
 
-    fn argumentative_mechanisms(&self) -> Vec<(&str, &MechanismSketch)> {
-        self.iter_argumentative()
-            .flat_map(|(sid, a)| a.mechanisms.iter().map(move |m| (sid, m)))
-            .collect()
-    }
-
-    fn argumentative_positions(&self) -> Vec<(&str, &PositionSketch)> {
-        self.iter_argumentative()
-            .flat_map(|(sid, a)| a.positions.iter().map(move |p| (sid, p)))
-            .collect()
-    }
-
-    fn argumentative_evidence(&self) -> Vec<(&str, &EvidenceInvocationSketch)> {
-        self.iter_argumentative()
-            .flat_map(|(sid, a)| a.evidence_invocations.iter().map(move |e| (sid, e)))
-            .collect()
-    }
-
-    fn argumentative_oppositions(&self) -> Vec<(&str, &OppositionSketch)> {
-        self.iter_argumentative()
-            .flat_map(|(sid, a)| a.oppositions.iter().map(move |o| (sid, o)))
-            .collect()
-    }
-
-    fn argumentative_concessions(&self) -> Vec<(&str, &ConcessionSketch)> {
-        self.iter_argumentative()
-            .flat_map(|(sid, a)| a.concessions.iter().map(move |c| (sid, c)))
-            .collect()
-    }
-
-    /// Iterator over every `(section_id, &ArgumentativeExtension)`
-    /// pair in the Phase 1 cache, regardless of which slot
-    /// (`type_extensions` plural or `type_extension` legacy singular)
-    /// carries it. Used by the five argumentative-axis accessors
-    /// above; pulling the iteration into one place keeps duplicate-
-    /// section-id handling consistent across all five.
-    fn iter_argumentative(
-        &self,
-    ) -> impl Iterator<
-        Item = (
-            &str,
-            &corpus_engine::enrichment::pipeline::atlas::ArgumentativeExtension,
-        ),
-    > {
-        self.phase1
-            .iter()
-            .flat_map(|p| p.questions_by_chapter.iter())
-            .flat_map(|q| {
-                let sid = q.chapter_id.as_str();
-                q.section_extraction
-                    .iter()
-                    .flat_map(move |se| se.iter_type_extensions().map(move |ext| (sid, ext)))
-            })
-            .filter_map(|(sid, ext)| match ext {
-                TypeExtension::Argumentative(a) => Some((sid, a)),
-                _ => None,
-            })
-    }
+    // Typed-axis candidate collection moved to
+    // `collect_axis_atoms` in the catalog-driven scoring block —
+    // search for "Catalog-driven axis scoring" below. Adding a new
+    // typed axis no longer means adding a snapshot accessor.
 
     fn entities_of_type(&self, kind: EntityType) -> Vec<&Entity> {
         let Some(file) = &self.atoms else {
@@ -1033,8 +954,8 @@ where
 
 // ── Scoring ────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub(super) struct PhaseScore {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct PhaseScore {
     pub expected: usize,
     pub matched: usize,
     pub forbidden_total: usize,
@@ -1056,7 +977,7 @@ impl PhaseScore {
     /// and never enter the aggregate, hiding the regression. This bit
     /// is the difference between "no scoreable artefacts" (a silent
     /// phase) and "tried and failed" (a recall=0 phase).
-    pub(super) fn precision(&self) -> Option<f32> {
+    pub(crate) fn precision(&self) -> Option<f32> {
         let denom = self.matched + self.forbidden_hit;
         if denom == 0 {
             // Two sub-cases:
@@ -1071,14 +992,14 @@ impl PhaseScore {
         Some(self.matched as f32 / denom as f32)
     }
 
-    pub(super) fn recall(&self) -> Option<f32> {
+    pub(crate) fn recall(&self) -> Option<f32> {
         if self.expected == 0 {
             return None;
         }
         Some(self.matched as f32 / self.expected as f32)
     }
 
-    pub(super) fn f1(&self) -> Option<f32> {
+    pub(crate) fn f1(&self) -> Option<f32> {
         let p = self.precision()?;
         let r = self.recall()?;
         if p + r == 0.0 {
@@ -1088,8 +1009,507 @@ impl PhaseScore {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub(super) struct EvalReport {
+// ── Catalog-driven axis scoring ───────────────────────────────────
+//
+// One driver function replaces the five hand-coded
+// score_{mechanism,named_position,evidence,opposition,concession}_
+// atoms helpers. Adding a new typed axis to the bench is now:
+//   1. add an arm to `resolve_type_extensions` that produces the
+//      projected atom shape (concept_kind / claim_kind / new
+//      AtomEnvelope variant),
+//   2. add a `TypedAxis` const entry in
+//      `corpus_engine::enrichment::atlas::axis_catalog`, and
+//   3. add a golden TOML block for the corresponding axis.
+//
+// No new Rust file. No new scorer. The catalog's `gating_fields` /
+// `atom_kind` declaration drives `collect_axis_atoms` (candidate
+// pool) and `matches_axis` (gating predicate).
+
+/// Per-expectation row in the uniform view the driver consumes.
+/// Built lazily from `GoldenSet.expected_*_atoms` named fields at
+/// score time so the on-disk TOML schema doesn't change.
+struct AxisExpectation<'a> {
+    /// Primary-name needle list. Used by `GatingField::Name`.
+    name_contains_any: &'a [String],
+    /// Position stance gate (`endorse` / `rebut` / ...). None = skip.
+    stance: Option<&'a str>,
+    /// Kind-discriminator gate. `EntityWithConceptKind` /
+    /// `ClaimWithKind` axes filter candidates by qualifier in
+    /// `collect_axis_atoms`; the field is populated for future
+    /// catalog axes whose collector cannot pre-filter (e.g. cross-
+    /// kind matching), and stays here so the uniform view shape
+    /// doesn't grow another variant later.
+    #[allow(dead_code)]
+    kind: Option<&'a str>,
+    /// Opposition left/right gates (order-independent).
+    left_contains_any: &'a [String],
+    right_contains_any: &'a [String],
+
+    // ─── Informational fields (mismatch → PhaseScore.note, not miss)
+    description_keywords_any: &'a [String],
+    domain_contains_any: &'a [String],
+    content_contains_any: &'a [String],
+    proponent_contains_any: &'a [String],
+    supports_contains_any: &'a [String],
+    axis_contains_any: &'a [String],
+    addresses_contains_any: &'a [String],
+    outcome: Option<&'a str>,
+}
+
+impl<'a> AxisExpectation<'a> {
+    fn empty() -> Self {
+        Self {
+            name_contains_any: &[],
+            stance: None,
+            kind: None,
+            left_contains_any: &[],
+            right_contains_any: &[],
+            description_keywords_any: &[],
+            domain_contains_any: &[],
+            content_contains_any: &[],
+            proponent_contains_any: &[],
+            supports_contains_any: &[],
+            axis_contains_any: &[],
+            addresses_contains_any: &[],
+            outcome: None,
+        }
+    }
+
+    /// Label printed in `PhaseScore.misses` when this expectation
+    /// goes unmatched. First non-empty needle wins; falls back to
+    /// composed "L vs R" for Opposition.
+    fn miss_label(&self) -> String {
+        if let Some(s) = self.name_contains_any.first().cloned() {
+            return s;
+        }
+        if !self.left_contains_any.is_empty() || !self.right_contains_any.is_empty() {
+            return format!(
+                "{} vs {}",
+                self.left_contains_any.first().cloned().unwrap_or_default(),
+                self.right_contains_any.first().cloned().unwrap_or_default()
+            );
+        }
+        if let Some(c) = self.content_contains_any.first().cloned() {
+            return c;
+        }
+        String::new()
+    }
+}
+
+/// Forbidden block — name-based anti-test.
+struct AxisForbidden<'a> {
+    name_contains_any: &'a [String],
+}
+
+impl<'a> AxisForbidden<'a> {
+    fn label(&self) -> String {
+        self.name_contains_any.first().cloned().unwrap_or_default()
+    }
+}
+
+/// Candidate atom enum — uniform over Entity / Claim / Position /
+/// Opposition so the matcher doesn't need a per-axis branch on
+/// candidate shape.
+enum AxisCandidate<'a> {
+    Entity(&'a Entity),
+    Claim(&'a corpus_engine::enrichment::atlas::atoms::Claim),
+    Position(&'a Position),
+    Opposition(&'a Opposition),
+}
+
+impl<'a> AxisCandidate<'a> {
+    fn primary_text(&self) -> &str {
+        match self {
+            AxisCandidate::Entity(e) => &e.canonical_name,
+            AxisCandidate::Claim(c) => &c.content,
+            AxisCandidate::Position(p) => &p.canonical_name,
+            // Opposition primary text used only for forbidden-block
+            // name matching, which we don't expose for Opposition v1.
+            AxisCandidate::Opposition(o) => &o.axis,
+        }
+    }
+
+    fn stance(&self) -> Option<&str> {
+        if let AxisCandidate::Position(p) = self {
+            Some(&p.stance)
+        } else {
+            None
+        }
+    }
+
+    fn opposition_labels(&self) -> Option<(&str, &str)> {
+        if let AxisCandidate::Opposition(o) = self {
+            Some((&o.left_label, &o.right_label))
+        } else {
+            None
+        }
+    }
+
+    fn description(&self) -> Option<&str> {
+        match self {
+            AxisCandidate::Entity(e) => Some(&e.description),
+            AxisCandidate::Claim(c) => Some(&c.content),
+            AxisCandidate::Position(p) => Some(&p.content),
+            AxisCandidate::Opposition(o) => Some(&o.axis),
+        }
+    }
+
+    /// Resolve the candidate's proponent / attributed-author name
+    /// against the snapshot's entity table. Position-only; everything
+    /// else returns None.
+    fn proponent_name(&self, snap: &AtlasSnapshot) -> Option<String> {
+        match self {
+            AxisCandidate::Position(p) => p
+                .proponent_id
+                .as_ref()
+                .and_then(|id| snap.entity_name_by_id(id))
+                .map(str::to_string),
+            _ => None,
+        }
+    }
+}
+
+/// Collect candidate atoms for an axis. Filters by qualifier when
+/// the catalog's `AtomKind` is `EntityWithConceptKind` /
+/// `ClaimWithKind`. Returns an empty Vec when atoms.json is absent.
+fn collect_axis_atoms<'a>(
+    axis: &TypedAxis,
+    snap: &'a AtlasSnapshot,
+) -> Vec<AxisCandidate<'a>> {
+    let Some(file) = snap.atoms.as_ref() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for atom in &file.atoms {
+        let candidate = match (axis.atom_kind, atom) {
+            (AtomKind::EntityWithConceptKind(tag), AtomEnvelope::Entity(e))
+                if e.concept_kind.as_deref() == Some(tag) =>
+            {
+                Some(AxisCandidate::Entity(e))
+            }
+            (AtomKind::ClaimWithKind(tag), AtomEnvelope::Claim(c))
+                if c.claim_kind.as_deref() == Some(tag) =>
+            {
+                Some(AxisCandidate::Claim(c))
+            }
+            (AtomKind::Entity, AtomEnvelope::Entity(e)) => Some(AxisCandidate::Entity(e)),
+            (AtomKind::Claim, AtomEnvelope::Claim(c)) => Some(AxisCandidate::Claim(c)),
+            (AtomKind::Position, AtomEnvelope::Position(p)) => Some(AxisCandidate::Position(p)),
+            (AtomKind::Opposition, AtomEnvelope::Opposition(o)) => {
+                Some(AxisCandidate::Opposition(o))
+            }
+            _ => None,
+        };
+        if let Some(c) = candidate {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Build the per-axis expectation view from the GoldenSet's existing
+/// named fields. Keeps the on-disk TOML schema unchanged — the
+/// uniform shape lives only in memory.
+fn axis_expectations<'a>(
+    axis: &TypedAxis,
+    golden: &'a GoldenSet,
+) -> (Vec<AxisExpectation<'a>>, Vec<AxisForbidden<'a>>) {
+    match axis.key {
+        "mechanism" => (
+            golden
+                .expected_mechanism_atoms
+                .iter()
+                .map(|e| AxisExpectation {
+                    name_contains_any: &e.name_contains_any,
+                    description_keywords_any: &e.description_keywords_any,
+                    domain_contains_any: &e.domain_contains_any,
+                    ..AxisExpectation::empty()
+                })
+                .collect(),
+            golden
+                .forbidden_mechanism_atoms
+                .iter()
+                .map(|f| AxisForbidden {
+                    name_contains_any: &f.name_contains_any,
+                })
+                .collect(),
+        ),
+        "named_position" => (
+            golden
+                .expected_named_position_atoms
+                .iter()
+                .map(|e| AxisExpectation {
+                    name_contains_any: &e.name_contains_any,
+                    stance: e.stance.as_deref(),
+                    content_contains_any: &e.content_contains_any,
+                    proponent_contains_any: &e.proponent_contains_any,
+                    ..AxisExpectation::empty()
+                })
+                .collect(),
+            golden
+                .forbidden_named_position_atoms
+                .iter()
+                .map(|f| AxisForbidden {
+                    name_contains_any: &f.name_contains_any,
+                })
+                .collect(),
+        ),
+        "evidence" => (
+            golden
+                .expected_evidence_atoms
+                .iter()
+                .map(|e| AxisExpectation {
+                    name_contains_any: &e.label_contains_any,
+                    kind: e.kind.as_deref(),
+                    content_contains_any: &e.content_contains_any,
+                    supports_contains_any: &e.supports_contains_any,
+                    ..AxisExpectation::empty()
+                })
+                .collect(),
+            Vec::new(),
+        ),
+        "opposition" => (
+            golden
+                .expected_opposition_atoms
+                .iter()
+                .map(|e| AxisExpectation {
+                    left_contains_any: &e.left_contains_any,
+                    right_contains_any: &e.right_contains_any,
+                    axis_contains_any: &e.axis_contains_any,
+                    ..AxisExpectation::empty()
+                })
+                .collect(),
+            Vec::new(),
+        ),
+        "concession" => (
+            golden
+                .expected_concession_atoms
+                .iter()
+                .map(|e| AxisExpectation {
+                    name_contains_any: &e.content_contains_any,
+                    outcome: e.outcome.as_deref(),
+                    addresses_contains_any: &e.addresses_contains_any,
+                    ..AxisExpectation::empty()
+                })
+                .collect(),
+            Vec::new(),
+        ),
+        _ => (Vec::new(), Vec::new()),
+    }
+}
+
+/// Apply the catalog axis's gating-field policy. Returns true iff
+/// the candidate satisfies every gate. Informational fields are
+/// NOT checked here — they produce notes after a positive name hit
+/// (see `emit_informational_notes`).
+fn matches_axis(
+    axis: &TypedAxis,
+    candidate: &AxisCandidate,
+    expect: &AxisExpectation,
+) -> bool {
+    for gate in axis.gating_fields {
+        match gate {
+            GatingField::Name => {
+                // Empty needle list means "no name gate for this
+                // expectation" — useful for Opposition where the
+                // gate is left/right pairing. Don't fail on empty.
+                if !expect.name_contains_any.is_empty()
+                    && !matches_any(candidate.primary_text(), expect.name_contains_any)
+                {
+                    return false;
+                }
+            }
+            GatingField::Stance => {
+                if let Some(want) = expect.stance {
+                    let actual = candidate.stance().unwrap_or("");
+                    if !actual.eq_ignore_ascii_case(want) {
+                        return false;
+                    }
+                }
+            }
+            GatingField::Kind => {
+                // Already enforced by `collect_axis_atoms`'
+                // `concept_kind` / `claim_kind` filter. Kept as a
+                // gating-field variant so the catalog row is
+                // self-describing: a reader sees `[Name, Kind]` and
+                // knows the axis is qualified.
+            }
+            GatingField::Opposition => {
+                let Some((left, right)) = candidate.opposition_labels() else {
+                    return false;
+                };
+                let direct = matches_any(left, expect.left_contains_any)
+                    && matches_any(right, expect.right_contains_any);
+                let reversed = matches_any(left, expect.right_contains_any)
+                    && matches_any(right, expect.left_contains_any);
+                if !direct && !reversed {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// Post-match informational checks. Emits a `PhaseScore.note` per
+/// mismatched supplementary field. Each axis's specific note shapes
+/// are preserved from the legacy code so JSON consumers (and the
+/// human reading the scoreboard) see identical messages.
+fn emit_informational_notes(
+    axis: &TypedAxis,
+    candidate: &AxisCandidate,
+    expect: &AxisExpectation,
+    snap: &AtlasSnapshot,
+    out: &mut PhaseScore,
+) {
+    match axis.key {
+        "mechanism" => {
+            let desc = candidate.description().unwrap_or("");
+            let name = candidate.primary_text();
+            if !expect.description_keywords_any.is_empty()
+                && !matches_any(desc, expect.description_keywords_any)
+            {
+                out.notes.push(format!(
+                    "mechanism name match for {:?} but description keywords did not hit",
+                    name
+                ));
+            }
+            if !expect.domain_contains_any.is_empty()
+                && !matches_any(desc, expect.domain_contains_any)
+            {
+                out.notes.push(format!(
+                    "mechanism name match for {:?} but domain keywords did not hit in description",
+                    name
+                ));
+            }
+        }
+        "named_position" => {
+            let name = candidate.primary_text();
+            let content = candidate.description().unwrap_or("");
+            if !expect.content_contains_any.is_empty()
+                && !matches_any(content, expect.content_contains_any)
+            {
+                out.notes.push(format!(
+                    "position name match for {:?} but content keywords did not hit",
+                    name
+                ));
+            }
+            if !expect.proponent_contains_any.is_empty() {
+                let proponent = candidate.proponent_name(snap).unwrap_or_default();
+                if !matches_any(&proponent, expect.proponent_contains_any) {
+                    out.notes.push(format!(
+                        "position name match for {:?} but proponent {:?} not in expected list",
+                        name, proponent
+                    ));
+                }
+            }
+        }
+        "evidence" => {
+            let content = candidate.primary_text();
+            let preview: String = content.chars().take(60).collect();
+            if !expect.content_contains_any.is_empty()
+                && !matches_any(content, expect.content_contains_any)
+            {
+                out.notes.push(format!(
+                    "evidence content match {:?} but content keywords did not hit",
+                    preview
+                ));
+            }
+            if !expect.supports_contains_any.is_empty() {
+                out.notes.push(format!(
+                    "evidence supports_contains_any check deferred to Stage 4 (EvidenceFor edge walk); claim {:?} matched on label",
+                    preview
+                ));
+            }
+        }
+        "opposition" => {
+            let (left, right) = candidate.opposition_labels().unwrap_or(("", ""));
+            let axis_text = candidate.description().unwrap_or("");
+            if !expect.axis_contains_any.is_empty()
+                && !matches_any(axis_text, expect.axis_contains_any)
+            {
+                out.notes.push(format!(
+                    "opposition {:?} vs {:?} matched but axis {:?} not in expected list",
+                    left, right, axis_text
+                ));
+            }
+        }
+        "concession" => {
+            let content = candidate.primary_text();
+            let preview: String = content.chars().take(60).collect();
+            if let Some(want) = expect.outcome {
+                let actual = match candidate {
+                    AxisCandidate::Claim(c) => c.concession_outcome.as_deref().unwrap_or(""),
+                    _ => "",
+                };
+                if !actual.eq_ignore_ascii_case(want) {
+                    out.notes.push(format!(
+                        "concession content match but outcome {:?} ≠ expected {:?}",
+                        actual, want
+                    ));
+                }
+            }
+            if !expect.addresses_contains_any.is_empty() {
+                out.notes.push(format!(
+                    "concession addresses_contains_any check deferred to Stage 4 (Concedes edge walk); claim {:?} matched on content",
+                    preview
+                ));
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Score a single axis. Returns None when the golden carries no
+/// expected or forbidden entries for this axis — `absence ≠ zero
+/// recall` is preserved from the legacy per-axis gates.
+fn score_axis(axis: &TypedAxis, golden: &GoldenSet, snap: &AtlasSnapshot) -> Option<PhaseScore> {
+    let (expected, forbidden) = axis_expectations(axis, golden);
+    if expected.is_empty() && forbidden.is_empty() {
+        return None;
+    }
+
+    let mut s = PhaseScore::default();
+    s.expected = expected.len();
+    s.forbidden_total = forbidden.len();
+
+    if snap.atoms.is_none() {
+        s.notes
+            .push("atoms.json absent — typed-extension scoring lanes have no signal".to_string());
+        return Some(s);
+    }
+
+    let candidates = collect_axis_atoms(axis, snap);
+
+    for exp in &expected {
+        let hit = candidates.iter().find(|c| matches_axis(axis, c, exp));
+        match hit {
+            Some(c) => {
+                s.matched += 1;
+                emit_informational_notes(axis, c, exp, snap, &mut s);
+            }
+            None => s.misses.push(exp.miss_label()),
+        }
+    }
+
+    // Forbidden checks are name-only for v1 (matches the legacy
+    // mechanism / named_position policy). Other forbidden shapes
+    // (e.g. forbidden_opposition_pair) can be added later.
+    for fexp in &forbidden {
+        if candidates
+            .iter()
+            .any(|c| matches_any(c.primary_text(), fexp.name_contains_any))
+        {
+            s.forbidden_hit += 1;
+            s.forbidden_hits.push(fexp.label());
+        }
+    }
+
+    Some(s)
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct EvalReport {
     pub corpus_id: String,
     pub golden_path: String,
     pub positions: Option<PhaseScore>,
@@ -1108,6 +1528,13 @@ pub(super) struct EvalReport {
 
     // v2 typed-extension axes (Argumentative). Each is scored under
     // `PhaseFilter::Atoms` when its golden axis is non-empty.
+    //
+    // `axis_scores` is the authoritative storage — keyed by
+    // `TypedAxis.key`. The five named fields below mirror the
+    // canonical map so existing JSON consumers / baseline diffs see
+    // identical keys. New axes added to `AXIS_CATALOG` show up only
+    // in `axis_scores`, not as new named fields.
+    pub axis_scores: BTreeMap<String, PhaseScore>,
     pub mechanism_atoms: Option<PhaseScore>,
     pub named_position_atoms: Option<PhaseScore>,
     pub evidence_atoms: Option<PhaseScore>,
@@ -1115,8 +1542,8 @@ pub(super) struct EvalReport {
     pub concession_atoms: Option<PhaseScore>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
-pub(super) struct DiscourseActReport {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct DiscourseActReport {
     pub total_claims: usize,
     pub act_counts: Vec<(String, usize)>,
     pub required_satisfied: bool,
@@ -1172,28 +1599,21 @@ fn score(golden: &GoldenSet, snap: &AtlasSnapshot, phase: PhaseFilter) -> EvalRe
             report.discourse_act_distribution = Some(score_discourse_acts(golden, snap));
         }
 
-        // v2 typed-extension scoring (Argumentative). Each axis is
-        // scored only when the golden surfaces it; absence ≠ zero
-        // recall.
-        if !golden.expected_mechanism_atoms.is_empty()
-            || !golden.forbidden_mechanism_atoms.is_empty()
-        {
-            report.mechanism_atoms = Some(score_mechanism_atoms(golden, snap));
+        // v2 typed-extension scoring driven by `AXIS_CATALOG`. Each
+        // axis is scored only when the golden surfaces it; absence ≠
+        // zero recall. The named-field mirror (mechanism_atoms etc.)
+        // is populated below for back-compat with existing JSON
+        // consumers and baseline diffs.
+        for axis in all_axes() {
+            if let Some(score) = score_axis(axis, golden, snap) {
+                report.axis_scores.insert(axis.key.to_string(), score);
+            }
         }
-        if !golden.expected_named_position_atoms.is_empty()
-            || !golden.forbidden_named_position_atoms.is_empty()
-        {
-            report.named_position_atoms = Some(score_named_position_atoms(golden, snap));
-        }
-        if !golden.expected_evidence_atoms.is_empty() {
-            report.evidence_atoms = Some(score_evidence_atoms(golden, snap));
-        }
-        if !golden.expected_opposition_atoms.is_empty() {
-            report.opposition_atoms = Some(score_opposition_atoms(golden, snap));
-        }
-        if !golden.expected_concession_atoms.is_empty() {
-            report.concession_atoms = Some(score_concession_atoms(golden, snap));
-        }
+        report.mechanism_atoms = report.axis_scores.get("mechanism").cloned();
+        report.named_position_atoms = report.axis_scores.get("named_position").cloned();
+        report.evidence_atoms = report.axis_scores.get("evidence").cloned();
+        report.opposition_atoms = report.axis_scores.get("opposition").cloned();
+        report.concession_atoms = report.axis_scores.get("concession").cloned();
     }
     // Phase 6 fault lines
     if phase.includes(PhaseFilter::FaultLines) {
@@ -1585,319 +2005,6 @@ fn score_claim_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         } else {
             s.misses
                 .push(ec.content_contains_any.first().cloned().unwrap_or_default());
-        }
-    }
-    s
-}
-
-// ─── Argumentative typed-extension scorers ────────────────────────
-//
-// Each scorer walks the Phase 1 cache via the
-// `AtlasSnapshot::argumentative_*` accessors. The match policy is
-// the same shape as `score_entity_atoms`: `name_contains_any` (or
-// the per-axis name field) is the load-bearing signal, optional
-// `*_contains_any` fields are additional filters that must ALL
-// hold when supplied, and discriminator fields (`stance`, `kind`,
-// `outcome`) are exact-match against the canonical snake_case
-// literal.
-//
-// Forbidden axes (mechanisms, named-positions) follow the
-// `ForbiddenName` convention used by entity scorers: a match is a
-// false positive against the listed substrings; absence is
-// correct silence.
-
-fn score_mechanism_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
-    let mut s = PhaseScore::default();
-    s.expected = golden.expected_mechanism_atoms.len();
-    s.forbidden_total = golden.forbidden_mechanism_atoms.len();
-
-    let mechanisms = snap.argumentative_mechanisms();
-    if snap.phase1.is_none() {
-        s.notes.push(
-            "cache/questions.json absent — typed-extension scoring lanes have no signal"
-                .to_string(),
-        );
-        return s;
-    }
-
-    // Match policy mirrors `score_entity_atoms`: name_contains_any is
-    // the load-bearing gate; description + domain are supplementary
-    // signals that surface in notes when they diverge. Domain in
-    // particular drifts on cross-discipline mechanisms (the model
-    // tags Rule 10b-18 as "law" while a finance-flavoured golden
-    // entry expected "regulation" or "finance") — gating on it
-    // converts a real hit into a miss for no measurement gain.
-    for em in &golden.expected_mechanism_atoms {
-        let hit = mechanisms
-            .iter()
-            .find(|(_, m)| matches_any(&m.name, &em.name_contains_any));
-        match hit {
-            Some((_, m)) => {
-                s.matched += 1;
-                if !em.description_keywords_any.is_empty()
-                    && !matches_any(&m.description, &em.description_keywords_any)
-                {
-                    s.notes.push(format!(
-                        "mechanism name match for {:?} but description keywords did not hit",
-                        m.name
-                    ));
-                }
-                if !em.domain_contains_any.is_empty()
-                    && !matches_any(&m.domain, &em.domain_contains_any)
-                {
-                    s.notes.push(format!(
-                        "mechanism name match for {:?} but domain {:?} not in expected list",
-                        m.name, m.domain
-                    ));
-                }
-            }
-            None => s.misses.push(
-                em.name_contains_any.first().cloned().unwrap_or_default(),
-            ),
-        }
-    }
-    for fm in &golden.forbidden_mechanism_atoms {
-        if mechanisms
-            .iter()
-            .any(|(_, m)| matches_any(&m.name, &fm.name_contains_any))
-        {
-            s.forbidden_hit += 1;
-            s.forbidden_hits
-                .push(fm.name_contains_any.first().cloned().unwrap_or_default());
-        }
-    }
-    s
-}
-
-fn score_named_position_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
-    let mut s = PhaseScore::default();
-    s.expected = golden.expected_named_position_atoms.len();
-    s.forbidden_total = golden.forbidden_named_position_atoms.len();
-
-    let positions = snap.argumentative_positions();
-    if snap.phase1.is_none() {
-        s.notes.push(
-            "cache/questions.json absent — typed-extension scoring lanes have no signal"
-                .to_string(),
-        );
-        return s;
-    }
-
-    // Match policy: name_contains_any is the load-bearing gate; the
-    // stance discriminator is also gating (a "rebut" stance on a
-    // tragedy-of-the-commons position is a different atom from
-    // an "endorse" stance, so the test would be meaningless if the
-    // golden couldn't pin it). Proponent + content are
-    // supplementary signals — content paraphrasing from the LLM
-    // routinely diverges from golden vocabulary, and gating on
-    // content keywords coaches the bench toward exact-quote
-    // matching the prompt didn't ask for.
-    for ep in &golden.expected_named_position_atoms {
-        let hit = positions.iter().find(|(_, p)| {
-            let name_ok = matches_any(&p.name, &ep.name_contains_any);
-            let stance_ok = match &ep.stance {
-                None => true,
-                Some(want) => p.stance.eq_ignore_ascii_case(want),
-            };
-            name_ok && stance_ok
-        });
-        match hit {
-            Some((_, p)) => {
-                s.matched += 1;
-                if !ep.content_contains_any.is_empty()
-                    && !matches_any(&p.content, &ep.content_contains_any)
-                {
-                    s.notes.push(format!(
-                        "position name match for {:?} but content keywords did not hit",
-                        p.name
-                    ));
-                }
-                if !ep.proponent_contains_any.is_empty()
-                    && !matches_any(&p.proponent, &ep.proponent_contains_any)
-                {
-                    s.notes.push(format!(
-                        "position name match for {:?} but proponent {:?} not in expected list",
-                        p.name, p.proponent
-                    ));
-                }
-            }
-            None => s.misses.push(
-                ep.name_contains_any.first().cloned().unwrap_or_default(),
-            ),
-        }
-    }
-    for fp in &golden.forbidden_named_position_atoms {
-        if positions
-            .iter()
-            .any(|(_, p)| matches_any(&p.name, &fp.name_contains_any))
-        {
-            s.forbidden_hit += 1;
-            s.forbidden_hits
-                .push(fp.name_contains_any.first().cloned().unwrap_or_default());
-        }
-    }
-    s
-}
-
-fn score_evidence_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
-    let mut s = PhaseScore::default();
-    s.expected = golden.expected_evidence_atoms.len();
-
-    let evidence = snap.argumentative_evidence();
-    if snap.phase1.is_none() {
-        s.notes.push(
-            "cache/questions.json absent — typed-extension scoring lanes have no signal"
-                .to_string(),
-        );
-        return s;
-    }
-
-    // Match policy: label_contains_any is the load-bearing gate;
-    // kind (study/figure/historical_example/...) is also gating
-    // because miscategorising a $1.4B FTC figure as a study vs a
-    // figure is a real-quality signal. Content + supports are
-    // supplementary — the supports field in particular drifts on
-    // LLM paraphrase (the model may bind a figure to the
-    // "rent-concentration thesis" while the golden wrote
-    // "extraction").
-    for ee in &golden.expected_evidence_atoms {
-        let hit = evidence.iter().find(|(_, e)| {
-            let label_ok = matches_any(&e.label, &ee.label_contains_any);
-            let kind_ok = match &ee.kind {
-                None => true,
-                Some(want) => e.kind.eq_ignore_ascii_case(want),
-            };
-            label_ok && kind_ok
-        });
-        match hit {
-            Some((_, e)) => {
-                s.matched += 1;
-                if !ee.content_contains_any.is_empty()
-                    && !matches_any(&e.content, &ee.content_contains_any)
-                {
-                    s.notes.push(format!(
-                        "evidence label match for {:?} but content keywords did not hit",
-                        e.label
-                    ));
-                }
-                if !ee.supports_contains_any.is_empty()
-                    && !matches_any(&e.supports, &ee.supports_contains_any)
-                {
-                    s.notes.push(format!(
-                        "evidence label match for {:?} but supports {:?} not in expected list",
-                        e.label, e.supports
-                    ));
-                }
-            }
-            None => s.misses.push(
-                ee.label_contains_any.first().cloned().unwrap_or_default(),
-            ),
-        }
-    }
-    s
-}
-
-fn score_opposition_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
-    let mut s = PhaseScore::default();
-    s.expected = golden.expected_opposition_atoms.len();
-
-    let oppositions = snap.argumentative_oppositions();
-    if snap.phase1.is_none() {
-        s.notes.push(
-            "cache/questions.json absent — typed-extension scoring lanes have no signal"
-                .to_string(),
-        );
-        return s;
-    }
-
-    // Match policy: left + right (order-independent) are the
-    // load-bearing gate. Axis is supplementary — it captures the
-    // dimension along which the opposition operates, which the LLM
-    // routinely paraphrases ("how the cycle ends" vs "unwind path"
-    // are semantically the same).
-    for eo in &golden.expected_opposition_atoms {
-        let hit = oppositions.iter().find(|(_, o)| {
-            let direct = matches_any(&o.left, &eo.left_contains_any)
-                && matches_any(&o.right, &eo.right_contains_any);
-            let reversed = matches_any(&o.left, &eo.right_contains_any)
-                && matches_any(&o.right, &eo.left_contains_any);
-            direct || reversed
-        });
-        match hit {
-            Some((_, o)) => {
-                s.matched += 1;
-                if !eo.axis_contains_any.is_empty()
-                    && !matches_any(&o.axis, &eo.axis_contains_any)
-                {
-                    s.notes.push(format!(
-                        "opposition {:?} vs {:?} matched but axis {:?} not in expected list",
-                        o.left, o.right, o.axis
-                    ));
-                }
-            }
-            None => s.misses.push(format!(
-                "{} vs {}",
-                eo.left_contains_any.first().cloned().unwrap_or_default(),
-                eo.right_contains_any.first().cloned().unwrap_or_default()
-            )),
-        }
-    }
-    s
-}
-
-fn score_concession_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
-    let mut s = PhaseScore::default();
-    s.expected = golden.expected_concession_atoms.len();
-
-    let concessions = snap.argumentative_concessions();
-    if snap.phase1.is_none() {
-        s.notes.push(
-            "cache/questions.json absent — typed-extension scoring lanes have no signal"
-                .to_string(),
-        );
-        return s;
-    }
-
-    // Match policy: content is the primary signal (no label field
-    // on concession sketches). Outcome (intact/narrowed/retracted)
-    // is supplementary — the judgment requires reading the section
-    // beyond the concession itself ("the author concedes X but the
-    // thesis stays intact" vs "the author concedes X and bounds
-    // the thesis to a narrower scope"), and the same passage can
-    // defensibly read either way. Gating on outcome converts real
-    // hits into misses where two reasonable readers disagree.
-    // Addresses is also supplementary; the LLM's binding choice
-    // drifts on paraphrase.
-    for ec in &golden.expected_concession_atoms {
-        let hit = concessions
-            .iter()
-            .find(|(_, c)| matches_any(&c.content, &ec.content_contains_any));
-        match hit {
-            Some((_, c)) => {
-                s.matched += 1;
-                if let Some(want) = &ec.outcome {
-                    if !c.outcome.eq_ignore_ascii_case(want) {
-                        s.notes.push(format!(
-                            "concession content match but outcome {:?} ≠ expected {:?}",
-                            c.outcome, want
-                        ));
-                    }
-                }
-                if !ec.addresses_contains_any.is_empty()
-                    && !matches_any(&c.addresses, &ec.addresses_contains_any)
-                {
-                    s.notes.push(format!(
-                        "concession content match but addresses {:?} not in expected list",
-                        c.addresses
-                    ));
-                }
-            }
-            None => s.misses.push(
-                ec.content_contains_any
-                    .first()
-                    .cloned()
-                    .unwrap_or_default(),
-            ),
         }
     }
     s

@@ -19,6 +19,8 @@ pub(crate) fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
         AtomEnvelope::Question(_) => "question",
         AtomEnvelope::Configuration(_) => "configuration",
         AtomEnvelope::ArgumentReconstruction(_) => "argument",
+        AtomEnvelope::Position(_) => "position",
+        AtomEnvelope::Opposition(_) => "opposition",
     }
 }
 
@@ -34,6 +36,9 @@ pub(crate) fn edge_type_label(t: EdgeType) -> &'static str {
         EdgeType::Grounding => "grounding",
         EdgeType::Framing => "framing",
         EdgeType::Provenance => "provenance",
+        EdgeType::EvidenceFor => "evidence_for",
+        EdgeType::Concedes => "concedes",
+        EdgeType::OpposesIn => "opposes_in",
     }
 }
 
@@ -107,6 +112,22 @@ pub(crate) fn atom_surface_fields(
             ),
             None,
         ),
+        AtomEnvelope::Position(p) => (
+            p.canonical_name.clone(),
+            Vec::new(),
+            p.content.clone(),
+            Some(p.salience),
+        ),
+        AtomEnvelope::Opposition(o) => (
+            o.canonical_label.clone(),
+            Vec::new(),
+            if o.framing.is_empty() {
+                format!("{} vs {}", o.left_label, o.right_label)
+            } else {
+                o.framing.clone()
+            },
+            Some(o.salience),
+        ),
     }
 }
 
@@ -170,5 +191,13 @@ pub(crate) fn atom_evidence_section_refs(
             }
             out
         }
+        AtomEnvelope::Position(p) => vec![(
+            p.first_appearance.chunk_id.clone(),
+            p.first_appearance.passage_preview.clone(),
+        )],
+        AtomEnvelope::Opposition(o) => vec![(
+            o.first_appearance.chunk_id.clone(),
+            o.first_appearance.passage_preview.clone(),
+        )],
     }
 }

@@ -2,6 +2,7 @@
 
 [meta]
 template = "stoicism-mini"
+corpus_id = "stoicism-mini"
 description = "Expected and forbidden outputs for the stoicism-mini template."
 
 # ── Phase 1 positions: removed (v1-pipeline legacy artifact) ───────

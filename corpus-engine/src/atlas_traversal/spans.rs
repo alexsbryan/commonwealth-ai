@@ -157,6 +157,8 @@ fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
         AtomEnvelope::Question(_) => "question",
         AtomEnvelope::Configuration(_) => "configuration",
         AtomEnvelope::ArgumentReconstruction(_) => "argument",
+        AtomEnvelope::Position(_) => "position",
+        AtomEnvelope::Opposition(_) => "opposition",
     }
 }
 
@@ -184,6 +186,8 @@ fn atom_anchored_at(atom: &AtomEnvelope, section: &str) -> bool {
             a.section_position.section_id == section
                 || a.evidence.iter().any(|c| c.chunk_id == section)
         }
+        AtomEnvelope::Position(p) => p.first_appearance.chunk_id == section,
+        AtomEnvelope::Opposition(o) => o.first_appearance.chunk_id == section,
     }
 }
 
@@ -232,6 +236,30 @@ fn atom_surface_forms(atom: &AtomEnvelope) -> Vec<String> {
             } else {
                 Vec::new()
             }
+        }
+        AtomEnvelope::Position(p) => {
+            // Position name is a 3-7-word stance label; usable as a
+            // surface form when long enough to disambiguate.
+            if p.canonical_name.len() >= 3 {
+                vec![p.canonical_name.clone()]
+            } else {
+                Vec::new()
+            }
+        }
+        AtomEnvelope::Opposition(o) => {
+            // Opposition canonical label combines both sides; the
+            // raw left/right labels are also worth surfacing.
+            let mut forms = Vec::with_capacity(3);
+            if o.canonical_label.len() >= 3 {
+                forms.push(o.canonical_label.clone());
+            }
+            if o.left_label.len() >= 3 {
+                forms.push(o.left_label.clone());
+            }
+            if o.right_label.len() >= 3 {
+                forms.push(o.right_label.clone());
+            }
+            forms
         }
         // Other atom types: no clean surface form for span
         // matching. Reachable via entity → atom panel.
@@ -300,7 +328,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        })
+                    concept_kind: None,
+})
     }
 
     #[test]

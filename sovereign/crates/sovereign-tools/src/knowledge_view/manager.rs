@@ -1168,7 +1168,8 @@ mod tests {
             role: Some("VP Eng".into()),
             participants: Vec::new(),
             defining_quote: None,
-        };
+                    concept_kind: None,
+};
         let api_migration = Entity {
             id: AtomId::entity(2),
             canonical_name: "API migration".into(),
@@ -1182,7 +1183,8 @@ mod tests {
             role: None,
             participants: vec![AtomId::entity(1)],
             defining_quote: None,
-        };
+                    concept_kind: None,
+};
 
         let edge_sarah = Edge {
             id: EdgeId::new(1),

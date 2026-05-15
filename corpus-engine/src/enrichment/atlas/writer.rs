@@ -75,6 +75,8 @@ pub fn write_atlas(
         &[],
         &[],
         &[],
+        &[],
+        &[],
         edges,
         &std::collections::BTreeMap::new(),
     )
@@ -103,14 +105,17 @@ pub fn write_atlas_full(
     questions: &[Question],
     configurations: &[Configuration],
     argument_reconstructions: &[crate::enrichment::atlas::atoms::ArgumentReconstruction],
+    positions: &[crate::enrichment::atlas::atoms::Position],
+    oppositions: &[crate::enrichment::atlas::atoms::Opposition],
     edges: &[Edge],
     trajectories: &std::collections::BTreeMap<String, Trajectory>,
 ) -> io::Result<AtlasWritten> {
     fs::create_dir_all(atlas_dir)?;
 
     // Wrap every atom in its envelope variant. Order — entities
-    // first, then events, then the Step 3b atom types — is stable
-    // across runs so diffs between runs stay clean.
+    // first, then events, then the Step 3b atom types, then the
+    // Gap-B typed extensions — is stable across runs so diffs
+    // between runs stay clean.
     let atoms: Vec<AtomEnvelope> = entities
         .iter()
         .cloned()
@@ -132,6 +137,8 @@ pub fn write_atlas_full(
                 .cloned()
                 .map(AtomEnvelope::ArgumentReconstruction),
         )
+        .chain(positions.iter().cloned().map(AtomEnvelope::Position))
+        .chain(oppositions.iter().cloned().map(AtomEnvelope::Opposition))
         .collect();
     let atoms_file = AtomsFile::new(atoms);
     let edges_file = EdgesFile::new(edges.to_vec());
@@ -391,7 +398,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        };
+                    concept_kind: None,
+};
         let event = Event {
             id: AtomId::event(1),
             description: "an event".into(),
@@ -447,7 +455,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        };
+                    concept_kind: None,
+};
         write_atlas(&atlas_dir, &[entity], &[], &[]).unwrap();
         let atoms_json = fs::read_to_string(atlas_dir.join("atoms.json")).unwrap();
         assert!(atoms_json.contains("\"Only\""));

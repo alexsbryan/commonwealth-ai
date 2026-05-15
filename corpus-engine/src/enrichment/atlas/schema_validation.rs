@@ -455,6 +455,11 @@ fn partition_atoms(
                 // function. Add coverage when the validator gets a
                 // dedicated bucket for arguments.
             }
+            AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => {
+                // Gap-B typed-extension atoms — additive like
+                // ArgumentReconstruction; the validator's coverage
+                // histogram lands in a follow-up.
+            }
         }
     }
     (entities, events, states, relations, claims, questions, configurations)
@@ -687,6 +692,7 @@ fn build_orphan_analysis(atoms: &[AtomEnvelope], edges: &[Edge]) -> OrphanAnalys
             AtomEnvelope::Question(q) => (q.id.as_str(), Some(5)),
             AtomEnvelope::Configuration(_) => ("", None),
             AtomEnvelope::ArgumentReconstruction(_) => ("", None),
+            AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => ("", None),
         };
         let Some(idx) = bucket_idx else {
             continue;
@@ -968,8 +974,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     fn claim_with_act(idx: usize, act: DiscourseAct, confidence: f32) -> Claim {
         Claim {
@@ -984,8 +991,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-        }
-    }
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+}
+}
 
     fn state(idx: usize, owner: usize, confidence: f32) -> State {
         State {

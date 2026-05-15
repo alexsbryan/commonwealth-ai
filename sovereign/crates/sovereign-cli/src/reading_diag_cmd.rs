@@ -872,6 +872,20 @@ fn atom_brief(atom: &AtomEnvelope) -> (&'static str, String, String) {
                 !a.conclusion.is_empty()
             ),
         ),
+        AtomEnvelope::Position(p) => (
+            "position",
+            p.canonical_name.clone(),
+            p.content.clone(),
+        ),
+        AtomEnvelope::Opposition(o) => (
+            "opposition",
+            o.canonical_label.clone(),
+            if o.framing.is_empty() {
+                format!("{} vs {}", o.left_label, o.right_label)
+            } else {
+                o.framing.clone()
+            },
+        ),
     }
 }
 
@@ -895,6 +909,7 @@ fn atom_evidence_section_ids(atom: &AtomEnvelope) -> Vec<String> {
             out.extend(a.evidence.iter().map(|c| c.chunk_id.clone()));
             out
         }
+        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => unreachable!("typed atoms wired in Gap B Stage 4"),
     }
 }
 

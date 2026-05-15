@@ -25,6 +25,7 @@
 
 pub mod analysis;
 pub mod atoms;
+pub mod axis_catalog;
 pub mod cross_corpus;
 pub mod edges;
 pub mod embeddings;
@@ -40,6 +41,9 @@ pub mod writer;
 pub use atoms::{
     AtomEnvelope, AtomId, AtomType, AtomsFile, ChunkRef, Claim, Configuration, Entity, Event,
     Question, Relation, ResolutionStatus, SectionPosition, SectionRange, State,
+};
+pub use axis_catalog::{
+    all_axes, axes_for_mode, axis_by_key, AtomKind, GatingField, TypedAxis, AXIS_CATALOG,
 };
 pub use edges::{Edge, EdgeId, EdgeProvenance, EdgeType, EdgesFile};
 pub use ingestion::{AtlasData, AtlasIngestion, AtlasIngestionConfig};

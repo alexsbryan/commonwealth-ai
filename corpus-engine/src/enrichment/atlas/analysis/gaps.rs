@@ -255,8 +255,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-        }
-    }
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+}
+}
 
     fn state(id: u32, owner: u32) -> State {
         State {

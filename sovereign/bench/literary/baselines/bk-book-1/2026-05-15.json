@@ -1,0 +1,139 @@
+{
+  "corpus_id": "brothers_karamazov",
+  "golden_path": "sovereign/bench/literary/bk-book-1.toml",
+  "positions": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [
+      "field_skeleton.json not present — skipping positions scoring"
+    ]
+  },
+  "person_atoms": {
+    "expected": 10,
+    "matched": 7,
+    "forbidden_total": 3,
+    "forbidden_hit": 0,
+    "misses": [
+      "Fyodor Pavlovitch",
+      "Dmitri",
+      "Alyosha"
+    ],
+    "forbidden_hits": [],
+    "notes": [
+      "4 hit(s) matched on name only — golden's description_keywords_any didn't appear in the extracted description"
+    ]
+  },
+  "concept_atoms": {
+    "expected": 2,
+    "matched": 0,
+    "forbidden_total": 1,
+    "forbidden_hit": 0,
+    "misses": [
+      "elder",
+      "sensual"
+    ],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "work_atoms": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "event_atoms": {
+    "expected": 5,
+    "matched": 2,
+    "forbidden_total": 1,
+    "forbidden_hit": 0,
+    "misses": [
+      "ran away",
+      "marri",
+      "died"
+    ],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "state_atoms": {
+    "expected": 3,
+    "matched": 1,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [
+      "Alyosha: faith",
+      "Ivan: intellectual"
+    ],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "relation_atoms": {
+    "expected": 3,
+    "matched": 3,
+    "forbidden_total": 1,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "question_atoms": {
+    "expected": 2,
+    "matched": 2,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "claim_atoms": {
+    "expected": 2,
+    "matched": 2,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "discourse_act_distribution": null,
+  "fault_lines": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": [
+      "edges.json contains 0 Tension edges (any of 118 edges total) — Phase 6 may not have run"
+    ]
+  },
+  "open_questions": {
+    "expected": 2,
+    "matched": 2,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "configurations": {
+    "expected": 0,
+    "matched": 0,
+    "forbidden_total": 0,
+    "forbidden_hit": 0,
+    "misses": [],
+    "forbidden_hits": [],
+    "notes": []
+  },
+  "axis_scores": {},
+  "mechanism_atoms": null,
+  "named_position_atoms": null,
+  "evidence_atoms": null,
+  "opposition_atoms": null,
+  "concession_atoms": null
+}

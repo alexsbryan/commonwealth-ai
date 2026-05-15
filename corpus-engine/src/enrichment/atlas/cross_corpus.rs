@@ -512,8 +512,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     #[test]
     fn grounding_matches_canonical_exact() {

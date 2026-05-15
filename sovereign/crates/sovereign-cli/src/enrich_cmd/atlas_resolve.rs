@@ -207,31 +207,72 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
         let mut edges = step_3a.edges.clone();
         edges.extend(step_3b.edges.iter().cloned());
 
+        // Gap B: project typed extensions into Position + Opposition
+        // atoms + qualified Concept Entities + qualified Claims +
+        // new edges. Runs after 3b so mechanism merge can fuzzy-match
+        // against the existing Concept entities and EvidenceFor /
+        // Concedes edges can target already-resolved positions /
+        // claims.
+        let typed = corpus_engine::enrichment::atlas::resolution::resolve_type_extensions(
+            &sections,
+            &step_3a.entities,
+            &[], // no pre-existing positions on first run
+            &step_3b.claims,
+            step_3a.entities.len() + 1,
+            step_3b.claims.len() + 1,
+            1,
+            1,
+            edges.len() + 1,
+        );
+        resolution_failures.extend(typed.failures.iter().cloned());
+
+        // Apply qualifier updates to existing entities — set
+        // `concept_kind` on Concept atoms whose name matched a
+        // mechanism sketch.
+        let mut entities = step_3a.entities.clone();
+        for e in entities.iter_mut() {
+            if let Some(kind) = typed.entity_qualifier_updates.get(&e.id) {
+                e.concept_kind = Some(kind.clone());
+            }
+        }
+        // Merge new entities (mechanism Concepts the resolver
+        // didn't fuzzy-match).
+        entities.extend(typed.new_entities.iter().cloned());
+        // Merge new claims (evidence + concession).
+        let mut claims = step_3b.claims.clone();
+        claims.extend(typed.new_claims.iter().cloned());
+        // Merge new edges.
+        edges.extend(typed.new_edges.iter().cloned());
+
         let result = write_atlas_full(
             &atlas_dir,
-            &step_3a.entities,
+            &entities,
             &step_3a.events,
             &step_3b.states,
             &step_3b.relations,
-            &step_3b.claims,
+            &claims,
             &step_3b.questions,
             &[], // configurations — Phase 8 territory
             &step_3b.argument_reconstructions,
+            &typed.new_positions,
+            &typed.new_oppositions,
             &edges,
             &step_3b.trajectories,
         );
         match result {
             Ok(w) => {
-                println!("  ✓ {} entity atom(s)", step_3a.entities.len());
+                println!("  ✓ {} entity atom(s)", entities.len());
                 println!("  ✓ {} event atom(s)", step_3a.events.len());
                 println!("  ✓ {} state atom(s)", step_3b.states.len());
                 println!("  ✓ {} relation atom(s)", step_3b.relations.len());
-                println!("  ✓ {} claim atom(s)", step_3b.claims.len());
+                println!("  ✓ {} claim atom(s)", claims.len());
                 println!("  ✓ {} question atom(s)", step_3b.questions.len());
                 println!(
                     "  ✓ {} argument-reconstruction atom(s)",
                     step_3b.argument_reconstructions.len()
                 );
+                println!("  ✓ {} position atom(s)", typed.new_positions.len());
+                println!("  ✓ {} opposition atom(s)", typed.new_oppositions.len());
                 println!("  ✓ {} edge(s) total", edges.len());
                 println!(
                     "  ✓ {} trajectory chain(s)",

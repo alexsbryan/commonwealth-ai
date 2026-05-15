@@ -134,6 +134,8 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
             AtomEnvelope::Question(_) => AtomType::Question,
             AtomEnvelope::Configuration(_) => AtomType::Configuration,
             AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
+            AtomEnvelope::Position(_) => AtomType::Position,
+            AtomEnvelope::Opposition(_) => AtomType::Opposition,
         };
         *atom_counts.entry(t).or_insert(0) += 1;
     }
@@ -231,6 +233,7 @@ mod tests {
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
+                    concept_kind: None,
                 })
             })
             .collect();
