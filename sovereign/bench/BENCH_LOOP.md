@@ -464,6 +464,17 @@ follow-up campaigns:
   hand-coded `score_*_atoms` functions collapsed into a single
   catalog-driven driver. See §9 "Adding a new typed axis".
 
+- **Three views of one retrieval event (legibility-first scoring).**
+  **Landed 2026-05-15.** Synth bench now renders three scoring
+  columns side-by-side: `answer-equiv` (judge — "did the answer
+  convey the fact?"), `title-coverage` (rigid src — "was the bank's
+  canonical title in the bag?"), `keyword-match` (strict fact —
+  "did the answer text contain the expected substring?"). Lead
+  scoring is `answer-equiv` because it correlates with user value;
+  `title-coverage` and `keyword-match` are diagnostic, not
+  pass/fail. Surfaces narrative-vs-reality divergence as legibility
+  per the meta-atlas spec. See bench/README.md "Three views".
+
 - **Prompt hot-reload — `SOVEREIGN_PROMPT_DIR` overlay.** **Landed
   2026-05-15.** Pipelines used to bake their prompt MD files at
   compile time via `include_str!` — every prompt edit forced a
