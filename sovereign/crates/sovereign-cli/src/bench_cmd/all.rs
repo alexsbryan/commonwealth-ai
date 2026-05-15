@@ -82,6 +82,13 @@ const HELP: Help = Help {
                  desktop-chat propagation — same `runtime.handle_message_stream` entry point. Costs \
                  one LLM chat call per question. Synth baselines stored at `baselines/<bench>-synth/`.",
             ),
+            (
+                "--routing-only",
+                "Drive ONLY the intent classifier (no retrieval, no synthesis) via `sovereign eval \
+                 run --routing-only`. Fastest iteration loop for classifier-prompt tuning: ~0.5-2s \
+                 per question. Mutually exclusive with --synth. Baselines stored at \
+                 `baselines/<bench>-routing/`.",
+            ),
         ]),
         HelpSection::Notes(
             "Enrichment lane reads ~/.sovereign/indexes/<corpus>/atlas/atoms.json directly. \
@@ -170,6 +177,19 @@ struct Opts {
     /// retrieval-mode and synth-mode runs from overwriting each
     /// other.
     synth: bool,
+    /// When true, retrieval-lane benches drive ONLY the router
+    /// classifier (no retrieval, no synthesis) via
+    /// `sovereign eval run --routing-only`. Fastest possible
+    /// iteration loop for classifier-prompt tuning — ~0.5-2s per
+    /// question (one fast-slot call). Mutually exclusive with
+    /// --synth.
+    ///
+    /// Output is a `RoutingRun` (per-question intent decision vs
+    /// expected). Bench-all renders a compact accuracy table +
+    /// flags misroutes for the operator to investigate. Baselines
+    /// stored at `baselines/<bench>-routing/` to keep separate
+    /// from retrieval and synth modes.
+    routing_only: bool,
 }
 
 impl Default for Opts {
@@ -183,24 +203,35 @@ impl Default for Opts {
             regression_threshold: 0.005, // 0.5 pt
             retrieval_limit: 30,
             synth: false,
+            routing_only: false,
         }
     }
 }
 
-/// Tag the bench's id with `-synth` when synth mode is active so
-/// retrieval-mode and synth-mode baselines don't overwrite each
-/// other. Enrichment-lane benches are unaffected (synth has no
+/// Tag the bench's id with the active retrieval mode (`-synth`,
+/// `-routing`) so the three modes don't overwrite each other's
+/// baselines. Enrichment-lane benches are unaffected (modes have no
 /// meaning there).
 fn baseline_bench(
     bench: &DiscoveredBench,
     opts: &Opts,
 ) -> DiscoveredBench {
-    if opts.synth && bench.surface == BenchSurface::RetrievalJudge {
-        let mut tagged = bench.clone();
-        tagged.id = format!("{}-synth", bench.id);
-        tagged
+    if bench.surface != BenchSurface::RetrievalJudge {
+        return bench.clone();
+    }
+    let suffix = if opts.routing_only {
+        "-routing"
+    } else if opts.synth {
+        "-synth"
     } else {
+        ""
+    };
+    if suffix.is_empty() {
         bench.clone()
+    } else {
+        let mut tagged = bench.clone();
+        tagged.id = format!("{}{}", bench.id, suffix);
+        tagged
     }
 }
 
@@ -326,7 +357,129 @@ async fn run_one(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
 
     match bench.surface {
         BenchSurface::Enrichment => run_enrichment(bench, opts).await,
-        BenchSurface::RetrievalJudge => run_retrieval(bench, opts).await,
+        BenchSurface::RetrievalJudge => {
+            if opts.routing_only {
+                run_routing_only(bench, opts).await
+            } else {
+                run_retrieval(bench, opts).await
+            }
+        }
+    }
+}
+
+/// Routing-only mode: drives `sovereign eval run --routing-only`,
+/// captures the per-question intent decision, renders a compact
+/// accuracy line. No retrieval, no synthesis — ~0.5-2s per question.
+async fn run_routing_only(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
+    let tmp = match tempfile::tempdir() {
+        Ok(t) => t,
+        Err(e) => return outcome_subprocess_fail(bench, format!("tempdir: {e}")),
+    };
+    let out_json = tmp.path().join("run.json");
+    let exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => return outcome_subprocess_fail(bench, format!("current_exe: {e}")),
+    };
+
+    let status = Command::new(&exe)
+        .args([
+            "eval",
+            "run",
+            "--bank",
+            bench.bench_path.to_str().unwrap_or(""),
+            "--routing-only",
+            "--output",
+            out_json.to_str().unwrap_or(""),
+        ])
+        .status();
+    match status {
+        Ok(s) if s.success() => {}
+        Ok(s) => {
+            return outcome_subprocess_fail(
+                bench,
+                format!("`eval run --routing-only` exited {}", s.code().unwrap_or(-1)),
+            )
+        }
+        Err(e) => return outcome_subprocess_fail(bench, format!("spawn: {e}")),
+    }
+
+    let bytes = match std::fs::read(&out_json) {
+        Ok(b) => b,
+        Err(e) => return outcome_subprocess_fail(bench, format!("read output: {e}")),
+    };
+    // RoutingRun is the subprocess output shape; parse loosely via
+    // serde_json::Value so we don't pull the type into all.rs.
+    let parsed: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(e) => return outcome_subprocess_fail(bench, format!("parse: {e}")),
+    };
+    let results = parsed
+        .get("results")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let total = results.len();
+    let correct = results
+        .iter()
+        .filter(|r| r.get("correct").and_then(|c| c.as_bool()).unwrap_or(false))
+        .count();
+    let misroutes: Vec<String> = results
+        .iter()
+        .filter(|r| !r.get("correct").and_then(|c| c.as_bool()).unwrap_or(true))
+        .map(|r| {
+            let id = r.get("question_id").and_then(|v| v.as_str()).unwrap_or("?");
+            let expected = r.get("expected").and_then(|v| v.as_str()).unwrap_or("?");
+            let actual = r.get("actual_intent").and_then(|v| v.as_str()).unwrap_or("?");
+            format!("{id}: expected={expected} actual={actual}")
+        })
+        .collect();
+
+    // Persist as baseline so future runs can diff (under -routing
+    // subdir; see `baseline_bench`).
+    let baseline_view = baseline_bench(bench, opts);
+    let prior: Option<serde_json::Value> = read_latest(&opts.bench_root, &baseline_view).ok().flatten();
+    if opts.update_baseline || prior.is_none() {
+        if let Err(e) = write_dated_and_update_latest(&opts.bench_root, &baseline_view, &parsed) {
+            eprintln!("warn: writing routing baseline: {e}");
+        }
+    }
+    let prior_correct = prior
+        .as_ref()
+        .and_then(|p| p.get("results")?.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter(|r| r.get("correct").and_then(|c| c.as_bool()).unwrap_or(false))
+                .count()
+        });
+
+    let status = match prior_correct {
+        None => BenchStatus::FirstRun,
+        Some(prev) if correct < prev => BenchStatus::Regressed,
+        Some(prev) if correct > prev => BenchStatus::Improved,
+        Some(_) => BenchStatus::Green,
+    };
+    let note = if misroutes.is_empty() {
+        Some(format!("routing accuracy {}/{} ✓", correct, total))
+    } else {
+        Some(format!(
+            "routing {}/{} correct · {} misroute(s):\n     {}",
+            correct,
+            total,
+            misroutes.len(),
+            misroutes.join("\n     ")
+        ))
+    };
+
+    BenchOutcome {
+        id: bench.id.clone(),
+        group: bench.group.clone(),
+        corpus_id: bench.corpus_id.clone(),
+        surface: bench.surface.label().to_string(),
+        status,
+        enrichment: None,
+        retrieval: None,
+        levers: bench.levers.clone(),
+        note,
     }
 }
 
@@ -703,6 +856,10 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
             }
             "--synth" => {
                 opts.synth = true;
+                i += 1;
+            }
+            "--routing-only" => {
+                opts.routing_only = true;
                 i += 1;
             }
             other if other.starts_with("--") => {

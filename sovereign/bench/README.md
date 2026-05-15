@@ -43,6 +43,20 @@ sovereign bench all --filter <group>/<id> --update-baseline
 
 Two complementary lever sets. Atom F1 measures projection correctness; retrieval+judge measures whether the resulting atlas serves user value. Per the lever framing: **no single aggregate F1 across corpora or across surfaces** — per-corpus + per-axis + per-category only.
 
+## Three views of the same retrieval event
+
+A single retrieval (`bench all --synth`) produces THREE complementary scoring views — surfaced side-by-side in the rendered scoreboards. They measure different things, and conflating them produces misleading regression signals.
+
+| View | Question it answers | Headline when |
+|---|---|---|
+| **answer-equiv** (LLM judge) | "Did the answer convey the expected fact?" | always when `--synth`. Strongest correlate of user value. Semantic equivalence credit — paraphrase is OK. |
+| **title-coverage** (rigid src) | "Was the bank's declared canonical source title in the retrieved bag?" | retrieval reach diagnostic. Misleading as a quality metric when a sibling corpus carries equivalent content (e.g. SEP article ranks higher than the Wikipedia overview on a comparison question — chat correctly serves the better chunk, bench grades it a miss). |
+| **keyword-match** (strict fact) | "Did the answer text contain the expected substring?" | calibration metric. Penalises paraphrase even when the fact is conveyed. Useful for prompt-iteration that's TRYING to tighten quoting behavior. |
+
+The bench surfaces all three. **`answer-equiv` is the canonical user-value score.** `title-coverage` and `keyword-match` are diagnostic — useful for drilling, misleading as headline numbers.
+
+This framing is a deliberate move toward the dual-stream legibility principle: the bank's `expected_sources` is a **narrative claim** ("here's where this answer should come from"), the actual retrieval is the **reality**, and the judge column says whether they were semantically equivalent. Treat divergence as legible, not as failure.
+
 ## Propagation: bench → chat
 
 `bench all` (default retrieval-mode) exercises `CorpusIndex::search_with_rerank` — the same primitive `Runtime::search_corpus_indexes` calls from desktop chat. Improvements to embed quality, BM25, vector cosine, atlas-tier boost, and the cross-encoder reranker propagate to chat 1:1.
