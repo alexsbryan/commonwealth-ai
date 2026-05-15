@@ -1980,24 +1980,41 @@ Tauri command: `prepare_crash_report` returns `{ report_path, mailto_url }`.
 
 Frontend `ReconnectBanner.svelte` "Send report" button deferred.
 
-#### 5.11.6 Open frontend work
+#### 5.11.6 Svelte layer
 
-The Rust layer is complete; six Svelte pieces remain for the visible
-UX:
+Frontends consuming the Rust commands and HTTP routes above:
 
-- `ReconnectBanner.svelte` (W1/W6) — subscribes to `supervisor-state`
-  events; "Send report" button calls `prepare_crash_report` →
-  `tauri-plugin-shell.open(mailto_url)`.
-- `ConsentGate.svelte` (W4) — modal on first launch when
-  `get_first_mesh_consent` returns `None`.
-- `ContributionPanel.svelte` (W3) — Settings sub-page; ceiling slider,
-  pause status countdown, live "served events" feed.
-- `Settings/Connect.svelte` (W5) — copy-button surface for
-  `OPENAI_BASE_URL=http://localhost:<port>/v1` + dummy API key + live
-  `/v1/models` list, so Codex / external OpenAI-compatible clients can
-  connect.
+- `ReconnectBanner.svelte` (W1/W6, mounted globally in `App.svelte`) —
+  subscribes to `supervisor-state` events; silent for healthy/starting,
+  warns for unhealthy/restarting, surfaces a "Send report" button on
+  `failed` that calls `prepare_crash_report` →
+  `tauri-plugin-shell.open(mailto_url)` and shows the local report
+  path so the user can attach manually.
+- `ConsentGate.svelte` (W4) — full-screen modal on first launch when
+  `get_first_mesh_consent` returns `None`; routed via the `"consent"`
+  view in `App.svelte`'s `AppView` union.
+- `SharingSection.svelte` (W3) — Settings → Sharing tab. Ceiling preset
+  row (Off / A little / Some / More / Unlimited), pause-status
+  countdown with "Until I resume" handling, three pause-duration
+  buttons + Resume, live recent-activity feed (10 events, 5s poll),
+  yielding-to-foreground state surface.
+- `ConnectSection.svelte` (W5) — Settings → Connect tab. Copy-button
+  rows for `OPENAI_BASE_URL=http://localhost:<port>/v1` + API key,
+  dark-themed Codex one-liner, live `/v1/models` list refreshed every
+  10s. No new daemon endpoints — `/v1/models` already existed.
+
+Tab routing in `SettingsPanel.svelte`: "Sharing" sits between Mesh and
+Skills; "Connect" sits between Skills and Paths. Both indexed by the
+keyword-search at the top of the panel.
+
+Open polish items not in scope for the launch:
+
 - Tray icon assets (green/yellow/red) + platform tint code.
-- HintCues activation for first-time nudges.
+- HintCues activation nudging first-time users to the Sharing tab.
+- W1 PR-3 — default-flip removing the in-process EmbeddedDaemon path,
+  plus the contribution-reads HTTP bridge `mesh_get_contributions`
+  needs for full functionality in supervisor mode.
+- Graceful SIGTERM-with-grace on daemon shutdown (libc-based; small).
 
 ---
 
