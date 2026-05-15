@@ -32,6 +32,7 @@ pub mod exemplar_bank;
 pub mod phase_cache;
 pub mod pipelines;
 pub mod progress;
+pub mod prompts;
 pub mod registry;
 pub mod run_output;
 pub mod runner;

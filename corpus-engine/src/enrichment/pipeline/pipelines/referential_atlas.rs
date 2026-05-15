@@ -34,31 +34,61 @@ use crate::error::{Error, Result};
 
 // ── Referential-specific prompt assets ───────────────────────
 
-const PHASE1_ATLAS_SYSTEM: &str =
-    include_str!("referential_atlas_prompts/phase1_system.md");
+static PHASE1_ATLAS_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase1_system.md",
+        include_str!("referential_atlas_prompts/phase1_system.md"),
+    ));
 
-const PHASE1_ATLAS_SYSTEM_TERSE: &str =
-    include_str!("referential_atlas_prompts/phase1_system_terse.md");
+static PHASE1_ATLAS_SYSTEM_TERSE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase1_system_terse.md",
+        include_str!("referential_atlas_prompts/phase1_system_terse.md"),
+    ));
 
-const PHASE1A_SEED_SYSTEM: &str =
-    include_str!("referential_atlas_prompts/phase1a_seed_system.md");
+static PHASE1A_SEED_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase1a_seed_system.md",
+        include_str!("referential_atlas_prompts/phase1a_seed_system.md"),
+    ));
 
-const PHASE1B_ENTITY_COVERAGE: &str =
-    include_str!("referential_atlas_prompts/phase1b_entity_coverage.md");
+static PHASE1B_ENTITY_COVERAGE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase1b_entity_coverage.md",
+        include_str!("referential_atlas_prompts/phase1b_entity_coverage.md"),
+    ));
 
-const PHASE1B_CONCEPT_COVERAGE: &str =
-    include_str!("referential_atlas_prompts/phase1b_concept_coverage.md");
+static PHASE1B_CONCEPT_COVERAGE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase1b_concept_coverage.md",
+        include_str!("referential_atlas_prompts/phase1b_concept_coverage.md"),
+    ));
 
-const PHASE3_QUESTION_NAMING: &str =
-    include_str!("referential_atlas_prompts/phase3_question_naming.md");
-const PHASE3_CLAIM_NAMING: &str =
-    include_str!("referential_atlas_prompts/phase3_claim_naming.md");
-const PHASE3_ENTITY_STATE_NAMING: &str =
-    include_str!("referential_atlas_prompts/phase3_entity_state_trajectory_naming.md");
-const PHASE3_RELATION_STATE_NAMING: &str =
-    include_str!("referential_atlas_prompts/phase3_relation_state_trajectory_naming.md");
-const PHASE3_EVENT_NAMING: &str =
-    include_str!("referential_atlas_prompts/phase3_event_thread_naming.md");
+static PHASE3_QUESTION_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase3_question_naming.md",
+        include_str!("referential_atlas_prompts/phase3_question_naming.md"),
+    ));
+static PHASE3_CLAIM_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase3_claim_naming.md",
+        include_str!("referential_atlas_prompts/phase3_claim_naming.md"),
+    ));
+static PHASE3_ENTITY_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase3_entity_state_trajectory_naming.md",
+        include_str!("referential_atlas_prompts/phase3_entity_state_trajectory_naming.md"),
+    ));
+static PHASE3_RELATION_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase3_relation_state_trajectory_naming.md",
+        include_str!("referential_atlas_prompts/phase3_relation_state_trajectory_naming.md"),
+    ));
+static PHASE3_EVENT_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "referential_atlas/phase3_event_thread_naming.md",
+        include_str!("referential_atlas_prompts/phase3_event_thread_naming.md"),
+    ));
 
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "referential_atlas";
@@ -101,7 +131,7 @@ impl Pipeline for ReferentialAtlasPipeline {
     // ── System preambles ──────────────────────────────────────
 
     fn phase1_system(&self) -> &'static str {
-        PHASE1_ATLAS_SYSTEM
+        *PHASE1_ATLAS_SYSTEM
     }
 
     fn phase3_system(&self) -> &'static str {
@@ -149,7 +179,7 @@ impl Pipeline for ReferentialAtlasPipeline {
             /*seed=*/ None,
         );
         Some(
-            ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user)
+            ChatPrompt::new(*PHASE1_ATLAS_SYSTEM_TERSE, user)
                 .with_response_schema(
                     "phase1_section_extraction",
                     phase1_section_extraction_schema(),
@@ -167,7 +197,7 @@ impl Pipeline for ReferentialAtlasPipeline {
     ) -> Option<ChatPrompt> {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
-            ChatPrompt::new(PHASE1B_ENTITY_COVERAGE, user)
+            ChatPrompt::new(*PHASE1B_ENTITY_COVERAGE, user)
                 .with_phase_id("phase1b_entity")
                 .with_max_output_tokens(512),
         )
@@ -180,7 +210,7 @@ impl Pipeline for ReferentialAtlasPipeline {
     ) -> Option<ChatPrompt> {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
-            ChatPrompt::new(PHASE1B_CONCEPT_COVERAGE, user)
+            ChatPrompt::new(*PHASE1B_CONCEPT_COVERAGE, user)
                 .with_phase_id("phase1b_concept")
                 .with_max_output_tokens(512),
         )
@@ -224,7 +254,7 @@ impl Pipeline for ReferentialAtlasPipeline {
     // back to. Referential corpora are multi-document — there is no
     // cross-document seed; each article's lead section serves as
     // its own seed if anything. Declare `SeedStrategy::None` so the
-    // runner skips Phase 1a entirely. The PHASE1A_SEED_SYSTEM asset
+    // runner skips Phase 1a entirely. The *PHASE1A_SEED_SYSTEM asset
     // stays in the tree as documentation of the per-article seed
     // shape, but is no longer wired in.
 
@@ -252,11 +282,11 @@ impl Pipeline for ReferentialAtlasPipeline {
         exemplars: &[&Exemplar],
     ) -> Option<ChatPrompt> {
         let system = match facet {
-            Facet::Question => PHASE3_QUESTION_NAMING,
-            Facet::Claim => PHASE3_CLAIM_NAMING,
-            Facet::EntityState => PHASE3_ENTITY_STATE_NAMING,
-            Facet::RelationState => PHASE3_RELATION_STATE_NAMING,
-            Facet::Event => PHASE3_EVENT_NAMING,
+            Facet::Question => *PHASE3_QUESTION_NAMING,
+            Facet::Claim => *PHASE3_CLAIM_NAMING,
+            Facet::EntityState => *PHASE3_ENTITY_STATE_NAMING,
+            Facet::RelationState => *PHASE3_RELATION_STATE_NAMING,
+            Facet::Event => *PHASE3_EVENT_NAMING,
         };
         let mut user = String::new();
 
