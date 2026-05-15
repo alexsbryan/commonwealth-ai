@@ -19,11 +19,31 @@ use super::super::types::*;
 use crate::enrichment::domain::ClusteringConfig;
 use crate::error::{Error, Result};
 
-const PHASE1_SYSTEM: &str = include_str!("literary_prompts/phase1_system.md");
-const PHASE3_SYSTEM: &str = include_str!("literary_prompts/phase3_system.md");
-const PHASE5_SYSTEM: &str = include_str!("literary_prompts/phase5_system.md");
-const PHASE6_SYSTEM: &str = include_str!("literary_prompts/phase6_system.md");
-const PHASE7_SYSTEM: &str = include_str!("literary_prompts/phase7_system.md");
+static PHASE1_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary/phase1_system.md",
+        include_str!("literary_prompts/phase1_system.md"),
+    ));
+static PHASE3_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary/phase3_system.md",
+        include_str!("literary_prompts/phase3_system.md"),
+    ));
+static PHASE5_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary/phase5_system.md",
+        include_str!("literary_prompts/phase5_system.md"),
+    ));
+static PHASE6_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary/phase6_system.md",
+        include_str!("literary_prompts/phase6_system.md"),
+    ));
+static PHASE7_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary/phase7_system.md",
+        include_str!("literary_prompts/phase7_system.md"),
+    ));
 
 /// Landing-1 literary pipeline. See module doc for scope.
 pub struct LiteraryPipeline {
@@ -64,23 +84,23 @@ impl Pipeline for LiteraryPipeline {
     }
 
     fn phase1_system(&self) -> &'static str {
-        PHASE1_SYSTEM
+        *PHASE1_SYSTEM
     }
 
     fn phase3_system(&self) -> &'static str {
-        PHASE3_SYSTEM
+        *PHASE3_SYSTEM
     }
 
     fn phase5_system(&self) -> &'static str {
-        PHASE5_SYSTEM
+        *PHASE5_SYSTEM
     }
 
     fn phase6_system(&self) -> &'static str {
-        PHASE6_SYSTEM
+        *PHASE6_SYSTEM
     }
 
     fn phase7_system(&self) -> &'static str {
-        PHASE7_SYSTEM
+        *PHASE7_SYSTEM
     }
 
     // ── Phase 1 — full implementation ─────────────────────────

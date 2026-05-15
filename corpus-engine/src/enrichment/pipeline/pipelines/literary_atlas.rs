@@ -38,56 +38,92 @@ use crate::types::{EmbedFn, InferenceFn};
 use serde::Deserialize;
 use tracing::debug;
 
-const PHASE1_ATLAS_SYSTEM: &str =
-    include_str!("literary_atlas_prompts/phase1_system.md");
+static PHASE1_ATLAS_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase1_system.md",
+        include_str!("literary_atlas_prompts/phase1_system.md"),
+    ));
 
-const PHASE1B_ENTITY_COVERAGE: &str =
-    include_str!("literary_atlas_prompts/phase1b_entity_coverage.md");
+static PHASE1B_ENTITY_COVERAGE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase1b_entity_coverage.md",
+        include_str!("literary_atlas_prompts/phase1b_entity_coverage.md"),
+    ));
 
-const PHASE1B_CONCEPT_COVERAGE: &str =
-    include_str!("literary_atlas_prompts/phase1b_concept_coverage.md");
+static PHASE1B_CONCEPT_COVERAGE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase1b_concept_coverage.md",
+        include_str!("literary_atlas_prompts/phase1b_concept_coverage.md"),
+    ));
 
 /// Terse Phase 1 preamble used when a default run failed with
 /// `PhaseFailureKind::ThinkTruncated`. The asset drops the shape
 /// example and prepends a "no reasoning trace" directive so the
 /// model emits JSON directly instead of burning its output budget
 /// on reflection.
-const PHASE1_ATLAS_SYSTEM_TERSE: &str =
-    include_str!("literary_atlas_prompts/phase1_system_terse.md");
+static PHASE1_ATLAS_SYSTEM_TERSE: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase1_system_terse.md",
+        include_str!("literary_atlas_prompts/phase1_system_terse.md"),
+    ));
 
 // Per-facet Phase 3 naming preambles. `compose_phase3_facet`
 // selects among these by facet. Each targets the naming convention
 // from spec §5.3 — question → thematic concern, claim → position
 // family, entity-state → trajectory arc, relation-state →
 // relational dynamic, event → narrative thread.
-const PHASE3_QUESTION_NAMING: &str =
-    include_str!("literary_atlas_prompts/phase3_question_naming.md");
-const PHASE3_CLAIM_NAMING: &str =
-    include_str!("literary_atlas_prompts/phase3_claim_naming.md");
-const PHASE3_ENTITY_STATE_NAMING: &str =
-    include_str!("literary_atlas_prompts/phase3_entity_state_trajectory_naming.md");
-const PHASE3_RELATION_STATE_NAMING: &str =
-    include_str!("literary_atlas_prompts/phase3_relation_state_trajectory_naming.md");
-const PHASE3_EVENT_NAMING: &str =
-    include_str!("literary_atlas_prompts/phase3_event_thread_naming.md");
+static PHASE3_QUESTION_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase3_question_naming.md",
+        include_str!("literary_atlas_prompts/phase3_question_naming.md"),
+    ));
+static PHASE3_CLAIM_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase3_claim_naming.md",
+        include_str!("literary_atlas_prompts/phase3_claim_naming.md"),
+    ));
+static PHASE3_ENTITY_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase3_entity_state_trajectory_naming.md",
+        include_str!("literary_atlas_prompts/phase3_entity_state_trajectory_naming.md"),
+    ));
+static PHASE3_RELATION_STATE_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase3_relation_state_trajectory_naming.md",
+        include_str!("literary_atlas_prompts/phase3_relation_state_trajectory_naming.md"),
+    ));
+static PHASE3_EVENT_NAMING: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase3_event_thread_naming.md",
+        include_str!("literary_atlas_prompts/phase3_event_thread_naming.md"),
+    ));
 
-const PHASE1A_SEED_SYSTEM: &str =
-    include_str!("literary_atlas_prompts/phase1a_seed_system.md");
+static PHASE1A_SEED_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase1a_seed_system.md",
+        include_str!("literary_atlas_prompts/phase1a_seed_system.md"),
+    ));
 
 /// Phase 8 configuration-detection preamble. The LLM reads the
 /// atlas summary (not raw text) and emits 0–3 Configuration atoms
 /// per spec §2.7, each with an `interpretive_note` articulating
 /// alternative readings (the Ricoeur constraint per spec §1.2).
-const PHASE8_CONFIGURATION_SYSTEM: &str =
-    include_str!("literary_atlas_prompts/phase8_configuration.md");
+static PHASE8_CONFIGURATION_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase8_configuration.md",
+        include_str!("literary_atlas_prompts/phase8_configuration.md"),
+    ));
 
 /// Phase 6 atlas Tension classifier preamble. The LLM reads one
 /// resolved candidate (a claim+state pair sharing an entity) and
 /// returns a verdict on whether they are in genuine structural
 /// tension. Yes-verdicts promote to `EdgeType::Tension` records on
 /// `edges.json` via `analysis::tension_classifier::classification_to_edge`.
-const PHASE6_CLASSIFIER_SYSTEM: &str =
-    include_str!("literary_atlas_prompts/phase6_classifier_system.md");
+static PHASE6_CLASSIFIER_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "literary_atlas/phase6_classifier_system.md",
+        include_str!("literary_atlas_prompts/phase6_classifier_system.md"),
+    ));
 
 /// Pipeline id exposed by the registry.
 pub const PIPELINE_ID: &str = "literary_atlas";
@@ -130,7 +166,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     // those in here.
 
     fn phase1_system(&self) -> &'static str {
-        PHASE1_ATLAS_SYSTEM
+        *PHASE1_ATLAS_SYSTEM
     }
 
     fn phase3_system(&self) -> &'static str {
@@ -192,7 +228,7 @@ impl Pipeline for LiteraryAtlasPipeline {
             /*seed=*/ None,
         );
         Some(
-            ChatPrompt::new(PHASE1_ATLAS_SYSTEM_TERSE, user)
+            ChatPrompt::new(*PHASE1_ATLAS_SYSTEM_TERSE, user)
                 .with_response_schema(
                     "phase1_section_extraction",
                     phase1_section_extraction_schema(),
@@ -210,7 +246,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     ) -> Option<ChatPrompt> {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
-            ChatPrompt::new(PHASE1B_ENTITY_COVERAGE, user)
+            ChatPrompt::new(*PHASE1B_ENTITY_COVERAGE, user)
                 .with_phase_id("phase1b_entity")
                 .with_max_output_tokens(512),
         )
@@ -223,7 +259,7 @@ impl Pipeline for LiteraryAtlasPipeline {
     ) -> Option<ChatPrompt> {
         let user = render_phase1b_user_body(chapter, existing);
         Some(
-            ChatPrompt::new(PHASE1B_CONCEPT_COVERAGE, user)
+            ChatPrompt::new(*PHASE1B_CONCEPT_COVERAGE, user)
                 .with_phase_id("phase1b_concept")
                 .with_max_output_tokens(512),
         )
@@ -256,7 +292,7 @@ impl Pipeline for LiteraryAtlasPipeline {
             "Respond with a single JSON object per the schema in the system \
              message. Entities only. No prose, no <think> block.",
         );
-        Some(ChatPrompt::new(PHASE1A_SEED_SYSTEM, user).with_phase_id("phase1_seed"))
+        Some(ChatPrompt::new(*PHASE1A_SEED_SYSTEM, user).with_phase_id("phase1_seed"))
     }
 
     fn parse_seed_response(&self, response: &str) -> Result<Vec<SeedEntity>> {
@@ -482,11 +518,11 @@ impl Pipeline for LiteraryAtlasPipeline {
         exemplars: &[&Exemplar],
     ) -> Option<ChatPrompt> {
         let system = match facet {
-            Facet::Question => PHASE3_QUESTION_NAMING,
-            Facet::Claim => PHASE3_CLAIM_NAMING,
-            Facet::EntityState => PHASE3_ENTITY_STATE_NAMING,
-            Facet::RelationState => PHASE3_RELATION_STATE_NAMING,
-            Facet::Event => PHASE3_EVENT_NAMING,
+            Facet::Question => *PHASE3_QUESTION_NAMING,
+            Facet::Claim => *PHASE3_CLAIM_NAMING,
+            Facet::EntityState => *PHASE3_ENTITY_STATE_NAMING,
+            Facet::RelationState => *PHASE3_RELATION_STATE_NAMING,
+            Facet::Event => *PHASE3_EVENT_NAMING,
         };
         let mut user = String::new();
 
@@ -731,7 +767,7 @@ impl Pipeline for LiteraryAtlasPipeline {
 
         user.push_str("\nReturn 0–3 configurations as strict JSON per the system prompt.");
 
-        Some(ChatPrompt::new(PHASE8_CONFIGURATION_SYSTEM, user).with_phase_id("phase8_configuration"))
+        Some(ChatPrompt::new(*PHASE8_CONFIGURATION_SYSTEM, user).with_phase_id("phase8_configuration"))
     }
 
     fn parse_phase8_configuration(
@@ -766,7 +802,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         content: &crate::enrichment::atlas::analysis::CandidateContent,
     ) -> Option<ChatPrompt> {
         Some(
-            ChatPrompt::new(PHASE6_CLASSIFIER_SYSTEM, render_phase6_classifier_user_body(content))
+            ChatPrompt::new(*PHASE6_CLASSIFIER_SYSTEM, render_phase6_classifier_user_body(content))
                 .with_response_schema(
                     "phase6_classifier_response",
                     crate::enrichment::atlas::analysis::phase6_classifier_response_schema(),
