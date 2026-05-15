@@ -1171,3 +1171,127 @@ mod tests {
     // can run independently of the (currently-broken) lib test
     // target.
 }
+
+// ─── Contribution controls ─────────────────────────────────────
+//
+// The Settings UI (and W3's tray menu) reads this status, sets the
+// peer-inflight ceiling, and toggles the runtime pause.
+//
+// Routes are mounted on the client port behind the same loopback
+// guard as `/internal/inference/warmup` — the operator's process
+// (or the desktop talking to a child daemon) calls them locally;
+// peers reaching them at all is a protocol error the guard rejects.
+
+#[derive(Debug, Serialize)]
+pub struct ContributionStatusResponse {
+    /// Configured max concurrent peer requests. `usize::MAX`
+    /// serialises as a large number — the UI displays "unlimited"
+    /// when comparing to a sentinel.
+    pub ceiling: usize,
+    /// Live in-flight peer request count (approximate under
+    /// contention — see field docs on `peer_inflight_count`).
+    pub in_flight: usize,
+    /// Unix-seconds expiry of the active pause, or `null` when not
+    /// paused. The UI computes "Resumes at <time>" from this.
+    pub paused_until: Option<i64>,
+    /// Seconds until the active pause expires (null when not paused).
+    pub pause_remaining_secs: Option<u64>,
+    /// Whether peer requests honour the foreground-yield window.
+    pub yield_peers_to_foreground: bool,
+    /// Currently-yielding-to-local-user marker; `null` when not in
+    /// the yield window. Lets the UI badge "yielding to chat".
+    pub yielding_secs_remaining: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetContributionCeilingRequest {
+    /// Max concurrent peer requests. `0` rejects all; `null` /
+    /// missing means "unlimited" (`usize::MAX`).
+    pub max: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PauseContributionsRequest {
+    /// How long the pause should last. `0` is a no-op (use
+    /// `/internal/contribution/resume` to clear an active pause).
+    pub duration_secs: u64,
+}
+
+/// `GET /internal/contribution/status` — snapshot for the Settings
+/// panel + tray status chip. Cheap (atomic loads only).
+pub async fn contribution_status(
+    State(state): State<AppState>,
+) -> Json<ContributionStatusResponse> {
+    let paused_until_raw = state.contribution_paused_until();
+    let paused_until = if paused_until_raw > 0 {
+        Some(paused_until_raw)
+    } else {
+        None
+    };
+    Json(ContributionStatusResponse {
+        ceiling: state.contribution_max_peer_inflight(),
+        in_flight: state.peer_inflight_count(),
+        paused_until,
+        pause_remaining_secs: state.seconds_until_unpaused(),
+        yield_peers_to_foreground: state.yield_peers_to_foreground(),
+        yielding_secs_remaining: state.seconds_until_foreground_idle(),
+    })
+}
+
+/// `POST /internal/contribution/ceiling` — set the peer-inflight
+/// cap. `null` / missing `max` maps to unlimited.
+pub async fn contribution_ceiling_set(
+    State(state): State<AppState>,
+    Json(req): Json<SetContributionCeilingRequest>,
+) -> Json<ContributionStatusResponse> {
+    let new_cap = req.max.unwrap_or(usize::MAX);
+    let prev = state.contribution_max_peer_inflight();
+    state.set_contribution_max_peer_inflight(new_cap);
+    if prev != new_cap {
+        tracing::info!(
+            previous = prev,
+            new = new_cap,
+            "contribution: peer-inflight ceiling updated"
+        );
+    }
+    contribution_status(State(state)).await
+}
+
+/// `POST /internal/contribution/pause` — pause for N seconds.
+/// Idempotent; subsequent calls reset the expiry. The tray's "Pause
+/// for 15min" / "1hr" submenu items call this.
+pub async fn contribution_pause(
+    State(state): State<AppState>,
+    Json(req): Json<PauseContributionsRequest>,
+) -> Json<ContributionStatusResponse> {
+    if req.duration_secs == 0 {
+        // No-op; surface current status. Avoids a confused state
+        // where `paused_until` gets set to now and immediately
+        // expires.
+        return contribution_status(State(state)).await;
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let expiry = now.saturating_add(req.duration_secs as i64);
+    state.set_contribution_paused_until(expiry);
+    tracing::info!(
+        duration_secs = req.duration_secs,
+        expiry_unix = expiry,
+        "contribution: paused via /internal/contribution/pause"
+    );
+    contribution_status(State(state)).await
+}
+
+/// `POST /internal/contribution/resume` — clear an active pause.
+/// No body required.
+pub async fn contribution_resume(
+    State(state): State<AppState>,
+) -> Json<ContributionStatusResponse> {
+    if state.contribution_paused_until() != 0 {
+        state.set_contribution_paused_until(0);
+        tracing::info!("contribution: resumed via /internal/contribution/resume");
+    }
+    contribution_status(State(state)).await
+}
