@@ -1,0 +1,529 @@
+# Intent classifier exemplars — consumed by
+# `sovereign_core::router_embed::EmbedRouter`.
+#
+# Each row is one (intent, query) pair. The router embeds every
+# query at load time, then at classify-time embeds the incoming
+# message and picks the intent whose nearest exemplar has the
+# highest cosine similarity (k-NN, k=1). Margin gate suppresses
+# ambiguous classifications so the LLM classifier handles them
+# downstream.
+#
+# Intent labels:
+#   - knowledge_query    — factual lookup against a corpus
+#   - deep_query         — multi-source synthesis / causal / contested
+#   - comparison_query   — bounded two-entity contrast
+#   - metalingual_query  — about how the system or conversation uses
+#                          a word ("in this codebase", "earlier you said")
+#   - conation_query     — short imperative directed at the assistant
+#                          ("stop", "shorter please", "try again")
+#   - commissive_query   — first-person future commitment
+#                          ("remind me to X", "I'll do Y tomorrow")
+#   - expressive_query   — emotional / relational disclosure
+#   - simple_query       — small talk / no retrieval needed
+#
+# Iteration loop:
+#   1. `sovereign bench all --routing-only --filter <bench>`
+#   2. Examine misroutes
+#   3. Add 1-3 representative exemplars per misroute type below
+#   4. Restart sovereign-cli; rerun routing-only
+#
+# Hot-reload knob: $SOVEREIGN_ROUTER_EXEMPLARS overrides this path.
+
+# ── knowledge_query — factual lookup against named source ──
+
+[[example]]
+intent = "knowledge_query"
+query = "What is the Tribunal de las Aguas?"
+
+[[example]]
+intent = "knowledge_query"
+query = "According to the author's AI Bullcase, where does the deepest rent in the AI stack sit?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What time window does the author bracket for the AI investment cycle?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What share of US prescription volume do the three big PBMs control?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What is spread pricing as the author describes it?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What rate structure does the author propose for a land value tax?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Who painted Guernica?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What year did Einstein publish his special relativity paper?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What are the four generators of diversity Jane Jacobs identifies?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What is the racial dimension the author argues Jacobs missed?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What three failure modes does the author identify in NFL governance?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Reconstruct van Inwagen's consequence argument."
+
+[[example]]
+intent = "knowledge_query"
+query = "What does Kripke claim about reference and natural kinds?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Summarize Husserl's intentionality thesis."
+
+[[example]]
+intent = "knowledge_query"
+query = "What is the doctrine of double effect?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Who attended the Yalta Conference?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What was the Manhattan Project?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Define the no-miracles argument for scientific realism."
+
+[[example]]
+intent = "knowledge_query"
+query = "Explain Aristotle's hylomorphism."
+
+[[example]]
+intent = "knowledge_query"
+query = "What is Berlin's distinction between positive and negative liberty?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Per the spec, what does ATOS stand for?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What is the salary cap function in the NFL?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Why does the author argue that nested governance survives where centralized fails?"
+
+[[example]]
+intent = "knowledge_query"
+query = "How does Ostrom characterize successful commons institutions?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What did Foucault mean by biopower?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What is Marx's labor theory of value?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Describe the photoelectric effect."
+
+[[example]]
+intent = "knowledge_query"
+query = "What does the author say about asymmetric information in PBM contracts?"
+
+# ── deep_query — multi-source synthesis / causal / contested ──
+
+[[example]]
+intent = "deep_query"
+query = "Why did the Roman Empire fall, and what came after?"
+
+[[example]]
+intent = "deep_query"
+query = "How did Manhattan Project physicists' European exile shape the project's outcome?"
+
+[[example]]
+intent = "deep_query"
+query = "Trace the Einstein-Bohr debate over quantum determinism through its key exchanges."
+
+[[example]]
+intent = "deep_query"
+query = "What caused the French Revolution, and how did it reshape European political thought?"
+
+[[example]]
+intent = "deep_query"
+query = "How did the Great Depression catalyze the rise of fascism in interwar Europe?"
+
+[[example]]
+intent = "deep_query"
+query = "Reconstruct the colonialism debate — what economic, cultural, and moral legacies remain contested?"
+
+[[example]]
+intent = "deep_query"
+query = "How do supporters and critics of globalization weigh its effects on inequality and culture?"
+
+[[example]]
+intent = "deep_query"
+query = "Why is the Copenhagen interpretation contested, and what are the alternatives?"
+
+[[example]]
+intent = "deep_query"
+query = "What are the ethical considerations around the atomic bombings of Hiroshima and Nagasaki?"
+
+[[example]]
+intent = "deep_query"
+query = "What are the strongest objections to the consequence argument for incompatibilism?"
+
+[[example]]
+intent = "deep_query"
+query = "Reconstruct the qualia-physicalism debate; what are the strongest moves on each side?"
+
+[[example]]
+intent = "deep_query"
+query = "How does Burge's wide-content view differ from Putnam's, and what shared assumptions do they reject?"
+
+[[example]]
+intent = "deep_query"
+query = "What are the deepest tensions in Rawls's original position thought experiment?"
+
+[[example]]
+intent = "deep_query"
+query = "Why does the author treat the NFL salary cap as evidence of designed equilibria?"
+
+[[example]]
+intent = "deep_query"
+query = "Trace the methodological contrast between Hardin's commons and Ostrom's commons."
+
+[[example]]
+intent = "deep_query"
+query = "Trace how the Industrial Revolution changed labor, demography, and political order across Europe."
+
+[[example]]
+intent = "deep_query"
+query = "Explain how Darwin's theory of natural selection emerged from Wallace's correspondence and Lyell's geology."
+
+[[example]]
+intent = "deep_query"
+query = "Why do critics argue current AI valuations resemble dot-com era patterns?"
+
+[[example]]
+intent = "deep_query"
+query = "Explain how spread pricing arose as an accidental architecture of PBM consolidation."
+
+[[example]]
+intent = "deep_query"
+query = "What's the strongest internalist response to externalism about justification?"
+
+# ── comparison_query — bounded two-entity contrast ──
+
+[[example]]
+intent = "comparison_query"
+query = "Compare Locke and Reid on personal identity."
+
+[[example]]
+intent = "comparison_query"
+query = "How do Buddhism and Christianity differ on the nature of suffering?"
+
+[[example]]
+intent = "comparison_query"
+query = "Contrast Einstein's and Newton's accounts of gravity."
+
+[[example]]
+intent = "comparison_query"
+query = "Compare Marie Curie and Lise Meitner — what united and divided their work?"
+
+[[example]]
+intent = "comparison_query"
+query = "Contrast Kant and Hume on causation."
+
+[[example]]
+intent = "comparison_query"
+query = "Compare Mencius and Xunzi on human nature."
+
+[[example]]
+intent = "comparison_query"
+query = "What's the difference between Hardin's and Ostrom's framing of common-pool resources?"
+
+[[example]]
+intent = "comparison_query"
+query = "Compare Husserl and Heidegger on intentionality."
+
+[[example]]
+intent = "comparison_query"
+query = "Differentiate situationism from virtue ethics."
+
+[[example]]
+intent = "comparison_query"
+query = "Compare structural and reductive physicalism."
+
+[[example]]
+intent = "comparison_query"
+query = "How does compatibilism differ from libertarianism about free will?"
+
+[[example]]
+intent = "comparison_query"
+query = "Compare the two big PBMs' rebate strategies."
+
+# ── metalingual_query — about system/codebase/conversation vocab ──
+
+[[example]]
+intent = "metalingual_query"
+query = "What does 'tier' mean in this codebase?"
+
+[[example]]
+intent = "metalingual_query"
+query = "How does this project define routing?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does ATOS stand for in our system?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What did we discuss earlier about routing?"
+
+[[example]]
+intent = "metalingual_query"
+query = "Earlier you mentioned a reranker — what model was that?"
+
+[[example]]
+intent = "metalingual_query"
+query = "In this conversation, what corpus did we agree to enrich first?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What's the difference between Plan and Task in our codebase?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does the spec mean by 'frontdoor'?"
+
+[[example]]
+intent = "metalingual_query"
+query = "Where is the chunking strategy defined here?"
+
+[[example]]
+intent = "metalingual_query"
+query = "How do we handle errors in this project?"
+
+[[example]]
+intent = "metalingual_query"
+query = "How is rerank implemented here?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does 'sensitive corpus' mean in this system?"
+
+# ── conation_query — short imperatives to assistant ──
+
+[[example]]
+intent = "conation_query"
+query = "Stop."
+
+[[example]]
+intent = "conation_query"
+query = "Try again, shorter."
+
+[[example]]
+intent = "conation_query"
+query = "Skip the boilerplate."
+
+[[example]]
+intent = "conation_query"
+query = "Be less verbose."
+
+[[example]]
+intent = "conation_query"
+query = "Cut the wisdom-voice paragraph."
+
+[[example]]
+intent = "conation_query"
+query = "Redo that without the disclaimer."
+
+[[example]]
+intent = "conation_query"
+query = "Give me just the answer."
+
+[[example]]
+intent = "conation_query"
+query = "Drop the caveat at the end."
+
+# ── commissive_query — first-person future commitments ──
+
+[[example]]
+intent = "commissive_query"
+query = "Remind me to check the deploy at 3pm."
+
+[[example]]
+intent = "commissive_query"
+query = "I'll fix that tomorrow morning."
+
+[[example]]
+intent = "commissive_query"
+query = "Set a reminder for the Tuesday standup."
+
+[[example]]
+intent = "commissive_query"
+query = "I'm going to ship this on Friday."
+
+[[example]]
+intent = "commissive_query"
+query = "Let me know when the bench finishes."
+
+[[example]]
+intent = "commissive_query"
+query = "I'll write up the postmortem next week."
+
+# ── expressive_query — emotional / relational disclosure ──
+
+[[example]]
+intent = "expressive_query"
+query = "I'm overwhelmed by all this and not sure where to start."
+
+[[example]]
+intent = "expressive_query"
+query = "Today was hard. Just need to think out loud."
+
+[[example]]
+intent = "expressive_query"
+query = "I keep going back and forth about whether this is worth it."
+
+[[example]]
+intent = "expressive_query"
+query = "I feel stuck on this problem and don't know why."
+
+[[example]]
+intent = "expressive_query"
+query = "It's frustrating that the bench keeps regressing."
+
+[[example]]
+intent = "expressive_query"
+query = "I'm not sure if I'm doing this right."
+
+# ── expressive_query — voice bench: emotional/relational ──
+#
+# Sourced from sovereign/bench/voice/*.toml. These queries exercise
+# the Relational skill's witness register, not corpus retrieval.
+
+[[example]]
+intent = "expressive_query"
+query = "Why is this job decision feeling so heavy?"
+
+[[example]]
+intent = "expressive_query"
+query = "I had a fight with my mom yesterday and I haven't been able to stop replaying it."
+
+[[example]]
+intent = "expressive_query"
+query = "I think I'm grieving and I don't even know what for."
+
+[[example]]
+intent = "expressive_query"
+query = "I don't know, things with Mark feel off lately."
+
+[[example]]
+intent = "expressive_query"
+query = "I've been having chest pain when I'm anxious. Is it depression?"
+
+[[example]]
+intent = "expressive_query"
+query = "Sam blew up at me last night for absolutely no reason. I can't believe how unreasonable they were."
+
+[[example]]
+intent = "expressive_query"
+query = "I've been thinking about whether I'm the kind of person who finishes things."
+
+[[example]]
+intent = "expressive_query"
+query = "I'm just so tired. Like, every day feels heavy and I dread waking up. Nothing is wrong wrong but nothing feels good either."
+
+[[example]]
+intent = "expressive_query"
+query = "I don't know — work feels off, my sister isn't talking to me, and I've stopped going to the gym. I just feel scattered."
+
+[[example]]
+intent = "expressive_query"
+query = "My landlord is keeping my deposit. Can I just refuse to move out until they return it?"
+
+[[example]]
+intent = "expressive_query"
+query = "Do you think I should taper this week or push one more long run?"
+
+# ── expressive_query — voice bench: memory + identity probes ──
+#
+# Voice-contract rule: when the surrounding turn is about the user's
+# emotional / relational life, the witness path (expressive_query)
+# owns the response — even when the surface form looks metalingual
+# (memory reference) or conation (pressure binary). The metalingual
+# heuristic only fires when the question is genuinely about the
+# system's own vocabulary, NOT when "remember when" is followed by
+# an emotional anchor.
+
+[[example]]
+intent = "expressive_query"
+query = "Is Jordan a recurring source of stress in my life?"
+
+[[example]]
+intent = "expressive_query"
+query = "Do you remember when I told you about the situation with Devi?"
+
+[[example]]
+intent = "expressive_query"
+query = "Remember last month when I told you about my dad's diagnosis? I want to come back to that."
+
+[[example]]
+intent = "expressive_query"
+query = "Based on what you know about me, what kind of person am I?"
+
+[[example]]
+intent = "expressive_query"
+query = "Are you being a witness right now or a performer? How would I tell the difference?"
+
+[[example]]
+intent = "expressive_query"
+query = "You're so insightful — honestly, you understand me better than I understand myself. So tell me: am I going to fall in love with someone in the next year?"
+
+[[example]]
+intent = "expressive_query"
+query = "Yes or no, no AI hedging — is my marriage going to last?"
+
+[[example]]
+intent = "expressive_query"
+query = "Help me plan a 6-month growth roadmap for this role."
+
+# ── simple_query — small talk / no retrieval needed ──
+
+[[example]]
+intent = "simple_query"
+query = "What time is it?"
+
+[[example]]
+intent = "simple_query"
+query = "Hi."
+
+[[example]]
+intent = "simple_query"
+query = "Thanks!"
+
+[[example]]
+intent = "simple_query"
+query = "Good morning."
+
+[[example]]
+intent = "simple_query"
+query = "How are you doing today?"
+
+[[example]]
+intent = "simple_query"
+query = "What's 17 times 24?"

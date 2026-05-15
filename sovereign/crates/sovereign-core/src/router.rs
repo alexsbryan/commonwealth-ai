@@ -6,6 +6,7 @@ use std::time::Instant;
 use async_trait::async_trait;
 
 use crate::error::Result;
+use crate::router_embed::EmbedRouter;
 use crate::skills::SkillRegistry;
 use crate::traits::{InferenceProvider, Router, StateStore};
 use crate::types::*;
@@ -210,6 +211,12 @@ pub struct LlmRouter {
     inference: Arc<dyn InferenceProvider>,
     store: Arc<dyn StateStore>,
     skills: Arc<SkillRegistry>,
+    /// Optional embedding-based intent classifier. When installed
+    /// AND confident (top-similarity above threshold + sufficient
+    /// margin), the embed router's verdict short-circuits the
+    /// heuristic + LLM cascade. Ambiguous queries fall through to
+    /// the existing path. Installed via `with_embed_router`.
+    embed_router: Option<Arc<EmbedRouter>>,
 }
 
 impl LlmRouter {
@@ -222,7 +229,16 @@ impl LlmRouter {
             inference,
             store,
             skills,
+            embed_router: None,
         }
+    }
+
+    /// Install an `EmbedRouter` as the first pre-check. When the
+    /// embed classifier returns a confident result the router skips
+    /// every downstream heuristic + the LLM Pass 1/2 calls.
+    pub fn with_embed_router(mut self, embed: Arc<EmbedRouter>) -> Self {
+        self.embed_router = Some(embed);
+        self
     }
 
     /// Pass 1: Coarse classification into one of three buckets.
@@ -781,6 +797,22 @@ Reply with JSON only:
         // require one for precision.
         let has_locator = has_system || has_conversation || has_source_anchor || has_ambient;
         if !has_locator {
+            return false;
+        }
+
+        // Source-anchored questions ("according to X", "X says")
+        // are AMBIGUOUS — they can be metalingual ("what does X
+        // mean according to source Y") OR referential ("what's
+        // the fact according to source Y"). String matching can't
+        // tell; only the full-sentence LLM classifier can. So when
+        // the only locator is source-anchored (no system/conversation
+        // /ambient signal), abstain from forcing metalingual and let
+        // the LLM decide downstream.
+        //
+        // System and conversation locators stay as overrides because
+        // their signals are unambiguous: "in this codebase" / "what
+        // did we discuss earlier" are always metalingual.
+        if has_source_anchor && !has_system && !has_conversation && !has_ambient {
             return false;
         }
 
@@ -1584,6 +1616,72 @@ impl Router for LlmRouter {
 
         // Get active skill routing hints.
         let routing_hints = self.skills.routing_hints();
+
+        // Pre-check -1: embedding-based intent classification.
+        // When installed AND confident (top-similarity + margin both
+        // pass the configured thresholds), the embed router commits
+        // to an intent without consulting the heuristic stack or the
+        // LLM Pass 1/2 calls. Falls through silently when ambiguous.
+        //
+        // This replaces the brittle string-match heuristics
+        // (`looks_like_metalingual` etc.) for the common case while
+        // still letting them act as a backstop for queries the
+        // embed router declines.
+        if let Some(embed) = self.embed_router.as_ref() {
+            match embed.classify(message, &*self.inference).await {
+                Ok(Some(verdict)) => {
+                    let latency_ms = start.elapsed().as_millis() as i64;
+                    let hash = message_hash(message);
+                    let intent_str = format!("{:?}", verdict.intent);
+                    let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+                    let _ = self
+                        .store
+                        .log_routing_meta(&hash, "EMBED_ROUTER", None)
+                        .await;
+                    eprintln!(
+                        "[router] \"{}\" → {:?} (embed: sim={:.3} margin={:.3} nearest={:?})",
+                        &message[..message.len().min(50)],
+                        verdict.intent,
+                        verdict.top_sim,
+                        verdict.margin,
+                        verdict.nearest_exemplar,
+                    );
+                    return Ok(RouterClassification {
+                        primary: IntentCandidate {
+                            intent: verdict.intent,
+                            // Map cosine similarity onto router
+                            // confidence — embed verdicts that
+                            // clear both gates are high-confidence
+                            // by construction. Pin to 0.95 (not
+                            // 1.0) so downstream decision policy
+                            // still treats this as "very likely"
+                            // rather than "unconditionally
+                            // certain"; leaves room for user
+                            // interpretation-redirect.
+                            confidence: 0.95,
+                        },
+                        alternatives: Vec::new(),
+                        rationale: Some(format!(
+                            "embed router: nearest exemplar {:?} (cosine {:.3}, margin {:.3})",
+                            verdict.nearest_exemplar, verdict.top_sim, verdict.margin
+                        )),
+                        coarse_intent: Some("EMBED_ROUTER".to_string()),
+                        self_assessment: None,
+                        timing: None,
+                    });
+                }
+                Ok(None) => {
+                    // Ambiguous — fall through to existing stack.
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target: "router.embed",
+                        error = %e,
+                        "embed-router classify failed; falling through"
+                    );
+                }
+            }
+        }
 
         // Pre-check 0: topic continuity — if the conversation has established
         // context (2+ turns on a topic), check whether this message is a general

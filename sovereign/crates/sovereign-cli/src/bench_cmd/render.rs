@@ -122,6 +122,22 @@ fn retrieval_summary(o: &BenchOutcome) -> String {
     };
     let cur = &ret.current;
     let q = cur.results.len();
+    // Three views of the same retrieval event:
+    //   - answer-equiv (judge): "did the answer convey the expected
+    //     fact?" Synth-only — semantic equivalence credit. The
+    //     headline number when present because it measures user
+    //     value, not bench-internal title coverage.
+    //   - title-coverage (rigid src): "was the bank's canonical
+    //     source title in the retrieved bag?" A useful diagnostic
+    //     of retrieval-axis coverage; misleading as a quality
+    //     metric when other corpora carry equivalent content.
+    //   - keyword-match (strict fact): "did the answer text contain
+    //     the expected keyword?" Penalises paraphrase even when the
+    //     fact is conveyed; treat as a calibration metric, not a
+    //     quality metric.
+    let judge = mean(&cur.results, |r| {
+        r.synth.as_ref().and_then(|s| s.judge_fact_score.as_ref()).and_then(|s| s.ratio)
+    });
     let fact = mean(&cur.results, |r| r.fact_score.ratio);
     let src = mean(&cur.results, |r| r.source_score.ratio);
     let essay = mean(&cur.results, |r| {
@@ -129,8 +145,22 @@ fn retrieval_summary(o: &BenchOutcome) -> String {
     });
 
     let mut parts = vec![format!("{q}Q")];
-    parts.push(retrieval_lever_cell("fact", fact, ret.baseline.as_ref().map(mean_run_fact)));
-    parts.push(retrieval_lever_cell("src", src, ret.baseline.as_ref().map(mean_run_src)));
+    // Lead with judge when available (synth mode). Otherwise the
+    // strict columns are the only signal.
+    if let Some(judge_val) = judge {
+        let prev = ret.baseline.as_ref().and_then(mean_run_judge);
+        parts.push(retrieval_lever_cell("answer-equiv", Some(judge_val), prev));
+    }
+    parts.push(retrieval_lever_cell(
+        "keyword-match",
+        fact,
+        ret.baseline.as_ref().map(mean_run_fact),
+    ));
+    parts.push(retrieval_lever_cell(
+        "title-coverage",
+        src,
+        ret.baseline.as_ref().map(mean_run_src),
+    ));
     if let Some(essay_val) = essay {
         let prev = ret.baseline.as_ref().and_then(mean_run_essay);
         parts.push(retrieval_lever_cell("essay", Some(essay_val), prev));
@@ -157,6 +187,14 @@ fn mean_run_src(run: &crate::eval_cmd::runner::EvalRun) -> f32 {
 }
 fn mean_run_essay(run: &crate::eval_cmd::runner::EvalRun) -> Option<f32> {
     mean(&run.results, |r| r.essay_readiness.as_ref().and_then(|e| Some(e.ratio())))
+}
+fn mean_run_judge(run: &crate::eval_cmd::runner::EvalRun) -> Option<f32> {
+    mean(&run.results, |r| {
+        r.synth
+            .as_ref()
+            .and_then(|s| s.judge_fact_score.as_ref())
+            .and_then(|s| s.ratio)
+    })
 }
 
 // ── Cross-corpus matrices ─────────────────────────────────────────
@@ -234,6 +272,26 @@ fn format_axis_cell(enr: &EnrichmentOutcome, axis: &str) -> String {
     format!("{:.1} {}", cur_f1 * 100.0, glyph)
 }
 
+/// Per-category matrix renders one of three views of the same
+/// retrieval event. Default `judge` when synth produced judge
+/// scores, else falls back to `fact_strict`. Two other levers
+/// (`title_coverage`, `keyword_match`) surface via the same
+/// matrix when an operator wants to drill on a specific axis.
+#[derive(Debug, Clone, Copy)]
+enum RetrievalLever {
+    /// Judge-validated answer equivalence — "did the answer convey
+    /// the expected fact?" Strongest correlate of user value.
+    AnswerEquiv,
+    /// Strict keyword match in answer text — "did the answer
+    /// contain the expected substring?" Penalises paraphrase.
+    KeywordMatch,
+    /// Strict source-title coverage — "was the bank's declared
+    /// canonical source in the retrieved bag?" Useful diagnostic of
+    /// retrieval reach; misleading when a sibling corpus carries
+    /// equivalent content.
+    TitleCoverage,
+}
+
 fn print_retrieval_matrix(rows: &[&BenchOutcome]) {
     // Collect all categories across all benches
     let mut categories: BTreeSet<String> = BTreeSet::new();
@@ -248,8 +306,67 @@ fn print_retrieval_matrix(rows: &[&BenchOutcome]) {
         return;
     }
 
+    // Pick the lead lever for the matrix. When any current run has
+    // judge scores (i.e. ran in synth mode), lead with judge; else
+    // fall back to keyword-match. Title-coverage is always rendered
+    // as a supporting matrix below the lead.
+    let has_judge = rows.iter().any(|o| {
+        o.retrieval
+            .as_ref()
+            .map(|r| {
+                r.current.results.iter().any(|x| {
+                    x.synth
+                        .as_ref()
+                        .and_then(|s| s.judge_fact_score.as_ref())
+                        .is_some()
+                })
+            })
+            .unwrap_or(false)
+    });
+
+    let (lead, lead_header) = if has_judge {
+        (
+            RetrievalLever::AnswerEquiv,
+            "Per-category cross-corpus (Retrieval · answer-equiv [judge])",
+        )
+    } else {
+        (
+            RetrievalLever::KeywordMatch,
+            "Per-category cross-corpus (Retrieval · keyword-match [strict fact])",
+        )
+    };
+    print_retrieval_matrix_for(&categories, rows, lead, lead_header);
+    if has_judge {
+        // Supporting view: title coverage. Names the bench's
+        // narrative claim (bank-declared sources) so divergences
+        // are legible rather than treated as primary signal.
+        print_retrieval_matrix_for(
+            &categories,
+            rows,
+            RetrievalLever::TitleCoverage,
+            "Per-category cross-corpus (Retrieval · title-coverage [bank-declared sources])",
+        );
+    } else {
+        // No judge available — still show title-coverage as a
+        // supporting view so the operator sees retrieval reach
+        // separately from answer keyword-match.
+        print_retrieval_matrix_for(
+            &categories,
+            rows,
+            RetrievalLever::TitleCoverage,
+            "Per-category cross-corpus (Retrieval · title-coverage [bank-declared sources])",
+        );
+    }
+}
+
+fn print_retrieval_matrix_for(
+    categories: &BTreeSet<String>,
+    rows: &[&BenchOutcome],
+    lever: RetrievalLever,
+    header: &str,
+) {
     println!();
-    println!("  Per-category cross-corpus (Retrieval lane · fact_recall)");
+    println!("  {header}");
     println!("  ─────────────────────────────────────────────────────────────────────");
 
     let corpus_cols: Vec<&str> = rows
@@ -267,18 +384,18 @@ fn print_retrieval_matrix(rows: &[&BenchOutcome]) {
     }
     println!();
 
-    for cat in &categories {
+    for cat in categories {
         print!("  {:<width$}", cat, width = cat_w + 2);
         for o in rows {
             let Some(ret) = &o.retrieval else { continue };
-            let cell = format_category_cell(ret, cat);
+            let cell = format_category_cell(ret, cat, lever);
             print!("  {:>width$}", cell, width = col_w);
         }
         println!();
     }
 }
 
-fn format_category_cell(ret: &RetrievalOutcome, category: &str) -> String {
+fn format_category_cell(ret: &RetrievalOutcome, category: &str, lever: RetrievalLever) -> String {
     let cur: Vec<&_> = ret
         .current
         .results
@@ -288,17 +405,32 @@ fn format_category_cell(ret: &RetrievalOutcome, category: &str) -> String {
     if cur.is_empty() {
         return "—".into();
     }
-    let cur_mean: f32 = cur
-        .iter()
-        .filter_map(|r| r.fact_score.ratio)
-        .sum::<f32>()
-        / cur.len().max(1) as f32;
+    let extract = |r: &crate::eval_cmd::runner::EvalResult| -> Option<f32> {
+        match lever {
+            RetrievalLever::AnswerEquiv => r
+                .synth
+                .as_ref()
+                .and_then(|s| s.judge_fact_score.as_ref())
+                .and_then(|s| s.ratio),
+            RetrievalLever::KeywordMatch => r.fact_score.ratio,
+            RetrievalLever::TitleCoverage => r.source_score.ratio,
+        }
+    };
+    let vals: Vec<f32> = cur.iter().filter_map(|r| extract(r)).collect();
+    if vals.is_empty() {
+        return "—".into();
+    }
+    let cur_mean: f32 = vals.iter().sum::<f32>() / vals.len() as f32;
     let prev_mean: Option<f32> = ret.baseline.as_ref().map(|b| {
         let prev: Vec<&_> = b.results.iter().filter(|r| r.category == category).collect();
         if prev.is_empty() {
             return 0.0;
         }
-        prev.iter().filter_map(|r| r.fact_score.ratio).sum::<f32>() / prev.len().max(1) as f32
+        let pvals: Vec<f32> = prev.iter().filter_map(|r| extract(r)).collect();
+        if pvals.is_empty() {
+            return 0.0;
+        }
+        pvals.iter().sum::<f32>() / pvals.len() as f32
     });
     let glyph = match prev_mean {
         None => "·".to_string(),

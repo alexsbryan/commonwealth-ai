@@ -1630,33 +1630,63 @@ async fn run_question_synth(session: &ChatSession, q: &Question, judge: bool) ->
     // 1. Drive the same path the desktop chat surface uses. Failures
     //    here become an empty-row result so one model-side error
     //    doesn't void the rest of the bank.
-    let handle = match session
+    //
+    // Fallback path: `handle_message_stream` returns
+    // `Error::NotImplemented("Streaming not supported for this intent")`
+    // for ComplexTask / MetalingualQuery / ConationQuery /
+    // CommissiveQuery. Without a fallback, those questions would
+    // score 0 across the board even though the daemon has a
+    // perfectly good non-streaming handler. Fall back to
+    // `handle_message` (same persistence semantics) so the bench
+    // measures the actual chat behavior on those intents.
+    let (message_id, raw, stream_wall_ms) = match session
         .runtime
         .handle_message_stream(&q.question, &conversation_id)
         .await
     {
-        Ok(h) => h,
+        Ok(handle) => {
+            let mid = handle.message_id.clone();
+            let mut stream = handle.stream;
+            let mut buf = String::new();
+            while let Some(item) = stream.next().await {
+                match item {
+                    Ok(chunk) => buf.push_str(&chunk),
+                    Err(e) => {
+                        let elapsed = t_wall.elapsed().as_millis() as u64;
+                        return empty_synth_result(q, format!("stream error: {e}"), elapsed);
+                    }
+                }
+            }
+            let wall = t_wall.elapsed().as_millis() as u64;
+            (mid, buf, wall)
+        }
+        Err(sovereign_core::error::Error::NotImplemented(_)) => {
+            // Non-streamable intent — fall back to the synchronous
+            // path. Same store-persist semantics; we read provenance
+            // + retrieved_chunks from the persisted message below.
+            match session
+                .runtime
+                .handle_message(&q.question, &conversation_id)
+                .await
+            {
+                Ok(resp) => {
+                    let wall = t_wall.elapsed().as_millis() as u64;
+                    (resp.message.id, resp.message.content, wall)
+                }
+                Err(e) => {
+                    let elapsed = t_wall.elapsed().as_millis() as u64;
+                    return empty_synth_result(
+                        q,
+                        format!("non-streaming fallback failed: {e}"),
+                        elapsed,
+                    );
+                }
+            }
+        }
         Err(e) => {
             return empty_synth_result(q, format!("stream start: {e}"), 0);
         }
     };
-    let message_id = handle.message_id.clone();
-    let mut stream = handle.stream;
-
-    // 2. Drain the token stream. Buffer raw — we'll split out the
-    //    `<think>` blocks once before scoring rather than streaming
-    //    deltas the way the chat CLI does (no human is watching).
-    let mut raw = String::new();
-    while let Some(item) = stream.next().await {
-        match item {
-            Ok(chunk) => raw.push_str(&chunk),
-            Err(e) => {
-                let elapsed = t_wall.elapsed().as_millis() as u64;
-                return empty_synth_result(q, format!("stream error: {e}"), elapsed);
-            }
-        }
-    }
-    let stream_wall_ms = t_wall.elapsed().as_millis() as u64;
 
     // 3. Pull the persisted assistant row to recover the metadata
     //    block. This is where `retrieved_chunks` and `provenance` live;
