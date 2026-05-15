@@ -236,6 +236,35 @@ fn main() -> ExitCode {
                             Arc::clone(&state_clone),
                         );
 
+                        // Re-apply the W4 consent ceiling at boot so a
+                        // daemon restart doesn't silently revert to
+                        // unlimited peer inference. No-op when the
+                        // user hasn't recorded consent yet (the
+                        // ConsentGate is about to render).
+                        let consent_ceiling = state_clone
+                            .config
+                            .read()
+                            .await
+                            .first_mesh_consent
+                            .as_ref()
+                            .map(|c| c.ceiling);
+                        if let Some(ceiling) = consent_ceiling {
+                            if let Err(e) =
+                                commands::set_contribution_ceiling(Some(ceiling)).await
+                            {
+                                tracing::warn!(
+                                    error = %e,
+                                    ceiling,
+                                    "boot: failed to re-apply first_mesh_consent ceiling"
+                                );
+                            } else {
+                                tracing::info!(
+                                    ceiling,
+                                    "boot: re-applied first_mesh_consent ceiling"
+                                );
+                            }
+                        }
+
                         // Install OCR context if the manager came up
                         // and the Tesseract sidecar is bundled. No-op
                         // when not available — `lc_ocr_available`
@@ -341,6 +370,8 @@ fn main() -> ExitCode {
             commands::resume_contributions,
             commands::get_recent_contributions,
             commands::prepare_crash_report,
+            commands::get_first_mesh_consent,
+            commands::record_first_mesh_consent,
             commands::get_storage_budget,
             commands::set_storage_budget,
             commands::build_corpus_index,

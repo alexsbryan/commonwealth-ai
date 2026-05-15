@@ -174,6 +174,35 @@ pub struct DesktopConfig {
     /// the AppState atomic the daemon owns.
     #[serde(default)]
     pub storage_budget_bytes: Option<u64>,
+
+    /// Result of the first-mesh-join consent dialog (W4). `None`
+    /// means the dialog has not yet been shown — the App router
+    /// gates the main UI on this. `Some(_)` is the user's decision;
+    /// the desktop calls /internal/contribution/ceiling on every
+    /// boot with the corresponding peer-inflight cap so the daemon
+    /// matches their preference even if its in-memory state was
+    /// reset.
+    #[serde(default)]
+    pub first_mesh_consent: Option<FirstMeshConsent>,
+}
+
+/// Persisted result of the W4 consent dialog. Captures both the
+/// answer and when it was given — the latter is useful for the
+/// "you set this 6 months ago, want to revisit?" prompt the
+/// Settings panel can surface later.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirstMeshConsent {
+    /// User chose to share idle GPU with mesh peers. `false`
+    /// translates to `contribution_max_peer_inflight = 0` (peer
+    /// inference all 503s — equivalent to
+    /// `SOVEREIGN_DISABLE_PEER_INFERENCE=1`).
+    pub share_gpu: bool,
+    /// Concrete peer-inflight ceiling applied at boot. For Yes,
+    /// default to 1 (one concurrent peer request — matches the
+    /// plan's 25% bucket). Stored explicitly so the user can later
+    /// edit it in Settings without re-prompting the consent dialog.
+    pub ceiling: usize,
+    pub recorded_at_unix: i64,
 }
 
 fn default_knowledge_view_enabled() -> bool {
@@ -307,6 +336,7 @@ impl Default for DesktopConfig {
             knowledge_view_enabled: default_knowledge_view_enabled(),
             storage_budget_bytes: None,
             enable_recipe_authoring: false,
+            first_mesh_consent: None,
         }
     }
 }
