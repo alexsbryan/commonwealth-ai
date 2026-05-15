@@ -25,6 +25,7 @@ use sovereign_tools::shell::ShellTool;
 use tokio_util::sync::CancellationToken;
 
 use crate::approval::TauriApprovalChannel;
+use crate::supervisor::Supervisor;
 
 // ─── Desktop Config ──────────────────────────────────────────
 
@@ -487,6 +488,13 @@ pub struct AppState {
     /// or when those DBs failed to open.
     pub notes: RwLock<Option<Arc<NoteStore>>>,
     pub features: RwLock<Option<Arc<FeatureStore>>>,
+    /// Child-process daemon supervisor. Populated only when
+    /// `SOVEREIGN_USE_SUPERVISOR=1` and `supervisor_setup::maybe_start`
+    /// successfully spawned a daemon. `None` for the in-process Local
+    /// path and for Attach mode (where the CLI owns the daemon
+    /// lifecycle separately). Tauri commands subscribe to its state
+    /// channel and call `request_reconnect()` on it.
+    pub supervisor: RwLock<Option<Arc<Supervisor>>>,
 }
 
 impl AppState {
@@ -514,6 +522,7 @@ impl AppState {
     pub fn new_with_mode(
         approval: Arc<TauriApprovalChannel>,
         mode: crate::bootstrap::BootstrapMode,
+        supervisor: Option<Arc<Supervisor>>,
     ) -> Self {
         let config = DesktopConfig::load();
         // The mesh daemon persists its running-mesh state into
@@ -522,6 +531,10 @@ impl AppState {
         // and would-be joiners get "no peer on this network".
         let mesh_data_dir = config.data_dir.clone();
 
+        // When `supervisor_setup` spawned the daemon as a child, the
+        // effective mode is already Attach against that child. The
+        // existing match below covers it — `Attach` → mesh = None,
+        // mutations route over HTTP just like CLI-attached mode.
         let mesh = match &mode {
             crate::bootstrap::BootstrapMode::Attach { .. } => None,
             crate::bootstrap::BootstrapMode::Local { .. } => {
@@ -556,6 +569,7 @@ impl AppState {
             watched_subsystem: RwLock::new(None),
             notes: RwLock::new(None),
             features: RwLock::new(None),
+            supervisor: RwLock::new(supervisor),
         }
     }
 }
