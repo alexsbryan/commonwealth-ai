@@ -518,8 +518,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     fn relation(idx: usize, label: &str, participants: Vec<AtomId>) -> Relation {
         Relation {
@@ -560,8 +561,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-        }
-    }
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+}
+}
 
     fn question(idx: usize, content: &str, open: bool) -> Question {
         Question {

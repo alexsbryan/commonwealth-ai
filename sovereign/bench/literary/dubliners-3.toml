@@ -17,6 +17,7 @@
 
 [meta]
 template = "dubliners-3"
+corpus_id = "dubliners-3"
 description = "Expected and forbidden outputs for Joyce's Dubliners 3-story fixture (The Sisters / Araby / Eveline)."
 
 # ── Person atoms ───────────────────────────────────────────────────

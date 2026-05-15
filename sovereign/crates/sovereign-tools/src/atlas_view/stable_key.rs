@@ -102,6 +102,16 @@ pub fn compute_stable_key(corpus_id: &str, atom: &AtomEnvelope) -> StableAtomKey
             a.name.as_str(),
             a.section_position.section_id.as_str(),
         ),
+        AtomEnvelope::Position(a) => (
+            "Position",
+            a.canonical_name.as_str(),
+            a.first_appearance.chunk_id.as_str(),
+        ),
+        AtomEnvelope::Opposition(a) => (
+            "Opposition",
+            a.canonical_label.as_str(),
+            a.first_appearance.chunk_id.as_str(),
+        ),
     };
 
     let mut h = blake3::Hasher::new();
@@ -143,7 +153,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
-        })
+                    concept_kind: None,
+})
     }
 
     #[test]
@@ -233,7 +244,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        });
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+});
         let claim_b = AtomEnvelope::Claim(Claim {
             id: AtomId::claim(2),
             content: "Knowledge is more than justified true belief.".into(),
@@ -246,7 +260,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        });
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+});
         let k_a = compute_stable_key("sep-epistemology", &claim_a);
         let k_b = compute_stable_key("sep-epistemology", &claim_b);
         assert_eq!(k_a.as_str().len(), 64);

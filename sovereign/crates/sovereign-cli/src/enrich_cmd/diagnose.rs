@@ -332,6 +332,7 @@ fn print_atoms(snap: &Snapshot, limit: usize) {
             AtomEnvelope::Question(_) => "Question",
             AtomEnvelope::Configuration(_) => "Configuration",
             AtomEnvelope::ArgumentReconstruction(_) => "ArgumentReconstruction",
+        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => unreachable!("typed atoms wired in Gap B Stage 4"),
         };
         *counts.entry(key).or_insert(0) += 1;
     }

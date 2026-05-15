@@ -477,6 +477,8 @@ pub(crate) fn endpoint_text(atom: Option<&AtomEnvelope>, atom_id: &str) -> Strin
         Some(Event(ev)) => format!("Event: {}", ev.description),
         Some(Configuration(cfg)) => format!("{}: {}", cfg.label, cfg.description),
         Some(ArgumentReconstruction(a)) => format!("Argument: {}", a.name),
+        Some(Position(p)) => format!("Position ({}): {}", p.stance, p.canonical_name),
+        Some(Opposition(o)) => format!("Opposition: {}", o.canonical_label),
         None => format!("{atom_id} (missing)"),
     }
 }

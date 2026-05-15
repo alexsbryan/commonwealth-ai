@@ -23,8 +23,13 @@
 //! systemd unit) and folding it into the bench would couple this
 //! tool to those concerns. Keep it dumb: measure what's loaded.
 
+mod all;
 mod atlas;
+mod baselines;
+mod discover;
 mod obsidian;
+mod render;
+mod scaffold;
 
 use crate::util::help::{self, Help, HelpSection};
 
@@ -35,12 +40,20 @@ const HELP: Help = Help {
         HelpSection::Usage("sovereign bench <subcommand> [args]"),
         HelpSection::Subcommands(&[
             (
+                "all",
+                "Discover every enrichment-eval + retrieval-judge bench, score each, diff vs baseline, exit 0/1.",
+            ),
+            (
                 "atlas",
                 "Run atlas Phase 1 + short-call tasks against the loaded primary model.",
             ),
             (
                 "obsidian",
                 "Score an obsidian-vault corpus against the in-repo fixture golden (correctness, not throughput).",
+            ),
+            (
+                "scaffold",
+                "Draft a golden TOML from an existing resolved atlas — sample atoms per axis, emit reviewable starting point.",
             ),
         ]),
         HelpSection::Notes(
@@ -66,8 +79,10 @@ pub async fn run_bench(args: &[String]) -> i32 {
         return 0;
     }
     match first {
+        "all" => all::cmd_all(&args[1..]).await,
         "atlas" => atlas::cmd_atlas(&args[1..]).await,
         "obsidian" => obsidian::cmd_obsidian(&args[1..]).await,
+        "scaffold" => scaffold::cmd_scaffold(&args[1..]).await,
         other => {
             eprintln!("error: unknown bench subcommand `{other}`");
             eprintln!();

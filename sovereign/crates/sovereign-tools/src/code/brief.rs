@@ -566,6 +566,8 @@ fn atom_label(atom: &AtomEnvelope) -> (&'static str, String) {
         AtomEnvelope::Question(q) => ("question", truncate_to_chars(&q.content, 60)),
         AtomEnvelope::Configuration(c) => ("configuration", c.label.clone()),
         AtomEnvelope::ArgumentReconstruction(a) => ("argument", a.name.clone()),
+        AtomEnvelope::Position(p) => ("position", p.canonical_name.clone()),
+        AtomEnvelope::Opposition(o) => ("opposition", o.canonical_label.clone()),
     }
 }
 

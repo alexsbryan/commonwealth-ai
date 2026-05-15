@@ -610,7 +610,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![AtomId::entity(2), AtomId::entity(3)],
-        };
+                    concept_kind: None,
+};
         let mut counts = HashMap::new();
         counts.insert(entity.id.clone(), 5);
         let candidates = vec![&entity];

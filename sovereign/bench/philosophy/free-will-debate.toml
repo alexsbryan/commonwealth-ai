@@ -16,6 +16,7 @@
 
 [meta]
 template = "free-will-debate"
+corpus_id = "free-will-debate"
 description = "Expected and forbidden outputs for the free-will-debate template, evaluated against the resolved atlas."
 
 # ── Phase 1 positions: removed (v1-pipeline legacy artifact) ───────

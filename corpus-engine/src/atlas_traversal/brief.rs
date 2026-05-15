@@ -89,10 +89,19 @@ fn assemble_entity_lookup(result: &TraversalResult) -> Brief {
     };
     let frame = depth_frame(entity.enrichment_depth);
     let mut body = String::new();
+    let kind_clause = match entity.concept_kind.as_deref() {
+        Some("mechanism") => " (named mechanism in the section's argument)",
+        Some("definition") => " (definition card)",
+        Some("image") => " (lyric image)",
+        Some("motif") => " (recurring motif)",
+        Some("formal_device") => " (formal device)",
+        _ => "",
+    };
     body.push_str(&format!(
-        "{} {} first appears in {}. {}",
+        "{} {}{} first appears in {}. {}",
         frame.records,
         bold(&entity.canonical_name),
+        kind_clause,
         entity.first_appearance.chunk_id,
         hedge_confidence(&entity.description, Some(1.0)),
     ));
@@ -139,9 +148,25 @@ fn assemble_entity_lookup(result: &TraversalResult) -> Brief {
         ));
         for c in &result.claims {
             let hedge = hedge_confidence("", c.confidence);
+            // Gap-B claim_kind qualifier: render evidence claims as
+            // "the section invokes X as <kind>", concessions as
+            // "the section concedes X (outcome=Y)". Base claims
+            // keep the existing clean rendering.
+            let kind_prefix = match c.claim_kind.as_deref() {
+                Some("evidence") => {
+                    let kind = c.evidence_kind.as_deref().unwrap_or("evidence");
+                    format!("[evidence:{}] ", kind)
+                }
+                Some("concession") => {
+                    let outcome = c.concession_outcome.as_deref().unwrap_or("intact");
+                    format!("[concession:{}] ", outcome)
+                }
+                _ => String::new(),
+            };
             body.push_str(&format!(
-                "- {} {}{}\n",
+                "- {} {}{}{}\n",
                 depth_tag(c.enrichment_depth),
+                kind_prefix,
                 c.content,
                 hedge,
             ));
@@ -159,6 +184,55 @@ fn assemble_entity_lookup(result: &TraversalResult) -> Brief {
                 s.section_range.start,
                 depth_tag(s.enrichment_depth),
                 s.label
+            ));
+        }
+    }
+
+    // Gap-B typed atoms: named positions this entity is the
+    // proponent of, plus oppositions where this entity is one
+    // side. Renders below the trajectory block so the reader sees
+    // factual atoms first, argumentative scaffolding second.
+    if !result.positions.is_empty() {
+        body.push_str(&format!(
+            "\n**Positions defended by {} ({}):**\n",
+            entity.canonical_name,
+            result.positions.len()
+        ));
+        for p in &result.positions {
+            let stance_phrase = match p.stance.as_str() {
+                "endorse" => "endorses",
+                "rebut" => "rebuts",
+                "mixed" => "takes a mixed stance on",
+                _ => "surveys",
+            };
+            body.push_str(&format!(
+                "- {} *{}* {}: {}\n",
+                depth_tag(p.enrichment_depth),
+                p.canonical_name,
+                stance_phrase,
+                p.content,
+            ));
+        }
+    }
+
+    if !result.oppositions.is_empty() {
+        body.push_str(&format!(
+            "\n**Oppositions touching {} ({}):**\n",
+            entity.canonical_name,
+            result.oppositions.len()
+        ));
+        for o in &result.oppositions {
+            let axis_clause = if o.axis.is_empty() {
+                String::new()
+            } else {
+                format!(" (axis: {})", o.axis)
+            };
+            body.push_str(&format!(
+                "- {} **{}** vs **{}**{}\n",
+                depth_tag(o.enrichment_depth),
+                o.left_label,
+                o.right_label,
+                axis_clause,
             ));
         }
     }
@@ -437,8 +511,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     #[test]
     fn brief_calibrates_extracted_atoms_with_interpretive_framing() {
@@ -475,6 +550,9 @@ mod tests {
             attributed_to: Some(e.id.clone()),
             confidence: Some(0.4), // below the hedge threshold
             anchor: None,
+            claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         };
         let result = TraversalResult {

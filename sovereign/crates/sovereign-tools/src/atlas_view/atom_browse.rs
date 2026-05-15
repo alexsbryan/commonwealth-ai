@@ -307,6 +307,8 @@ fn atom_type_of(atom: &AtomEnvelope) -> AtomType {
         AtomEnvelope::Question(_) => AtomType::Question,
         AtomEnvelope::Configuration(_) => AtomType::Configuration,
         AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
+        AtomEnvelope::Position(_) => AtomType::Position,
+        AtomEnvelope::Opposition(_) => AtomType::Opposition,
     }
 }
 
@@ -324,6 +326,8 @@ fn display_name_of(atom: &AtomEnvelope) -> String {
         AtomEnvelope::Question(a) => truncate_for_display(&a.content),
         AtomEnvelope::Configuration(a) => a.label.clone(),
         AtomEnvelope::ArgumentReconstruction(a) => a.name.clone(),
+        AtomEnvelope::Position(a) => a.canonical_name.clone(),
+        AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
     }
 }
 
@@ -355,6 +359,8 @@ fn evidence_count(atom: &AtomEnvelope) -> u32 {
         AtomEnvelope::Question(a) => a.raised_at.len() as u32,
         AtomEnvelope::Configuration(a) => a.evidence.len() as u32,
         AtomEnvelope::ArgumentReconstruction(a) => a.evidence.len() as u32,
+        AtomEnvelope::Position(_) => 1,
+        AtomEnvelope::Opposition(_) => 1,
     }
 }
 
@@ -390,7 +396,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
-        })
+                    concept_kind: None,
+})
     }
 
     fn claim(id: usize, content: &str) -> AtomEnvelope {
@@ -409,7 +416,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        })
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+})
     }
 
     fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {

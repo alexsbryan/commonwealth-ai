@@ -24,7 +24,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 use crate::enrichment::atlas::atoms::{
-    Claim, Configuration, Entity, Event, Question, Relation, ResolutionStatus, State,
+    Claim, Configuration, Entity, Event, Opposition, Position, Question, Relation,
+    ResolutionStatus, State,
 };
 use crate::enrichment::atlas::edges::{Edge, EdgeType};
 
@@ -55,6 +56,17 @@ pub struct TraversalResult {
     pub questions: Vec<Question>,
     pub configurations: Vec<Configuration>,
     pub edges: Vec<Edge>,
+    /// Named-view atoms (Gap B). Populated by entity_lookup when
+    /// the queried entity is the proponent of a position, or when
+    /// the position's content references the entity. Empty for plan
+    /// kinds that don't surface positions yet (`tension_list`,
+    /// `corpus_overview` will be wired in v2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub positions: Vec<Position>,
+    /// Structural X-vs-Y framings (Gap B). Populated when one side
+    /// of the binary resolves to the queried entity.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub oppositions: Vec<Opposition>,
 }
 
 impl TraversalResult {
@@ -90,6 +102,8 @@ pub struct AtlasView<'a> {
     pub questions: &'a [Question],
     pub configurations: &'a [Configuration],
     pub edges: &'a [Edge],
+    pub positions: &'a [Position],
+    pub oppositions: &'a [Opposition],
 }
 
 /// Execute the plan. Deterministic: same atlas + same plan → same
@@ -181,6 +195,58 @@ fn traverse_entity_lookup(target: &QueryTarget, atlas: AtlasView<'_>) -> Travers
             || my_state_ids.contains(edge.target.as_str());
         if touches {
             result.edges.push(edge.clone());
+        }
+    }
+
+    // Gap-B typed atoms: positions and oppositions touching this
+    // entity. Two surfaces:
+    //   - structural — `proponent_id` / `left_atom_id` /
+    //     `right_atom_id` resolved to this entity at extract time.
+    //   - textual — the position name/content or opposition
+    //     left/right/framing mentions the entity's canonical name
+    //     or any alias. Catches the common case where the
+    //     resolver didn't snap a proponent string to an Entity
+    //     (because the model used a surname-only or short-form
+    //     reference) but the typed atom is still clearly about
+    //     this entity.
+    // Build a needle list from canonical_name + aliases — full forms
+    // AND surname-or-token tail (so "Jane Jacobs" also matches "Jacobs"
+    // alone). Tokens shorter than 4 chars dropped to avoid spurious
+    // hits ("the", "and", "of").
+    let mut entity_names_lower: Vec<String> = Vec::new();
+    for raw in std::iter::once(entity.canonical_name.clone())
+        .chain(entity.aliases.iter().cloned())
+    {
+        let lower = raw.to_lowercase();
+        if lower.len() >= 4 && !entity_names_lower.contains(&lower) {
+            entity_names_lower.push(lower.clone());
+        }
+        for tok in raw.split_whitespace() {
+            let t = tok.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+            if t.len() >= 4 && !entity_names_lower.contains(&t) {
+                entity_names_lower.push(t);
+            }
+        }
+    }
+    let mentions_entity = |s: &str| -> bool {
+        let lower = s.to_lowercase();
+        entity_names_lower.iter().any(|n| lower.contains(n))
+    };
+    for p in atlas.positions {
+        let structural = p.proponent_id.as_ref() == Some(&entity.id);
+        let textual = mentions_entity(&p.canonical_name) || mentions_entity(&p.content);
+        if structural || textual {
+            result.positions.push(p.clone());
+        }
+    }
+    for o in atlas.oppositions {
+        let structural = o.left_atom_id.as_ref() == Some(&entity.id)
+            || o.right_atom_id.as_ref() == Some(&entity.id);
+        let textual = mentions_entity(&o.left_label)
+            || mentions_entity(&o.right_label)
+            || mentions_entity(&o.framing);
+        if structural || textual {
+            result.oppositions.push(o.clone());
         }
     }
 
@@ -425,8 +491,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     fn state(idx: usize, owner: usize, label: &str, section: &str) -> State {
         State {
@@ -480,8 +547,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-        }
-    }
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+}
+}
 
     fn question(idx: usize, content: &str) -> Question {
         Question {
@@ -533,6 +603,8 @@ mod tests {
             questions,
             configurations: &[],
             edges,
+            positions: &[],
+            oppositions: &[],
         }
     }
 
@@ -657,6 +729,8 @@ mod tests {
                 questions: &[],
                 configurations: &[],
                 edges: &[],
+                positions: &[],
+                oppositions: &[],
             },
         );
         assert!(result.hit);
