@@ -298,7 +298,8 @@ impl Pipeline for EngineeringAtlasPipeline {
                 claims,
                 questions_raised: Vec::new(),
                 argument_reconstructions: Vec::new(),
-            }),
+                type_extension: None,
+                type_extensions: Vec::new(),            }),
         })
     }
 }

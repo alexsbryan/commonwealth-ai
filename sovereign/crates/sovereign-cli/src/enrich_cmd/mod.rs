@@ -24,7 +24,9 @@ pub mod atlas_tensions;
 pub mod atlas_tensions_classify;
 pub mod build;
 pub mod cascade;
+pub mod classify;
 pub mod config;
+pub mod extract_typed;
 pub mod corpus_io;
 pub mod triage;
 pub mod diagnose;
@@ -102,7 +104,9 @@ const HELP: Help = Help {
             "Individual phases",
             &[
                 ("seed", "Stage 1a: extract the canonical seed entity list from the first section."),
+                ("classify", "Phase 0: per-section type classification (fiction / argumentative / journal / ...). Drives routed Phase 1 dispatch."),
                 ("extract", "Phase 1: per-section atlas extraction (subset or full)."),
+                ("extract-typed", "Routed-Phase-1 v1: per-type typed-extension extraction over already-extracted sections (ArgumentativeEssay only in v1)."),
                 ("cluster", "Phase 2: cluster the Phase 1 sketches by facet."),
                 ("name", "Phase 3: name each facet cluster."),
                 ("resolve", "Phase 3a/3b: resolve atoms + edges + trajectories from the sketches."),
@@ -179,7 +183,9 @@ pub async fn run_enrich(args: &[String]) -> i32 {
 
         // ── Individual phases ─────────────────────────────────
         "seed" => seed_cmd::cmd_seed(rest).await,
+        "classify" => classify::cmd_classify(rest).await,
         "extract" => extract::cmd_extract(rest).await,
+        "extract-typed" => extract_typed::cmd_extract_typed(rest).await,
         "cluster" | "cluster-atlas" => atlas_phase_cmd::cmd_cluster_atlas(rest).await,
         "name" | "name-atlas-clusters" => {
             atlas_phase_cmd::cmd_name_atlas_clusters(rest).await

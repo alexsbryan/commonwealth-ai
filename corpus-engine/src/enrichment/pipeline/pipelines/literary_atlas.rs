@@ -1270,6 +1270,14 @@ impl RawSectionExtraction {
                 .into_iter()
                 .filter_map(RawArgumentReconstructionSketch::into_sketch)
                 .collect(),
+            // RawSectionExtraction is the literary-atlas parser; the
+            // routed Phase 1 dispatcher (obsidian_atlas) is the only
+            // path that ever populates `type_extension`. Leave it
+            // None here; the dispatcher merges in the typed payload
+            // post-parse when classification routes to a non-Fiction
+            // type.
+            type_extension: None,
+            type_extensions: Vec::new(),
         }
     }
 }

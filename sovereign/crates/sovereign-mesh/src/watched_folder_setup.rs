@@ -19,6 +19,7 @@
 
 use std::sync::Arc;
 
+use sovereign_tools::local_corpus::config::{ReconcileKind, SyncMode};
 use sovereign_tools::local_corpus::watched::events::EventSink;
 use sovereign_tools::local_corpus::watched::registry::WatchedFolderRegistry;
 use sovereign_tools::local_corpus::watched::scheduler::{
@@ -26,6 +27,14 @@ use sovereign_tools::local_corpus::watched::scheduler::{
 };
 use sovereign_tools::local_corpus::watched::worker::Worker;
 use sovereign_tools::local_corpus::LocalCorpusManager;
+
+/// Default sweep cadence for obsidian vaults registered with the
+/// reconciliation worker. Matches the watched-folder
+/// `WatchedFolderConfig::default().sweep_interval_secs` (120s) so the
+/// two corpus types behave identically under the daemon's dispatch
+/// loop. The scheduler also enforces a hard 60s floor; tuning lower
+/// has no effect.
+const OBSIDIAN_DEFAULT_SWEEP_INTERVAL_SECS: u64 = 120;
 
 use corpus_engine::CorpusEngine;
 
@@ -57,24 +66,51 @@ impl WatchedSubsystem {
     ) -> Self {
         let registry = Arc::new(WatchedFolderRegistry::new());
 
-        // Auto-resume: every persisted WatchedFolder corpus gets
-        // re-registered so the scheduler picks it up on the next
-        // tick. Idempotent. Threading sync_mode through here is
-        // what restores Manual-mode behaviour after a daemon
-        // restart — without it, every Manual corpus would revert
-        // to Continuous on the very next tick.
-        let watched = manager.list_watched().await;
-        let mut count = 0_usize;
-        for cfg in &watched {
-            if let Some(wf) = cfg.source_type.watched_config() {
-                registry
-                    .register_with_mode(cfg.id.clone(), wf.sweep_interval_secs, wf.sync_mode)
-                    .await;
-                count += 1;
+        // Auto-resume: every persisted reconcilable corpus (watched
+        // folder OR obsidian vault) gets re-registered so the
+        // scheduler picks it up on the next tick. Idempotent.
+        // Threading sync_mode through for watched folders is what
+        // restores Manual-mode behaviour after a daemon restart —
+        // without it, every Manual corpus would revert to Continuous
+        // on the very next tick. Obsidian vaults always register as
+        // Continuous on a fixed cadence; per-vault sweep tuning is
+        // deferred until a tuning need surfaces.
+        let reconcilable = manager.list_reconcilable().await;
+        let mut watched_count = 0_usize;
+        let mut obsidian_count = 0_usize;
+        for cfg in &reconcilable {
+            match cfg.source_type.reconcile_kind() {
+                Some(ReconcileKind::WatchedFolder) => {
+                    if let Some(wf) = cfg.source_type.watched_config() {
+                        registry
+                            .register_with_mode(
+                                cfg.id.clone(),
+                                wf.sweep_interval_secs,
+                                wf.sync_mode,
+                            )
+                            .await;
+                        watched_count += 1;
+                    }
+                }
+                Some(ReconcileKind::ObsidianVault) => {
+                    registry
+                        .register_with_mode(
+                            cfg.id.clone(),
+                            OBSIDIAN_DEFAULT_SWEEP_INTERVAL_SECS,
+                            SyncMode::Continuous,
+                        )
+                        .await;
+                    obsidian_count += 1;
+                }
+                None => {}
             }
         }
-        if count > 0 {
-            tracing::info!(count, "watched_folder:resumed_corpora");
+        if watched_count > 0 || obsidian_count > 0 {
+            tracing::info!(
+                watched = watched_count,
+                obsidian = obsidian_count,
+                "watched_folder:resumed_corpora"
+            );
         }
 
         let sink: EventSink = Arc::new(|_event| {
