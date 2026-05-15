@@ -61,7 +61,11 @@ use crate::error::{Error, Result};
 
 pub const PIPELINE_ID: &str = "engineering_atlas";
 
-const PHASE1_SYSTEM: &str = include_str!("engineering_atlas_prompts/phase1_system.md");
+static PHASE1_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "engineering_atlas/phase1_system.md",
+        include_str!("engineering_atlas_prompts/phase1_system.md"),
+    ));
 
 pub struct EngineeringAtlasPipeline {
     inner: LiteraryAtlasPipeline,
@@ -93,7 +97,7 @@ impl Pipeline for EngineeringAtlasPipeline {
     }
 
     fn phase1_system(&self) -> &'static str {
-        PHASE1_SYSTEM
+        *PHASE1_SYSTEM
     }
 
     fn phase3_system(&self) -> &'static str {
@@ -119,7 +123,7 @@ impl Pipeline for EngineeringAtlasPipeline {
         _exemplars: &[&Exemplar],
     ) -> ChatPrompt {
         let user = render_user_body(chapter);
-        ChatPrompt::new(PHASE1_SYSTEM, user)
+        ChatPrompt::new(*PHASE1_SYSTEM, user)
             .with_response_schema("engineering_claims", phase1_engineering_schema())
             .with_phase_id("phase1")
     }
@@ -152,7 +156,7 @@ impl Pipeline for EngineeringAtlasPipeline {
             render_user_body(chapter)
         );
         Some(
-            ChatPrompt::new(PHASE1_SYSTEM, user)
+            ChatPrompt::new(*PHASE1_SYSTEM, user)
                 .with_response_schema("engineering_claims", phase1_engineering_schema())
                 .with_phase_id("phase1_terse"),
         )

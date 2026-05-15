@@ -57,8 +57,11 @@ pub const PIPELINE_ID: &str = "obsidian_atlas";
 ///   5. "Distinguish Concept from Claim" — flags the failure mode
 ///      where the model folds named mechanisms into the Claim
 ///      that *uses* them.
-const PHASE1_OBSIDIAN_SYSTEM: &str =
-    include_str!("obsidian_atlas_prompts/phase1_system.md");
+static PHASE1_OBSIDIAN_SYSTEM: ::std::sync::LazyLock<&'static str> =
+    ::std::sync::LazyLock::new(|| crate::enrichment::pipeline::prompts::load_or_baked(
+        "obsidian_atlas/phase1_system.md",
+        include_str!("obsidian_atlas_prompts/phase1_system.md"),
+    ));
 
 /// Obsidian-vault atlas pipeline. Wraps a `LiteraryAtlasPipeline` and
 /// delegates every trait method — for v1 the two are behaviourally
@@ -104,7 +107,7 @@ impl Pipeline for ObsidianAtlasPipeline {
     //    specific tuning need at those stages.
 
     fn phase1_system(&self) -> &'static str {
-        PHASE1_OBSIDIAN_SYSTEM
+        *PHASE1_OBSIDIAN_SYSTEM
     }
     fn phase3_system(&self) -> &'static str {
         self.inner.phase3_system()

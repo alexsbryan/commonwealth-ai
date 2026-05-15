@@ -464,6 +464,20 @@ follow-up campaigns:
   hand-coded `score_*_atoms` functions collapsed into a single
   catalog-driven driver. See §9 "Adding a new typed axis".
 
+- **Prompt hot-reload — `SOVEREIGN_PROMPT_DIR` overlay.** **Landed
+  2026-05-15.** Pipelines used to bake their prompt MD files at
+  compile time via `include_str!` — every prompt edit forced a
+  `sovereign-cli` rebuild. Now, when `SOVEREIGN_PROMPT_DIR` is set
+  and `$SOVEREIGN_PROMPT_DIR/<pipeline>/<filename>.md` exists, it's
+  loaded at first read; otherwise the compile-time-baked copy is
+  used unchanged. Pattern: `export
+  SOVEREIGN_PROMPT_DIR=~/dev/prompt-overlays && mkdir -p
+  $SOVEREIGN_PROMPT_DIR/literary_atlas && cp corpus-engine/src/
+  enrichment/pipeline/pipelines/literary_atlas_prompts/phase1_system.md
+  $SOVEREIGN_PROMPT_DIR/literary_atlas/` then edit the overlay
+  copy. Next `sovereign enrich build` picks it up without a
+  rebuild.
+
 - **Golden scaffolder — `sovereign bench scaffold <corpus-id>`.**
   **Landed 2026-05-15.** Reads `atoms.json`, samples per catalog
   axis + base atom kinds, emits a draft golden TOML. Cuts new-bench

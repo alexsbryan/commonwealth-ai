@@ -10,6 +10,19 @@ sovereign bench all --rebuild --filter <id>   # re-extract atlas (enrichment lan
 sovereign bench all --report /tmp/r.json  # persist combined results bundle
 ```
 
+**Prompt-tuning loop (no CLI rebuild required):**
+
+```bash
+export SOVEREIGN_PROMPT_DIR=~/prompt-overlays
+mkdir -p $SOVEREIGN_PROMPT_DIR/<pipeline-id>
+cp corpus-engine/src/enrichment/pipeline/pipelines/<pipeline-id>_prompts/<file>.md \
+   $SOVEREIGN_PROMPT_DIR/<pipeline-id>/
+# edit the overlay copy
+sovereign enrich build <corpus>   # next run picks up the overlay
+```
+
+Without the env var (or with the file absent at the overlay path), pipelines use the compile-time-baked prompt. Edit the overlay, re-run; compare baselines via `sovereign bench all`.
+
 **Spinning up a new bench:**
 
 ```bash
