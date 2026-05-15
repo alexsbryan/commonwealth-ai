@@ -116,7 +116,9 @@ const HELP: Help = Help {
         HelpSection::Notes(
             "The driver shells out to the recipe's `[enrich].command` for each work unit, \
              treating `{key}` as the work-unit slug. Failures are bucketed (timeout / \
-             refused / vram_thrash / mismatch / model_missing / unknown) and retried up to \
+             refused / vram_thrash / gpu_vulkan / gpu_rocm / inference_json_parse / \
+             inference_5xx / daemon_down / stale_cache / mismatch / model_missing / \
+             phase_failed / build_step_failed / unknown) and retried up to \
              `[dispatch].max_attempts` before landing in `failed`. Add an `[schedule]` \
              block with `active_hours = \"HH:MM-HH:MM\"` to auto-pause outside that window.",
         ),
