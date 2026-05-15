@@ -29,6 +29,14 @@ reqwest = { workspace = true }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
 dirs = "5"
+# Ephemeral worker pods: the owner persists a single Ed25519 signing
+# key under ~/.sovereign/worker_owner_key.bin, generated on first use
+# via OS rng. See worker_pod_provider.rs.
+ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
+rand = "0.9"
+# `hex::encode` formats pod-pubkey thumbprints in the `pod up` output;
+# the same display format `pod down` will consume in a follow-up.
+hex = "0.4"
 hostname = { workspace = true }
 # `oicp-types` intentionally NOT a direct dep — the sovereign-core
 # re-export (`sovereign_core::oicp`) is the canonical consumer path

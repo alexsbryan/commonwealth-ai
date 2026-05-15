@@ -106,6 +106,19 @@ ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 rcgen = "0.13"
 # Bootstrap blob is base64'd into Vast's `onstart` env var.
 base64 = "0.22"
+# HTTPS termination for the worker daemon — pod serves its
+# seed-derived self-signed cert on :9742. `axum-server` is the
+# cleanest path that pairs axum routers with rustls without
+# hand-rolling a TLS acceptor. `tls-rustls-no-provider` lets us
+# install the same `aws-lc-rs` crypto provider reqwest uses,
+# avoiding the "two providers, can't pick one" error rustls 0.23
+# emits when both are registered.
+axum-server = { version = "0.7", features = ["tls-rustls-no-provider"] }
+# `aws_lc_rs` is the same crypto provider reqwest uses by default —
+# both halves of the protocol (pod's TLS server + owner's pinned
+# reqwest client) share one FIPS-aligned crypto stack. `std` is
+# default in rustls 0.23 but we make it explicit here.
+rustls = { version = "0.23", default-features = false, features = ["std", "aws_lc_rs"] }
 # Percent-encode model file names in the peer-fetch URL so a
 # filename with characters that would otherwise need encoding
 # (spaces, plus signs) reaches the server intact.

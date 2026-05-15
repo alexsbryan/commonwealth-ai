@@ -1,8 +1,10 @@
-# sovereign-mesh worker container, CUDA flavor.
+# sovereign ephemeral-worker container, CUDA flavor.
 #
-# Sister image to `Containerfile` (ROCm). Same architecture: builds an
-# image that joins your tailnet, pulls Darwin GGUFs from R2, and runs
-# `sovereign-cli daemon run`. The only differences from the ROCm image:
+# Sister image to `Containerfile` (ROCm). Runs in worker mode —
+# `sovereign-cli daemon run --worker-mode` — and is owned by exactly
+# one persistent peer for the lifetime of one job. See
+# sovereign/docs/EPHEMERAL_WORKER_PODS.md. Differences from the ROCm
+# image:
 #
 #   1. NVIDIA CUDA base (devel for build, runtime for serving).
 #   2. llama-cpp-2 features patched from `"rocm"` to `"cuda"`.
@@ -22,14 +24,14 @@
 # ── run locally (rootful podman, NVIDIA GPU passthrough requires the
 #                 NVIDIA Container Toolkit):
 #     podman run --rm --device nvidia.com/gpu=all \
-#       -e TS_AUTHKEY=tskey-... \
-#       -e MESH_SEED_ADDR=100.x.y.z:9742 \
-#       -e R2_ENDPOINT=... -e R2_ACCESS_KEY=... -e R2_SECRET_KEY=... \
-#       -e PRIMARY_COPIES=1 \
-#       -p 9741:9741 -p 9742:9742 \
+#       -e SOVEREIGN_BOOTSTRAP="$(sovereign worker-pod mint-blob …)" \
+#       -p 9742:9742 \
 #       ghcr.io/<you>/sovereign-cuda:latest
 #
-# (RunPod's runtime adds GPU device passthrough automatically.)
+# In production the owner doesn't run the pod locally — Vast/RunPod
+# does, and the owner ships `SOVEREIGN_BOOTSTRAP` via the provider's
+# onstart-cmd env. (RunPod's runtime adds GPU device passthrough
+# automatically.)
 
 # ─── Build stage ─────────────────────────────────────────────────────
 # CUDA 12.1.1 requires NVIDIA driver >= 530.30, which most cloud
@@ -215,29 +217,31 @@ ENV DEBIAN_FRONTEND=noninteractive
 #               (GGML_OPENMP=ON) but the cuda *-runtime image doesn't
 #               ship it, so sovereign-cli fails immediately with
 #               "error while loading shared libraries: libgomp.so.1".
+#
+# Worker-mode pods no longer install Tailscale or rclone — uploads
+# arrive over the owner's pinned-TLS connection, and the pod never
+# joins a tailnet. See EPHEMERAL_WORKER_PODS.md "Deleted (when
+# full-mesh-pods go away)".
 RUN apt-get update && apt-get install -y --no-install-recommends \
       --allow-change-held-packages \
-      curl ca-certificates iproute2 iptables unzip \
+      curl ca-certificates unzip \
       libnccl2 libgomp1 \
- && curl -fsSL https://tailscale.com/install.sh | sh \
- && curl -fsSL https://rclone.org/install.sh | bash \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
 
 WORKDIR /workspace
-RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign /root/.config/rclone
+RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign
 
-COPY sovereign/container/entrypoint.sh           /entrypoint.sh
-COPY sovereign/container/entrypoint-tailscale.sh /entrypoint-tailscale.sh
-RUN chmod +x /entrypoint.sh /entrypoint-tailscale.sh
+COPY sovereign/container/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-EXPOSE 9741 9742
+# Worker daemon's owner-only TLS surface. No client port (9741) — pods
+# don't serve /v1/chat/* in worker mode.
+EXPOSE 9742
 
 ENV SOVEREIGN_DATA_DIR=/workspace/data
 ENV SOVEREIGN_MODELS_DIR=/workspace/models
-ENV PRIMARY_COPIES=1
-ENV CONTEXT_SIZE=32768
 
 ENTRYPOINT ["/entrypoint.sh"]

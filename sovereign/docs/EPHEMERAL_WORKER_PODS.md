@@ -2,12 +2,36 @@
 
 ## Status
 
-**Designed, not implemented.** 2026-05-15. Successor to the
-`pipeline pod up` flow that joined every Vast pod to the mesh as a
-full peer. That approach was shoehorned: it worked because Tailscale
-gave us symmetric reachability for free, but it forced a single-owner
-ephemeral worker through the same gossip/join/leave machinery a
-persistent peer uses.
+**MVP implemented.** 2026-05-15. Wire-protocol seam and full
+single-pod lifecycle are live and unit-tested (28 tests across
+`sovereign-mesh::worker_*` + `sovereign-cli::worker_pod_provider`)
+with a real-TLS end-to-end integration test
+(`sovereign/crates/sovereign-mesh/tests/worker_e2e.rs`) covering:
+
+- Owner ↔ pod handshake over reqwest-pinned TLS against the
+  seed-derived self-signed cert.
+- Upload SHA validation, manifest dispatch, cursor-based completed
+  poll, DELETE shutdown.
+- Impostor-owner rejection (wrong signing key can't drive a pinned pod).
+
+Outstanding from the MVP plan:
+
+- Desktop wizard Tauri commands (`worker_pod_create/status/destroy`).
+  The Rust controller surface is ready; the Tauri glue is a thin
+  follow-up.
+- Real-runner integration. The pod's worker daemon currently uses an
+  `EchoRunner` stub (acks every input unit) — production wires this
+  to `sovereign-pipeline` for actual enrichment.
+- `pipeline pod dispatch <id>` + `pipeline pod poll <id>` commands.
+  `pod up` boots the pod into "uploads ready" state; dispatch +
+  polling are not yet exposed as CLI subcommands (the controller
+  helpers are public — wiring the CLI is mechanical).
+
+Successor to the legacy `pipeline pod up` flow that joined every Vast
+pod to the mesh as a full peer. That approach was shoehorned: it
+worked because Tailscale gave us symmetric reachability for free, but
+it forced a single-owner ephemeral worker through the same
+gossip/join/leave machinery a persistent peer uses.
 
 This document defines the architecture for treating Vast pods as
 **ephemeral workers** instead of **persistent peers** — a clean

@@ -1,10 +1,10 @@
-# sovereign-mesh worker container, ROCm flavor.
+# sovereign ephemeral-worker container, ROCm flavor.
 #
-# Builds an image that joins your tailnet, pulls Darwin GGUFs from R2,
-# and runs `sovereign-cli daemon run` with the mesh advertising
-# whatever slots fit on the host GPU. Designed for ad-hoc spin-up on
-# RunPod MI300X (gfx942) instances; same image with AMDGPU_TARGETS
-# adjusted works on MI250X (gfx90a) or MI100 (gfx908).
+# Builds an image that runs `sovereign-cli daemon run --worker-mode`.
+# The pod becomes a single-owner ephemeral worker — see
+# sovereign/docs/EPHEMERAL_WORKER_PODS.md. No Tailscale, no R2, no
+# mesh gossip; the owner connects directly to :9742 over a
+# seed-derived TLS pin.
 #
 # ── build (from commonwealth-ai/ workspace root, NOT from sovereign/):
 #     cd ~/dev/commonwealth-ai
@@ -13,27 +13,24 @@
 #
 # `podman` is the recommended builder on Fedora / RHEL / Toolbox
 # hosts (rootless, daemonless). `docker build -f Containerfile` works
-# identically — both consume Dockerfile syntax and emit OCI-compliant
-# images that any registry (ghcr, Docker Hub, RunPod) accepts.
+# identically.
 #
 # The build context is the commonwealth-ai/ monorepo root because the
-# workspace Cargo.toml at that root declares every crate (corpus-engine,
-# oicp-types, commonwealth/crates/*, sovereign/crates/*) as a path-dep
-# member. Building from sovereign/ alone would not see those manifests.
+# workspace Cargo.toml at that root declares every crate as a
+# path-dep member.
 #
 # ── run locally (rootful podman, AMD GPU passthrough):
 #     podman run --rm \
 #       --device=/dev/kfd --device=/dev/dri --group-add video \
-#       -e TS_AUTHKEY=tskey-... \
-#       -e MESH_SEED_ADDR=100.x.y.z:9742 \
-#       -e R2_ENDPOINT=... -e R2_ACCESS_KEY=... -e R2_SECRET_KEY=... \
-#       -e PRIMARY_COPIES=1 \
-#       -p 9741:9741 -p 9742:9742 \
+#       -e SOVEREIGN_BOOTSTRAP="$(sovereign worker-pod mint-blob …)" \
+#       -p 9742:9742 \
 #       ghcr.io/<you>/sovereign-rocm:latest
 #
-# (RunPod's runtime adds GPU device passthrough automatically; the
-# --device / --group-add flags above are only needed for direct
-# rootful local runs.)
+# In production the owner doesn't run the pod locally — Vast/RunPod
+# does, and the owner ships `SOVEREIGN_BOOTSTRAP` via the provider's
+# onstart-cmd env. (RunPod's runtime adds GPU device passthrough
+# automatically; the --device / --group-add flags above are only
+# needed for direct rootful local runs.)
 
 # ─── Build stage ─────────────────────────────────────────────────────
 FROM docker.io/rocm/dev-ubuntu-22.04:7.2 AS build
@@ -134,33 +131,34 @@ FROM docker.io/rocm/dev-ubuntu-22.04:7.2
 ENV DEBIAN_FRONTEND=noninteractive
 # Runtime math libs (hipblas, rocblas) — the binary dlopen's these on
 # slot load; without them the daemon segfaults when llama.cpp tries to
-# init a ROCm device. iproute2/iptables are required by tailscaled's
-# userspace networking mode.
+# init a ROCm device.
+#
+# Worker-mode pods no longer install Tailscale or rclone — uploads
+# arrive over the owner's pinned-TLS connection, and the pod never
+# joins a tailnet. See EPHEMERAL_WORKER_PODS.md "Deleted (when
+# full-mesh-pods go away)".
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates iproute2 iptables unzip \
+    curl ca-certificates unzip \
     hipblas rocblas \
     libgomp1 \
- && curl -fsSL https://tailscale.com/install.sh | sh \
- && curl -fsSL https://rclone.org/install.sh | bash \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli
 
 # Workspace volume — RunPod mounts /workspace by default; our entrypoint
-# arranges /workspace/models for GGUFs and /workspace/data for atlases.
+# arranges /workspace/models for owner uploads and /workspace/data for
+# the worker daemon's local state.
 WORKDIR /workspace
-RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign /root/.config/rclone
+RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign
 
-COPY sovereign/container/entrypoint.sh           /entrypoint.sh
-COPY sovereign/container/entrypoint-tailscale.sh /entrypoint-tailscale.sh
-RUN chmod +x /entrypoint.sh /entrypoint-tailscale.sh
+COPY sovereign/container/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Daemon's external HTTP + internal mesh gossip ports.
-EXPOSE 9741 9742
+# Worker daemon's owner-only TLS surface. No client port (9741) — pods
+# don't serve /v1/chat/* in worker mode.
+EXPOSE 9742
 
 ENV SOVEREIGN_DATA_DIR=/workspace/data
 ENV SOVEREIGN_MODELS_DIR=/workspace/models
-ENV PRIMARY_COPIES=1
-ENV CONTEXT_SIZE=32768
 
 ENTRYPOINT ["/entrypoint.sh"]

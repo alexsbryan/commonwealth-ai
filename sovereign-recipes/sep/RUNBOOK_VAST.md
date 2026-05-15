@@ -1,9 +1,36 @@
 # SEP enrichment on a Vast.ai peer — runbook
 
-The pipeline driver runs locally; one or more Vast.ai pods join the
-mesh as ephemeral worker peers. Each pod runs the same `sovereign-cli
-daemon` as the laptop, but advertises a primary GGUF slot the driver
-fans inference out to via the mesh load balancer.
+> **Worker-mode rewrite — 2026-05-15.** `pipeline pod up` no longer
+> joins pods to the mesh. Pods are now owner-only ephemeral workers
+> over a TLS-pinned channel; see
+> [`sovereign/docs/EPHEMERAL_WORKER_PODS.md`](../../sovereign/docs/EPHEMERAL_WORKER_PODS.md)
+> for the new architecture. The owner-side env-var contract shrunk
+> from 8 fields to 2 (`SOVEREIGN_VAST_IMAGE` + `vastai` CLI auth).
+>
+> The mesh/Tailscale/R2 instructions below are kept as a reference
+> for legacy images still on the join-the-mesh entrypoint, but new
+> deployments should use the worker-mode flow:
+>
+> ```bash
+> # 1. Mint pod (owner uploads happen in the same command — no R2)
+> sovereign pipeline pod up \
+>     --image ghcr.io/<you>/sovereign-cuda:latest \
+>     --gpu L40S --disk 80 --max-price 0.80 \
+>     --upload ~/sovereign/models/FINAL-Bench_Darwin-36B-Opus-Q6_K.gguf \
+>     --upload ~/sovereign/models/Qwen3-Embedding-0.6B-Q8_0.gguf
+>
+> # 2. The command prints a worker token + pinned thumbprint. The
+> #    pod is in "uploads ready" state; dispatch + poll commands
+> #    (`pipeline pod dispatch`, `pipeline pod poll`) are the
+> #    follow-up surface tracked in EPHEMERAL_WORKER_PODS.md.
+>
+> # 3. Tear down — same as legacy:
+> sovereign pipeline pod down <vast-id>
+> ```
+
+The pipeline driver runs locally; one or more Vast.ai pods receive
+work over an owner-pinned TLS channel. The legacy section below
+described the mesh-join path that worker-mode replaces.
 
 Everything that used to be ad-hoc bash (xargs fan-out, restart loops,
 manual cost math, peer health probes) is handled by `sovereign
