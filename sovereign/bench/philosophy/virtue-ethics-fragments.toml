@@ -2,6 +2,7 @@
 
 [meta]
 template = "virtue-ethics-fragments"
+corpus_id = "virtue-ethics-fragments"
 description = "Expected and forbidden outputs for the virtue-ethics-fragments template."
 
 # ── Phase 1 positions: removed (v1-pipeline legacy artifact) ───────

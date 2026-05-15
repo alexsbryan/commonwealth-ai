@@ -1056,7 +1056,8 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        };
+                    concept_kind: None,
+};
         // Off-list noise: 5 entities with massive centrality (each
         // sourcing 100 edges into earth or each other).
         let mut atoms: Vec<AtomEnvelope> = vec![AtomEnvelope::Entity(earth)];
@@ -1074,7 +1075,8 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
-            }));
+                            concept_kind: None,
+}));
         }
 
         // Edges: Earth gets 5 inbound. Random Pages each get 100
@@ -1199,7 +1201,8 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
-            })
+                            concept_kind: None,
+})
         };
         atoms.push(mk(1, "Earth")); // L1 seed
         for (i, name) in ["Neighbour A", "Neighbour B", "Neighbour C", "Neighbour D"]
@@ -1349,7 +1352,8 @@ mod tests {
                 role: None,
                 participants: Vec::new(),
                 defining_quote: None,
-            }));
+                            concept_kind: None,
+}));
         }
         // Equal centrality: each gets one inbound from the other.
         let edges = vec![

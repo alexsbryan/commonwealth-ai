@@ -29,6 +29,7 @@
 
 [meta]
 template = "obsidian-real-vault-2026-05-14"
+corpus_id = "obsidian-vault"
 description = "Golden set for Alex Bryan's personal vault — root essays only. Heterogeneous topic range: institutional economics, urban planning, market design, NFL as designed system, AI investment stack, pharmacy benefit managers, land value tax, philosophy of music."
 vault_path = "/Users/alexsbryan/Documents/Obsidian Vault"
 excluded_paths = [

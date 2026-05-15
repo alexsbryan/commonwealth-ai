@@ -1,0 +1,2156 @@
+{
+  "bank_name": "wikipedia-core-v1",
+  "corpus": "wikipedia",
+  "limit": 10,
+  "started_at_unix": 1777497973,
+  "results": [
+    {
+      "question_id": "factual_einstein_1905",
+      "category": "factual_recall",
+      "question": "What were Einstein's four 1905 'Annus Mirabilis' papers about?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1905_–_Annus_Mirabilis_papers",
+          "score": 0.033333335,
+          "snippet": "Albert Einstein  The Annus Mirabilis papers are four articles pertaining to the photoelectric effect (which gave rise to quantum theory), Brownian motion, the special theory of relativity, and E = mc that Einstein published in the Annalen der Physik scientific journal in 1905. These four works contributed substantially to the foundation of modern physics and changed views on space, time, and matter. The four papers are:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1900–1905:_First_scientific_papers",
+          "score": 0.032522473,
+          "snippet": "Albert Einstein  (Einstein was formally awarded his PhD on 15 January 1906.) Four other pieces of work that Einstein completed in 1905— his famous papers on the photoelectric effect, Brownian motion, his special theory of relativity and the equivalence of mass and energy —have led to the year being celebrated as an annus mirabilis for physics akin to 1666 (the year in which Isaac Newton experienced his greatest epiphanies). The publications deeply impressed Einstein's contemporaries."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of electromagnetic theory",
+          "url": "https://en.wikipedia.org/wiki/History_of_electromagnetic_theory#Einstein's_Annus_Mirabilis",
+          "score": 0.031778056,
+          "snippet": "History of electromagnetic theory  In 1905, while he was working in the patent office, Albert Einstein had four papers published in the Annalen der Physik, the leading German physics journal. These are the papers that history has come to call the Annus Mirabilis papers:  All four papers are today recognized as tremendous achievements—and hence 1905 is known as Einstein's \" Wonderful Year \". At the time, however, they were not noticed by most physicists as being important, and many of those who did notice them rejected them outright. Some of this work—such as the theory of light quanta—remained…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Georges Lemaître",
+          "url": "https://en.wikipedia.org/wiki/Georges_Lema%C3%AEtre#Work",
+          "score": 0.029631255,
+          "snippet": "Georges Lemaître  Lemaître was a pioneer in applying Albert Einstein 's theory of general relativity to cosmology. In a 1927 article, which preceded Edwin Hubble 's landmark article by two years, Lemaître derived what became known as Hubble's law and proposed it as a generic phenomenon in relativistic cosmology. Lemaître was also the first to estimate the numerical value of the Hubble constant.  Einstein was skeptical of this paper. When Lemaître approached Einstein at the 1927 Solvay Conference, the latter pointed out that Alexander Friedmann had proposed a similar solution to Einstein's equa…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hendrik Lorentz",
+          "url": "https://en.wikipedia.org/wiki/Hendrik_Lorentz#Lorentz_and_special_relativity",
+          "score": 0.016129032,
+          "snippet": "Hendrik Lorentz  wit's end) The confirmation of his prediction had to wait until 1908 and later (see Kaufmann–Bucherer–Neumann experiments).  Lorentz published a series of papers dealing with what he called \"Einstein's principle of relativity\". For instance, in 1909, 1910, 1914. In his 1906 lectures published with additions in 1909 in the book \"The theory of electrons\" (updated in 1915), he spoke affirmatively of Einstein's theory:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spacetime diagram",
+          "url": "https://en.wikipedia.org/wiki/Spacetime_diagram#History",
+          "score": 0.015873017,
+          "snippet": "Spacetime diagram  Albert Einstein announced his theory of special relativity in 1905, with Hermann Minkowski providing his graphical representation in 1908."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+          "score": 0.015873017,
+          "snippet": "Albert Einstein  Einstein's work is also known for its influence on the philosophy of science. In 1905, he published four groundbreaking papers, sometimes described as his annus mirabilis. These papers outlined a theory of the photoelectric effect, explained Brownian motion, introduced his special theory of relativity—a theory which addressed the inability of classical mechanics to account satisfactorily for the behavior of the electromagnetic field—and demonstrated that if the special theory is correct, mass and energy are equivalent to each other. In 1915, he proposed a general theory of rel…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Hendrik Lorentz",
+          "url": "https://en.wikipedia.org/wiki/Hendrik_Lorentz#Electrodynamics_and_relativity",
+          "score": 0.015625,
+          "snippet": "Hendrik Lorentz  In 1899 and again in 1904, Lorentz added time dilation to his transformations and published what Poincaré in 1905 named Lorentz transformations."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Abstract",
+          "score": 0.015625,
+          "snippet": "Albert Einstein  and especially for his discovery of the law of the photoelectric effect \", a pivotal step in the development of quantum theory.  Einstein's work is also known for its influence on the philosophy of science. In 1905, he published four groundbreaking papers, sometimes described as his annus mirabilis (miracle year). These papers outlined a theory of the photoelectric effect, explained Brownian motion, introduced his special theory of relativity—a theory which addressed the inability of classical mechanics to account satisfactorily for the behavior of the electromagnetic field —a…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Scholarly peer review",
+          "url": "https://en.wikipedia.org/wiki/Scholarly_peer_review#History",
+          "score": 0.015384615,
+          "snippet": "Scholarly peer review  began to involve external reviewers in the mid-19th-century, and did not become commonplace until the mid-20th-century.  Peer review became a touchstone of the scientific method, but until the end of the 19th century was often performed directly by an editor-in-chief or editorial committee. Editors of scientific journals at that time made publication decisions without seeking outside input, i.e. an external panel of reviewers, giving established authors latitude in their journalistic discretion. For example, Albert Einstein 's four revolutionary Annus Mirabilis papers in…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Albert Einstein"
+        ],
+        "missing": [
+          "Annus Mirabilis papers"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "photoelectric effect",
+          "Brownian motion",
+          "special relativity",
+          "mass-energy equivalence",
+          "1905"
+        ],
+        "missing": [],
+        "total_expected": 5,
+        "ratio": 1.0
+      },
+      "embed_ms": 35,
+      "search_ms": 263,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "factual_yalta_leaders",
+      "category": "factual_recall",
+      "question": "Who were the three Allied leaders at the Yalta Conference?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference",
+          "score": 0.030621786,
+          "snippet": "Yalta Conference  The Yalta Conference, held 4–11 February 1945, was the World War II meeting of the heads of government of the United States, the United Kingdom and the Soviet Union to discuss the postwar reorganization of Germany and Europe. The three states were represented by President Franklin D. Roosevelt, Prime Minister Winston Churchill, and General Secretary Joseph Stalin. The conference was held near Yalta in Crimea, Soviet Union, within the Livadia, Yusupov, and Vorontsov palaces. The aim of the conference was to shape a postwar peace that represented not only a collective security …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Georgy Zhukov",
+          "url": "https://en.wikipedia.org/wiki/Georgy_Zhukov#Inter-allied_diplomacy",
+          "score": 0.016666668,
+          "snippet": "Georgy Zhukov  From 16 July to 2 August, Zhukov participated in the Potsdam Conference with the fellow representatives of the Allied governments. As one of the four commanders of the Allied occupational forces, Zhukov established good relationships with his new colleagues, General Dwight D. Eisenhower, Field Marshal Bernard Montgomery, and Marshal Jean de Lattre, and the four frequently exchanged views about such matters as the sentencing, trials, and judgments of war criminals, geopolitical relationships between the Allied states, and how to defeat Japan and rebuild Germany."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
+          "score": 0.016666668,
+          "snippet": "Yalta Conference  All three leaders ratified the agreement of the European Advisory Commission setting the boundaries of postwar occupation zones for Germany with three zones of occupation, one for each of the three principal Allies. They also agreed to give France a zone of occupation carved out of the US and UK zones, but De Gaulle maintained the principle of refusing to accept that the French zone would be defined by boundaries established in his absence. He thus ordered French forces to occupy Stuttgart in addition to the lands earlier agreed upon as comprising the French occupation zone. …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Allies of World War II",
+          "url": "https://en.wikipedia.org/wiki/Allies_of_World_War_II#The_Big_Three",
+          "score": 0.016393442,
+          "snippet": "Allies of World War II  Franklin D. Roosevelt, Winston Churchill, and Joseph Stalin were The Big Three leaders. They were in frequent contact through ambassadors, top generals, foreign ministers and special emissaries such as the American Harry Hopkins. It is also often called the \"Strange Alliance\", because it united the leaders of the world's greatest capitalist state (the United States), the greatest socialist state (the Soviet Union) and the greatest colonial power (the United Kingdom).  Relations between them resulted in the major decisions that shaped the war effort and planned for the p…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Conference",
+          "score": 0.016393442,
+          "snippet": "Yalta Conference  During the Yalta Conference, the Western Allies had liberated all of France and Belgium and were fighting on the western border of Germany. In the east, Soviet forces were 65 km (40 mi) from Berlin, having already pushed back the Germans from Poland, Romania, and Bulgaria. There was no longer a question regarding German defeat. The issue was the new shape of postwar Europe."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Surrender of Japan",
+          "url": "https://en.wikipedia.org/wiki/Surrender_of_Japan#Events_at_Potsdam",
+          "score": 0.016129032,
+          "snippet": "Surrender of Japan  The leaders of the major Allied powers met at the Potsdam Conference from 16 July to 2 August 1945. The participants were the Soviet Union, the United Kingdom, and the United States, represented by Stalin, Winston Churchill (later Clement Attlee), and Truman respectively."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Charles de Gaulle",
+          "url": "https://en.wikipedia.org/wiki/Charles_de_Gaulle#Foreign_policy",
+          "score": 0.015873017,
+          "snippet": "Charles de Gaulle  De Gaulle hosted a superpower summit on 17 May 1960 for arms limitation talks and détente efforts in the wake of the 1960 U-2 incident between United States President Dwight Eisenhower, Soviet Premier Nikita Khrushchev, and United Kingdom Prime Minister Harold Macmillan. When Khrushchev condemned the United States U-2 flights, de Gaulle expressed to Khrushchev his disapproval of 18 near-simultaneous secret Soviet satellite overflights of French territory; Khrushchev denied knowledge of the overflights. Lieutenant General Vernon A. Walters was struck by de Gaulle's \"unconditi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Charles de Gaulle",
+          "url": "https://en.wikipedia.org/wiki/Charles_de_Gaulle#Yalta_and_Potsdam",
+          "score": 0.015873017,
+          "snippet": "Charles de Gaulle  De Gaulle was never invited to the summit conferences of Allied leaders such as Yalta and Potsdam. He never forgave the Big Three leaders (Churchill, Roosevelt and Stalin) for their neglect and continued to rage against it as having been a negative factor in European politics for the rest of his life.  After the Rhine crossings, the French First Army captured a large section of territory in southern Germany, but although this later allowed France to play a part in the signing of the German surrender, Roosevelt in particular refused to allow any discussion about de Gaulle par…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "James F. Byrnes",
+          "url": "https://en.wikipedia.org/wiki/James_F._Byrnes#World_War_II",
+          "score": 0.015625,
+          "snippet": "James F. Byrnes  In short, Byrnes never had a serious chance at being nominated for vice president, and the nomination went instead to Truman. Roosevelt brought Byrnes to the Yalta Conference in early 1945 in which he seemed to favor Soviet plans. Written in shorthand, his notes comprise one of the most complete records of the \"Big Three\" Yalta meetings. At the same time, Byrnes did not participate in the foreign ministers' meetings or the direct meetings between Roosevelt, Winston Churchill, and Joseph Stalin. After the Conference, he was influential in convincing the U.S. Congress and the ge…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Korean War",
+          "url": "https://en.wikipedia.org/wiki/Korean_War#Korea_divided_(1945–1949)",
+          "score": 0.015625,
+          "snippet": "Korean War  At the Tehran Conference in 1943 and the Yalta Conference in February 1945, the Soviet Union promised to join its allies in the Pacific War within three months of the victory in Europe. Germany officially surrendered on 8 May 1945, and the USSR declared war on Japan and invaded Manchuria on 8 August 1945, three days after the atomic bombing of Hiroshima. By 10 August, the Red Army had begun to occupy the north of Korea."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Yalta Conference"
+        ],
+        "missing": [],
+        "total_expected": 1,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "Franklin D. Roosevelt",
+          "Winston Churchill",
+          "Joseph Stalin",
+          "February 1945"
+        ],
+        "missing": [],
+        "total_expected": 4,
+        "ratio": 1.0
+      },
+      "embed_ms": 18,
+      "search_ms": 221,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "factual_special_vs_general_relativity",
+      "category": "factual_recall",
+      "question": "What is the core difference between special relativity and general relativity?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Scientific law",
+          "url": "https://en.wikipedia.org/wiki/Scientific_law#Laws_as_consequences_of_mathematical_symmetries",
+          "score": 0.016666668,
+          "snippet": "Scientific law  Special relativity uses rapidity to express motion according to the symmetries of hyperbolic rotation, a transformation mixing space and time. Symmetry between inertial and gravitational mass results in general relativity."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Spacetime",
+          "url": "https://en.wikipedia.org/wiki/Spacetime#Twin_paradox",
+          "score": 0.016666668,
+          "snippet": "Spacetime  Nevertheless, the twin paradox is not a true paradox because it is easily understood within the context of special relativity.  The impression that a paradox exists stems from a misunderstanding of what special relativity states. Special relativity does not declare all frames of reference to be equivalent, only inertial frames. The traveling twin's frame is not inertial during periods when she is accelerating. Furthermore, the difference between the twins is observationally detectable: the traveling twin needs to fire her rockets to be able to return home, while the stay-at-home twi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Maxwell's equations",
+          "url": "https://en.wikipedia.org/wiki/Maxwell%27s_equations#Abstract",
+          "score": 0.016393442,
+          "snippet": "Maxwell's equations  ε 0 {\\displaystyle \\varepsilon _{0}} is the vacuum permittivity and μ 0 {\\displaystyle \\mu _{0}} the vacuum permeability.  The equations have two major variants:  The term \"Maxwell's equations\" is often also used for equivalent alternative formulations. Versions of Maxwell's equations based on the electric and magnetic scalar potentials are preferred for explicitly solving the equations as a boundary value problem, analytical mechanics, or for use in quantum mechanics. The covariant formulation (on spacetime rather than space and time separately) makes the compatibility of…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Relativistic Doppler effect",
+          "url": "https://en.wikipedia.org/wiki/Relativistic_Doppler_effect#Source_and_receiver_both_in_circular_motion_around_a_common_center",
+          "score": 0.016393442,
+          "snippet": "Relativistic Doppler effect  Suppose source and receiver are located on opposite ends of a spinning rotor, as illustrated in Fig. 6. Kinematic arguments (special relativity) and arguments based on noting that there is no difference in potential between source and receiver in the pseudogravitational field of the rotor (general relativity) both lead to the conclusion that there should be no Doppler shift between source and receiver.  In 1961, Champeney and Moon conducted a Mössbauer rotor experiment testing exactly this scenario, and found that the Mössbauer absorption process was unaffected by …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Inertia",
+          "url": "https://en.wikipedia.org/wiki/Inertia#Relativity",
+          "score": 0.016129032,
+          "snippet": "Inertia  Albert Einstein 's theory of special relativity, as proposed in his 1905 paper entitled \" On the Electrodynamics of Moving Bodies \", was built on the understanding of inertial reference frames developed by Galileo, Huygens and Newton. While this revolutionary theory did significantly change the meaning of many Newtonian concepts such as mass, energy, and distance, Einstein's concept of inertia remained at first unchanged from Newton's original meaning. However, this resulted in a limitation inherent in special relativity: the principle of relativity could only apply to inertial refere…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Minkowski space",
+          "url": "https://en.wikipedia.org/wiki/Minkowski_space#Abstract",
+          "score": 0.016129032,
+          "snippet": "Minkowski space  it from the work of Hendrik Lorentz, Henri Poincaré, and others said it \"was grown on experimental physical grounds\".  Minkowski space is closely associated with Einstein's theories of special relativity and general relativity and is the most common mathematical structure by which special relativity is formalized. While the individual components in Euclidean space and time might differ due to length contraction and time dilation, in Minkowski spacetime, all frames of reference will agree on the total interval in spacetime between events. Minkowski space differs from four-dimen…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Physics",
+          "url": "https://en.wikipedia.org/wiki/Physics#Modern",
+          "score": 0.015873017,
+          "snippet": "Physics  particle accelerators. On this scale, ordinary, commonsensical notions of space, time, matter, and energy are no longer valid.  The two chief theories of modern physics present a different picture of the concepts of space, time, and matter from that presented by classical physics. Classical mechanics approximates nature as continuous, while quantum theory is concerned with the discrete nature of many phenomena at the atomic and subatomic level and with the complementary aspects of particles and waves in the description of such phenomena. The theory of relativity is concerned with the …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Membrane potential",
+          "url": "https://en.wikipedia.org/wiki/Membrane_potential#Voltage",
+          "score": 0.015873017,
+          "snippet": "Membrane potential  The same principle applies to voltage in cell biology. In electrically active tissue, the potential difference between any two points can be measured by inserting an electrode at each point, for example one inside and one outside the cell, and connecting both electrodes to the leads of what is in essence a specialized voltmeter. By convention, the zero potential value is assigned to the outside of the cell and the sign of the potential difference between the outside and the inside is determined by the potential of the inside relative to the outside zero."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Galileo Galilei",
+          "url": "https://en.wikipedia.org/wiki/Galileo_Galilei#Galilean_invariance",
+          "score": 0.015625,
+          "snippet": "Galileo Galilei  Galileo put forward the basic principle of relativity, that the laws of physics are the same in any system that is moving at a constant speed in a straight line, regardless of its particular speed or direction. Hence, there is no absolute motion or absolute rest. This principle provided the basic framework for Newton's laws of motion and is central to Einstein's special theory of relativity."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to general relativity",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_general_relativity#Probing_the_gravitational_field",
+          "score": 0.015625,
+          "snippet": "Introduction to general relativity  they must follow the curvature of the Earth's surface. But they are as straight as is possible subject to this constraint.  The properties of geodesics differ from those of straight lines. For example, on a plane, parallel lines never meet, but this is not so for geodesics on the surface of the Earth: for example, lines of longitude are parallel at the equator, but intersect at the poles. Analogously, the world lines of test particles in free fall are spacetime geodesics, the straightest possible lines in spacetime. But still there are crucial differences be…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [
+          "Special relativity",
+          "General relativity"
+        ],
+        "total_expected": 2,
+        "ratio": 0.0
+      },
+      "fact_score": {
+        "matched": [
+          "inertial frames",
+          "accelerated frames",
+          "gravity",
+          "spacetime curvature",
+          "1905"
+        ],
+        "missing": [
+          "1915"
+        ],
+        "total_expected": 6,
+        "ratio": 0.8333333
+      },
+      "embed_ms": 18,
+      "search_ms": 216,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "synth_manhattan_emigre_physicists",
+      "category": "multi_article_synthesis",
+      "question": "How did the Manhattan Project draw on European physicists who fled Nazi Germany?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr",
+          "score": 0.031498015,
+          "snippet": "Niels Bohr  Bohr mentored and collaborated with physicists including Hans Kramers, Oskar Klein, George de Hevesy, and Werner Heisenberg. He predicted the properties of a new zirconium-like element, which was named hafnium, after the Latin name for Copenhagen, where it was discovered. Later, the synthetic element bohrium was named after him. During the 1930s, Bohr helped refugees from Nazism. After Denmark was occupied by the Germans, he met with Heisenberg, who had become the head of the German nuclear weapon project. In September 1943 word reached Bohr that he was about to be arrested by the …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Franklin D. Roosevelt",
+          "url": "https://en.wikipedia.org/wiki/Franklin_D._Roosevelt#Nuclear_program",
+          "score": 0.016666668,
+          "snippet": "Franklin D. Roosevelt  In August 1939, Leo Szilard and Albert Einstein sent the Einstein–Szilárd letter to Roosevelt, warning of the possibility of a German project to develop nuclear weapons. Szilard realized that the recently discovered process of nuclear fission could be used to create a weapon of mass destruction. Roosevelt feared the consequences of allowing Germany to have sole possession of the technology and authorized preliminary research into nuclear weapons. After Pearl Harbor, the Roosevelt administration secured funding to continue research and selected General Leslie Groves to ov…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Kurt Weill",
+          "url": "https://en.wikipedia.org/wiki/Kurt_Weill#Life_in_Paris_and_New_York",
+          "score": 0.016666668,
+          "snippet": "Kurt Weill  Weill fled Nazi Germany in March 1933. A prominent and popular Jewish composer, Weill was officially denounced for his political views and sympathies, and became a target of the Nazi authorities, who criticized and interfered with performances of his later stage works, such as Rise and Fall of the City of Mahagonny (Aufstieg und Fall der Stadt Mahagonny, 1930), Die Bürgschaft (1932), and Der Silbersee (1933). With no option but to leave Germany, he went first to Paris, where he worked once more with Brecht (after a project with Jean Cocteau failed) on the ballet The Seven Deadly Si…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Werner Heisenberg",
+          "url": "https://en.wikipedia.org/wiki/Werner_Heisenberg#1945:_Reaction_to_Hiroshima",
+          "score": 0.016393442,
+          "snippet": "Werner Heisenberg  Nine of the prominent German scientists who published reports in Nuclear Physics Research Reports as members of the Uranverein were captured by Operation Alsos and incarcerated in England under Operation Epsilon. Ten German scientists, including Heisenberg, were held at Farm Hall in England. The facility had been a safe house of the British foreign intelligence MI6. During their detention, their conversations were recorded. Conversations thought to be of intelligence value were transcribed and translated into English. The transcripts were released in 1992. On 6 August 1945, …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of military technology",
+          "url": "https://en.wikipedia.org/wiki/History_of_military_technology#World_War_II",
+          "score": 0.016393442,
+          "snippet": "History of military technology  British physicists pioneered long-wave radar, developing an effective system for detecting incoming German air forces. Work on potentially more precise short-wave radar was turned over to the U.S.; several thousand academic physicists and engineers not participating the Manhattan Project did radar work, particularly at MIT and Stanford, resulting in microwave radar systems that could resolve more detail in incoming flight formations. Further refinement of microwave technology led to proximity fuzes, which greatly enhanced the ability of the U.S. Navy to defend a…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Total war",
+          "url": "https://en.wikipedia.org/wiki/Total_war#United_States",
+          "score": 0.016129032,
+          "snippet": "Total war  held by them. Strict systems of rationing of consumer staples were introduced to redirect productive capacity to war needs.  Previously untouched sections of the nation mobilised for the war effort. Academics became technocrats; home-makers became bomb-makers (massive numbers of women worked in industry during the war); union leaders and businessmen became commanders in the massive armies of production. The great scientific communities of the United States were mobilised as never before, and mathematicians, doctors, engineers, and chemists turned their minds to the problems ahead of…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Neptunium",
+          "url": "https://en.wikipedia.org/wiki/Neptunium#Subsequent_developments",
+          "score": 0.016129032,
+          "snippet": "Neptunium  years (later revised to 2.144 million years), confirming the predictions of Nishina and Kimura of a very long half-life.  Early research into the element was somewhat limited because most of the nuclear physicists and chemists in the United States at the time were focused on the massive effort to research the properties of plutonium as part of the Manhattan Project. Research into the element did continue as a minor part of the project and the first bulk sample of neptunium was isolated in 1944."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear proliferation",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_proliferation#Israel",
+          "score": 0.015873017,
+          "snippet": "Nuclear proliferation  scientist Frank Barnaby, who questioned Vanunu over several days, estimated Israel had enough plutonium for about 150 weapons.  According to Lieutenant Colonel Warner D. Farr in a report to the USAF Counterproliferation Center, while France was previously a leader in nuclear research \"Israel and France were at a similar level of expertise after WWII, and Israeli scientists could make significant contributions to the French effort. \" In 1986 Francis Perrin, French high-commissioner for atomic energy from 1951 to 1970 stated that in 1949 Israeli scientists were invited to …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Heavy water",
+          "url": "https://en.wikipedia.org/wiki/Heavy_water#Neutron_moderator",
+          "score": 0.015625,
+          "snippet": "Heavy water  The Nazi nuclear program, operating with more modest means than the contemporary Manhattan Project and hampered by many leading scientists having been driven into exile (many of them ending up working for the Manhattan Project), as well as continuous infighting, wrongly dismissed graphite as a moderator due to not recognizing the effect of impurities. Given that isotope separation of uranium was deemed too big a hurdle, this left heavy water as a potential moderator. Other problems were the ideological aversion regarding what propaganda dismissed as \" Jewish physics \" and the mist…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Otto Hahn",
+          "url": "https://en.wikipedia.org/wiki/Otto_Hahn#Abstract",
+          "score": 0.015384615,
+          "snippet": "Otto Hahn  During World War I he served with a Landwehr regiment on the Western Front, and with the chemical warfare unit headed by Fritz Haber on the Western, Eastern and Italian fronts, earning the Iron Cross (2nd Class) for his part in the First Battle of Ypres. After the war he became the head of the Kaiser Wilhelm Institute for Chemistry, while remaining in charge of his own department. Between 1934 and 1938, he worked with Strassmann and Meitner on the study of isotopes created through the neutron bombardment of uranium and thorium, which led to the discovery of nuclear fission. He was a…"
+        }
+      ],
+      "source_score": {
+        "matched": [],
+        "missing": [
+          "Manhattan Project",
+          "Albert Einstein",
+          "Leo Szilard",
+          "Enrico Fermi"
+        ],
+        "total_expected": 4,
+        "ratio": 0.0
+      },
+      "fact_score": {
+        "matched": [
+          "Albert Einstein",
+          "Leo Szilard",
+          "Einstein-Szilard letter",
+          "Los Alamos"
+        ],
+        "missing": [
+          "Edward Teller",
+          "Enrico Fermi"
+        ],
+        "total_expected": 6,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 18,
+      "search_ms": 208,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "synth_einstein_bohr_debate",
+      "category": "multi_article_synthesis",
+      "question": "What were the central scientific disagreements between Einstein and Bohr about quantum mechanics?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Albert Einstein",
+          "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Bohr_versus_Einstein",
+          "score": 0.033333335,
+          "snippet": "Albert Einstein  The Bohr–Einstein debates were a series of public disputes about quantum mechanics between Einstein and Niels Bohr, who were two of its founders. Their debates are remembered because of their importance to the philosophy of science. Their debates would influence later interpretations of quantum mechanics."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_mechanics",
+          "score": 0.030117754,
+          "snippet": "Niels Bohr  Philosophical issues that arose from the novel aspects of quantum mechanics became widely celebrated subjects of discussion. Einstein and Bohr had good-natured arguments over such issues throughout their lives."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Determinism",
+          "url": "https://en.wikipedia.org/wiki/Determinism#Quantum_realm",
+          "score": 0.016393442,
+          "snippet": "Determinism  cannot be \"sensible\", meaning that the values of the hidden variables inherently depend on the devices used to measure them.  This debate is relevant because there are possibly specific situations in which the arrival of an electron at a screen at a certain point and time would trigger one event, whereas its arrival at another point would trigger an entirely different event (e.g. see Schrödinger's cat —a thought experiment used as part of a deeper debate).  In his 1939 address \"The Relation between Mathematics and Physics\" Paul Dirac points out that purely deterministic classical …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/Quantum_mechanics#Philosophical_implications",
+          "score": 0.016393442,
+          "snippet": "Quantum mechanics  Albert Einstein, himself one of the founders of quantum theory, was troubled by its apparent failure to respect some cherished metaphysical principles, such as determinism and locality. Einstein's long-running exchanges with Bohr about the meaning and status of quantum mechanics are now known as the Bohr–Einstein debates. Einstein believed that underlying quantum mechanics must be a theory that explicitly forbids action at a distance. He argued that quantum mechanics was incomplete, a theory that was valid but not fundamental, analogous to how thermodynamics is valid, but th…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "A Brief History of Time",
+          "url": "https://en.wikipedia.org/wiki/A_Brief_History_of_Time#Chapter_4:_The_Uncertainty_Principle",
+          "score": 0.016129032,
+          "snippet": "A Brief History of Time  revised in 1900 by German scientist Max Planck who suggested that energy must radiate in small, finite packets called quanta.  Hawking then discusses the uncertainty principle formulated by German scientist Werner Heisenberg, according to which the speed and the position of a particle cannot be precisely known due to Planck's quantum hypothesis: increasing the accuracy in measuring its speed will decrease the certainty of its position and vice versa. This disproved Laplace's idea of a completely deterministic theory of the universe. Hawking then describes the eventual …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Critical_reactions",
+          "score": 0.016129032,
+          "snippet": "Uncertainty principle  The Copenhagen interpretation of quantum mechanics and Heisenberg's uncertainty principle were, in fact, initially seen as twin targets by detractors. According to the Copenhagen interpretation of quantum mechanics, there is no fundamental reality that the quantum state describes, just a prescription for calculating experimental results. There is no way to say what the state of a system fundamentally is, only what the result of observations might be.  Albert Einstein believed that randomness is a reflection of our ignorance of some fundamental property of reality, while …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_mechanics",
+          "score": 0.015873017,
+          "snippet": "Niels Bohr  In February 1927, Heisenberg developed the first version of the uncertainty principle, presenting it using a thought experiment where an electron was observed through a gamma-ray microscope. Bohr was dissatisfied with Heisenberg's argument, since it required only that a measurement disturb properties that already existed, rather than the more radical idea that the electron's properties could not be discussed at all apart from the context they were measured in. In a paper presented at the Volta Conference at Como in September 1927, Bohr emphasized that Heisenberg's uncertainty relat…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Reality",
+          "url": "https://en.wikipedia.org/wiki/Reality#Role_of_\"observation\"_in_quantum_mechanics",
+          "score": 0.015873017,
+          "snippet": "Reality  mystical and anti-scientific by Albert Einstein. Pauli accepted the term, and described quantum mechanics as lucid mysticism.  Heisenberg and Bohr always described quantum mechanics in logical positivist terms. Bohr also took an active interest in the philosophical implications of quantum theories such as his complementarity, for example. He believed quantum theory offers a complete description of nature, albeit one that is simply ill-suited for everyday experiences – which are better described by classical mechanics and probability. Bohr never specified a demarcation line above which…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Reality",
+          "url": "https://en.wikipedia.org/wiki/Reality#Role_of_\"observation\"_in_quantum_mechanics",
+          "score": 0.015625,
+          "snippet": "Reality  The quantum mind –body problem refers to the philosophical discussions of the mind–body problem in the context of quantum mechanics. Since quantum mechanics involves quantum superpositions, which are not perceived by observers, some interpretations of quantum mechanics place conscious observers in a special position.  The founders of quantum mechanics debated the role of the observer, and of them, Wolfgang Pauli and Werner Heisenberg believed that it was the observer that produced collapse. This point of view, which was never fully endorsed by Niels Bohr, was denounced as mystical and…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Paul Feyerabend",
+          "url": "https://en.wikipedia.org/wiki/Paul_Feyerabend#Departure_from_Popper",
+          "score": 0.015384615,
+          "snippet": "Paul Feyerabend  Feyerabend's first paper that explicitly repudiates Popper is his two-part paper on Niels Bohr's conception of complementarity. According to Popper, Bohr and his followers accepted complementarity as a consequence of accepting positivism. Popper was the founder of the theory of falsification, which Feyerabend was very critical of. He meant that no science is perfect, and therefore can't be proven false. Once one repudiates positivism as a philosophical doctrine, Popper claims, one undermines the principle of complementarity. Against this, Feyerabend claims that Bohr was a plur…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Albert Einstein",
+          "Niels Bohr"
+        ],
+        "missing": [
+          "Bohr-Einstein debates",
+          "Copenhagen interpretation",
+          "EPR paradox"
+        ],
+        "total_expected": 5,
+        "ratio": 0.4
+      },
+      "fact_score": {
+        "matched": [
+          "Copenhagen interpretation",
+          "hidden variables",
+          "complementarity"
+        ],
+        "missing": [
+          "EPR paradox",
+          "Solvay Conference",
+          "God does not play dice"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "embed_ms": 18,
+      "search_ms": 196,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "synth_versailles_to_wwii",
+      "category": "multi_article_synthesis",
+      "question": "How did the Treaty of Versailles contribute to the conditions that led to World War II?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Adolf Hitler",
+          "url": "https://en.wikipedia.org/wiki/Adolf_Hitler#World_War_I",
+          "score": 0.016666668,
+          "snippet": "Adolf Hitler  leaders, Jews, Marxists, and those who signed the armistice that ended the fighting—later dubbed the \"November criminals\".  The Treaty of Versailles stipulated that Germany had to relinquish several of its territories and demilitarise the Rhineland. The treaty imposed economic sanctions and levied heavy reparations on the country. Many Germans saw the treaty as an unjust humiliation. They especially objected to Article 231, which they interpreted as declaring Germany responsible for the war. The Versailles Treaty and the economic, social, and political conditions in Germany after…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Weimar Republic",
+          "url": "https://en.wikipedia.org/wiki/Weimar_Republic#War_guilt",
+          "score": 0.016666668,
+          "snippet": "Weimar Republic  by invasion and encirclement. Revising the conditions of the Versailles Treaty became the main goal of German foreign policy.  The consensus opposing the \"war guilt clause\" did much to promote agitation against foreign countries and the Weimar Constitution. Both the DNVP and, in particular, the NSDAP questioned the entire post-war order and propagated a \"war guilt lie\". In line with national conservative and bourgeois right-wing parties, they accused the governing parties of having contributed to Germany's humiliation by signing the treaty and of denying it the right to self-d…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fourteen Points",
+          "url": "https://en.wikipedia.org/wiki/Fourteen_Points#Treaty_of_Versailles",
+          "score": 0.016393442,
+          "snippet": "Fourteen Points  Weinberg wrote that given the way that the majority of Germans believed in the Dolchstoßlegende that it was inevitable that Germany would have made some sort of challenge to the international order created by the Treaty of Versailles, and the question of the \"injustice\" of the Treaty of Versailles was irrelevant as a challenge would have been made even if the Treaty of Versailles had been more favorable to Germany. The Dolchstoßlegende claimed that Germany had decisively defeated the combined forces of France, the British empire and the United States in 1918 and it was only at…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Causes of World War II",
+          "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_II#Remilitarization_of_the_Rhineland",
+          "score": 0.016393442,
+          "snippet": "Causes of World War II  In violation of the Treaty of Versailles and the spirit of the Locarno Pact and the Stresa Front, Germany remilitarized the Rhineland on March 7, 1936, by moving German troops into the part of western Germany in which according to the Versailles Treaty, they were not allowed. Neither France nor Britain was prepared to fight a preventive war to stop the violation and so there were no consequences."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Causes of World War II",
+          "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_II#Nazi_dictatorship",
+          "score": 0.016129032,
+          "snippet": "Causes of World War II  Hitler and his Nazis took full control of Germany in 1933–34 (Machtergreifung), turning it into a dictatorship with a highly hostile outlook toward the Treaty of Versailles and Jews. It solved its unemployment crisis by heavy military spending."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Causes of World War II",
+          "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_II",
+          "score": 0.016129032,
+          "snippet": "Causes of World War II  During the interwar period, deep anger arose in the Weimar Republic over the conditions of the 1919 Treaty of Versailles, which punished Germany for its role in World War I with heavy financial reparations and severe limitations on its military that were intended to prevent it from becoming a military power again. The demilitarisation of the Rhineland, the prohibition of German unification with Austria, and the loss of its overseas colonies as well as some 12% of its pre-war land area and population all provoked strong currents of revanchism in German politics. During t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "German Empire",
+          "url": "https://en.wikipedia.org/wiki/German_Empire",
+          "score": 0.015873017,
+          "snippet": "German Empire  The Treaty of Versailles imposed post-war reparation costs of 132 billion gold marks, as well as limiting the army to 100,000 men and disallowing conscription, armored vehicles, submarines, aircraft, and more than six battleships. The consequential economic devastation, later exacerbated by the Great Depression, as well as humiliation and outrage experienced by the German population are considered leading factors in the rise of Adolf Hitler and Nazism."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of Europe",
+          "url": "https://en.wikipedia.org/wiki/History_of_Europe#World_War_I",
+          "score": 0.015873017,
+          "snippet": "History of Europe  The world war was settled by the victors at the Paris Peace Conference, 1919. The major decisions were the creation of the League of Nations; peace treaties with defeated enemies, most notably the Treaty of Versailles with Germany; the awarding of German and Ottoman overseas possessions as \"mandates\", chiefly to Britain and France; and the drawing of new national boundaries to better reflect the forces of nationalism. Multiple nations were required to sign minority rights treaties. The Treaty of Versailles itself weakened Germany's military power and placed full blame for th…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Causes of World War II",
+          "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_II#Legacies_of_World_War_I",
+          "score": 0.015625,
+          "snippet": "Causes of World War II  The war's economic and psychological legacies persisted well into the Interwar period."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Italian front (World War I)",
+          "url": "https://en.wikipedia.org/wiki/Italian_front_(World_War_I)#Aftermath",
+          "score": 0.015625,
+          "snippet": "Italian front (World War I)  As the war came to an end, Italian Prime Minister Vittorio Emanuele Orlando met with British Prime Minister David Lloyd George, Prime Minister of France Georges Clemenceau and United States President Woodrow Wilson in Versailles to discuss how the borders of Europe should be redefined to help avoid a future European war. The talks provided little territorial gain to Italy as Wilson promised freedom to all European nationalities to form their nation-states. As a result, the Treaty of Versailles did not assign Dalmatia and Albania to Italy as had been promised. Furth…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Weimar Republic",
+          "Causes of World War II",
+          "Adolf Hitler"
+        ],
+        "missing": [
+          "Treaty of Versailles"
+        ],
+        "total_expected": 4,
+        "ratio": 0.75
+      },
+      "fact_score": {
+        "matched": [
+          "war guilt clause",
+          "reparations",
+          "Weimar Republic",
+          "Adolf Hitler",
+          "1919"
+        ],
+        "missing": [
+          "territorial losses",
+          "rearmament"
+        ],
+        "total_expected": 7,
+        "ratio": 0.71428573
+      },
+      "embed_ms": 22,
+      "search_ms": 210,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "synth_radar_battle_of_britain",
+      "category": "multi_article_synthesis",
+      "question": "How did the development of radar shape the outcome of the Battle of Britain?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fighter aircraft",
+          "url": "https://en.wikipedia.org/wiki/Fighter_aircraft#Technological_innovations",
+          "score": 0.032002047,
+          "snippet": "Fighter aircraft  Britain and America cooperated closely in the development of airborne radar, and Germany's radar technology generally lagged slightly behind Anglo-American efforts, while other combatants developed few radar-equipped fighters."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Britain",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Britain#Navigational_aids",
+          "score": 0.03079839,
+          "snippet": "Battle of Britain  While the British were using radar for air defence more effectively than the Germans realised, the Luftwaffe attempted to press its own offensive with advanced radio navigation systems of which the British were initially not aware. One of these was Knickebein (\"bent leg\"); this system was used at night and for raids where precision was required. It was rarely used during the Battle of Britain."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air warfare of World War II",
+          "url": "https://en.wikipedia.org/wiki/Air_warfare_of_World_War_II#Battle_of_Britain",
+          "score": 0.016666668,
+          "snippet": "Air warfare of World War II  had more planes, but they used much of their fuel getting to Britain, and so had more limited time for combat.  The Royal Air Force also had at its disposal a complex and integrated network of reporting stations and operations control rooms incorporating the new innovation of radar. Known as the Dowding system (after Hugh Dowding, the commander of RAF Fighter Command during the battle and the man who ordered its implementation), it was the first integrated air defence system in the world, and is often credited with giving the RAF the ability to effectively counter …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air warfare of World War II",
+          "url": "https://en.wikipedia.org/wiki/Air_warfare_of_World_War_II#Germany:_Luftwaffe",
+          "score": 0.016666668,
+          "snippet": "Air warfare of World War II  The Luftwaffe was deficient in radar technology except for their usable UHF and later VHF band airborne intercept radar designs such as the Lichtenstein and Neptun radar systems for their night fighters. The Messerschmitt Me 262 jet fighter did not enter service until July 1944, and the lightweight Heinkel He 162 appeared only during the last months of the air war in Europe. The Luftwaffe could not deal with Britain's increasingly lethal defensive fighter screen after the Battle of Britain, or the faster P-51 Mustang escort fighters after 1943."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Britain",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Britain#Attrition_statistics",
+          "score": 0.016393442,
+          "snippet": "Battle of Britain  The shift of targets from air bases to industry and communications was taken because it was assumed that Fighter Command was virtually eliminated."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Britain",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Britain#Assault_on_RAF:_radar_and_airfields",
+          "score": 0.016393442,
+          "snippet": "Battle of Britain  fighter units, replacing many Geschwaderkommodore with younger, more aggressive pilots like Adolf Galland and Werner Mölders.  Finally, Göring stopped the attacks on the radar chain. These were seen as unsuccessful, and neither the Reichsmarschall nor his subordinates realised how vital the Chain Home stations were to the defence systems. It was known that radar provided some early warning of raids, but the belief among German fighter pilots was that anything bringing up the \" Tommies \" to fight was to be encouraged."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Britain",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Britain#Intelligence",
+          "score": 0.016129032,
+          "snippet": "Battle of Britain  This lack of leadership and solid intelligence meant the Germans did not adopt a consistent strategy, even when the RAF had its back to the wall. Moreover, there was never a systematic focus on one type of target (such as airbases, radar stations, or aircraft factories); consequently, the already haphazard effort was further diluted."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Mark Oliphant",
+          "url": "https://en.wikipedia.org/wiki/Mark_Oliphant#Radar",
+          "score": 0.015625,
+          "snippet": "Mark Oliphant  radar systems with wavelengths less than 10 centimetres (4 in); the best available at the time was 150 centimetres (60 in).  Oliphant's group at Birmingham worked on developing two promising devices, the klystron and the magnetron. Working with James Sayers, Oliphant managed to produce an improved version of the klystron capable of generating 400W. Meanwhile, two more members of his Birmingham team, John Randall and Harry Boot, worked on a radical new design, a cavity magnetron. By February 1940, they had an output of 400W with a wavelength of 9.8 centimetres (3.9 in), just the …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arthur C. Clarke",
+          "url": "https://en.wikipedia.org/wiki/Arthur_C._Clarke#World_War_II",
+          "score": 0.015625,
+          "snippet": "Arthur C. Clarke  During the Second World War from 1941 to 1946, he served in the Royal Air Force as a radar specialist and was involved in the early-warning radar defence system, which contributed to the RAF's success during the Battle of Britain. Clarke spent most of his wartime service working on ground-controlled approach (GCA) radar, as documented in the semiautobiographical Glide Path, his only non-science fiction novel. Although GCA did not see much practical use during the war, after several years of development it proved vital to the Berlin Airlift of 1948–1949. Clarke initially serve…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of military technology",
+          "url": "https://en.wikipedia.org/wiki/History_of_military_technology#Abstract",
+          "score": 0.015384615,
+          "snippet": "History of military technology  of detecting U-boats, resulting in the first tenuous long-term connections between academic science and the military."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Battle of Britain"
+        ],
+        "missing": [
+          "Radar",
+          "Chain Home",
+          "Hugh Dowding"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [
+          "Chain Home",
+          "early warning",
+          "Royal Air Force",
+          "Luftwaffe",
+          "Dowding system",
+          "1940"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 18,
+      "search_ms": 204,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "causal_barbarossa_failure",
+      "category": "causal_reasoning",
+      "question": "Why did Operation Barbarossa fail?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa#Abstract",
+          "score": 0.03306011,
+          "snippet": "Operation Barbarossa  Following the heavy losses and logistical strain of Barbarossa, the Wehrmacht ' s diminished forces could no longer attack along the entire Eastern Front, and subsequent operations to retake the initiative and drive deep into Soviet territory—such as Case Blue in 1942 and Operation Citadel in 1943—were weaker and eventually failed, which resulted in the Wehrmacht ' s defeat. These Soviet victories ended Germany's territorial expansion and presaged the eventual defeat and collapse of Nazi Germany in 1945."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of Poland",
+          "url": "https://en.wikipedia.org/wiki/History_of_Poland#Invasions_and_resistance",
+          "score": 0.029857397,
+          "snippet": "History of Poland  West did happen, the delay caused it to be less effective, a possibly crucial factor in the victory of the Battle of Britain.  After Germany invaded the Soviet Union as part of its Operation Barbarossa in June 1941, the whole of pre-war Poland was overrun and occupied by German troops."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa",
+          "score": 0.016666668,
+          "snippet": "Operation Barbarossa  Following the heavy losses and logistical strain of Barbarossa, the Wehrmacht's diminished forces could no longer attack along the entire Eastern Front, and subsequent operations to retake the initiative and drive deep into Soviet territory—such as Case Blue in 1942 and Operation Citadel in 1943—were weaker and eventually failed, which resulted in the Wehrmacht's defeat. These Soviet victories ended Germany's territorial expansion and presaged the eventual defeat and collapse of Nazi Germany in 1945."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa#Soviet_preparations",
+          "score": 0.016393442,
+          "snippet": "Operation Barbarossa  the basis for all subsequent Soviet war plans and the deployment of their armed forces in preparation for the German invasion."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa",
+          "score": 0.016129032,
+          "snippet": "Operation Barbarossa  The operation opened up the Eastern Front, in which more forces were committed than in any other theatre of war in human history. The area saw some of history's largest battles, most horrific atrocities, and highest casualties, all of which influenced the course of World War II and the subsequent history of the 20th century. The German armies eventually captured some five million Soviet Red Army troops and deliberately starved to death or otherwise killed 3.3 million Soviet prisoners of war, and millions of civilians, as the \"Hunger Plan\" worked to solve German food short…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa#German-Soviet_relations_of_1939–40",
+          "score": 0.016129032,
+          "snippet": "Operation Barbarossa  Other historians contend that Stalin did not plan for such an attack in June 1941, given the parlous state of the Red Army at the time of the invasion."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Wehrmacht",
+          "url": "https://en.wikipedia.org/wiki/Wehrmacht#Eastern_theatre",
+          "score": 0.015873017,
+          "snippet": "Wehrmacht  Major campaigns and battles in Eastern and Central Europe included:"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Operation Barbarossa",
+          "url": "https://en.wikipedia.org/wiki/Operation_Barbarossa#Initial_attacks",
+          "score": 0.015873017,
+          "snippet": "Operation Barbarossa  Stalin's order, which Timoshenko authorised, was not based on a realistic appraisal of the military situation at hand, but commanders passed it along for fear of retribution if they failed to obey; several days passed before the Soviet leadership became aware of the enormity of the opening defeat."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Crimean War",
+          "url": "https://en.wikipedia.org/wiki/Crimean_War#Russian_expansionism",
+          "score": 0.015625,
+          "snippet": "Crimean War  (comment in the margin by Nicholas I: 'This is the whole point')."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Erwin Rommel",
+          "url": "https://en.wikipedia.org/wiki/Erwin_Rommel#Siege_of_Tobruk",
+          "score": 0.015625,
+          "snippet": "Erwin Rommel  Lieutenant General Leslie Morshead. Hoping to catch the defenders off-guard, Rommel launched a failed attack on 14 April.  Rommel requested reinforcements, but the OKW, then completing preparations for Operation Barbarossa, refused. General Friedrich Paulus, head of the Operations Branch of the OKH, arrived on 25 April to review the situation. He was present for a second failed attack on the city on 30 April. On 4 May, Paulus ordered that no further attempts should be made to take Tobruk via a direct assault. Following a failed counter-attack in Operation Brevity in May, Wavell l…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Operation Barbarossa"
+        ],
+        "missing": [
+          "Battle of Moscow",
+          "Eastern Front (World War II)"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "1941"
+        ],
+        "missing": [
+          "Russian winter",
+          "overextended supply lines",
+          "Soviet industrial relocation",
+          "Battle of Moscow",
+          "underestimated Soviet manpower"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 17,
+      "search_ms": 199,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "causal_midway_consequences",
+      "category": "causal_reasoning",
+      "question": "What were the strategic consequences of the Battle of Midway for the Pacific War?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Political history of the world",
+          "url": "https://en.wikipedia.org/wiki/Political_history_of_the_world#World_War_II",
+          "score": 0.031746034,
+          "snippet": "Political history of the world  Japan, which aimed to dominate Asia and the Pacific, was at war with the Republic of China by 1937. In December 1941, Japan attacked American and British territories with near-simultaneous offensives against Southeast Asia and the Central Pacific, including an attack on the US fleet at Pearl Harbor which forced the US to declare war against Japan; the European Axis powers declared war on the US in solidarity. Japan soon captured much of the western Pacific, but its advances were halted in 1942 after losing the critical Battle of Midway; later, Germany and Italy …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Midway",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Midway#Impact",
+          "score": 0.030776516,
+          "snippet": "Battle of Midway  Operation FS to invade and occupy Fiji and Samoa; attacked Australia, Alaska, and Ceylon; or even attempted to occupy Hawaii.  Although the Japanese continued to try to secure more territory, and the U.S. did not move from a state of naval parity to one of supremacy until after several more months of hard combat, Midway allowed the Allies to switch to the strategic initiative, paving the way for the landings on Guadalcanal and the prolonged attrition of the Solomon Islands campaign. Midway allowed this to occur before the first of the new Essex -class fleet carriers became av…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Midway Atoll",
+          "url": "https://en.wikipedia.org/wiki/Midway_Atoll#Abstract",
+          "score": 0.016666668,
+          "snippet": "Midway Atoll  Service (FWS). The refuge and most of its surrounding area are part of the larger Papahānaumokuākea Marine National Monument.  From 1941 until 1993, the atoll was the home of Naval Air Facility Midway Island, which played a crucial role in the Battle of Midway, June 4–6, 1942. Aircraft based at the then-named Henderson Field on Eastern Island joined with United States Navy ships and planes in an attack on a Japanese battle group that sank four carriers and one heavy cruiser and defended the atoll from invasion. The battle was a critical Allied victory and a major turning point of…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Pacific War",
+          "url": "https://en.wikipedia.org/wiki/Pacific_War#Midway",
+          "score": 0.016666668,
+          "snippet": "Pacific War  Admiral Yamamoto viewed the operation against Midway as the potentially decisive battle of the war which could lead to the destruction of American strategic power in the Pacific, and subsequently allow for a negotiated peace settlement. Through strategic and tactical surprise, the Japanese would knock out Midway's air strength and soften it for a landing by 5,000 troops. After the quick capture of the island, the Combined Fleet would lay the basis for the most important part of the operation. Yamamoto hoped that the attack would lure the Americans into a trap. Midway was to be bai…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Air warfare of World War II",
+          "url": "https://en.wikipedia.org/wiki/Air_warfare_of_World_War_II#Coral_Sea_and_Midway",
+          "score": 0.016393442,
+          "snippet": "Air warfare of World War II  Most critically, the damage to one of the Japanese fleet carriers and the other carrier's airgroup would leave both carriers out of the Battle of Midway, preventing them from them bringing their 144 aircraft (at full strength) to supplement the Japanese carrier force. This would allow the American forces to be at near-parity temporarily, setting the stage for the turning point of the Pacific War."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Midway",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Midway#Background",
+          "score": 0.016393442,
+          "snippet": "Battle of Midway  After expanding the war in the Pacific to include western colonies, the Japanese Empire quickly attained its initial strategic goals of British Hong Kong, the Philippines, British Malaya, Singapore, and the Dutch East Indies, the latter of which's oil resources were particularly important to Japan. Because of this, preliminary planning for the second phase of operations commenced as early as January 1942."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Midway",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Midway",
+          "score": 0.016129032,
+          "snippet": "Battle of Midway  The Battle of Midway was a major naval battle in the Pacific Theater of World War II that took place 4–7 June 1942, six months after Japan's attack on Pearl Harbor and one month after the Battle of the Coral Sea. The U.S. Navy under Admirals Chester W. Nimitz, Frank J. Fletcher, and Raymond A. Spruance defeated an attacking fleet of the Imperial Japanese Navy under Admirals Isoroku Yamamoto, Chūichi Nagumo, and Nobutake Kondō north of Midway Atoll, inflicting devastating damage on the Japanese fleet. Military historian John Keegan called it \"the most stunning and decisive blo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Midway",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Midway#Impact",
+          "score": 0.016129032,
+          "snippet": "Battle of Midway  terms of numbers, but their planes, many of which were obsolete, were largely flown by inexperienced and poorly trained pilots.  Midway showed the worth of pre-war naval cryptanalysis and intelligence-gathering. These efforts continued and were expanded throughout the war in both the Pacific and Atlantic theaters. Successes were numerous and significant. For instance, cryptanalysis made possible the shooting down of Admiral Yamamoto's airplane in 1943.  The Battle of Midway also caused the plan of Japan and Nazi Germany to meet up in the Indian subcontinent to be abandoned.  …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II#Abstract",
+          "score": 0.015625,
+          "snippet": "World War II  Japan aimed to dominate East Asia and the Asia-Pacific, and by 1937 was at war with the Republic of China. In December 1941, Japan attacked American and British territories in Southeast Asia and the Central Pacific, including an attack on Pearl Harbor, which resulted in the United States and the United Kingdom declaring war against Japan. The European Axis powers declared war on the US in solidarity. Japan soon conquered much of the western Pacific, but its advances were halted in 1942 after its defeat in the naval Battle of Midway; Germany and Italy were defeated in North Africa…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Battle of Midway",
+          "url": "https://en.wikipedia.org/wiki/Battle_of_Midway#Yamamoto's_plan",
+          "score": 0.015384615,
+          "snippet": "Battle of Midway  Finally, much of Yamamoto's planning, coinciding with the general feeling among the Japanese leadership at the time, was based on a gross misjudgment of American morale which was believed to be debilitated from the string of Japanese victories in the preceding months."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Battle of Midway",
+          "Pacific War"
+        ],
+        "missing": [],
+        "total_expected": 2,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [
+          "four Japanese carriers",
+          "June 1942",
+          "naval air power"
+        ],
+        "missing": [
+          "shift in initiative",
+          "code-breaking",
+          "Magic intelligence"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "embed_ms": 22,
+      "search_ms": 201,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "causal_great_depression_to_fascism",
+      "category": "causal_reasoning",
+      "question": "How did the Great Depression contribute to the rise of fascism in Europe?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Modern era",
+          "url": "https://en.wikipedia.org/wiki/Modern_era#Interwar_period",
+          "score": 0.032786883,
+          "snippet": "Modern era  The Interwar period was the period between the end of World War I in 1918 and the beginning of World War II in 1939. It included the Roaring Twenties, the Great Depression, and the rise of communism in Russia and fascism in Italy and Germany."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Liberalism",
+          "url": "https://en.wikipedia.org/wiki/Liberalism#History",
+          "score": 0.03079839,
+          "snippet": "Liberalism  In the United States, modern liberalism traces its history to the popular presidency of Franklin D. Roosevelt, who initiated the New Deal in response to the Great Depression and won an unprecedented four elections. The New Deal coalition established by Roosevelt left a strong legacy and influenced many future American presidents, including John F. Kennedy. Meanwhile, the definitive liberal response to the Great Depression was given by the British economist John Maynard Keynes, who had begun a theoretical work examining the relationship between unemployment, money and prices back in…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Late modern period",
+          "url": "https://en.wikipedia.org/wiki/Late_modern_period#The_1920s_and_the_Depression",
+          "score": 0.016666668,
+          "snippet": "Late modern period  In some world states, the desperate citizens turned toward nationalist demagogues —the most infamous being Adolf Hitler —setting the stage for the next era of war. The convulsion brought on by the worldwide depression resulted in the rise of Nazism. In Asia, Japan became an ever more assertive power, especially with regards to China."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Modern dance",
+          "url": "https://en.wikipedia.org/wiki/Modern_dance#Radical_dance",
+          "score": 0.016666668,
+          "snippet": "Modern dance  Disturbed by the Great Depression and the rising threat of fascism in Europe, the radical dancers tried to raise consciousness by dramatizing the economic, social, ethnic and political crises of their time."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nazi Party",
+          "url": "https://en.wikipedia.org/wiki/Nazi_Party#Abstract",
+          "score": 0.016129032,
+          "snippet": "Nazi Party  The party had little popular support until the Great Depression, when worsening living standards and widespread unemployment drove Germans into political extremism."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Interwar period",
+          "url": "https://en.wikipedia.org/wiki/Interwar_period#Abstract",
+          "score": 0.016129032,
+          "snippet": "Interwar period  the Great Depression, an unprecedented worldwide economic downturn that severely damaged many of the world's largest economies.  Politically, the era coincided with the rise of communism, starting in Russia with the October Revolution and Russian Civil War, at the end of WWI, and ended with the rise of fascism, particularly in Germany and Italy. China was in the midst of a half-century of instability and the Chinese Civil War between the Kuomintang and the Chinese Communist Party. The empires of Britain, France, and others faced challenges as imperialism was increasingly viewe…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fascism",
+          "url": "https://en.wikipedia.org/wiki/Fascism#International_impact_of_the_Great_Depression_and_buildup_to_World_War_II",
+          "score": 0.015873017,
+          "snippet": "Fascism  The conditions of economic hardship caused by the Great Depression brought about an international surge of social unrest. According to historian Philip Morgan, \"the onset of the Great Depression... was the greatest stimulus yet to the diffusion and expansion of fascism outside Italy.\" Fascist propaganda blamed the problems of the long depression of the 1930s on minorities and scapegoats: \" Judeo - Masonic - bolshevik \" conspiracies, left-wing internationalism and the presence of immigrants."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Interwar period",
+          "url": "https://en.wikipedia.org/wiki/Interwar_period#Great_Depression",
+          "score": 0.015625,
+          "snippet": "Interwar period  few alternative sources of jobs, areas dependent on primary sector industries such as mining and logging suffered the most.  The Weimar Republic in Germany gave way to two episodes of political and economic turmoil, the first culminated in the German hyperinflation of 1923 and the failed Beer Hall Putsch of that same year. The second convulsion, brought on by the worldwide depression and Germany's disastrous monetary policies, resulted in the further rise of Nazism. In Asia, Japan became an ever more assertive power, especially with regard to China."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fascism",
+          "url": "https://en.wikipedia.org/wiki/Fascism#International_impact_of_the_Great_Depression_and_buildup_to_World_War_II",
+          "score": 0.015625,
+          "snippet": "Fascism  A variety of para-fascist governments that borrowed elements from fascism were formed during the Great Depression, including those of Greece, Lithuania, Poland and Yugoslavia. In the Netherlands, the National Socialist Movement in the Netherlands was at its height in the 1930s due to the Great Depression, especially in 1935 when it won almost eight percent of votes, until the year 1937."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Roaring Twenties",
+          "url": "https://en.wikipedia.org/wiki/Roaring_Twenties#Black_Tuesday",
+          "score": 0.015384615,
+          "snippet": "Roaring Twenties  The Dow Jones Industrial Stock Index had continued its upward move for weeks, and coupled with heightened speculative activities, it gave an illusion that the bull market of 1928 to 1929 would last forever. On October 29, 1929, also known as Black Tuesday, stock prices on Wall Street collapsed. The events in the United States added to a worldwide depression, later called the Great Depression, that put millions of people out of work around the world throughout the 1930s."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Fascism"
+        ],
+        "missing": [
+          "Great Depression",
+          "Rise of Adolf Hitler",
+          "Weimar Republic"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [
+          "Weimar Republic",
+          "Adolf Hitler",
+          "1929"
+        ],
+        "missing": [
+          "mass unemployment",
+          "Benito Mussolini",
+          "loss of faith in liberal democracy"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "embed_ms": 129,
+      "search_ms": 203,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "compare_stalin_churchill_leadership",
+      "category": "comparative",
+      "question": "How did Stalin's and Churchill's wartime leadership styles differ?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Cult of personality",
+          "url": "https://en.wikipedia.org/wiki/Cult_of_personality#Philippines",
+          "score": 0.016666668,
+          "snippet": "Cult of personality  Ferdinand Marcos developed a cult of personality as a way of remaining President of the Philippines for 20 years, in a way that political scientists have compared to other authoritarian and totalitarian leaders such as Joseph Stalin and Adolf Hitler, but also to more contemporary dictators such as Suharto in Indonesia, Saddam Hussein in Iraq, and the Kim dynasty of North Korea."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Joseph Stalin",
+          "url": "https://en.wikipedia.org/wiki/Joseph_Stalin#1942–1945:_Soviet_counter-attack",
+          "score": 0.016666668,
+          "snippet": "Joseph Stalin  In November 1943, Stalin met with Churchill and Roosevelt in Tehran, a location of Stalin's choosing. There, Stalin and Roosevelt got on well, with both desiring the post-war dismantling of the British Empire. At Tehran, the trio agreed that to prevent Germany rising to military prowess yet again, the German state should be broken up. Roosevelt and Churchill also agreed to Stalin's demand that the German city of Königsberg be declared Soviet territory. Stalin was impatient for the UK and U.S. to open up a Western Front to take the pressure off of the East; they eventually did so…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Trotskyism",
+          "url": "https://en.wikipedia.org/wiki/Trotskyism#Debated_comparison_with_Stalinism",
+          "score": 0.016393442,
+          "snippet": "Trotskyism  civilised figure than Stalin and suggested that he would not have purged the Red Army generals or millions of Soviet citizens.  Historian Sheila Fitzpatrick has also questioned the premise of historical inevitability presented by conservative critics such as Robert Service in that the Soviet Union would have experienced the same \"totalitarian despotism under Trotskyist rule\". Fitzpatrick suggested it was implausible that Trotsky like Stalin would have launched an anti-semitic campaign after World War II or initiated the Great Purge. Rather, she inferred that Trotsky would presumabl…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Operation_Barbarossa",
+          "score": 0.016393442,
+          "snippet": "Winston Churchill  Hitler launched his invasion of the Soviet Union on 22 June 1941. Churchill had known since April, from Enigma decrypts at Bletchley Park, that the attack was imminent. He had tried to warn Joseph Stalin via the ambassador to Moscow, Stafford Cripps, but Stalin did not trust Churchill. The night before the attack, already intending to address the nation, Churchill alluded to his hitherto anti-communist views by saying to Colville: \"If Hitler invaded Hell, I would at least make a favourable reference to the Devil\"."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Leon Trotsky",
+          "url": "https://en.wikipedia.org/wiki/Leon_Trotsky#Political_stature_and_conflicts_with_Stalin",
+          "score": 0.016129032,
+          "snippet": "Leon Trotsky  describing the military measures he would have taken in place of Stalin to counter the rise of Nazi Germany in 1932."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Allies of World War II",
+          "url": "https://en.wikipedia.org/wiki/Allies_of_World_War_II#Tensions",
+          "score": 0.016129032,
+          "snippet": "Allies of World War II  There were many tensions among the Big Three leaders, although they were not enough to break the alliance during wartime.  In 1942 Roosevelt proposed becoming, with China, the Four Policemen of world peace. Although the 'Four Powers' were reflected in the wording of the Declaration by United Nations, Roosevelt's proposal was not initially supported by Churchill or Stalin.  Division emerged over the length of time taken by the Western Allies to establish a second front in Europe. Stalin and the Soviets used the potential employment of the second front as an 'acid test' f…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Stalinism",
+          "url": "https://en.wikipedia.org/wiki/Stalinism#Trotskyism",
+          "score": 0.015873017,
+          "snippet": "Stalinism  of their accepting the hopelessly discredited Stalinist leadership.  —Trotsky's writings on Stalinism and fascism in 1933"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Leon Trotsky",
+          "url": "https://en.wikipedia.org/wiki/Leon_Trotsky#Lenin's_succession",
+          "score": 0.015873017,
+          "snippet": "Leon Trotsky  Opponents such as Winston Churchill even argued that \"Lenin indeed regarded Trotsky as his political heir\" and sought to protect him before his passing in 1924. Zinoviev and Kamenev also viewed Trotsky as Lenin's most likely successor and sided with Stalin out of fear that Trotsky would remove them from the party leadership. However, his chief adversary Stalin, strongly denied claims that Trotsky was the succeeding chairman following Lenin's illness. He pointed out that Trotsky was expected to serve as one of several deputy chairmen under Lenin which included Kamenev, Rykov and T…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nikolai Bukharin",
+          "url": "https://en.wikipedia.org/wiki/Nikolai_Bukharin#Power_struggle",
+          "score": 0.015625,
+          "snippet": "Nikolai Bukharin  Stalin felt that in the new situation the policies of his former foes—Trotsky, Zinoviev, and Kamenev—were the right ones."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Yalta Conference",
+          "url": "https://en.wikipedia.org/wiki/Yalta_Conference#Eastern_Bloc",
+          "score": 0.015625,
+          "snippet": "Yalta Conference  Because of Stalin's promises, Churchill believed that he would keep his word regarding Poland and he remarked, \"Poor Neville Chamberlain believed he could trust Hitler. He was wrong. But I don't think I am wrong about Stalin.\"  Churchill defended his actions at Yalta in a three-day parliamentary debate starting on February 27, which ended in a vote of confidence. During the debate, many MPs criticised Churchill and expressed deep reservations about Yalta and support for Poland, with 25 drafting an amendment protesting the agreement.  After the Second World War ended, a commun…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Joseph Stalin",
+          "Winston Churchill"
+        ],
+        "missing": [],
+        "total_expected": 2,
+        "ratio": 1.0
+      },
+      "fact_score": {
+        "matched": [],
+        "missing": [
+          "centralised command",
+          "purges",
+          "parliamentary accountability",
+          "rhetorical leadership",
+          "Stavka",
+          "war cabinet"
+        ],
+        "total_expected": 6,
+        "ratio": 0.0
+      },
+      "embed_ms": 19,
+      "search_ms": 205,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "compare_einstein_newton_gravity",
+      "category": "comparative",
+      "question": "How do Einstein's and Newton's conceptions of gravity differ?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Introduction to general relativity",
+          "url": "https://en.wikipedia.org/wiki/Introduction_to_general_relativity#From_special_to_general_relativity",
+          "score": 0.032539684,
+          "snippet": "Introduction to general relativity  In September 1905, Albert Einstein published his theory of special relativity, which reconciles Newton's laws of motion with electrodynamics (the interaction between objects with electric charge). Special relativity introduced a new framework for all of physics by proposing new concepts of space and time. Some then-accepted physical theories were inconsistent with that framework; a key example was Newton's theory of gravity, which describes the mutual attraction experienced by bodies due to their mass.  Several physicists, including Einstein, searched for a …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Ernst Mach",
+          "url": "https://en.wikipedia.org/wiki/Ernst_Mach#Abstract",
+          "score": 0.016666668,
+          "snippet": "Ernst Mach  Ernst Waldfried Josef Wenzel Mach (/ m ɑː x / MAHKH; German:; 18 February 1838 – 19 February 1916) was an Austrian physicist and philosopher, who contributed to the physics of shock waves. The ratio of the speed of a flow or object to that of sound is named the Mach number in his honour. As a philosopher of science, he was a major influence on logical positivism and American pragmatism. Through his criticism of Isaac Newton 's theories of space and time, he foreshadowed Albert Einstein 's theory of relativity."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Newton's law of universal gravitation",
+          "url": "https://en.wikipedia.org/wiki/Newton%27s_law_of_universal_gravitation#Extensions",
+          "score": 0.016393442,
+          "snippet": "Newton's law of universal gravitation  In recent years, quests for non-inverse square terms in the law of gravity have been carried out by neutron interferometry."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "A Brief History of Time",
+          "url": "https://en.wikipedia.org/wiki/A_Brief_History_of_Time#Chapter_2:_Space_and_Time",
+          "score": 0.016393442,
+          "snippet": "A Brief History of Time  Einstein's general theory of relativity explains how the path of a ray of light is affected by ' gravity ', which according to Einstein is an illusion caused by the warping of spacetime, in contrast to Newton's view which described gravity as a force which matter exerts on other matter. In spacetime curvature, light always travels in a straight path in the 4-dimensional \"spacetime\", but may appear to curve in 3-dimensional space due to gravitational effects. These straight-line paths are geodesics. The twin paradox, a thought experiment in special relativity involving …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "A Brief History of Time",
+          "url": "https://en.wikipedia.org/wiki/A_Brief_History_of_Time#Chapter_2:_Space_and_Time",
+          "score": 0.016129032,
+          "snippet": "A Brief History of Time  In this chapter, Hawking describes the development of scientific thought regarding the nature of space and time. He first describes the Aristotelian idea that the naturally preferred state of a body is to be at rest, and which can only be moved by force, implying that heavier objects will fall faster. However, Italian scientist Galileo Galilei experimentally proved Aristotle's theory wrong by observing the motion of objects of different weights and concluding that all objects would fall at the same rate. This eventually led to English scientist Isaac Newton 's laws of …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Evidence",
+          "url": "https://en.wikipedia.org/wiki/Evidence#In_philosophy_of_science",
+          "score": 0.016129032,
+          "snippet": "Evidence  These requirements suggest scientific evidence consists not of private mental states but of public physical objects or events.  A central issue for the scientific conception of evidence is the problem of underdetermination, i.e. that the evidence available supports competing theories equally well. So, for example, evidence from our everyday life about how gravity works confirms Newton's and Einstein's theory of gravitation equally well and is therefore unable to establish consensus among scientists. But in such cases, it is often the gradual accumulation of evidence that eventually l…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of general relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_general_relativity",
+          "score": 0.015873017,
+          "snippet": "History of general relativity  General relativity is a theory of gravitation that was developed by Albert Einstein between 1907 and 1915, with contributions by many others after 1915. According to general relativity, the observed gravitational attraction between masses results from the warping of space and time by those masses. Before the advent of general relativity, Newton's law of universal gravitation had been accepted for more than two hundred years as a valid description of the gravitational force between masses, even though Newton himself did not regard the theory as the final word on t…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Space",
+          "url": "https://en.wikipedia.org/wiki/Space#Leibniz_and_Newton",
+          "score": 0.015625,
+          "snippet": "Space  Instead, Newton argued, it must be a result of non-inertial motion relative to space itself. For several centuries the bucket argument was considered decisive in showing that space must exist independently of matter."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of general relativity",
+          "url": "https://en.wikipedia.org/wiki/History_of_general_relativity#Abstract",
+          "score": 0.015625,
+          "snippet": "History of general relativity  General relativity is a theory of gravitation that was developed by Albert Einstein between 1907 and 1915, with contributions by many others after 1915. According to general relativity, the observed gravitational attraction between masses results from the warping of space and time by those masses.  Before the advent of general relativity, Newton's law of universal gravitation had been accepted for more than two hundred years as a valid description of the gravitational force between masses, even though Newton himself did not regard the theory as the final word on …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Fundamental interaction",
+          "url": "https://en.wikipedia.org/wiki/Fundamental_interaction#Gravity",
+          "score": 0.015384615,
+          "snippet": "Fundamental interaction  as everyday experience: objects fall; heavy objects act as if they were glued to the ground, and animals can only jump so high.  Gravitation was the first interaction to be described mathematically. In ancient times, Aristotle hypothesized that objects of different masses fall at different rates. During the Scientific Revolution, Galileo Galilei experimentally determined that this hypothesis was wrong under certain circumstances—neglecting the friction due to air resistance and buoyancy forces if an atmosphere is present (e.g. the case of a dropped air-filled balloon v…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Newton's law of universal gravitation"
+        ],
+        "missing": [
+          "Isaac Newton",
+          "Albert Einstein",
+          "General relativity"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [
+          "action at a distance",
+          "spacetime curvature",
+          "inverse-square law",
+          "geodesic"
+        ],
+        "missing": [
+          "equivalence principle",
+          "Mercury perihelion"
+        ],
+        "total_expected": 6,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 18,
+      "search_ms": 200,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "compare_curie_meitner",
+      "category": "comparative",
+      "question": "Compare the scientific contributions of Marie Curie and Lise Meitner.",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Nobel_Prize",
+          "score": 0.03201844,
+          "snippet": "Lise Meitner  the joint work that had preceded the discovery and of Meitner's written and verbal contributions after her flight from Berlin."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Abstract",
+          "score": 0.031257633,
+          "snippet": "Lise Meitner  \"fission\". The discovery of nuclear fission led to the development of atomic bombs and nuclear reactors during World War II.  Meitner did not share the 1944 Nobel Prize in Chemistry for nuclear fission, which was awarded to her long-time collaborator Otto Hahn. Several scientists and journalists have called her exclusion \"unjust\". According to the Nobel Prize archive, she was nominated 19 times for the Nobel Prize in Chemistry between 1924 and 1948, and 30 times for the Nobel Prize in Physics between 1937 and 1967. Despite not having been awarded the Nobel Prize, Meitner was invi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Marie Curie",
+          "url": "https://en.wikipedia.org/wiki/Marie_Curie#Postwar_years",
+          "score": 0.03079839,
+          "snippet": "Marie Curie  She also travelled to other countries, appearing publicly and giving lectures in Belgium, Brazil, Spain, and Czechoslovakia.  Led by Curie, the Institute produced four more Nobel Prize winners, including her daughter Irène Joliot-Curie and her son-in-law, Frédéric Joliot-Curie. Eventually it became one of the world's four major radioactivity-research laboratories, the others being the Cavendish Laboratory, with Ernest Rutherford; the Institute for Radium Research, Vienna, with Stefan Meyer; and the Kaiser Wilhelm Institute for Chemistry, with Otto Hahn and Lise Meitner."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Transmutation",
+          "score": 0.016666668,
+          "snippet": "Lise Meitner  It was a logical decision, having been the discoverers of protactinium.\""
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner#Awards_and_honours",
+          "score": 0.016666668,
+          "snippet": "Lise Meitner  After her death in 1968, Meitner received many naming honours. In 1997, element 109 was named meitnerium. She is the first and so far the only non-mythological woman thus exclusively honoured (since curium was named after both Marie and Pierre Curie). Additional naming honours are the Hahn–Meitner-Institut in Berlin, craters on the Moon and Venus, and the main-belt asteroid 6999 Meitner. In 2000, the European Physical Society established the biennial Lise Meitner Prize for excellent research in nuclear science. In 2006 the \"Gothenburg Lise Meitner Award\" was established by the Un…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Marie Curie",
+          "url": "https://en.wikipedia.org/wiki/Marie_Curie#Postwar_years",
+          "score": 0.016393442,
+          "snippet": "Marie Curie  Radium Research, Vienna, with Stefan Meyer; and the Kaiser Wilhelm Institute for Chemistry, with Otto Hahn and Lise Meitner.  In August 1922 Marie Curie became a member of the League of Nations ' newly created International Committee on Intellectual Cooperation. She sat on the committee until 1934 and contributed to League of Nations' scientific coordination with other prominent researchers such as Albert Einstein, Hendrik Lorentz, and Henri Bergson. In 1923 she wrote a biography of her late husband, titled Pierre Curie. In 1925 she visited Poland to participate in a ceremony layi…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Henri Becquerel",
+          "url": "https://en.wikipedia.org/wiki/Henri_Becquerel",
+          "score": 0.016129032,
+          "snippet": "Henri Becquerel  Antoine Henri Becquerel was a French engineer, physicist, Nobel laureate, and the first person to discover radioactivity. For work in this field he, along with Marie Skłodowska-Curie and Pierre Curie, received the 1903 Nobel Prize in Physics. The SI unit for radioactivity, the becquerel (Bq), is named after him."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Lise Meitner",
+          "url": "https://en.wikipedia.org/wiki/Lise_Meitner",
+          "score": 0.016129032,
+          "snippet": "Lise Meitner  According to the Nobel Prize archive, she was nominated 19 times for the Nobel Prize in Chemistry between 1924 and 1948, and 30 times for the Nobel Prize in Physics between 1937 and 1967. Despite not having been awarded the Nobel Prize, Meitner was invited to attend the Lindau Nobel Laureate Meeting in 1962. She received many other honours, including the posthumous naming of element 109 meitnerium in 1997. Meitner was praised by Albert Einstein as the \"German Marie Curie.\""
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Marjane Satrapi",
+          "url": "https://en.wikipedia.org/wiki/Marjane_Satrapi#Films",
+          "score": 0.015625,
+          "snippet": "Marjane Satrapi  Satrapi and Paronnaud continued their successful collaboration with a second film, a live-action adaptation of Chicken with Plums, released in late 2011. In 2012, Satrapi directed and acted in the comedy crime film Gang of the Jotas, from her own screenplay.  In 2014 Satrapi directed the comedy-horror film The Voices, from a screenplay by Michael R. Perry.  In 2019, Satrapi directed a biopic of two-time Nobel Prize winner Marie Curie, titled Radioactive."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Light-emitting diode",
+          "url": "https://en.wikipedia.org/wiki/Light-emitting_diode#Discoveries_and_early_devices",
+          "score": 0.015384615,
+          "snippet": "Light-emitting diode  Electroluminescence as a phenomenon was discovered in 1907 by the English experimenter H. J. Round of Marconi Labs, using a crystal of silicon carbide and a cat's-whisker detector. Russian inventor Oleg Losev reported the creation of the first LED in 1927. His research was distributed in Soviet, German and British scientific journals, but no practical use was made of the discovery for several decades, partly due to the very inefficient light-producing properties of silicon carbide, the semiconductor Losev used.  In 1936, Georges Destriau observed that electroluminescence …"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Marie Curie",
+          "Lise Meitner"
+        ],
+        "missing": [
+          "Discovery of nuclear fission"
+        ],
+        "total_expected": 3,
+        "ratio": 0.6666667
+      },
+      "fact_score": {
+        "matched": [
+          "radioactivity",
+          "radium",
+          "nuclear fission",
+          "Otto Hahn",
+          "Nobel Prize"
+        ],
+        "missing": [
+          "polonium"
+        ],
+        "total_expected": 6,
+        "ratio": 0.8333333
+      },
+      "embed_ms": 17,
+      "search_ms": 195,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "boundary_bletchley_park",
+      "category": "boundary_coverage",
+      "question": "What was the role of cryptanalysis at Bletchley Park during World War II?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Cryptanalysis",
+          "url": "https://en.wikipedia.org/wiki/Cryptanalysis#Indicator",
+          "score": 0.030550372,
+          "snippet": "Cryptanalysis  With reciprocal machine ciphers such as the Lorenz cipher and the Enigma machine used by Nazi Germany during World War II, each message had its own key. Usually, the transmitting operator informed the receiving operator of this message key by transmitting some plaintext and/or ciphertext before the enciphered message. This is termed the indicator, as it indicates to the receiving operator how to set his machine to decipher the message.  Poorly designed and implemented indicator systems allowed first Polish cryptographers and then the British cryptographers at Bletchley Park to b…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Information theory",
+          "url": "https://en.wikipedia.org/wiki/Information_theory#Historical_background",
+          "score": 0.016666668,
+          "snippet": "Information theory  The unit of information was therefore the decimal digit, which since has sometimes been called the hartley in his honor as a unit or scale or measure of information. Alan Turing in 1940 used similar ideas as part of the statistical analysis of the breaking of the German second world war Enigma ciphers."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Cryptanalysis",
+          "url": "https://en.wikipedia.org/wiki/Cryptanalysis#Abstract",
+          "score": 0.016666668,
+          "snippet": "Cryptanalysis  do not target weaknesses in the cryptographic algorithms themselves, but instead exploit weaknesses in their implementation.  Even though the goal has been the same, the methods and techniques of cryptanalysis have changed drastically through the history of cryptography, adapting to increasing cryptographic complexity, ranging from the pen-and-paper methods of the past, through machines like the British Bombes and Colossus computers at Bletchley Park in World War II, to the mathematically advanced computerized schemes of the present. Methods for breaking modern cryptosystems oft…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "MI6",
+          "url": "https://en.wikipedia.org/wiki/MI6#Inter-war_period",
+          "score": 0.016393442,
+          "snippet": "MI6  letter to the Daily Mail, but it remains unclear if MI6 was aware that the letter was a forgery at the time.  On 26 and 27 July 1939, in Pyry near Warsaw, British military intelligence representatives including Dilly Knox, Alastair Denniston and Humphrey Sandwith were introduced by their allied Polish counterparts to their Enigma-decryption techniques and equipment, including Zygalski sheets and the cryptologic \" Bomba \", and were promised future delivery of a reverse-engineered, Polish-built duplicate Enigma machine. The demonstration represented a vital basis for the later British conti…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Cryptanalysis",
+          "url": "https://en.wikipedia.org/wiki/Cryptanalysis",
+          "score": 0.016393442,
+          "snippet": "Cryptanalysis refers to the process of analyzing information systems in order to understand hidden aspects of the systems. Cryptanalysis is used to breach cryptographic security systems and gain access to the contents of encrypted messages, even if the cryptographic key is unknown. In addition to mathematical analysis of cryptographic algorithms, cryptanalysis includes the study of side-channel attacks that do not target weaknesses in the cryptographic algorithms themselves, but instead exploit weaknesses in their implementation. Even though the goal has been the same, the methods and techniqu…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Alan Turing",
+          "url": "https://en.wikipedia.org/wiki/Alan_Turing#Turingery",
+          "score": 0.016129032,
+          "snippet": "Alan Turing  Turingery and the statistical approach of Banburismus undoubtedly fed into the thinking about cryptanalysis of the Lorenz cipher, but he was not directly involved in the Colossus development."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Colossus computer",
+          "url": "https://en.wikipedia.org/wiki/Colossus_computer",
+          "score": 0.016129032,
+          "snippet": "Colossus computer  Colossus was a set of computers developed by British codebreakers in the years 1943–1945 to help in the cryptanalysis of the Lorenz cipher. Colossus used thermionic valves to perform Boolean and counting operations. Colossus is thus regarded as the world's first programmable, electronic, digital computer, although it was programmed by switches and plugs and not by a stored program. Colossus was designed by General Post Office (GPO) research telephone engineer Tommy Flowers based on plans developed by mathematician Max Newman at the Government Code and Cypher School (GC&CS) a…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Cryptanalysis",
+          "url": "https://en.wikipedia.org/wiki/Cryptanalysis#Classical_ciphers",
+          "score": 0.015873017,
+          "snippet": "Cryptanalysis  of England. The plans came to light after her coded correspondence with fellow conspirators was deciphered by Thomas Phelippes.  In Europe during the 15th and 16th centuries, the idea of a polyalphabetic substitution cipher was developed, among others by the French diplomat Blaise de Vigenère (1523–96). For some three centuries, the Vigenère cipher, which uses a repeating key to select different encryption alphabets in rotation, was considered to be completely secure (le chiffre indéchiffrable —\"the indecipherable cipher\"). Nevertheless, Charles Babbage (1791–1871) and later, in…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Alan Turing",
+          "url": "https://en.wikipedia.org/wiki/Alan_Turing#Abstract",
+          "score": 0.015873017,
+          "snippet": "Alan Turing  considered a model of a general-purpose computer. Turing is widely considered to be the father of theoretical computer science.  Born in London, Turing was raised in southern England. He graduated from King's College, Cambridge, and in 1938, earned a doctorate degree from Princeton University. During World War II, Turing worked for the Government Code and Cypher School at Bletchley Park, Britain's codebreaking centre that produced Ultra intelligence. He led Hut 8, the section responsible for German naval cryptanalysis. Turing devised techniques for speeding the breaking of German …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Alan Turing",
+          "url": "https://en.wikipedia.org/wiki/Alan_Turing#Hut_8_and_the_naval_Enigma",
+          "score": 0.015625,
+          "snippet": "Alan Turing  Turing decided to tackle the particularly difficult problem of cracking the German naval use of Enigma \"because no one else was doing anything about it and I could have it to myself\". In December 1939, Turing solved the essential part of the naval indicator system, which was more complex than the indicator systems used by the other services."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Alan Turing"
+        ],
+        "missing": [
+          "Bletchley Park",
+          "Ultra",
+          "Enigma machine"
+        ],
+        "total_expected": 4,
+        "ratio": 0.25
+      },
+      "fact_score": {
+        "matched": [
+          "Enigma",
+          "Alan Turing",
+          "Ultra",
+          "Lorenz cipher",
+          "bombes",
+          "Government Code and Cypher School"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 21,
+      "search_ms": 199,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "boundary_emmy_noether",
+      "category": "boundary_coverage",
+      "question": "Who was Emmy Noether and what is the significance of Noether's theorem?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Abstract",
+          "score": 0.03226646,
+          "snippet": "Emmy Noether  Amalie Emmy Noether (US: / ˈ n ʌ t ər /, UK: / ˈ n ɜː t ə /; German:; 23 March 1882 – 14 April 1935) was a German mathematician who made many important contributions to abstract algebra. She proved Noether's first and second theorems, which are fundamental in mathematical physics. She was described by Pavel Alexandrov, Albert Einstein, Jean Dieudonné, Hermann Weyl and Norbert Wiener as the most important woman in the history of mathematics. As one of the leading mathematicians of her time, she developed theories of rings, fields, and algebras. In physics, Noether's theorem explai…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Historical_context",
+          "score": 0.016666668,
+          "snippet": "Emmy Noether  Noether's most important contributions to mathematics were to the development of this new field, abstract algebra."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Graduate_students",
+          "score": 0.016666668,
+          "snippet": "Emmy Noether  making significant contributions (in particular Levitzky's theorem and the Hopkins–Levitzki theorem) to ring theory.  Other Noether Boys included Max Deuring, Hans Fitting, Ernst Witt, Chiungtze C. Tsen and Otto Schilling. Deuring, who had been considered the most promising of Noether's students, was awarded his doctorate in 1930. He worked in Hamburg, Marden and Göttingen and is known for his contributions to arithmetic geometry. Fitting graduated in 1931 with a thesis on abelian groups and is remembered for his work in group theory, particularly Fitting's theorem and the Fittin…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Graduate_students",
+          "score": 0.016393442,
+          "snippet": "Emmy Noether  in 1935 due to accusations of homosexual acts. He was later reinstated and became a professor at Humboldt University in 1948.  Noether then supervised Werner Weber and Jakob Levitzki, who both defended their theses in 1929. Weber, who was considered only a modest mathematician, would later take part in driving Jewish mathematicians out of Göttingen. Levitzki worked first at Yale University and then at the Hebrew University of Jerusalem in Palestine, making significant contributions (in particular Levitzky's theorem and the Hopkins–Levitzki theorem) to ring theory."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Habilitation_and_Noether's_theorem",
+          "score": 0.016129032,
+          "snippet": "Emmy Noether  position and was not paid. Her lectures often were advertised under Hilbert's name, and Noether would provide \"assistance\".  Soon after arriving at Göttingen, she demonstrated her capabilities by proving the theorem now known as Noether's theorem which shows that a conservation law is associated with any differentiable symmetry of a physical system. The paper, Invariante Variationsprobleme, was presented by a colleague, Felix Klein, on 26 July 1918 at a meeting of the Royal Society of Sciences at Göttingen. Noether presumably did not present it herself because she was not a membe…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Background_on_abstract_algebra_and_begriffliche_Mathematik_(conceptual_mathematics)",
+          "score": 0.016129032,
+          "snippet": "Emmy Noether  in the original element, such as by multiplying a number by one), and for every element there must be an inverse element.  The integers have additional properties which do not generalize to all commutative rings. An important example is the fundamental theorem of arithmetic, which says that every positive integer can be factored uniquely into prime numbers. Unique factorizations do not always exist in other rings, but Noether found a unique factorization theorem, now called the Lasker–Noether theorem, for the ideals of many rings. Much of Noether's work lay in determining what pr…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Background_on_abstract_algebra_and_begriffliche_Mathematik_(conceptual_mathematics)",
+          "score": 0.015873017,
+          "snippet": "Emmy Noether  Unlike most mathematicians, she did not make abstractions by generalizing from known examples; rather, she worked directly with the abstractions. In his obituary of Noether, van der Waerden recalled that"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Contributions_to_mathematics_and_physics",
+          "score": 0.015625,
+          "snippet": "Emmy Noether  by linear transformations, and their application to the study of commutative number fields and their arithmetics  In the first epoch (1907–1919), Noether dealt primarily with differential and algebraic invariants, beginning with her dissertation under Paul Gordan. Her mathematical horizons broadened, and her work became more general and abstract, as she became acquainted with the work of David Hilbert, through close interactions with a successor to Gordan, Ernst Sigismund Fischer. Shortly after moving to Göttingen in 1915, she proved the two Noether's theorems, \"one of the most i…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Commutative_rings,_ideals,_and_modules",
+          "score": 0.015625,
+          "snippet": "Emmy Noether  The Lasker–Noether theorem can be viewed as a generalization of the fundamental theorem of arithmetic which states that any positive integer can be expressed as a product of prime numbers, and that this decomposition is unique."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Emmy Noether",
+          "url": "https://en.wikipedia.org/wiki/Emmy_Noether#Physics",
+          "score": 0.015384615,
+          "snippet": "Emmy Noether  Noether was brought to Göttingen in 1915 by David Hilbert and Felix Klein, who wanted her expertise in invariant theory to help them in understanding general relativity, a geometrical theory of gravitation developed mainly by Albert Einstein. Hilbert had observed that the conservation of energy seemed to be violated in general relativity, because gravitational energy could itself gravitate. Noether provided the resolution of this paradox, and a fundamental tool of modern theoretical physics, with Noether's first theorem, which she proved in 1915, but did not publish until 1918. S…"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Emmy Noether"
+        ],
+        "missing": [
+          "Noether's theorem"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "abstract algebra",
+          "ring theory",
+          "symmetry",
+          "conservation laws",
+          "Göttingen",
+          "1918"
+        ],
+        "missing": [],
+        "total_expected": 6,
+        "ratio": 1.0
+      },
+      "embed_ms": 22,
+      "search_ms": 193,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "boundary_copenhagen_interpretation",
+      "category": "boundary_coverage",
+      "question": "What is the Copenhagen interpretation of quantum mechanics?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Alternatives",
+          "score": 0.031544957,
+          "snippet": "Copenhagen interpretation  A large number of alternative interpretations have appeared, sharing some aspects of the Copenhagen interpretation while providing alternatives to other aspects. The ensemble interpretation is similar; it offers an interpretation of the wave function, but not for single particles. The consistent histories interpretation advertises itself as \"Copenhagen done right\". More recently, interpretations inspired by quantum information theory like QBism and relational quantum mechanics have appeared. Experts on quantum foundational issues continue to favor the Copenhagen inte…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Arrow of time",
+          "url": "https://en.wikipedia.org/wiki/Arrow_of_time#Quantum_arrow_of_time",
+          "score": 0.030309988,
+          "snippet": "Arrow of time  Quantum evolution is governed by equations of motions that are time-symmetric (such as the Schrödinger equation in the non-relativistic approximation), and by wave function collapse, which is a time-irreversible process, and is either real (by the Copenhagen interpretation of quantum mechanics) or apparent only (by the many-worlds interpretation and relational quantum mechanics interpretation)."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Consequences",
+          "score": 0.016666668,
+          "snippet": "Copenhagen interpretation  The nature of the Copenhagen interpretation is exposed by considering a number of experiments and paradoxes."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Abstract",
+          "score": 0.016666668,
+          "snippet": "Copenhagen interpretation  The Copenhagen interpretation is a collection of views about the meaning of quantum mechanics, stemming from the work of Niels Bohr, Werner Heisenberg, Max Born, and others. While \"Copenhagen\" refers to the Danish city, the use as an \"interpretation\" was apparently coined by Heisenberg during the 1950s to refer to ideas developed in the 1925–1927 period, glossing over his disagreements with Bohr. Consequently, there is no definitive historical statement of what the interpretation entails."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Critical_reactions",
+          "score": 0.016393442,
+          "snippet": "Uncertainty principle  The Copenhagen interpretation of quantum mechanics and Heisenberg's uncertainty principle were, in fact, initially seen as twin targets by detractors. According to the Copenhagen interpretation of quantum mechanics, there is no fundamental reality that the quantum state describes, just a prescription for calculating experimental results. There is no way to say what the state of a system fundamentally is, only what the result of observations might be.  Albert Einstein believed that randomness is a reflection of our ignorance of some fundamental property of reality, while …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Origin_and_use_of_the_term",
+          "score": 0.016129032,
+          "snippet": "Copenhagen interpretation  Geist der Quantentheorie' if I may so express myself, which has directed the entire development of modern atomic physics."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Copenhagen interpretation",
+          "url": "https://en.wikipedia.org/wiki/Copenhagen_interpretation#Abstract",
+          "score": 0.016129032,
+          "snippet": "Copenhagen interpretation  over his disagreements with Bohr. Consequently, there is no definitive historical statement of what the interpretation entails.  Features common across versions of the Copenhagen interpretation include the idea that quantum mechanics is intrinsically indeterministic, with probabilities calculated using the Born rule, and the principle of complementarity, which states that objects have certain pairs of complementary properties that cannot all be observed or measured simultaneously. Moreover, the act of \"observing\" or \"measuring\" an object is irreversible, and no truth…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Many-worlds interpretation",
+          "url": "https://en.wikipedia.org/wiki/Many-worlds_interpretation#Abstract",
+          "score": 0.015873017,
+          "snippet": "Many-worlds interpretation  Hugh Everett, who first proposed it in 1957. Bryce DeWitt popularized the formulation and named it many-worlds in the 1970s.  In modern versions of many-worlds, the subjective appearance of wave function collapse is explained by the mechanism of quantum decoherence. Decoherence approaches to interpreting quantum theory have been widely explored and developed since the 1970s. MWI is considered a mainstream interpretation of quantum mechanics, along with the other decoherence interpretations, the Copenhagen interpretation, and hidden variable theories such as Bohmian …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "History of quantum mechanics",
+          "url": "https://en.wikipedia.org/wiki/History_of_quantum_mechanics#Copenhagen_interpretation",
+          "score": 0.015873017,
+          "snippet": "History of quantum mechanics  Bohr, Heisenberg, and others tried to explain what these experimental results and mathematical models really mean. The term Copenhagen interpretation has been applied to their views in retrospect, glossing over differences among them. While no definitive statement of \"the\" Copenhagen interpretation exists, the following ideas are widely seen as characteristic of it."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Bell test",
+          "url": "https://en.wikipedia.org/wiki/Bell_test#Many-worlds_loophole",
+          "score": 0.015625,
+          "snippet": "Bell test  The many-worlds interpretation, also known as the Hugh Everett interpretation, is deterministic and has local dynamics, consisting of the unitary part of quantum mechanics without collapse. Bell's theorem does not apply because of an implicit assumption that measurements have a single outcome."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Copenhagen interpretation"
+        ],
+        "missing": [
+          "Niels Bohr",
+          "Werner Heisenberg"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "complementarity",
+          "Niels Bohr",
+          "Werner Heisenberg",
+          "measurement"
+        ],
+        "missing": [
+          "wavefunction collapse",
+          "no underlying reality independent of observation"
+        ],
+        "total_expected": 6,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 18,
+      "search_ms": 194,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "contested_atomic_bombings_morality",
+      "category": "contested",
+      "question": "What are the major arguments for and against the morality of the atomic bombings of Hiroshima and Nagasaki?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.031159421,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  compounded by illness and malnutrition. Though Hiroshima had a sizable military garrison, most of the dead were civilians.  Scholars have extensively studied the effects of the bombings on the social and political character of subsequent world history and popular culture, and there is still much debate concerning the ethical and legal justification for the bombings. According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.016666668,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  to destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nuclear weapon",
+          "url": "https://en.wikipedia.org/wiki/Nuclear_weapon#Testing_and_deployment",
+          "score": 0.016393442,
+          "snippet": "Nuclear weapons have only twice been used in warfare, both times by the United States against Japan at the end of World War II. On August 6, 1945, the United States Army Air Forces (USAAF) detonated a uranium gun-type fission bomb nicknamed \" Little Boy \" over the Japanese city of Hiroshima; three days later, on August 9, the USAAF detonated a plutonium implosion-type fission bomb nicknamed \" Fat Man \" over the Japanese city of Nagasaki. These bombings caused injuries that resulted in the deaths of approximately 200,000 civilians and military personnel. The ethics of these bombings and their r…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Air_raids_on_Japan",
+          "score": 0.016393442,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  destroy the enemy's war industries, kill or disable civilian employees of these industries, and undermine civilian morale."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Debate_over_bombings",
+          "score": 0.016129032,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  idea became the accepted position in Japan and that it may have played some part in the decision-making of the US government."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki",
+          "score": 0.016129032,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  According to supporters, the atomic bombings were necessary to bring an end to the war with minimal casualties and ultimately prevented a greater loss of life; according to critics, the bombings were unnecessary for the war's end and were a war crime, raising moral and ethical implications."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Nawaz Sharif",
+          "url": "https://en.wikipedia.org/wiki/Nawaz_Sharif#1998_nuclear_crisis",
+          "score": 0.015873017,
+          "snippet": "Nawaz Sharif  its nuclear tests, codenamed Chagai-I and Chagai-II. Following these test, Nawaz appeared on national television and stated:  If had wanted, she would have conducted nuclear tests 15–20 years ago but the abject poverty of the people of the region dissuaded from doing so. But the orld, instead of putting pressure on not to take the destructive road imposed all kinds of sanctions on for no fault If had its own nuclear capability Hiroshima and Nagasaki would not have suffered atomic destruction at the hands of the"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Abstract",
+          "score": 0.015873017,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  On 6 and 9 August 1945, the United States detonated two atomic bombs over the Japanese cities of Hiroshima and Nagasaki. The bombings killed between 150,000 and 246,000 people, most of whom were civilians, and remain the only use of nuclear weapons in an armed conflict. Japan surrendered to the Allies on 15 August, six days after the bombing of Nagasaki and the Soviet Union's declaration of war against Japan and invasion of Japanese-occupied Manchuria. The Japanese government signed the instrument of surrender on 2 September, effectively ending the wa…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Radhabinod Pal",
+          "url": "https://en.wikipedia.org/wiki/Radhabinod_Pal#War_crimes_trial_dissent",
+          "score": 0.015625,
+          "snippet": "Radhabinod Pal  even the published accounts of Nanking 'rape' could not be accepted by the world without some suspicion of exaggeration...\"  Furthermore, he believed that the exclusion of Western colonialism and the use of the atom bomb by the United States from the list of crimes, as well as the exclusion of judges from the vanquished nations on the bench, signified the \"failure of the Tribunal to provide anything other than the opportunity for the victors to retaliate.\" Pal wrote that the Tokyo Trials were an exercise in victor's justice and that the Allies were equally culpable in acts such…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Atomic bombings of Hiroshima and Nagasaki",
+          "url": "https://en.wikipedia.org/wiki/Atomic_bombings_of_Hiroshima_and_Nagasaki#Reportage",
+          "score": 0.015625,
+          "snippet": "Atomic bombings of Hiroshima and Nagasaki  Less than a week after his New York Times story was published, Lawrence also backtracked and dismissed the reports on radiation sickness as Japanese efforts to undermine American morale."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "missing": [
+          "Debate over the atomic bombings of Hiroshima and Nagasaki"
+        ],
+        "total_expected": 2,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "civilian casualties"
+        ],
+        "missing": [
+          "ended the war sooner",
+          "saved lives by avoiding invasion",
+          "alternatives existed",
+          "demonstration",
+          "Soviet entry"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 26,
+      "search_ms": 198,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "contested_strategic_bombing_war_crime",
+      "category": "contested",
+      "question": "Was the Allied strategic bombing of German cities a war crime?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II#Abstract",
+          "score": 0.031746034,
+          "snippet": "Strategic bombing during World War II  The Allies attacked oil installations, and controversial firebombings took place against Hamburg (1943), Dresden (1945), and other German cities."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II",
+          "score": 0.029857397,
+          "snippet": "Strategic bombing during World War II  The Allies attacked oil installations, and controversial firebombings took place against Hamburg (1943), Dresden (1945), and other German cities. In the Pacific War, the Japanese frequently bombed civilian populations as early as 1937–1938, such as in Shanghai and Chongqing. US air raids on Japan escalated from October 1944, culminating in widespread firebombing, and later in August 1945 with the atomic bombings of Hiroshima and Nagasaki. The effectiveness of the strategic bombing campaigns is controversial. Although they did not produce decisive military…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II",
+          "score": 0.016666668,
+          "snippet": "Strategic bombing during World War II  World War II (1939–1945) involved sustained strategic bombing of railways, harbours, cities, workers' and civilian housing, and industrial districts in enemy territory. Strategic bombing as a military strategy is distinct both from close air support of ground forces and from tactical air power. During World War II, many military strategists of air power believed that air forces could win major victories by attacking industrial and political infrastructure, rather than purely military targets. Strategic bombing often involved bombing areas inhabited by civ…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II casualties",
+          "url": "https://en.wikipedia.org/wiki/World_War_II_casualties#Classification_of_casualties",
+          "score": 0.016666668,
+          "snippet": "World War II casualties  Civilian casualties include deaths caused by strategic bombing, Holocaust victims, German war crimes, Japanese war crimes, population transfers in the Soviet Union, Allied war crimes, and deaths due to war-related famine and disease."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Military history",
+          "url": "https://en.wikipedia.org/wiki/Military_history#Industrial_warfare",
+          "score": 0.016393442,
+          "snippet": "Military history  were available for combat. Conscription was notably used by Napoleon Bonaparte and the major parties during the two World Wars.  Total war was used in industrial warfare, the objective being to prevent the opposing nation to engage in war. Napoleon was the innovator. William Tecumseh Sherman 's \" March to the Sea \" and Philip Sheridan 's burning of the Shenandoah Valley during the American Civil War were examples. On the largest scale the strategic bombing of enemy cities and industrial factories during World War II was total warfare."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II#Legal_considerations",
+          "score": 0.016393442,
+          "snippet": "Strategic bombing during World War II  and these conventions were interpreted by both sides to allow the indiscriminate bombing of enemy cities throughout the war.  General Telford Taylor, Chief Counsel for War Crimes at the Nuremberg Trials, wrote that:  If the first badly bombed cities — Warsaw, Rotterdam, Belgrade, and London — suffered at the hands of the Germans and not the Allies, nonetheless the ruins of German and Japanese cities were the results not of reprisal but of deliberate policy, and bore witness that aerial bombardment of cities and factories has become a recognized part of mo…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II#Abstract",
+          "score": 0.016129032,
+          "snippet": "Strategic bombing during World War II  bombing during World War I (1914–1918), the Spanish Civil War (1936–1939), and the Second Sino-Japanese War (1937–1945).  In the Pacific War, the Japanese frequently bombed civilian populations as early as 1937–1938, such as in Shanghai and Chongqing. US air raids on Japan escalated from October 1944, culminating in widespread firebombing, and later in August 1945 with the atomic bombings of Hiroshima and Nagasaki. The effectiveness of the strategic bombing campaigns is controversial. Although they did not produce decisive military victories in themselves…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II#Casualties",
+          "score": 0.016129032,
+          "snippet": "Strategic bombing during World War II  After the war, the U.S. Strategic Bombing Survey reviewed the available casualty records in Germany and concluded that official German statistics of casualties from air attack had been too low. The survey estimated that at a minimum 305,000 were killed in German cities due to bombing and estimated a minimum of 780,000 wounded. Roughly 7,500,000 German civilians were also rendered homeless. Overy estimated in 2014 that in all about 353,000 civilians were killed by Allies bombing raids against German cities. In addition to the minimum figure given in the St…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "World War II",
+          "url": "https://en.wikipedia.org/wiki/World_War_II#Western_Europe/Atlantic_and_Mediterranean_(1942–1943)",
+          "score": 0.015625,
+          "snippet": "World War II  its capture by German forces. Axis forces in Africa withdrew into Tunisia, which was conquered by the Allies in May 1943.  In June 1943, the British and Americans began a strategic bombing campaign against Germany with a goal to disrupt the war economy, reduce morale, and \" de-house \" the civilian population. The firebombing of Hamburg was among the first attacks in this campaign, inflicting significant casualties and considerable losses on infrastructure of this important industrial centre."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Strategic bombing during World War II",
+          "url": "https://en.wikipedia.org/wiki/Strategic_bombing_during_World_War_II#Bombing_in_France",
+          "score": 0.015625,
+          "snippet": "Strategic bombing during World War II  for both German surface ships and submarines, while French industry was an important contributor to the German war effort.  French civilian casualties due to Allied strategic bombing are estimated at half of the 67,000 French civilian dead during Allied operations in 1942–1945; the other part being mostly killed during tactical bombing in the Normandy campaign. 22% of the bombs dropped in Europe by British and American air forces between 1940 and 1945 were in France. The port city of Le Havre had been destroyed by 132 bombings during the war (5,000 dead) …"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Strategic bombing during World War II"
+        ],
+        "missing": [
+          "Bombing of Dresden",
+          "Bombing of Hamburg"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "Dresden",
+          "Hamburg",
+          "civilian targets",
+          "area bombing"
+        ],
+        "missing": [
+          "international humanitarian law",
+          "Arthur Harris"
+        ],
+        "total_expected": 6,
+        "ratio": 0.6666667
+      },
+      "embed_ms": 17,
+      "search_ms": 194,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "contested_churchill_legacy",
+      "category": "contested",
+      "question": "How is Winston Churchill's legacy contested today?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Retirement:_1955–1964",
+          "score": 0.032291666,
+          "snippet": "Winston Churchill  Montague Browne wrote that he never heard Churchill refer to depression and certainly did not suffer from it."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Death,_funeral_and_memorials",
+          "score": 0.016666668,
+          "snippet": "Winston Churchill  votes, he was voted the greatest Briton of all time, his nearest rival being Isambard Kingdom Brunel some 56,000 votes behind.  He is one of only 8 people to be granted honorary citizenship of the United States, and the first. The United States Navy honoured him in 1999 by naming a Arleigh Burke -class destroyer as the USS Winston S. Churchill. Other memorials in North America include the National Churchill Museum in Fulton, where he made the 1946 \"Iron Curtain\" speech; Churchill Square in Edmonton, Alberta; and the Winston Churchill Range, a mountain range northwest of Lake…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Douglas Haig, 1st Earl Haig",
+          "url": "https://en.wikipedia.org/wiki/Douglas_Haig,_1st_Earl_Haig#Tactical_developments",
+          "score": 0.016393442,
+          "snippet": "Douglas Haig, 1st Earl Haig  today of the unredeemable defectiveness of all civil and military leaders. Haig could be said to have established the paradigm."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Artist,_historian,_and_writer",
+          "score": 0.016393442,
+          "snippet": "Winston Churchill  Churchill was a prolific writer. His output included a novel (Savrola), two biographies, memoirs, histories, and press articles. Two of his most famous works were his six-volume memoir, The Second World War, and the four-volume A History of the English-Speaking Peoples. In recognition of his \"mastery of historical and biographical description\" and oratorial output, Churchill received the Nobel Prize in Literature in 1953.  He used either \"Winston S. Churchill\" or \"Winston Spencer Churchill\" as his pen name to avoid confusion with the American novelist Winston Churchill, whom…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Alan Brooke, 1st Viscount Alanbrooke",
+          "url": "https://en.wikipedia.org/wiki/Alan_Brooke,_1st_Viscount_Alanbrooke#Abstract",
+          "score": 0.016129032,
+          "snippet": "Alan Brooke, 1st Viscount Alanbrooke  Field Marshal Alan Francis Brooke, 1st Viscount Alanbrooke, KG, GCB, OM, GCVO, DSO & Bar (23 July 1883 – 17 June 1963), was a senior officer of the British Army. He was Chief of the Imperial General Staff (CIGS), the professional head of the British Army, during the Second World War, and was promoted to field marshal on 1 January 1944. As chairman of the Chiefs of Staff Committee, Brooke was the foremost military advisor to Prime Minister Winston Churchill, and had the role of co-ordinator of the British military efforts in the Allies ' victory in 1945. Af…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Cultural_depictions",
+          "score": 0.016129032,
+          "snippet": "Winston Churchill  While biographies by Addison, Gilbert, Jenkins and Rhodes James are among the most acclaimed works about Churchill, he has been the subject of numerous others. David Freeman counted 62 in English to the end of the 20th century. At a public ceremony in Westminster Hall on 30 November 1954, Churchill's 80th birthday, the joint Houses of Parliament presented him with a full-length portrait of himself, painted by Graham Sutherland. Churchill and Clementine reportedly hated it and she had it destroyed.  Biographical films include Young Winston (1972), directed by Richard Attenbor…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Abstract",
+          "score": 0.015873017,
+          "snippet": "Winston Churchill  member of the Conservative Party, which he led from 1940 to 1955. He was a member of the Liberal Party from 1904 to 1924.  One of the 20th century's most significant figures, Churchill remains popular in the UK and the rest of the Anglosphere. He is generally viewed as a victorious wartime leader, who defended liberal democracy against the spread of fascism, and as a liberal reformer who spurred the creation of the modern welfare state. However, recent scholarship has been more critical of Churchill, especially with regards to his views on race, and his unwavering commitment…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Winston Churchill",
+          "url": "https://en.wikipedia.org/wiki/Winston_Churchill#Family",
+          "score": 0.015873017,
+          "snippet": "Winston Churchill  Churchill married Clementine Hozier in September 1908. They remained married for 57 years until his death. Churchill was aware of the strain his career placed on their marriage. According to Colville, he had an affair in the 1930s with Doris Castlerosse, although this is discounted by Andrew Roberts.  The Churchills' first child, Diana, was born in July 1909; Randolph, in May 1911. Sarah, was born in October 1914, and Marigold, in November 1918. Marigold died in August 1921, from sepsis. On 15 September 1922, the Churchills' last child, Mary, was born. Later that month, the …"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Neville Chamberlain",
+          "url": "https://en.wikipedia.org/wiki/Neville_Chamberlain#Abstract",
+          "score": 0.015625,
+          "snippet": "Neville Chamberlain  a range of reform measures from 1924 to 1929. He was appointed Chancellor of the Exchequer in the National Government in 1931.  Chamberlain's reputation remains controversial among historians, the initial high regard for him being entirely eroded by books such as Guilty Men, published in July 1940, which blamed Chamberlain and his associates for the Munich accord and for allegedly failing to prepare the country for war. Most historians in the generation following Chamberlain's death held similar views, led by Churchill in The Gathering Storm. Some later historians have tak…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Stanley Bruce",
+          "url": "https://en.wikipedia.org/wiki/Stanley_Bruce#Modernising_government",
+          "score": 0.015384615,
+          "snippet": "Stanley Bruce  conclude that Bruce was the best of the prime ministers that he served or opposed in his 38-year parliamentary career."
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Winston Churchill"
+        ],
+        "missing": [
+          "Legacy of Winston Churchill",
+          "Bengal famine of 1943"
+        ],
+        "total_expected": 3,
+        "ratio": 0.33333334
+      },
+      "fact_score": {
+        "matched": [
+          "imperial views"
+        ],
+        "missing": [
+          "Bengal famine",
+          "wartime leadership",
+          "anti-Soviet",
+          "racial views",
+          "memorial controversies"
+        ],
+        "total_expected": 6,
+        "ratio": 0.16666667
+      },
+      "embed_ms": 17,
+      "search_ms": 195,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    },
+    {
+      "question_id": "contested_quantum_determinism",
+      "category": "contested",
+      "question": "How did Heisenberg's uncertainty principle reshape philosophical debate about determinism?",
+      "retrieved": [
+        {
+          "corpus_id": "wikipedia",
+          "title": "Uncertainty",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty#Risk_and_uncertainty",
+          "score": 0.03306011,
+          "snippet": "Uncertainty  typically arises in situations where multiple analysts or observers have different interpretations of the same statements.  At the subatomic level, uncertainty may be a fundamental and unavoidable property of the universe. In quantum mechanics, the Heisenberg uncertainty principle puts limits on how much an observer can ever know about the position and velocity of a particle. This may not just be ignorance of potentially obtainable facts but that there is no fact to be found. There is some controversy in physics as to whether such uncertainty is an irreducible property of nature o…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "A Brief History of Time",
+          "url": "https://en.wikipedia.org/wiki/A_Brief_History_of_Time#Chapter_4:_The_Uncertainty_Principle",
+          "score": 0.031513646,
+          "snippet": "A Brief History of Time  objections, it has been proven to be very successful in describing the universe except for gravity and large-scale structures.  Hawking then discusses how Heisenberg's uncertainty principle implies the wave–particle duality behaviour of light (and particles in general)."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Niels Bohr",
+          "url": "https://en.wikipedia.org/wiki/Niels_Bohr#Quantum_mechanics",
+          "score": 0.031498015,
+          "snippet": "Niels Bohr  In February 1927, Heisenberg developed the first version of the uncertainty principle, presenting it using a thought experiment where an electron was observed through a gamma-ray microscope. Bohr was dissatisfied with Heisenberg's argument, since it required only that a measurement disturb properties that already existed, rather than the more radical idea that the electron's properties could not be discussed at all apart from the context they were measured in. In a paper presented at the Volta Conference at Como in September 1927, Bohr emphasized that Heisenberg's uncertainty relat…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#History",
+          "score": 0.031099323,
+          "snippet": "Uncertainty principle  commutativity implies the uncertainty principle. Writing to Wolfgang Pauli in February 1927, he worked out the basic concepts.  In his celebrated 1927 paper \" Über den anschaulichen Inhalt der quantentheoretischen Kinematik und Mechanik \" (\"On the Perceptual Content of Quantum Theoretical Kinematics and Mechanics\"), Heisenberg established this expression as the minimum amount of unavoidable momentum disturbance caused by any position measurement, but he did not give a precise definition for the uncertainties Δx and Δ p. Instead, he gave some plausible estimates in each c…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Bell test",
+          "url": "https://en.wikipedia.org/wiki/Bell_test#Overview",
+          "score": 0.016666668,
+          "snippet": "Bell test  The Bell test has its origins in the debate between Einstein and other pioneers of quantum physics, principally Niels Bohr. One feature of the theory of quantum mechanics under debate was the meaning of Heisenberg's uncertainty principle. This principle states that if some information is known about a given particle, there is some other information about it that is impossible to know. An example of this is found in observations of the position and the momentum of a given particle. According to the uncertainty principle, a particle's momentum and its position cannot simultaneously be…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Uncertainty principle",
+          "url": "https://en.wikipedia.org/wiki/Uncertainty_principle#Terminology_and_translation",
+          "score": 0.016129032,
+          "snippet": "Uncertainty principle  Throughout the main body of his original 1927 paper, written in German, Heisenberg used the word \"Ungenauigkeit\", to describe the basic theoretical principle. Only in the endnote did he switch to the word \"Unsicherheit\". Later on, he always used \"Unbestimmtheit\". When the English-language version of Heisenberg's textbook, The Physical Principles of the Quantum Theory, was published in 1930, however, only the English word \"uncertainty\" was used, and it became the term in the English language."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Werner Heisenberg",
+          "url": "https://en.wikipedia.org/wiki/Werner_Heisenberg#Göttingen,_Copenhagen_and_Leipzig",
+          "score": 0.015873017,
+          "snippet": "Werner Heisenberg  It was in Copenhagen, in 1927, that Heisenberg developed his uncertainty principle, while working on the mathematical foundations of quantum mechanics. On 23 February, Heisenberg wrote a letter to fellow physicist Wolfgang Pauli, in which he first described his new principle. In his paper on the principle, Heisenberg used the word \" Ungenauigkeit \" (imprecision), not uncertainty, to describe it."
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "John von Neumann",
+          "url": "https://en.wikipedia.org/wiki/John_von_Neumann#Quantum_mechanics",
+          "score": 0.015625,
+          "snippet": "John von Neumann  as position or momentum are represented as linear operators acting on the Hilbert space associated with the quantum system.  The physics of quantum mechanics was thereby reduced to the mathematics of Hilbert spaces and linear operators acting on them. For example, the uncertainty principle, according to which the determination of the position of a particle prevents the determination of its momentum and vice versa, is translated into the non-commutativity of the two corresponding operators. This new mathematical formulation included as special cases the formulations of both He…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "Max Born",
+          "url": "https://en.wikipedia.org/wiki/Max_Born#Göttingen",
+          "score": 0.015384615,
+          "snippet": "Max Born  paper was submitted for publication before the end of the year by all three authors. The result was a surprising formulation:  where p and q were matrices for location and momentum, and I is the identity matrix. The left hand side of the equation is not zero because matrix multiplication is not commutative. This formulation was entirely attributable to Born, who also established that all the elements not on the diagonal of the matrix were zero. Born considered that his paper with Jordan contained \"the most important principles of quantum mechanics including its extension to electrody…"
+        },
+        {
+          "corpus_id": "wikipedia",
+          "title": "A Brief History of Time",
+          "url": "https://en.wikipedia.org/wiki/A_Brief_History_of_Time#Chapter_4:_The_Uncertainty_Principle",
+          "score": 0.015151516,
+          "snippet": "A Brief History of Time  revised in 1900 by German scientist Max Planck who suggested that energy must radiate in small, finite packets called quanta.  Hawking then discusses the uncertainty principle formulated by German scientist Werner Heisenberg, according to which the speed and the position of a particle cannot be precisely known due to Planck's quantum hypothesis: increasing the accuracy in measuring its speed will decrease the certainty of its position and vice versa. This disproved Laplace's idea of a completely deterministic theory of the universe. Hawking then describes the eventual …"
+        }
+      ],
+      "source_score": {
+        "matched": [
+          "Uncertainty principle",
+          "Werner Heisenberg"
+        ],
+        "missing": [
+          "Determinism",
+          "Hidden-variable theory"
+        ],
+        "total_expected": 4,
+        "ratio": 0.5
+      },
+      "fact_score": {
+        "matched": [
+          "hidden variables",
+          "Bohr",
+          "Einstein"
+        ],
+        "missing": [
+          "indeterminism",
+          "Laplace's demon",
+          "free will"
+        ],
+        "total_expected": 6,
+        "ratio": 0.5
+      },
+      "embed_ms": 18,
+      "search_ms": 196,
+      "corpora_hit": [
+        "wikipedia"
+      ],
+      "vector_eligible": true
+    }
+  ]
+}

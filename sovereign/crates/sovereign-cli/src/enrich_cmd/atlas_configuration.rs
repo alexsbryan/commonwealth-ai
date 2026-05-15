@@ -128,6 +128,12 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
     let mut claims = Vec::new();
     let mut questions = Vec::new();
     let mut argument_reconstructions = Vec::new();
+    // Gap-B typed atoms preserved across the configuration rewrite.
+    // Phase 8 only adds Configuration atoms; positions + oppositions
+    // produced by the Gap-B resolver projection must survive the
+    // read-modify-write of atoms.json.
+    let mut positions = Vec::new();
+    let mut oppositions = Vec::new();
     for a in atoms_file.atoms {
         match a {
             AtomEnvelope::Entity(x) => entities.push(x),
@@ -140,6 +146,8 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
                 // Drop previous Phase 8 output; this pass replaces it.
             }
             AtomEnvelope::ArgumentReconstruction(x) => argument_reconstructions.push(x),
+            AtomEnvelope::Position(x) => positions.push(x),
+            AtomEnvelope::Opposition(x) => oppositions.push(x),
         }
     }
 
@@ -298,6 +306,8 @@ pub async fn cmd_atlas_configuration(args: &[String]) -> i32 {
         &questions,
         &configurations,
         &argument_reconstructions,
+        &positions,
+        &oppositions,
         &edges_file.edges,
         &trajectories,
     ) {

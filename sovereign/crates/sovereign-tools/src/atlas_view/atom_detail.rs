@@ -335,6 +335,20 @@ fn build_referenced_atoms(
                 refs.push(p);
             }
         }
+        AtomEnvelope::Position(p) => {
+            if let Some(prop) = &p.proponent_id {
+                refs.push(prop);
+            }
+            refs.extend(p.evidence_ids.iter());
+        }
+        AtomEnvelope::Opposition(o) => {
+            if let Some(l) = &o.left_atom_id {
+                refs.push(l);
+            }
+            if let Some(r) = &o.right_atom_id {
+                refs.push(r);
+            }
+        }
     }
 
     let mut out: BTreeMap<String, ReferencedAtom> = BTreeMap::new();
@@ -368,6 +382,8 @@ fn build_evidence(atom: &AtomEnvelope) -> Vec<EvidenceExcerpt> {
         AtomEnvelope::Question(a) => a.raised_at.iter().collect(),
         AtomEnvelope::Configuration(a) => a.evidence.iter().collect(),
         AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
+        AtomEnvelope::Position(p) => vec![&p.first_appearance],
+        AtomEnvelope::Opposition(o) => vec![&o.first_appearance],
     };
     chunks
         .into_iter()
@@ -402,6 +418,9 @@ fn edge_type_rank(t: EdgeType) -> u8 {
         EdgeType::Grounding => 7,
         EdgeType::Framing => 8,
         EdgeType::Provenance => 9,
+        EdgeType::EvidenceFor => 10,
+        EdgeType::Concedes => 11,
+        EdgeType::OpposesIn => 12,
     }
 }
 
@@ -419,6 +438,8 @@ fn atom_type_of(atom: &AtomEnvelope) -> AtomType {
         AtomEnvelope::Question(_) => AtomType::Question,
         AtomEnvelope::Configuration(_) => AtomType::Configuration,
         AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
+        AtomEnvelope::Position(_) => AtomType::Position,
+        AtomEnvelope::Opposition(_) => AtomType::Opposition,
     }
 }
 
@@ -441,6 +462,8 @@ fn display_name_of(atom: &AtomEnvelope) -> String {
         AtomEnvelope::Question(a) => truncate(&a.content),
         AtomEnvelope::Configuration(a) => a.label.clone(),
         AtomEnvelope::ArgumentReconstruction(a) => a.name.clone(),
+        AtomEnvelope::Position(a) => a.canonical_name.clone(),
+        AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
     }
 }
 
@@ -487,7 +510,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
-        })
+                    concept_kind: None,
+})
     }
 
     fn claim_with_evidence(id: usize, content: &str, chunks: &[&str]) -> AtomEnvelope {
@@ -506,7 +530,10 @@ mod tests {
             confidence: Some(0.8),
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        })
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+})
     }
 
     fn write_atoms(atlas_dir: &Path, atoms: Vec<AtomEnvelope>) {
@@ -744,7 +771,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        });
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+});
         // Drop unused Initiative-style fields on the entity so the
         // serde round-trip stays clean.
         if let AtomEnvelope::Entity(ref mut e) = hume {
@@ -785,7 +815,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        });
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+});
         write_atoms(&atlas_dir, vec![dangling_claim]);
         let reader = FileAtlasReader::new(tmp.path().to_path_buf());
         let detail = reader

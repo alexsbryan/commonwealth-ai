@@ -116,6 +116,8 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
     let mut claims = Vec::new();
     let mut questions = Vec::new();
     let mut configurations = Vec::new();
+    let mut positions = Vec::new();
+    let mut oppositions = Vec::new();
     for a in atoms_file.atoms {
         match a {
             AtomEnvelope::Entity(x) => entities.push(x),
@@ -131,6 +133,8 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
                 // Brief assembler picks them up via atoms.json
                 // directly.
             }
+            AtomEnvelope::Position(x) => positions.push(x),
+            AtomEnvelope::Opposition(x) => oppositions.push(x),
         }
     }
 
@@ -143,6 +147,8 @@ pub async fn cmd_atlas_query(args: &[String]) -> i32 {
         questions: &questions,
         configurations: &configurations,
         edges: &edges_file.edges,
+        positions: &positions,
+        oppositions: &oppositions,
     };
 
     let plan = classify_query(&parsed.query, &entities);

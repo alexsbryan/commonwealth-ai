@@ -655,7 +655,8 @@ fn emit_entities(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        });
+                    concept_kind: None,
+});
     }
 
     // Modules.
@@ -686,7 +687,8 @@ fn emit_entities(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        });
+                    concept_kind: None,
+});
     }
 
     // Items.
@@ -716,7 +718,8 @@ fn emit_entities(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        });
+                    concept_kind: None,
+});
     }
 
     // Externals (placeholders). Match the Wikipedia off-corpus pattern:
@@ -741,7 +744,8 @@ fn emit_entities(
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        });
+                    concept_kind: None,
+});
     }
 
     (entities, idx)

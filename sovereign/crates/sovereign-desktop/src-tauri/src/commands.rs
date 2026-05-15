@@ -4586,6 +4586,24 @@ fn atom_surface_dto(
             a.conclusion.clone(),
             None,
         ),
+        AtomEnvelope::Position(p) => (
+            "position",
+            p.canonical_name.clone(),
+            Vec::new(),
+            p.content.clone(),
+            Some(p.salience),
+        ),
+        AtomEnvelope::Opposition(o) => (
+            "opposition",
+            o.canonical_label.clone(),
+            Vec::new(),
+            if o.framing.is_empty() {
+                format!("{} vs {}", o.left_label, o.right_label)
+            } else {
+                o.framing.clone()
+            },
+            Some(o.salience),
+        ),
     }
 }
 
@@ -4602,6 +4620,7 @@ fn edge_type_label_dto(t: corpus_engine::enrichment::atlas::EdgeType) -> &'stati
         EdgeType::Grounding => "grounding",
         EdgeType::Framing => "framing",
         EdgeType::Provenance => "provenance",
+        EdgeType::EvidenceFor | EdgeType::Concedes | EdgeType::OpposesIn => unreachable!("typed edges wired in Gap B Stage 4"),
     }
 }
 
@@ -4662,6 +4681,7 @@ fn atom_evidence_section_refs_dto(
             }
             out
         }
+        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => unreachable!("typed atoms wired in Gap B Stage 4"),
     }
 }
 

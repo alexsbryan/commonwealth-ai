@@ -353,7 +353,8 @@ impl AtlasIngestion for StructureFirstIngestion {
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
-                });
+                                    concept_kind: None,
+});
             }
 
             // Pass 2: scan kept articles' outgoing links for targets
@@ -398,7 +399,8 @@ impl AtlasIngestion for StructureFirstIngestion {
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
-                });
+                                    concept_kind: None,
+});
             }
 
             tracing::info!(
