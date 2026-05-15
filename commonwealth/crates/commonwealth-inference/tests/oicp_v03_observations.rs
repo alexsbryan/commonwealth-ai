@@ -35,6 +35,7 @@ fn idle_capable() -> NodeCapabilities {
         loaded_models: vec![],
         embed_model: None,
         benchmark: None,
+        current_in_flight: None,
     }
 }
 

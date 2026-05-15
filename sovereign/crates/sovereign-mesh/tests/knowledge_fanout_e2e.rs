@@ -143,6 +143,7 @@ fn caps_with_hosted(corpora: &[&str]) -> NodeCapabilities {
         loaded_models: vec![],
         embed_model: None,
         benchmark: None,
+        current_in_flight: None,
     }
 }
 

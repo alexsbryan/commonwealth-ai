@@ -281,7 +281,7 @@ mod tests {
         SetupConfig {
             models: ModelsSection {
                 primary: "/home/alex/.sovereign/models/Darwin-36B.gguf".into(),
-                fast: "/home/alex/.sovereign/models/Qwen3-2B.gguf".into(),
+                fast: Some("/home/alex/.sovereign/models/Qwen3-2B.gguf".into()),
                 embed: "/home/alex/.sovereign/models/embed.gguf".into(),
                 code: None,
                 context_size: None,
