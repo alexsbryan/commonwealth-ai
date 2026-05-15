@@ -70,6 +70,18 @@ const HELP: Help = Help {
                 "Before scoring, re-extract the enrichment-lane corpus's atlas via `sovereign enrich build <id>`. \
                  GPU-bound, sequential. No-op for retrieval-lane benches (index is owned by the daemon).",
             ),
+            (
+                "--retrieval-limit <N>",
+                "Top-K cap passed to `sovereign eval run --limit` on retrieval-lane benches. Default 30 \
+                 (matches the chunk counts the synced pre-monorepo baselines were captured at).",
+            ),
+            (
+                "--synth",
+                "Drive the FULL chat pipeline (intent classifier → router → search → synthesis) via \
+                 `sovereign eval run --synth` instead of bare retrieval. Most faithful proxy for \
+                 desktop-chat propagation — same `runtime.handle_message_stream` entry point. Costs \
+                 one LLM chat call per question. Synth baselines stored at `baselines/<bench>-synth/`.",
+            ),
         ]),
         HelpSection::Notes(
             "Enrichment lane reads ~/.sovereign/indexes/<corpus>/atlas/atoms.json directly. \
@@ -139,6 +151,25 @@ struct Opts {
     rebuild: bool,
     report: Option<PathBuf>,
     regression_threshold: f32,
+    /// Top-K cap passed to `sovereign eval run --limit` on retrieval
+    /// lane subprocess invocations. Default 30 to match the chunk
+    /// counts the pre-monorepo baselines were captured at; CLI
+    /// default (10) was producing apples-to-oranges source_recall
+    /// regressions.
+    retrieval_limit: usize,
+    /// When true, retrieval-lane benches drive the FULL chat pipeline
+    /// (intent classifier → router → search tools → synthesis) via
+    /// `sovereign eval run --synth` instead of the bare embed→search
+    /// path. Synth mode is the most faithful proxy for "does this
+    /// bench improvement propagate to the desktop chat experience?"
+    /// — same `runtime.handle_message_stream` entry point.
+    ///
+    /// Cost: one LLM chat call per question (~5-30s on the loaded
+    /// model). Default off; opt in for end-to-end regression gates.
+    /// Baselines are stored under `<bench-id>-synth/` to keep
+    /// retrieval-mode and synth-mode runs from overwriting each
+    /// other.
+    synth: bool,
 }
 
 impl Default for Opts {
@@ -150,7 +181,26 @@ impl Default for Opts {
             rebuild: false,
             report: None,
             regression_threshold: 0.005, // 0.5 pt
+            retrieval_limit: 30,
+            synth: false,
         }
+    }
+}
+
+/// Tag the bench's id with `-synth` when synth mode is active so
+/// retrieval-mode and synth-mode baselines don't overwrite each
+/// other. Enrichment-lane benches are unaffected (synth has no
+/// meaning there).
+fn baseline_bench(
+    bench: &DiscoveredBench,
+    opts: &Opts,
+) -> DiscoveredBench {
+    if opts.synth && bench.surface == BenchSurface::RetrievalJudge {
+        let mut tagged = bench.clone();
+        tagged.id = format!("{}-synth", bench.id);
+        tagged
+    } else {
+        bench.clone()
     }
 }
 
@@ -405,16 +455,21 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         Err(e) => return outcome_subprocess_fail(bench, format!("current_exe: {e}")),
     };
 
-    let status = Command::new(&exe)
-        .args([
-            "eval",
-            "run",
-            "--bank",
-            bench.bench_path.to_str().unwrap_or(""),
-            "--output",
-            out_json.to_str().unwrap_or(""),
-        ])
-        .status();
+    let limit_str = opts.retrieval_limit.to_string();
+    let mut cmd_args: Vec<&str> = vec![
+        "eval",
+        "run",
+        "--bank",
+        bench.bench_path.to_str().unwrap_or(""),
+        "--limit",
+        &limit_str,
+        "--output",
+        out_json.to_str().unwrap_or(""),
+    ];
+    if opts.synth {
+        cmd_args.push("--synth");
+    }
+    let status = Command::new(&exe).args(&cmd_args).status();
 
     match status {
         Ok(s) if s.success() => {}
@@ -441,20 +496,21 @@ async fn run_retrieval(bench: &DiscoveredBench, opts: &Opts) -> BenchOutcome {
         Err(e) => return outcome_subprocess_fail(bench, format!("parse eval run output: {e}")),
     };
 
-    let baseline: Option<EvalRun> = read_latest(&opts.bench_root, bench)
+    let baseline_view = baseline_bench(bench, opts);
+    let baseline: Option<EvalRun> = read_latest(&opts.bench_root, &baseline_view)
         .unwrap_or_else(|e| {
             eprintln!(
                 "warn: reading {} baseline failed: {e} — treating as first run",
-                bench.id
+                baseline_view.id
             );
             None
         });
 
     if opts.update_baseline || baseline.is_none() {
-        if let Err(e) = write_dated_and_update_latest(&opts.bench_root, bench, &current) {
+        if let Err(e) = write_dated_and_update_latest(&opts.bench_root, &baseline_view, &current) {
             eprintln!(
                 "warn: writing baseline for {}/{} failed: {e}",
-                bench.group, bench.id
+                baseline_view.group, baseline_view.id
             );
         }
     }
@@ -637,6 +693,17 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
                     .parse::<f32>()
                     .map_err(|e| format!("--regression-threshold: {e}"))?;
                 i += 2;
+            }
+            "--retrieval-limit" => {
+                let v = args.get(i + 1).ok_or("--retrieval-limit requires a number")?;
+                opts.retrieval_limit = v
+                    .parse::<usize>()
+                    .map_err(|e| format!("--retrieval-limit: {e}"))?;
+                i += 2;
+            }
+            "--synth" => {
+                opts.synth = true;
+                i += 1;
             }
             other if other.starts_with("--") => {
                 return Err(format!("unknown flag: {other}"));

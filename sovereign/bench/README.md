@@ -33,14 +33,37 @@ sovereign bench all --filter <group>/<id> --update-baseline
 
 `scaffold` reads the corpus's `atoms.json` and samples 10 entries per typed axis + base atom kind. The draft encodes what the extractor PRODUCED — review every entry, tighten the needles, add anti-tests. Verified: a fresh scaffold against obsidian-vault scores 100% F1 across all 5 typed axes against the same atlas (drawn from atoms; matches atoms).
 
-## Two scoring surfaces
+## Three scoring surfaces
 
 | Surface | Scores | Runs via | Today's coverage |
 |---|---|---|---|
-| **Enrichment-eval** | atom F1 per axis against a hand-authored golden | in-process `score_corpus` | obsidian, literary (bk-book-1, dubliners-3), philosophy (free-will-debate, stoicism-mini, virtue-ethics-fragments) |
-| **Retrieval + LLM-judge** | per-question source_recall / fact_recall / `essay_readiness` | subprocess `sovereign eval run` (needs live daemon) | obsidian, sep, wikipedia |
+| **Enrichment-eval** | atom F1 per axis against a hand-authored golden | in-process `score_corpus` | obsidian, literary (bk-book-1, dubliners-3), philosophy |
+| **Retrieval (bare)** | per-question source_recall / fact_recall | subprocess `eval run` (no `--synth`) | obsidian, sep, wikipedia |
+| **Retrieval + synth (full chat pipeline)** | same scoring, but answers come from `runtime.handle_message_stream` | subprocess `eval run --synth` (via `bench all --synth`) | same banks; opt-in cost ~5-30s/q |
 
 Two complementary lever sets. Atom F1 measures projection correctness; retrieval+judge measures whether the resulting atlas serves user value. Per the lever framing: **no single aggregate F1 across corpora or across surfaces** — per-corpus + per-axis + per-category only.
+
+## Propagation: bench → chat
+
+`bench all` (default retrieval-mode) exercises `CorpusIndex::search_with_rerank` — the same primitive `Runtime::search_corpus_indexes` calls from desktop chat. Improvements to embed quality, BM25, vector cosine, atlas-tier boost, and the cross-encoder reranker propagate to chat 1:1.
+
+`bench all --synth` drives `runtime.handle_message_stream` — the **exact same entry point the desktop chat surface uses**. Adds coverage of the chat-only layers: intent classifier, router (KnowledgeQuery/DeepQuery/etc), sensitive-corpus oracle, kind filter, and the synthesis LLM itself. Use this for end-to-end propagation gates.
+
+```bash
+# Cheap: tune retrieval primitives. Same code chat uses for embed+search+rerank.
+sovereign bench all                       # ~minutes
+# Full-chain: confirm chat-side wins. Same code chat uses end-to-end.
+sovereign bench all --synth               # ~30s/question, opt-in for nightly / release
+```
+
+Baselines are stored separately per mode (`baselines/<bench>/` vs `baselines/<bench>-synth/`) so the two never overwrite each other. Empirical 2026-05-15 obsidian baseline:
+
+| Mode | fact_recall | source_recall |
+|---|---|---|
+| retrieval | 0.96 | 1.00 |
+| synth | 0.56 | 0.75 |
+
+The 0.96→0.56 / 1.00→0.75 gap is the lever surface for the chat-only layers (classifier routing, sensitive filtering, synthesis model selection of which retrieved chunks to actually surface).
 
 ## Filesystem convention
 
