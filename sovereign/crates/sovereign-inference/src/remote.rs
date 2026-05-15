@@ -185,6 +185,20 @@ impl RemoteApiProvider {
         self.api_key.as_ref().map(|k| format!("Bearer {k}"))
     }
 
+    /// Daemon root + warmup path. The route is mounted at the daemon
+    /// root (not under `/v1`), so we strip a `/v1` suffix from
+    /// `self.endpoint` if present. Two endpoint shapes appear in the
+    /// codebase: callers like `chat_cmd/bootstrap` pass
+    /// `http://host:9741/v1`; peer-inference callers pass
+    /// `http://peer:9741`. Both resolve to the same warmup URL here.
+    fn warmup_url(&self) -> String {
+        let base = self
+            .endpoint
+            .strip_suffix("/v1")
+            .unwrap_or(&self.endpoint);
+        format!("{base}/internal/inference/warmup")
+    }
+
     /// Fetch the OICP capabilities manifest from a provider.
     /// Returns None if the provider doesn't support OICP (404 or parse failure).
     pub async fn fetch_oicp_manifest(&self) -> Option<ProviderManifest> {
@@ -435,6 +449,41 @@ impl InferenceProvider for RemoteApiProvider {
             relative_reasoning: Depth::Deep,
         }
     }
+
+    /// POSTs to the daemon's loopback warmup endpoint
+    /// (`/internal/inference/warmup`, see
+    /// `commonwealth-api::routes_internal::mesh_admin::inference_warmup`).
+    /// Used by the desktop's child-process supervisor path so a
+    /// window-focus warmup flows over HTTP to the supervised daemon
+    /// rather than into an in-process slot.
+    ///
+    /// Best-effort and silent on failure (network error, 4xx/5xx) —
+    /// the trait's default impl is a no-op for the same reason: an
+    /// unwarmed slot is a slow first turn, not a broken caller.
+    async fn warmup_primary(&self) -> Result<()> {
+        let url = self.warmup_url();
+        let mut req = self.client.post(&url).json(&serde_json::json!({}));
+        if let Some(ref auth) = self.auth_header() {
+            req = req.header("Authorization", auth);
+        }
+        match req.send().await {
+            Ok(r) if r.status().is_success() => Ok(()),
+            Ok(r) => {
+                tracing::debug!(
+                    status = %r.status(),
+                    "RemoteApiProvider::warmup_primary: non-success, treating as no-op"
+                );
+                Ok(())
+            }
+            Err(e) => {
+                tracing::debug!(
+                    error = %e,
+                    "RemoteApiProvider::warmup_primary: transport error, treating as no-op"
+                );
+                Ok(())
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -580,5 +629,33 @@ mod tests {
             4096,
         );
         assert_eq!(provider.auth_header(), None);
+    }
+
+    #[test]
+    fn warmup_url_strips_v1_suffix() {
+        let provider = RemoteApiProvider::new(
+            "http://localhost:9741/v1",
+            None,
+            "model",
+            4096,
+        );
+        assert_eq!(
+            provider.warmup_url(),
+            "http://localhost:9741/internal/inference/warmup",
+        );
+    }
+
+    #[test]
+    fn warmup_url_preserves_bare_host() {
+        let provider = RemoteApiProvider::new(
+            "http://peer:9741",
+            None,
+            "mesh-peer",
+            32_768,
+        );
+        assert_eq!(
+            provider.warmup_url(),
+            "http://peer:9741/internal/inference/warmup",
+        );
     }
 }

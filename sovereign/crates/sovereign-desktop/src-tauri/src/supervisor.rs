@@ -43,6 +43,27 @@
 //! - No knowledge of `SetupConfig` semantics. Callers compute the
 //!   binary path, args, ports, and crash-log dir; this module just
 //!   spawns and supervises.
+//!
+//! # Integration pattern
+//!
+//! ```ignore
+//! let supervisor = Arc::new(Supervisor::new(config));
+//! let mut states = supervisor.subscribe();
+//! let task = {
+//!     let sup = Arc::clone(&supervisor);
+//!     tokio::spawn(async move { sup.run().await })
+//! };
+//! // ...UI subscribes to `states`, calls `supervisor.request_reconnect()`...
+//! // On app quit:
+//! task.abort();
+//! ```
+//!
+//! `JoinHandle::abort()` drops the run future; the in-flight `Child`
+//! handle's `kill_on_drop(true)` SIGKILLs the daemon. For v1 that's
+//! the same behaviour as `kill -9 sovereign-cli` — the daemon writes
+//! `mesh.json` atomically on each state change, so on-disk persistence
+//! survives an abrupt termination. A graceful SIGTERM-with-grace path
+//! can layer on later without changing this contract.
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -128,6 +149,11 @@ enum ExitOutcome {
     /// `request_reconnect()` was called while the child was alive.
     /// Not counted as a crash; clears backoff state.
     ManualReconnect,
+    /// All references to the supervisor have been dropped (mpsc
+    /// channel closed) — the integration layer wants the run loop to
+    /// exit. The supervisor kills the child and returns; the outer
+    /// `run()` method observes this and breaks out of the loop.
+    Shutdown,
 }
 
 impl ExitOutcome {
@@ -140,6 +166,7 @@ impl ExitOutcome {
                 format!("daemon stopped responding ({consecutive_failures} failed heartbeats)")
             }
             Self::ManualReconnect => "manual reconnect".into(),
+            Self::Shutdown => "supervisor shutdown".into(),
         }
     }
 }
@@ -257,6 +284,11 @@ impl Supervisor {
             let crash_log = self.persist_crash_log(pid, &outcome).await;
 
             match outcome {
+                ExitOutcome::Shutdown => {
+                    // Channel closed; nothing more for us to do.
+                    info!("supervisor: shutdown — exiting run loop");
+                    return;
+                }
                 ExitOutcome::ManualReconnect => {
                     info!("supervisor: manual reconnect; resetting backoff");
                     attempt = 0;
@@ -411,16 +443,18 @@ impl Supervisor {
                     };
                 }
                 msg = reconnect_rx.recv() => {
-                    if msg.is_none() {
-                        // Channel closed — supervisor handle dropped.
-                        // Kill the child and exit the loop cleanly.
-                        let _ = child.kill().await;
-                        let _ = child.wait().await;
-                        return ExitOutcome::ManualReconnect;
-                    }
-                    info!(pid, "supervisor: reconnect requested; killing child");
                     let _ = child.kill().await;
                     let _ = child.wait().await;
+                    if msg.is_none() {
+                        // All `Supervisor` references dropped → the
+                        // integration layer wants us to stop. Returning
+                        // `Shutdown` (vs. `ManualReconnect`) is what
+                        // keeps the outer loop from spinning on a
+                        // closed channel — see `run()`.
+                        info!(pid, "supervisor: reconnect channel closed; shutting down");
+                        return ExitOutcome::Shutdown;
+                    }
+                    info!(pid, "supervisor: reconnect requested; killing child");
                     return ExitOutcome::ManualReconnect;
                 }
                 _ = ticker.tick() => {
@@ -463,7 +497,7 @@ impl Supervisor {
     }
 
     async fn persist_crash_log(&self, pid: u32, outcome: &ExitOutcome) -> Option<PathBuf> {
-        if matches!(outcome, ExitOutcome::ManualReconnect) {
+        if matches!(outcome, ExitOutcome::ManualReconnect | ExitOutcome::Shutdown) {
             return None;
         }
         let ts = SystemTime::now()
