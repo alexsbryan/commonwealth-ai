@@ -330,8 +330,9 @@ mod tests {
             role: role.map(|s| s.into()),
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     fn org(idx: usize, name: &str) -> Entity {
         Entity {
@@ -347,8 +348,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     fn initiative(idx: usize, name: &str, participant_ids: &[AtomId]) -> Entity {
         Entity {
@@ -364,8 +366,9 @@ mod tests {
             role: None,
             participants: participant_ids.to_vec(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     fn involves_edge(idx: usize, target: &AtomId, chunk_id: &str) -> Edge {
         Edge {

@@ -408,6 +408,8 @@ fn anchor_chunk_id(atom: &AtomEnvelope) -> Option<&str> {
         Question(a) => a.raised_at.first().map(|c| c.chunk_id.as_str()),
         Configuration(a) => a.evidence.first().map(|c| c.chunk_id.as_str()),
         ArgumentReconstruction(a) => a.evidence.first().map(|c| c.chunk_id.as_str()),
+        Position(p) => Some(p.first_appearance.chunk_id.as_str()),
+        Opposition(o) => Some(o.first_appearance.chunk_id.as_str()),
     }
 }
 

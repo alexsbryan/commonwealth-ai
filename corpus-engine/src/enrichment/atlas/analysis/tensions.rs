@@ -677,8 +677,11 @@ mod tests {
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
             quotable_excerpt: None,
-        }
-    }
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+}
+}
 
     fn state(id: u32, owner: u32) -> State {
         State {
@@ -819,8 +822,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     /// Two claims attributed to two different concept-typed entities,
     /// whose contents both mention the canonical name of a third

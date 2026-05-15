@@ -566,8 +566,9 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     fn involves(idx: usize, target: &AtomId, chunk_id: &str) -> Edge {
         Edge {

@@ -233,7 +233,8 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        })]);
+                    concept_kind: None,
+})]);
         std::fs::write(
             atlas_dir.join("atoms.json"),
             serde_json::to_vec_pretty(&atoms).unwrap(),

@@ -382,8 +382,9 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
-    }
+                    concept_kind: None,
+}
+}
 
     fn bk_fixture() -> Vec<Entity> {
         vec![

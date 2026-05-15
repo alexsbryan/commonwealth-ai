@@ -50,6 +50,12 @@ impl AtomId {
     pub fn argument_reconstruction(index: usize) -> Self {
         Self(format!("argument-{index:04}"))
     }
+    pub fn position(index: usize) -> Self {
+        Self(format!("position-{index:04}"))
+    }
+    pub fn opposition(index: usize) -> Self {
+        Self(format!("opposition-{index:04}"))
+    }
 
     /// Build from a raw string. Callers are responsible for honouring
     /// the `<type>-<index>` convention; use the typed constructors
@@ -168,6 +174,28 @@ pub struct Entity {
     /// non-initiative entities.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub participants: Vec<AtomId>,
+    /// Gap-B qualifier for `Concept`-typed entities sourced from the
+    /// routed-Phase-1 typed-extension dispatcher. Populated when the
+    /// resolver projects a Mechanism / Definition / Image / Motif /
+    /// FormalDevice sketch onto a Concept atom — the value tells the
+    /// brief assembler and atlas-tier retrieval which argumentative
+    /// or descriptive slot the concept fills:
+    ///
+    /// - `mechanism` — argumentative named lever ("spread pricing",
+    ///   "EUV monopoly", "salary cap").
+    /// - `definition` — descriptive zettel-style "X is the practice
+    ///   of …".
+    /// - `image` — lyric concrete sense-image ("the bruised plum").
+    /// - `motif` — lyric recurring image-as-structure.
+    /// - `formal_device` — lyric compositional move (anaphora,
+    ///   caesura, refrain).
+    ///
+    /// `None` on base-schema Concept atoms (literary / philosophy
+    /// extractions) and on every non-Concept entity_type. The field
+    /// is `Option<String>` rather than an enum so future modes can
+    /// add qualifier values without bumping AtomsFile::SCHEMA_VERSION.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub concept_kind: Option<String>,
 }
 
 // ── Event ────────────────────────────────────────────────────
@@ -297,6 +325,40 @@ pub struct Claim {
     /// Act-on bucket.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor: Option<String>,
+    /// Gap-B qualifier marking a Claim atom sourced from a typed-
+    /// extension non-base sketch. Populated when the resolver
+    /// projects an Evidence / Concession / PropertyClaim /
+    /// Observation / Realisation / Blocker sketch onto the Claim
+    /// envelope. Brief renderer reads the qualifier to phrase
+    /// appropriately ("X is invoked as evidence for Y", "the
+    /// section grants X but Y still holds", etc.). `None` on base
+    /// argumentative-prose claims.
+    ///
+    /// Values: `property` | `evidence` | `concession` | `observation`
+    /// | `realisation` | `blocker` | `status` | `example`. String
+    /// rather than enum so future modes add values without
+    /// migration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_kind: Option<String>,
+    /// Concession-specific qualifier. Set only when
+    /// `claim_kind == "concession"`. Values: `intact` | `narrowed`
+    /// | `retracted` — same vocabulary as the typed-extension
+    /// `ConcessionSketch.outcome` field. The brief renderer uses
+    /// this to phrase the concession's load-bearing direction:
+    /// `intact` reads as "X is granted, but Y still holds";
+    /// `narrowed` as "X is granted, bounding Y to ..."; `retracted`
+    /// as "X compels yielding Y".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub concession_outcome: Option<String>,
+    /// Evidence-specific qualifier. Set only when
+    /// `claim_kind == "evidence"`. Values: `study` | `figure` |
+    /// `historical_example` | `case_study` | `personal_anecdote`
+    /// | `quotation` | `other`. Routes the brief renderer to
+    /// citation-style phrasing for studies/figures and
+    /// narrative-style phrasing for historical examples /
+    /// anecdotes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_kind: Option<String>,
     pub enrichment_depth: EnrichmentDepth,
 }
 
@@ -427,6 +489,99 @@ pub struct Configuration {
     pub enrichment_depth: EnrichmentDepth,
 }
 
+// ── Position (Gap B) ─────────────────────────────────────────
+
+/// A NAMED stance the corpus identifies — a whole view the section
+/// either endorses, rebuts, or surveys. Distinct from Claim atoms:
+/// a Position is "the view that X" — a thing the section *names*
+/// and may reference repeatedly; a Claim is "X" — a single assertion
+/// the section makes. Sourced from typed-extension
+/// `argumentative.positions[]` (workstream B / Gap B), promoted from
+/// Phase 1 cache into the resolved atlas so atlas-tier retrieval
+/// surfaces it the same way it surfaces Claim atoms.
+///
+/// Examples across domains:
+/// - `the rent-concentration thesis` (argumentative essay, AI)
+/// - `Hardin's tragedy thesis` (argumentative essay, commons)
+/// - `Ostrom's third-pattern view` (argumentative essay, commons)
+/// - `the parks-as-product thesis` (urbanism essay, Jacobs)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Position {
+    pub id: AtomId,
+    /// Reader-facing name for the stance, in 3-7 words.
+    pub canonical_name: String,
+    /// One-sentence statement of what the position SAYS.
+    pub content: String,
+    /// `endorse` | `rebut` | `survey` | `mixed`. Carried as a string
+    /// rather than an enum so future stance refinements land without
+    /// migration; readers snap on the four known values.
+    pub stance: String,
+    /// Resolved Entity id for the proponent — Person or Institution
+    /// the position is attributed to. `None` when the section voices
+    /// the position itself or when proponent didn't resolve.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proponent_id: Option<AtomId>,
+    /// Atoms (Mechanism Concepts, evidence Claims) the resolver
+    /// detected as supporting this position via the Phase 1
+    /// `evidence_invocations[].supports` linkage. Populated by the
+    /// resolver's edge-emission pass after all atoms have ids.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_ids: Vec<AtomId>,
+    pub first_appearance: ChunkRef,
+    /// 3-8 word keyphrases the prompt anchored the position against.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<String>,
+    /// Corpus-relative importance (0.0–1.0). Derived from frequency +
+    /// section salience, same ordinal-rank discipline as entity
+    /// salience.
+    pub salience: f32,
+    pub enrichment_depth: EnrichmentDepth,
+}
+
+// ── Opposition (Gap B) ───────────────────────────────────────
+
+/// A NAMED X-vs-Y framing the section sets up. Distinct from a Claim
+/// that uses an opposition argumentatively: the Opposition atom names
+/// the structural binary itself ("markets vs governments", "planting
+/// vs maintenance", "supply expansion vs substitution"). Sourced from
+/// typed-extension `argumentative.oppositions[]`.
+///
+/// `left_atom_id` / `right_atom_id` resolve the two sides to existing
+/// Concept Entity atoms when fuzzy-match succeeds. Falls back to
+/// `left_label` / `right_label` raw strings when resolution fails —
+/// the atom still surfaces in retrieval; just doesn't graph-traverse.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Opposition {
+    pub id: AtomId,
+    /// Reader-facing label combining both sides: "markets vs
+    /// governments". Used by retrieval scoring + brief renderer.
+    pub canonical_label: String,
+    /// Resolved Concept Entity id for the left side. `None` when
+    /// fuzzy-match didn't snap to an existing concept.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_atom_id: Option<AtomId>,
+    /// Raw left-side label from the typed-extension sketch. Always
+    /// populated even when `left_atom_id` is present, so a reader
+    /// sees the exact phrasing the section used.
+    pub left_label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub right_atom_id: Option<AtomId>,
+    pub right_label: String,
+    /// Axis along which the two sides differ. Empty when the section
+    /// uses the opposition without naming the axis.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub axis: String,
+    /// One-sentence statement of how the section uses this
+    /// opposition argumentatively.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub framing: String,
+    pub first_appearance: ChunkRef,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchors: Vec<String>,
+    pub salience: f32,
+    pub enrichment_depth: EnrichmentDepth,
+}
+
 // ── Atom envelope (on-disk shape per spec §6.2) ──────────────
 
 /// Discriminated atom-type tag. Matches the `"atom_type"` string in
@@ -446,6 +601,8 @@ pub enum AtomType {
     Question,
     Configuration,
     ArgumentReconstruction,
+    Position,
+    Opposition,
 }
 
 /// On-disk representation of a single atom. Untagged body per
@@ -478,6 +635,10 @@ pub enum AtomEnvelope {
     Question(Question),
     Configuration(Configuration),
     ArgumentReconstruction(ArgumentReconstruction),
+    /// Gap-B typed-extension atom — see [`Position`].
+    Position(Position),
+    /// Gap-B typed-extension atom — see [`Opposition`].
+    Opposition(Opposition),
 }
 
 impl AtomEnvelope {
@@ -491,6 +652,8 @@ impl AtomEnvelope {
             AtomEnvelope::Question(a) => &a.id,
             AtomEnvelope::Configuration(a) => &a.id,
             AtomEnvelope::ArgumentReconstruction(a) => &a.id,
+            AtomEnvelope::Position(a) => &a.id,
+            AtomEnvelope::Opposition(a) => &a.id,
         }
     }
 
@@ -504,6 +667,8 @@ impl AtomEnvelope {
             AtomEnvelope::Question(a) => a.enrichment_depth,
             AtomEnvelope::Configuration(a) => a.enrichment_depth,
             AtomEnvelope::ArgumentReconstruction(a) => a.enrichment_depth,
+            AtomEnvelope::Position(a) => a.enrichment_depth,
+            AtomEnvelope::Opposition(a) => a.enrichment_depth,
         }
     }
 }
@@ -555,7 +720,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        };
+                    concept_kind: None,
+};
         let env = AtomEnvelope::Entity(entity.clone());
         let json = serde_json::to_string(&env).unwrap();
         // Pin the on-disk shape — atom_type as PascalCase, data nested.
@@ -669,7 +835,10 @@ mod tests {
             confidence: Some(0.91),
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        };
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+};
         let json = serde_json::to_string(&AtomEnvelope::Claim(claim.clone())).unwrap();
         assert!(json.contains("\"discourse_act\":\"argue\""));
         assert!(json.contains("\"epistemic_status\":\"confident\""));
@@ -708,7 +877,10 @@ mod tests {
             confidence: None,
             anchor: Some("open_index_for_corpus".into()),
             enrichment_depth: EnrichmentDepth::Extracted,
-        };
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+};
         let json = serde_json::to_string(&AtomEnvelope::Claim(claim.clone())).unwrap();
         assert!(
             json.contains("\"anchor\":\"open_index_for_corpus\""),
@@ -756,7 +928,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        };
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+};
         let json = serde_json::to_string(&AtomEnvelope::Claim(no_anchor)).unwrap();
         assert!(
             !json.contains("\"anchor\""),
@@ -846,7 +1021,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        };
+                    concept_kind: None,
+};
         let env = AtomEnvelope::Entity(entity);
         assert_eq!(env.id().as_str(), "entity-0005");
         assert_eq!(env.enrichment_depth(), EnrichmentDepth::Structural);

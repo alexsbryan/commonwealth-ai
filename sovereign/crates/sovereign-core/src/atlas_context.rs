@@ -123,6 +123,8 @@ impl AtlasGraph {
             AtomEnvelope::Question(q) => q.raised_at.iter().collect(),
             AtomEnvelope::Configuration(cfg) => cfg.evidence.iter().collect(),
             AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
+            AtomEnvelope::Position(p) => vec![&p.first_appearance],
+            AtomEnvelope::Opposition(o) => vec![&o.first_appearance],
         }
     }
 }
@@ -189,6 +191,18 @@ pub fn edge_weight(edge_type: EdgeType) -> f32 {
         // navigation; they're surfaced via dedicated cross-corpus
         // retrieval paths.
         EdgeType::Grounding | EdgeType::Framing | EdgeType::Provenance => 0.0,
+        // Gap-B typed-extension edges. EvidenceFor lands at Grounds
+        // weight because the semantics overlap (evidence supports a
+        // claim/position the same way Grounds links one claim to
+        // its evidential basis). Concedes mirrors Tension (a
+        // concession addresses a counter-position the same way a
+        // Tension edge captures dialectical disagreement). OpposesIn
+        // walks from an Opposition atom out to its two sides — the
+        // graph traversal benefit lives mainly downstream of the
+        // Opposition atom itself, so the edge weight is medium.
+        EdgeType::EvidenceFor => 0.8,
+        EdgeType::Concedes => 1.0,
+        EdgeType::OpposesIn => 0.6,
     }
 }
 

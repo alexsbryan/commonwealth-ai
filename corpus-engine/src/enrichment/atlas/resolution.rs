@@ -262,7 +262,8 @@ fn synthesize_entities_from_unresolved_event_participants(
                     affiliation: None,
                     role: None,
                     participants: Vec::new(),
-                };
+                                    concept_kind: None,
+};
                 name_index.insert(fold(trimmed), new_id.clone());
                 entities.push(entity);
                 token_index = build_token_index(entities);
@@ -628,7 +629,8 @@ async fn resolve_entities(
                         affiliation: None,
                         role: None,
                         participants: Vec::new(),
-                    };
+                                            concept_kind: None,
+};
                     entities.push(entity);
                     descriptions.push(candidate_emb);
                     section_refs.push(1);
@@ -1455,6 +1457,9 @@ pub fn resolve_step_3b(
                 // Derived — Phase 5 will replace with LLM score.
                 confidence: None,
                 anchor,
+                claim_kind: None,
+                concession_outcome: None,
+                evidence_kind: None,
                 enrichment_depth: section.enrichment_depth,
             });
             if let Some(entity_id) = attributed_to {
@@ -2355,6 +2360,387 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     }
 }
 
+// ─── Gap B: typed-extension projection ───────────────────────────
+//
+// Walks every section's `type_extensions` and projects sketches into
+// resolved atoms + edges. v1 covers the Argumentative variant only —
+// the bench-loop's load-bearing surface. Narrative / Descriptive /
+// Reflective / Procedural / Lyric projection lands in v2 alongside
+// their golden-axis scorers.
+//
+// Projection mapping (Argumentative):
+//
+// - `mechanisms[]`     → Concept Entity with `concept_kind = "mechanism"`.
+//                       Fuzzy-merges against existing Concept Entity
+//                       atoms (name match); on hit, the existing atom
+//                       gets `concept_kind` set in the
+//                       `entity_qualifier_updates` map. On miss, a new
+//                       Entity is emitted.
+// - `positions[]`      → Position atom. Proponent string is resolved
+//                       to an Entity id via the existing name index;
+//                       resolution failure leaves `proponent_id = None`
+//                       but the Position is still emitted (the section
+//                       voiced the position).
+// - `evidence_invocations[]` → Claim atom with `claim_kind = "evidence"`,
+//                       `evidence_kind` set per sketch's `kind` field.
+//                       When `supports` fuzzy-resolves to an existing
+//                       Position or Claim id, an `EvidenceFor` edge
+//                       links them.
+// - `oppositions[]`    → Opposition atom. `left` / `right` strings
+//                       fuzzy-resolve to existing Concept Entity ids
+//                       (when possible). Two `OpposesIn` edges link
+//                       the opposition to each resolved side.
+// - `concessions[]`    → Claim atom with `claim_kind = "concession"`,
+//                       `concession_outcome` set per sketch. When
+//                       `addresses` fuzzy-resolves to a Position id,
+//                       a `Concedes` edge links them.
+
+/// Bundle returned by [`resolve_type_extensions`].
+#[derive(Debug, Clone, Default)]
+pub struct TypeExtensionResolveOutput {
+    /// New Concept Entity atoms — mechanism / definition / image /
+    /// motif / formal_device sketches that didn't fuzzy-merge into an
+    /// existing Concept. Caller pushes onto the existing entities
+    /// list.
+    pub new_entities: Vec<super::atoms::Entity>,
+    /// Existing Entity atom ids that should have their
+    /// `concept_kind` set to the supplied tag string (e.g.
+    /// `"mechanism"`). Caller iterates and mutates the entity
+    /// in-place. Order-independent — a HashMap keyed by AtomId.
+    pub entity_qualifier_updates: std::collections::HashMap<super::atoms::AtomId, String>,
+    /// New Claim atoms — projected evidence + concession sketches.
+    /// Carry `claim_kind` (+ `evidence_kind` / `concession_outcome`)
+    /// qualifiers per the projection map above.
+    pub new_claims: Vec<super::atoms::Claim>,
+    /// New Position atoms from `argumentative.positions[]`.
+    pub new_positions: Vec<super::atoms::Position>,
+    /// New Opposition atoms from `argumentative.oppositions[]`.
+    pub new_oppositions: Vec<super::atoms::Opposition>,
+    /// New edges — `EvidenceFor`, `Concedes`, `OpposesIn`.
+    pub new_edges: Vec<Edge>,
+    /// Structured drops from the projection pass. Same shape as
+    /// Phase 3a/3b failures; folded into the run's overall failure
+    /// list by the caller.
+    pub failures: Vec<crate::enrichment::pipeline::types::PhaseFailure>,
+}
+
+/// Project every section's `type_extensions` into resolved atoms +
+/// edges. Runs after Phase 3a + 3b so it can fuzzy-merge mechanism
+/// sketches against already-resolved Concept Entity atoms.
+///
+/// `next_*_idx` parameters are the first-free atom-id index for each
+/// kind — the caller passes `existing_entities.len() + 1` etc. so
+/// new ids don't collide with Step 3a/3b output.
+pub fn resolve_type_extensions(
+    sections: &[SectionExtraction],
+    existing_entities: &[super::atoms::Entity],
+    existing_positions: &[super::atoms::Position],
+    existing_claims: &[super::atoms::Claim],
+    next_entity_idx: usize,
+    next_claim_idx: usize,
+    next_position_idx: usize,
+    next_opposition_idx: usize,
+    next_edge_idx: usize,
+) -> TypeExtensionResolveOutput {
+    use crate::enrichment::pipeline::atlas::{EntityType, TypeExtension};
+    use crate::enrichment::pipeline::types::{
+        PhaseFailure, PhaseFailureKind, PipelinePhase,
+    };
+    use super::atoms::{AtomId, ChunkRef, Claim, Entity, Opposition, Position};
+    use super::edges::{EdgeId, EdgeProvenance, EdgeType};
+    use crate::enrichment::pipeline::atlas::EnrichmentDepth;
+
+    let mut out = TypeExtensionResolveOutput::default();
+    let mut entity_idx = next_entity_idx;
+    let mut claim_idx = next_claim_idx;
+    let mut position_idx = next_position_idx;
+    let mut opposition_idx = next_opposition_idx;
+    let mut edge_idx = next_edge_idx;
+
+    // Build a name index keyed on existing Concept entities for
+    // mechanism merge. Plus a name index across ALL entities for
+    // proponent / evidence-supports resolution. Plus a name index
+    // for positions (so EvidenceFor edges can target positions, not
+    // just claims).
+    let concept_name_to_id: std::collections::HashMap<String, AtomId> =
+        existing_entities
+            .iter()
+            .filter(|e| matches!(e.entity_type, EntityType::Concept))
+            .map(|e| (fold(&e.canonical_name), e.id.clone()))
+            .collect();
+    let entity_name_to_id: std::collections::HashMap<String, AtomId> = existing_entities
+        .iter()
+        .map(|e| (fold(&e.canonical_name), e.id.clone()))
+        .collect();
+    let position_name_to_id: std::collections::HashMap<String, AtomId> =
+        existing_positions
+            .iter()
+            .map(|p| (fold(&p.canonical_name), p.id.clone()))
+            .collect();
+
+    for section in sections {
+        for ext in section.iter_type_extensions() {
+            let TypeExtension::Argumentative(arg) = ext else {
+                // Stage 2 v1 only projects argumentative typed
+                // extensions — narrative / descriptive / reflective
+                // / procedural / lyric land in a follow-up.
+                continue;
+            };
+            // ── Mechanisms ────────────────────────────────────
+            for sk in &arg.mechanisms {
+                let trimmed = sk.name.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let folded = fold(trimmed);
+                if let Some(existing_id) = concept_name_to_id.get(&folded) {
+                    out.entity_qualifier_updates
+                        .insert(existing_id.clone(), "mechanism".into());
+                    continue;
+                }
+                let new_id = AtomId::entity(entity_idx);
+                entity_idx += 1;
+                out.new_entities.push(Entity {
+                    id: new_id,
+                    canonical_name: trimmed.to_string(),
+                    aliases: Vec::new(),
+                    entity_type: EntityType::Concept,
+                    first_appearance: ChunkRef::new(section.section_id.clone(), None),
+                    description: sk.description.trim().to_string(),
+                    defining_quote: None,
+                    salience: 0.5,
+                    enrichment_depth: section.enrichment_depth,
+                    affiliation: None,
+                    role: None,
+                    participants: Vec::new(),
+                    concept_kind: Some("mechanism".into()),
+                });
+            }
+
+            // ── Positions ─────────────────────────────────────
+            for sk in &arg.positions {
+                let trimmed = sk.name.trim();
+                if trimmed.is_empty() || sk.content.trim().is_empty() {
+                    continue;
+                }
+                let proponent_id = if sk.proponent.trim().is_empty() {
+                    None
+                } else {
+                    entity_name_to_id.get(&fold(sk.proponent.trim())).cloned()
+                };
+                if !sk.proponent.trim().is_empty() && proponent_id.is_none() {
+                    out.failures.push(PhaseFailure {
+                        phase: PipelinePhase::Concerns,
+                        subject: format!("position:{}", trimmed),
+                        kind: PhaseFailureKind::UnresolvedEntityName,
+                        reason: format!(
+                            "position proponent `{}` did not resolve to any Entity atom",
+                            sk.proponent.trim()
+                        ),
+                        raw_response_head: None,
+                    });
+                }
+                let new_id = AtomId::position(position_idx);
+                position_idx += 1;
+                out.new_positions.push(Position {
+                    id: new_id,
+                    canonical_name: trimmed.to_string(),
+                    content: sk.content.trim().to_string(),
+                    stance: if sk.stance.trim().is_empty() {
+                        "survey".to_string()
+                    } else {
+                        sk.stance.trim().to_string()
+                    },
+                    proponent_id,
+                    evidence_ids: Vec::new(),
+                    first_appearance: ChunkRef::new(section.section_id.clone(), None),
+                    anchors: if sk.anchor.is_empty() {
+                        Vec::new()
+                    } else {
+                        vec![sk.anchor.clone()]
+                    },
+                    salience: 0.5,
+                    enrichment_depth: section.enrichment_depth,
+                });
+            }
+
+            // ── Evidence invocations ──────────────────────────
+            for sk in &arg.evidence_invocations {
+                let label = sk.label.trim();
+                let content = sk.content.trim();
+                if label.is_empty() || content.is_empty() {
+                    continue;
+                }
+                let new_claim_id = AtomId::claim(claim_idx);
+                claim_idx += 1;
+                let claim_content = format!("{label}: {content}");
+                out.new_claims.push(Claim {
+                    id: new_claim_id.clone(),
+                    content: claim_content,
+                    discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Assert,
+                    epistemic_status: crate::enrichment::pipeline::atlas::EpistemicStatus::Confident,
+                    scope: crate::enrichment::pipeline::atlas::ClaimScope::Contextual,
+                    evidence: vec![ChunkRef::new(section.section_id.clone(), None)],
+                    quotable_excerpt: None,
+                    attributed_to: None,
+                    confidence: None,
+                    anchor: if sk.anchor.is_empty() {
+                        None
+                    } else {
+                        Some(sk.anchor.clone())
+                    },
+                    claim_kind: Some("evidence".into()),
+                    concession_outcome: None,
+                    evidence_kind: if sk.kind.is_empty() {
+                        Some("other".into())
+                    } else {
+                        Some(sk.kind.clone())
+                    },
+                    enrichment_depth: section.enrichment_depth,
+                });
+
+                // EvidenceFor edge — fuzzy-resolve `supports` against
+                // positions first, then claims.
+                if !sk.supports.trim().is_empty() {
+                    let folded = fold(sk.supports.trim());
+                    let target = position_name_to_id
+                        .get(&folded)
+                        .or_else(|| {
+                            existing_claims
+                                .iter()
+                                .find(|c| {
+                                    fold(&c.content).contains(&folded)
+                                        || folded.contains(&fold(&c.content))
+                                })
+                                .map(|c| &c.id)
+                        })
+                        .cloned();
+                    if let Some(target_id) = target {
+                        let new_edge_id = EdgeId::new(edge_idx);
+                        edge_idx += 1;
+                        out.new_edges.push(Edge {
+                            id: new_edge_id,
+                            edge_type: EdgeType::EvidenceFor,
+                            source: new_claim_id,
+                            target: target_id,
+                            evidence: vec![ChunkRef::new(section.section_id.clone(), None)],
+                            confidence: 1.0,
+                            provenance: EdgeProvenance::Derived,
+                            trigger_event: None,
+                            sub_question: None,
+                        });
+                    }
+                }
+            }
+
+            // ── Oppositions ───────────────────────────────────
+            for sk in &arg.oppositions {
+                let left = sk.left.trim();
+                let right = sk.right.trim();
+                if left.is_empty() || right.is_empty() {
+                    continue;
+                }
+                let left_atom_id = concept_name_to_id.get(&fold(left)).cloned();
+                let right_atom_id = concept_name_to_id.get(&fold(right)).cloned();
+                let new_id = AtomId::opposition(opposition_idx);
+                opposition_idx += 1;
+                let canonical_label = format!("{left} vs {right}");
+                out.new_oppositions.push(Opposition {
+                    id: new_id.clone(),
+                    canonical_label,
+                    left_atom_id: left_atom_id.clone(),
+                    left_label: left.to_string(),
+                    right_atom_id: right_atom_id.clone(),
+                    right_label: right.to_string(),
+                    axis: sk.axis.trim().to_string(),
+                    framing: sk.framing.trim().to_string(),
+                    first_appearance: ChunkRef::new(section.section_id.clone(), None),
+                    anchors: if sk.anchor.is_empty() {
+                        Vec::new()
+                    } else {
+                        vec![sk.anchor.clone()]
+                    },
+                    salience: 0.5,
+                    enrichment_depth: section.enrichment_depth,
+                });
+                // OpposesIn edges — one per resolved side.
+                for side_id in [left_atom_id, right_atom_id].into_iter().flatten() {
+                    let new_edge_id = EdgeId::new(edge_idx);
+                    edge_idx += 1;
+                    out.new_edges.push(Edge {
+                        id: new_edge_id,
+                        edge_type: EdgeType::OpposesIn,
+                        source: new_id.clone(),
+                        target: side_id,
+                        evidence: vec![ChunkRef::new(section.section_id.clone(), None)],
+                        confidence: 1.0,
+                        provenance: EdgeProvenance::Derived,
+                        trigger_event: None,
+                        sub_question: None,
+                    });
+                }
+            }
+
+            // ── Concessions ───────────────────────────────────
+            for sk in &arg.concessions {
+                let content = sk.content.trim();
+                if content.is_empty() {
+                    continue;
+                }
+                let new_claim_id = AtomId::claim(claim_idx);
+                claim_idx += 1;
+                out.new_claims.push(Claim {
+                    id: new_claim_id.clone(),
+                    content: content.to_string(),
+                    discourse_act: crate::enrichment::pipeline::atlas::DiscourseAct::Object,
+                    epistemic_status: crate::enrichment::pipeline::atlas::EpistemicStatus::Confident,
+                    scope: crate::enrichment::pipeline::atlas::ClaimScope::Contextual,
+                    evidence: vec![ChunkRef::new(section.section_id.clone(), None)],
+                    quotable_excerpt: None,
+                    attributed_to: None,
+                    confidence: None,
+                    anchor: if sk.anchor.is_empty() {
+                        None
+                    } else {
+                        Some(sk.anchor.clone())
+                    },
+                    claim_kind: Some("concession".into()),
+                    concession_outcome: if sk.outcome.is_empty() {
+                        Some("intact".into())
+                    } else {
+                        Some(sk.outcome.clone())
+                    },
+                    evidence_kind: None,
+                    enrichment_depth: section.enrichment_depth,
+                });
+                // Concedes edge — fuzzy-resolve `addresses` against
+                // positions only (concessions address named views).
+                if !sk.addresses.trim().is_empty() {
+                    let folded = fold(sk.addresses.trim());
+                    if let Some(target_id) = position_name_to_id.get(&folded).cloned() {
+                        let new_edge_id = EdgeId::new(edge_idx);
+                        edge_idx += 1;
+                        out.new_edges.push(Edge {
+                            id: new_edge_id,
+                            edge_type: EdgeType::Concedes,
+                            source: new_claim_id,
+                            target: target_id,
+                            evidence: vec![ChunkRef::new(section.section_id.clone(), None)],
+                            confidence: 1.0,
+                            provenance: EdgeProvenance::Derived,
+                            trigger_event: None,
+                            sub_question: None,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    let _ = edge_idx; // silence final value
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3027,7 +3413,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Zossima".into(),
@@ -3041,7 +3428,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
         ];
 
         // Two sections, in order. sec_0001 introduces a state +
@@ -3175,6 +3563,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
+            concept_kind: None,
         }];
 
         let sections = vec![SectionExtraction {
@@ -3398,7 +3787,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Alexei Fyedorovitch Kramzof".into(),
@@ -3412,7 +3802,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
             Entity {
                 id: AtomId::entity(3),
                 canonical_name: "Sofya Ivanovna Karamzova".into(),
@@ -3426,7 +3817,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
         ]
     }
 
@@ -3508,7 +3900,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Marika".into(),
@@ -3522,7 +3915,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
         ];
         let name_index = build_name_index(&entities);
         let token_index = build_token_index(&entities);
@@ -3559,7 +3953,8 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }];
+                    concept_kind: None,
+}];
         let name_index = build_name_index(&entities);
         let token_index = build_token_index(&entities);
         // `Anka` is Lev-1 from `Anna` but both are 4 chars. Guard
@@ -3593,7 +3988,8 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
+                    concept_kind: None,
+}
     }
 
     fn low_salience_fyodor_drift() -> super::super::atoms::Entity {
@@ -3611,7 +4007,8 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
-        }
+                    concept_kind: None,
+}
     }
 
     fn two_contested_ivans() -> (super::super::atoms::Entity, super::super::atoms::Entity) {
@@ -3629,7 +4026,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        };
+                    concept_kind: None,
+};
         let b = Entity {
             id: AtomId::entity(2),
             canonical_name: "Ivan Petrovich Sidorov".into(),
@@ -3643,7 +4041,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        };
+                    concept_kind: None,
+};
         (a, b)
     }
 
@@ -3692,7 +4091,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Ivan Petrovich Karamazov".into(),
@@ -3706,7 +4106,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
         ];
         let name_index = build_name_index(&contested);
         let token_index = build_token_index(&contested);
@@ -3793,7 +4194,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
             Entity {
                 id: AtomId::entity(2),
                 canonical_name: "Zossima".into(),
@@ -3807,7 +4209,8 @@ mod tests {
                 affiliation: None,
                 role: None,
                 participants: Vec::new(),
-            },
+                            concept_kind: None,
+},
         ];
 
         // Two sections each introducing a relation between the
@@ -3867,6 +4270,7 @@ mod tests {
             role: None,
             participants: Vec::new(),
             defining_quote: None,
+            concept_kind: None,
         }
     }
 
@@ -4480,7 +4884,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: Vec::new(),
-        };
+                    concept_kind: None,
+};
         // Short names below TYPO_DEDUP_MIN_FOLDED_LEN must not match.
         assert!(!typo_dedup_match(&mk("Lewis"), &mk("Lewes")));
         // Long-enough names with prefix mismatch must not match.

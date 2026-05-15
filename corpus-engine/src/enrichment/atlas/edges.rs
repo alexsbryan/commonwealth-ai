@@ -54,6 +54,27 @@ pub enum EdgeType {
     Grounding,
     Framing,
     Provenance,
+    // Gap-B typed-extension edges (§3.2 — surfaced from Phase 1
+    // typed extensions during routed Phase-1 resolution).
+    /// Evidence atom supports a target claim or position. source =
+    /// Claim with `claim_kind: "evidence"` OR an evidence atom;
+    /// target = Claim or Position. Derived deterministically from
+    /// the typed extension's `evidence_invocations[].supports` field
+    /// when that string fuzzy-resolves to an atom id.
+    EvidenceFor,
+    /// Concession claim addresses a target position. source = Claim
+    /// with `claim_kind: "concession"`; target = Position. Derived
+    /// from `concessions[].addresses` when resolution succeeds. The
+    /// edge's existence (combined with the source claim's
+    /// `concession_outcome`) lets a downstream reader follow "what
+    /// did the author grant in service of what view?".
+    Concedes,
+    /// Opposition atom frames a target Concept/Entity as one side
+    /// of its binary. Two edges per Opposition (left + right side)
+    /// so the graph stays traversable from a concept back to every
+    /// opposition that includes it without scanning Opposition
+    /// .left_label / .right_label strings.
+    OpposesIn,
 }
 
 // ── Provenance ───────────────────────────────────────────────

@@ -271,7 +271,8 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
-        })
+                    concept_kind: None,
+})
     }
 
     fn sample_claim(id: usize, content: &str) -> AtomEnvelope {
@@ -287,7 +288,10 @@ mod tests {
             confidence: None,
             anchor: None,
             enrichment_depth: EnrichmentDepth::Extracted,
-        })
+                    claim_kind: None,
+            concession_outcome: None,
+            evidence_kind: None,
+})
     }
 
     fn make_reader() -> (TempDir, FileAtlasReader) {
