@@ -31,6 +31,9 @@
   import MeshJoinDialog from "./lib/components/MeshJoinDialog.svelte";
   import SetupFlow from "./lib/setup/SetupFlow.svelte";
   import WelcomeThreshold from "./lib/setup/WelcomeThreshold.svelte";
+  import ConsentGate from "./lib/setup/ConsentGate.svelte";
+  import ReconnectBanner from "./lib/components/ReconnectBanner.svelte";
+  import { getFirstMeshConsent } from "./lib/api";
   import { ensureSeededConversations } from "./lib/setup/seededConversations";
   import ToastHost from "./lib/components/ToastHost.svelte";
 
@@ -38,6 +41,7 @@
     | "loading"
     | "welcome"
     | "setup"
+    | "consent"
     | "chat"
     | "settings"
     | "recipe_author"
@@ -58,7 +62,7 @@
   );
 
   let showNavRail = $derived(
-    view !== "loading" && view !== "welcome" && view !== "setup"
+    view !== "loading" && view !== "welcome" && view !== "setup" && view !== "consent"
   );
 
   // M3 — Recipe Author workspace gate. Read from `DesktopConfig`
@@ -272,13 +276,29 @@
       // Non-fatal — chat still opens, just without seed conversations.
       console.warn("ensureSeededConversations failed:", e);
     }
-    view = "chat";
+    // First-mesh-join consent gate (W4). When the user hasn't yet
+    // recorded a decision, surface the ConsentGate before chat. Any
+    // failure (daemon briefly unreachable) falls through to chat —
+    // the gate will re-appear on the next launch if consent is
+    // genuinely missing.
+    let needsConsent = false;
+    try {
+      const consent = await getFirstMeshConsent();
+      needsConsent = consent === null;
+    } catch (e) {
+      console.warn("getFirstMeshConsent failed:", e);
+    }
+    view = needsConsent ? "consent" : "chat";
     // Fire-and-forget background install of `wikipedia-simple` so
     // the user lands in chat with retrieval gradually coming online.
     // Idempotent on the daemon; safe to call on every setup
     // completion. Errors are silent — the user discovers Knowledge
     // from Settings if they care.
     void startDefaultCorpusInstall().catch(() => {});
+  }
+
+  function handleConsentRecorded() {
+    view = "chat";
   }
 
   function handleConversationSelect(id: string | null) {
@@ -389,6 +409,8 @@
   <WelcomeThreshold onBegin={() => (view = "setup")} />
 {:else if view === "setup"}
   <SetupFlow onComplete={handleSetupComplete} />
+{:else if view === "consent"}
+  <ConsentGate onChoice={handleConsentRecorded} />
 {:else}
   <!-- Post-onboarding chrome shell: rail + content area side by side -->
   <div class="app-chrome">
@@ -477,6 +499,13 @@
 {/if}
 
 <ToastHost />
+
+<!-- Global supervisor banner. Listens for `supervisor-state` events
+     from the Rust supervisor and renders only when the daemon is
+     restarting / unhealthy / failed (silent for healthy + starting).
+     Visible across every view, including setup/welcome — a daemon
+     crash mid-setup deserves the same recovery surface. -->
+<ReconnectBanner />
 
 {#if attachedToDaemon}
   <!-- Pill anchored top-right; shows briefly on startup then fades out.

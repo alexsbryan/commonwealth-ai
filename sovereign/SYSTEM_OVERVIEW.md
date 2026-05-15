@@ -1855,6 +1855,150 @@ commonwealth daemon start/stop/status
 `contrib/`: `install.sh` (curl installer), `systemd/commonwealth.service`,
 `launchd/com.commonwealth.daemon.plist`.
 
+### 5.11 Desktop production-readiness layer
+
+A coordinated stack of changes (W1–W6) shipped for the friends-and-family
+launch, all targeting the same failure mode: a non-technical user's chat
+experience gets ruined by either (a) a daemon crash dropping the whole UI,
+or (b) peer work pinning their GPU while they're actively chatting.
+
+#### 5.11.1 Child-process daemon supervisor (W1)
+
+`sovereign/crates/sovereign-desktop/src-tauri/src/supervisor.rs` —
+Tauri-free, broadcast-driven supervisor with heartbeat, exponential
+backoff (1s→5s→30s→2min), crash-loop ceiling (>5 in 1h), bounded
+stderr ring buffer, and crash-log persistence to
+`<data_dir>/crash-logs/daemon-<unix-ts>.log`.
+
+Opt-in via `SOVEREIGN_USE_SUPERVISOR=1`. When set,
+`supervisor_setup::maybe_start` (also new) resolves the `sovereign-cli`
+binary (`SOVEREIGN_CLI_PATH` override → next-to-exe fallback), spawns
+it as a child via `tokio::process::Command`, waits up to 60s for the
+first Healthy state, and overrides `BootstrapMode::Local` to
+`BootstrapMode::Attach { client_port }` — folding the supervised path
+into the existing Attach-mode HTTP plumbing. On failure, falls back to
+the legacy in-process `EmbeddedDaemon` with a loud `warn!`.
+
+Motivated by process-level ggml/llama.cpp SEGVs that an in-process
+supervisor can't catch (the panic IS the process dying). The
+child-process boundary makes "daemon crashed → click Reconnect" a
+recoverable UI state instead of a dead window.
+
+`RemoteApiProvider::warmup_primary` was added so the supervised
+daemon's window-focus warmup flows over HTTP to the child's
+`/internal/inference/warmup` route (which already existed; the override
+just routes there).
+
+PR-3 (deferred) flips the supervised path to default and removes the
+in-process EmbeddedDaemon construction from `bootstrap.rs`.
+
+#### 5.11.2 Contribution ceiling + foreground-yield for peer serving (W2)
+
+`commonwealth/crates/commonwealth-api/src/admission.rs` —
+`peer_admission_layer` axum middleware applied per-route to
+`POST /v1/chat/completions` (client port) and
+`POST /internal/knowledge/search` (internal port). Local requests
+(no `X-Node-Id`) admit unconditionally — one header check, hot path
+stays cheap. Peer requests check, in priority order:
+
+1. **Paused** — `AppState::contribution_paused_until > now`
+2. **Yielding to local** — local foreground request within
+   `yield_window_secs`
+3. **Ceiling exceeded** — `peer_inflight_count >= contribution_max_peer_inflight`
+
+Rejections return 503 with structured body
+(`{error, reason: "paused" | "yielded_to_local" | "ceiling_exceeded",
+retry_after_secs}`) plus `Retry-After` header so the requesting peer's
+load balancer picks another peer naturally.
+
+`PeerInflightGuard` is a RAII type that decrements the inflight counter
+on drop — including panic unwind — so the count stays accurate even
+when downstream handlers blow up.
+
+The foreground-yield primitive already existed for ingest workers
+(`yield_window_secs`); W2 extended it to peer-served inference, which
+is the actual "press send and the GPU isn't pinned by peer work" fix.
+
+New control routes (loopback-only, on the client port alongside
+`/internal/inference/warmup`):
+
+- `GET  /internal/contribution/status`   — Settings/tray snapshot
+- `POST /internal/contribution/ceiling`  — set peer-inflight cap
+- `POST /internal/contribution/pause`    — pause for N seconds
+- `POST /internal/contribution/resume`   — clear active pause
+- `GET  /internal/contribution/recent`   — last N LedgerEvents
+
+#### 5.11.3 Tray status chip + pause-with-duration menu (W3)
+
+`sovereign/crates/sovereign-desktop/src-tauri/src/tray.rs` —
+rewritten from the Open/Quit-only stub. Status text line updated by a
+5s tokio poller calling `get_contribution_status`. Pause submenu posts
+to `/internal/contribution/pause` with the chosen duration; "Until I
+resume" encodes 365 days and the renderer recognises that ceiling.
+Resume Sharing item is `set_enabled` per the poll's `paused_until`.
+
+Five Tauri command wrappers (`commands.rs`):
+`get_contribution_status`, `set_contribution_ceiling`,
+`pause_contributions`, `resume_contributions`, `get_recent_contributions`.
+Local DTOs mirror the daemon shapes byte-for-byte (same pattern as
+`MeshQuiesceState`) so the desktop crate doesn't depend on
+`commonwealth-api` types.
+
+Frontend pieces deferred: in-app `ContributionPanel.svelte`,
+color-changing tray icon assets.
+
+#### 5.11.4 First-mesh-join consent (W4)
+
+`DesktopConfig.first_mesh_consent: Option<FirstMeshConsent>`.
+`FirstMeshConsent` records `{ share_gpu, ceiling, recorded_at_unix }`.
+`None` means "consent dialog not yet shown" — the Svelte `App.svelte`
+gates the main UI on this.
+
+Tauri commands: `get_first_mesh_consent`,
+`record_first_mesh_consent(share_gpu)`. Yes → ceiling=1 (25% bucket
+per the W4 plan); No → ceiling=0. The command persists to
+`DesktopConfig` AND best-effort applies the ceiling at the daemon. A
+boot-time re-apply in `main.rs` (after `state::bootstrap`) re-issues
+the ceiling so a daemon restart doesn't silently revert to unlimited.
+
+Frontend `ConsentGate.svelte` deferred.
+
+#### 5.11.5 Crash report "send to Alex" (W6)
+
+`sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs` —
+reads the latest supervisor-written crash log, redacts `SetupConfig`
+(model basenames only, never absolute paths), stitches into a single
+markdown file at `~/Desktop/sovereign-crash-<unix-ts>.md`, returns a
+prefilled `mailto:` URL the frontend opens via `tauri-plugin-shell`.
+
+**No auto-upload.** v1 ships a markdown file the user reads before
+sending — transparency builds trust for the friends-and-family launch.
+The mailto body instructs them to attach the file manually. Tail-of-log
+truncation at 256 KB (panic context lives at the bottom of stderr).
+
+Tauri command: `prepare_crash_report` returns `{ report_path, mailto_url }`.
+
+Frontend `ReconnectBanner.svelte` "Send report" button deferred.
+
+#### 5.11.6 Open frontend work
+
+The Rust layer is complete; six Svelte pieces remain for the visible
+UX:
+
+- `ReconnectBanner.svelte` (W1/W6) — subscribes to `supervisor-state`
+  events; "Send report" button calls `prepare_crash_report` →
+  `tauri-plugin-shell.open(mailto_url)`.
+- `ConsentGate.svelte` (W4) — modal on first launch when
+  `get_first_mesh_consent` returns `None`.
+- `ContributionPanel.svelte` (W3) — Settings sub-page; ceiling slider,
+  pause status countdown, live "served events" feed.
+- `Settings/Connect.svelte` (W5) — copy-button surface for
+  `OPENAI_BASE_URL=http://localhost:<port>/v1` + dummy API key + live
+  `/v1/models` list, so Codex / external OpenAI-compatible clients can
+  connect.
+- Tray icon assets (green/yellow/red) + platform tint code.
+- HintCues activation for first-time nudges.
+
 ---
 
 ## 6. How the Four Projects Fit Together

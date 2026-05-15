@@ -1267,3 +1267,90 @@ export async function atlasGetAtomDetail(
 ): Promise<AtomDetail | null> {
   return invoke("atlas_get_atom_detail", { corpusId, atomId });
 }
+
+// ─── Contribution controls (W2/W3) ───────────────────────────
+
+export interface ContributionStatus {
+  /** Max concurrent peer requests; `Number.MAX_SAFE_INTEGER`-ish
+   *  values mean unlimited. Compare `ceiling >= 9_000_000_000` for
+   *  "no cap" UX rather than displaying a giant number. */
+  ceiling: number;
+  in_flight: number;
+  /** Unix-seconds expiry of the active pause, or null. */
+  paused_until: number | null;
+  pause_remaining_secs: number | null;
+  yield_peers_to_foreground: boolean;
+  /** Seconds remaining in the active foreground-yield window, or null. */
+  yielding_secs_remaining: number | null;
+}
+
+export interface LedgerEventDto {
+  /** Hex-encoded NodeId of the origin (this node when serving). */
+  node_id: unknown;
+  timestamp: number;
+  /** Tagged union — branch on `kind.type`:
+   *  "InferenceServed" | "InferenceReceived" | "KnowledgeQueryServed"
+   *  | "ShardTransferred" | "StorageSnapshot". */
+  kind: { type: string; [k: string]: unknown };
+}
+
+export async function getContributionStatus(): Promise<ContributionStatus> {
+  return invoke("get_contribution_status");
+}
+
+export async function setContributionCeiling(
+  max: number | null,
+): Promise<ContributionStatus> {
+  return invoke("set_contribution_ceiling", { max });
+}
+
+export async function pauseContributions(
+  durationSecs: number,
+): Promise<ContributionStatus> {
+  return invoke("pause_contributions", { durationSecs });
+}
+
+export async function resumeContributions(): Promise<ContributionStatus> {
+  return invoke("resume_contributions");
+}
+
+export async function getRecentContributions(
+  limit?: number,
+): Promise<LedgerEventDto[]> {
+  return invoke("get_recent_contributions", { limit: limit ?? null });
+}
+
+// ─── First-mesh-join consent (W4) ────────────────────────────
+
+export interface FirstMeshConsent {
+  share_gpu: boolean;
+  ceiling: number;
+  recorded_at_unix: number;
+}
+
+/** Returns null when the user hasn't been prompted yet — App.svelte
+ *  gates the main UI on this. */
+export async function getFirstMeshConsent(): Promise<FirstMeshConsent | null> {
+  return invoke("get_first_mesh_consent");
+}
+
+export async function recordFirstMeshConsent(
+  shareGpu: boolean,
+): Promise<FirstMeshConsent> {
+  return invoke("record_first_mesh_consent", { shareGpu });
+}
+
+// ─── Crash report (W6) ───────────────────────────────────────
+
+export interface CrashReportInfo {
+  /** Absolute path of the markdown report on the user's Desktop. */
+  report_path: string;
+  /** Pre-filled `mailto:` URL — open with tauri-plugin-shell. */
+  mailto_url: string;
+}
+
+/** Bundles the latest supervisor crash log + redacted config into a
+ *  markdown file the user can review before sending. NO auto-upload. */
+export async function prepareCrashReport(): Promise<CrashReportInfo> {
+  return invoke("prepare_crash_report");
+}
