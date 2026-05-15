@@ -682,38 +682,43 @@ async fn cmd_pod(args: &[String]) -> i32 {
 }
 
 async fn cmd_pod_up(args: &[String]) -> i32 {
-    // Defaults tuned for the SEP fanout use case — single 48 GB GPU,
-    // sovereign CUDA image, 80 GB disk for model cache.
+    // EPHEMERAL_WORKER_PODS.md path. The pod boots in worker mode,
+    // owned by exactly this CLI invocation for the lifetime of the
+    // job. No Tailscale, no R2, no mesh join.
+    //
+    // The MVP performs: search → create → wait-for-address →
+    // wait-for-health → uploads (if any) → print handle. The pod is
+    // left running for follow-up dispatch. `pipeline pod down` (or
+    // SIGINT here) tears it down.
     let mut gpu_name: String = "L40S".into();
     let mut image: Option<String> = std::env::var("SOVEREIGN_VAST_IMAGE").ok();
     let mut disk_gb: u32 = 80;
-    let mut recipe_id: String = "ad-hoc".into();
     let mut label: Option<String> = None;
-    let mut mesh_join_link: Option<String> = std::env::var("MESH_JOIN_LINK").ok();
-    let mut founder_addr: Option<String> = std::env::var("SOVEREIGN_FOUNDER_ADDR").ok();
-    // The pod entrypoint reads `TS_AUTHKEY`; humans following the
-    // Tailscale docs export `TAILSCALE_AUTHKEY`. We accept either —
-    // `TAILSCALE_AUTHKEY` wins when both are set so the operator can
-    // override the bashrc-stored TS_AUTHKEY without unsetting it.
-    let mut tailscale_authkey: Option<String> = std::env::var("TAILSCALE_AUTHKEY")
-        .ok()
-        .or_else(|| std::env::var("TS_AUTHKEY").ok());
     let mut max_price: f64 = 0.80;
     let mut dry_run: bool = false;
+    let mut job_id: Option<String> = None;
+    let mut uploads: Vec<std::path::PathBuf> = Vec::new();
+    let mut bootstrap_ttl_hours: u64 = 12;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
             "--gpu" => { i += 1; gpu_name = args[i].clone(); }
             "--image" => { i += 1; image = Some(args[i].clone()); }
             "--disk" => { i += 1; disk_gb = args[i].parse().unwrap_or(disk_gb); }
-            "--recipe-id" => { i += 1; recipe_id = args[i].clone(); }
             "--label" => { i += 1; label = Some(args[i].clone()); }
-            "--mesh-join-link" => { i += 1; mesh_join_link = Some(args[i].clone()); }
-            "--founder-addr" => { i += 1; founder_addr = Some(args[i].clone()); }
             "--max-price" => { i += 1; max_price = args[i].parse().unwrap_or(max_price); }
+            "--job-id" => { i += 1; job_id = Some(args[i].clone()); }
+            "--upload" => { i += 1; uploads.push(std::path::PathBuf::from(args[i].clone())); }
+            "--ttl-hours" => { i += 1; bootstrap_ttl_hours = args[i].parse().unwrap_or(bootstrap_ttl_hours); }
             "--dry-run" => { dry_run = true; }
             other => {
                 eprintln!("unknown flag: {other}");
+                eprintln!(
+                    "usage: sovereign pipeline pod up \\\n\
+                    \x20\x20[--gpu <name>] [--image <ref>] [--disk <gb>] [--label <s>]\\\n\
+                    \x20\x20[--max-price <usd>] [--job-id <s>] [--upload <path>]... \\\n\
+                    \x20\x20[--ttl-hours <h>] [--dry-run]"
+                );
                 return 2;
             }
         }
@@ -727,64 +732,20 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         );
         return 2;
     };
-    let Some(join_link) = mesh_join_link else {
-        eprintln!(
-            "no mesh-join link. Pass `--mesh-join-link cwth-…` or set MESH_JOIN_LINK.\n\
-             Get one with: sovereign mesh status (look for the join-link line)"
-        );
-        return 2;
-    };
-    let Some(founder) = founder_addr else {
-        eprintln!(
-            "no founder address. Pass `--founder-addr <ip>` or set SOVEREIGN_FOUNDER_ADDR.\n\
-             This is the Tailscale IPv4 of the mesh founder (your laptop, usually)."
-        );
-        return 2;
-    };
-    // ─── Env-var contract for the pod's onstart command ─────────────
-    // The pod entrypoint (sovereign/container/entrypoint.sh:41-45) hard-
-    // requires the following via `: "${VAR:?...}"`. The CLI must export
-    // every one of them, and validate their presence up front so the
-    // user sees the whole missing set at once instead of round-tripping
-    // through 90-second pod boot timeouts. When the entrypoint adds a
-    // new `:?` check, update this block AND the runbook
-    // (sovereign-recipes/sep/RUNBOOK_VAST.md) in lockstep.
-    //
-    // Future structural fix: switch the entrypoint to `sovereign mesh
-    // fetch-model` (see project_pod_mesh_fetch_refactor memory) — that
-    // drops R2_* from this contract entirely.
-    let mut missing: Vec<&'static str> = Vec::new();
-    let ts_key = tailscale_authkey.take().filter(|s| !s.is_empty());
-    if ts_key.is_none() { missing.push("TAILSCALE_AUTHKEY (or TS_AUTHKEY)"); }
-    let r2_endpoint = std::env::var("R2_ENDPOINT").ok().filter(|s| !s.is_empty());
-    if r2_endpoint.is_none() { missing.push("R2_ENDPOINT"); }
-    let r2_access_key = std::env::var("R2_ACCESS_KEY").ok().filter(|s| !s.is_empty());
-    if r2_access_key.is_none() { missing.push("R2_ACCESS_KEY"); }
-    let r2_secret_key = std::env::var("R2_SECRET_KEY").ok().filter(|s| !s.is_empty());
-    if r2_secret_key.is_none() { missing.push("R2_SECRET_KEY"); }
-    if !missing.is_empty() {
-        eprintln!(
-            "missing required env vars (pod entrypoint will reject):\n\
-             {}\n\
-             \n\
-             Set them in ~/.bashrc (or this shell) and re-run.\n\
-             Full prereqs: sovereign-recipes/sep/RUNBOOK_VAST.md",
-            missing.iter().map(|v| format!("  - {v}")).collect::<Vec<_>>().join("\n")
-        );
-        return 2;
-    }
-    let ts_key = ts_key.unwrap();
-    let r2_endpoint = r2_endpoint.unwrap();
-    let r2_access_key = r2_access_key.unwrap();
-    let r2_secret_key = r2_secret_key.unwrap();
-    // R2_BUCKET is optional — entrypoint defaults to "sovereign-models".
-    let r2_bucket = std::env::var("R2_BUCKET").ok().filter(|s| !s.is_empty());
-
-    // Build the search query — verified hosts only, CUDA ≥ 12.4 so
-    // the image's CUDA runtime matches at runtime.
+    let job_id = job_id.unwrap_or_else(|| {
+        format!(
+            "job-{}",
+            uuid::Uuid::new_v4().simple().to_string().chars().take(12).collect::<String>()
+        )
+    });
+    // ─── Vast offer search ─────────────────────────────────────────
+    // Verified hosts only; CUDA ≥ 12.4 so the image's runtime matches.
+    // `direct_port_count>=2` ensures the pod will get a public host
+    // port for the worker daemon on :9742 (see EPHEMERAL_WORKER_PODS.md
+    // §"Provider connectivity audit").
     let query = format!(
         "gpu_name={gpu_name} verified=true rentable=true cuda_max_good>=12.4 \
-         dph_total<={max_price}"
+         direct_port_count>=2 dph_total<={max_price}"
     );
     let offers = match pod::search_offers(&query, 50) {
         Ok(v) => v,
@@ -793,228 +754,158 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let Some(pick) = pod::pick_offer(&offers) else {
-        eprintln!("no offers matched: {query}");
-        return 1;
+    let pick = match pod::pick_offer(&offers).cloned() {
+        Some(p) => p,
+        None => {
+            eprintln!("no offers matched: {query}");
+            return 1;
+        }
     };
-
     println!(
         "selected offer: id={} gpu={} ${:.3}/hr rel={:.2} verified={} loc={}",
         pick.id, pick.gpu_name, pick.price_per_hour, pick.reliability, pick.verified, pick.geolocation,
     );
 
-    // Build the onstart command: export env vars, then exec the image
-    // entrypoint. Vast's SSH instance type ignores image ENTRYPOINT
-    // by default, so we invoke it explicitly.
-    // Export every env var the pod entrypoint expects. Notes:
-    //   - TS_AUTHKEY is exported alongside TAILSCALE_AUTHKEY because
-    //     entrypoint.sh reads the former while everything else in our
-    //     toolchain (CLI flag, runbook, ~/.bashrc) uses the latter.
-    //   - MESH_SEED_ADDR MUST be `host:port`. The entrypoint's beacon
-    //     splits on `:` and falls back to using the full string for
-    //     both halves when no colon is present (entrypoint.sh:169-170),
-    //     producing `100.x.y.z:100.x.y.z` and a 60-second beacon
-    //     timeout. The CLI's `--founder-addr` is documented as the
-    //     tailnet IPv4 alone (no port) — match that and auto-append
-    //     the founder daemon's internal port (9742) here.
-    //   - SINGLE_MODEL=primary is the CLI-side default because the
-    //     common Vast offer (L40S, 45 GB VRAM) cannot fit the legacy
-    //     3-slot loadout — Darwin-36B alone needs ~47 GB resident.
-    //     Override with PRIMARY_GGUF env if the founder's primary is
-    //     different (default below matches founder's current primary
-    //     on 2026-05-15; refresh when the founder's loadout changes).
-    //   - R2_BUCKET only exported when explicitly set; entrypoint
-    //     defaults to "sovereign-models" otherwise.
-    let mesh_seed_addr = if founder.contains(':') {
-        founder.clone()
-    } else {
-        format!("{founder}:9742")
-    };
-    let primary_gguf = std::env::var("PRIMARY_GGUF")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "FINAL-Bench_Darwin-36B-Opus-Q6_K.gguf".to_string());
-    let embed_gguf = std::env::var("EMBED_GGUF")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "Qwen3-Embedding-0.6B-Q8_0.gguf".to_string());
-
-    // ─── R2 pre-flight ──────────────────────────────────────────────
-    // Run the same `rclone lsf` the pod entrypoint runs, but locally
-    // and BEFORE we call vastai. Catches "PRIMARY_GGUF isn't in the
-    // bucket" before a single dollar is spent on a pod that would
-    // FATAL ~60s into boot. Uses RCLONE_CONFIG_* env vars so no temp
-    // config file with secrets is written to disk.
-    {
-        let bucket = r2_bucket.as_deref().unwrap_or("sovereign-models");
-        let rclone_check = std::process::Command::new("rclone").arg("--version").output();
-        let rclone_present = rclone_check
-            .as_ref()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-        if !rclone_present {
-            eprintln!(
-                "R2 pre-flight: rclone not installed locally — REQUIRED for `pod up`.\n\
-                 Install: curl https://rclone.org/install.sh | sudo bash\n\
-                 (We use it to verify PRIMARY_GGUF exists in r2:{bucket} before paying for a pod.)"
-            );
-            return 2;
-        }
-        let out = std::process::Command::new("rclone")
-            .env("RCLONE_CONFIG_R2_TYPE", "s3")
-            .env("RCLONE_CONFIG_R2_PROVIDER", "Cloudflare")
-            .env("RCLONE_CONFIG_R2_REGION", "auto")
-            .env("RCLONE_CONFIG_R2_ENDPOINT", &r2_endpoint)
-            .env("RCLONE_CONFIG_R2_ACCESS_KEY_ID", &r2_access_key)
-            .env("RCLONE_CONFIG_R2_SECRET_ACCESS_KEY", &r2_secret_key)
-            .env("RCLONE_CONFIG_R2_ACL", "private")
-            .arg("lsf")
-            .arg(format!("r2:{bucket}"))
-            .output();
-        let out = match out {
-            Ok(o) => o,
+    // ─── Hash uploads up front ─────────────────────────────────────
+    // The bootstrap blob carries a `filename → SHA-256` manifest the
+    // pod uses to validate streamed uploads. We compute SHAs locally
+    // before paying for the pod so a missing file aborts cheaply.
+    use sha2::{Digest, Sha256};
+    use std::collections::BTreeMap;
+    let mut upload_specs: BTreeMap<String, sovereign_mesh::worker_controller::UploadFile> =
+        BTreeMap::new();
+    for path in &uploads {
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => {
+                eprintln!("--upload path has no filename component: {}", path.display());
+                return 2;
+            }
+        };
+        let bytes = match std::fs::read(path) {
+            Ok(b) => b,
             Err(e) => {
-                eprintln!("R2 pre-flight: rclone failed to spawn: {e}");
+                eprintln!("--upload read failed for {}: {e}", path.display());
                 return 1;
             }
         };
-        if !out.status.success() {
-            eprintln!(
-                "R2 pre-flight: `rclone lsf r2:{bucket}` failed:\n{}",
-                String::from_utf8_lossy(&out.stderr)
-            );
-            eprintln!(
-                "Possible causes: wrong R2_ENDPOINT, bad access/secret key, \n\
-                 bucket name typo, or token missing Object Read on this bucket."
-            );
-            return 1;
-        }
-        let listing = String::from_utf8_lossy(&out.stdout);
-        let bucket_files: std::collections::HashSet<&str> =
-            listing.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
-        // Verify every GGUF the pod's SINGLE_MODEL=primary sync expects
-        // is in the bucket. Add to this list as the entrypoint grows
-        // — the goal is "no pod boot ever fails with `missing $GGUF
-        // after sync` because we caught it locally."
-        let required = [
-            ("PRIMARY_GGUF", primary_gguf.as_str()),
-            ("EMBED_GGUF",   embed_gguf.as_str()),
-        ];
-        let mut missing_ggufs: Vec<(&str, &str)> = Vec::new();
-        for (env_name, fname) in &required {
-            if !bucket_files.contains(fname) {
-                missing_ggufs.push((env_name, fname));
-            }
-        }
-        if !missing_ggufs.is_empty() {
-            eprintln!("R2 pre-flight FAILED — bucket r2:{bucket} is missing:");
-            for (env_name, fname) in &missing_ggufs {
-                eprintln!("  - {env_name}='{fname}'");
-            }
-            eprintln!("\nBucket currently contains:");
-            for f in &bucket_files {
-                eprintln!("  - {f}");
-            }
-            eprintln!(
-                "\nFix: upload the missing GGUF(s) to r2:{bucket}, or override\n\
-                 the relevant env var to a filename from the list above."
-            );
-            return 2;
-        }
-        println!(
-            "R2 pre-flight OK — {primary_gguf} + {embed_gguf} present in r2:{bucket}"
+        let mut h = Sha256::new();
+        h.update(&bytes);
+        let mut sha = [0u8; 32];
+        sha.copy_from_slice(&h.finalize());
+        upload_specs.insert(
+            name,
+            sovereign_mesh::worker_controller::UploadFile {
+                local_path: path.clone(),
+                sha256: sha,
+            },
         );
     }
-    // Context size sized to fit `primary_gguf` resident on an L40S:
-    //   - Darwin-36B-Q6  : ~30 GB weights + ~8 GB KV @ 16K = ~38 GB    ← fits in 41 GB available
-    //   - Darwin-36B-Q6  : ~30 GB weights + ~17 GB KV @ 32K = ~47 GB   ← does NOT fit
-    // 16K is the safe default for any 35B-class model on an L40S. The
-    // SEP recipe processes one chunk at a time, not whole articles, so
-    // 16K context is plenty in practice. Override via CONTEXT_SIZE env
-    // on a beefier pod (H100 → 32K is fine).
-    let context_size = std::env::var("CONTEXT_SIZE")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "16384".to_string());
-    let r2_bucket_line = r2_bucket
-        .as_deref()
-        .map(|b| format!("export R2_BUCKET='{b}'\n         "))
-        .unwrap_or_default();
-    let onstart_cmd = format!(
-        "set -eu\n\
-         export TS_AUTHKEY='{ts_key}'\n\
-         export TAILSCALE_AUTHKEY='{ts_key}'\n\
-         export MESH_JOIN_LINK='{join_link}'\n\
-         export MESH_SEED_ADDR='{mesh_seed_addr}'\n\
-         export SOVEREIGN_FOUNDER_ADDR='{founder}'\n\
-         export R2_ENDPOINT='{r2_endpoint}'\n\
-         export R2_ACCESS_KEY='{r2_access_key}'\n\
-         export R2_SECRET_KEY='{r2_secret_key}'\n\
-         {r2_bucket_line}\
-         export SINGLE_MODEL='primary'\n\
-         export PRIMARY_GGUF='{primary_gguf}'\n\
-         export EMBED_GGUF='{embed_gguf}'\n\
-         export CONTEXT_SIZE='{context_size}'\n\
-         exec /entrypoint.sh\n",
-    );
 
-    let label_value = label.unwrap_or_else(|| format!("{recipe_id}-pod"));
-    let req = pod::CreateRequest {
-        offer_id: pick.id,
-        image: &image,
-        disk_gb,
-        onstart_cmd: &onstart_cmd,
-        env: "",
-        label: &label_value,
-        ssh: true,
-    };
+    let label_value = label.unwrap_or_else(|| format!("{job_id}-pod"));
 
     if dry_run {
         println!(
             "DRY RUN: would create instance via vastai create instance {} \
-             --image {} --disk {} --label {} --ssh --onstart-cmd <…>",
-            pick.id, image, disk_gb, label_value
+             --image {} --disk {} --label {} --ssh, then mint a worker bootstrap blob \
+             with {} upload(s), upload to :9742 over TLS-pinned reqwest.",
+            pick.id, image, disk_gb, label_value, upload_specs.len(),
         );
         return 0;
     }
 
-    let created = match pod::create_instance(&req, pick) {
-        Ok(c) => c,
+    // ─── Owner key + controller ─────────────────────────────────────
+    let owner_key = match crate::worker_pod_provider::load_or_create_owner_key() {
+        Ok(k) => k,
         Err(e) => {
-            eprintln!("vastai create failed: {e}");
+            eprintln!(
+                "could not load/create owner key at {}: {e}",
+                crate::worker_pod_provider::owner_key_path().display(),
+            );
+            return 1;
+        }
+    };
+    let provider = std::sync::Arc::new(crate::worker_pod_provider::VastWorkerProvider::new(
+        image.clone(),
+        disk_gb,
+        label_value.clone(),
+        pick.clone(),
+    ));
+    let mut ctrl_config = sovereign_mesh::worker_controller::ControllerConfig::default();
+    ctrl_config.bootstrap_ttl_seconds = bootstrap_ttl_hours.saturating_mul(3600);
+    let controller =
+        sovereign_mesh::worker_controller::WorkerController::new(provider, owner_key, ctrl_config);
+
+    // ─── JobSpec ────────────────────────────────────────────────────
+    // No units list yet — `pod up` boots the pod and leaves it ready
+    // for follow-up dispatch. A future `pipeline pod dispatch <handle>
+    // <manifest.json>` command will POST the units to the worker.
+    let spec = sovereign_mesh::worker_controller::JobSpec {
+        job_id: job_id.clone(),
+        image: image.clone(),
+        disk_gb,
+        gpu_name: pick.gpu_name.clone(),
+        max_price_per_hour: pick.price_per_hour,
+        label: label_value.clone(),
+        uploads: upload_specs,
+        units: Vec::new(),
+        runner_config: serde_json::json!({}),
+    };
+
+    // create_and_run mints the blob, calls vastai create, polls for
+    // address, waits for health, uploads files. It does NOT dispatch
+    // a job (units is empty); the pod stays in "uploads ready" state
+    // for follow-up commands.
+    let (handle, instance) = match controller.create_and_run(&spec).await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("pod up failed: {e}");
+            // Best-effort cleanup: if `instance_id` was created but
+            // the rest of the lifecycle failed, the operator can run
+            // `vastai destroy instance <id>` manually. Surfacing the
+            // error is more important than guessing the instance id
+            // here.
             return 1;
         }
     };
 
     let rec = ledger::PodRecord {
-        vast_id: created.vast_id.clone(),
+        vast_id: instance.instance_id.clone(),
         label: label_value,
-        recipe_id,
-        gpu_name: created.gpu_name,
-        image: created.image,
+        recipe_id: job_id.clone(),
+        gpu_name: instance.gpu_name.clone(),
+        image: image.clone(),
         started_at: ledger::unix_now(),
         ended_at: None,
-        cost_per_hour: created.cost_per_hour,
+        cost_per_hour: instance.cost_per_hour,
         status: ledger::PodStatus::Running,
     };
     if let Err(e) = ledger::append(ledger::default_path(), rec) {
         eprintln!(
             "WARNING: pod {} launched but ledger append failed: {e}\n\
              Track manually until `pod list` resolves.",
-            created.vast_id
+            instance.instance_id
         );
     }
 
     println!();
-    println!("pod launched:");
-    println!("  vast id     {}", created.vast_id);
-    println!("  $/hr        {:.3}", created.cost_per_hour);
-    println!("  image       {}", image);
+    println!("worker pod ready:");
+    println!("  vast id          {}", instance.instance_id);
+    println!("  job id           {job_id}");
+    println!("  $/hr             {:.3}", instance.cost_per_hour);
+    println!("  worker address   {}", handle.base_url());
+    println!(
+        "  pinned thumbprint {}",
+        hex::encode(handle.pod_pubkey_thumbprint())
+    );
+    println!("  uploads          {}", spec.uploads.len());
     println!();
-    println!("Watch it come online with:");
-    println!("  vastai logs {} --tail 50", created.vast_id);
-    println!("Then verify the mesh saw it:");
-    println!("  sovereign mesh status");
+    println!("Pod is in 'uploads ready' state. Dispatch a job with the worker token:");
+    println!("  (token printed once — keep it; future invocations will be `pipeline pod dispatch <vast-id>`)");
+    println!("  token: {}", handle.worker_token());
+    println!();
+    println!("Tear down with:");
+    println!("  sovereign pipeline pod down {}", instance.instance_id);
     0
 }
 

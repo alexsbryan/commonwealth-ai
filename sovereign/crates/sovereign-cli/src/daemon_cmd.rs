@@ -121,6 +121,25 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
 };
 
 async fn run_daemon(args: &[String]) -> i32 {
+    // ── Worker-mode branch (ephemeral pod) ────────────────────────
+    //
+    // `sovereign daemon run --worker-mode` runs an ephemeral worker
+    // daemon (see `sovereign/docs/EPHEMERAL_WORKER_PODS.md`) instead
+    // of a full persistent peer. The worker boots with a bootstrap
+    // blob (env `SOVEREIGN_BOOTSTRAP` or `--bootstrap-blob <file>`),
+    // serves the four owner-only routes on `:9742` over a
+    // seed-derived self-signed TLS cert, and exits when the owner
+    // sends `DELETE /internal/worker/job` (or process is signalled).
+    //
+    // Worker mode skips every persistent-peer surface: no SetupConfig
+    // (no inference models), no mesh state machine, no
+    // /v1/chat/completions exposure. The binary is the same, but the
+    // wiring branches here and stays in worker_daemon.rs from this
+    // point forward.
+    if args.iter().any(|a| a == "--worker-mode") {
+        return run_worker_daemon(args).await;
+    }
+
     // ── Phase 4 flag parsing ──────────────────────────────────────
     //
     // `--setup-only` runs the wizard and exits without binding the
@@ -2560,5 +2579,60 @@ fn warn_orphaned_indexes(
          point the FS watcher at the wrong directory.)"
     );
     eprintln!();
+}
+
+/// Worker-mode entry — runs the ephemeral pod daemon. Skips every
+/// persistent-peer surface (no config, no models, no mesh) and serves
+/// only the four owner-only routes documented in
+/// `sovereign/docs/EPHEMERAL_WORKER_PODS.md`.
+///
+/// Triggered by `sovereign daemon run --worker-mode`. The bootstrap
+/// blob is read from `SOVEREIGN_BOOTSTRAP` env or `--bootstrap-blob
+/// <file>`. Falls through to the foreground worker daemon; exits when
+/// the owner sends `DELETE /internal/worker/job` (TBD: wire shutdown
+/// from the worker state's flag) or the process receives SIGTERM.
+async fn run_worker_daemon(args: &[String]) -> i32 {
+    // Parse `--bootstrap-blob <path>` if supplied. The env-var path
+    // is the production default (Vast injects it via `onstart_cmd`);
+    // the file-path mode is for local testing where shell quoting a
+    // 500-byte blob is painful.
+    let mut blob_path: Option<std::path::PathBuf> = None;
+    let mut iter = args.iter().enumerate();
+    while let Some((_, a)) = iter.next() {
+        if a == "--bootstrap-blob" {
+            if let Some((_, p)) = iter.next() {
+                blob_path = Some(std::path::PathBuf::from(p));
+            }
+        }
+    }
+
+    let (blob, source) = match sovereign_mesh::worker_daemon::load_bootstrap_blob(
+        "SOVEREIGN_BOOTSTRAP",
+        blob_path.as_deref(),
+    ) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("worker daemon: {e}");
+            return 2;
+        }
+    };
+    eprintln!(
+        "[worker-daemon] bootstrap loaded from {source}; job_id={} expected_uploads={}",
+        blob.job_id,
+        blob.expected_uploads.len()
+    );
+
+    // MVP runner is the echo stub. Real-runner integration with
+    // sovereign-pipeline is a follow-up (see `EPHEMERAL_WORKER_PODS.md`
+    // §Touch list / "Modified: pod entrypoint" — the runner swap is a
+    // single line at this call site).
+    let runner: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> =
+        Arc::new(sovereign_mesh::worker_daemon::EchoRunner);
+
+    if let Err(e) = sovereign_mesh::worker_daemon::run_worker_mode(blob, runner, None).await {
+        eprintln!("worker daemon: serve failed: {e}");
+        return 1;
+    }
+    0
 }
 

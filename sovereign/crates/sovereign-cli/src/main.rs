@@ -50,6 +50,9 @@ mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
 mod pipeline_cmd;
+// Ephemeral worker pods — Vast `WorkerProvider` impl + owner-key
+// persistence. See sovereign/docs/EPHEMERAL_WORKER_PODS.md.
+mod worker_pod_provider;
 mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;

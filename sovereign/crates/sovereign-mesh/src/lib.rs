@@ -55,6 +55,7 @@ pub mod work_atlas_broadcaster;
 // replaces the full-mesh-pod path. Pods become single-owner workers,
 // not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
 pub mod worker_controller;
+pub mod worker_daemon;
 pub mod worker_http;
 pub mod worker_pod;
 

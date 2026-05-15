@@ -193,6 +193,10 @@ crates/
     ├── auto_ingest.rs reindexer.rs supervised_task.rs
     ├── auto_resume.rs        #   Re-spawn in-progress ingests on daemon restart
     ├── canonical_pull.rs     #   Pull a peer's canonical index over the mesh
+    ├── worker_pod.rs         #   Ephemeral worker bootstrap blob + Ed25519 token + WorkerHandle
+    ├── worker_http.rs        #   Pod-side router: /internal/worker/{upload,job,completed} + auth middleware
+    ├── worker_controller.rs  #   Owner-side controller + WorkerProvider trait + reqwest TLS pinning
+    ├── worker_daemon.rs      #   `daemon run --worker-mode` entry: HTTPS termination on :9742 from seed-derived cert
     └── projects.rs types.rs
 
 skills/                       # 8 skills: research-analyst, epistemic-research, codebase-navigator,

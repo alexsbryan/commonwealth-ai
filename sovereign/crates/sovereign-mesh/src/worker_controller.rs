@@ -276,7 +276,7 @@ impl WorkerController {
         }
     }
 
-    async fn wait_for_health(
+    pub async fn wait_for_health(
         &self,
         handle: &WorkerHandle,
         client: &Client,
@@ -315,7 +315,7 @@ impl WorkerController {
         }
     }
 
-    async fn upload_files(
+    pub async fn upload_files(
         &self,
         handle: &WorkerHandle,
         client: &Client,
@@ -371,7 +371,7 @@ impl WorkerController {
         Ok(())
     }
 
-    async fn dispatch_job(
+    pub async fn dispatch_job(
         &self,
         handle: &WorkerHandle,
         client: &Client,
