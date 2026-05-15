@@ -285,7 +285,7 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Synchronous — load happens inline; model files are mmapped so
     // cold-start latency is dominated by disk I/O on first reference.
     let provider: Arc<dyn InferenceProvider> = match EmbeddedLlamaCpp::load_full_with_families(
-        &config.models.fast,
+        config.models.fast_path(),
         Some(&config.models.primary),
         Some(&config.models.embed),
         // PR-E2: optional Code specialist. When set, `code`-hinted
@@ -2365,7 +2365,7 @@ impl ProviderFactory for LlamaCppFactory {
         // idle timeout from `cfg` for the same reason: a hot-reload
         // shouldn't drop the operator's tuned values.
         let provider = EmbeddedLlamaCpp::load_full_with_families(
-            &cfg.models.fast,
+            cfg.models.fast_path(),
             Some(&cfg.models.primary),
             Some(&cfg.models.embed),
             cfg.models.code.as_deref(),

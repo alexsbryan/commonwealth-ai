@@ -34,7 +34,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "create" => cmd_create(&args[1..]).await,
         "join" => cmd_join(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
-        "status" => cmd_status().await,
+        "status" => cmd_status(&args[1..]).await,
         "balance" => cmd_balance().await,
         "leave" => cmd_leave().await,
         "logs" => cmd_logs().await,
@@ -450,8 +450,194 @@ async fn cmd_rotate(args: &[String]) -> i32 {
     }
 }
 
-async fn cmd_status() -> i32 {
-    println!("(mesh status requires a running daemon — this will be wired through the embedded daemon in a future update)");
+/// `sovereign mesh status [--json] [--self] [--addr-only]`
+///
+/// Reads the running daemon's `/v1/mesh/status` endpoint and renders
+/// the mesh view. Default output is human-readable; `--json` prints
+/// the raw response from the daemon.
+///
+/// Designed to replace the toolbox-tailscale-socket dance in the
+/// pod-deployment workflow. Two scripting modes:
+///
+///   `--self`           Restrict the rendering / JSON to the current
+///                      node's row. Combine with `--addr-only` to
+///                      capture this node's first advertised address
+///                      for `SOVEREIGN_FOUNDER_ADDR`-style env
+///                      assignments without parsing JSON elsewhere.
+///
+///   `--addr-only`      Print only the first advertised address of
+///                      the matched row(s). One address per line.
+///                      Exit code is 1 if no address is available
+///                      yet (member exists but no gossip round has
+///                      populated addresses).
+///
+/// Examples:
+///   sovereign mesh status
+///   sovereign mesh status --json
+///   export SOVEREIGN_FOUNDER_ADDR=$(sovereign mesh status --self --addr-only)
+async fn cmd_status(args: &[String]) -> i32 {
+    if crate::util::help::wants_help(args) {
+        eprintln!("Usage: sovereign mesh status [--json] [--self] [--addr-only]");
+        eprintln!();
+        eprintln!("Show mesh members, online status, and advertised addresses.");
+        eprintln!("Reads /v1/mesh/status from the running daemon (default port 9741).");
+        eprintln!();
+        eprintln!("Flags:");
+        eprintln!("  --json        Raw JSON pass-through from the daemon endpoint.");
+        eprintln!("  --self        Restrict to the current node's row.");
+        eprintln!("  --addr-only   Print only the first address of each matched row");
+        eprintln!("                (one per line). Right for SOVEREIGN_FOUNDER_ADDR=$(...).");
+        return 0;
+    }
+
+    let mut json_out = false;
+    let mut self_only = false;
+    let mut addr_only = false;
+    for a in args {
+        match a.as_str() {
+            "--json" => json_out = true,
+            "--self" => self_only = true,
+            "--addr-only" => addr_only = true,
+            other => {
+                eprintln!("Unknown flag: {other}");
+                eprintln!("Try `sovereign mesh status --help` for usage.");
+                return 2;
+            }
+        }
+    }
+
+    // Fetch from the daemon. Use SetupConfig for the port so a custom
+    // client_port (set via `[daemon].client_port`) still works.
+    let port = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741);
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/status");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .expect("reqwest client builds");
+    let resp = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("mesh status: daemon at {url} not reachable: {e}");
+            eprintln!("hint: `sovereign daemon status` to check, `sovereign daemon start` to launch.");
+            return 1;
+        }
+    };
+    if !resp.status().is_success() {
+        eprintln!(
+            "mesh status: daemon returned HTTP {} from {url}",
+            resp.status()
+        );
+        return 1;
+    }
+    let body = match resp.text().await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("mesh status: read body: {e}");
+            return 1;
+        }
+    };
+
+    let status: sovereign_mesh::mesh_http::StatusResponse = match serde_json::from_str(&body) {
+        Ok(s) => s,
+        Err(e) => {
+            // Daemon version drift — fall back to raw JSON pass-through
+            // so the operator at least sees the data even when our
+            // local DTO doesn't match.
+            eprintln!("mesh status: response shape mismatch ({e}); printing raw JSON.");
+            println!("{body}");
+            return 1;
+        }
+    };
+
+    // Filter to self when requested. Most addr-only / scripting uses
+    // want exactly this node's address.
+    let members: Vec<&sovereign_mesh::mesh_http::MemberDto> = if self_only {
+        status.members.iter().filter(|m| m.is_self).collect()
+    } else {
+        status.members.iter().collect()
+    };
+
+    if addr_only {
+        // Print first address per matched row, one per line. Right
+        // shape for `export FOO=$(...)` (when --self matches one row)
+        // and `for a in $(...)` (when matching multiple).
+        let mut printed_any = false;
+        for m in &members {
+            if let Some(a) = m.addresses.first() {
+                println!("{a}");
+                printed_any = true;
+            }
+        }
+        return if printed_any { 0 } else { 1 };
+    }
+
+    if json_out {
+        // Re-serialize from our typed view so --self filtering takes
+        // effect even in --json mode. Pretty-print so the output is
+        // human-grokkable too.
+        let filtered = serde_json::json!({
+            "running": status.running,
+            "mesh_name": status.mesh_name,
+            "members_online": status.members_online,
+            "members_total": status.members_total,
+            "members": members,
+            "join_key": status.join_key,
+            "join_link": status.join_link,
+        });
+        match serde_json::to_string_pretty(&filtered) {
+            Ok(s) => println!("{s}"),
+            Err(e) => {
+                eprintln!("mesh status: serialize: {e}");
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    // Human-readable rendering. Designed to be skimmable in 2 seconds:
+    // mesh name on top, online/total on the right, members table, and
+    // the join key + link at the bottom (the operator typically needs
+    // one of those for whatever workflow led them here).
+    if !status.running {
+        println!("mesh: daemon running, but no mesh active (`sovereign mesh create` or `mesh join` to bootstrap)");
+        return 0;
+    }
+    let mesh_name = status.mesh_name.as_deref().unwrap_or("<unnamed>");
+    println!(
+        "mesh: {mesh_name}    [{online}/{total} online]",
+        online = status.members_online,
+        total = status.members_total,
+    );
+    println!();
+    println!("  {:<22} {:<12} {:<8} address(es)", "node_id", "name", "status");
+    println!("  {:-<22} {:-<12} {:-<8} {:-<25}", "", "", "", "");
+    for m in &members {
+        let self_tag = if m.is_self { " *" } else { "" };
+        let addr_disp = if m.addresses.is_empty() {
+            "<not advertised>".to_string()
+        } else {
+            m.addresses.join(", ")
+        };
+        // node_id is 22 chars including the "node-" prefix; truncate
+        // gracefully if a future format grows it.
+        let nid: String = m.node_id.chars().take(22).collect();
+        let name: String = m.name.chars().take(12).collect();
+        println!(
+            "  {:<22} {:<12} {:<8} {}{}",
+            nid, name, m.status, addr_disp, self_tag,
+        );
+    }
+    if !self_only {
+        println!();
+        if let Some(k) = status.join_key.as_deref() {
+            println!("join key:  {k}");
+        }
+        if let Some(l) = status.join_link.as_deref() {
+            println!("join link: {l}");
+        }
+    }
     0
 }
 

@@ -3161,18 +3161,77 @@ impl EmbeddedLlamaCpp {
             None
         };
 
+        // ─── Primary-slot alias when fast_path == primary_path ───────
+        // sovereign-core's ModelsSection::fast_path() returns the
+        // primary GGUF when no distinct fast is configured. That
+        // means the loader receives the same `&Path` for both
+        // arguments, the fast slot is eagerly loaded above, and a
+        // naive lazy-primary path would re-load the same weights
+        // into VRAM on the first /v1/chat/completions to primary —
+        // doubling the model's resident footprint and breaking the
+        // VRAM-tight pods that asked for the subsume in the first
+        // place.
+        //
+        // When the alias is detected and a primary-sibling pool is
+        // NOT configured (the pool builds its own primary slots
+        // from primary_path and would conflict with this
+        // pre-population), build a primary ModelSlot from the
+        // already-loaded fast model via `from_existing_model`. That
+        // call shares the `Arc<LlamaModel>` (one VRAM weights
+        // allocation across both slots) and allocates only a fresh
+        // context — a separate KV cache so primary and fast don't
+        // contend on the same llama_decode state.
+        let primary_is_alias = matches!(
+            primary_model_path,
+            Some(p) if p == fast_model_path
+        ) && primary_pool.is_none();
+        let (primary_preloaded, primary_preloaded_path): (Option<ModelSlot>, Option<PathBuf>) =
+            if primary_is_alias {
+                let primary_p = primary_model_path.unwrap();
+                tracing::info!(
+                    slot = "primary",
+                    path = %primary_p.display(),
+                    "fast and primary share a GGUF; aliasing primary slot to fast's loaded weights (one VRAM copy, separate KV)"
+                );
+                match ModelSlot::from_existing_model(
+                    &backend,
+                    Arc::clone(&fast.model),
+                    fast.model_id.clone(),
+                    fast.size_bytes,
+                    context_size,
+                    /* n_seq_max */ 1,
+                    /* n_ubatch */ 512,
+                ) {
+                    Ok(slot) => (Some(slot), Some(primary_p.to_path_buf())),
+                    Err(e) => {
+                        // Fall back to lazy-load. Logged so operators
+                        // notice the missed optimisation, but the
+                        // daemon still works — just with the extra
+                        // VRAM cost on first primary use.
+                        tracing::warn!(
+                            slot = "primary",
+                            error = %e,
+                            "fast/primary alias setup failed; primary will lazy-load and double VRAM"
+                        );
+                        (None, None)
+                    }
+                }
+            } else {
+                (None, None)
+            };
+
         Ok(Self {
             backend: Arc::clone(&backend),
             fast,
             fast_short,
             fast_short_coalescer,
-            primary: Arc::new(Mutex::new(None)),
+            primary: Arc::new(Mutex::new(primary_preloaded)),
             primary_path: primary_model_path.map(|p| p.to_path_buf()),
             primary_ctx_size: context_size,
             gpu_layers: n_gpu_layers,
             primary_backend: backend,
             last_primary_use: Arc::new(Mutex::new(None)),
-            primary_loaded_path: Arc::new(Mutex::new(None)),
+            primary_loaded_path: Arc::new(Mutex::new(primary_preloaded_path)),
             code_path: code_model_path.map(|p| p.to_path_buf()),
             code_quirks,
             embed_slot,

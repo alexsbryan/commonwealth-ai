@@ -1259,7 +1259,9 @@ async fn mirror_to_setup_config(
                 .primary_model_path
                 .clone()
                 .unwrap_or_else(|| desktop.model_path.clone()),
-            fast: desktop.model_path.clone(),
+            // Desktop config always carries a model_path (the
+            // wizard requires one). Map it to an explicit fast.
+            fast: Some(desktop.model_path.clone()),
             embed: desktop
                 .embed_model_path
                 .clone()
@@ -1276,8 +1278,19 @@ async fn mirror_to_setup_config(
     });
 
     let mut changed = false;
-    if cli.models.fast != desktop.model_path {
-        cli.models.fast = desktop.model_path.clone();
+    // Desktop's `model_path` is the operator's chosen fast slot; if it
+    // differs from what we have, write it back as an explicit fast.
+    // Comparing against fast_path() handles the subsumed case
+    // naturally — when the desktop set the same path as primary, we
+    // leave `fast` as None so the subsume relationship stays clean
+    // instead of materialising a redundant explicit entry.
+    let desktop_path = desktop.model_path.as_path();
+    if desktop_path != cli.models.fast_path() {
+        cli.models.fast = if desktop_path == cli.models.primary {
+            None
+        } else {
+            Some(desktop.model_path.clone())
+        };
         changed = true;
     }
     if let Some(p) = &desktop.primary_model_path {
@@ -1444,7 +1457,11 @@ pub async fn complete_setup(
     if !setup.model_path.is_empty() {
         config.model_path = setup.model_path.into();
     } else if let Some(c) = cli_cfg.as_ref() {
-        config.model_path = c.models.fast.clone();
+        // Desktop tracks one model_path that surfaces in the UI as
+        // "the model loaded in the fast role". fast_path() returns
+        // primary when fast is subsumed, so the same field is right
+        // in either case — no separate branch needed.
+        config.model_path = c.models.fast_path().to_path_buf();
     }
     config.primary_model_path = setup
         .primary_model_path

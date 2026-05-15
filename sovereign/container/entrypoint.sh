@@ -52,6 +52,14 @@ PRIMARY_GGUF="${PRIMARY_GGUF:-FINAL-Bench_Darwin-36B-Opus-Q6_K.gguf}"
 FAST_GGUF="${FAST_GGUF:-Darwin-9B-Opus.Q8_0.gguf}"
 EMBED_GGUF="${EMBED_GGUF:-Qwen3-Embedding-0.6B-Q8_0.gguf}"
 NODE_ROLE="${NODE_ROLE:-ephemeral-worker}"
+# SINGLE_MODEL=primary: skip the FAST slot — sync + load primary +
+# embed only. The daemon's primary slot subsumes the fast role (chat
+# is one model class, both speeds run on the same weights via mmap
+# sharing). Embed is a different model class so it stays. Right
+# setting for VRAM-tight peers (e.g. L40S with 45 GB, where a 35B Q6
+# primary + a 9B fast simultaneously won't fit). Unset = legacy
+# 3-slot behaviour.
+SINGLE_MODEL="${SINGLE_MODEL:-}"
 
 MODELS_DIR="${SOVEREIGN_MODELS_DIR:-/workspace/models}"
 DATA_DIR="${SOVEREIGN_DATA_DIR:-/workspace/data}"
@@ -198,6 +206,39 @@ if [ -z "$beacon_ok" ]; then
 fi
 echo "[entrypoint] mesh seed reachable (attempt ${beacon_ok})"
 
+# ─── Clock sync ──────────────────────────────────────────────────────
+# AWS Signature V4 (which R2 / S3 use) rejects requests with timestamp
+# skew >15 min with a `403 Forbidden` and no useful body — only
+# rclone's "Time may be set wrong" NOTICE in stderr identifies the
+# real cause. Vast hosts occasionally hand us containers with
+# host-clock skew measured in *hours* (observed 3h8m on a Finnish
+# host, 2026-05-15). Pull a trustworthy `Date` from any HTTPS header
+# and set the system clock before rclone runs.
+#
+# Why HTTP Date over ntpdate:
+#   - ntpdate needs UDP/123 outbound, occasionally blocked at Vast.
+#   - Some hosts' kernels reject NTP's `adjtimex` even with cap.
+#   - We're already talking HTTPS through the Tailscale proxy, so a
+#     `curl --head` works whether or not direct outbound is open.
+# Failure is non-fatal — the next step (rclone lsf) is the real
+# integration test and will fail loudly if the clock fix didn't
+# stick. We log the before/after so the diagnosis is unambiguous.
+echo "[entrypoint] clock sync (before: $(date -u +%Y-%m-%dT%H:%M:%SZ))"
+HTTP_DATE=$(curl -sIm 10 https://www.cloudflare.com/ \
+    | awk 'BEGIN{IGNORECASE=1} /^date:/ {sub(/^[Dd]ate:[ \t]*/,""); sub(/\r$/,""); print; exit}')
+if [ -z "$HTTP_DATE" ]; then
+    echo "[entrypoint] WARNING: HTTP Date probe returned nothing; clock unchanged"
+elif date -s "$HTTP_DATE" >/dev/null 2>&1; then
+    echo "[entrypoint] clock set to $(date -u +%Y-%m-%dT%H:%M:%SZ) (from cloudflare.com Date header)"
+else
+    # CAP_SYS_TIME missing or the host kernel rejected the syscall.
+    # If skew is small (<15 min) R2 will still work; if not, the
+    # next step fails with a clear NOTICE.
+    echo "[entrypoint] WARNING: date -s rejected (CAP_SYS_TIME absent or syscall blocked?)"
+    echo "[entrypoint]   target was: $HTTP_DATE"
+    echo "[entrypoint]   current:    $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+fi
+
 # ─── 2. rclone config + model sync ───────────────────────────────────
 # provider = Cloudflare + region = auto are required for R2.
 # `Other` falls back to us-east-1 for SigV4 signing and R2 401s.
@@ -242,19 +283,37 @@ if ! rclone lsf "r2:${R2_BUCKET}" 2>&1; then
     exit 1
 fi
 
-echo "[entrypoint] syncing models from r2:${R2_BUCKET} → ${MODELS_DIR}"
-# --transfers=4 saturates RunPod's network without overwhelming local IO.
-# --checkers=8 hashes existing files so re-runs skip already-present GGUFs.
-# --retries 5: pod's network can blip during a 50 GB pull.
-rclone sync "r2:${R2_BUCKET}" "$MODELS_DIR" --progress --transfers=4 --checkers=8 --retries=5
+if [ "$SINGLE_MODEL" = "primary" ]; then
+    echo "[entrypoint] SINGLE_MODEL=primary: syncing primary + embed (skipping fast)"
+    # Sync primary (~30 GB) and embed (~0.7 GB). `copyto` (not `copy`)
+    # gives full-path control over destination so we can pin local
+    # filenames. `--retries 5` matches the multi-file sync's blip
+    # budget. No `--checkers` flag needed — single file each.
+    for gguf in "$PRIMARY_GGUF" "$EMBED_GGUF"; do
+        echo "[entrypoint]   r2:${R2_BUCKET}/${gguf} → ${MODELS_DIR}/${gguf}"
+        rclone copyto "r2:${R2_BUCKET}/${gguf}" "${MODELS_DIR}/${gguf}" \
+            --progress --transfers=4 --retries=5
+        if [ ! -f "$MODELS_DIR/$gguf" ]; then
+            echo "[entrypoint] FATAL: $MODELS_DIR/$gguf missing after sync"
+            echo "  (check that '$gguf' actually exists in r2:${R2_BUCKET})"
+            exit 1
+        fi
+    done
+else
+    echo "[entrypoint] syncing models from r2:${R2_BUCKET} → ${MODELS_DIR}"
+    # --transfers=4 saturates RunPod's network without overwhelming local IO.
+    # --checkers=8 hashes existing files so re-runs skip already-present GGUFs.
+    # --retries 5: pod's network can blip during a 50 GB pull.
+    rclone sync "r2:${R2_BUCKET}" "$MODELS_DIR" --progress --transfers=4 --checkers=8 --retries=5
 
-# Sanity: required files present?
-for f in "$PRIMARY_GGUF" "$FAST_GGUF" "$EMBED_GGUF"; do
-  if [ ! -f "$MODELS_DIR/$f" ]; then
-    echo "[entrypoint] FATAL: $MODELS_DIR/$f missing after sync (check R2_BUCKET / GGUF env vars)"
-    exit 1
-  fi
-done
+    # Sanity: required files present?
+    for f in "$PRIMARY_GGUF" "$FAST_GGUF" "$EMBED_GGUF"; do
+      if [ ! -f "$MODELS_DIR/$f" ]; then
+        echo "[entrypoint] FATAL: $MODELS_DIR/$f missing after sync (check R2_BUCKET / GGUF env vars)"
+        exit 1
+      fi
+    done
+fi
 
 # ─── 3. config.toml ──────────────────────────────────────────────────
 CONFIG=/root/.config/sovereign/config.toml
@@ -274,7 +333,37 @@ else
   PRIMARY_BLOCK=""
 fi
 
-cat > "$CONFIG" <<EOF
+if [ "$SINGLE_MODEL" = "primary" ]; then
+    # No-fast config: primary + embed only. The daemon's ModelsSection
+    # treats `fast` as Optional and routes Speed::Fast requests to the
+    # primary slot when fast is unset (see
+    # sovereign-core::ModelsSection::fast_path). Inference calls
+    # targeting `commonwealth/primary` (the SEP ingest path) and
+    # `commonwealth/fast` both land on primary here.
+    cat > "$CONFIG" <<EOF
+[models]
+primary = "${MODELS_DIR}/${PRIMARY_GGUF}"
+embed = "${MODELS_DIR}/${EMBED_GGUF}"
+context_size = ${CONTEXT_SIZE}
+${PRIMARY_BLOCK}
+
+[daemon]
+client_port = 9741
+internal_port = 9742
+autostart = false
+primary_idle_secs = 0
+extras_idle_secs = 0
+yield_to_foreground_secs = 0
+
+[data]
+dir = "${DATA_DIR}"
+
+[mesh]
+seed_addrs = ["${MESH_SEED_ADDR}"]
+node_role = "${NODE_ROLE}"
+EOF
+else
+    cat > "$CONFIG" <<EOF
 [models]
 primary = "${MODELS_DIR}/${PRIMARY_GGUF}"
 fast = "${MODELS_DIR}/${FAST_GGUF}"
@@ -297,6 +386,7 @@ dir = "${DATA_DIR}"
 seed_addrs = ["${MESH_SEED_ADDR}"]
 node_role = "${NODE_ROLE}"
 EOF
+fi
 
 echo "[entrypoint] config written:"
 sed -E 's/(access_key|secret_key|authkey)([^=]*)=.*/\1\2 = <redacted>/' "$CONFIG"

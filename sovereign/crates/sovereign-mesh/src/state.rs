@@ -45,6 +45,11 @@ impl MeshState {
                     },
                     contribution_level: 0, // Populated from ledger
                     contribution_label: String::new(),
+                    // SocketAddrs render as host:port. Surfaced for
+                    // `sovereign mesh status` and the pod-deployment
+                    // workflow (operators need self.address as the
+                    // founder addr; member addresses for debugging).
+                    addresses: m.addresses.iter().map(|a| a.to_string()).collect(),
                 }
             })
             .collect();
