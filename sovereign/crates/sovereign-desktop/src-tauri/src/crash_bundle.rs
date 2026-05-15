@@ -88,10 +88,14 @@ pub fn render_report(
                 "- Primary model: `{}`\n",
                 basename(&c.models.primary)
             ));
-            out.push_str(&format!(
-                "- Fast model: `{}`\n",
-                basename(&c.models.fast)
-            ));
+            // Show the explicit fast GGUF when one is configured;
+            // otherwise tell triage that primary is doing double duty
+            // so they don't go hunting for a fast-slot misconfig.
+            if c.models.has_explicit_fast() {
+                out.push_str(&format!("- Fast model: `{}`\n", basename(c.models.fast_path())));
+            } else {
+                out.push_str("- Fast model: <subsumed by primary>\n");
+            }
             out.push_str(&format!(
                 "- Embed model: `{}`\n",
                 basename(&c.models.embed)

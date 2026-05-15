@@ -111,20 +111,37 @@ COPY sovereign/crates/    ./sovereign/crates/
 COPY sovereign/contrib/   ./sovereign/contrib/
 COPY sovereign/.opencode/ ./sovereign/.opencode/
 
-# Swap the linux llama-cpp-2 backend feature from "rocm" (repo default)
-# to "cuda" for this image. We do it in-image rather than via a Cargo
-# feature flag because the choice lives inside a target-conditional
+# Swap the linux llama-cpp-2 backend feature (whichever of "rocm" or
+# "vulkan" is currently checked in — the repo default has flipped over
+# time) to "cuda" for this image. We do it in-image rather than via a
+# Cargo feature flag because the choice lives inside a target-conditional
 # dependency declaration, not in the workspace features table.
 #
-# Mirrors what scripts/bootstrap-linux.sh does for local Vulkan swaps.
-RUN python3 -c "import re,pathlib; \
-p=pathlib.Path('/workspace/sovereign/crates/sovereign-inference/Cargo.toml'); \
-src=p.read_text(); \
-header='[target.\\'cfg(target_os = \"linux\")\\'.dependencies]'; \
-m=re.search(re.escape(header)+r'\s*\nllama-cpp-2 = \{[^\n]*\}', src); \
-assert m, 'linux llama-cpp-2 line not found'; \
-new=re.sub(r'\"rocm\"','\"cuda\"',m.group(0),count=1); \
-p.write_text(src[:m.start()]+new+src[m.end():])"
+# Tolerant of:
+#   - either "rocm" or "vulkan" as the source feature
+#   - comment / blank lines between the [target...] header and the
+#     llama-cpp-2 line (the in-repo comment block explaining the ROCm
+#     SEGV workaround is one such block).
+#
+# Mirrors swap_inference_backend() in scripts/bootstrap-linux.sh.
+RUN python3 <<'PY'
+import re, pathlib
+p = pathlib.Path('/workspace/sovereign/crates/sovereign-inference/Cargo.toml')
+src = p.read_text()
+header = '[target.\'cfg(target_os = "linux")\'.dependencies]'
+pattern = (
+    re.escape(header)
+    + r'(?:[ \t]*\n(?:[ \t]*#[^\n]*\n|[ \t]*\n)*)'
+    + r'(llama-cpp-2\s*=\s*\{[^\n]*\})'
+)
+m = re.search(pattern, src)
+assert m, "couldn't find Linux llama-cpp-2 line under " + header
+line = m.group(1)
+new_line, n = re.subn(r'"(rocm|vulkan)"', '"cuda"', line, count=1)
+assert n == 1, f"expected one rocm/vulkan token to swap, found {n}: {line!r}"
+p.write_text(src[:m.start(1)] + new_line + src[m.end(1):])
+print("Patched:", new_line.strip())
+PY
 
 WORKDIR /workspace
 # Pre-fetch dependencies so the llama.cpp source lands on disk in the

@@ -691,7 +691,13 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     let mut label: Option<String> = None;
     let mut mesh_join_link: Option<String> = std::env::var("MESH_JOIN_LINK").ok();
     let mut founder_addr: Option<String> = std::env::var("SOVEREIGN_FOUNDER_ADDR").ok();
-    let mut tailscale_authkey: Option<String> = std::env::var("TAILSCALE_AUTHKEY").ok();
+    // The pod entrypoint reads `TS_AUTHKEY`; humans following the
+    // Tailscale docs export `TAILSCALE_AUTHKEY`. We accept either —
+    // `TAILSCALE_AUTHKEY` wins when both are set so the operator can
+    // override the bashrc-stored TS_AUTHKEY without unsetting it.
+    let mut tailscale_authkey: Option<String> = std::env::var("TAILSCALE_AUTHKEY")
+        .ok()
+        .or_else(|| std::env::var("TS_AUTHKEY").ok());
     let mut max_price: f64 = 0.80;
     let mut dry_run: bool = false;
     let mut i = 0;
@@ -735,13 +741,44 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         );
         return 2;
     };
-    let Some(ts_key) = tailscale_authkey.take() else {
+    // ─── Env-var contract for the pod's onstart command ─────────────
+    // The pod entrypoint (sovereign/container/entrypoint.sh:41-45) hard-
+    // requires the following via `: "${VAR:?...}"`. The CLI must export
+    // every one of them, and validate their presence up front so the
+    // user sees the whole missing set at once instead of round-tripping
+    // through 90-second pod boot timeouts. When the entrypoint adds a
+    // new `:?` check, update this block AND the runbook
+    // (sovereign-recipes/sep/RUNBOOK_VAST.md) in lockstep.
+    //
+    // Future structural fix: switch the entrypoint to `sovereign mesh
+    // fetch-model` (see project_pod_mesh_fetch_refactor memory) — that
+    // drops R2_* from this contract entirely.
+    let mut missing: Vec<&'static str> = Vec::new();
+    let ts_key = tailscale_authkey.take().filter(|s| !s.is_empty());
+    if ts_key.is_none() { missing.push("TAILSCALE_AUTHKEY (or TS_AUTHKEY)"); }
+    let r2_endpoint = std::env::var("R2_ENDPOINT").ok().filter(|s| !s.is_empty());
+    if r2_endpoint.is_none() { missing.push("R2_ENDPOINT"); }
+    let r2_access_key = std::env::var("R2_ACCESS_KEY").ok().filter(|s| !s.is_empty());
+    if r2_access_key.is_none() { missing.push("R2_ACCESS_KEY"); }
+    let r2_secret_key = std::env::var("R2_SECRET_KEY").ok().filter(|s| !s.is_empty());
+    if r2_secret_key.is_none() { missing.push("R2_SECRET_KEY"); }
+    if !missing.is_empty() {
         eprintln!(
-            "no Tailscale auth key. Pass via TAILSCALE_AUTHKEY env var.\n\
-             Generate one in the Tailscale admin: Settings → Keys → Generate auth key (reusable)."
+            "missing required env vars (pod entrypoint will reject):\n\
+             {}\n\
+             \n\
+             Set them in ~/.bashrc (or this shell) and re-run.\n\
+             Full prereqs: sovereign-recipes/sep/RUNBOOK_VAST.md",
+            missing.iter().map(|v| format!("  - {v}")).collect::<Vec<_>>().join("\n")
         );
         return 2;
-    };
+    }
+    let ts_key = ts_key.unwrap();
+    let r2_endpoint = r2_endpoint.unwrap();
+    let r2_access_key = r2_access_key.unwrap();
+    let r2_secret_key = r2_secret_key.unwrap();
+    // R2_BUCKET is optional — entrypoint defaults to "sovereign-models".
+    let r2_bucket = std::env::var("R2_BUCKET").ok().filter(|s| !s.is_empty());
 
     // Build the search query — verified hosts only, CUDA ≥ 12.4 so
     // the image's CUDA runtime matches at runtime.
@@ -769,12 +806,155 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // Build the onstart command: export env vars, then exec the image
     // entrypoint. Vast's SSH instance type ignores image ENTRYPOINT
     // by default, so we invoke it explicitly.
+    // Export every env var the pod entrypoint expects. Notes:
+    //   - TS_AUTHKEY is exported alongside TAILSCALE_AUTHKEY because
+    //     entrypoint.sh reads the former while everything else in our
+    //     toolchain (CLI flag, runbook, ~/.bashrc) uses the latter.
+    //   - MESH_SEED_ADDR MUST be `host:port`. The entrypoint's beacon
+    //     splits on `:` and falls back to using the full string for
+    //     both halves when no colon is present (entrypoint.sh:169-170),
+    //     producing `100.x.y.z:100.x.y.z` and a 60-second beacon
+    //     timeout. The CLI's `--founder-addr` is documented as the
+    //     tailnet IPv4 alone (no port) — match that and auto-append
+    //     the founder daemon's internal port (9742) here.
+    //   - SINGLE_MODEL=primary is the CLI-side default because the
+    //     common Vast offer (L40S, 45 GB VRAM) cannot fit the legacy
+    //     3-slot loadout — Darwin-36B alone needs ~47 GB resident.
+    //     Override with PRIMARY_GGUF env if the founder's primary is
+    //     different (default below matches founder's current primary
+    //     on 2026-05-15; refresh when the founder's loadout changes).
+    //   - R2_BUCKET only exported when explicitly set; entrypoint
+    //     defaults to "sovereign-models" otherwise.
+    let mesh_seed_addr = if founder.contains(':') {
+        founder.clone()
+    } else {
+        format!("{founder}:9742")
+    };
+    let primary_gguf = std::env::var("PRIMARY_GGUF")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "FINAL-Bench_Darwin-36B-Opus-Q6_K.gguf".to_string());
+    let embed_gguf = std::env::var("EMBED_GGUF")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Qwen3-Embedding-0.6B-Q8_0.gguf".to_string());
+
+    // ─── R2 pre-flight ──────────────────────────────────────────────
+    // Run the same `rclone lsf` the pod entrypoint runs, but locally
+    // and BEFORE we call vastai. Catches "PRIMARY_GGUF isn't in the
+    // bucket" before a single dollar is spent on a pod that would
+    // FATAL ~60s into boot. Uses RCLONE_CONFIG_* env vars so no temp
+    // config file with secrets is written to disk.
+    {
+        let bucket = r2_bucket.as_deref().unwrap_or("sovereign-models");
+        let rclone_check = std::process::Command::new("rclone").arg("--version").output();
+        let rclone_present = rclone_check
+            .as_ref()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if !rclone_present {
+            eprintln!(
+                "R2 pre-flight: rclone not installed locally — REQUIRED for `pod up`.\n\
+                 Install: curl https://rclone.org/install.sh | sudo bash\n\
+                 (We use it to verify PRIMARY_GGUF exists in r2:{bucket} before paying for a pod.)"
+            );
+            return 2;
+        }
+        let out = std::process::Command::new("rclone")
+            .env("RCLONE_CONFIG_R2_TYPE", "s3")
+            .env("RCLONE_CONFIG_R2_PROVIDER", "Cloudflare")
+            .env("RCLONE_CONFIG_R2_REGION", "auto")
+            .env("RCLONE_CONFIG_R2_ENDPOINT", &r2_endpoint)
+            .env("RCLONE_CONFIG_R2_ACCESS_KEY_ID", &r2_access_key)
+            .env("RCLONE_CONFIG_R2_SECRET_ACCESS_KEY", &r2_secret_key)
+            .env("RCLONE_CONFIG_R2_ACL", "private")
+            .arg("lsf")
+            .arg(format!("r2:{bucket}"))
+            .output();
+        let out = match out {
+            Ok(o) => o,
+            Err(e) => {
+                eprintln!("R2 pre-flight: rclone failed to spawn: {e}");
+                return 1;
+            }
+        };
+        if !out.status.success() {
+            eprintln!(
+                "R2 pre-flight: `rclone lsf r2:{bucket}` failed:\n{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            eprintln!(
+                "Possible causes: wrong R2_ENDPOINT, bad access/secret key, \n\
+                 bucket name typo, or token missing Object Read on this bucket."
+            );
+            return 1;
+        }
+        let listing = String::from_utf8_lossy(&out.stdout);
+        let bucket_files: std::collections::HashSet<&str> =
+            listing.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        // Verify every GGUF the pod's SINGLE_MODEL=primary sync expects
+        // is in the bucket. Add to this list as the entrypoint grows
+        // — the goal is "no pod boot ever fails with `missing $GGUF
+        // after sync` because we caught it locally."
+        let required = [
+            ("PRIMARY_GGUF", primary_gguf.as_str()),
+            ("EMBED_GGUF",   embed_gguf.as_str()),
+        ];
+        let mut missing_ggufs: Vec<(&str, &str)> = Vec::new();
+        for (env_name, fname) in &required {
+            if !bucket_files.contains(fname) {
+                missing_ggufs.push((env_name, fname));
+            }
+        }
+        if !missing_ggufs.is_empty() {
+            eprintln!("R2 pre-flight FAILED — bucket r2:{bucket} is missing:");
+            for (env_name, fname) in &missing_ggufs {
+                eprintln!("  - {env_name}='{fname}'");
+            }
+            eprintln!("\nBucket currently contains:");
+            for f in &bucket_files {
+                eprintln!("  - {f}");
+            }
+            eprintln!(
+                "\nFix: upload the missing GGUF(s) to r2:{bucket}, or override\n\
+                 the relevant env var to a filename from the list above."
+            );
+            return 2;
+        }
+        println!(
+            "R2 pre-flight OK — {primary_gguf} + {embed_gguf} present in r2:{bucket}"
+        );
+    }
+    // Context size sized to fit `primary_gguf` resident on an L40S:
+    //   - Darwin-36B-Q6  : ~30 GB weights + ~8 GB KV @ 16K = ~38 GB    ← fits in 41 GB available
+    //   - Darwin-36B-Q6  : ~30 GB weights + ~17 GB KV @ 32K = ~47 GB   ← does NOT fit
+    // 16K is the safe default for any 35B-class model on an L40S. The
+    // SEP recipe processes one chunk at a time, not whole articles, so
+    // 16K context is plenty in practice. Override via CONTEXT_SIZE env
+    // on a beefier pod (H100 → 32K is fine).
+    let context_size = std::env::var("CONTEXT_SIZE")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "16384".to_string());
+    let r2_bucket_line = r2_bucket
+        .as_deref()
+        .map(|b| format!("export R2_BUCKET='{b}'\n         "))
+        .unwrap_or_default();
     let onstart_cmd = format!(
         "set -eu\n\
+         export TS_AUTHKEY='{ts_key}'\n\
          export TAILSCALE_AUTHKEY='{ts_key}'\n\
          export MESH_JOIN_LINK='{join_link}'\n\
-         export MESH_SEED_ADDR='{founder}'\n\
+         export MESH_SEED_ADDR='{mesh_seed_addr}'\n\
          export SOVEREIGN_FOUNDER_ADDR='{founder}'\n\
+         export R2_ENDPOINT='{r2_endpoint}'\n\
+         export R2_ACCESS_KEY='{r2_access_key}'\n\
+         export R2_SECRET_KEY='{r2_secret_key}'\n\
+         {r2_bucket_line}\
+         export SINGLE_MODEL='primary'\n\
+         export PRIMARY_GGUF='{primary_gguf}'\n\
+         export EMBED_GGUF='{embed_gguf}'\n\
+         export CONTEXT_SIZE='{context_size}'\n\
          exec /entrypoint.sh\n",
     );
 

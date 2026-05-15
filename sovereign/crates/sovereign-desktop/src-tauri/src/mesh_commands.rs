@@ -445,6 +445,7 @@ impl MeshStateResponse {
                 },
                 contribution_level: 0,
                 contribution_label: String::new(),
+                addresses: m.addresses,
             })
             .collect();
         Self {

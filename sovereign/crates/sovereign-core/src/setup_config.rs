@@ -44,16 +44,35 @@ pub struct SetupConfig {
     pub watched_folders: WatchedFoldersSection,
 }
 
-/// Absolute paths to the loaded GGUF models. Three slots are
-/// required (`fast` + `primary` + `embed`); a fourth optional slot
-/// (`code`) is the specialization added in PR-E2, loaded lazily
-/// when a code-hinted request arrives.
+/// Absolute paths to the loaded GGUF models. Two slots are
+/// required (`primary` + `embed`); `fast` is optional with a clean
+/// subsume story (when unset, the primary model serves the fast role
+/// — Speed::Fast requests land on the primary slot). A fourth slot
+/// (`code`) is the optional PR-E2 specialization, loaded lazily when
+/// a code-hinted request arrives.
+///
+/// Why `fast` is optional but `embed` is required: chat slots all
+/// run the same `llama_decode` family, so primary can stand in for
+/// fast (mmap weight-sharing makes the cost ~per-slot-KV-cache, not
+/// per-weight-copy). Embedding is a different model class entirely
+/// (Qwen3-Embedding vs Darwin/Qwen-instruct); the primary can't
+/// substitute, so embed-less configs raise an invariant exception
+/// at the first embed call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelsSection {
     /// The "primary" model — what the UX calls the Main responder.
     /// Internally this is the `thoughtful` profile slot.
     pub primary: PathBuf,
-    pub fast: PathBuf,
+    /// Optional fast/speed slot. When `None`, the primary slot
+    /// subsumes the fast role — see [`Self::fast_path`] /
+    /// [`Self::has_explicit_fast`]. The field stays private-ish in
+    /// the API surface: callers should go through those methods
+    /// instead of reading the Option directly, so the "subsume to
+    /// primary" decision lives in one place. Right setting for
+    /// VRAM-tight peers (e.g. L40S, 45 GB) where the primary alone
+    /// (~30 GB Q6) leaves no room for a second model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast: Option<PathBuf>,
     pub embed: PathBuf,
     /// Optional code-specialist model. When present, `code`-hinted
     /// inference requests route here instead of the primary. Lazy-
@@ -175,6 +194,31 @@ impl ModelsSection {
     /// cold-start and reload paths can't drift.
     pub fn effective_context_size(&self) -> u32 {
         self.context_size.unwrap_or_else(default_context_size)
+    }
+
+    /// Path the fast-slot loader should use, with primary as the
+    /// fallback when no distinct fast model is configured. Callers
+    /// that need to know whether a fast model is configured *as
+    /// opposed to* subsumed by primary should use
+    /// [`Self::has_explicit_fast`] alongside this. Encapsulates the
+    /// subsume rule in one place so the rest of the codebase can
+    /// treat fast as if it always existed.
+    pub fn fast_path(&self) -> &Path {
+        self.fast.as_deref().unwrap_or(&self.primary)
+    }
+
+    /// `true` when an explicit fast GGUF is configured (the
+    /// `[models].fast` key is set in `config.toml`). `false` when
+    /// the primary subsumes the fast role.
+    ///
+    /// Use when the distinction matters — e.g. VRAM accounting
+    /// (don't double-count primary's weights), mesh advertising
+    /// (don't list a duplicate `fast` slot to peers when it's just
+    /// an alias), reload-diff (a change from None to Some/primary-
+    /// equal is operator-visible). For path lookups, prefer
+    /// [`Self::fast_path`].
+    pub fn has_explicit_fast(&self) -> bool {
+        self.fast.is_some()
     }
 
     /// Memory budget in raw bytes for the extras lineup.
@@ -476,7 +520,9 @@ impl SetupConfig {
     /// TOML stores `~/.sovereign/...` literally; we resolve at load time.
     fn expand_paths(&mut self) {
         self.models.primary = expand_home(&self.models.primary);
-        self.models.fast = expand_home(&self.models.fast);
+        if let Some(fast) = &self.models.fast {
+            self.models.fast = Some(expand_home(fast));
+        }
         self.models.embed = expand_home(&self.models.embed);
         if let Some(p) = self.models.code.as_mut() {
             *p = expand_home(p);
@@ -531,12 +577,66 @@ fn expand_home(p: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
+    fn models(primary: &str, fast: Option<&str>, embed: &str) -> ModelsSection {
+        ModelsSection {
+            primary: PathBuf::from(primary),
+            fast: fast.map(PathBuf::from),
+            embed: PathBuf::from(embed),
+            code: None,
+            context_size: None,
+            extra: BTreeMap::new(),
+            max_extras_memory_gb: None,
+            primary_pool: None,
+        }
+    }
+
+    #[test]
+    fn fast_path_returns_primary_when_fast_unset() {
+        let m = models("/models/primary.gguf", None, "/models/embed.gguf");
+        assert_eq!(m.fast_path(), Path::new("/models/primary.gguf"));
+        assert!(!m.has_explicit_fast());
+    }
+
+    #[test]
+    fn fast_path_returns_explicit_fast_when_set() {
+        let m = models(
+            "/models/primary.gguf",
+            Some("/models/fast.gguf"),
+            "/models/embed.gguf",
+        );
+        assert_eq!(m.fast_path(), Path::new("/models/fast.gguf"));
+        assert!(m.has_explicit_fast());
+    }
+
+    #[test]
+    fn parse_config_without_fast_field_succeeds() {
+        // The pod entrypoint writes a `[models]` table with only
+        // primary + embed when SINGLE_MODEL=primary is set. Before
+        // this commit, deserializing that TOML failed with
+        // "missing field `fast`" and killed every Vast.ai pod at
+        // the daemon-launch stage. Lock the now-Optional behaviour
+        // in so a future refactor can't silently reintroduce the
+        // hard requirement.
+        let toml = r#"
+[models]
+primary = "/models/primary.gguf"
+embed = "/models/embed.gguf"
+
+[daemon]
+[data]
+"#;
+        let cfg: SetupConfig = toml::from_str(toml).unwrap();
+        assert_eq!(cfg.models.primary, PathBuf::from("/models/primary.gguf"));
+        assert!(cfg.models.fast.is_none());
+        assert_eq!(cfg.models.fast_path(), Path::new("/models/primary.gguf"));
+    }
+
     #[test]
     fn roundtrip_minimal_config() {
         let cfg = SetupConfig {
             models: ModelsSection {
                 primary: PathBuf::from("/models/primary.gguf"),
-                fast: PathBuf::from("/models/fast.gguf"),
+                fast: Some(PathBuf::from("/models/fast.gguf")),
                 embed: PathBuf::from("/models/embed.gguf"),
                 code: None,
                 context_size: None,

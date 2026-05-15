@@ -1803,9 +1803,15 @@ fn register_local_model_slots(
 
     let mut slots: Vec<(String, &std::path::Path)> = vec![
         ("primary".into(), cfg.models.primary.as_path()),
-        ("fast".into(), cfg.models.fast.as_path()),
         ("embed".into(), cfg.models.embed.as_path()),
     ];
+    // Mesh-advertise fast only when it's a distinct GGUF. If the
+    // primary subsumes the fast role, a separate "fast" advertisement
+    // would mislead peers into thinking there are two chat models on
+    // this node when there's actually one.
+    if cfg.models.has_explicit_fast() {
+        slots.push(("fast".into(), cfg.models.fast_path()));
+    }
     if let Some(code_path) = cfg.models.code.as_ref() {
         slots.push(("code".into(), code_path.as_path()));
     }
