@@ -10,9 +10,17 @@
 # entities, numbers, claims) so the retrieval scorer's keyword match
 # isn't doing semantic guesswork.
 
+# NOTE: `corpus` points at the watched-folder index ID (opaque
+# auto-generated when the desktop "Connect obsidian vault" flow
+# registers a vault). The semantic name is "obsidian-vault" and
+# the enrichment-eval golden in `golden.toml` targets a separate
+# atlas-only install under that name. Retrieval scoring needs the
+# chunks.lance + _corpus_meta.json combo which only lives under
+# the watched-folder corpus_id. Once both surfaces share one
+# corpus install, this can flip back to `obsidian-vault`.
 [bank]
 name = "obsidian-real-vault-v1"
-corpus = "obsidian-real-vault"
+corpus = "watched-959ee8a8f330"
 description = """
 12-question retrieval bank for Alex's personal vault. Covers the
 heterogeneous topic range of the root essays: institutional
