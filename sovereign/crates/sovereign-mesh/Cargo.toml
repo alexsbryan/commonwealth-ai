@@ -96,6 +96,16 @@ dirs = "6"
 # Streaming SHA-256 in `model_fetch` so the file is hashed
 # while the bytes pass through — no second pass over disk.
 sha2 = { workspace = true }
+# Ed25519 keypair derivation in `worker_pod.rs`. `pkcs8` lets us feed
+# the derived key directly to rcgen for self-signed cert generation;
+# `rand_core` exposes the RNG trait we need on the verify side.
+ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
+# Self-signed TLS cert generation from a deterministic Ed25519 seed
+# (pod side) — version matches commonwealth-discovery to keep one
+# rcgen in the build graph.
+rcgen = "0.13"
+# Bootstrap blob is base64'd into Vast's `onstart` env var.
+base64 = "0.22"
 # Percent-encode model file names in the peer-fetch URL so a
 # filename with characters that would otherwise need encoding
 # (spaces, plus signs) reaches the server intact.
@@ -118,6 +128,10 @@ bytes = "1"
 
 [dev-dependencies]
 tempfile = "3"
+# `ServiceExt::oneshot` lets the worker_http integration tests dispatch
+# a synthetic axum Request through the router without spinning up a
+# TcpListener. Same pattern as commonwealth's HTTP unit tests.
+tower = { workspace = true }
 # `tracing-subscriber` is used in integration tests (e.g.
 # `injection_order.rs`) to capture tracing events emitted by the
 # library under test and assert on them. Keeping it scoped to
