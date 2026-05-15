@@ -492,7 +492,8 @@ mod tests {
             claims: Vec::new(),
             questions_raised: Vec::new(),
             argument_reconstructions: Vec::new(),
-        }
+            type_extension: None,
+            type_extensions: Vec::new(),        }
     }
 
     fn claim(content: &str, anchor: &str) -> ClaimSketch {

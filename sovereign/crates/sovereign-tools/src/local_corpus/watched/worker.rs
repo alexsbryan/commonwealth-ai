@@ -31,8 +31,20 @@ use super::state::WatchedFolderState;
 use super::status::{DiffSummary, WatchedFolderStatus};
 use super::threshold::{DeletionGuard, GuardDecision};
 use super::walker;
-use crate::local_corpus::config::{LocalCorpusConfig, LocalCorpusSourceType, WatchedFolderConfig};
+use crate::local_corpus::config::{
+    LocalCorpusConfig, LocalCorpusSourceType, ReconcileKind, WatchedFolderConfig,
+};
 use crate::local_corpus::manager::LocalCorpusManager;
+
+/// Minimum seconds between successive writeback refreshes for the
+/// same obsidian-vault corpus. 5 minutes — covers the case where the
+/// user is editing notes every few seconds: each sweep keeps the
+/// chunk index live (cheap), but tag refresh only fires at most once
+/// every five minutes. Writeback is also idempotent on unchanged
+/// input (the per-note merge is a no-op when the desired tag set is
+/// already present), so this debounce is purely a CPU/disk safety
+/// net, not a correctness gate.
+const WRITEBACK_DEBOUNCE_SECS: u64 = 300;
 
 /// Why a sweep was skipped (no work happened).
 #[derive(Debug, Clone, PartialEq)]
@@ -115,12 +127,12 @@ impl Worker {
                 return Ok(WorkerOutcome::Skipped(SkipReason::NotRegistered));
             }
         };
-        let watched_cfg = match watched_config_of(&config) {
-            Some(w) => w.clone(),
+        let (reconcile_kind, watched_cfg) = match reconciliation_config_for(&config) {
+            Some(v) => v,
             None => {
                 self.emit(WatchedFolderEvent::SweepSkipped {
                     corpus_id: corpus_id.to_string(),
-                    reason: "not_watched_source_type".into(),
+                    reason: "not_reconcilable_source_type".into(),
                 });
                 return Ok(WorkerOutcome::Skipped(SkipReason::NotWatchedSourceType));
             }
@@ -171,7 +183,7 @@ impl Worker {
         // Run the sweep body inside a helper so any error consistently
         // transitions state to Errored and emits SweepErrored.
         let outcome = match self
-            .run_sweep_body(&config, &watched_cfg, &mut state, now_unix)
+            .run_sweep_body(&config, &watched_cfg, reconcile_kind, &mut state, now_unix)
             .await
         {
             Ok(out) => out,
@@ -198,6 +210,7 @@ impl Worker {
         &self,
         config: &LocalCorpusConfig,
         watched_cfg: &WatchedFolderConfig,
+        reconcile_kind: ReconcileKind,
         state: &mut WatchedFolderState,
         now_unix: u64,
     ) -> Result<WorkerOutcome> {
@@ -408,7 +421,7 @@ impl Worker {
             });
         }
 
-        // 11. Update entries cache; status → Idle; persist.
+        // 11. Update entries cache; status → Idle.
         // Note: revivals are already absent from `state.tombstones`
         // (detect_revivals removed them) and present in `snapshot`
         // (the walk found them). Removed docs are absent from
@@ -421,6 +434,81 @@ impl Worker {
             tombstones: state.tombstones.len(),
         };
         state.last_updated_unix = now_unix;
+
+        // 11b. For obsidian vaults: best-effort refresh per-note tag
+        // writes against the cached cluster preview. The chunk index
+        // is already up-to-date via the apply step above; this step
+        // only keeps the *frontmatter tags* on existing notes in sync
+        // with the most recent clustering result. Skipped when:
+        //   - corpus is a watched folder (no writeback at all)
+        //   - the user hasn't run the initial clustering pipeline yet
+        //     (no cached preview → benign no-op)
+        //   - the writeback was refreshed within the debounce window
+        //     (5 minutes — see WRITEBACK_DEBOUNCE_SECS below)
+        // touched_user_notes from the result is patched onto
+        // state.entries so the next sweep's fast-path treats writeback's
+        // own mtime bumps as "no change" — preventing the
+        // writeback ↔ walker feedback loop.
+        if reconcile_kind == ReconcileKind::ObsidianVault {
+            let debounce_ok = state
+                .last_writeback_unix
+                .map(|prev| now_unix.saturating_sub(prev) >= WRITEBACK_DEBOUNCE_SECS)
+                .unwrap_or(true);
+            if debounce_ok {
+                match self.manager.refresh_writeback_if_clustered(&corpus_id).await {
+                    Ok(Some(wb_result)) => {
+                        for touched in &wb_result.touched_user_notes {
+                            if let Some(entry) = state.entries.get_mut(&touched.relative_path) {
+                                entry.mtime_unix = touched.mtime_unix;
+                                entry.size_bytes = touched.size_bytes;
+                                entry.content_hash = touched.content_hash.clone();
+                            }
+                        }
+                        state.last_writeback_unix = Some(now_unix);
+                        tracing::info!(
+                            corpus_id = %corpus_id,
+                            tagged = wb_result.files_tagged,
+                            touched = wb_result.touched_user_notes.len(),
+                            skipped = wb_result.files_skipped.len(),
+                            index_notes = wb_result.index_notes_created,
+                            "obsidian_vault:writeback_refreshed"
+                        );
+                    }
+                    Ok(None) => {
+                        // No cached preview yet — benign. User has not
+                        // run the initial clustering. The chunk index is
+                        // still being kept live by the sweep itself.
+                        tracing::debug!(
+                            corpus_id = %corpus_id,
+                            "obsidian_vault:writeback_skipped — no cached cluster preview"
+                        );
+                    }
+                    Err(e) => {
+                        // Writeback failure is non-fatal: the chunk
+                        // index is already updated; tag refresh can
+                        // retry on the next sweep. Log loudly but
+                        // don't fail the sweep.
+                        tracing::warn!(
+                            corpus_id = %corpus_id,
+                            error = %e,
+                            "obsidian_vault:writeback_failed (non-fatal)"
+                        );
+                    }
+                }
+            } else {
+                tracing::debug!(
+                    corpus_id = %corpus_id,
+                    last_writeback_unix = ?state.last_writeback_unix,
+                    "obsidian_vault:writeback_debounced"
+                );
+            }
+        }
+
+        // 11c. Persist the final state. Done after writeback so
+        // state.last_writeback_unix and the patched entries land in
+        // the same write — no race where a daemon crash between the
+        // two writes leaves entries pointing at pre-writeback hashes
+        // for the same `last_writeback_unix`.
         state.save(&self.state_dir(&corpus_id))?;
 
         self.emit(WatchedFolderEvent::SweepCompleted {
@@ -498,10 +586,48 @@ impl Worker {
     }
 }
 
-fn watched_config_of(c: &LocalCorpusConfig) -> Option<&WatchedFolderConfig> {
+/// Resolve the per-corpus reconciliation knobs for a sweep, plus the
+/// `ReconcileKind` so the worker can branch where needed (e.g., the
+/// post-apply writeback step that only fires for obsidian vaults).
+///
+/// For `WatchedFolder` corpora the knobs come straight off the
+/// persisted `WatchedFolderConfig`. For `ObsidianVault` corpora we
+/// synthesise an equivalent on the fly: the worker body wants
+/// `exclude_globs`, `deletion_guard`, `soft_delete_grace_secs`,
+/// `with_ocr`, `additional_roots`, etc., and obsidian vaults can
+/// reuse sensible watched-folder defaults for every field that
+/// matters here (vault excludes are hardcoded below; OCR is always
+/// off for a markdown-only corpus).
+///
+/// `DocumentFolder` is one-shot and should never reach the worker;
+/// returning `None` makes the dispatch loop emit a benign
+/// `not_reconcilable_source_type` skip event.
+fn reconciliation_config_for(
+    c: &LocalCorpusConfig,
+) -> Option<(ReconcileKind, WatchedFolderConfig)> {
     match &c.source_type {
-        LocalCorpusSourceType::WatchedFolder(cfg) => Some(cfg),
-        _ => None,
+        LocalCorpusSourceType::WatchedFolder(cfg) => {
+            Some((ReconcileKind::WatchedFolder, cfg.clone()))
+        }
+        LocalCorpusSourceType::ObsidianVault { .. } => {
+            let mut wf = WatchedFolderConfig::default();
+            // Sovereign's own writeback output and Obsidian's app
+            // config folder must never be walked. The writeback
+            // sentinel-frontmatter check (Phase A2) catches edits to
+            // managed per-note tag files, but `_sovereign-index/**`
+            // is fully sovereign-owned and warrants a hard exclude
+            // — no point hashing files we authored ourselves.
+            wf.exclude_globs = vec![
+                "_sovereign-index/**".to_string(),
+                ".obsidian/**".to_string(),
+                ".trash/**".to_string(),
+            ];
+            // Markdown-only vault, no OCR path needed regardless of
+            // the OcrCtx the daemon may or may not have installed.
+            wf.with_ocr = false;
+            Some((ReconcileKind::ObsidianVault, wf))
+        }
+        LocalCorpusSourceType::DocumentFolder => None,
     }
 }
 

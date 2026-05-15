@@ -79,23 +79,43 @@ pub struct WatchedFolderConfig {
     /// When `false`, symlinked files and directories are skipped
     /// (default). When `true`, the walker follows symlinks and tracks
     /// visited inodes via `(dev, ino)` to break loops.
+    ///
+    /// `#[serde(default)]` lets thin clients (CLI, HTTP callers) omit
+    /// the field and fall through to the `false` default — without
+    /// this, every partial-config POST to
+    /// `/internal/corpus/watch/register` would have to enumerate
+    /// every field even when they want the defaults.
+    #[serde(default)]
     pub follow_symlinks: bool,
     /// Threshold guard against catastrophic deletion (drive unmount,
     /// `rm -rf`, etc.). Evaluated before any deletion is applied.
+    ///
+    /// `#[serde(default)]` — same rationale as `follow_symlinks`.
+    /// Falls back to `DeletionGuardConfig::default()` (absolute=100,
+    /// fractional=0.25, enabled).
+    #[serde(default)]
     pub deletion_guard: DeletionGuardConfig,
     /// Polling cadence between sweeps. Floored at 60 s by the scheduler
     /// regardless of the configured value — tighter intervals hammer
     /// the disk and shrink the deletion-guard window below human
     /// reaction time. Ignored when `sync_mode == Manual`.
+    ///
+    /// `#[serde(default = ...)]` — default 120s (matches the worker
+    /// constant). Without this, omitting the field from the wire
+    /// payload (CLI's partial-config path, peer mesh setup) would
+    /// 422 on every register.
+    #[serde(default = "default_sweep_interval_secs")]
     pub sweep_interval_secs: u64,
     /// Soft-delete grace window. Removed files keep a tombstone in the
     /// per-corpus state file; restoring the file with the same content
     /// hash within this window short-circuits re-extraction. Default 7
     /// days.
+    #[serde(default = "default_soft_delete_grace_secs")]
     pub soft_delete_grace_secs: u64,
     /// Glob patterns excluded from the walk, in addition to the
     /// built-in defaults (`.git/`, `node_modules/`, `.DS_Store`, …).
     /// Matched against the path relative to the watched root.
+    #[serde(default)]
     pub exclude_globs: Vec<String>,
     /// When `true`, scanned PDFs (no text layer) get OCR'd through
     /// the existing `local_corpus::ocr` pipeline (rasterize →
@@ -257,8 +277,8 @@ impl Default for WatchedFolderConfig {
         Self {
             follow_symlinks: false,
             deletion_guard: DeletionGuardConfig::default(),
-            sweep_interval_secs: 120,
-            soft_delete_grace_secs: 7 * 86_400,
+            sweep_interval_secs: default_sweep_interval_secs(),
+            soft_delete_grace_secs: default_soft_delete_grace_secs(),
             exclude_globs: Vec::new(),
             with_ocr: false,
             sync_mode: SyncMode::Continuous,
@@ -267,6 +287,21 @@ impl Default for WatchedFolderConfig {
             enrichment: WatchedEnrichmentConfig::Off,
         }
     }
+}
+
+// ─── Serde defaults (used by `#[serde(default = …)]`) ─────────────────
+//
+// Keep these in sync with the `Default` impl above. Free functions are
+// the only shape serde's `default = "…"` attribute accepts, and
+// inlining the value at the attribute site would silently let the two
+// defaults diverge.
+
+fn default_sweep_interval_secs() -> u64 {
+    120
+}
+
+fn default_soft_delete_grace_secs() -> u64 {
+    7 * 86_400
 }
 
 /// Catastrophe gate: a sweep that would remove `>= absolute_threshold`
@@ -520,7 +555,16 @@ impl LocalCorpusConfig {
                 namespace: "sovereign".into(),
                 index_dir: "_sovereign-index".into(),
                 snapshot_dir: snapshot_root.join(&id),
-                snapshot_retention: 3,
+                // Live-sync (Phase A): the reconciliation worker
+                // can fire writeback after every sweep with new
+                // atoms. A count-of-3 retention burns through the
+                // baseline within ~3 minutes of active editing, so
+                // we hold 24 instead — at the daemon's ~120s sweep
+                // cadence with a 5-minute writeback debounce, 24
+                // snapshots cover roughly a 2-hour edit session.
+                // Snapshots live outside the vault and are small
+                // (one JSON per write); the disk cost is bounded.
+                snapshot_retention: 24,
             }),
             enrichment: Some(EnrichmentConfig { enabled: false }),
             watcher: WatcherConfig {
@@ -644,6 +688,36 @@ impl LocalCorpusSourceType {
         matches!(self, LocalCorpusSourceType::WatchedFolder(_))
     }
 
+    /// True for any source type the daemon's reconciliation worker
+    /// should periodically sweep. Covers `WatchedFolder` *and*
+    /// `ObsidianVault` — both surface user edits the worker must
+    /// reflect into the index. `DocumentFolder` is one-shot (drag-drop
+    /// ingest) and never enters the dispatch loop.
+    ///
+    /// Distinct from `is_watched()` so any caller that means "is this
+    /// specifically a WatchedFolder source" (UI affordances, recipe
+    /// distinctions) keeps its narrower semantics unchanged.
+    pub fn should_reconcile(&self) -> bool {
+        matches!(
+            self,
+            LocalCorpusSourceType::WatchedFolder(_) | LocalCorpusSourceType::ObsidianVault { .. }
+        )
+    }
+
+    /// Tag for the reconciliation worker telling it how to interpret a
+    /// dispatched corpus. `None` for source types the worker should
+    /// never see (i.e. `DocumentFolder`). Branching on this in the
+    /// worker keeps the dispatch path single while letting the
+    /// per-variant differences (vault writeback, watched additional
+    /// roots) stay explicit.
+    pub fn reconcile_kind(&self) -> Option<ReconcileKind> {
+        match self {
+            LocalCorpusSourceType::WatchedFolder(_) => Some(ReconcileKind::WatchedFolder),
+            LocalCorpusSourceType::ObsidianVault { .. } => Some(ReconcileKind::ObsidianVault),
+            LocalCorpusSourceType::DocumentFolder => None,
+        }
+    }
+
     /// Borrow the `WatchedFolderConfig` if this is a watched-folder
     /// source. Returns `None` for the other source types.
     pub fn watched_config(&self) -> Option<&WatchedFolderConfig> {
@@ -652,6 +726,16 @@ impl LocalCorpusSourceType {
             _ => None,
         }
     }
+}
+
+/// Discriminator the reconciliation worker uses to branch between the
+/// two reconcilable source types. Mirrors `LocalCorpusSourceType` but
+/// strips the per-variant payload so callers that only need to dispatch
+/// on shape don't carry the full config around.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReconcileKind {
+    WatchedFolder,
+    ObsidianVault,
 }
 
 fn escape_toml(s: &str) -> String {
@@ -697,7 +781,7 @@ mod tests {
         let wb = cfg.write_back.as_ref().expect("vault should have writeback");
         assert_eq!(wb.namespace, "sovereign");
         assert_eq!(wb.index_dir, "_sovereign-index");
-        assert_eq!(wb.snapshot_retention, 3);
+        assert_eq!(wb.snapshot_retention, 24);
         assert!(wb.snapshot_dir.starts_with("/tmp/snapshots"));
         assert!(wb.snapshot_dir.to_string_lossy().contains(&cfg.id));
         assert!(cfg.watcher.enabled);
@@ -707,6 +791,89 @@ mod tests {
         assert!(cfg.id.starts_with("obsidian-"));
         // Scanned-PDF detection is pointless for markdown vaults.
         assert!(!cfg.pre_scan.scanned_pdf_detection);
+    }
+
+    #[test]
+    fn watched_folder_config_partial_payload_deserialises_via_defaults() {
+        // Regression: when /internal/corpus/watch/register was first
+        // wired, the CLI sent a partial config (only the knobs the
+        // user explicitly set) and the daemon's WatchedFolderConfig
+        // had no #[serde(default)] on its non-optional fields,
+        // returning 422 on every register that omitted any of
+        // follow_symlinks / deletion_guard / sweep_interval_secs /
+        // soft_delete_grace_secs / exclude_globs. The fix is at the
+        // *deserializer* (server) — clients should be allowed to send
+        // only the fields they care about. This test pins the
+        // partial-payload contract.
+
+        // 1. Empty object → all defaults.
+        let cfg: WatchedFolderConfig = serde_json::from_str("{}").expect("empty {} parses");
+        assert_eq!(cfg.sweep_interval_secs, 120);
+        assert_eq!(cfg.soft_delete_grace_secs, 7 * 86_400);
+        assert!(!cfg.follow_symlinks);
+        assert_eq!(cfg.deletion_guard.absolute_threshold, 100);
+        assert!((cfg.deletion_guard.fractional_threshold - 0.25).abs() < 1e-6);
+        assert!(cfg.deletion_guard.enabled);
+        assert!(cfg.exclude_globs.is_empty());
+        assert_eq!(cfg.sync_mode, SyncMode::Continuous);
+        assert!(!cfg.sensitive);
+        assert!(cfg.additional_roots.is_empty());
+
+        // 2. CLI's actual shape: only the fields the user set.
+        let partial = r#"{
+            "follow_symlinks": true,
+            "exclude_globs": ["COMMONWEALTH/**", ".obsidian/**"]
+        }"#;
+        let cfg: WatchedFolderConfig =
+            serde_json::from_str(partial).expect("CLI partial payload parses");
+        assert!(cfg.follow_symlinks);
+        assert_eq!(cfg.exclude_globs.len(), 2);
+        // Defaults still kick in for omitted fields:
+        assert_eq!(cfg.sweep_interval_secs, 120);
+        assert_eq!(cfg.deletion_guard.absolute_threshold, 100);
+    }
+
+    #[test]
+    fn serde_defaults_match_default_impl() {
+        // The free functions referenced by `#[serde(default = "…")]`
+        // and the `Default` impl must agree. A drift here means a
+        // server that builds via Default sees one value while a
+        // server that deserialises an empty payload sees another —
+        // the bug-fix only works as long as the two stay locked.
+        let from_default = WatchedFolderConfig::default();
+        let from_empty: WatchedFolderConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(from_default.sweep_interval_secs, from_empty.sweep_interval_secs);
+        assert_eq!(
+            from_default.soft_delete_grace_secs,
+            from_empty.soft_delete_grace_secs
+        );
+        assert_eq!(from_default.follow_symlinks, from_empty.follow_symlinks);
+    }
+
+    #[test]
+    fn should_reconcile_covers_watched_and_vault_but_not_folder() {
+        let folder = LocalCorpusConfig::document_folder(PathBuf::from("/tmp/f"), "f".into());
+        assert!(!folder.source_type.should_reconcile());
+        assert!(folder.source_type.reconcile_kind().is_none());
+
+        let watched = LocalCorpusConfig::watched_folder(
+            PathBuf::from("/tmp/w"),
+            "w".into(),
+            WatchedFolderConfig::default(),
+        );
+        assert!(watched.source_type.should_reconcile());
+        assert_eq!(
+            watched.source_type.reconcile_kind(),
+            Some(ReconcileKind::WatchedFolder)
+        );
+
+        let vault =
+            LocalCorpusConfig::obsidian_vault(PathBuf::from("/tmp/v"), PathBuf::from("/tmp/snap"));
+        assert!(vault.source_type.should_reconcile());
+        assert_eq!(
+            vault.source_type.reconcile_kind(),
+            Some(ReconcileKind::ObsidianVault)
+        );
     }
 
     #[test]

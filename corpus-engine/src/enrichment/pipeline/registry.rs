@@ -40,6 +40,9 @@ impl PipelineRegistry {
         r.register(super::pipelines::engineering_atlas::PIPELINE_ID, || {
             Arc::new(super::pipelines::engineering_atlas::EngineeringAtlasPipeline::new())
         });
+        r.register(super::pipelines::obsidian_atlas::PIPELINE_ID, || {
+            Arc::new(super::pipelines::obsidian_atlas::ObsidianAtlasPipeline::new())
+        });
         r
     }
 
@@ -102,6 +105,26 @@ mod tests {
         // Referential corpora skip Phase 8 — there's no interpretive
         // rollup to produce when the source text is editorial neutral.
         assert!(!p.runs_configuration_phase());
+    }
+
+    #[test]
+    fn builtin_registers_obsidian_atlas() {
+        let r = PipelineRegistry::builtin();
+        let p = r
+            .get("obsidian_atlas")
+            .expect("obsidian_atlas should be registered as a builtin pipeline");
+        assert_eq!(p.id(), "obsidian_atlas");
+        // Vault pipeline is a thin forwarding wrapper around
+        // literary_atlas — it shares the same opt-ins until prompt
+        // divergence lands.
+        let lit = r
+            .get("literary_atlas")
+            .expect("literary_atlas should be registered");
+        assert_eq!(p.runs_configuration_phase(), lit.runs_configuration_phase());
+        assert_eq!(
+            p.runs_phase6_atlas_classifier(),
+            lit.runs_phase6_atlas_classifier()
+        );
     }
 
     #[test]

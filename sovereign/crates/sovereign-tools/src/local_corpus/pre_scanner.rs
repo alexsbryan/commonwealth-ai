@@ -258,6 +258,34 @@ impl<'a> PreScanner<'a> {
             .map(|e| e.to_ascii_lowercase())
             .collect();
 
+        // Compile exclude globs once. Source: the source-type's
+        // exclude list (today only WatchedFolder carries one;
+        // ObsidianVault inherits its excludes via the worker's
+        // synthesised WatchedFolderConfig in
+        // `worker::reconciliation_config_for`). Pre-fix, only the
+        // worker's sweep loop applied these globs and the initial
+        // `manager.ingest` skipped them — that's why an obsidian-
+        // vault corpus registered with `--exclude COMMONWEALTH/**`
+        // would still ingest 179 documents when the walker said 41.
+        // Same compile-on-error semantics as walker.rs: a malformed
+        // glob warns and is dropped rather than wedging the scan.
+        let exclude_globs: Vec<glob::Pattern> = self
+            .config
+            .source_type
+            .watched_config()
+            .map(|wf| wf.exclude_globs.clone())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|g| match glob::Pattern::new(&g) {
+                Ok(p) => Some(p),
+                Err(e) => {
+                    tracing::warn!(pattern = %g, "pre_scanner:exclude_glob_invalid: {e}");
+                    None
+                }
+            })
+            .collect();
+        let walk_root = self.root_path();
+
         let mut candidates = Vec::new();
         let mut ignored_extensions: u32 = 0;
         let mut total_visited: u32 = 0;
@@ -282,6 +310,22 @@ impl<'a> PreScanner<'a> {
             }
             total_visited = total_visited.saturating_add(1);
             let path = entry.path().to_path_buf();
+
+            // Exclude-glob check matches the walker's semantics
+            // (walker.rs:274) — patterns evaluated against the path
+            // relative to the walk root, forward-slash normalised.
+            // A file that any pattern matches is dropped silently
+            // here (does NOT bump skipped_by_extension since the
+            // skip is by user-rule, not by extension).
+            if !exclude_globs.is_empty() {
+                if let Ok(rel) = entry.path().strip_prefix(walk_root) {
+                    let rel_norm = rel.to_string_lossy().replace('\\', "/");
+                    if exclude_globs.iter().any(|p| p.matches(&rel_norm)) {
+                        continue;
+                    }
+                }
+            }
+
             let ext = path
                 .extension()
                 .and_then(|e| e.to_str())
@@ -465,6 +509,62 @@ mod tests {
         // routed into the OCR-eligible bucket rather than a flat
         // "couldn't be read" with no recovery.
         assert_eq!(class, PdfClass::ScannedNoText);
+    }
+
+    #[test]
+    fn pre_scan_honours_watched_folder_exclude_globs() {
+        // Regression: a watched-folder corpus registered with
+        // `--exclude COMMONWEALTH/**` was still ingesting every file
+        // under COMMONWEALTH/. The walker honored the exclude (state
+        // showed correct live_docs) but the initial `manager.ingest`
+        // path used PreScanner directly and bypassed the rule —
+        // resulting in a LanceDB index that contained material the
+        // user explicitly asked to skip.
+        use super::super::config::{
+            LocalCorpusConfig, LocalCorpusSourceType, WatchedFolderConfig,
+        };
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("root.md"), b"keep").unwrap();
+        fs::create_dir_all(dir.path().join("COMMONWEALTH")).unwrap();
+        fs::write(dir.path().join("COMMONWEALTH/work.md"), b"drop").unwrap();
+        fs::create_dir_all(dir.path().join("_sovereign-index")).unwrap();
+        fs::write(dir.path().join("_sovereign-index/index.md"), b"drop").unwrap();
+
+        let mut wf = WatchedFolderConfig::default();
+        wf.exclude_globs = vec![
+            "COMMONWEALTH/**".into(),
+            "_sovereign-index/**".into(),
+        ];
+        let mut cfg = LocalCorpusConfig::watched_folder(
+            dir.path().to_path_buf(),
+            "test".into(),
+            wf.clone(),
+        );
+        // `watched_folder()` factory consumes the WatchedFolderConfig
+        // into source_type; force the cfg's extensions to include md
+        // (default already does).
+        cfg.source_type = LocalCorpusSourceType::WatchedFolder(wf);
+
+        let scanner = PreScanner::new(&cfg);
+        let result = scanner.run_blocking(|_, _| {});
+
+        let names: Vec<&str> = result
+            .readable
+            .iter()
+            .map(|m| m.display_name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"root"),
+            "root.md must be ingested; got {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n == &"work"),
+            "COMMONWEALTH/work.md must be excluded; got {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n == &"index"),
+            "_sovereign-index/index.md must be excluded; got {names:?}"
+        );
     }
 
     #[test]

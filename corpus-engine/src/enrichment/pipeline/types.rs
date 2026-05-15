@@ -377,6 +377,528 @@ pub enum RetryMode {
     Terse { max_output_tokens: u32 },
 }
 
+// ── Phase 0: per-section classification (routed-Phase-1 prelude) ──
+//
+// The classifier reads each section's title, first ~500 words, and
+// frontmatter tags, and assigns a `SectionType` that drives downstream
+// Phase 1 dispatch. The classification is meta-shape, not content
+// extraction — it answers "what kind of writing is this?" so the
+// routed Phase 1 can pick a schema that fits the section's genre.
+//
+// Why it lives here: classification is a typed input/output the runner
+// caches alongside Phase 1's `cache/questions.json`. The
+// `SectionClassification` struct mirrors `Phase1ChapterResult` shape-
+// wise (per-section, cacheable, schema-versioned).
+
+/// Genre tag assigned to a section by the Phase 0 classifier.
+///
+/// The set is closed: a section that matches none well falls into
+/// `Mixed` with `secondary_type` populated so the runner can fan out
+/// to two Phase 1 schemas. Adding a new variant is a schema-version
+/// bump on `SectionClassificationsFile` — all existing classified
+/// caches stay readable via the `Unknown` fallback below.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SectionType {
+    /// Short stories, narrative fiction passages, novel chapters.
+    /// The literary-atlas schema fits this case unchanged.
+    Fiction,
+    /// Long-form argumentative writing — econ / policy / social
+    /// criticism. The current literary schema cramps these into a
+    /// 10-cap Claims array; the routed Phase 1 will give them
+    /// first-class `positions`, `mechanisms`, `oppositions`,
+    /// `evidence_invocations`.
+    ArgumentativeEssay,
+    /// Literary, musical, film, or visual criticism — sections that
+    /// name works and judge them. Routed Phase 1 gives them
+    /// `works_discussed`, `formal_elements`, `evaluative_judgments`.
+    Criticism,
+    /// First-person daily journals, project journals, field notes.
+    /// Author voice ≠ Person; people-encountered + decisions-made +
+    /// observations + open-threads.
+    Journal,
+    /// Meeting transcripts / recaps. Attendees + agenda + decisions
+    /// + action items.
+    MeetingRecord,
+    /// Zettel cards, definition notes, glossary entries. Dense
+    /// concept + relationship payload, little narrative.
+    Reference,
+    /// Work-tracking notes — task lists, technical planning,
+    /// status logs. Decisions + tasks + artifacts (incl. model
+    /// names) + blockers.
+    ProjectNote,
+    /// Verse including prose poetry. Speaker ≠ Person; images,
+    /// motifs, formal devices.
+    Poetry,
+    /// The section genuinely spans two genres (e.g., a journal
+    /// entry that contains a long argumentative riff). The runner
+    /// fans out to both `primary_type` and `secondary_type` Phase 1
+    /// schemas and merges results.
+    Mixed,
+    /// Forward-compat fallback for deserialising classification
+    /// caches written by future variants. Treated as `Mixed` with
+    /// no secondary at dispatch time.
+    #[serde(other)]
+    Unknown,
+}
+
+impl SectionType {
+    /// Stable short tag used in filenames, logs, prompt-asset paths.
+    /// One change here ripples through everywhere — keep in sync
+    /// with the `Deserialize` rename_all = "snake_case" attribute.
+    pub fn tag(self) -> &'static str {
+        match self {
+            SectionType::Fiction => "fiction",
+            SectionType::ArgumentativeEssay => "argumentative_essay",
+            SectionType::Criticism => "criticism",
+            SectionType::Journal => "journal",
+            SectionType::MeetingRecord => "meeting_record",
+            SectionType::Reference => "reference",
+            SectionType::ProjectNote => "project_note",
+            SectionType::Poetry => "poetry",
+            SectionType::Mixed => "mixed",
+            SectionType::Unknown => "unknown",
+        }
+    }
+
+    /// All variants the classifier may emit. `Unknown` is excluded —
+    /// it's a deserializer fallback, not a classifier output.
+    pub const CLASSIFIER_OUTPUTS: &'static [SectionType] = &[
+        SectionType::Fiction,
+        SectionType::ArgumentativeEssay,
+        SectionType::Criticism,
+        SectionType::Journal,
+        SectionType::MeetingRecord,
+        SectionType::Reference,
+        SectionType::ProjectNote,
+        SectionType::Poetry,
+        SectionType::Mixed,
+    ];
+}
+
+// ── MECE classification vector (v2) ───────────────────────────
+//
+// The flat `SectionType` above is the v1 surface — pragmatic, but
+// not MECE. `MeetingRecord` ⊂ `Reference`, `Criticism` ⊂
+// `ArgumentativeEssay`, `Journal` collapses Narrative+Reflective,
+// and `Mixed` is the taxonomy admitting it cannot carve cleanly.
+//
+// v2 replaces the single label with a vector over three orthogonal
+// MECE axes (Discourse Mode, Epistemic Posture, Temporal Frame) plus
+// an optional Audience axis. Atom shapes attach to axis VALUES, not
+// labels, so routing becomes compositional: a section with
+// `discourse_mode = {Argumentative @ 0.55, Narrative @ 0.45}` fans out
+// to BOTH typed extensions above `ROUTING_THRESHOLD` (0.25) instead of
+// collapsing into `Mixed` and getting dropped by the dispatcher.
+//
+// Back-compat: `SectionClassificationVector::legacy_section_type()`
+// projects to the v1 `SectionType` enum for any caller that hasn't
+// migrated. Conversely `SectionClassificationVector::from_legacy()`
+// reads a v1 record as a degenerate vector (primary @ 1.0, no
+// secondaries) so existing `cache/section_classifications.json` files
+// stay readable across the bump.
+
+/// Axis A — what is the section's language *doing*. Six MECE values.
+/// Atom families produced per discourse mode:
+/// - Narrative: Events, EntityStates, Relations, RelationStates, ParticipantArcs
+/// - Argumentative: Positions, Mechanisms, Oppositions, EvidenceInvocations, Concessions
+/// - Descriptive: Definitions, PropertyClaims, Relationships, Examples, Provenance
+/// - Reflective: Interactions, Observations, OpenThreads, MoodShifts, Realisations
+/// - Procedural: Tasks, Decisions, Artifacts, Dependencies, Blockers, StatusSignals
+/// - Lyric: Images, Motifs, FormalDevices, VoiceShifts, TonalMovements
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscourseMode {
+    Narrative,
+    Argumentative,
+    Descriptive,
+    Reflective,
+    Procedural,
+    Lyric,
+}
+
+impl DiscourseMode {
+    /// Stable short tag — filenames, logs, prompt-asset paths.
+    pub fn tag(self) -> &'static str {
+        match self {
+            DiscourseMode::Narrative => "narrative",
+            DiscourseMode::Argumentative => "argumentative",
+            DiscourseMode::Descriptive => "descriptive",
+            DiscourseMode::Reflective => "reflective",
+            DiscourseMode::Procedural => "procedural",
+            DiscourseMode::Lyric => "lyric",
+        }
+    }
+
+    pub const ALL: &'static [DiscourseMode] = &[
+        DiscourseMode::Narrative,
+        DiscourseMode::Argumentative,
+        DiscourseMode::Descriptive,
+        DiscourseMode::Reflective,
+        DiscourseMode::Procedural,
+        DiscourseMode::Lyric,
+    ];
+}
+
+/// Dispatcher fans out to every discourse mode whose weight ≥ this.
+/// 0.25 chosen so a 0.55/0.45 hybrid fires both extensions but a
+/// 0.85/0.15 single-mode-with-spoken-word-framing fires only the
+/// primary. Tune at the call site if a corpus needs different
+/// behaviour.
+pub const DISCOURSE_ROUTING_THRESHOLD: f32 = 0.25;
+
+/// Axis A weighted distribution. `primary` always has the largest
+/// weight; `secondaries` is sorted by weight descending and capped
+/// at 2 to bound dispatch fan-out at 3 modes per section.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DiscourseModeDistribution {
+    pub primary: DiscourseMode,
+    pub primary_weight: f32,
+    #[serde(default)]
+    pub secondaries: Vec<(DiscourseMode, f32)>,
+}
+
+impl DiscourseModeDistribution {
+    /// Single-mode-at-1.0 constructor — the shape v1 caches project
+    /// into.
+    pub fn solo(mode: DiscourseMode) -> Self {
+        Self {
+            primary: mode,
+            primary_weight: 1.0,
+            secondaries: Vec::new(),
+        }
+    }
+
+    /// Sum of `primary_weight` + every secondary weight. Validator
+    /// callers want this within `[0.99, 1.01]`; classifier output
+    /// outside that range is suspect.
+    pub fn weight_sum(&self) -> f32 {
+        self.primary_weight + self.secondaries.iter().map(|(_, w)| *w).sum::<f32>()
+    }
+
+    /// `true` when the weights sum to 1.0 within ±0.01. Used by the
+    /// classifier parser to reject malformed model output.
+    pub fn weights_sum_to_one(&self) -> bool {
+        let s = self.weight_sum();
+        (0.99..=1.01).contains(&s)
+    }
+
+    /// Modes the dispatcher should fan out to. Always includes the
+    /// primary; secondaries are included only when their weight is
+    /// ≥ `threshold`. Returned in (mode, weight) pairs preserving
+    /// the input order.
+    pub fn active_modes(&self, threshold: f32) -> Vec<(DiscourseMode, f32)> {
+        let mut out = Vec::with_capacity(1 + self.secondaries.len());
+        out.push((self.primary, self.primary_weight));
+        for &(mode, weight) in &self.secondaries {
+            if weight >= threshold {
+                out.push((mode, weight));
+            }
+        }
+        out
+    }
+}
+
+/// Axis B — section's relationship to actual-world truth. Four MECE
+/// values. Modulates downstream Claim atoms via `apply_epistemic_modulator`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EpistemicPosture {
+    Factual,
+    Normative,
+    Fictional,
+    Hypothetical,
+}
+
+impl EpistemicPosture {
+    pub fn tag(self) -> &'static str {
+        match self {
+            EpistemicPosture::Factual => "factual",
+            EpistemicPosture::Normative => "normative",
+            EpistemicPosture::Fictional => "fictional",
+            EpistemicPosture::Hypothetical => "hypothetical",
+        }
+    }
+}
+
+/// Axis C — temporal anchor of the content. Three MECE values.
+/// Modulates Event/Task atoms via `apply_temporal_modulator`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TemporalFrame {
+    Episodic,
+    Atemporal,
+    Prospective,
+}
+
+impl TemporalFrame {
+    pub fn tag(self) -> &'static str {
+        match self {
+            TemporalFrame::Episodic => "episodic",
+            TemporalFrame::Atemporal => "atemporal",
+            TemporalFrame::Prospective => "prospective",
+        }
+    }
+}
+
+/// Optional Axis D — who the section is *for*. Not load-bearing for
+/// atom shape; affects rendering downstream (briefing tone, redaction
+/// rules). Three MECE values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AudienceRelation {
+    PrivateFirstPerson,
+    SpecificRecipient,
+    PublicImpersonal,
+}
+
+/// The v2 classification record. Replaces `SectionClassification`'s
+/// flat enum with a vector over three+ MECE axes. The dispatcher
+/// reads `discourse_mode.active_modes(DISCOURSE_ROUTING_THRESHOLD)`
+/// and fires one typed extension per active mode; the post-extraction
+/// modulators apply Epistemic + Temporal tags to the extracted atoms.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SectionClassificationVector {
+    pub section_id: String,
+    pub discourse_mode: DiscourseModeDistribution,
+    pub epistemic_posture: EpistemicPosture,
+    pub temporal_frame: TemporalFrame,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audience_relation: Option<AudienceRelation>,
+    /// SHA-256 short hash (16 hex chars) of section text at classify
+    /// time. Same role as v1's `SectionClassification::content_hash`.
+    pub content_hash: String,
+    pub classified_at_unix: u64,
+    /// Short rationale the operator can audit. Routed to telemetry;
+    /// not load-bearing for downstream phases.
+    #[serde(default)]
+    pub reasoning: String,
+}
+
+impl SectionClassificationVector {
+    /// Project the vector back to a v1 `SectionType` for any caller
+    /// that hasn't migrated. The mapping is necessarily lossy —
+    /// secondaries and the Epistemic/Temporal axes collapse into the
+    /// flat label.
+    pub fn legacy_section_type(&self) -> SectionType {
+        let primary = self.discourse_mode.primary;
+        match (primary, self.epistemic_posture) {
+            (DiscourseMode::Narrative, EpistemicPosture::Fictional) => SectionType::Fiction,
+            (DiscourseMode::Narrative, _) => SectionType::Fiction,
+            (DiscourseMode::Argumentative, _) => SectionType::ArgumentativeEssay,
+            (DiscourseMode::Reflective, _) => SectionType::Journal,
+            (DiscourseMode::Procedural, _) => SectionType::ProjectNote,
+            (DiscourseMode::Lyric, _) => SectionType::Poetry,
+            (DiscourseMode::Descriptive, _) => SectionType::Reference,
+        }
+    }
+
+    /// Inverse — read a v1 `SectionClassification` as a degenerate
+    /// vector (primary @ 1.0, no secondaries; epistemic + temporal
+    /// guessed from the v1 label). Used by the cache-migration path
+    /// in `SectionClassificationsFile::read_with_migration`.
+    pub fn from_legacy(c: &SectionClassification) -> Self {
+        let (mode, posture, frame) = match c.primary_type {
+            SectionType::Fiction => (
+                DiscourseMode::Narrative,
+                EpistemicPosture::Fictional,
+                TemporalFrame::Episodic,
+            ),
+            SectionType::ArgumentativeEssay => (
+                DiscourseMode::Argumentative,
+                EpistemicPosture::Normative,
+                TemporalFrame::Atemporal,
+            ),
+            SectionType::Criticism => (
+                DiscourseMode::Argumentative,
+                EpistemicPosture::Normative,
+                TemporalFrame::Atemporal,
+            ),
+            SectionType::Journal => (
+                DiscourseMode::Reflective,
+                EpistemicPosture::Factual,
+                TemporalFrame::Episodic,
+            ),
+            SectionType::MeetingRecord => (
+                DiscourseMode::Descriptive,
+                EpistemicPosture::Factual,
+                TemporalFrame::Episodic,
+            ),
+            SectionType::Reference => (
+                DiscourseMode::Descriptive,
+                EpistemicPosture::Factual,
+                TemporalFrame::Atemporal,
+            ),
+            SectionType::ProjectNote => (
+                DiscourseMode::Procedural,
+                EpistemicPosture::Factual,
+                TemporalFrame::Prospective,
+            ),
+            SectionType::Poetry => (
+                DiscourseMode::Lyric,
+                EpistemicPosture::Fictional,
+                TemporalFrame::Atemporal,
+            ),
+            SectionType::Mixed | SectionType::Unknown => (
+                DiscourseMode::Descriptive,
+                EpistemicPosture::Factual,
+                TemporalFrame::Atemporal,
+            ),
+        };
+        let mut dist = DiscourseModeDistribution::solo(mode);
+        // If the legacy record carried a secondary_type, project it as
+        // a 0.50/0.50 split. Otherwise stay degenerate at 1.0.
+        if let Some(secondary) = c.secondary_type {
+            let secondary_mode = match secondary {
+                SectionType::Fiction => DiscourseMode::Narrative,
+                SectionType::ArgumentativeEssay | SectionType::Criticism => {
+                    DiscourseMode::Argumentative
+                }
+                SectionType::Journal => DiscourseMode::Reflective,
+                SectionType::MeetingRecord | SectionType::Reference => {
+                    DiscourseMode::Descriptive
+                }
+                SectionType::ProjectNote => DiscourseMode::Procedural,
+                SectionType::Poetry => DiscourseMode::Lyric,
+                SectionType::Mixed | SectionType::Unknown => DiscourseMode::Descriptive,
+            };
+            if secondary_mode != mode {
+                dist.primary_weight = 0.5;
+                dist.secondaries.push((secondary_mode, 0.5));
+            }
+        }
+        Self {
+            section_id: c.section_id.clone(),
+            discourse_mode: dist,
+            epistemic_posture: posture,
+            temporal_frame: frame,
+            audience_relation: None,
+            content_hash: c.content_hash.clone(),
+            classified_at_unix: c.classified_at_unix,
+            reasoning: c.reasoning.clone(),
+        }
+    }
+}
+
+/// Result of the Phase 0 classifier for one section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionClassification {
+    pub section_id: String,
+    pub primary_type: SectionType,
+    /// Model self-reported certainty, `0.0..=1.0`. Low confidence
+    /// (< 0.6) is a signal for the runner to also dispatch the
+    /// `secondary_type` Phase 1 schema as a safety net. The raw
+    /// number flows to telemetry so we can spot a classifier that's
+    /// systematically over-confident on a particular genre.
+    pub confidence: f32,
+    /// Populated when `primary_type == Mixed` OR the model surfaced
+    /// a credible second-best fit. The runner fans out to both
+    /// primary + secondary Phase 1 schemas and merges atom sets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary_type: Option<SectionType>,
+    /// Short rationale (1-2 sentences) explaining the classifier's
+    /// choice. Routed to telemetry + visible in `enrich classify`
+    /// CLI output. Not load-bearing for downstream phases.
+    #[serde(default)]
+    pub reasoning: String,
+    /// SHA-256 short hash (16 hex chars) of the section text seen
+    /// at classify time. Used by the runner to invalidate the
+    /// cached classification when the section content changes —
+    /// without this, a stale classification persists across edits
+    /// to a chapter and the routed Phase 1 keeps dispatching the
+    /// wrong schema.
+    pub content_hash: String,
+    /// Unix seconds when the classification was written. Surfaced
+    /// in the CLI so an operator can see how stale the cache is.
+    pub classified_at_unix: u64,
+}
+
+/// On-disk shape of `cache/section_classifications.json`.
+/// Schema-version-stamped per the existing cache convention.
+///
+/// **v2 (current).** `classifications` carries
+/// `SectionClassificationVector` records — per-section MECE
+/// classification across Discourse Mode / Epistemic Posture /
+/// Temporal Frame axes.
+///
+/// **v1 (back-compat read).** Old `cache/section_classifications.json`
+/// files carry the flat `SectionType` records under the same field
+/// name. They deserialise via [`SectionClassificationsFile::from_json_with_migration`],
+/// which peeks at `schema_version`, parses v1 into a side struct,
+/// and projects each record into a degenerate vector (primary
+/// discourse mode @ 1.0, no secondaries) before returning.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SectionClassificationsFile {
+    pub schema_version: u32,
+    /// Producer-pipeline id (`obsidian_atlas`, …) so a cache produced
+    /// by one pipeline doesn't get silently consumed by another with
+    /// different routing rules.
+    pub pipeline_id: String,
+    /// v2 axis vectors.
+    #[serde(default)]
+    pub classifications: Vec<SectionClassificationVector>,
+    pub written_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// v1 on-disk shape, for migration reads only. Same JSON layout as
+/// the pre-v2 `SectionClassificationsFile`. The migration helper
+/// matches on `schema_version` and routes to this struct when it
+/// reads `1`, then projects each record into a v2 vector. The
+/// `schema_version` field is read by serde but otherwise unused
+/// — the migration helper pre-routes on it via a `Value` probe.
+#[derive(Debug, Clone, Deserialize)]
+struct SectionClassificationsFileV1 {
+    #[allow(dead_code)]
+    schema_version: u32,
+    pipeline_id: String,
+    #[serde(default)]
+    classifications: Vec<SectionClassification>,
+    written_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl SectionClassificationsFile {
+    /// v2: classifications carry `SectionClassificationVector` over
+    /// MECE axes. v1 files (flat `SectionType` records) are migrated
+    /// transparently by `from_json_with_migration()`.
+    pub const SCHEMA_VERSION: u32 = 2;
+
+    /// Read + transparently migrate a classifications cache. Returns
+    /// the file with `classifications` populated regardless of the
+    /// on-disk version:
+    ///
+    /// - **v2 file** → parsed directly.
+    /// - **v1 file** → parsed into [`SectionClassificationsFileV1`]
+    ///   and each record projected via
+    ///   [`SectionClassificationVector::from_legacy`] into a
+    ///   degenerate vector.
+    ///
+    /// On migration, `schema_version` is bumped to the current
+    /// `SCHEMA_VERSION` so a subsequent save writes the v2 shape.
+    pub fn from_json_with_migration(raw: &str) -> Result<Self, serde_json::Error> {
+        let probe: serde_json::Value = serde_json::from_str(raw)?;
+        let version = probe
+            .get("schema_version")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        if version >= Self::SCHEMA_VERSION {
+            serde_json::from_value(probe)
+        } else {
+            let v1: SectionClassificationsFileV1 = serde_json::from_value(probe)?;
+            let classifications: Vec<SectionClassificationVector> = v1
+                .classifications
+                .iter()
+                .map(SectionClassificationVector::from_legacy)
+                .collect();
+            Ok(SectionClassificationsFile {
+                schema_version: Self::SCHEMA_VERSION,
+                pipeline_id: v1.pipeline_id,
+                classifications,
+                written_at: v1.written_at,
+            })
+        }
+    }
+}
+
 // ── Phase 1: per-chapter question extraction ──────────────────
 
 /// Input to phase 1. Constructed by the runner from the chunk index +

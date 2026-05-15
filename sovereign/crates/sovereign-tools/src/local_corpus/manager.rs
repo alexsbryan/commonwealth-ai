@@ -95,6 +95,14 @@ pub struct LocalCorpusManager {
     inference: Option<Arc<dyn InferenceProvider>>,
     data_dir: PathBuf,
     snapshot_root: PathBuf,
+    /// Directory the manager writes generated recipe TOMLs to —
+    /// `<recipes_dir>/<corpus_id>.toml`. Must match the
+    /// `CorpusEngine`'s `overrides_dir` so `fetch_recipe(corpus_id)`
+    /// resolves at apply time. Defaulted by [`init`] to
+    /// `{data_dir}/local-corpus-recipes/`; production daemons should
+    /// use [`init_with_recipes_dir`] to point this at the engine's
+    /// own recipes_dir.
+    recipes_dir: PathBuf,
     corpora: RwLock<HashMap<String, LocalCorpusConfig>>,
     /// Cache of the most recent `LabeledClusterResult` per corpus, so
     /// `build_preview` can be called separately from `cluster` without
@@ -134,12 +142,47 @@ impl LocalCorpusManager {
     /// `{data_dir}/local-corpus-staging/`. `snapshot_root` is the
     /// default root for vault snapshots (used only by Obsidian flows,
     /// M5).
+    ///
+    /// Defaults the recipe-output directory to
+    /// `{data_dir}/local-corpus-recipes/`. The daemon should prefer
+    /// [`init_with_recipes_dir`] so the manager writes recipes into
+    /// the same path the engine reads from — otherwise sweeps error
+    /// with `No registry entry for corpus '…'`.
     pub async fn init(
         engine: Arc<CorpusEngine>,
         store: Arc<dyn StateStore>,
         inference: Option<Arc<dyn InferenceProvider>>,
         data_dir: PathBuf,
         snapshot_root: PathBuf,
+    ) -> Result<Self> {
+        let default_recipes_dir = data_dir.join("local-corpus-recipes");
+        Self::init_with_recipes_dir(
+            engine,
+            store,
+            inference,
+            data_dir,
+            snapshot_root,
+            default_recipes_dir,
+        )
+        .await
+    }
+
+    /// Same as [`init`] but with an explicit `recipes_dir`. The
+    /// daemon's `CorpusEngine` is constructed with one overrides
+    /// directory; the manager must write its generated recipe TOMLs
+    /// into the same directory, otherwise the engine's
+    /// `fetch_recipe(corpus_id)` returns `No registry entry for
+    /// corpus '<id>'` and every reconciliation sweep errors at apply
+    /// time. Threading the directory through here lets the daemon
+    /// keep the two in sync without colocating production-layout
+    /// constants in two crates.
+    pub async fn init_with_recipes_dir(
+        engine: Arc<CorpusEngine>,
+        store: Arc<dyn StateStore>,
+        inference: Option<Arc<dyn InferenceProvider>>,
+        data_dir: PathBuf,
+        snapshot_root: PathBuf,
+        recipes_dir: PathBuf,
     ) -> Result<Self> {
         let corpora_dir = config_dir(&data_dir);
         std::fs::create_dir_all(&corpora_dir)
@@ -153,6 +196,7 @@ impl LocalCorpusManager {
             inference,
             data_dir,
             snapshot_root,
+            recipes_dir,
             corpora: RwLock::new(corpora),
             cluster_results: RwLock::new(HashMap::new()),
             ocr_ctx: RwLock::new(None),
@@ -645,9 +689,13 @@ impl LocalCorpusManager {
             return Ok(stats);
         }
 
-        // 3. Write recipe TOML to a temp file.
+        // 3. Write recipe TOML to a temp file. Output goes into
+        // `self.recipes_dir`, which the daemon configures to match
+        // `CorpusEngine`'s `overrides_dir` — without that alignment
+        // the sweep's first `apply_update` call errors with `No
+        // registry entry for corpus '<id>'`.
         let recipe = recipe_toml(&config, &staging);
-        let recipe_path = recipe_path_for(&self.data_dir, &config.id);
+        let recipe_path = recipe_path_for(&self.recipes_dir, &config.id);
         if let Some(parent) = recipe_path.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| Error::Execution(format!("create recipe dir: {e}")))?;
@@ -769,6 +817,54 @@ impl LocalCorpusManager {
             Error::NotFound(format!("local corpus '{id}' not registered"))
         })?;
         Ok(super::git::check_git_repo(&cfg.root_path))
+    }
+
+    /// Best-effort writeback refresh used by the live-sync
+    /// reconciliation worker. Returns `Ok(None)` when there is no
+    /// cached cluster result for the corpus — the user hasn't built a
+    /// Map of Content yet, so there are no tags to refresh. Returns
+    /// `Ok(Some(result))` when writeback executed against the cached
+    /// preview.
+    ///
+    /// Idempotent against unchanged input: `WriteBack::execute` skips
+    /// the per-note write when the merged frontmatter is byte-identical
+    /// to disk (post Phase A2), so calling this every sweep with no
+    /// new cluster work doesn't churn mtimes.
+    ///
+    /// Caller (the worker) is responsible for:
+    ///   - Debouncing (e.g., 5-minute window via
+    ///     `WatchedFolderState.last_writeback_unix`).
+    ///   - Patching `WatchedFolderState.entries` with the returned
+    ///     `WriteBackResult.touched_user_notes` so the very-next walker
+    ///     sweep's fast-path doesn't re-detect this writeback's mtime
+    ///     bumps as user edits.
+    pub async fn refresh_writeback_if_clustered(
+        &self,
+        id: &str,
+    ) -> Result<Option<super::writeback::WriteBackResult>> {
+        let cfg = self.get(id).await.ok_or_else(|| {
+            Error::NotFound(format!("local corpus '{id}' not registered"))
+        })?;
+        let Some(wb_cfg) = cfg.write_back.clone() else {
+            return Ok(None);
+        };
+        // No cached cluster → no preview to write back → benign skip.
+        // The caller treats this as "writeback not applicable yet,"
+        // not a failure.
+        let has_clusters = self.cluster_results.read().await.contains_key(id);
+        if !has_clusters {
+            return Ok(None);
+        }
+        let cluster_cfg = super::clusterer::ClusterConfig::default();
+        let preview = self.get_preview(id, &cluster_cfg).await?;
+        let wb = super::writeback::WriteBack::new(
+            wb_cfg,
+            cfg.root_path.clone(),
+            cfg.id.clone(),
+        );
+        let version = (wb.list_snapshots().map(|s| s.len()).unwrap_or(0) as u32) + 1;
+        let result = wb.execute(&preview, version, None).await?;
+        Ok(Some(result))
     }
 
     /// Write tags (and optional index notes) for a previously-computed
@@ -972,6 +1068,22 @@ impl LocalCorpusManager {
             .await
             .values()
             .filter(|c| c.source_type.is_watched())
+            .cloned()
+            .collect()
+    }
+
+    /// Snapshot of every corpus the reconciliation worker should
+    /// sweep. Covers `WatchedFolder` *and* `ObsidianVault` — both
+    /// surface user edits that must reflect into the index. Used by
+    /// `watched_folder_setup::WatchedSubsystem::install` to seed the
+    /// scheduler on daemon startup. `DocumentFolder` corpora are
+    /// one-shot and excluded.
+    pub async fn list_reconcilable(&self) -> Vec<LocalCorpusConfig> {
+        self.corpora
+            .read()
+            .await
+            .values()
+            .filter(|c| c.source_type.should_reconcile())
             .cloned()
             .collect()
     }
@@ -1396,10 +1508,13 @@ fn config_file(data_dir: &Path, corpus_id: &str) -> PathBuf {
     config_dir(data_dir).join(format!("{corpus_id}.json"))
 }
 
-fn recipe_path_for(data_dir: &Path, corpus_id: &str) -> PathBuf {
-    data_dir
-        .join("local-corpus-recipes")
-        .join(format!("{corpus_id}.toml"))
+/// Resolve the recipe-TOML path for a corpus inside the manager's
+/// configured `recipes_dir`. The directory is the manager's
+/// per-instance setting (see [`LocalCorpusManager::init_with_recipes_dir`])
+/// — it is NOT derived from `data_dir` anymore so the daemon can
+/// align it with the engine's `overrides_dir`.
+fn recipe_path_for(recipes_dir: &Path, corpus_id: &str) -> PathBuf {
+    recipes_dir.join(format!("{corpus_id}.toml"))
 }
 
 fn persist_config(dir: &Path, config: &LocalCorpusConfig) -> Result<()> {
@@ -1650,10 +1765,11 @@ mod tests {
 
     #[test]
     fn recipe_path_layout_includes_corpus_id() {
-        let p = recipe_path_for(Path::new("/tmp/data"), "folder-abc123");
-        assert_eq!(
-            p,
-            PathBuf::from("/tmp/data/local-corpus-recipes/folder-abc123.toml")
-        );
+        // recipe_path_for now takes the recipes_dir directly — the
+        // caller (manager) supplies whatever directory the daemon
+        // aligned with `CorpusEngine`'s overrides_dir. The function
+        // is a flat join + ".toml" suffix.
+        let p = recipe_path_for(Path::new("/tmp/data/recipes"), "folder-abc123");
+        assert_eq!(p, PathBuf::from("/tmp/data/recipes/folder-abc123.toml"));
     }
 }

@@ -1,0 +1,363 @@
+# Golden set for Alex Bryan's personal vault at
+# /Users/alexsbryan/Documents/Obsidian Vault (root essays, COMMONWEALTH/
+# work tree deliberately excluded — see [meta].excluded_paths).
+#
+# Schema mirrors `bench/literary/{bk-book-1,dubliners-3}.toml` (consumed
+# by `sovereign enrich eval`, see `enrich_cmd/eval.rs:240+`).
+#
+# This is a "live" golden — every expected_* entry below references
+# concrete entities, concepts, or claims that appear verbatim in the
+# author's vault as of the file's most recent edit. When a note is
+# rewritten enough that an entry no longer holds, the entry comes out
+# of the golden — drift over time is the cost of grounding in real
+# content, and worth paying for measurement that reflects the actual
+# tuning surface.
+#
+# Authoring date: 2026-05-14. Sampled ~10 root essays
+# (Ostrom Summary, Joan Robinson, The Rules Are The Game,
+# Pharmacy Benefit, AI Bullcase, Beyond GDP, Jane Jacobs Urban Ranking,
+# LVT, Stock Buybacks, Incompleteness) to ground entries.
+#
+# Match semantics:
+#   * `canonical_name_contains_any` — case-insensitive substring of the
+#     candidate atom's display name; ANY listed substring satisfies.
+#   * `description_keywords_any` — case-insensitive substring of the
+#     atom's description / claim / crux text; informational only.
+#   * `participants_any` — ANY listed name appears in the participants
+#     list (resolved through entity_name_by_id).
+#   * `forbidden_*` blocks count as anti-tests.
+
+[meta]
+template = "obsidian-real-vault-2026-05-14"
+description = "Golden set for Alex Bryan's personal vault — root essays only. Heterogeneous topic range: institutional economics, urban planning, market design, NFL as designed system, AI investment stack, pharmacy benefit managers, land value tax, philosophy of music."
+vault_path = "/Users/alexsbryan/Documents/Obsidian Vault"
+excluded_paths = [
+    "COMMONWEALTH/",
+    "_sovereign-index/",
+    ".obsidian/",
+    "Untitled.md",
+    "Untitled 1.md",
+]
+
+# ── Phase 1 atoms: persons (named individuals across the root essays) ─
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Elinor Ostrom", "Ostrom"]
+description_keywords_any = ["Nobel", "commons", "common-pool", "Valencia", "Tribunal", "Hardin"]
+note = "Anchor of Ostrom Summary + several cluster MoCs. The 2009 Nobel and the Valencia water court are the most likely description keywords."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Garrett Hardin", "Hardin"]
+description_keywords_any = ["Tragedy of the Commons", "1968", "thought experiment", "Ostrom"]
+note = "Foil to Ostrom. Surname-only references are common; alias resolution test."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Joan Robinson"]
+description_keywords_any = ["Cambridge", "Keynes", "monopolistic", "imperfect competition", "capital"]
+note = "Joan Robinson note. Cambridge capital controversy is the signature association."
+
+[[expected_person_atoms]]
+canonical_name_contains_any = ["Jane Jacobs", "Jacobs"]
+description_keywords_any = ["Death and Life", "four generators", "diversity", "short blocks", "border vacuum"]
+note = "Recurring across Jane Jacobs Urban Ranking + others. Surname-only references should resolve to her, not to a different Jacobs."
+
+# ── Forbidden persons ──────────────────────────────────────────────
+
+[[forbidden_person_atoms]]
+canonical_name_contains_any = ["the author", "the narrator", "the user", "the writer"]
+note = "Generic first-person referents are not Person atoms. Symmetric to the 'narrator' anti-test in dubliners-3."
+
+[[forbidden_person_atoms]]
+canonical_name_contains_any = ["1968", "2009", "1974", "ERISA"]
+note = "Years and statute names are not Person atoms — a known failure mode for date-shaped or ALL-CAPS tokens in some Phase 1 extractions."
+
+[[forbidden_person_atoms]]
+canonical_name_contains_any = ["NFL", "PBM", "ASML", "TSMC", "NVIDIA", "FTC", "FOMC"]
+note = "Org/agency acronyms are Institution atoms (or Concepts), not Persons. Tests the extractor's promotion discipline on capitalised abbreviations."
+
+# ── Phase 1 atoms: concepts (named ideas / domain terms) ───────────
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["tragedy of the commons"]
+description_keywords_any = ["Hardin", "1968", "thought experiment", "model", "open access"]
+note = "The Ostrom-Hardin duality concept. Should appear once even though it's discussed across multiple notes."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["common-pool resource", "commons", "polycentric"]
+description_keywords_any = ["Ostrom", "design principles", "Valencia", "Maine", "lobster", "irrigation"]
+note = "Ostrom's positive contribution. Tests whether the extractor lifts a domain-of-art concept that isn't a person or org."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["salary cap", "revenue sharing", "draft"]
+description_keywords_any = ["NFL", "designed system", "rules", "competitive", "Green Bay"]
+note = "Central concept of The Rules Are The Game. Multiple NFL mechanisms — extractor may produce them as one concept or three; both shapes are credited."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["capture", "regulatory capture", "rule capture"]
+description_keywords_any = ["officials", "lobbying", "rigged", "hollowed", "appearance"]
+note = "The Rules Are The Game's named failure mode. Distinct from the 'free-market vs regulation' concept the same note critiques."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["land value tax", "LVT"]
+description_keywords_any = ["unimproved", "speculation", "progressive", "George"]
+note = "LVT note's core proposal. Henry George heritage may or may not appear depending on how Phase 1 reads tax-policy prose."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["pharmacy benefit manager", "PBM"]
+description_keywords_any = ["rebate", "spread pricing", "formulary", "CVS", "Express Scripts"]
+note = "Pharmacy Benefit note's central institution. The big-three concentration is the load-bearing claim."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["spread pricing"]
+description_keywords_any = ["arbitrage", "opacity", "Ohio", "Medicaid", "$1.4 billion"]
+note = "Specific mechanism inside the PBM essay. Tests sub-concept extraction — does the model produce 'spread pricing' as a distinct atom from 'PBM' itself?"
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["four generators", "diversity", "Jacobs' conditions"]
+description_keywords_any = ["short blocks", "building-age", "mixed-use", "density", "Death and Life"]
+note = "Jane Jacobs's framework. Phrasing varies — 'four conditions' / 'four generators' / 'Jacobs' framework' all credit."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["border vacuum"]
+description_keywords_any = ["freeway", "boundary", "discontinuous", "Jacobs"]
+note = "Specific Jacobsian term that's idiosyncratic enough to test technical-vocabulary preservation."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["EUV lithography", "ASML", "EUV"]
+description_keywords_any = ["monopoly", "chip", "leading-edge", "TSMC"]
+note = "AI Bullcase's deepest-rent claim. ASML may surface as Concept (the tech monopoly) or Institution (the firm) — either credits."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["high-bandwidth memory", "HBM"]
+description_keywords_any = ["Hynix", "Samsung", "Micron", "AI", "data center", "Margins"]
+note = "Mid-stack rent layer in AI Bullcase. Three-firm oligopoly is the specific structural claim."
+
+[[expected_concept_atoms]]
+canonical_name_contains_any = ["beyond GDP", "GDP critique", "alternative welfare"]
+description_keywords_any = ["welfare", "measurement", "household", "wellbeing"]
+note = "Beyond GDP essay. Phrasing varies but the critique-of-aggregate-measurement angle should land."
+
+# ── Forbidden concepts ─────────────────────────────────────────────
+
+[[forbidden_concept_atoms]]
+canonical_name_contains_any = ["the Karamazov family", "Father Zossima"]
+note = "Smoke test — must not bleed from literary goldens."
+
+[[forbidden_concept_atoms]]
+canonical_name_contains_any = ["the project", "the work", "the writeup", "the essay", "the article"]
+note = "Generic referent phrases are not Concept atoms — they are deictic devices."
+
+[[forbidden_concept_atoms]]
+canonical_name_contains_any = ["good push", "your textbook", "based on our discussion"]
+note = "Conversational scaffolding phrases that appear in dialogue-style notes (LVT.md opens with 'Based on our discussion'). Extractor must filter dialog framing from substantive concepts."
+
+# ── Phase 1 atoms: institutions / orgs (heterogeneous content tier) ─
+
+[[expected_event_atoms]]
+description_contains_any = ["Ostrom Nobel", "Ostrom won the Nobel", "Nobel Prize in Economics", "2009"]
+note = "Discrete event referenced in Ostrom Summary's final paragraph. Tests whether the extractor lifts an event embedded in an argumentative essay (not a meeting note or journal entry)."
+
+[[expected_event_atoms]]
+description_contains_any = ["CVS Caremark merger", "CVS-Caremark", "CVS merged with Caremark", "$26.5 billion"]
+note = "Specific named M&A event in Pharmacy Benefit. Tests whether dollar-figure events round-trip with their amounts as description keywords."
+
+[[expected_event_atoms]]
+description_contains_any = ["Pruitt-Igoe", "demolition of Pruitt-Igoe", "modernist planning failure"]
+note = "Named historical event in Jane Jacobs Urban Ranking. Symbol of modernist planning failure."
+
+# ── Phase 1 atoms: questions (recurring open questions in vault prose) ─
+
+[[expected_question_atoms]]
+content_contains_any = ["capture", "rigged", "hollowed", "legitimate competitive system"]
+note = "Rules Are The Game's animating question — how do you tell a legitimate competitive system from a captured one. Question may surface as a Claim atom instead of a Question; either credits if keywords match."
+
+[[expected_question_atoms]]
+content_contains_any = ["oversupply", "cycle", "2027", "2030", "demand-side", "rent unwind"]
+note = "AI Bullcase's animating question — when does the rent unwind. Tests retrieval of a forward-looking analytical question."
+
+# ────────────────────────────────────────────────────────────────────
+# v2 — Routed Phase 1 typed-extension axes (Argumentative discourse)
+# ────────────────────────────────────────────────────────────────────
+#
+# These axes score the `type_extensions` field on the Phase 1 cache —
+# atoms the routed dispatcher (`sovereign enrich extract-typed`)
+# produces when the Phase 0 classifier's discourse-mode vector
+# surfaces `argumentative` above the routing threshold. Match
+# semantics:
+#
+#   * `name_contains_any` / `label_contains_any` /
+#     `content_contains_any` — case-insensitive substring of the
+#     candidate atom's named field; ANY listed substring satisfies.
+#   * Optional `*_contains_any` filters (`domain`, `content`,
+#     `proponent`, `axis`, `supports`, `addresses`) tighten the
+#     match when supplied; empty = unconstrained.
+#   * Discriminator fields (`stance`, `kind`, `outcome`) require
+#     exact case-insensitive match against the canonical enum
+#     literal; absent = unconstrained.
+#
+# A `description_keywords_any` divergence (mechanism only) is
+# informational — it lands in the report notes but does not move
+# the F1 score, mirroring the `expected_*_atoms` semantics above.
+
+# ── Mechanisms (the named levers the argument turns on) ─────────────
+
+[[expected_mechanism_atoms]]
+name_contains_any = ["spread pricing", "PBM spread", "rebate wall", "DIR fees", "DIR fee"]
+description_keywords_any = ["pharmacy", "insurer", "drug", "rebate", "manufacturer"]
+domain_contains_any = ["economics", "pharmacy", "healthcare"]
+note = "Pharmacy Benefit's load-bearing mechanism set. Spread pricing + rebate wall are the two the essay most consistently names; DIR fees vary by draft."
+
+[[expected_mechanism_atoms]]
+name_contains_any = ["EUV monopoly", "EUV", "extreme ultraviolet"]
+description_keywords_any = ["ASML", "lithography", "leading-edge", "monopoly", "fabs"]
+domain_contains_any = ["economics", "semiconductors", "technology"]
+note = "AI Bullcase's chokepoint mechanism. The 'one company makes the machine that makes the chip' framing."
+
+[[expected_mechanism_atoms]]
+name_contains_any = ["custom-silicon substitution", "custom silicon", "hyperscaler chips", "in-house silicon"]
+description_keywords_any = ["TPU", "Trainium", "Maia", "GPU", "NVIDIA", "margins"]
+domain_contains_any = ["economics", "semiconductors", "technology"]
+note = "AI Bullcase's unwind mechanism — hyperscalers compress GPU rents via own-chip routing. Tests whether mechanism atoms capture the *substitution* path not just the *substitute*."
+
+[[expected_mechanism_atoms]]
+name_contains_any = ["salary cap", "revenue sharing", "draft"]
+description_keywords_any = ["NFL", "competitive balance", "designed", "league", "teams"]
+domain_contains_any = ["sports", "institutional design", "economics"]
+note = "Rules Are The Game's institutional mechanisms. Tests cross-domain extraction — mechanism atoms from a sports-design essay land alongside econ-essay mechanisms."
+
+[[expected_mechanism_atoms]]
+name_contains_any = ["land value tax", "LVT", "Henry George"]
+description_keywords_any = ["land", "unimproved", "rent", "Henry George", "tax base"]
+domain_contains_any = ["economics", "urbanism", "tax"]
+note = "LVT essay's central mechanism. Tests whether a named-after-its-author mechanism extracts cleanly with both forms."
+
+[[expected_mechanism_atoms]]
+name_contains_any = ["share buyback", "stock buyback", "buyback", "10b-18"]
+description_keywords_any = ["repurchase", "SEC", "1982", "dividend", "earnings per share"]
+domain_contains_any = ["economics", "finance", "regulation"]
+note = "Stock Buybacks essay's central mechanism. Tests the Rule 10b-18 regulatory-history thread surfacing as a mechanism rather than disappearing into a Claim."
+
+# ── Named positions (the whole-views the section argues with) ───────
+
+[[expected_named_position_atoms]]
+name_contains_any = ["tragedy of the commons", "Hardin's tragedy", "tragedy thesis"]
+content_contains_any = ["overgrazing", "inevitable", "common-pool", "ruin"]
+proponent_contains_any = ["Hardin", "Garrett Hardin"]
+stance = "rebut"
+note = "Ostrom Summary explicitly rebuts Hardin's tragedy framing — tests stance attribution + proponent linking."
+
+[[expected_named_position_atoms]]
+name_contains_any = ["third pattern", "third-way", "third way", "polycentric", "nested governance", "commons governance", "Ostrom's third", "Ostrom's view"]
+proponent_contains_any = ["Ostrom"]
+stance = "endorse"
+note = "Ostrom Summary's load-bearing named position. Variants accept the LLM's natural phrasings (third-way, polycentric) alongside the academic-canon term (third pattern). Endorse stance + Ostrom proponent should both land."
+
+[[expected_named_position_atoms]]
+name_contains_any = ["rent-concentration", "rent concentration thesis", "AI rent thesis"]
+content_contains_any = ["chokepoint", "monopoly", "extract", "ASML", "memory"]
+stance = "endorse"
+note = "AI Bullcase's animating thesis. Tests endorse-stance without explicit proponent (it's the section's own voice)."
+
+[[expected_named_position_atoms]]
+name_contains_any = ["capture thesis", "regulatory capture", "PBM capture", "extraction critique", "extractive intermediation"]
+content_contains_any = ["PBM", "extract", "rent", "regulatory"]
+stance = "endorse"
+note = "Pharmacy Benefit's capture framing. Tests that 'regulatory capture' surfaces as a position (the section defends it) rather than only as a Concept atom. Out-of-subset for the 10-section iter2 run."
+
+[[forbidden_named_position_atoms]]
+name_contains_any = ["the author's position", "the essay's view", "the writer's stance", "my opinion"]
+note = "Self-referential framing should not produce position atoms — positions are NAMED whole-views, not deictic gestures."
+
+# ── Evidence invocations (the citations / figures / examples) ───────
+
+[[expected_evidence_atoms]]
+label_contains_any = ["$1.4B FTC", "$1.4 billion FTC", "FTC report", "FTC PBM"]
+content_contains_any = ["FTC", "PBM", "spread", "billion"]
+kind = "figure"
+supports_contains_any = ["spread pricing", "capture", "extract"]
+note = "Pharmacy Benefit's most-cited dollar figure. Tests label+content+kind+supports all four filter axes."
+
+[[expected_evidence_atoms]]
+label_contains_any = ["Ohio $224.8M", "Ohio Medicaid", "Ohio PBM audit", "Ohio audit"]
+content_contains_any = ["Ohio", "Medicaid", "audit"]
+kind = "case_study"
+note = "Pharmacy Benefit's state-level case study. Kind=case_study (not figure — even though it has a dollar number, the *unit of evidence* is the audit)."
+
+[[expected_evidence_atoms]]
+label_contains_any = ["Valencia water court", "Tribunal de las Aguas", "Valencia tribunal"]
+content_contains_any = ["Valencia", "water", "centuries"]
+kind = "historical_example"
+supports_contains_any = ["third pattern", "polycentric", "commons", "Ostrom"]
+note = "Ostrom Summary's signature historical example for the third pattern. Tests historical_example kind + multi-position supports."
+
+[[expected_evidence_atoms]]
+label_contains_any = ["Micron net margin", "58% net margin", "memory margins"]
+content_contains_any = ["Micron", "margin", "memory", "quarter"]
+kind = "figure"
+supports_contains_any = ["memory oligopoly", "rent", "extract"]
+note = "AI Bullcase's memory-rent figure. Quarterly-margin figure with supports linking to the broader rent thesis."
+
+[[expected_evidence_atoms]]
+label_contains_any = ["Pruitt-Igoe", "Pruitt Igoe", "Pruitt-Igoe demolition"]
+content_contains_any = ["1972", "St. Louis", "modernist", "demolition"]
+kind = "historical_example"
+note = "Jane Jacobs Urban Ranking's signature counter-example. Date / city / event-type should all appear in the content."
+
+# ── Oppositions (the named X-vs-Y framings) ─────────────────────────
+
+[[expected_opposition_atoms]]
+left_contains_any = ["markets", "free markets", "market discipline"]
+right_contains_any = ["governments", "states", "central authority", "regulation"]
+axis_contains_any = ["governance", "allocation", "commons"]
+note = "Ostrom Summary's framing of the false binary Ostrom dissolves. Order-independent — left/right may flip."
+
+[[expected_opposition_atoms]]
+left_contains_any = ["supply expansion", "new supply", "fab build-out"]
+right_contains_any = ["substitution", "custom silicon", "hyperscaler chips"]
+axis_contains_any = ["unwind", "cycle", "how the cycle ends"]
+note = "AI Bullcase's framing of the two cycle-unwind paths (memory vs GPU). Tests axis attribution."
+
+[[expected_opposition_atoms]]
+left_contains_any = ["towers in a park", "modernist planning", "Le Corbusier"]
+right_contains_any = ["short blocks", "mixed use", "Jacobs", "dense neighbourhood"]
+axis_contains_any = ["urbanism", "city design", "block scale"]
+note = "Jane Jacobs Urban Ranking's foundational opposition. Tests that an essay's load-bearing aesthetic / structural binary surfaces."
+
+[[expected_opposition_atoms]]
+left_contains_any = ["competitive balance", "designed parity", "salary cap"]
+right_contains_any = ["dynasty", "concentration", "winner-takes-most"]
+axis_contains_any = ["league design", "competitive distribution", "outcome variance"]
+note = "Rules Are The Game's central design tension. Order-independent — the essay frames it both ways."
+
+# ── Concessions (the author's 'I grant that …' moves) ───────────────
+
+[[expected_concession_atoms]]
+content_contains_any = ["graveyard of analysts", "called the top", "timing the cycle is hard"]
+addresses_contains_any = ["rent concentration", "AI rent", "AI bullcase"]
+outcome = "intact"
+note = "AI Bullcase's signature concession — acknowledges past failures of similar calls while keeping the structural thesis intact. Tests outcome=intact with addresses linking."
+
+[[expected_concession_atoms]]
+content_contains_any = ["commons fail", "commons can collapse", "self-governance does not", "Hardin is right when", "communities can collapse", "open-access", "where the third pattern doesn't"]
+addresses_contains_any = ["third pattern", "polycentric", "Ostrom"]
+outcome = "narrowed"
+note = "Ostrom Summary's standard concession — grants Hardin's framing in pure open-access cases, narrows the third-pattern claim to bounded commons. Variants accept the model's natural phrasings (commons can collapse, self-governance does not always work)."
+
+[[expected_concession_atoms]]
+content_contains_any = ["PBMs do provide", "rebate negotiation is real", "scale has efficiency benefits"]
+addresses_contains_any = ["capture", "extract", "PBM"]
+outcome = "narrowed"
+note = "Pharmacy Benefit's concession — grants PBMs deliver some genuine intermediation value before pivoting to the extraction critique."
+
+# ── Notes on the held-out posture ──────────────────────────────────
+#
+# v1 of this golden does NOT define a held-out subset. Reason: the
+# author of the vault (Alex) is the author of the golden, which is
+# exactly the unconscious-bias risk the literary pressure-test
+# flagged. A held-out subset addresses it only if a second pair of
+# eyes authors part of the golden — meaningless when the bench is
+# tuned by the same person. The right v2 move is to invite a peer
+# to author entries for ~5 root essays we both consider
+# representative; until then, the bench acceptance is "non-decreasing
+# F1 across prompt revisions" rather than "above absolute
+# threshold."

@@ -41,7 +41,13 @@ use corpus_engine::enrichment::atlas::atoms::{
 };
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType, EdgesFile};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
-use corpus_engine::enrichment::pipeline::atlas::EntityType;
+use corpus_engine::enrichment::pipeline::atlas::{
+    ConcessionSketch, EntityType, EvidenceInvocationSketch, MechanismSketch, OppositionSketch,
+    PositionSketch, TypeExtension,
+};
+use corpus_engine::enrichment::pipeline::types::Phase1Output;
+use corpus_engine::enrichment::pipeline::PipelinePhase;
+use corpus_engine::enrichment::pipeline::PhaseCache;
 use corpus_engine::enrichment::skeleton::{FieldSkeleton, SkeletonPosition};
 use serde::{Deserialize, Serialize};
 
@@ -133,7 +139,12 @@ pub(super) fn score_corpus(
     let golden = GoldenSet::load(golden_path)?;
     let atlas_dir = paths::index_root(corpus_id).join(ATLAS_DIRNAME);
     let skeleton_path = paths::index_root(corpus_id).join("field_skeleton.json");
-    let snapshot = AtlasSnapshot::load(&atlas_dir, &skeleton_path)?;
+    let phase1_cache_dir = paths::cache_dir(corpus_id);
+    let snapshot = AtlasSnapshot::load(
+        &atlas_dir,
+        &skeleton_path,
+        Some(&phase1_cache_dir),
+    )?;
     let mut report = score(&golden, &snapshot, phase);
     report.corpus_id = corpus_id.to_string();
     report.golden_path = golden_path.display().to_string();
@@ -286,6 +297,29 @@ struct GoldenSet {
     #[serde(default)]
     #[allow(dead_code)]
     forbidden_edges: Vec<toml::Value>,
+
+    // ─── v2 typed-extension axes (Argumentative discourse mode) ───
+    //
+    // Scored against `Phase1Output.questions_by_chapter[*].
+    // section_extraction.{type_extension, type_extensions}` per
+    // `AtlasSnapshot::argumentative_*`. All axes are optional; an
+    // empty array means "no signal on this axis", not "expected
+    // zero". Goldens for non-argumentative corpora can omit them
+    // entirely.
+    #[serde(default)]
+    expected_mechanism_atoms: Vec<ExpectedMechanism>,
+    #[serde(default)]
+    forbidden_mechanism_atoms: Vec<ForbiddenName>,
+    #[serde(default)]
+    expected_named_position_atoms: Vec<ExpectedNamedPosition>,
+    #[serde(default)]
+    forbidden_named_position_atoms: Vec<ForbiddenName>,
+    #[serde(default)]
+    expected_evidence_atoms: Vec<ExpectedEvidence>,
+    #[serde(default)]
+    expected_opposition_atoms: Vec<ExpectedOpposition>,
+    #[serde(default)]
+    expected_concession_atoms: Vec<ExpectedConcession>,
 }
 
 impl GoldenSet {
@@ -408,6 +442,121 @@ struct ExpectedClaim {
     note: Option<String>,
 }
 
+// ─── Argumentative typed-extension expectations ───────────────────
+//
+// Match policy mirrors `ExpectedAtom`: `*_contains_any` is a
+// case-insensitive substring against the named field; ANY listed
+// substring satisfies the match. Discriminator fields (`stance`,
+// `kind`, `outcome`) require exact match against the canonical
+// snake_case enum literal when supplied — left `None` to skip.
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedMechanism {
+    /// Substrings against the mechanism's `name`. Load-bearing
+    /// signal: a mechanism atom is the named lever the section's
+    /// argument turns on. Mirrors `canonical_name_contains_any` on
+    /// `ExpectedAtom` to keep the golden's verb shape consistent.
+    #[serde(alias = "canonical_name_contains_any")]
+    name_contains_any: Vec<String>,
+    /// Optional substrings against the mechanism's `description`.
+    /// Informational — a name-only hit still counts as a match;
+    /// description divergence surfaces in `name_only_hits`.
+    #[serde(default)]
+    description_keywords_any: Vec<String>,
+    /// Optional substrings against the mechanism's `domain` tag
+    /// (`economics`, `urbanism`, `music`, ...). When non-empty,
+    /// ANY listed substring satisfies; empty = no domain filter.
+    #[serde(default)]
+    domain_contains_any: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedNamedPosition {
+    /// Substrings against the position's `name` ("the
+    /// rent-concentration thesis"; "Hardin's tragedy framing").
+    /// Distinct from `ExpectedPosition` (Phase 1 skeleton) — this
+    /// scores the v2 typed-extension Position sketch.
+    #[serde(alias = "canonical_name_contains_any")]
+    name_contains_any: Vec<String>,
+    /// Optional substrings against the position's `content` (the
+    /// one-sentence statement). Informational; absence does not
+    /// reduce recall.
+    #[serde(default)]
+    content_contains_any: Vec<String>,
+    /// Optional substrings against the position's `proponent` field
+    /// (entity name attribution). Empty = no proponent filter.
+    #[serde(default)]
+    proponent_contains_any: Vec<String>,
+    /// Optional exact-match on the position's `stance`
+    /// (`endorse` | `rebut` | `survey` | `mixed`). None = skip.
+    #[serde(default)]
+    stance: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedEvidence {
+    /// Substrings against the evidence atom's `label` (e.g.
+    /// `"$1.4B FTC PBM spread"`, `"Soviet Aral Sea counter-example"`).
+    label_contains_any: Vec<String>,
+    /// Optional substrings against the evidence atom's `content`
+    /// (the one-sentence statement of what the evidence is).
+    #[serde(default)]
+    content_contains_any: Vec<String>,
+    /// Optional exact-match on the evidence atom's `kind`
+    /// (`study` | `figure` | `historical_example` | `case_study` |
+    /// `personal_anecdote` | `quotation` | `other`). None = skip.
+    #[serde(default)]
+    kind: Option<String>,
+    /// Optional substrings against the evidence atom's `supports`
+    /// field (the claim/position the evidence is invoked to back).
+    /// Empty = no supports filter.
+    #[serde(default)]
+    supports_contains_any: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedOpposition {
+    /// Substrings against the opposition's `left` label.
+    left_contains_any: Vec<String>,
+    /// Substrings against the opposition's `right` label.
+    right_contains_any: Vec<String>,
+    /// Optional substrings against the opposition's `axis` (the
+    /// dimension along which they differ). Empty = no axis filter.
+    #[serde(default)]
+    axis_contains_any: Vec<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ExpectedConcession {
+    /// Substrings against the concession's `content` (the
+    /// one-sentence statement of what the author concedes).
+    content_contains_any: Vec<String>,
+    /// Optional substrings against the concession's `addresses`
+    /// field (the position or claim the concession addresses).
+    /// Empty = no addresses filter.
+    #[serde(default)]
+    addresses_contains_any: Vec<String>,
+    /// Optional exact-match on the concession's `outcome`
+    /// (`intact` | `narrowed` | `retracted`). None = skip.
+    #[serde(default)]
+    outcome: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    note: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct DiscourseActDistribution {
     required_acts_any: Vec<String>,
@@ -465,10 +614,21 @@ struct AtlasSnapshot {
     edges: Option<EdgesFile>,
     gaps: Option<GapsOutput>,
     configurations: Option<ConfigurationsOutput>,
+    /// Phase 1 cache — surfaces per-section typed extensions
+    /// (`section_extraction.type_extensions`) so the typed-atom
+    /// scorers can match against the Phase 1 output directly,
+    /// without waiting on resolver projection (Gap B). `None` when
+    /// the corpus hasn't been Phase-1-extracted yet or is on the
+    /// pre-routed pipeline.
+    phase1: Option<Phase1Output>,
 }
 
 impl AtlasSnapshot {
-    fn load(atlas_dir: &Path, skeleton_path: &Path) -> Result<Self, String> {
+    fn load(
+        atlas_dir: &Path,
+        skeleton_path: &Path,
+        phase1_cache_dir: Option<&Path>,
+    ) -> Result<Self, String> {
         let skeleton = if skeleton_path.exists() {
             let raw = std::fs::read_to_string(skeleton_path)
                 .map_err(|e| format!("read {}: {e}", skeleton_path.display()))?;
@@ -504,13 +664,95 @@ impl AtlasSnapshot {
             None
         };
 
+        // Phase 1 cache lookup. Best-effort: the resolved-atlas
+        // surface is the canonical scoring source, so a missing
+        // cache simply means typed-extension scoring lanes return
+        // "no signal" instead of being treated as zero recall.
+        let phase1 = phase1_cache_dir.and_then(|cache_dir| {
+            let cache = PhaseCache::new(cache_dir.to_path_buf());
+            match cache.read::<Phase1Output>(PipelinePhase::Questions) {
+                Ok(Some(p)) => Some(p),
+                _ => None,
+            }
+        });
+
         Ok(Self {
             skeleton,
             atoms,
             edges,
             gaps,
             configurations,
+            phase1,
         })
+    }
+
+    // ─── Typed-extension accessors (Phase 1 cache) ────────────────
+    //
+    // Each accessor walks `questions_by_chapter[*].section_extraction`
+    // and visits every active `TypeExtension` on that section — both
+    // the v2 plural slot (`type_extensions: Vec<TypeExtension>`) and
+    // the v1 legacy singular (`type_extension: Option<TypeExtension>`).
+    // Returns the sketches paired with the originating section_id so
+    // scorers can attribute hits and misses to specific sections in
+    // the report.
+
+    fn argumentative_mechanisms(&self) -> Vec<(&str, &MechanismSketch)> {
+        self.iter_argumentative()
+            .flat_map(|(sid, a)| a.mechanisms.iter().map(move |m| (sid, m)))
+            .collect()
+    }
+
+    fn argumentative_positions(&self) -> Vec<(&str, &PositionSketch)> {
+        self.iter_argumentative()
+            .flat_map(|(sid, a)| a.positions.iter().map(move |p| (sid, p)))
+            .collect()
+    }
+
+    fn argumentative_evidence(&self) -> Vec<(&str, &EvidenceInvocationSketch)> {
+        self.iter_argumentative()
+            .flat_map(|(sid, a)| a.evidence_invocations.iter().map(move |e| (sid, e)))
+            .collect()
+    }
+
+    fn argumentative_oppositions(&self) -> Vec<(&str, &OppositionSketch)> {
+        self.iter_argumentative()
+            .flat_map(|(sid, a)| a.oppositions.iter().map(move |o| (sid, o)))
+            .collect()
+    }
+
+    fn argumentative_concessions(&self) -> Vec<(&str, &ConcessionSketch)> {
+        self.iter_argumentative()
+            .flat_map(|(sid, a)| a.concessions.iter().map(move |c| (sid, c)))
+            .collect()
+    }
+
+    /// Iterator over every `(section_id, &ArgumentativeExtension)`
+    /// pair in the Phase 1 cache, regardless of which slot
+    /// (`type_extensions` plural or `type_extension` legacy singular)
+    /// carries it. Used by the five argumentative-axis accessors
+    /// above; pulling the iteration into one place keeps duplicate-
+    /// section-id handling consistent across all five.
+    fn iter_argumentative(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            &str,
+            &corpus_engine::enrichment::pipeline::atlas::ArgumentativeExtension,
+        ),
+    > {
+        self.phase1
+            .iter()
+            .flat_map(|p| p.questions_by_chapter.iter())
+            .flat_map(|q| {
+                let sid = q.chapter_id.as_str();
+                q.section_extraction
+                    .iter()
+                    .flat_map(move |se| se.iter_type_extensions().map(move |ext| (sid, ext)))
+            })
+            .filter_map(|(sid, ext)| match ext {
+                TypeExtension::Argumentative(a) => Some((sid, a)),
+                _ => None,
+            })
     }
 
     fn entities_of_type(&self, kind: EntityType) -> Vec<&Entity> {
@@ -863,6 +1105,14 @@ pub(super) struct EvalReport {
     pub fault_lines: Option<PhaseScore>,
     pub open_questions: Option<PhaseScore>,
     pub configurations: Option<PhaseScore>,
+
+    // v2 typed-extension axes (Argumentative). Each is scored under
+    // `PhaseFilter::Atoms` when its golden axis is non-empty.
+    pub mechanism_atoms: Option<PhaseScore>,
+    pub named_position_atoms: Option<PhaseScore>,
+    pub evidence_atoms: Option<PhaseScore>,
+    pub opposition_atoms: Option<PhaseScore>,
+    pub concession_atoms: Option<PhaseScore>,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
@@ -920,6 +1170,29 @@ fn score(golden: &GoldenSet, snap: &AtlasSnapshot, phase: PhaseFilter) -> EvalRe
         report.claim_atoms = Some(score_claim_atoms(golden, snap));
         if !golden.expected_discourse_act_distribution.is_empty() {
             report.discourse_act_distribution = Some(score_discourse_acts(golden, snap));
+        }
+
+        // v2 typed-extension scoring (Argumentative). Each axis is
+        // scored only when the golden surfaces it; absence ≠ zero
+        // recall.
+        if !golden.expected_mechanism_atoms.is_empty()
+            || !golden.forbidden_mechanism_atoms.is_empty()
+        {
+            report.mechanism_atoms = Some(score_mechanism_atoms(golden, snap));
+        }
+        if !golden.expected_named_position_atoms.is_empty()
+            || !golden.forbidden_named_position_atoms.is_empty()
+        {
+            report.named_position_atoms = Some(score_named_position_atoms(golden, snap));
+        }
+        if !golden.expected_evidence_atoms.is_empty() {
+            report.evidence_atoms = Some(score_evidence_atoms(golden, snap));
+        }
+        if !golden.expected_opposition_atoms.is_empty() {
+            report.opposition_atoms = Some(score_opposition_atoms(golden, snap));
+        }
+        if !golden.expected_concession_atoms.is_empty() {
+            report.concession_atoms = Some(score_concession_atoms(golden, snap));
         }
     }
     // Phase 6 fault lines
@@ -1060,12 +1333,19 @@ fn score_entity_atoms(
              description_keywords_any didn't appear in the extracted description"
         ));
     }
-    // Forbidden checks scan ALL entities regardless of type — see
-    // AtlasSnapshot::all_entities for the rationale (catches the
-    // "narrator as unspecified" / type-evasion failure mode).
-    let all = snap.all_entities();
+    // Forbidden checks scan entities of the SAME type plus
+    // `Other(_)` (the hedge bucket). The type-scoped check is what
+    // makes `forbidden_person_atoms = ["NFL"]` mean "NFL should not
+    // appear AS A PERSON" rather than "NFL should not appear
+    // anywhere" — without scoping, a correctly-classified NFL
+    // Institution would trip the forbidden_person check, conflating
+    // the right call with a regression. The `entities` list defined
+    // above already covers typed-or-unspecified for `kind`; reuse it
+    // so the narrator/type-evasion failure mode still gets caught
+    // (a "narrator" emitted with entity_type=unspecified shows up in
+    // `untyped` and remains in the forbidden scan).
     for fb in forbidden {
-        if all
+        if entities
             .iter()
             .any(|e| matches_any(&e.canonical_name, &fb.name_contains_any))
         {
@@ -1305,6 +1585,319 @@ fn score_claim_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
         } else {
             s.misses
                 .push(ec.content_contains_any.first().cloned().unwrap_or_default());
+        }
+    }
+    s
+}
+
+// ─── Argumentative typed-extension scorers ────────────────────────
+//
+// Each scorer walks the Phase 1 cache via the
+// `AtlasSnapshot::argumentative_*` accessors. The match policy is
+// the same shape as `score_entity_atoms`: `name_contains_any` (or
+// the per-axis name field) is the load-bearing signal, optional
+// `*_contains_any` fields are additional filters that must ALL
+// hold when supplied, and discriminator fields (`stance`, `kind`,
+// `outcome`) are exact-match against the canonical snake_case
+// literal.
+//
+// Forbidden axes (mechanisms, named-positions) follow the
+// `ForbiddenName` convention used by entity scorers: a match is a
+// false positive against the listed substrings; absence is
+// correct silence.
+
+fn score_mechanism_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_mechanism_atoms.len();
+    s.forbidden_total = golden.forbidden_mechanism_atoms.len();
+
+    let mechanisms = snap.argumentative_mechanisms();
+    if snap.phase1.is_none() {
+        s.notes.push(
+            "cache/questions.json absent — typed-extension scoring lanes have no signal"
+                .to_string(),
+        );
+        return s;
+    }
+
+    // Match policy mirrors `score_entity_atoms`: name_contains_any is
+    // the load-bearing gate; description + domain are supplementary
+    // signals that surface in notes when they diverge. Domain in
+    // particular drifts on cross-discipline mechanisms (the model
+    // tags Rule 10b-18 as "law" while a finance-flavoured golden
+    // entry expected "regulation" or "finance") — gating on it
+    // converts a real hit into a miss for no measurement gain.
+    for em in &golden.expected_mechanism_atoms {
+        let hit = mechanisms
+            .iter()
+            .find(|(_, m)| matches_any(&m.name, &em.name_contains_any));
+        match hit {
+            Some((_, m)) => {
+                s.matched += 1;
+                if !em.description_keywords_any.is_empty()
+                    && !matches_any(&m.description, &em.description_keywords_any)
+                {
+                    s.notes.push(format!(
+                        "mechanism name match for {:?} but description keywords did not hit",
+                        m.name
+                    ));
+                }
+                if !em.domain_contains_any.is_empty()
+                    && !matches_any(&m.domain, &em.domain_contains_any)
+                {
+                    s.notes.push(format!(
+                        "mechanism name match for {:?} but domain {:?} not in expected list",
+                        m.name, m.domain
+                    ));
+                }
+            }
+            None => s.misses.push(
+                em.name_contains_any.first().cloned().unwrap_or_default(),
+            ),
+        }
+    }
+    for fm in &golden.forbidden_mechanism_atoms {
+        if mechanisms
+            .iter()
+            .any(|(_, m)| matches_any(&m.name, &fm.name_contains_any))
+        {
+            s.forbidden_hit += 1;
+            s.forbidden_hits
+                .push(fm.name_contains_any.first().cloned().unwrap_or_default());
+        }
+    }
+    s
+}
+
+fn score_named_position_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_named_position_atoms.len();
+    s.forbidden_total = golden.forbidden_named_position_atoms.len();
+
+    let positions = snap.argumentative_positions();
+    if snap.phase1.is_none() {
+        s.notes.push(
+            "cache/questions.json absent — typed-extension scoring lanes have no signal"
+                .to_string(),
+        );
+        return s;
+    }
+
+    // Match policy: name_contains_any is the load-bearing gate; the
+    // stance discriminator is also gating (a "rebut" stance on a
+    // tragedy-of-the-commons position is a different atom from
+    // an "endorse" stance, so the test would be meaningless if the
+    // golden couldn't pin it). Proponent + content are
+    // supplementary signals — content paraphrasing from the LLM
+    // routinely diverges from golden vocabulary, and gating on
+    // content keywords coaches the bench toward exact-quote
+    // matching the prompt didn't ask for.
+    for ep in &golden.expected_named_position_atoms {
+        let hit = positions.iter().find(|(_, p)| {
+            let name_ok = matches_any(&p.name, &ep.name_contains_any);
+            let stance_ok = match &ep.stance {
+                None => true,
+                Some(want) => p.stance.eq_ignore_ascii_case(want),
+            };
+            name_ok && stance_ok
+        });
+        match hit {
+            Some((_, p)) => {
+                s.matched += 1;
+                if !ep.content_contains_any.is_empty()
+                    && !matches_any(&p.content, &ep.content_contains_any)
+                {
+                    s.notes.push(format!(
+                        "position name match for {:?} but content keywords did not hit",
+                        p.name
+                    ));
+                }
+                if !ep.proponent_contains_any.is_empty()
+                    && !matches_any(&p.proponent, &ep.proponent_contains_any)
+                {
+                    s.notes.push(format!(
+                        "position name match for {:?} but proponent {:?} not in expected list",
+                        p.name, p.proponent
+                    ));
+                }
+            }
+            None => s.misses.push(
+                ep.name_contains_any.first().cloned().unwrap_or_default(),
+            ),
+        }
+    }
+    for fp in &golden.forbidden_named_position_atoms {
+        if positions
+            .iter()
+            .any(|(_, p)| matches_any(&p.name, &fp.name_contains_any))
+        {
+            s.forbidden_hit += 1;
+            s.forbidden_hits
+                .push(fp.name_contains_any.first().cloned().unwrap_or_default());
+        }
+    }
+    s
+}
+
+fn score_evidence_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_evidence_atoms.len();
+
+    let evidence = snap.argumentative_evidence();
+    if snap.phase1.is_none() {
+        s.notes.push(
+            "cache/questions.json absent — typed-extension scoring lanes have no signal"
+                .to_string(),
+        );
+        return s;
+    }
+
+    // Match policy: label_contains_any is the load-bearing gate;
+    // kind (study/figure/historical_example/...) is also gating
+    // because miscategorising a $1.4B FTC figure as a study vs a
+    // figure is a real-quality signal. Content + supports are
+    // supplementary — the supports field in particular drifts on
+    // LLM paraphrase (the model may bind a figure to the
+    // "rent-concentration thesis" while the golden wrote
+    // "extraction").
+    for ee in &golden.expected_evidence_atoms {
+        let hit = evidence.iter().find(|(_, e)| {
+            let label_ok = matches_any(&e.label, &ee.label_contains_any);
+            let kind_ok = match &ee.kind {
+                None => true,
+                Some(want) => e.kind.eq_ignore_ascii_case(want),
+            };
+            label_ok && kind_ok
+        });
+        match hit {
+            Some((_, e)) => {
+                s.matched += 1;
+                if !ee.content_contains_any.is_empty()
+                    && !matches_any(&e.content, &ee.content_contains_any)
+                {
+                    s.notes.push(format!(
+                        "evidence label match for {:?} but content keywords did not hit",
+                        e.label
+                    ));
+                }
+                if !ee.supports_contains_any.is_empty()
+                    && !matches_any(&e.supports, &ee.supports_contains_any)
+                {
+                    s.notes.push(format!(
+                        "evidence label match for {:?} but supports {:?} not in expected list",
+                        e.label, e.supports
+                    ));
+                }
+            }
+            None => s.misses.push(
+                ee.label_contains_any.first().cloned().unwrap_or_default(),
+            ),
+        }
+    }
+    s
+}
+
+fn score_opposition_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_opposition_atoms.len();
+
+    let oppositions = snap.argumentative_oppositions();
+    if snap.phase1.is_none() {
+        s.notes.push(
+            "cache/questions.json absent — typed-extension scoring lanes have no signal"
+                .to_string(),
+        );
+        return s;
+    }
+
+    // Match policy: left + right (order-independent) are the
+    // load-bearing gate. Axis is supplementary — it captures the
+    // dimension along which the opposition operates, which the LLM
+    // routinely paraphrases ("how the cycle ends" vs "unwind path"
+    // are semantically the same).
+    for eo in &golden.expected_opposition_atoms {
+        let hit = oppositions.iter().find(|(_, o)| {
+            let direct = matches_any(&o.left, &eo.left_contains_any)
+                && matches_any(&o.right, &eo.right_contains_any);
+            let reversed = matches_any(&o.left, &eo.right_contains_any)
+                && matches_any(&o.right, &eo.left_contains_any);
+            direct || reversed
+        });
+        match hit {
+            Some((_, o)) => {
+                s.matched += 1;
+                if !eo.axis_contains_any.is_empty()
+                    && !matches_any(&o.axis, &eo.axis_contains_any)
+                {
+                    s.notes.push(format!(
+                        "opposition {:?} vs {:?} matched but axis {:?} not in expected list",
+                        o.left, o.right, o.axis
+                    ));
+                }
+            }
+            None => s.misses.push(format!(
+                "{} vs {}",
+                eo.left_contains_any.first().cloned().unwrap_or_default(),
+                eo.right_contains_any.first().cloned().unwrap_or_default()
+            )),
+        }
+    }
+    s
+}
+
+fn score_concession_atoms(golden: &GoldenSet, snap: &AtlasSnapshot) -> PhaseScore {
+    let mut s = PhaseScore::default();
+    s.expected = golden.expected_concession_atoms.len();
+
+    let concessions = snap.argumentative_concessions();
+    if snap.phase1.is_none() {
+        s.notes.push(
+            "cache/questions.json absent — typed-extension scoring lanes have no signal"
+                .to_string(),
+        );
+        return s;
+    }
+
+    // Match policy: content is the primary signal (no label field
+    // on concession sketches). Outcome (intact/narrowed/retracted)
+    // is supplementary — the judgment requires reading the section
+    // beyond the concession itself ("the author concedes X but the
+    // thesis stays intact" vs "the author concedes X and bounds
+    // the thesis to a narrower scope"), and the same passage can
+    // defensibly read either way. Gating on outcome converts real
+    // hits into misses where two reasonable readers disagree.
+    // Addresses is also supplementary; the LLM's binding choice
+    // drifts on paraphrase.
+    for ec in &golden.expected_concession_atoms {
+        let hit = concessions
+            .iter()
+            .find(|(_, c)| matches_any(&c.content, &ec.content_contains_any));
+        match hit {
+            Some((_, c)) => {
+                s.matched += 1;
+                if let Some(want) = &ec.outcome {
+                    if !c.outcome.eq_ignore_ascii_case(want) {
+                        s.notes.push(format!(
+                            "concession content match but outcome {:?} ≠ expected {:?}",
+                            c.outcome, want
+                        ));
+                    }
+                }
+                if !ec.addresses_contains_any.is_empty()
+                    && !matches_any(&c.addresses, &ec.addresses_contains_any)
+                {
+                    s.notes.push(format!(
+                        "concession content match but addresses {:?} not in expected list",
+                        c.addresses
+                    ));
+                }
+            }
+            None => s.misses.push(
+                ec.content_contains_any
+                    .first()
+                    .cloned()
+                    .unwrap_or_default(),
+            ),
         }
     }
     s
@@ -1648,6 +2241,11 @@ fn print_text_report(r: &EvalReport) {
     print_phase_row("relation atoms", r.relation_atoms.as_ref());
     print_phase_row("question atoms", r.question_atoms.as_ref());
     print_phase_row("claim atoms", r.claim_atoms.as_ref());
+    print_phase_row("mechanism atoms (typed)", r.mechanism_atoms.as_ref());
+    print_phase_row("named-position atoms", r.named_position_atoms.as_ref());
+    print_phase_row("evidence atoms (typed)", r.evidence_atoms.as_ref());
+    print_phase_row("opposition atoms", r.opposition_atoms.as_ref());
+    print_phase_row("concession atoms", r.concession_atoms.as_ref());
     print_phase_row("fault lines (Phase 6)", r.fault_lines.as_ref());
     print_phase_row("open questions (P7)", r.open_questions.as_ref());
     print_phase_row("configurations (P8)", r.configurations.as_ref());
