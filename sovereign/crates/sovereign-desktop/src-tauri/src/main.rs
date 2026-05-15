@@ -14,6 +14,7 @@ mod routing_events;
 mod setup_flow;
 mod smoketest;
 mod state;
+mod supervisor;
 mod tray;
 
 use std::process::ExitCode;
