@@ -292,11 +292,43 @@ pub async fn build_session_with_skills(
     //    Use the LLM router here so the chat flow is bit-for-bit
     //    identical to the desktop surface — the point of the CLI is
     //    to reproduce that flow, not a simplified version.
-    let router: Box<dyn sovereign_core::traits::Router> = Box::new(LlmRouter::new(
+    //
+    //    Embed-router pre-check: when the exemplar TOML is reachable
+    //    (default `sovereign/router/exemplars.toml` or
+    //    `$SOVEREIGN_ROUTER_EXEMPLARS`), load it and pre-embed every
+    //    exemplar. Subsequent routing decisions consult the embed
+    //    classifier before the heuristic + LLM cascade. Falls through
+    //    to the legacy stack on load failure or low-confidence
+    //    classifications.
+    let mut llm_router = LlmRouter::new(
         Arc::clone(&inference),
         Arc::clone(&store),
         Arc::clone(&skills),
-    ));
+    );
+    if let Some(path) = resolve_router_exemplars_path() {
+        match sovereign_core::router_embed::EmbedRouter::load(
+            &path,
+            Arc::clone(&inference),
+        )
+        .await
+        {
+            Ok(embed) => {
+                eprintln!(
+                    "Router embed exemplars: {} loaded from {}",
+                    embed.exemplar_count(),
+                    path.display()
+                );
+                llm_router = llm_router.with_embed_router(Arc::new(embed));
+            }
+            Err(e) => {
+                eprintln!(
+                    "warn: embed-router load failed ({}); falling back to heuristic + LLM stack",
+                    e
+                );
+            }
+        }
+    }
+    let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
     // 8. Approval channel. Chat turns don't trigger confirmations
@@ -724,6 +756,25 @@ async fn load_wikipedia_graph(
                 );
             }
         }
+    }
+    None
+}
+
+/// Resolve the path to `router/exemplars.toml`. Checks
+/// `$SOVEREIGN_ROUTER_EXEMPLARS` (an absolute or cwd-relative path)
+/// first, falls back to the canonical in-repo path. Returns `None`
+/// when neither candidate exists so callers can silently skip embed
+/// routing in deployments that don't ship the exemplars.
+fn resolve_router_exemplars_path() -> Option<PathBuf> {
+    if let Ok(env) = std::env::var("SOVEREIGN_ROUTER_EXEMPLARS") {
+        let p = PathBuf::from(env);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let default = PathBuf::from("sovereign/router/exemplars.toml");
+    if default.is_file() {
+        return Some(default);
     }
     None
 }

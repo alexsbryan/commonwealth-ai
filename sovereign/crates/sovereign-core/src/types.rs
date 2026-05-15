@@ -385,7 +385,7 @@ pub enum StreamFrame {
 
 // ─── Routing Types ─────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Intent {
     SimpleQuery,
     DeepQuery,

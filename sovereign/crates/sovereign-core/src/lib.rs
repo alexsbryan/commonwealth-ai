@@ -15,6 +15,7 @@ pub mod planner;
 pub mod query_session;
 pub mod registry;
 pub mod router;
+pub mod router_embed;
 pub mod runtime;
 pub mod gap;
 pub mod setup_config;
