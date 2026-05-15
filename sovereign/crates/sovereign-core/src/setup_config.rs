@@ -614,8 +614,16 @@ yield_to_foreground_secs = 0
 
     #[test]
     fn default_path_includes_sovereign_and_config_toml() {
+        // Post-consolidation (2026-05-10): config lives at
+        // `~/.sovereign/config.toml`, not `~/sovereign/config.toml`.
+        // Path::ends_with matches whole components, so the dotted
+        // directory needs the dot literal in the predicate.
         let p = SetupConfig::default_path();
-        assert!(p.ends_with("sovereign/config.toml"), "unexpected path: {}", p.display());
+        assert!(
+            p.ends_with(".sovereign/config.toml"),
+            "unexpected path: {}",
+            p.display()
+        );
     }
 
     #[test]

@@ -2402,7 +2402,8 @@ mod tests {
             claims: Vec::new(),
             questions_raised: Vec::new(),
             argument_reconstructions: Vec::new(),
-        }
+            type_extension: None,
+            type_extensions: Vec::new(),        }
     }
 
     fn entity(name: &str, aliases: &[&str], description: &str) -> EntitySketch {
@@ -3089,7 +3090,8 @@ mod tests {
                     anchor: "faith in the cell".into(),
                 }],
                 argument_reconstructions: Vec::new(),
-            },
+                type_extension: None,
+                type_extensions: Vec::new(),            },
             SectionExtraction {
                 section_id: "sec_0002".into(),
                 enrichment_depth: EnrichmentDepth::Extracted,

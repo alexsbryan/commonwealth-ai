@@ -612,6 +612,36 @@ pub struct SectionExtraction {
     /// extraction discipline.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub argument_reconstructions: Vec<ArgumentReconstructionSketch>,
+    /// **Legacy (v1)** — single typed-extension slot. Populated by
+    /// the routed Phase 1 dispatcher in workstream B v1, when a
+    /// section's classification was `ArgumentativeEssay` and the
+    /// dispatcher attached an `ArgumentativeExtension`.
+    ///
+    /// **v2 replaces this with [`type_extensions`]** (plural) so a
+    /// hybrid section (e.g. argumentative + narrative) can carry
+    /// multiple typed extensions side-by-side. The plural field is
+    /// canonical for new writes. Both fields are honoured by
+    /// `has_no_atoms` and `atom_count`; legacy caches that still
+    /// carry the singular field stay readable.
+    ///
+    /// New code should write to `type_extensions` and leave this
+    /// `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_extension: Option<TypeExtension>,
+    /// **v2 routed Phase 1 fan-out.** One entry per active discourse
+    /// mode the Phase 0 classifier's vector surfaced above
+    /// `DISCOURSE_ROUTING_THRESHOLD`. The dispatcher fires one chat
+    /// call per active mode and pushes the parsed extension into this
+    /// vector. Hybrid sections (Argumentative + Narrative @ 0.55/0.45)
+    /// produce two entries.
+    ///
+    /// Each variant is unique per `discourse_mode` — the dispatcher
+    /// rejects duplicates. Empty vector means the section didn't
+    /// trigger any typed extension (pure literary / philosophy run,
+    /// or a classification at every mode below threshold which is
+    /// structurally impossible since primary ≥ 1/6).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_extensions: Vec<TypeExtension>,
 }
 
 impl SectionExtraction {
@@ -626,18 +656,666 @@ impl SectionExtraction {
             && self.events.is_empty()
             && self.claims.is_empty()
             && self.questions_raised.is_empty()
+            && self.type_extension.is_none()
+            && self.type_extensions.is_empty()
     }
 
-    /// Total atom count across all typed fields.
+    /// Total atom count across all typed fields, including any
+    /// type extensions on either the legacy singular slot or the
+    /// v2 plural slot.
     pub fn atom_count(&self) -> usize {
-        self.entities_introduced.len()
+        let base = self.entities_introduced.len()
             + self.entities_developed.len()
             + self.relations_introduced.len()
             + self.relations_developed.len()
             + self.events.len()
             + self.claims.len()
-            + self.questions_raised.len()
+            + self.questions_raised.len();
+        let legacy_ext = self
+            .type_extension
+            .as_ref()
+            .map(|e| e.atom_count())
+            .unwrap_or(0);
+        let ext: usize = self.type_extensions.iter().map(|e| e.atom_count()).sum();
+        base + legacy_ext + ext
     }
+
+    /// Visit every typed extension attached to this section,
+    /// regardless of whether it sits on the legacy singular slot or
+    /// the v2 plural slot. Order: plural entries first (in vector
+    /// order), then the legacy singular (if any). Used by downstream
+    /// consumers that need to enumerate extensions without caring
+    /// about the slot.
+    pub fn iter_type_extensions(&self) -> impl Iterator<Item = &TypeExtension> {
+        self.type_extensions
+            .iter()
+            .chain(self.type_extension.iter())
+    }
+}
+
+// ─── Type-specific extension atoms (routed Phase 1, workstream B) ─
+
+/// Optional per-section payload populated by the routed-Phase-1
+/// dispatcher (`obsidian_atlas`) based on the section's
+/// classification. The literary / philosophy paths leave this `None`
+/// and continue to populate only the legacy fields above —
+/// `SectionExtraction` stays back-compat with every existing cache
+/// file.
+///
+/// Each variant carries the atom shapes the section's genre
+/// genuinely needs but the legacy schema cannot express. Argumentative
+/// essays were the empirical driver — Phase 1 on `Pharmacy Benefit`
+/// and `FIFA Financialized` produced 0 atoms under the literary
+/// schema; the argumentative variant gives mechanisms, positions,
+/// and evidence first-class slots so the claim-cap-of-10 stops being
+/// the ceiling.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum TypeExtension {
+    /// Argumentative essay: positions + mechanisms + evidence +
+    /// oppositions + concessions. Populated when the Phase 0
+    /// classifier's vector surfaces `DiscourseMode::Argumentative`
+    /// above the routing threshold.
+    Argumentative(ArgumentativeExtension),
+    /// Narrative sections — story arcs, event sequences, character
+    /// development. Populated when the discourse vector surfaces
+    /// `DiscourseMode::Narrative`. v1 stub — atom shapes land in
+    /// task #34 (`typed_schemas/narrative.rs`).
+    Narrative(NarrativeExtension),
+    /// Descriptive sections — definition cards, zettel notes,
+    /// glossary entries, anatomical descriptions of institutions /
+    /// systems. v1 stub.
+    Descriptive(DescriptiveExtension),
+    /// Reflective sections — first-person processing of experience,
+    /// journal entries, diary-shaped notes. v1 stub.
+    Reflective(ReflectiveExtension),
+    /// Procedural sections — task lists, project plans, meeting
+    /// recaps with action items, technical specs naming decisions
+    /// and dependencies. v1 stub.
+    Procedural(ProceduralExtension),
+    /// Lyric sections — verse, prose poetry, spoken-word scripts
+    /// classified by the section opening as Lyric. v1 stub.
+    Lyric(LyricExtension),
+}
+
+impl TypeExtension {
+    /// Atoms inside this extension. Used by `atom_count`.
+    pub fn atom_count(&self) -> usize {
+        match self {
+            TypeExtension::Argumentative(a) => a.atom_count(),
+            TypeExtension::Narrative(a) => a.atom_count(),
+            TypeExtension::Descriptive(a) => a.atom_count(),
+            TypeExtension::Reflective(a) => a.atom_count(),
+            TypeExtension::Procedural(a) => a.atom_count(),
+            TypeExtension::Lyric(a) => a.atom_count(),
+        }
+    }
+
+    /// Which discourse mode this extension was routed from. Used by
+    /// the dispatcher's duplicate-detection guard and by downstream
+    /// modulator passes that filter extensions by mode.
+    pub fn discourse_mode_tag(&self) -> &'static str {
+        match self {
+            TypeExtension::Argumentative(_) => "argumentative",
+            TypeExtension::Narrative(_) => "narrative",
+            TypeExtension::Descriptive(_) => "descriptive",
+            TypeExtension::Reflective(_) => "reflective",
+            TypeExtension::Procedural(_) => "procedural",
+            TypeExtension::Lyric(_) => "lyric",
+        }
+    }
+}
+
+/// Argumentative-essay-specific atom shapes the literary schema
+/// can't express cleanly. All fields are sparse — Phase 1 emits
+/// only what the section actually carries; downstream consumers must
+/// tolerate empty arrays.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ArgumentativeExtension {
+    /// Named stances the section identifies and (typically) argues
+    /// against or for. A position is a named *whole view* — "the
+    /// markets-or-states framing", "Ostrom's third-pattern view",
+    /// "the rent-concentration thesis" — distinct from any single
+    /// claim that uses it. Empty when the section makes claims
+    /// without naming the stance.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub positions: Vec<PositionSketch>,
+    /// Named domain mechanisms the section operates with. These are
+    /// Concepts in the entity sense too — but the schema surfaces
+    /// them as first-class so the prompt can name them more
+    /// generously without competing with the entity cap. Empty
+    /// when the section's content is purely narrative or
+    /// definition-focused.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mechanisms: Vec<MechanismSketch>,
+    /// Specific evidence invoked — a study by name, a dollar figure,
+    /// a regression coefficient, a historical example used to ground
+    /// a claim. The point is to make the evidence-to-claim graph
+    /// explicit so a downstream reader can audit "what does this
+    /// claim rest on?" without re-reading.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_invocations: Vec<EvidenceInvocationSketch>,
+    /// X-vs-Y framings the section sets up — "markets vs governments",
+    /// "planting vs maintenance", "open access vs commons governance".
+    /// Different from claims in that an opposition names the
+    /// structural binary itself, not an assertion within it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub oppositions: Vec<OppositionSketch>,
+    /// Author's "I grant X but ..." moves. Concessions are
+    /// argumentative hygiene — they show the position is held
+    /// against the strongest counter-statements the author can
+    /// produce. Empty for sections that don't concede.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub concessions: Vec<ConcessionSketch>,
+}
+
+impl ArgumentativeExtension {
+    pub fn atom_count(&self) -> usize {
+        self.positions.len()
+            + self.mechanisms.len()
+            + self.evidence_invocations.len()
+            + self.oppositions.len()
+            + self.concessions.len()
+    }
+}
+
+/// Named whole-view stance. Distinct from a Claim atom: a Position
+/// is "the view that X" (a thing the section *names* and may
+/// reference repeatedly); a Claim is "X" (a single assertion the
+/// section makes).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PositionSketch {
+    /// Reader-facing name for the stance. May be a coinage by the
+    /// author ("the rent-concentration thesis") or a canonical
+    /// label ("Hardin's tragedy framing").
+    pub name: String,
+    /// One-sentence statement of the position's content — what the
+    /// view *says*.
+    pub content: String,
+    /// Entity name the position is attributed to. Empty when the
+    /// position is article-voice or has no clear proponent in the
+    /// section.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub proponent: String,
+    /// Whether the section endorses, rebuts, or surveys this
+    /// position. `endorse | rebut | survey | mixed`. Defaults
+    /// `survey` when ambiguous — the safe read when the section's
+    /// stance toward the position isn't clear from a single span.
+    #[serde(default = "default_position_stance")]
+    pub stance: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+fn default_position_stance() -> String {
+    "survey".to_string()
+}
+
+/// A named mechanism the section operates with. Mechanisms describe
+/// *how* something works in a domain — "spread pricing" names the
+/// mechanism that lets PBMs extract; "salary cap" names the
+/// competitive-balance lever the NFL uses; "regulatory capture"
+/// names the failure mode an essay diagnoses.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MechanismSketch {
+    pub name: String,
+    /// One-sentence description of how the mechanism works.
+    pub description: String,
+    /// Domain the mechanism comes from — "economics", "music",
+    /// "biology", "urban planning", "law". Routed downstream so
+    /// cross-corpus retrieval can scope by domain.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub domain: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+/// A specific piece of evidence the section invokes to ground a
+/// claim. The point is auditability: a downstream reader should
+/// be able to ask "where did this claim come from?" and get a
+/// pointer to a study / figure / historical example.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvidenceInvocationSketch {
+    /// Short label for the evidence. Examples: `"Lin Chen redlining
+    /// preprint"`, `"$1.4B FTC PBM spread"`, `"Soviet Aral Sea
+    /// counter-example"`, `"NFL Green Bay survivability"`.
+    pub label: String,
+    /// What the evidence *is* — one sentence the prompt can extract
+    /// verbatim from the section.
+    pub content: String,
+    /// Kind of evidence: `study`, `figure`, `historical_example`,
+    /// `case_study`, `personal_anecdote`, `quotation`, `other`.
+    /// Free-form; routing on it stays optional. Default `other`
+    /// when ambiguous.
+    #[serde(default = "default_evidence_kind")]
+    pub kind: String,
+    /// Claim or position the evidence is invoked to support. Empty
+    /// when the section invokes evidence without binding it to a
+    /// specific claim (rare but real — narrative-style evidence
+    /// invocation).
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub supports: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+fn default_evidence_kind() -> String {
+    "other".to_string()
+}
+
+/// An X-vs-Y framing the section sets up. `left` and `right` are
+/// labels for the two sides; `axis` names the dimension along which
+/// they differ. The axis can be empty for raw binary oppositions
+/// the section doesn't formalise.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OppositionSketch {
+    pub left: String,
+    pub right: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub axis: String,
+    /// One-sentence statement of how the section uses this
+    /// opposition — what it's doing argumentatively.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub framing: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+/// Author's "I grant that X" move. A concession identifies a
+/// counter-position the author treats seriously before pushing back
+/// or accepting a bounded version of it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConcessionSketch {
+    /// One-sentence statement of what the author concedes.
+    pub content: String,
+    /// Position or claim the concession addresses. Empty when the
+    /// concession is unbound.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub addresses: String,
+    /// Whether the concession ultimately leaves the author's view
+    /// `intact`, `narrowed`, or `retracted`. Default `intact` —
+    /// the most common shape: "I grant X is real BUT my point
+    /// still stands."
+    #[serde(default = "default_concession_outcome")]
+    pub outcome: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+fn default_concession_outcome() -> String {
+    "intact".to_string()
+}
+
+// ─── v2 typed-extension sketches per discourse mode ───────────────
+//
+// Each of the five non-argumentative discourse modes carries its own
+// `Vec<…Sketch>` collections. The v1 landing keeps these struct
+// definitions empty-shaped so the type system can switch over and the
+// dispatcher can fan out; the concrete atom shapes + parsers + prompts
+// land per-module under `typed_schemas/` (task #34).
+
+/// Narrative discourse mode: events, entity-states, relations,
+/// relation-states, participant arcs. Most fields mirror the literary
+/// base schema's sketches — narrative routing exists so that a hybrid
+/// section (e.g. a policy essay with a Wheeler-family opening) gets
+/// the *event-arc* extracted even when the base argumentative
+/// extractor would have dropped it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct NarrativeExtension {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<EventSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entity_states: Vec<EntityStateSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relations: Vec<RelationSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relation_states: Vec<RelationStateSketch>,
+    /// Through-arcs for participants the section follows across
+    /// multiple events — beyond a single state change. Free-form
+    /// description per the literary atlas convention; resolution
+    /// upgrades to structured arcs downstream.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub participant_arcs: Vec<ParticipantArcSketch>,
+}
+
+impl NarrativeExtension {
+    pub fn atom_count(&self) -> usize {
+        self.events.len()
+            + self.entity_states.len()
+            + self.relations.len()
+            + self.relation_states.len()
+            + self.participant_arcs.len()
+    }
+}
+
+/// Through-arc sketch for narrative routing. Names a participant + the
+/// shape of their movement across the section ("from grief to
+/// acceptance", "from outsider to insider"). Resolution turns these
+/// into Arc atoms with start/end states.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ParticipantArcSketch {
+    pub participant: String,
+    pub label: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+/// Descriptive discourse mode: definitions, property claims,
+/// structural relationships, examples, provenance pointers. The
+/// extractor that fires on `DiscourseMode::Descriptive` writes here
+/// instead of (or alongside) the literary base schema's claims field.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct DescriptiveExtension {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub definitions: Vec<DefinitionSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub property_claims: Vec<PropertyClaimSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relationships: Vec<RelationSketch>,
+    /// Concrete examples used to illustrate a definition / claim.
+    /// Distinct from `evidence_invocations` on the argumentative
+    /// extension — descriptive examples illustrate rather than
+    /// support.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<ExampleSketch>,
+    /// Source pointers — citations, footnotes, "as described in X"
+    /// references. Empty when the section is voice-only.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub provenance: Vec<ProvenanceSketch>,
+}
+
+impl DescriptiveExtension {
+    pub fn atom_count(&self) -> usize {
+        self.definitions.len()
+            + self.property_claims.len()
+            + self.relationships.len()
+            + self.examples.len()
+            + self.provenance.len()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DefinitionSketch {
+    pub term: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PropertyClaimSketch {
+    pub subject: String,
+    pub property: String,
+    pub value: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ExampleSketch {
+    pub label: String,
+    pub content: String,
+    /// Definition / claim / concept the example illustrates. Empty
+    /// when ungrounded.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub illustrates: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProvenanceSketch {
+    /// Short label for the source — author + title, URL, or DOI-ish
+    /// identifier.
+    pub label: String,
+    /// One sentence of context for the source.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub context: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+/// Reflective discourse mode: interactions with others / texts,
+/// observations, open threads (questions or lines of thinking the
+/// author leaves unresolved), mood shifts, realisations.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ReflectiveExtension {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interactions: Vec<InteractionSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observations: Vec<ObservationSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub open_threads: Vec<OpenThreadSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mood_shifts: Vec<MoodShiftSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub realisations: Vec<RealisationSketch>,
+}
+
+impl ReflectiveExtension {
+    pub fn atom_count(&self) -> usize {
+        self.interactions.len()
+            + self.observations.len()
+            + self.open_threads.len()
+            + self.mood_shifts.len()
+            + self.realisations.len()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InteractionSketch {
+    /// Named other(s) the author interacted with — colleague, friend,
+    /// author of a text. Empty when the interaction is with an
+    /// inanimate object or a non-personalised idea.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub with: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ObservationSketch {
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OpenThreadSketch {
+    /// One sentence stating the unresolved thread — a question, a
+    /// hunch the author can't yet pin down, a line of work to return
+    /// to.
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MoodShiftSketch {
+    /// Where the author started.
+    pub from: String,
+    /// Where the author ended.
+    pub to: String,
+    /// What moved them — the trigger / catalyst.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub catalyst: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RealisationSketch {
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+/// Procedural discourse mode: tasks (what will be done), decisions
+/// (what was chosen), artifacts (the produced things), dependencies
+/// (what blocks what), blockers (active obstacles), status signals
+/// (progress markers).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct ProceduralExtension {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tasks: Vec<TaskSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decisions: Vec<DecisionSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<ArtifactSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependencies: Vec<DependencySketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blockers: Vec<BlockerSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub status_signals: Vec<StatusSignalSketch>,
+}
+
+impl ProceduralExtension {
+    pub fn atom_count(&self) -> usize {
+        self.tasks.len()
+            + self.decisions.len()
+            + self.artifacts.len()
+            + self.dependencies.len()
+            + self.blockers.len()
+            + self.status_signals.len()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TaskSketch {
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub owner: String,
+    /// Free-form due-at hint — "by Thursday", "Q3", "before the merge
+    /// freeze". The temporal modulator (task #36) may upgrade this to
+    /// a structured date when context permits.
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub due_at: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DecisionSketch {
+    pub content: String,
+    /// Alternatives considered and rejected. Empty when the decision
+    /// is voiced without alternatives.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ArtifactSketch {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DependencySketch {
+    pub from: String,
+    pub to: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BlockerSketch {
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub blocks: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StatusSignalSketch {
+    /// One of `done`, `in_progress`, `paused`, `cancelled`, `unknown`.
+    /// Free-form to tolerate future expansion; routing on it stays
+    /// optional.
+    pub state: String,
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+/// Lyric discourse mode: images, motifs, formal devices, voice shifts,
+/// tonal movements. The atom shapes here are deliberately
+/// expressive-domain — they don't try to recover argumentation or
+/// fact-claims from verse.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct LyricExtension {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<ImageSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub motifs: Vec<MotifSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub formal_devices: Vec<FormalDeviceSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub voice_shifts: Vec<VoiceShiftSketch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tonal_movements: Vec<TonalMovementSketch>,
+}
+
+impl LyricExtension {
+    pub fn atom_count(&self) -> usize {
+        self.images.len()
+            + self.motifs.len()
+            + self.formal_devices.len()
+            + self.voice_shifts.len()
+            + self.tonal_movements.len()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ImageSketch {
+    pub content: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MotifSketch {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FormalDeviceSketch {
+    /// Anaphora, enjambment, caesura, refrain, parallelism, etc.
+    /// Free-form so the prompt can name a device without a fixed
+    /// taxonomy.
+    pub name: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub example: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VoiceShiftSketch {
+    pub from: String,
+    pub to: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TonalMovementSketch {
+    pub from: String,
+    pub to: String,
+    #[serde(default, skip_serializing_if = "is_empty_str")]
+    pub anchor: String,
 }
 
 #[cfg(test)]
@@ -750,7 +1428,8 @@ mod tests {
                 anchor: "faith in the cell".into(),
             }],
             argument_reconstructions: Vec::new(),
-        };
+            type_extension: None,
+            type_extensions: Vec::new(),        };
 
         let json = serde_json::to_string_pretty(&extraction).unwrap();
         let parsed: SectionExtraction = serde_json::from_str(&json).unwrap();
