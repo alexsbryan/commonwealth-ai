@@ -454,6 +454,14 @@ struct IndexMeta {
     /// policy survives shard→canonical→shard round-trips.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     mutable_merge: Option<crate::recipe::MutableMergePolicy>,
+
+    /// Stream-axis block (Move 5, Stage 2). Per-corpus stability tag
+    /// + provenance summary. `None` for legacy indexes written before
+    /// the stream taxonomy landed; backfilled lazily by
+    /// `sovereign corpus stream-axes`. Articulation lives per-atom on
+    /// meta-atlas anchors, not here.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stream: Option<crate::stream_axes::StreamAxes>,
 }
 
 /// Provenance of an on-disk index. See the `IndexMeta::provenance`
@@ -498,6 +506,22 @@ pub fn read_provenance(index_dir: &Path) -> CorpusProvenance {
 /// partition's `_corpus_meta.json` is first created. Idempotent —
 /// repeated calls with the same value are no-ops on disk semantics.
 /// Errors when the meta file is missing or malformed.
+/// Stamp the stream-axis block onto an index by `index_dir` path,
+/// without needing a [`CorpusIndex`] handle (no LanceDB open). Used
+/// by `sovereign corpus stream-axes` to backfill the block for
+/// installed corpora that lack it.
+///
+/// Reads `<index_dir>/_corpus_meta.json`, sets the `stream` field,
+/// rewrites. Errors if the meta is missing.
+pub fn set_stream_axes(
+    index_dir: &Path,
+    axes: crate::stream_axes::StreamAxes,
+) -> Result<()> {
+    let mut meta = read_meta(index_dir)?;
+    meta.stream = Some(axes);
+    write_meta(index_dir, &meta)
+}
+
 pub fn set_provenance(index_dir: &Path, provenance: CorpusProvenance) -> Result<()> {
     let meta = read_meta(index_dir)?;
     let updated = IndexMeta { provenance, ..meta };
@@ -720,6 +744,7 @@ impl CorpusIndex {
             total_shards: meta.total_shards,
             processed_shards: meta.processed_shards,
             mutable_merge: meta.mutable_merge,
+            stream: meta.stream,
         })
     }
 
@@ -839,6 +864,26 @@ impl CorpusIndex {
     pub fn mutable_merge(&self) -> Option<crate::recipe::MutableMergePolicy> {
         let index_dir = Path::new(self.db.uri());
         read_meta(index_dir).ok().and_then(|m| m.mutable_merge)
+    }
+
+    /// Stamp the stream-axis block onto this index's
+    /// `_corpus_meta.json`. Move 5 Stage 2; called by
+    /// `sovereign corpus stream-axes` to backfill the block for
+    /// installed corpora that lack it, and (eventually) by the
+    /// ingest path at install time.
+    pub fn set_stream(&self, axes: crate::stream_axes::StreamAxes) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.stream = Some(axes);
+        write_meta(index_dir, &meta)
+    }
+
+    /// Read the stream-axis block from this index's `_corpus_meta.json`.
+    /// `None` if the block was never written (legacy index, or
+    /// install path that pre-dates Move 5).
+    pub fn stream(&self) -> Option<crate::stream_axes::StreamAxes> {
+        let index_dir = Path::new(self.db.uri());
+        read_meta(index_dir).ok().and_then(|m| m.stream)
     }
 
     /// The corpus ID this index belongs to.

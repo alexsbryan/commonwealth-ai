@@ -234,6 +234,10 @@ impl CorpusIndex {
             // policy (or the first input shard's, in the merge path)
             // is known. None preserves classic content-hash dedupe.
             mutable_merge: None,
+            // Set lazily by `sovereign corpus stream-axes` once the
+            // recipe is resolved post-ingest. Move 5 Stage 2 wires
+            // this; v1 leaves the create path untouched.
+            stream: None,
         };
         write_meta(path, &meta)?;
 

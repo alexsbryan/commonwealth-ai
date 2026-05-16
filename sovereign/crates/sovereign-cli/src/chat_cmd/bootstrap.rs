@@ -423,6 +423,30 @@ pub async fn build_session_with_skills(
     // signal.
     let _bump_flusher = Arc::clone(&atlas_mgr).spawn_bump_flusher(30);
 
+    // Cross-corpus meta-atlas (Move 5). Loads
+    // `~/.sovereign/meta-atlas/canonical_atoms.json` produced by
+    // `sovereign meta-atlas build`. Empty / absent file → boost is a
+    // no-op and retrieval falls back to cosine + existing
+    // entity-boost. Operator can rebuild with the CLI; we don't auto-
+    // build at chat boot (cost is non-trivial on a 1.6M-atom
+    // wikipedia install).
+    let meta_atlas_path = corpus_engine::meta_atlas::default_meta_atlas_path();
+    let meta_atlas = match corpus_engine::meta_atlas::MetaAtlasIndex::load(
+        meta_atlas_path.as_deref(),
+    ) {
+        Ok(idx) => Arc::new(idx),
+        Err(e) => {
+            eprintln!("Meta-atlas: load failed ({e}); boost disabled");
+            Arc::new(corpus_engine::meta_atlas::MetaAtlasIndex::empty())
+        }
+    };
+    eprintln!(
+        "Meta-atlas:  {} canonical atoms across {} corpus(es)",
+        meta_atlas.len(),
+        meta_atlas.corpus_count(),
+    );
+    runtime = runtime.with_meta_atlas(Arc::clone(&meta_atlas));
+
     // Optional cross-encoder reranker. When `SOVEREIGN_RERANK_MODEL_PATH`
     // is set, load that GGUF into a `StandaloneReranker` and wire it
     // into the Runtime. The reranker runs locally (the daemon-attached

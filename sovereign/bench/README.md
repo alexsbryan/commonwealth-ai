@@ -57,6 +57,22 @@ The bench surfaces all three. **`answer-equiv` is the canonical user-value score
 
 This framing is a deliberate move toward the dual-stream legibility principle: the bank's `expected_sources` is a **narrative claim** ("here's where this answer should come from"), the actual retrieval is the **reality**, and the judge column says whether they were semantically equivalent. Treat divergence as legible, not as failure.
 
+### Fourth lens — `meta_atlas_hits`
+
+Per-question JSON carries `meta_atlas_hits: [{entity, corpus_id, articulation, stability, chunks_added}]`, one row per anchor (max 3 per matched canonical entity — one per articulation axis with a dominant anchor) the cross-corpus meta-atlas surfaced for the turn (Move 5). Read it as the answer to **"which canonical entities did the meta-atlas recognise, and which stream did each anchor serve?"**:
+
+- `articulation = "inventory"` → the structural-map anchor. Broad overview content. Wikipedia article, vault reference card, code symbol entry.
+- `articulation = "argument"` → the articulated-claim anchor. SEP claim, design-doc assertion, judicial opinion, essay reasoning.
+- `articulation = "trace"` → the lived-practice anchor. Conversation history, journal entry, newsworthy event description.
+- `stability = "frozen"` → snapshot release; re-ingest replaces wholesale.
+- `stability = "versioned"` → active revision; expected to delta-ingest.
+- `stability = "rolling"` → continuously updated within a window.
+- `chunks_added = 0` → the meta-atlas surfaced an anchor but the focused per-corpus search returned nothing usable. Useful diagnostic when title-coverage stays flat despite meta-atlas hits — typically means the atlas's `first_appearance` chunk is missing from the live index (a sign the corpus was rebuilt without the atlas re-running).
+
+The meta-atlas is built by `sovereign meta-atlas build` (per-atom rule-based classifier in `corpus-engine/src/meta_atlas/classifier.rs`) and persisted to `~/.sovereign/meta-atlas/canonical_atoms.json`. Per-corpus stability lives in each corpus's `_corpus_meta.json::stream` block — populated at ingest time, backfilled by `sovereign corpus stream-axes` for legacy corpora.
+
+The synthesis prompt uses these tags to sub-bucket the corpus section into three named streams (`## Broad map (inventory)` / `## Articulated claims (arguments)` / `## Lived practice (traces)`) so the model can compose the streams as distinct epistemic sources. Chunks without an `articulation` tag fall through to the existing `## From knowledge base` section — no-regression on un-meta-tagged retrieval.
+
 ## Propagation: bench → chat
 
 `bench all` (default retrieval-mode) exercises `CorpusIndex::search_with_rerank` — the same primitive `Runtime::search_corpus_indexes` calls from desktop chat. Improvements to embed quality, BM25, vector cosine, atlas-tier boost, and the cross-encoder reranker propagate to chat 1:1.
