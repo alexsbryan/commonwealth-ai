@@ -113,10 +113,50 @@ pub struct JobSpec {
     pub runner_config: serde_json::Value,
 }
 
+/// Where the bytes for one manifest entry come from. Either streamed
+/// up from the owner's local disk, or fetched by the pod from a URL
+/// (typically a presigned object-store URL — R2/B2/S3 — so the bytes
+/// arrive at the pod over a data-center-fronted multi-Gbps egress
+/// path instead of the owner's residential upload).
+///
+/// SHA validation is the load-bearing piece: in both cases the pod
+/// hashes received bytes against the owner-signed `sha256`, so the
+/// URL is trusted transport, not trusted source.
 #[derive(Debug, Clone)]
 pub struct UploadFile {
-    pub local_path: std::path::PathBuf,
     pub sha256: Sha256Digest,
+    pub source: UploadSource,
+}
+
+#[derive(Debug, Clone)]
+pub enum UploadSource {
+    /// Stream bytes from the owner's disk over the pinned-TLS
+    /// connection. Right for files that only exist locally (recipe
+    /// configs, owner-built corpora) or small enough that residential
+    /// upload is acceptable.
+    Local(std::path::PathBuf),
+    /// Have the pod fetch the URL itself. Right for big GGUFs staged
+    /// in R2/B2/S3 — pod's data-center egress (multi-Gbps) replaces
+    /// owner's residential upload (10-50 Mbps).
+    FetchUrl(String),
+}
+
+impl UploadFile {
+    pub fn local(path: impl Into<std::path::PathBuf>, sha256: Sha256Digest) -> Self {
+        Self {
+            sha256,
+            source: UploadSource::Local(path.into()),
+        }
+    }
+    pub fn fetch_url(url: impl Into<String>, sha256: Sha256Digest) -> Self {
+        Self {
+            sha256,
+            source: UploadSource::FetchUrl(url.into()),
+        }
+    }
+    pub fn is_url_backed(&self) -> bool {
+        matches!(self.source, UploadSource::FetchUrl(_))
+    }
 }
 
 // ───── Controller ──────────────────────────────────────────────────
@@ -220,6 +260,13 @@ impl WorkerController {
 
         self.wait_for_health(&handle, &client).await?;
         self.upload_files(&handle, &client, &blob, spec).await?;
+        // If any entry is URL-backed, the pod is still pulling in the
+        // background. Block until it reports all uploads ready before
+        // dispatch — otherwise dispatch_job 412s with "uploads
+        // incomplete" and the owner has to retry.
+        if spec.uploads.values().any(|f| f.is_url_backed()) {
+            self.wait_for_uploads(&handle, &client).await?;
+        }
         self.dispatch_job(&handle, &client, spec).await?;
         Ok((handle, instance))
     }
@@ -227,7 +274,13 @@ impl WorkerController {
     fn mint_blob(&self, spec: &JobSpec) -> ControllerResult<BootstrapBlob> {
         let mut expected = BTreeMap::new();
         for (name, file) in &spec.uploads {
-            expected.insert(name.clone(), file.sha256);
+            let entry = match &file.source {
+                UploadSource::Local(_) => crate::worker_pod::UploadEntry::local(file.sha256),
+                UploadSource::FetchUrl(url) => {
+                    crate::worker_pod::UploadEntry::from_url(file.sha256, url.clone())
+                }
+            };
+            expected.insert(name.clone(), entry);
         }
         let (blob, _thumb) = mint_bootstrap(BootstrapInputs {
             job_id: spec.job_id.clone(),
@@ -326,23 +379,35 @@ impl WorkerController {
             // Sanity: the manifest in spec must agree with the blob.
             // If not, the upload would fail at the pod anyway, but
             // catching it here is friendlier.
-            let expected = blob
-                .expected_uploads
-                .get(name)
-                .copied()
-                .ok_or_else(|| ControllerError::PodRejected {
+            let entry = blob.expected_uploads.get(name).cloned().ok_or_else(|| {
+                ControllerError::PodRejected {
                     status: 0,
                     route: "/upload".into(),
                     body: format!("file {name} missing from blob manifest"),
-                })?;
-            if expected != file.sha256 {
+                }
+            })?;
+            if entry.sha256 != file.sha256 {
                 return Err(ControllerError::PodRejected {
                     status: 0,
                     route: "/upload".into(),
                     body: format!("sha mismatch for {name} between blob and JobSpec"),
                 });
             }
-            let bytes = tokio::fs::read(&file.local_path).await?;
+            let local_path = match &file.source {
+                UploadSource::FetchUrl(_) => {
+                    // Pod fetches itself in the background. Skip
+                    // the owner-side upload — `wait_for_uploads`
+                    // (or the existing dispatch precondition check)
+                    // will wait until the pod has finished pulling.
+                    tracing::debug!(
+                        file = %name,
+                        "controller: file is URL-backed; pod fetches it directly"
+                    );
+                    continue;
+                }
+                UploadSource::Local(p) => p,
+            };
+            let bytes = tokio::fs::read(local_path).await?;
             // One-shot upload for the MVP. Streamed chunking is a
             // straightforward extension: append-only POSTs with
             // `finalize=false`, then a final POST with `finalize=true`.
@@ -369,6 +434,51 @@ impl WorkerController {
             }
         }
         Ok(())
+    }
+
+    /// Wait until the pod reports `uploads_ready == uploads_expected`
+    /// on its `/health` endpoint. Useful when any upload entry is
+    /// URL-backed — those fetches happen in the background after the
+    /// pod boots; controllers that go straight to `dispatch_job` will
+    /// 412 until they're done.
+    ///
+    /// Polls at `health_poll_interval`; gives up after
+    /// `health_poll_timeout`. Both knobs live in [`ControllerConfig`].
+    pub async fn wait_for_uploads(
+        &self,
+        handle: &WorkerHandle,
+        client: &Client,
+    ) -> ControllerResult<()> {
+        let start = std::time::Instant::now();
+        let url = format!("{}/internal/worker/health", handle.base_url());
+        loop {
+            let resp = client
+                .get(&url)
+                .bearer_auth(handle.worker_token())
+                .send()
+                .await?;
+            if resp.status().is_success() {
+                let body: serde_json::Value = resp.json().await?;
+                let ready = body.get("uploads_ready").and_then(|v| v.as_u64()).unwrap_or(0);
+                let expected = body
+                    .get("uploads_expected")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                if ready >= expected && expected > 0 {
+                    return Ok(());
+                }
+                if ready >= expected {
+                    return Ok(()); // 0/0 — empty manifest, trivially ready.
+                }
+            }
+            if start.elapsed() >= self.config.health_poll_timeout {
+                return Err(ControllerError::Timeout {
+                    what: "pod uploads to finish",
+                    elapsed_secs: start.elapsed().as_secs(),
+                });
+            }
+            tokio::time::sleep(self.config.health_poll_interval).await;
+        }
     }
 
     pub async fn dispatch_job(
@@ -549,13 +659,7 @@ mod tests {
         let path = tmp.path().join("f.gguf");
         std::fs::write(&path, b"x").unwrap();
         let mut uploads = BTreeMap::new();
-        uploads.insert(
-            "f.gguf".to_string(),
-            UploadFile {
-                local_path: path,
-                sha256: [9u8; 32],
-            },
-        );
+        uploads.insert("f.gguf".to_string(), UploadFile::local(path, [9u8; 32]));
         let spec = JobSpec {
             job_id: "spec-test".into(),
             image: "img".into(),
@@ -569,7 +673,43 @@ mod tests {
         };
         let blob = ctrl.mint_blob(&spec).unwrap();
         assert_eq!(blob.job_id, "spec-test");
-        assert_eq!(blob.expected_uploads.get("f.gguf"), Some(&[9u8; 32]));
+        let entry = blob.expected_uploads.get("f.gguf").unwrap();
+        assert_eq!(entry.sha256, [9u8; 32]);
+        assert!(entry.fetch_url.is_none(), "local upload has no fetch_url");
+    }
+
+    #[test]
+    fn mint_blob_carries_url_backed_entries() {
+        let owner = fixed_owner_key();
+        let provider = Arc::new(MockProvider::new(PublicAddress {
+            host: "h".into(),
+            port: 0,
+        }));
+        let ctrl = WorkerController::new(provider, owner, ControllerConfig::default());
+
+        let mut uploads = BTreeMap::new();
+        uploads.insert(
+            "primary.gguf".to_string(),
+            UploadFile::fetch_url("https://r2.example/primary.gguf?sig=…", [3u8; 32]),
+        );
+        let spec = JobSpec {
+            job_id: "url-spec".into(),
+            image: "img".into(),
+            disk_gb: 1,
+            gpu_name: "g".into(),
+            max_price_per_hour: 0.0,
+            label: "t".into(),
+            uploads,
+            units: vec![],
+            runner_config: serde_json::json!({}),
+        };
+        let blob = ctrl.mint_blob(&spec).unwrap();
+        let entry = blob.expected_uploads.get("primary.gguf").unwrap();
+        assert_eq!(entry.sha256, [3u8; 32]);
+        assert_eq!(
+            entry.fetch_url.as_deref(),
+            Some("https://r2.example/primary.gguf?sig=…"),
+        );
     }
 
     #[test]

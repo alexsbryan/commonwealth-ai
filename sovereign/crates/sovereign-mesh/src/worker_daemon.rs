@@ -34,6 +34,26 @@ use crate::worker_http::{
 };
 use crate::worker_pod::{BootstrapBlob, WORKER_PORT, self_signed_cert};
 
+/// Disk-dump coordination signals — `(complete_flag, notify_handle)`.
+/// Shared between [`WorkerState`] (writer; flips on dump completion)
+/// and runners that need to gate on the dump (e.g.
+/// `SubprocessRunner`, which can't `--config` the child daemon at a
+/// file that doesn't exist yet).
+pub type DiskDumpSignals = (
+    std::sync::Arc<std::sync::atomic::AtomicBool>,
+    std::sync::Arc<tokio::sync::Notify>,
+);
+
+/// Build a fresh pair of disk-dump signals. Both are owned by `Arc`
+/// so the caller can clone the handles into a runner before passing
+/// the originals through to [`run_worker_mode`].
+pub fn new_disk_dump_signals() -> DiskDumpSignals {
+    (
+        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        std::sync::Arc::new(tokio::sync::Notify::new()),
+    )
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum WorkerDaemonError {
     #[error("worker-pod: {0}")]
@@ -97,10 +117,38 @@ pub fn load_bootstrap_blob(
 
 /// Run the worker daemon forever (or until the caller cancels the
 /// task). Blocks the calling task on the axum-server future.
+///
+/// `models_dir`, when set, triggers the disk-dump watcher: as soon as
+/// every upload in the manifest is complete, bytes are atomically
+/// written to `<models_dir>/<name>` and a child-daemon config is
+/// generated at `<models_dir>/../config.toml`. SubprocessRunner
+/// (Phase 2) will spawn `sovereign-cli daemon run` against that
+/// config to do actual inference work.
 pub async fn run_worker_mode(
     blob: BootstrapBlob,
     runner: Arc<dyn WorkerRunner>,
     bind_addr: Option<SocketAddr>,
+    models_dir: Option<std::path::PathBuf>,
+) -> Result<()> {
+    run_worker_mode_with_signals(blob, runner, bind_addr, models_dir, None).await
+}
+
+/// Same as [`run_worker_mode`] but allows the caller to supply
+/// pre-built disk-dump signals so a [`SubprocessRunner`] (or any
+/// runner that wants to gate on the dump) can observe the same flag
+/// the [`WorkerState`] writes.
+///
+/// When `signals` is `None`, fresh `Arc`s are minted — equivalent
+/// to the [`run_worker_mode`] behaviour. Most production callers
+/// will pass `Some(signals)` so the runner is woken correctly.
+///
+/// [`SubprocessRunner`]: crate::worker_subprocess_runner::SubprocessRunner
+pub async fn run_worker_mode_with_signals(
+    blob: BootstrapBlob,
+    runner: Arc<dyn WorkerRunner>,
+    bind_addr: Option<SocketAddr>,
+    models_dir: Option<std::path::PathBuf>,
+    signals: Option<DiskDumpSignals>,
 ) -> Result<()> {
     // axum-server's TLS path (and any rustls construction) needs a
     // crypto provider installed at process scope. We choose
@@ -110,10 +158,23 @@ pub async fn run_worker_mode(
     // wired one up aren't disturbed.
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 
+    let (dump_complete, dump_ready) = signals.unwrap_or_else(new_disk_dump_signals);
     let state = Arc::new(
-        WorkerState::from_blob(blob.clone(), runner)
+        WorkerState::from_blob_with_signals(blob.clone(), runner, dump_complete, dump_ready)
             .map_err(WorkerDaemonError::State)?,
     );
+    // Kick off background fetches for any URL-backed entries in the
+    // manifest. The pod's `/health` shows progress; the dispatch
+    // handler's existing precondition wait covers the case where the
+    // owner gets ahead of the fetcher.
+    state.spawn_url_fetches();
+    // If the daemon was given a models dir, spawn the disk-dump
+    // watcher — bytes will land on disk + a child-daemon config is
+    // written when every upload completes. Phase 2 will spawn the
+    // child off this.
+    if let Some(dir) = models_dir {
+        state.spawn_disk_dump_watcher(dir);
+    }
     let router = worker_router(state);
 
     let (cert_der, key_der) = self_signed_cert(&blob.seed)?;

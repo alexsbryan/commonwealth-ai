@@ -47,7 +47,14 @@ use thiserror::Error;
 
 /// Bootstrap-blob protocol version. Bump when a wire-incompatible field
 /// is added. Pods reject blobs whose version they don't recognise.
-pub const BOOTSTRAP_VERSION: u8 = 1;
+///
+/// Version history:
+/// - v1 (2026-05-15) — initial wire protocol, manifest = `name → sha256`
+/// - v2 (2026-05-15) — manifest = `name → UploadEntry { sha256, fetch_url }`
+///   so the pod can pull bytes from R2/B2/S3/CDN instead of streaming
+///   from the owner's residential upload link. The presigned URL is
+///   trusted because the SHA the pod validates against is owner-signed.
+pub const BOOTSTRAP_VERSION: u8 = 2;
 
 /// Default port the worker daemon binds for the owner-only HTTPS surface.
 /// Reuses the persistent peer's "internal" port — pods don't run a mesh
@@ -57,6 +64,45 @@ pub const WORKER_PORT: u16 = 9742;
 /// SHA-256 digest type as a fixed-size array — easier to pass through
 /// `serde` and compare in tests than a `Vec<u8>`.
 pub type Sha256Digest = [u8; 32];
+
+/// One row in the upload manifest carried by the bootstrap blob.
+/// Every upload must declare a SHA-256 the pod will validate against.
+/// `fetch_url` is the orthogonal R2/B2/S3 acceleration path: when set,
+/// the pod fetches the bytes itself (typically from a CDN-fronted
+/// object store with multi-Gbps egress) instead of waiting for the
+/// owner to stream from a residential upload link.
+///
+/// Owner uploads + fetch-URL entries can be mixed in the same manifest
+/// — useful when most files live in R2 but a recipe-local config TOML
+/// only exists on the owner's laptop.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct UploadEntry {
+    #[serde(with = "serde_bytes_32")]
+    pub sha256: Sha256Digest,
+    /// Optional URL the pod fetches itself. Reqwest-shaped HTTPS URL,
+    /// typically a presigned object-store URL with a short TTL. The
+    /// pod treats the URL as opaque transport — the SHA validation
+    /// is the load-bearing piece of trust. A malicious URL that
+    /// returns different bytes will fail the SHA check and the
+    /// pod refuses to accept the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fetch_url: Option<String>,
+}
+
+impl UploadEntry {
+    pub fn local(sha256: Sha256Digest) -> Self {
+        Self {
+            sha256,
+            fetch_url: None,
+        }
+    }
+    pub fn from_url(sha256: Sha256Digest, url: impl Into<String>) -> Self {
+        Self {
+            sha256,
+            fetch_url: Some(url.into()),
+        }
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum WorkerPodError {
@@ -162,10 +208,12 @@ pub struct BootstrapBlob {
     /// `Authorization` header. Bound to the pod's public-key thumbprint
     /// so a stolen token can't be replayed against a different pod.
     pub worker_token: String,
-    /// Filename → SHA-256. The pod's `/internal/worker/upload` endpoint
-    /// validates each uploaded file against this manifest. Anything not
-    /// listed is rejected.
-    pub expected_uploads: BTreeMap<String, Sha256Digest>,
+    /// Filename → upload manifest entry. The pod's
+    /// `/internal/worker/upload` endpoint validates each uploaded file
+    /// against the entry's SHA; entries with a `fetch_url` are pulled
+    /// by the pod itself in the background. Anything not listed is
+    /// rejected.
+    pub expected_uploads: BTreeMap<String, UploadEntry>,
     /// Blob expiry (unix seconds). The pod refuses to start (and the
     /// token is also expired-by-design) past this point.
     pub expires_unix: u64,
@@ -300,7 +348,7 @@ pub fn verify_worker_token(
 pub struct BootstrapInputs<'a> {
     pub job_id: String,
     pub owner_signing: &'a SigningKey,
-    pub expected_uploads: BTreeMap<String, Sha256Digest>,
+    pub expected_uploads: BTreeMap<String, UploadEntry>,
     /// Lifetime of the blob *and* the token, in seconds from now. Tokens
     /// outlive the pod's expected runtime so polling keeps working
     /// across owner-side restarts.
@@ -554,8 +602,11 @@ mod tests {
     fn bootstrap_round_trip() {
         let owner = fixed_owner_key();
         let mut manifest = BTreeMap::new();
-        manifest.insert("primary.gguf".to_string(), [1u8; 32]);
-        manifest.insert("embed.gguf".to_string(), [2u8; 32]);
+        manifest.insert("primary.gguf".to_string(), UploadEntry::local([1u8; 32]));
+        manifest.insert(
+            "embed.gguf".to_string(),
+            UploadEntry::from_url([2u8; 32], "https://r2.example/embed.gguf?sig=…"),
+        );
 
         let inputs = BootstrapInputs {
             job_id: "sep-2026-05-15".into(),
@@ -566,6 +617,12 @@ mod tests {
         };
         let (blob, expected_thumbprint) = mint_bootstrap(inputs).unwrap();
         assert_eq!(blob.pod_pubkey_thumbprint(), expected_thumbprint);
+        // Mixed local + URL entries survive the round trip.
+        assert_eq!(blob.expected_uploads["primary.gguf"].fetch_url, None);
+        assert_eq!(
+            blob.expected_uploads["embed.gguf"].fetch_url.as_deref(),
+            Some("https://r2.example/embed.gguf?sig=…"),
+        );
 
         let encoded = encode_bootstrap(&blob).unwrap();
         let decoded = decode_bootstrap(&encoded).unwrap();
@@ -675,6 +732,23 @@ mod tests {
         let encoded = encode_bootstrap(&blob).unwrap();
         let err = decode_bootstrap(&encoded).unwrap_err();
         assert!(matches!(err, WorkerPodError::UnsupportedVersion(99)));
+    }
+
+    #[test]
+    fn upload_entry_helpers_round_trip_serde() {
+        let local = UploadEntry::local([7u8; 32]);
+        let url = UploadEntry::from_url([8u8; 32], "https://example.com/x");
+        // `fetch_url` is `skip_serializing_if = "Option::is_none"`, so
+        // the local entry's JSON has no fetch_url key.
+        let local_json = serde_json::to_string(&local).unwrap();
+        assert!(!local_json.contains("fetch_url"));
+        let url_json = serde_json::to_string(&url).unwrap();
+        assert!(url_json.contains("fetch_url"));
+        // Round-trips both ways.
+        let local_back: UploadEntry = serde_json::from_str(&local_json).unwrap();
+        let url_back: UploadEntry = serde_json::from_str(&url_json).unwrap();
+        assert_eq!(local, local_back);
+        assert_eq!(url, url_back);
     }
 
     #[test]

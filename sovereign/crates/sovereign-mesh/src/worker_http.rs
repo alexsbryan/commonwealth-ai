@@ -141,6 +141,22 @@ pub struct WorkerState {
     /// Set when DELETE /job is received. The runner observes this to
     /// drain gracefully; the HTTP layer just records the flag.
     pub shutdown_requested: std::sync::atomic::AtomicBool,
+    /// Set true by [`spawn_disk_dump_watcher`] once every manifested
+    /// upload is on disk and the child-daemon config has been written.
+    /// Phase 2's `SubprocessRunner` reads this (plus the companion
+    /// notify below) to gate child-daemon spawn — you can't `--config
+    /// <path>` a daemon at a file that doesn't exist yet.
+    ///
+    /// Wrapped in `Arc` so the runner can hold its own clone and
+    /// observe the same signal — the alternative (giving the runner a
+    /// reference to `WorkerState`) would create a cycle because the
+    /// state already owns the runner.
+    pub disk_dump_complete: Arc<std::sync::atomic::AtomicBool>,
+    /// Companion to `disk_dump_complete` — wakes waiters when the dump
+    /// transitions to "done". Use the
+    /// `notified()`-before-`load()` pattern to avoid TOCTOU races
+    /// between subscribers and the watcher task.
+    pub disk_dump_ready: Arc<tokio::sync::Notify>,
     /// The pluggable enrichment runner. Wrapped in Arc so handlers can
     /// hand a cloned callback to it.
     pub runner: Arc<dyn WorkerRunner>,
@@ -161,7 +177,30 @@ impl WorkerState {
     /// Build state from a bootstrap blob the pod just decoded. Fails
     /// if the embedded owner verifying key isn't a valid Ed25519
     /// point — wire-protocol error, not a runtime failure.
+    ///
+    /// The disk-dump signals are owned by the new state; callers who
+    /// need to share them with a runner (e.g. `SubprocessRunner`) should
+    /// use [`Self::from_blob_with_signals`] and pass pre-built `Arc`s.
     pub fn from_blob(blob: BootstrapBlob, runner: Arc<dyn WorkerRunner>) -> Result<Self, String> {
+        Self::from_blob_with_signals(
+            blob,
+            runner,
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Arc::new(tokio::sync::Notify::new()),
+        )
+    }
+
+    /// Same as [`Self::from_blob`] but accepts pre-built disk-dump
+    /// signals so the caller can hand the same `Arc`s to a runner.
+    /// `SubprocessRunner` needs this — it has to observe the dump
+    /// finishing before it can `--config` the child daemon at the
+    /// generated TOML.
+    pub fn from_blob_with_signals(
+        blob: BootstrapBlob,
+        runner: Arc<dyn WorkerRunner>,
+        disk_dump_complete: Arc<std::sync::atomic::AtomicBool>,
+        disk_dump_ready: Arc<tokio::sync::Notify>,
+    ) -> Result<Self, String> {
         let pod_thumbprint = {
             let sk = derive_signing_key(&blob.seed);
             pubkey_thumbprint(&sk.verifying_key())
@@ -176,6 +215,8 @@ impl WorkerState {
             completed: Mutex::new(Vec::new()),
             job: RwLock::new(None),
             shutdown_requested: std::sync::atomic::AtomicBool::new(false),
+            disk_dump_complete,
+            disk_dump_ready,
             runner,
         })
     }
@@ -187,6 +228,284 @@ impl WorkerState {
             .map(|d| d.as_secs())
             .unwrap_or(0)
     }
+
+    /// Spawn a background task that polls upload state and dumps
+    /// every completed upload to `models_dir` once all of them are
+    /// ready. Also writes a child-daemon config at `<models_dir>/../config.toml`
+    /// pointing at the dumped files. Runs forever (cheaply — 500ms
+    /// poll interval until ready, then logs once and exits).
+    ///
+    /// Phase 2's SubprocessRunner will await this dump completing
+    /// before spawning the child daemon.
+    pub fn spawn_disk_dump_watcher(self: &Arc<Self>, models_dir: std::path::PathBuf) {
+        let state = Arc::clone(self);
+        tokio::spawn(async move {
+            let expected = state.blob.expected_uploads.len();
+            if expected == 0 {
+                return;
+            }
+            loop {
+                let ready = {
+                    let uploads = state.uploads.read().await;
+                    uploads.values().filter(|p| p.digest.is_some()).count()
+                };
+                if ready >= expected {
+                    if let Err(e) = dump_uploads_to_disk(&state, &models_dir).await {
+                        tracing::error!(error = %e, "worker: disk dump failed");
+                        // Leave signals unfired so the runner stays
+                        // blocked rather than spawning a child against
+                        // half-written models. The owner sees stuck
+                        // dispatches via `/completed` and re-creates
+                        // the pod.
+                        return;
+                    }
+                    let config_path = models_dir
+                        .parent()
+                        .map(|p| p.join("config.toml"))
+                        .unwrap_or_else(|| models_dir.join("config.toml"));
+                    if let Err(e) = write_child_daemon_config(&models_dir, &config_path) {
+                        tracing::warn!(error = %e, "worker: child-daemon config write failed");
+                        // Same rationale — without a config, the child
+                        // can't start. Don't fire signals.
+                        return;
+                    }
+                    tracing::info!(
+                        path = %config_path.display(),
+                        "worker: wrote child-daemon config"
+                    );
+                    // Atomic-then-notify ordering: subscribers using
+                    // the `notified()`-before-`load()` pattern will
+                    // either see the new flag value or be woken by
+                    // the notify, but never miss both.
+                    state
+                        .disk_dump_complete
+                        .store(true, std::sync::atomic::Ordering::Release);
+                    state.disk_dump_ready.notify_waiters();
+                    tracing::info!("worker: disk dump complete; child-daemon spawn now unblocked");
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            }
+        });
+    }
+
+    /// Spawn background tasks for every URL-backed entry in the
+    /// manifest. Each task downloads the file with reqwest, validates
+    /// SHA-256 against the owner-signed entry, and stages the bytes
+    /// into the same `uploads` map manual uploads use. The dispatch
+    /// handler's existing `uploads_ready < expected` check then waits
+    /// naturally — owner code doesn't need to know whether a file came
+    /// from R2 or from the laptop.
+    ///
+    /// Fetch failures are logged but don't unwind anything; the pod
+    /// just stays in "uploads not ready" until the owner notices via
+    /// `/health` and re-creates the pod (typical Vast-rental
+    /// workflow). A more aggressive policy could retry with backoff
+    /// — punted to a follow-up.
+    pub fn spawn_url_fetches(self: &Arc<Self>) {
+        let client = reqwest::Client::builder()
+            // Same connect timeout we use everywhere — fail fast on
+            // bad DNS / firewalled URLs so the owner sees the error
+            // in `/health` quickly.
+            .connect_timeout(std::time::Duration::from_secs(15))
+            .build()
+            .expect("reqwest client");
+        for (name, entry) in &self.blob.expected_uploads {
+            let Some(url) = entry.fetch_url.clone() else {
+                continue;
+            };
+            let state = Arc::clone(self);
+            let name = name.clone();
+            let expected_sha = entry.sha256;
+            let client = client.clone();
+            tokio::spawn(async move {
+                tracing::info!(file = %name, url = %url, "worker: fetching upload from URL");
+                match fetch_and_validate(&client, &url, &expected_sha).await {
+                    Ok(bytes) => {
+                        let len = bytes.len();
+                        let mut uploads = state.uploads.write().await;
+                        uploads.insert(
+                            name.clone(),
+                            UploadProgress {
+                                bytes,
+                                hasher: None,
+                                digest: Some(expected_sha),
+                            },
+                        );
+                        tracing::info!(
+                            file = %name,
+                            bytes = len,
+                            "worker: URL fetch complete + SHA validated"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            file = %name,
+                            url = %url,
+                            error = %e,
+                            "worker: URL fetch failed; pod will stay in 'uploads not ready'"
+                        );
+                    }
+                }
+            });
+        }
+    }
+}
+
+/// Atomic disk dump of every completed upload. Writes each entry's
+/// bytes to `<dir>/<name>` via write-then-rename so a partial write
+/// can never be mistaken for a complete file. The dump is idempotent
+/// — calling twice is a no-op on the second call (file already exists
+/// and matches the manifest SHA).
+///
+/// Phase 1 of the SubprocessRunner story: the bytes a child daemon
+/// would `mmap` need to actually exist on disk. This is the seam
+/// where they land.
+pub async fn dump_uploads_to_disk(
+    state: &WorkerState,
+    dir: &std::path::Path,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let uploads = state.uploads.read().await;
+    for (name, progress) in uploads.iter() {
+        // Only dump completed uploads (those with a validated digest).
+        if progress.digest.is_none() {
+            continue;
+        }
+        let target = dir.join(name);
+        if target.exists() {
+            // Idempotent — skip if already on disk. SHA was validated
+            // when the upload completed, so we trust the existing file.
+            continue;
+        }
+        let tmp = target.with_extension("partial");
+        std::fs::write(&tmp, &progress.bytes)?;
+        std::fs::rename(&tmp, &target)?;
+        tracing::info!(
+            file = %name,
+            path = %target.display(),
+            bytes = progress.bytes.len(),
+            "worker: dumped upload to disk"
+        );
+    }
+    Ok(())
+}
+
+/// Write a minimal child-daemon config pointing at the dumped model
+/// files. Phase 2's SubprocessRunner will spawn `sovereign-cli daemon
+/// run` with `SOVEREIGN_CONFIG=<this-path>` so the child loads the
+/// uploaded GGUFs.
+///
+/// Convention: file named `primary.gguf` becomes the primary slot,
+/// `embed.gguf` (or anything starting with `embed`) becomes the embed
+/// slot. Anything else is ignored — the child daemon doesn't load
+/// arbitrary files. Callers can override the convention by writing
+/// their own config externally.
+pub fn write_child_daemon_config(
+    models_dir: &std::path::Path,
+    config_path: &std::path::Path,
+) -> std::io::Result<()> {
+    let mut primary: Option<std::path::PathBuf> = None;
+    let mut embed: Option<std::path::PathBuf> = None;
+    if let Ok(entries) = std::fs::read_dir(models_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let lower = name.to_lowercase();
+            if lower.contains("embed") {
+                embed = Some(path);
+            } else if lower.ends_with(".gguf") && primary.is_none() {
+                primary = Some(path);
+            }
+        }
+    }
+    let Some(primary) = primary else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "no primary GGUF found in {} — child daemon config needs at least one *.gguf",
+                models_dir.display()
+            ),
+        ));
+    };
+    let mut toml = String::new();
+    toml.push_str("# Auto-generated by sovereign-mesh::worker_http for child-daemon launch.\n");
+    toml.push_str("# Do not edit by hand — regenerated each pod boot.\n\n");
+    toml.push_str("[models]\n");
+    toml.push_str(&format!("primary = \"{}\"\n", primary.display()));
+    if let Some(e) = embed {
+        toml.push_str(&format!("embed = \"{}\"\n", e.display()));
+    }
+    toml.push_str("\n[daemon]\n");
+    // Client port stays on the canonical 9741 so any inference call
+    // (whether routed through SubprocessRunner or a future
+    // out-of-band debug session on the pod) hits the URL Sovereign
+    // users already expect.
+    toml.push_str("client_port = 9741\n");
+    // Internal port is shifted off the daemon's default :9742 because
+    // the worker-mode daemon already owns that port. The child needs
+    // its own internal port so its admin/mesh surface (if it ever
+    // tries to come up — currently it shouldn't because there's no
+    // mesh-join config) doesn't fail to bind and abort the daemon.
+    toml.push_str("internal_port = 9743\n");
+    if let Some(parent) = config_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(config_path, toml)?;
+    Ok(())
+}
+
+async fn fetch_and_validate(
+    client: &reqwest::Client,
+    url: &str,
+    expected_sha: &Sha256Digest,
+) -> std::result::Result<Vec<u8>, String> {
+    // Brief retry loop — covers two real-world failure modes that
+    // shouldn't put the pod permanently in "uploads not ready":
+    // (1) origin-server cold start (R2 / B2 occasionally 503s on the
+    //     first request to a recently-created object), and (2) DNS
+    //     propagation lag if the URL was just minted. Anything beyond
+    //     these (genuine misconfig, bad signature, file-not-there)
+    //     fails after the retry budget and stays failed.
+    //
+    // A SHA mismatch is a hard error — no retry. The owner signed the
+    // wrong SHA into the blob, or the URL is serving different bytes;
+    // both are user-actionable, not transient.
+    let attempts = 6;
+    let mut delay = std::time::Duration::from_millis(250);
+    let mut last_err = String::new();
+    for attempt in 1..=attempts {
+        match client.get(url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                let bytes = resp
+                    .bytes()
+                    .await
+                    .map_err(|e| format!("body: {e}"))?
+                    .to_vec();
+                let mut h = Sha256::new();
+                h.update(&bytes);
+                let mut got = [0u8; 32];
+                got.copy_from_slice(&h.finalize());
+                if &got != expected_sha {
+                    return Err(format!(
+                        "sha mismatch: expected {} got {} (not retried — owner-signed SHA is wrong)",
+                        hex::encode(expected_sha),
+                        hex::encode(got),
+                    ));
+                }
+                return Ok(bytes);
+            }
+            Ok(resp) => last_err = format!("status: {}", resp.status()),
+            Err(e) => last_err = format!("send: {e}"),
+        }
+        if attempt < attempts {
+            tokio::time::sleep(delay).await;
+            delay = (delay * 2).min(std::time::Duration::from_secs(5));
+        }
+    }
+    Err(last_err)
 }
 
 // ───── Router ───────────────────────────────────────────────────────
@@ -311,7 +630,7 @@ async fn upload_handler(
     _headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<UploadResponse>, Response> {
-    let Some(expected) = state.blob.expected_uploads.get(&q.name).copied() else {
+    let Some(entry) = state.blob.expected_uploads.get(&q.name).cloned() else {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
@@ -322,24 +641,38 @@ async fn upload_handler(
             .into_response());
     };
 
-    let mut uploads = state.uploads.write().await;
-    let entry = uploads.entry(q.name.clone()).or_default();
-    if entry.hasher.is_none() {
-        entry.hasher = Some(Sha256::new());
+    // Reject manual upload attempts for URL-backed entries — those
+    // are fetched by the pod itself. Without this guard, an owner
+    // racing the background fetch could overwrite progress.
+    if entry.fetch_url.is_some() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({
+                "error": "file is URL-backed; pod fetches it directly",
+                "name": q.name,
+            })),
+        )
+            .into_response());
     }
-    if let Some(h) = entry.hasher.as_mut() {
+
+    let mut uploads = state.uploads.write().await;
+    let progress = uploads.entry(q.name.clone()).or_default();
+    if progress.hasher.is_none() {
+        progress.hasher = Some(Sha256::new());
+    }
+    if let Some(h) = progress.hasher.as_mut() {
         h.update(&body);
     }
-    entry.bytes.extend_from_slice(&body);
-    let bytes_received = entry.bytes.len();
+    progress.bytes.extend_from_slice(&body);
+    let bytes_received = progress.bytes.len();
 
     let mut ready = false;
     if q.finalize {
-        let hasher = entry.hasher.take().unwrap_or_default();
+        let hasher = progress.hasher.take().unwrap_or_default();
         let digest_bytes = hasher.finalize();
         let mut got = [0u8; 32];
         got.copy_from_slice(&digest_bytes);
-        if got != expected {
+        if got != entry.sha256 {
             // Reset progress so the owner can retry from byte 0.
             uploads.remove(&q.name);
             return Err((
@@ -347,13 +680,13 @@ async fn upload_handler(
                 Json(serde_json::json!({
                     "error": "sha256 mismatch — upload rejected",
                     "name": q.name,
-                    "expected": hex::encode(expected),
+                    "expected": hex::encode(entry.sha256),
                     "got": hex::encode(got),
                 })),
             )
                 .into_response());
         }
-        entry.digest = Some(got);
+        progress.digest = Some(got);
         ready = true;
     }
 
@@ -544,7 +877,10 @@ mod tests {
         sha.copy_from_slice(&digest.finalize());
 
         let mut manifest = BTreeMap::new();
-        manifest.insert("primary.gguf".to_string(), sha);
+        manifest.insert(
+            "primary.gguf".to_string(),
+            crate::worker_pod::UploadEntry::local(sha),
+        );
 
         let owner = fixed_owner_key();
         let inputs = BootstrapInputs {
@@ -766,6 +1102,83 @@ mod tests {
         assert!(state
             .shutdown_requested
             .load(std::sync::atomic::Ordering::Acquire));
+    }
+
+    #[tokio::test]
+    async fn dump_uploads_to_disk_writes_validated_bytes() {
+        let bytes = b"abcdefghij";
+        let (state, _blob, _token) = test_setup(bytes);
+        // Manually inject a completed upload (skipping the HTTP layer).
+        {
+            let mut h = Sha256::new();
+            h.update(bytes);
+            let mut sha = [0u8; 32];
+            sha.copy_from_slice(&h.finalize());
+            let mut uploads = state.uploads.write().await;
+            uploads.insert(
+                "primary.gguf".to_string(),
+                UploadProgress {
+                    bytes: bytes.to_vec(),
+                    hasher: None,
+                    digest: Some(sha),
+                },
+            );
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        dump_uploads_to_disk(&state, tmp.path()).await.unwrap();
+        let written = std::fs::read(tmp.path().join("primary.gguf")).unwrap();
+        assert_eq!(written, bytes);
+        // Idempotent — second call is a no-op (file already exists).
+        dump_uploads_to_disk(&state, tmp.path()).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn dump_skips_incomplete_uploads() {
+        let (state, _blob, _token) = test_setup(b"x");
+        // Insert an upload progress without a digest (i.e., still mid-stream).
+        {
+            let mut uploads = state.uploads.write().await;
+            uploads.insert(
+                "in-flight.gguf".to_string(),
+                UploadProgress {
+                    bytes: b"partial".to_vec(),
+                    hasher: Some(Sha256::new()),
+                    digest: None,
+                },
+            );
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        dump_uploads_to_disk(&state, tmp.path()).await.unwrap();
+        assert!(
+            !tmp.path().join("in-flight.gguf").exists(),
+            "incomplete uploads must not be dumped"
+        );
+    }
+
+    #[test]
+    fn child_daemon_config_picks_primary_and_embed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let models = tmp.path().join("models");
+        std::fs::create_dir(&models).unwrap();
+        std::fs::write(models.join("FINAL-Bench_Darwin-36B-Opus-Q6_K.gguf"), b"x").unwrap();
+        std::fs::write(models.join("Qwen3-Embedding-0.6B-Q8_0.gguf"), b"y").unwrap();
+
+        let config = tmp.path().join("config.toml");
+        write_child_daemon_config(&models, &config).unwrap();
+        let body = std::fs::read_to_string(&config).unwrap();
+        assert!(body.contains("primary = "));
+        assert!(body.contains("FINAL-Bench_Darwin-36B-Opus-Q6_K.gguf"));
+        assert!(body.contains("embed = "));
+        assert!(body.contains("Qwen3-Embedding-0.6B-Q8_0.gguf"));
+    }
+
+    #[test]
+    fn child_daemon_config_errors_with_no_gguf() {
+        let tmp = tempfile::tempdir().unwrap();
+        let models = tmp.path().join("models");
+        std::fs::create_dir(&models).unwrap();
+        let err = write_child_daemon_config(&models, &tmp.path().join("config.toml")).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[tokio::test]
