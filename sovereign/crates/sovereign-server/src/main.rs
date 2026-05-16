@@ -463,6 +463,23 @@ async fn main() {
         let _bump_flusher = Arc::clone(&atlas_mgr).spawn_bump_flusher(30);
     }
 
+    // Cross-corpus meta-atlas (Move 5). Loads the persisted
+    // `canonical_atoms.json` produced by `sovereign meta-atlas build`.
+    let meta_atlas_path = corpus_engine::meta_atlas::default_meta_atlas_path();
+    match corpus_engine::meta_atlas::MetaAtlasIndex::load(meta_atlas_path.as_deref()) {
+        Ok(idx) => {
+            tracing::info!(
+                atoms = idx.len(),
+                corpora = idx.corpus_count(),
+                "meta-atlas loaded"
+            );
+            runtime_builder = runtime_builder.with_meta_atlas(Arc::new(idx));
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "meta-atlas load failed; boost disabled");
+        }
+    }
+
     let runtime = Arc::new(runtime_builder);
 
     // Auth state.

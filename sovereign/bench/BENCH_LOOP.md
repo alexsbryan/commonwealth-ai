@@ -507,6 +507,55 @@ follow-up campaigns:
   validated improvement. `--rebuild` re-extracts the enrichment-
   lane atlas before scoring (sequential, GPU-bound).
 
+- **Meta-atlas substrate — Move 5.** **Landed 2026-05-15.**
+  Replaces Move 4's priority-dial registry with a derived
+  two-axis stream taxonomy. **Articulation** is per-atom — a
+  rule-based classifier (`corpus-engine/src/meta_atlas/classifier.rs`)
+  reads atom shape (`entity_type`, `defining_quote`, `discourse_act`,
+  `event_type`, etc.) + chunk-preview markers and emits an
+  `ArticulationVector { inventory, argument, trace }` per atom.
+  **Stability** is per-corpus — `derive_stability` reads recipe
+  `acquire.kind()` + `update.ingest_driver` and writes the value
+  into `_corpus_meta.json` (`sovereign corpus stream-axes` for
+  legacy backfill). The meta-atlas builder
+  (`sovereign meta-atlas build`) walks every installed atlas,
+  classifies each Entity atom, clusters by normalised
+  `canonical_key`, and persists to
+  `~/.sovereign/meta-atlas/canonical_atoms.json`. The chat path's
+  `Runtime::meta_atlas_boost` consults the index per question:
+  for each matched canonical entity it picks the top anchor per
+  articulation axis (max 3 — Inventory / Argument / Trace),
+  injects chunks via focused per-corpus search, tags each chunk
+  with `metadata["articulation"]` + `metadata["stability"]`.
+  `format_scored_chunks_with_kinds` sub-buckets the corpus
+  section into three named prompt sections so the synthesis
+  model sees the streams as distinct. Chunks without tags fall
+  through to the existing `## From knowledge base` catch-all —
+  no-regression on un-meta-tagged retrieval. Bench observability:
+  per-question JSON carries `meta_atlas_hits: [{entity, corpus_id,
+  articulation, stability, chunks_added}]`. The per-atom
+  classifier handles heterogeneous user-pointed corpora (vaults,
+  watched folders) as a first-class case: a single vault with
+  mixed journals (Trace) / essays (Argument) / reference cards
+  (Inventory) gets per-atom tags from atom shape, no recipe
+  edits required.
+
+  **Move 5.1 follow-ups (2026-05-15):** (a) Token-index disambig
+  lookup — single-word surface forms ("Einstein") fan out across
+  candidate canonical_keys and score by last-token-match +
+  parenthetical-disambig penalty + max-anchor-salience. "Einstein"
+  → `albert einstein` (was disambig stub). (b) Already-in-bag
+  re-rank — when meta-atlas anchor chunks are already in the
+  cosine bag, score-lift + tag in place so the synthesis prompt
+  sub-buckets correctly. (c) Rolling-stability corpora excluded
+  from anchoring (conv-history, codex-session, newsworthy are
+  practice-stream; never anchor canonical-entity lookups). Open:
+  within-corpus polysemy (Isaac vs Helmut Newton) needs external
+  popularity signal — Move 5.2 territory. Title-coverage lift the
+  Move 5 plan predicted isn't testable in single-big-corpus
+  installs; would surface in a deploy with wiki + SEP
+  einstein-philscience.
+
 - **Cross-corpus calibration.** Each bench today tunes against one
   corpus's golden. Whether the same prompt iterations transfer
   cleanly across corpora (does endorse/rebut symmetry help a recipe

@@ -24,6 +24,7 @@ mod git_archaeology_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod corpus_catalog_cmd;
+mod meta_atlas_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
 mod doc_fetcher;
@@ -484,6 +485,10 @@ async fn async_main() {
             }
             "corpus" => {
                 let code = mesh_cmd::run_corpus(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "meta-atlas" => {
+                let code = meta_atlas_cmd::run_meta_atlas(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "mcp" => {

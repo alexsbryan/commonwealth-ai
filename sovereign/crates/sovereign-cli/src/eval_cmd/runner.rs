@@ -118,6 +118,34 @@ pub struct EvalResult {
     /// retrieve.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub atlas_navigation: Vec<RetrievedChunk>,
+    /// Move 5: meta-atlas hit records — one per anchor (max 3 per
+    /// matched meta-atom, one per articulation axis with a dominant
+    /// anchor) the cross-corpus meta-atlas surfaced for this
+    /// question. The bench's fourth lens over retrieval: "which
+    /// canonical entities did the meta-atlas recognise, and which
+    /// stream did each anchor serve?". Empty when the meta-atlas
+    /// didn't match the question's entities (the common case) and on
+    /// retrieval-mode runs (synth path only).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub meta_atlas_hits: Vec<MetaAtlasHitEcho>,
+}
+
+/// Echo of `sovereign_core::runtime::MetaAtlasHitRecord` for the
+/// per-question JSON. Kept as a separate type so the bench schema is
+/// not coupled to runtime internals — if the runtime adds fields the
+/// bench output stays stable until we explicitly forward them.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaAtlasHitEcho {
+    pub entity: String,
+    pub corpus_id: String,
+    /// `"inventory" | "argument" | "trace"` — dominant articulation
+    /// of the anchor.
+    pub articulation: String,
+    /// `"frozen" | "versioned" | "rolling"` or `None` when the
+    /// corpus carried no stream block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stability: Option<String>,
+    pub chunks_added: usize,
 }
 
 /// Synth-mode payload. Only populated when the eval drove the full
@@ -1065,6 +1093,7 @@ async fn run_question(
                 loose_source_evidence: Vec::new(),
                 essay_readiness: None,
                 atlas_navigation: Vec::new(),
+                meta_atlas_hits: Vec::new(),
                 // Note: error message isn't carried in the result row
                 // today; the runner's stderr already logged it. Add a
                 // `note: Option<String>` field if this becomes annoying.
@@ -1547,6 +1576,7 @@ async fn run_question(
         loose_source_evidence,
         essay_readiness,
         atlas_navigation: atlas_navigation_packed,
+        meta_atlas_hits: Vec::new(),
     }
 }
 
@@ -1744,6 +1774,14 @@ async fn run_question_synth(session: &ChatSession, q: &Question, judge: bool) ->
         .cloned()
         .unwrap_or_default();
 
+    // Move 4 — canonical-entity boosts echoed back from
+    // runtime metadata. One row per primary / alternative slot.
+    let meta_atlas_hits: Vec<MetaAtlasHitEcho> = metadata
+        .as_ref()
+        .and_then(|m| m.get("meta_atlas_hits"))
+        .and_then(|v| serde_json::from_value::<Vec<MetaAtlasHitEcho>>(v.clone()).ok())
+        .unwrap_or_default();
+
     let titles: Vec<String> = retrieved_chunks_meta
         .iter()
         .filter_map(|c| c.get("title").and_then(|t| t.as_str()))
@@ -1860,6 +1898,7 @@ async fn run_question_synth(session: &ChatSession, q: &Question, judge: bool) ->
         loose_source_evidence: Vec::new(),
         essay_readiness: None,
         atlas_navigation: Vec::new(),
+        meta_atlas_hits,
     }
 }
 
@@ -1892,5 +1931,6 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
         loose_source_evidence: Vec::new(),
         essay_readiness: None,
         atlas_navigation: Vec::new(),
+        meta_atlas_hits: Vec::new(),
     }
 }

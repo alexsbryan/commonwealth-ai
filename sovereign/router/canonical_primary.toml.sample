@@ -1,0 +1,30 @@
+# Canonical-entity overrides — operator escape hatch on top of the
+# Move 5 meta-atlas substrate.
+#
+# Move 4's per-corpus integer priority dial (`[corpora]` block) was
+# deleted in Move 5. Per-corpus stability is now *derived* from
+# recipe fields (`acquire.kind()` + `update.ingest_driver`) and
+# written to each corpus's `_corpus_meta.json`. Per-atom articulation
+# is *classified* per-atom by the rule-based classifier in
+# `corpus-engine/src/meta_atlas/classifier.rs` from atom shape
+# (`entity_type`, `defining_quote`, `discourse_act`, etc.).
+#
+# This file lives at `~/.sovereign/canonical_primary.toml` (NOT here).
+# Copy this sample and edit only when the substrate's derivation
+# misfires on a known-stakes entity.
+#
+# v1 of Move 5 does NOT consume the override surface yet — the
+# overrides land in a follow-up Move (5.1) that adds bidirectional
+# alias resolution + per-entity primary pinning to address the
+# alias-precedence bugs surfaced in the bench validation.
+
+# Per-entity primary overrides. Pin a canonical entity to a specific
+# corpus when the substrate's classifier+salience-ranking picks the
+# wrong anchor. Keys are normalised (lowercase, alphanumeric only,
+# single-spaced).
+[overrides]
+"aristotle" = "sep"
+"plato" = "sep"
+"kant" = "sep"
+"hume" = "sep"
+"nietzsche" = "sep"
