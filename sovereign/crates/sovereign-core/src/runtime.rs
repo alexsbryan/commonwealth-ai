@@ -773,6 +773,96 @@ pub(crate) fn reweight_by_query_relevance(
     }
 }
 
+/// Inject canonical-entity boost hits into the merge bag. Each newly
+/// injected chunk gets a small score lift above `top_score` so it
+/// survives `chunks.truncate(KQ_MERGED_LIMIT)`. Existing chunks with
+/// the same `(corpus_id, chunk_id)` are skipped (no double-injection)
+/// but counted as "displaced by their score-lift sibling" rather than
+/// added — the merge still has them, and the upstream caller still
+/// gets credit via the eventual title-coverage signal.
+///
+/// `rank` is the running boost rank; mutated so successive calls keep
+/// their relative ordering.
+///
+/// Returns the count of meta-atlas-anchored chunks in the bag for
+/// this batch — counts both freshly injected chunks AND already-
+/// present chunks whose score got lifted to the boost band.
+///
+/// `articulation` and `stability` (when present) are written into
+/// each affected chunk's `metadata` so the synthesis-prompt
+/// formatter ([`format_scored_chunks_with_kinds`]) can sub-section
+/// the corpus bucket by stream.
+///
+/// Move 5.1: already-present chunks now get their score lifted +
+/// metadata tagged in place, rather than being skipped. Reason:
+/// the meta-atlas anchor's canonical chunk is often already at
+/// cosine-top when the corpus is wiki-shaped and dominant; skipping
+/// silently made the boost a no-op in single-corpus deployments.
+/// The re-rank ensures the synthesis-prompt formatter sees the
+/// stream tag and sectioning applies regardless of whether the
+/// chunk was net-new or cosine-discovered.
+pub(crate) fn inject_meta_atlas_hits(
+    chunks: &mut Vec<corpus_engine::ScoredChunk>,
+    hits: Vec<corpus_engine::ScoredChunk>,
+    expected_corpus: &str,
+    articulation: &str,
+    stability: Option<&str>,
+    top_score: f32,
+    rank: &mut usize,
+) -> usize {
+    if hits.is_empty() {
+        return 0;
+    }
+    let mut affected = 0usize;
+    for hit in hits {
+        if hit.corpus_id != expected_corpus {
+            // search_corpora_filtered's name_match is substring;
+            // tighten to exact corpus_id here so a stray match
+            // from a wider sibling doesn't sneak in.
+            continue;
+        }
+        *rank += 1;
+        // Above any current chunk by a deterministic margin. The
+        // 1e-4 floor leaves room for reweight_by_query_relevance
+        // (multiplies by up to 4×) without rank reshuffling within
+        // the meta-atlas cohort.
+        let lifted_score = top_score + 1e-4 * (*rank as f32);
+        if let Some(existing) = chunks.iter_mut().find(|c| {
+            c.corpus_id == hit.corpus_id
+                && c.chunk_id.is_some()
+                && c.chunk_id == hit.chunk_id
+        }) {
+            // Already-present: lift score + tag metadata in place.
+            existing.score = lifted_score;
+            existing
+                .metadata
+                .insert("source".to_string(), "meta_atlas_boost".to_string());
+            existing
+                .metadata
+                .insert("articulation".to_string(), articulation.to_string());
+            if let Some(s) = stability {
+                existing
+                    .metadata
+                    .insert("stability".to_string(), s.to_string());
+            }
+            affected += 1;
+            continue;
+        }
+        let mut hit = hit;
+        hit.score = lifted_score;
+        hit.metadata
+            .insert("source".to_string(), "meta_atlas_boost".to_string());
+        hit.metadata
+            .insert("articulation".to_string(), articulation.to_string());
+        if let Some(s) = stability {
+            hit.metadata.insert("stability".to_string(), s.to_string());
+        }
+        chunks.push(hit);
+        affected += 1;
+    }
+    affected
+}
+
 /// Drop chunks that have zero query-token overlap in title or content.
 ///
 /// Hybrid search returns up to `KQ_PER_CORPUS_LIMIT` chunks per
@@ -1513,6 +1603,13 @@ const ENTITY_QUERY_LIMIT: usize = 3;
 /// `COMPARISON_PER_ENTITY_RESERVE` below.
 const COMPARISON_ENTITY_QUERY_LIMIT: usize = 6;
 
+/// Canonical-entity boost — number of chunks fetched from the
+/// canonical entity's *primary* corpus. The primary slot is meant to
+/// anchor the bench's title-coverage signal: one canonical-overview
+/// chunk in the merge bag is enough for a title-match hit, three lets
+/// the merge cap reject one without losing the anchor.
+const CANONICAL_PRIMARY_LIMIT: usize = 3;
+
 /// For ComparisonQuery, guarantee this many entity-titled chunks per
 /// named entity survive the `KQ_MERGED_LIMIT` truncation. Without
 /// this, an entity-boost contribution can be out-ranked by the
@@ -1977,6 +2074,15 @@ fn format_scored_chunks_with_kinds(
     contested: Option<&std::collections::HashSet<String>>,
     folder_metadata: Option<&std::collections::HashMap<String, crate::traits::FolderMetadata>>,
 ) -> String {
+    // Move 5 — sub-bucket the corpus bucket by the meta-atlas
+    // articulation axis when chunks carry the `articulation`
+    // metadata tag. Three new prompt sections render before the
+    // existing "From knowledge base" catch-all so the synthesis
+    // model sees the structural-map / articulated-claim /
+    // lived-practice distinction.
+    let mut corpus_inventory = Vec::new();
+    let mut corpus_argument = Vec::new();
+    let mut corpus_trace = Vec::new();
     let mut corpus_parts = Vec::new();
     let mut folder_parts = Vec::new();
     let mut web_parts = Vec::new();
@@ -2002,13 +2108,21 @@ fn format_scored_chunks_with_kinds(
             })
             .unwrap_or("");
 
+        // Articulation + stability tags, when present.
+        let articulation_tag = c.metadata.get("articulation").map(String::as_str);
+        let stability_tag = c.metadata.get("stability").map(String::as_str);
+        let stability_suffix = match stability_tag {
+            Some(s) => format!(" · {s}"),
+            None => String::new(),
+        };
+
         let (label, bucket) = if let Some(meta) = folder_meta {
-            // Folder corpora win precedence over Catalog/Web — a
-            // folder is by definition the user's own material and
+            // Folder corpora win precedence over Catalog/Web/articulation
+            // — a folder is by definition the user's own material and
             // the synthesis register changes accordingly.
             (
                 format!(
-                    "[Folder: {} — {title}{contested_suffix}]",
+                    "[Folder: {} — {title}{contested_suffix}{stability_suffix}]",
                     meta.display_name
                 ),
                 &mut folder_parts,
@@ -2017,6 +2131,21 @@ fn format_scored_chunks_with_kinds(
             (format!("[Catalog: {title}{contested_suffix}]"), &mut catalog_parts)
         } else if c.url.is_some() {
             (format!("[Web: {title}{contested_suffix}]"), &mut web_parts)
+        } else if let Some(axis) = articulation_tag {
+            // Meta-atlas-tagged corpus chunk — sub-bucket by axis.
+            let bucket = match axis {
+                "inventory" => &mut corpus_inventory,
+                "argument" => &mut corpus_argument,
+                "trace" => &mut corpus_trace,
+                _ => &mut corpus_parts,
+            };
+            (
+                format!(
+                    "[{}: {title}{contested_suffix}{stability_suffix}]",
+                    c.corpus_id
+                ),
+                bucket,
+            )
         } else {
             (format!("[Source: {title}{contested_suffix}]"), &mut corpus_parts)
         };
@@ -2037,6 +2166,24 @@ fn format_scored_chunks_with_kinds(
         sections.push(format!(
             "## From your folders\n\n{}",
             folder_parts.join("\n\n---\n\n")
+        ));
+    }
+    if !corpus_inventory.is_empty() {
+        sections.push(format!(
+            "## Broad map (inventory)\n\n{}",
+            corpus_inventory.join("\n\n---\n\n")
+        ));
+    }
+    if !corpus_argument.is_empty() {
+        sections.push(format!(
+            "## Articulated claims (arguments)\n\n{}",
+            corpus_argument.join("\n\n---\n\n")
+        ));
+    }
+    if !corpus_trace.is_empty() {
+        sections.push(format!(
+            "## Lived practice (traces)\n\n{}",
+            corpus_trace.join("\n\n---\n\n")
         ));
     }
     if !corpus_parts.is_empty() {
@@ -2480,6 +2627,32 @@ struct KnowledgeContext {
     coverage: Option<crate::types::CoverageNote>,
 }
 
+/// One meta-atlas anchor injection. The chat path logs a
+/// `Vec<MetaAtlasHitRecord>` per question for observability; the
+/// bench surface mirrors it into `EvalResult.meta_atlas_hits` so the
+/// per-question JSON carries which entities the meta-atlas recognised
+/// and which stream the anchor served.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MetaAtlasHitRecord {
+    /// Display name from the meta-atlas — what the operator reads
+    /// ("Albert Einstein", not "albert einstein").
+    pub entity: String,
+    /// Corpus the injected chunks came from.
+    pub corpus_id: String,
+    /// `"inventory" | "argument" | "trace"` — the dominant
+    /// articulation axis of the anchor that was picked.
+    pub articulation: String,
+    /// `"frozen" | "versioned" | "rolling" | null` — the per-corpus
+    /// write contract. `null` when the corpus has no stream block
+    /// (legacy / atlas-only sibling).
+    pub stability: Option<String>,
+    /// How many chunks the targeted search returned and were
+    /// injected. Zero means the meta-atlas surfaced an anchor but
+    /// the per-corpus search yielded nothing useful — diagnostic
+    /// when title-coverage stays flat despite meta-atlas hits.
+    pub chunks_added: usize,
+}
+
 /// Everything `handle_knowledge_query` and the streaming KQ branch need
 /// to issue a synthesis request. Produced by
 /// [`Runtime::prepare_knowledge_query_plan`] so the two paths cannot
@@ -2512,6 +2685,13 @@ struct KnowledgeQueryPlan {
     /// (CLI / test harness fallback) → coverage chip suppressed,
     /// `display_name` falls back to `corpus_id`.
     folder_meta: std::collections::HashMap<String, crate::traits::FolderMetadata>,
+    /// Meta-atlas hit records (Move 5). One per injected anchor
+    /// (max 3 per matched meta-atom — one per articulation axis with
+    /// a dominant anchor). Surfaced in synth metadata so the bench's
+    /// per-question JSON can carry "which canonical entities did the
+    /// meta-atlas recognise and which stream did each anchor
+    /// serve" — the fourth legibility lens.
+    meta_atlas_hits: Vec<MetaAtlasHitRecord>,
 }
 
 /// Streaming handle returned by [`Runtime::handle_message_stream`].
@@ -2994,6 +3174,14 @@ pub struct Runtime {
     /// `search_with_rerank` no-op back to baseline regardless of
     /// `rerank_fn`'s presence.
     pub rerank_config: corpus_engine::RerankConfig,
+    /// Cross-corpus meta-atlas index (Move 5). Built at bootstrap
+    /// from `~/.sovereign/meta-atlas/canonical_atoms.json` (produced
+    /// by `sovereign meta-atlas build`). The chat-path boost pass
+    /// `Self::meta_atlas_boost` consults the index on every
+    /// knowledge-query turn to surface stream-tagged anchors per
+    /// question entity. `None` (or empty index) = no boost; retrieval
+    /// falls back to cosine + entity-boost search exactly as before.
+    pub meta_atlas: Option<Arc<corpus_engine::meta_atlas::MetaAtlasIndex>>,
     /// Per-conversation last-turn provenance snapshot, written at
     /// dispatch inside [`Self::handle_expressive_query_stream`] and
     /// read by [`Self::get_last_turn_provenance`]. Last-write-wins
@@ -3042,6 +3230,7 @@ impl Runtime {
             folder_metadata: None,
             rerank_fn: None,
             rerank_config: corpus_engine::RerankConfig::default(),
+            meta_atlas: None,
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
         }
     }
@@ -3119,6 +3308,19 @@ impl Runtime {
 
     pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
         self.corpus_engine = Some(engine);
+        self
+    }
+
+    /// Install the cross-corpus meta-atlas index. Built by the
+    /// bootstrap by loading `~/.sovereign/meta-atlas/canonical_atoms.json`
+    /// (produced by `sovereign meta-atlas build`). Optional — when
+    /// `None`, [`Self::meta_atlas_boost`] short-circuits and retrieval
+    /// behaves exactly as before the meta-atlas substrate landed.
+    pub fn with_meta_atlas(
+        mut self,
+        index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>,
+    ) -> Self {
+        self.meta_atlas = Some(index);
         self
     }
 
@@ -3989,6 +4191,115 @@ impl Runtime {
         chunks
     }
 
+    /// Canonical-entity boost (Move 4). For every question entity that
+    /// resolves through the cross-corpus
+    /// [`corpus_engine::meta_atlas::MetaAtlasIndex`], pick the top
+    /// anchor per articulation axis (max 3 — one per
+    /// `Inventory|Argument|Trace`), run a focused per-corpus search
+    /// against that anchor's corpus, inject the returned chunks into
+    /// `chunks` with a small score lift that survives
+    /// `KQ_MERGED_LIMIT` truncation, and tag each injected chunk's
+    /// metadata with `articulation` + `stability`. Returns one
+    /// [`MetaAtlasHitRecord`] per anchor.
+    ///
+    /// Why one anchor per axis rather than "primary + alts": the
+    /// per-atom articulation classifier (Move 5 Stage 1) tags each
+    /// anchor with what kind of epistemic content it holds. The
+    /// chat-path goal is the synthesis model seeing structural map +
+    /// articulated claim + lived practice as distinct prompt
+    /// sections. Picking by axis preserves that legibility.
+    ///
+    /// `min_axis_weight` is the threshold the dominant axis must
+    /// clear for an anchor to claim a slot. Anchors with weak
+    /// dominance (ambiguous) are suppressed — better to inject
+    /// nothing than to inject a chunk the classifier wasn't sure
+    /// about.
+    async fn meta_atlas_boost(
+        &self,
+        chunks: &mut Vec<corpus_engine::ScoredChunk>,
+        entities: &[String],
+    ) -> Vec<MetaAtlasHitRecord> {
+        let Some(index) = self.meta_atlas.as_ref() else {
+            return Vec::new();
+        };
+        if index.is_empty() || entities.is_empty() {
+            return Vec::new();
+        }
+
+        let matches = index.lookup_any(entities);
+        if matches.is_empty() {
+            return Vec::new();
+        }
+
+        // Reference score above which boosted chunks should sort.
+        let top_score = chunks
+            .iter()
+            .map(|c| c.score)
+            .fold(f32::MIN, f32::max)
+            .max(1.0);
+
+        let mut applied: Vec<MetaAtlasHitRecord> = Vec::new();
+        let mut rank: usize = 0;
+        const MIN_AXIS_WEIGHT: f32 = 0.40;
+
+        for atom in matches {
+            let entity_emb = self
+                .inference
+                .embed_query(&atom.display)
+                .await
+                .unwrap_or_default();
+            if entity_emb.is_empty() {
+                tracing::warn!(
+                    entity = %atom.display,
+                    "meta_atlas_boost: empty embedding for entity; skipping"
+                );
+                continue;
+            }
+
+            for axis in
+                corpus_engine::stream_axes::Articulation::ALL.iter()
+            {
+                let anchor = match corpus_engine::meta_atlas::MetaAtlasIndex
+                    ::top_anchor_for_axis(&atom, *axis, MIN_AXIS_WEIGHT)
+                {
+                    Some(a) => a,
+                    None => continue,
+                };
+                let hits = self
+                    .search_corpora_filtered(
+                        &entity_emb,
+                        &atom.display,
+                        CANONICAL_PRIMARY_LIMIT,
+                        None,
+                        Some(&anchor.corpus_id),
+                        "MetaAtlasBoost",
+                    )
+                    .await;
+                let stability_tag = anchor
+                    .stability
+                    .map(|s| s.as_str().to_string());
+                let added = inject_meta_atlas_hits(
+                    chunks,
+                    hits,
+                    &anchor.corpus_id,
+                    axis.as_str(),
+                    stability_tag.as_deref(),
+                    top_score,
+                    &mut rank,
+                );
+                applied.push(MetaAtlasHitRecord {
+                    entity: atom.display.clone(),
+                    corpus_id: anchor.corpus_id.clone(),
+                    articulation: axis.as_str().to_string(),
+                    stability: stability_tag,
+                    chunks_added: added,
+                });
+            }
+        }
+
+        applied
+    }
+
     /// Source-cohesion expansion.
     ///
     /// When the initial retrieval has clearly landed on a single
@@ -4581,6 +4892,17 @@ impl Runtime {
                 "DeepQuery: entity-boost retrieval"
             );
         }
+
+        // Canonical-entity boost (Move 4) — same pass as the streaming
+        // KQ branch. Surfaces the canonical-overview chunk for any
+        // famous entity named in the question, anchored to the
+        // registry's primary corpus, regardless of cross-corpus cosine
+        // ranking. Records are not threaded through KnowledgeContext
+        // (the non-streaming surface is unused by the bench), but the
+        // chunks they inject still survive the merge below.
+        let _meta_atlas_hits = self
+            .meta_atlas_boost(&mut all_chunks, &entities)
+            .await;
 
         // Optional question decomposition (gated by env flag). Catches
         // concept axes that proper-noun extraction misses ("compassion",
@@ -6159,6 +6481,7 @@ impl Runtime {
                 source_map,
                 result_quality,
                 folder_meta,
+                meta_atlas_hits,
             } = plan;
             let documents_found = chunks.len();
             let top_source_label = shape.top_source_label.clone();
@@ -6280,6 +6603,10 @@ impl Runtime {
                     "result_quality": result_quality,
                     "provenance": provenance,
                     "retrieved_chunks": retrieved_chunks,
+                    // Move 4 — canonical-entity-boost echo for the
+                    // bench's fourth legibility lens. Empty when the
+                    // registry was unset or matched no entities.
+                    "meta_atlas_hits": meta_atlas_hits,
                     // PR3 — grounded follow-ups rendered as clickable
                     // NextStepButtons under the bubble. Empty array
                     // when retrieval produced nothing to ground an
@@ -7933,6 +8260,29 @@ impl Runtime {
             );
         }
 
+        // 2b''. Canonical-entity boost (Move 4). For every question
+        //       entity that resolves through the cross-corpus canonical
+        //       registry, fetch focused chunks from the entity's
+        //       primary + alternative corpora and inject them with a
+        //       score lift that survives `KQ_MERGED_LIMIT` truncation.
+        //       The registry maps surface forms (`Einstein`,
+        //       `albert-einstein`) to primary-corpus anchors so the
+        //       canonical overview cannot be edged out by a higher-
+        //       cosine focused article on cross-corpus comparison
+        //       questions. `None` registry / empty matches = no-op.
+        let meta_atlas_hits = self
+            .meta_atlas_boost(&mut chunks, &entities)
+            .await;
+        if !meta_atlas_hits.is_empty() {
+            let total_added: usize =
+                meta_atlas_hits.iter().map(|r| r.chunks_added).sum();
+            tracing::info!(
+                hits = meta_atlas_hits.len(),
+                chunks_added = total_added,
+                "KnowledgeQuery: meta-atlas boost"
+            );
+        }
+
         // 2b'. Optional question decomposition (gated by env flag).
         //      Catches concept axes that proper-noun extraction misses
         //      and gives each side of a comparison its own focused pass.
@@ -8063,6 +8413,7 @@ impl Runtime {
                 source_map: HashMap::new(),
                 result_quality: "empty",
                 folder_meta: std::collections::HashMap::new(),
+                meta_atlas_hits,
             };
         }
 
@@ -8304,6 +8655,7 @@ impl Runtime {
             source_map,
             result_quality,
             folder_meta,
+            meta_atlas_hits,
         }
     }
 
@@ -10868,6 +11220,102 @@ mod relational_intent_override_tests {
             SkillRegister::Relational,
         );
         assert!(matches!(out, Intent::Continuation { .. }));
+    }
+}
+
+#[cfg(test)]
+mod formatter_stream_section_tests {
+    //! Move 5 Stage 5 — formatter sub-buckets the corpus bucket by
+    //! `metadata["articulation"]` so the synthesis model sees the
+    //! three streams as named sections. Chunks without the tag fall
+    //! through to the catch-all "From knowledge base" section
+    //! (no-regression for un-meta-tagged retrieval).
+
+    use super::format_scored_chunks_with_kinds;
+    use corpus_engine::ScoredChunk;
+    use std::collections::HashMap;
+
+    fn chunk(corpus: &str, title: &str, content: &str, axis: Option<&str>, stab: Option<&str>) -> ScoredChunk {
+        let mut metadata = HashMap::new();
+        if let Some(a) = axis {
+            metadata.insert("articulation".into(), a.into());
+        }
+        if let Some(s) = stab {
+            metadata.insert("stability".into(), s.into());
+        }
+        ScoredChunk {
+            content: content.into(),
+            title: Some(title.into()),
+            url: None,
+            corpus_id: corpus.into(),
+            score: 1.0,
+            metadata,
+            chunk_id: None,
+            source_doc_id: None,
+            vector_distance: None,
+        }
+    }
+
+    #[test]
+    fn meta_atlas_tags_produce_three_sub_sections() {
+        let chunks = vec![
+            chunk(
+                "wikipedia",
+                "Albert Einstein",
+                "Einstein was a German-born theoretical physicist…",
+                Some("inventory"),
+                Some("frozen"),
+            ),
+            chunk(
+                "sep-einstein-philscience",
+                "Einstein's Philosophy of Science",
+                "Einstein argued that physics must explain…",
+                Some("argument"),
+                Some("frozen"),
+            ),
+            chunk(
+                "conversation-history",
+                "Yesterday's discussion",
+                "We talked about Einstein's gravity earlier…",
+                Some("trace"),
+                Some("rolling"),
+            ),
+        ];
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        assert!(out.contains("## Broad map (inventory)"));
+        assert!(out.contains("## Articulated claims (arguments)"));
+        assert!(out.contains("## Lived practice (traces)"));
+        // Each section's header includes [corpus_id ... · stability].
+        assert!(out.contains("[wikipedia: Albert Einstein · frozen]"));
+        assert!(out.contains("[sep-einstein-philscience: Einstein's Philosophy of Science · frozen]"));
+        assert!(out.contains("[conversation-history: Yesterday's discussion · rolling]"));
+        // Catch-all bucket is NOT rendered (no untagged corpus chunks).
+        assert!(!out.contains("## From knowledge base"));
+    }
+
+    #[test]
+    fn untagged_chunks_fall_through_to_catch_all() {
+        let chunks = vec![chunk(
+            "wikipedia",
+            "Some article",
+            "Body",
+            None,
+            None,
+        )];
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        assert!(out.contains("## From knowledge base"));
+        assert!(!out.contains("## Broad map"));
+    }
+
+    #[test]
+    fn mixed_tagged_and_untagged_render_both_buckets() {
+        let chunks = vec![
+            chunk("wiki", "Tagged", "x", Some("inventory"), Some("frozen")),
+            chunk("wiki", "Untagged", "y", None, None),
+        ];
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        assert!(out.contains("## Broad map (inventory)"));
+        assert!(out.contains("## From knowledge base"));
     }
 }
 

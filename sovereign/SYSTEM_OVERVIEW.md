@@ -1162,6 +1162,36 @@ the manifest the desktop uses for tier-driven install.
 The desktop `KnowledgeStatus` panel shows one row for "Wikipedia" — the
 two-layer setup is hidden behind elegant install / expand UX.
 
+**Meta-atlas substrate** (Move 5, retrieval-time). On the chat path
+`Runtime::meta_atlas_boost` consults the cross-corpus
+`corpus_engine::meta_atlas::MetaAtlasIndex` — built by
+`sovereign meta-atlas build` (rule-based per-atom classifier in
+`corpus-engine/src/meta_atlas/classifier.rs`) and persisted to
+`~/.sovereign/meta-atlas/canonical_atoms.json`. The taxonomy has two
+axes. **Articulation** is per-atom (`Inventory | Argument | Trace`),
+derived from atom shape — `entity_type`, `defining_quote`,
+`discourse_act`, `event_type`. Heterogeneous user corpora (vaults,
+watched folders) are first-class: a single vault with mixed
+journals (Trace) / essays (Argument) / reference cards (Inventory)
+gets per-atom tags out of the box because the classifier reads atom
+shape, not recipe labels. **Stability** is per-corpus
+(`Frozen | Versioned | Rolling`), derived from acquire kind +
+`update.ingest_driver` and persisted in each corpus's
+`_corpus_meta.json::stream` block (`sovereign corpus stream-axes`
+for legacy backfill). At retrieval time the boost picks the top
+anchor per articulation axis (max 3 — one per Inventory / Argument
+/ Trace), runs a focused per-corpus search via
+`search_corpora_filtered`, and injects chunks above the cosine
+merge with `metadata["articulation"]` + `metadata["stability"]`.
+`format_scored_chunks_with_kinds` sub-buckets the corpus section
+into three named prompt sections so the synthesis model sees the
+streams as distinct. Chunks without tags fall through to the
+existing `## From knowledge base` catch-all (no-regression).
+Bench's per-question JSON carries `meta_atlas_hits: [{entity,
+corpus_id, articulation, stability, chunks_added}]` — the fourth
+lens on retrieval next to answer-equiv, title-coverage, and
+keyword-match.
+
 ### 4.12 KnowledgeView — Landscape digest assembly
 
 Splices short structured summaries of the user's own world into the system

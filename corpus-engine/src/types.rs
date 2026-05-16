@@ -377,6 +377,13 @@ pub struct IndexInfo {
     /// first input shard's `IndexInfo` without a second meta read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mutable_merge: Option<crate::recipe::MutableMergePolicy>,
+    /// Stream-axis block (Move 5, Stage 2). Per-corpus stability tag
+    /// surfaced here so retrieval-time consumers can render the
+    /// freshness contract on chunk headers without a second meta
+    /// read. `None` for legacy indexes pre-Stream-axes; `sovereign
+    /// corpus stream-axes` backfills lazily.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream: Option<crate::stream_axes::StreamAxes>,
 }
 
 // ─── Scored Chunk (search result) ───────────────────────
