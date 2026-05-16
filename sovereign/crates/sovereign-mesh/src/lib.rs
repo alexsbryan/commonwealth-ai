@@ -58,6 +58,7 @@ pub mod worker_controller;
 pub mod worker_daemon;
 pub mod worker_http;
 pub mod worker_pod;
+pub mod worker_subprocess_runner;
 
 pub use daemon::EmbeddedDaemon;
 pub use work_atlas_broadcaster::MeshBroadcaster;

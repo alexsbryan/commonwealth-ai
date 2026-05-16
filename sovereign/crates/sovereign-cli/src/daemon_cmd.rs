@@ -2622,14 +2622,68 @@ async fn run_worker_daemon(args: &[String]) -> i32 {
         blob.expected_uploads.len()
     );
 
-    // MVP runner is the echo stub. Real-runner integration with
-    // sovereign-pipeline is a follow-up (see `EPHEMERAL_WORKER_PODS.md`
-    // §Touch list / "Modified: pod entrypoint" — the runner swap is a
-    // single line at this call site).
-    let runner: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> =
-        Arc::new(sovereign_mesh::worker_daemon::EchoRunner);
+    // Pod models dir — the disk-dump watcher writes uploaded bytes
+    // here, and the SubprocessRunner spawns a child daemon against
+    // the config the watcher writes one level up.
+    let models_dir = std::env::var("SOVEREIGN_MODELS_DIR")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/workspace/models"));
+    let config_path = models_dir
+        .parent()
+        .map(|p| p.join("config.toml"))
+        .unwrap_or_else(|| models_dir.join("config.toml"));
 
-    if let Err(e) = sovereign_mesh::worker_daemon::run_worker_mode(blob, runner, None).await {
+    // Pre-build the disk-dump signals so the runner can share them
+    // with the WorkerState. Without this the runner would never
+    // observe the dump completing (it'd hold a different Notify
+    // than the watcher fires).
+    let signals = sovereign_mesh::worker_daemon::new_disk_dump_signals();
+
+    // `SOVEREIGN_WORKER_RUNNER=echo` falls back to the stub used
+    // during early integration testing — useful when validating the
+    // wire protocol against a real Vast pod before the child daemon
+    // is known-good. Production default is `subprocess`.
+    let runner_kind = std::env::var("SOVEREIGN_WORKER_RUNNER")
+        .unwrap_or_else(|_| "subprocess".to_string());
+    let runner: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> = match runner_kind.as_str() {
+        "echo" => {
+            eprintln!("[worker-daemon] runner: echo (stub — no inference will run)");
+            Arc::new(sovereign_mesh::worker_daemon::EchoRunner)
+        }
+        other => {
+            if other != "subprocess" {
+                eprintln!(
+                    "[worker-daemon] unrecognised SOVEREIGN_WORKER_RUNNER={other:?}; \
+                     falling back to subprocess"
+                );
+            }
+            eprintln!(
+                "[worker-daemon] runner: subprocess (child daemon will spawn against {})",
+                config_path.display()
+            );
+            let cfg = sovereign_mesh::worker_subprocess_runner::SubprocessRunnerConfig {
+                config_path: config_path.clone(),
+                ..Default::default()
+            };
+            Arc::new(sovereign_mesh::worker_subprocess_runner::SubprocessRunner::new(
+                cfg,
+                signals.0.clone(),
+                signals.1.clone(),
+            ))
+        }
+    };
+
+    if let Err(e) = sovereign_mesh::worker_daemon::run_worker_mode_with_signals(
+        blob,
+        runner,
+        None,
+        Some(models_dir),
+        Some(signals),
+    )
+    .await
+    {
         eprintln!("worker daemon: serve failed: {e}");
         return 1;
     }

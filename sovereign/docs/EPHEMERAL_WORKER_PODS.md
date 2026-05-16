@@ -19,13 +19,34 @@ Outstanding from the MVP plan:
 - Desktop wizard Tauri commands (`worker_pod_create/status/destroy`).
   The Rust controller surface is ready; the Tauri glue is a thin
   follow-up.
-- Real-runner integration. The pod's worker daemon currently uses an
-  `EchoRunner` stub (acks every input unit) — production wires this
-  to `sovereign-pipeline` for actual enrichment.
 - `pipeline pod dispatch <id>` + `pipeline pod poll <id>` commands.
   `pod up` boots the pod into "uploads ready" state; dispatch +
   polling are not yet exposed as CLI subcommands (the controller
   helpers are public — wiring the CLI is mechanical).
+
+Landed since the original MVP plan:
+
+- **Runner Phase 1** — `WorkerState::spawn_disk_dump_watcher` (in
+  `worker_http`): on full upload completion, atomically dumps GGUFs
+  to `$SOVEREIGN_MODELS_DIR` (default `/workspace/models`) and
+  writes a child-daemon `config.toml` one level up. Idempotent,
+  validated SHA, safe to call before/after dispatch.
+- **Runner Phase 2** — `SubprocessRunner` (in
+  `worker_subprocess_runner`): on first dispatch, awaits the
+  disk-dump signal, then lazy-spawns `sovereign-cli daemon run
+  --config <path>` as a child process. Per-unit dispatch tasks
+  proxy `{url, body}` payloads to `http://127.0.0.1:9741<url>`
+  (the child's client port — distinct from the worker daemon's
+  `:9742`) and feed the JSON response into the
+  `/internal/worker/completed` queue. Child uses `kill_on_drop` so
+  ephemeral pod destroy reaps it cleanly. Selected by default;
+  set `SOVEREIGN_WORKER_RUNNER=echo` to revert to the stub for
+  wire-protocol validation.
+- **Fetch-from-URL** — pod can pull large GGUFs directly from R2 /
+  B2 / HTTP origins via `UploadEntry.fetch_url` instead of the
+  owner's residential upload bandwidth. CLI ergonomics:
+  `--upload-from-base-url <base>` rewrites every `--upload`
+  filename into `<base>/<name>`.
 
 Successor to the legacy `pipeline pod up` flow that joined every Vast
 pod to the mesh as a full peer. That approach was shoehorned: it
@@ -109,12 +130,27 @@ no third-party rendezvous.
    Owner pushes a job blob containing the work-queue manifest, model
    references, and corpus partitions.
 
-2. **Model & corpus upload** (owner → worker)
-   One-time at job start. Owner streams GGUFs and corpus shards over
-   the same TLS connection. Inverts the current `sovereign mesh
-   fetch-model` direction (which would require the pod to reach back
-   into the owner's NAT'd network). Pod writes to its scratch disk
-   and runs locally for the rest of the job.
+2. **Model & corpus upload** (owner → worker, with optional
+   pod-pulls-from-URL acceleration)
+   One-time at job start. The owner has two transport options per
+   file in the upload manifest:
+
+   - **Stream from owner's disk** over the same TLS connection.
+     Right for files that only exist locally (recipe configs,
+     owner-built corpora). Throughput is bottlenecked by the owner's
+     residential upload — fine for hundreds of MB, painful for tens
+     of GB.
+   - **Pod fetches from a presigned URL** (R2 / B2 / S3 / DO Spaces).
+     The owner mints a short-TTL presigned URL and bakes it into
+     the bootstrap blob's manifest. Pod fetches the bytes itself in
+     the background — at data-center egress speeds (multi-Gbps)
+     instead of residential upload (10-50 Mbps). SHA validation is
+     owner-signed in both cases, so the URL is trusted transport,
+     not trusted source.
+
+   The two options can be mixed in a single manifest: e.g. R2 for the
+   big GGUFs, direct stream for a recipe config that only lives on
+   the owner's laptop.
 
 3. **Result pull** (owner → worker, repeated)
    Worker stages completed units (atoms, fragments, ledger emissions)

@@ -23,8 +23,8 @@ use std::time::Duration;
 use ed25519_dalek::SigningKey;
 use sha2::{Digest, Sha256};
 use sovereign_mesh::worker_controller::{
-    JobSpec, ProviderInstance, ProviderResult, PublicAddress, UploadFile, WorkerController,
-    WorkerProvider,
+    JobSpec, ProviderInstance, ProviderResult, PublicAddress, UploadFile, UploadSource,
+    WorkerController, WorkerProvider,
 };
 use sovereign_mesh::worker_daemon::{EchoRunner, run_worker_mode};
 use sovereign_mesh::worker_pod::{
@@ -89,6 +89,10 @@ async fn spawn_worker_daemon(blob: BootstrapBlob) -> SocketAddr {
         sovereign_mesh::worker_http::WorkerState::from_blob(blob.clone(), Arc::new(EchoRunner))
             .expect("state"),
     );
+    // Production `run_worker_mode` calls this after state construction;
+    // the test helper has to do the same or URL-backed entries in the
+    // manifest never get fetched.
+    state.spawn_url_fetches();
     let router = sovereign_mesh::worker_http::worker_router(state);
 
     // `axum_server::bind_rustls(addr, tls).handle(...)` exposes the
@@ -137,10 +141,7 @@ async fn full_lifecycle_against_real_tls_pod() {
     let mut uploads = BTreeMap::new();
     uploads.insert(
         "primary.gguf".to_string(),
-        UploadFile {
-            local_path: upload_path,
-            sha256: sha,
-        },
+        UploadFile::local(upload_path, sha),
     );
 
     let spec = JobSpec {
@@ -173,7 +174,10 @@ async fn full_lifecycle_against_real_tls_pod() {
     // The real flow has the controller mint inside `create_and_run`,
     // but for the test we pre-mint and feed both halves.
     let mut expected_uploads = BTreeMap::new();
-    expected_uploads.insert("primary.gguf".to_string(), sha);
+    expected_uploads.insert(
+        "primary.gguf".to_string(),
+        sovereign_mesh::worker_pod::UploadEntry::local(sha),
+    );
     let (blob, _) = mint_bootstrap(BootstrapInputs {
         job_id: "e2e-1".into(),
         owner_signing: &owner,
@@ -317,6 +321,181 @@ async fn wrong_owner_key_cannot_drive_a_pinned_pod() {
 }
 
 #[tokio::test]
+async fn url_backed_upload_fetched_by_pod_in_background() {
+    // Simulates the R2 acceleration path: owner mints a blob carrying
+    // a `fetch_url` per file, pod fetches each URL itself in the
+    // background, owner never streams a single byte. End state should
+    // match the upload+dispatch flow exactly.
+    install_crypto_provider();
+    let owner = SigningKey::from_bytes(&[88u8; 32]);
+
+    // Stand up a plain HTTP server hosting one file. Plays the role
+    // of R2/B2/S3 in this test.
+    let file_bytes = b"bytes-staged-in-r2".to_vec();
+    let mut h = Sha256::new();
+    h.update(&file_bytes);
+    let mut sha = [0u8; 32];
+    sha.copy_from_slice(&h.finalize());
+
+    let file_bytes_arc = Arc::new(file_bytes.clone());
+    let staging = axum::Router::new().route(
+        "/primary.gguf",
+        axum::routing::get({
+            let body = file_bytes_arc.clone();
+            move || {
+                let body = body.clone();
+                async move { (*body).clone() }
+            }
+        }),
+    );
+    let staging_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let staging_addr = staging_listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(staging_listener, staging).await;
+    });
+    let fetch_url = format!("http://{}/primary.gguf", staging_addr);
+
+    // Mint a blob with a URL-backed manifest entry.
+    use sovereign_mesh::worker_pod::UploadEntry;
+    let mut expected = std::collections::BTreeMap::new();
+    expected.insert(
+        "primary.gguf".to_string(),
+        UploadEntry::from_url(sha, fetch_url.clone()),
+    );
+    let (blob, _) =
+        sovereign_mesh::worker_pod::mint_bootstrap(sovereign_mesh::worker_pod::BootstrapInputs {
+            job_id: "url-job".into(),
+            owner_signing: &owner,
+            expected_uploads: expected,
+            ttl_seconds: 600,
+            seed_override: Some([23u8; 32]),
+        })
+        .unwrap();
+
+    let bound = spawn_worker_daemon(blob.clone()).await;
+
+    // Build a controller pointed at the daemon. JobSpec contains the
+    // same URL-backed entry — controller's upload_files will skip it,
+    // wait_for_uploads will block until the pod's background fetch
+    // completes.
+    let provider = Arc::new(PreboundProvider {
+        address: PublicAddress {
+            host: bound.ip().to_string(),
+            port: bound.port(),
+        },
+    });
+    let mut config = sovereign_mesh::worker_controller::ControllerConfig::default();
+    config.health_poll_interval = Duration::from_millis(50);
+    config.health_poll_timeout = Duration::from_secs(10);
+    let controller = WorkerController::new(provider, owner.clone(), config);
+
+    let mut uploads = BTreeMap::new();
+    uploads.insert(
+        "primary.gguf".to_string(),
+        UploadFile::fetch_url(fetch_url, sha),
+    );
+    let spec = JobSpec {
+        job_id: "url-job".into(),
+        image: "ignored".into(),
+        disk_gb: 0,
+        gpu_name: "Mock".into(),
+        max_price_per_hour: 0.0,
+        label: "url".into(),
+        uploads,
+        units: vec![sovereign_mesh::worker_http::WorkUnit {
+            unit_id: 1,
+            kind: "k".into(),
+            payload: serde_json::json!({}),
+        }],
+        runner_config: serde_json::json!({}),
+    };
+
+    let client =
+        sovereign_mesh::worker_controller::build_pinned_client_for(&blob).expect("pinned");
+    let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+        bound.ip().to_string(),
+        bound.port(),
+        blob.pod_pubkey_thumbprint(),
+        blob.worker_token.clone(),
+        "url-job",
+        owner.clone(),
+    );
+
+    controller.wait_for_health(&handle, &client).await.unwrap();
+    // upload_files SHOULD be a no-op — the only file is URL-backed.
+    controller
+        .upload_files(&handle, &client, &blob, &spec)
+        .await
+        .unwrap();
+    // wait_for_uploads blocks until the pod's background fetch has
+    // landed the bytes.
+    controller.wait_for_uploads(&handle, &client).await.unwrap();
+    controller.dispatch_job(&handle, &client, &spec).await.unwrap();
+    // Echo runner emits one completed unit → polling sees it.
+    for _ in 0..100 {
+        let batch = controller.poll_completed(&handle, &client).await.unwrap();
+        if batch.total_completed >= 1 {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("URL-backed file never landed on the pod");
+}
+
+#[tokio::test]
+async fn url_backed_upload_rejects_manual_upload() {
+    // If the owner tries to POST bytes for a URL-backed entry (maybe
+    // they mixed up flags), the pod must refuse — otherwise a race
+    // between the background fetch and the manual upload corrupts
+    // the staged bytes.
+    install_crypto_provider();
+    let owner = SigningKey::from_bytes(&[44u8; 32]);
+
+    let mut expected = std::collections::BTreeMap::new();
+    expected.insert(
+        "primary.gguf".to_string(),
+        // URL doesn't have to resolve — we never let the fetch
+        // complete in this test.
+        sovereign_mesh::worker_pod::UploadEntry::from_url(
+            [9u8; 32],
+            "http://127.0.0.1:1/never-resolves",
+        ),
+    );
+    let (blob, _) =
+        sovereign_mesh::worker_pod::mint_bootstrap(sovereign_mesh::worker_pod::BootstrapInputs {
+            job_id: "conflict-job".into(),
+            owner_signing: &owner,
+            expected_uploads: expected,
+            ttl_seconds: 60,
+            seed_override: Some([24u8; 32]),
+        })
+        .unwrap();
+
+    let bound = spawn_worker_daemon(blob.clone()).await;
+    let client =
+        sovereign_mesh::worker_controller::build_pinned_client_for(&blob).expect("pinned");
+    let url = format!(
+        "https://{}:{}/internal/worker/upload?name=primary.gguf&finalize=true",
+        bound.ip(),
+        bound.port()
+    );
+    let resp = client
+        .post(&url)
+        .bearer_auth(&blob.worker_token)
+        .body("bytes".as_bytes().to_vec())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        reqwest::StatusCode::CONFLICT,
+        "manual upload of URL-backed entry must 409"
+    );
+    // Quiet the `UploadSource::Local` unused-warning lint by referencing it.
+    let _ = UploadSource::Local("p".into());
+}
+
+#[tokio::test]
 async fn smoke_run_worker_mode_bails_on_bad_blob_seed() {
     install_crypto_provider();
     // `run_worker_mode` is mostly a thin wrapper — we don't try to
@@ -348,7 +527,7 @@ async fn smoke_run_worker_mode_bails_on_bad_blob_seed() {
     let runner: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> = Arc::new(EchoRunner);
     let result = tokio::time::timeout(
         Duration::from_secs(2),
-        run_worker_mode(blob, runner, Some(blocked)),
+        run_worker_mode(blob, runner, Some(blocked), None),
     )
     .await;
     match result {

@@ -698,6 +698,16 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     let mut dry_run: bool = false;
     let mut job_id: Option<String> = None;
     let mut uploads: Vec<std::path::PathBuf> = Vec::new();
+    // Each entry is (name, sha256-hex, url) — the pod will fetch the
+    // URL itself instead of waiting for an owner upload. Right for
+    // GGUFs staged in R2/B2/S3 with multi-Gbps egress.
+    let mut upload_urls: Vec<(String, String, String)> = Vec::new();
+    // When set, every `--upload <path>` flag is translated into a
+    // URL-backed entry at `<base>/<filename>`. The local file is
+    // read only to compute SHA-256 — the pod fetches bytes from the
+    // URL. This is the ergonomic primitive for the common case
+    // where every model is staged in one R2/B2 bucket.
+    let mut upload_from_base: Option<String> = None;
     let mut bootstrap_ttl_hours: u64 = 12;
     let mut i = 0;
     while i < args.len() {
@@ -709,6 +719,33 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
             "--max-price" => { i += 1; max_price = args[i].parse().unwrap_or(max_price); }
             "--job-id" => { i += 1; job_id = Some(args[i].clone()); }
             "--upload" => { i += 1; uploads.push(std::path::PathBuf::from(args[i].clone())); }
+            "--upload-from-base-url" => {
+                i += 1;
+                // Strip trailing slash so we can paste either with or
+                // without — `<base>/<filename>` is always a clean join.
+                upload_from_base = Some(args[i].trim_end_matches('/').to_string());
+            }
+            "--upload-url" => {
+                i += 1;
+                // Format: name=sha256-hex=url. Three '=' separators
+                // are unambiguous because SHA-256 hex is fixed 64
+                // chars and contains no '=', and presigned URLs have
+                // their own '=' inside the query string — so we
+                // splitn(3, '=') instead of a naive split.
+                let raw = args[i].clone();
+                let mut parts = raw.splitn(3, '=');
+                let name = parts.next().unwrap_or("");
+                let sha = parts.next().unwrap_or("");
+                let url = parts.next().unwrap_or("");
+                if name.is_empty() || sha.len() != 64 || url.is_empty() {
+                    eprintln!(
+                        "--upload-url expects `name=sha256-hex=url`. Got: {raw}\n\
+                         (sha256 hex must be exactly 64 chars; name and url non-empty.)"
+                    );
+                    return 2;
+                }
+                upload_urls.push((name.to_string(), sha.to_string(), url.to_string()));
+            }
             "--ttl-hours" => { i += 1; bootstrap_ttl_hours = args[i].parse().unwrap_or(bootstrap_ttl_hours); }
             "--dry-run" => { dry_run = true; }
             other => {
@@ -716,8 +753,22 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
                 eprintln!(
                     "usage: sovereign pipeline pod up \\\n\
                     \x20\x20[--gpu <name>] [--image <ref>] [--disk <gb>] [--label <s>]\\\n\
-                    \x20\x20[--max-price <usd>] [--job-id <s>] [--upload <path>]... \\\n\
-                    \x20\x20[--ttl-hours <h>] [--dry-run]"
+                    \x20\x20[--max-price <usd>] [--job-id <s>] \\\n\
+                    \x20\x20[--upload <path>]... [--upload-url <name>=<sha256-hex>=<url>]... \\\n\
+                    \x20\x20[--upload-from-base-url <base-url>] \\\n\
+                    \x20\x20[--ttl-hours <h>] [--dry-run]\n\
+                    \n\
+                    --upload streams the file from your laptop (slow over residential\n\
+                    upload). --upload-url has the pod fetch the file itself from\n\
+                    R2/B2/S3 at data-center speeds — paste a presigned URL with a\n\
+                    short TTL.\n\
+                    \n\
+                    --upload-from-base-url <base> is the ergonomic shortcut: each\n\
+                    --upload <local-path> becomes a URL-backed entry at\n\
+                    `<base>/<filename>` with SHA computed from the local copy. Right\n\
+                    for the common case where every model is staged in one R2 bucket.\n\
+                    \n\
+                    SHA validation is owner-signed in every case."
                 );
                 return 2;
             }
@@ -793,12 +844,32 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         h.update(&bytes);
         let mut sha = [0u8; 32];
         sha.copy_from_slice(&h.finalize());
+        // If --upload-from-base-url is set, the local file is just a
+        // SHA source — the pod fetches bytes from <base>/<filename>
+        // instead. This is the right primitive for "all my models are
+        // already staged in one R2 bucket".
+        let upload_file = if let Some(base) = upload_from_base.as_ref() {
+            let url = format!("{base}/{name}");
+            sovereign_mesh::worker_controller::UploadFile::fetch_url(url, sha)
+        } else {
+            sovereign_mesh::worker_controller::UploadFile::local(path.clone(), sha)
+        };
+        upload_specs.insert(name, upload_file);
+    }
+    // URL-backed entries — pod fetches itself.
+    for (name, sha_hex, url) in &upload_urls {
+        let sha_bytes = match hex::decode(sha_hex) {
+            Ok(v) if v.len() == 32 => v,
+            _ => {
+                eprintln!("--upload-url SHA-256 hex must decode to 32 bytes; got: {sha_hex}");
+                return 2;
+            }
+        };
+        let mut sha = [0u8; 32];
+        sha.copy_from_slice(&sha_bytes);
         upload_specs.insert(
-            name,
-            sovereign_mesh::worker_controller::UploadFile {
-                local_path: path.clone(),
-                sha256: sha,
-            },
+            name.clone(),
+            sovereign_mesh::worker_controller::UploadFile::fetch_url(url.clone(), sha),
         );
     }
 
