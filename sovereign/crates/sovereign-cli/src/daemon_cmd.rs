@@ -150,6 +150,30 @@ async fn run_daemon(args: &[String]) -> i32 {
     // the command line, only via the config file).
     let setup_only = args.iter().any(|a| a == "--setup-only");
 
+    // `--config <path>` overrides the default `~/.sovereign/config.toml`
+    // path. Phase 2 of EPHEMERAL_WORKER_PODS uses this to point the
+    // child daemon spawned by `SubprocessRunner` at the auto-generated
+    // pod-side config (written by `worker_http::write_child_daemon_config`).
+    // Production launchd/systemd units don't pass `--config`; they
+    // continue to use the canonical path. The wizard short-circuit
+    // above still checks `exists()` at the canonical path even when
+    // `--config` is set — that's intentional: if the operator passes
+    // `--config` they're telling us they have a config, so we skip
+    // the wizard entirely and surface a clean error if the file is
+    // missing.
+    let config_override: Option<std::path::PathBuf> = {
+        let mut path: Option<std::path::PathBuf> = None;
+        let mut it = args.iter();
+        while let Some(a) = it.next() {
+            if a == "--config" {
+                if let Some(p) = it.next() {
+                    path = Some(std::path::PathBuf::from(p));
+                }
+            }
+        }
+        path
+    };
+
     // ── Phase 4 first-boot wizard ─────────────────────────────────
     //
     // Pre-Phase-4 the daemon refused to start with a "run sovereign
@@ -159,7 +183,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // launchd-spawned daemon with no config will fall through to
     // the same hint as before, since `is_terminal()` returns false
     // in that environment.
-    if !sovereign_core::setup_config::SetupConfig::exists() {
+    // When `--config <path>` is passed, the operator owns the config
+    // file's existence — skip both the `exists()` short-circuit and
+    // the interactive wizard. Otherwise fall through to the
+    // canonical-path checks.
+    if config_override.is_none() && !sovereign_core::setup_config::SetupConfig::exists() {
         if !std::io::stdin().is_terminal() {
             eprintln!("error: no config at {}", SetupConfig::default_path().display());
             eprintln!(
@@ -220,15 +248,27 @@ async fn run_daemon(args: &[String]) -> i32 {
     );
 
     // ── Load config ───────────────────────────────────────────────
-    let config = match SetupConfig::load() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: {e}");
-            eprintln!(
-                "hint: run `sovereign daemon --setup-only` to (re-)create the config."
-            );
-            return 1;
-        }
+    let config = match config_override.as_ref() {
+        Some(path) => match SetupConfig::load_from(path) {
+            Ok(c) => {
+                eprintln!("[daemon] loaded config from {}", path.display());
+                c
+            }
+            Err(e) => {
+                eprintln!("error: --config {}: {e}", path.display());
+                return 1;
+            }
+        },
+        None => match SetupConfig::load() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("error: {e}");
+                eprintln!(
+                    "hint: run `sovereign daemon --setup-only` to (re-)create the config."
+                );
+                return 1;
+            }
+        },
     };
 
     // ── VRAM capacity preflight ───────────────────────────────────

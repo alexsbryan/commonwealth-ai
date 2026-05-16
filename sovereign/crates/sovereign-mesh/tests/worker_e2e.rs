@@ -538,3 +538,162 @@ async fn smoke_run_worker_mode_bails_on_bad_blob_seed() {
         Err(_) => panic!("run_worker_mode hung instead of returning AddrInUse"),
     }
 }
+
+/// Multi-pod end-to-end: stand up 3 real TLS pods, build a
+/// [`PoolHandle`] manually pointing at them, dispatch a partitioned
+/// manifest, drain via fan-in poll, and destroy them all.
+///
+/// This is the integration test that proves the coordinator's
+/// fan-in poll logic actually drains units across heterogeneous
+/// pods. The single-pod e2e covers the wire protocol; this covers
+/// the cursor/aggregation machinery sitting on top of it.
+#[tokio::test]
+async fn multi_pod_pool_poll_drains_partitioned_units() {
+    use sovereign_mesh::multi_pod_coordinator::{
+        CoordinatorConfig, PoolHandle, PoolPod, partition_units,
+    };
+    use tokio::sync::Mutex as AsyncMutex;
+
+    install_crypto_provider();
+    let owner = SigningKey::from_bytes(&[44u8; 32]);
+
+    // Spin up 3 real TLS pods, each with a distinct seed.
+    let pod_count = 3;
+    let total_units = 7;
+    // unit_ids start at 1 — the `/completed` cursor uses `> since`
+    // watermark semantics with 0 = "before anything", so a unit_id of
+    // 0 would never be reported.
+    let units: Vec<sovereign_mesh::worker_http::WorkUnit> = (1..=total_units)
+        .map(|i| sovereign_mesh::worker_http::WorkUnit {
+            unit_id: i as u64,
+            kind: format!("u{i}"),
+            payload: serde_json::json!({"i": i}),
+        })
+        .collect();
+    let partitions = partition_units(units.clone(), pod_count);
+
+    // For each partition, mint a blob, spawn a daemon, build a handle
+    // + client + PoolPod.
+    let mut pods: Vec<Arc<PoolPod>> = Vec::with_capacity(pod_count);
+    for (i, part) in partitions.iter().enumerate() {
+        let seed_bytes = [70u8 + i as u8; 32];
+        let (blob, _) = mint_bootstrap(BootstrapInputs {
+            job_id: format!("multi-job-p{i}"),
+            owner_signing: &owner,
+            expected_uploads: BTreeMap::new(),
+            ttl_seconds: 600,
+            seed_override: Some(seed_bytes),
+        })
+        .unwrap();
+        let bound = spawn_worker_daemon(blob.clone()).await;
+        let client =
+            sovereign_mesh::worker_controller::build_pinned_client_for(&blob).expect("pinned");
+        let handle = sovereign_mesh::worker_pod::WorkerHandle::new(
+            bound.ip().to_string(),
+            bound.port(),
+            blob.pod_pubkey_thumbprint(),
+            blob.worker_token.clone(),
+            blob.job_id.clone(),
+            owner.clone(),
+        );
+        let instance = sovereign_mesh::worker_controller::ProviderInstance {
+            instance_id: format!("inst-{i}"),
+            gpu_name: "Mock-L40S".into(),
+            cost_per_hour: 0.25,
+        };
+        pods.push(Arc::new(PoolPod {
+            handle,
+            instance,
+            blob,
+            client,
+            assigned_units: part.len(),
+            received_units: AsyncMutex::new(0),
+        }));
+    }
+
+    // Use a tiny controller config for fast polling in tests.
+    let mut cfg = sovereign_mesh::worker_controller::ControllerConfig::default();
+    cfg.health_poll_interval = Duration::from_millis(20);
+    cfg.health_poll_timeout = Duration::from_secs(5);
+    let provider = Arc::new(PreboundProvider {
+        // Address irrelevant — we don't call provider methods in this test.
+        address: PublicAddress {
+            host: "0.0.0.0".to_string(),
+            port: 0,
+        },
+    });
+    let controller = WorkerController::new(provider, owner.clone(), cfg);
+
+    // Dispatch each partition. We use the raw dispatch_job because the
+    // PoolPod manifest was constructed without the standard create_and_run
+    // dispatch step (we built it manually to control seeds).
+    for (i, pod) in pods.iter().enumerate() {
+        let spec_with_part = JobSpec {
+            job_id: pod.handle.job_id().to_string(),
+            image: "ignored".into(),
+            disk_gb: 0,
+            gpu_name: "Mock".into(),
+            max_price_per_hour: 0.0,
+            label: format!("partition-{i}"),
+            uploads: BTreeMap::new(),
+            units: partitions[i].clone(),
+            runner_config: serde_json::json!({}),
+        };
+        controller.wait_for_health(&pod.handle, &pod.client).await.unwrap();
+        controller
+            .dispatch_job(&pod.handle, &pod.client, &spec_with_part)
+            .await
+            .expect("dispatch_job for pool pod");
+    }
+
+    let pool = PoolHandle {
+        pods: pods.clone(),
+        expected_total_units: total_units,
+        config: CoordinatorConfig {
+            poll_interval: Duration::from_millis(50),
+            stall_timeout: Duration::from_secs(5),
+            total_timeout: Duration::from_secs(15),
+        },
+        base_job_id: "multi-job".into(),
+    };
+
+    // Fan-in poll. Record (pod_idx, unit_id) tuples as units land.
+    let received = std::sync::Arc::new(std::sync::Mutex::new(Vec::<(usize, u64)>::new()));
+    let received_h = received.clone();
+    let summary = pool
+        .poll_until_complete(&controller, |pod_idx, unit| {
+            received_h.lock().unwrap().push((pod_idx, unit.unit_id));
+        })
+        .await
+        .expect("poll_until_complete");
+
+    assert!(!summary.timed_out, "poll loop should not have timed out");
+    assert_eq!(summary.total_received, total_units);
+
+    // Verify the right pod received the right partition.
+    let observations = received.lock().unwrap().clone();
+    let mut got_per_pod: Vec<Vec<u64>> = vec![Vec::new(); pod_count];
+    for (idx, uid) in observations {
+        got_per_pod[idx].push(uid);
+    }
+    for i in 0..pod_count {
+        let mut expected: Vec<u64> = partitions[i].iter().map(|u| u.unit_id).collect();
+        let mut got = got_per_pod[i].clone();
+        expected.sort();
+        got.sort();
+        assert_eq!(
+            got, expected,
+            "pod {i} should have echoed exactly its partition"
+        );
+    }
+
+    // Per-pod snapshot should reflect the full drain.
+    let snaps = pool.snapshot().await;
+    for s in &snaps {
+        assert_eq!(s.received_units, s.assigned_units);
+    }
+
+    // Destroy_all is a no-op against PreboundProvider but exercises the
+    // fan-out destroy code path.
+    let _results = pool.destroy_all(&controller).await;
+}

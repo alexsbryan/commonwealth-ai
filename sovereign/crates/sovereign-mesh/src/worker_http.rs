@@ -66,6 +66,16 @@ use crate::worker_pod::{
 /// `payload` semantics. Wrapping in a typed envelope keeps the cursor
 /// + auth logic generic across job types (atom enrichment, Lance
 /// fragment generation, ledger emission, …).
+///
+/// ## `unit_id` convention
+///
+/// The `/internal/worker/completed` cursor uses `> since` watermark
+/// semantics with 0 as the "before anything" baseline. **Callers
+/// MUST assign `unit_id >= 1`** — a unit with `unit_id == 0` would
+/// never satisfy the `> since` filter and would be silently dropped
+/// from every poll response. The single-pod CLI and the multi-pod
+/// coordinator both honour this; if you build a manifest directly
+/// in tests or custom integrations, start at 1.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkUnit {
     pub unit_id: u64,

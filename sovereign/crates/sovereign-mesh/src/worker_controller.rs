@@ -182,6 +182,11 @@ pub enum ControllerError {
         route: String,
         body: String,
     },
+    /// Caller-facing validation failure. Distinct from `Timeout` /
+    /// `PodRejected` / network errors so the CLI can format it as a
+    /// usage error rather than a transient failure.
+    #[error("invalid argument: {0}")]
+    InvalidArgument(String),
 }
 
 pub type ControllerResult<T> = std::result::Result<T, ControllerError>;
@@ -195,6 +200,13 @@ pub struct ControllerConfig {
     pub address_poll_timeout: Duration,
     pub health_poll_interval: Duration,
     pub health_poll_timeout: Duration,
+    /// How long to wait for all URL-backed uploads on the pod to
+    /// finish. Distinct from `health_poll_timeout` because uploads
+    /// can take 10x longer than the daemon's HTTP probe — a 30 GB
+    /// GGUF fetched from R2 over a residential-link pod's egress
+    /// can take 5-10 min, well past the 5-min `health` ceiling.
+    /// Default 30 min covers 60 GB at 250 Mbps with headroom.
+    pub uploads_poll_timeout: Duration,
     pub completed_poll_interval: Duration,
     /// Tokens live for the WHOLE job + a buffer so an owner-side
     /// restart doesn't invalidate them mid-poll. Past this the
@@ -209,6 +221,7 @@ impl Default for ControllerConfig {
             address_poll_timeout: Duration::from_secs(180),
             health_poll_interval: Duration::from_secs(3),
             health_poll_timeout: Duration::from_secs(300),
+            uploads_poll_timeout: Duration::from_secs(30 * 60),
             completed_poll_interval: Duration::from_secs(30),
             // 12 hours: a long SEP fanout finishes in ~6h on an L40S;
             // doubling that leaves headroom for retries + owner restart.
@@ -243,12 +256,79 @@ impl WorkerController {
     /// the pod, wait for it to come up, upload files, dispatch the
     /// job. Returns a [`WorkerHandle`] the owner uses to poll.
     pub async fn create_and_run(&self, spec: &JobSpec) -> ControllerResult<(WorkerHandle, ProviderInstance)> {
+        let (handle, instance, _blob, _client) = self.create_and_run_with_blob(spec).await?;
+        Ok((handle, instance))
+    }
+
+    /// Same as [`Self::create_and_run`] but also returns the bootstrap
+    /// blob and the pinned reqwest client. Needed by callers (notably
+    /// [`MultiPodCoordinator`]) that own the polling loop themselves —
+    /// the blob carries the seed used to derive the per-pod cert, and
+    /// the client is the only one whose root-of-trust matches that
+    /// cert.
+    ///
+    /// [`MultiPodCoordinator`]: crate::multi_pod_coordinator::MultiPodCoordinator
+    pub async fn create_and_run_with_blob(
+        &self,
+        spec: &JobSpec,
+    ) -> ControllerResult<(WorkerHandle, ProviderInstance, BootstrapBlob, Client)> {
         let blob = self.mint_blob(spec)?;
         let bootstrap_b64 = encode_bootstrap(&blob)?;
         let instance = self.provider.create(&bootstrap_b64, spec)?;
-        let address = self.wait_for_address(&instance.instance_id).await?;
 
-        let client = self.build_pinned_client(&blob)?;
+        // From here on, every fallible step must tear down the
+        // provider instance on failure. Otherwise a timeout 5 min
+        // into the boot sequence leaves a pod billing forever and
+        // the operator has to grep `vastai show instances` to find
+        // it. Wrap the post-create lifecycle in an inner helper so
+        // `?` propagates errors out, then catch and destroy.
+        match self
+            .complete_create_lifecycle(&instance, &blob, spec)
+            .await
+        {
+            Ok((handle, client)) => Ok((handle, instance, blob, client)),
+            Err(e) => {
+                tracing::error!(
+                    instance_id = %instance.instance_id,
+                    error = %e,
+                    "controller: post-create lifecycle failed — destroying provider instance"
+                );
+                eprintln!(
+                    "[controller] post-create failure on instance {}: {e}\n\
+                     [controller] auto-destroying to stop billing…",
+                    instance.instance_id
+                );
+                if let Err(destroy_err) = self.provider.destroy(&instance.instance_id) {
+                    eprintln!(
+                        "[controller] WARNING: auto-destroy failed for instance {}: {destroy_err}\n\
+                         [controller] manually destroy with: `sovereign pipeline pod down {}` \
+                         or `vastai destroy instance {}`",
+                        instance.instance_id,
+                        instance.instance_id,
+                        instance.instance_id,
+                    );
+                } else {
+                    eprintln!(
+                        "[controller] instance {} destroyed.",
+                        instance.instance_id
+                    );
+                }
+                Err(e)
+            }
+        }
+    }
+
+    /// Inner half of [`Self::create_and_run_with_blob`]: everything
+    /// after `provider.create` returns. Factored so the error path
+    /// has a single catch site for auto-destroy.
+    async fn complete_create_lifecycle(
+        &self,
+        instance: &ProviderInstance,
+        blob: &BootstrapBlob,
+        spec: &JobSpec,
+    ) -> ControllerResult<(WorkerHandle, Client)> {
+        let address = self.wait_for_address(&instance.instance_id).await?;
+        let client = self.build_pinned_client(blob)?;
         let handle = WorkerHandle::new(
             address.host.clone(),
             address.port,
@@ -259,7 +339,7 @@ impl WorkerController {
         );
 
         self.wait_for_health(&handle, &client).await?;
-        self.upload_files(&handle, &client, &blob, spec).await?;
+        self.upload_files(&handle, &client, blob, spec).await?;
         // If any entry is URL-backed, the pod is still pulling in the
         // background. Block until it reports all uploads ready before
         // dispatch — otherwise dispatch_job 412s with "uploads
@@ -267,8 +347,15 @@ impl WorkerController {
         if spec.uploads.values().any(|f| f.is_url_backed()) {
             self.wait_for_uploads(&handle, &client).await?;
         }
-        self.dispatch_job(&handle, &client, spec).await?;
-        Ok((handle, instance))
+        // Only dispatch if the spec actually has units. The single-pod
+        // CLI calls `create_and_run` with `units: []` to leave the pod
+        // in "uploads ready" state for a follow-up `pod dispatch`; the
+        // multi-pod path packs partition units into the spec ahead of
+        // time and lets dispatch happen here.
+        if !spec.units.is_empty() {
+            self.dispatch_job(&handle, &client, spec).await?;
+        }
+        Ok((handle, client))
     }
 
     fn mint_blob(&self, spec: &JobSpec) -> ControllerResult<BootstrapBlob> {
@@ -471,7 +558,7 @@ impl WorkerController {
                     return Ok(()); // 0/0 — empty manifest, trivially ready.
                 }
             }
-            if start.elapsed() >= self.config.health_poll_timeout {
+            if start.elapsed() >= self.config.uploads_poll_timeout {
                 return Err(ControllerError::Timeout {
                     what: "pod uploads to finish",
                     elapsed_secs: start.elapsed().as_secs(),
