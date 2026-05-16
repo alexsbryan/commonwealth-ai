@@ -13,8 +13,11 @@
 pub mod acquirers;
 pub mod alignment_projector;
 pub mod archaeology_eval;
+pub mod atlas_canonical;
 pub mod atlas_traversal;
 pub mod canonical_sync;
+pub mod meta_atlas;
+pub mod stream_axes;
 pub mod chunkers;
 pub mod engine;
 pub mod enrichment;

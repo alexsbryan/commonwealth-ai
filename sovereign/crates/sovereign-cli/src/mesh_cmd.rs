@@ -89,6 +89,7 @@ pub async fn run_corpus(args: &[String]) -> i32 {
             crate::corpus_watch_cmd::run_remove_root(&args[1..]).await
         }
         "watch-remove" => crate::corpus_watch_cmd::run_remove(&args[1..]).await,
+        "stream-axes" => cmd_corpus_stream_axes(&args[1..]).await,
         other => {
             eprintln!("Unknown corpus subcommand: {other}");
             crate::util::help::print(&HELP_CORPUS);
@@ -1366,6 +1367,143 @@ fn format_count(n: u64) -> String {
 /// `committed_iter_pos` coordinate space shifted between runs as
 /// `processed_shards` shrunk the assigned set.
 ///
+/// `sovereign corpus stream-axes` — backfill per-corpus stream-axis
+/// blocks into installed `_corpus_meta.json` files.
+///
+/// Walks installed corpora; for each one that lacks a `stream` block
+/// (or `--force`d), derives stability via
+/// [`corpus_engine::stream_axes::derive_stability_from_info`] and
+/// writes the block via [`corpus_engine::index::set_stream_axes`].
+/// Idempotent. Move 5 Stage 2.
+async fn cmd_corpus_stream_axes(args: &[String]) -> i32 {
+    let mut force = false;
+    let mut filter: Option<String> = None;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--force" => force = true,
+            "--corpus" => match iter.next() {
+                Some(v) => filter = Some(v.clone()),
+                None => {
+                    eprintln!("--corpus requires an argument");
+                    return 1;
+                }
+            },
+            "--all" => {} // default behaviour
+            "--help" | "-h" => {
+                println!(
+                    "sovereign corpus stream-axes [--corpus <id>] [--force]\n\
+                    \n\
+                    Backfill per-corpus stream-axis (stability) block into\n\
+                    installed _corpus_meta.json files. Derives from corpus\n\
+                    kind + acquire shape + parent_corpus_id.\n\
+                    \n\
+                    --corpus <id>   Limit to one corpus by id.\n\
+                    --force         Re-derive even when a stream block already exists."
+                );
+                return 0;
+            }
+            other => {
+                eprintln!("unknown flag: {other}");
+                return 1;
+            }
+        }
+    }
+
+    let indexes_dir = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.data.dir)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".sovereign")
+        })
+        .join("indexes");
+
+    // Use a no-op embed fn — we only need installed_indexes(), which
+    // doesn't touch embedding. The recipes_dir is irrelevant for
+    // listing, so we pass a dummy path that won't be read.
+    let engine = CorpusEngine::new(
+        std::env::temp_dir(),
+        indexes_dir.clone(),
+        Arc::new(|_: &str| {
+            Box::pin(async move { Ok::<Vec<f32>, corpus_engine::Error>(Vec::new()) })
+        }),
+    );
+
+    let indexes = match engine.installed_indexes().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("error: list indexes: {e}");
+            return 1;
+        }
+    };
+
+    let mut written = 0usize;
+    let mut skipped = 0usize;
+    let mut errors = 0usize;
+
+    println!(
+        "{:<32} {:<10} {:<10} {}",
+        "corpus", "stability", "source", "from"
+    );
+    println!("{}", "─".repeat(96));
+
+    for info in indexes {
+        if let Some(f) = &filter {
+            if info.corpus_id != *f {
+                continue;
+            }
+        }
+        let existing = info.stream.clone();
+        if existing.is_some() && !force {
+            println!(
+                "{:<32} {:<10} {:<10} {}",
+                info.corpus_id,
+                existing.as_ref().unwrap().stability.as_str(),
+                "(existing)",
+                existing.as_ref().unwrap().from_signal,
+            );
+            skipped += 1;
+            continue;
+        }
+        let (stability, from_signal) =
+            corpus_engine::stream_axes::derive_stability_from_info(&info);
+        let axes = corpus_engine::stream_axes::StreamAxes {
+            stability,
+            source: corpus_engine::stream_axes::StreamAxesSource::Backfill,
+            derived_at: corpus_engine::stream_axes::timestamp_now(),
+            from_signal: from_signal.clone(),
+        };
+        match corpus_engine::index::set_stream_axes(&info.path, axes.clone()) {
+            Ok(()) => {
+                println!(
+                    "{:<32} {:<10} {:<10} {}",
+                    info.corpus_id,
+                    stability.as_str(),
+                    "backfill",
+                    from_signal
+                );
+                written += 1;
+            }
+            Err(e) => {
+                eprintln!("  ✗ {}: {e}", info.corpus_id);
+                errors += 1;
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "Summary: {} written · {} skipped (existing) · {} errors",
+        written, skipped, errors
+    );
+    if errors > 0 {
+        1
+    } else {
+        0
+    }
+}
+
 /// Output: distinct articles in index, expected from filter, missing
 /// titles count, plus a sample of up to 10 missing titles for spot-
 /// checking. Non-zero exit when the gap exceeds 1% of the filter

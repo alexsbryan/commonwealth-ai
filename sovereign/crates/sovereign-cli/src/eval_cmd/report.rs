@@ -585,6 +585,7 @@ mod tests {
             loose_source_evidence: Vec::new(),
             essay_readiness: None,
             atlas_navigation: Vec::new(),
+            meta_atlas_hits: Vec::new(),
         }
     }
 
