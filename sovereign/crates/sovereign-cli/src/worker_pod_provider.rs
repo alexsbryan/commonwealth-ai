@@ -178,6 +178,132 @@ impl WorkerProvider for VastWorkerProvider {
     }
 }
 
+// ───── Multi-offer Vast provider (drives `MultiPodCoordinator`) ──────
+
+/// A [`WorkerProvider`] backed by a queue of pre-picked Vast offers.
+/// Each call to [`create`] dispenses the next offer in the queue.
+/// Returns `Provider::Other` when the queue is empty — that should
+/// only happen if the caller asked for more pods than offers were
+/// staged, which is a user-side bug.
+///
+/// Lives in the CLI crate (not `sovereign-mesh`) for the same reason
+/// the single-offer provider does: keeping `vastai` shell-outs out of
+/// the mesh crate avoids the dep cycle that would otherwise form.
+///
+/// [`create`]: WorkerProvider::create
+pub struct MultiOfferVastWorkerProvider {
+    pub image: String,
+    pub disk_gb: u32,
+    /// Used as a prefix; per-pod labels become `<label>-p<index>`.
+    pub label_prefix: String,
+    pub worker_port: u16,
+    /// Queue of offers — popped in order. The first `create()` call
+    /// gets `offers[0]`, the second `offers[1]`, etc.
+    offers: std::sync::Mutex<Vec<pod::Offer>>,
+    /// Monotonically increasing per-pod index, used for label suffix.
+    next_index: std::sync::atomic::AtomicUsize,
+}
+
+impl MultiOfferVastWorkerProvider {
+    pub fn new(
+        image: String,
+        disk_gb: u32,
+        label_prefix: String,
+        offers: Vec<pod::Offer>,
+    ) -> Self {
+        Self {
+            image,
+            disk_gb,
+            label_prefix,
+            worker_port: WORKER_PORT,
+            offers: std::sync::Mutex::new(offers),
+            next_index: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    pub fn remaining_offers(&self) -> usize {
+        self.offers.lock().map(|v| v.len()).unwrap_or(0)
+    }
+}
+
+impl WorkerProvider for MultiOfferVastWorkerProvider {
+    fn create(&self, bootstrap_b64: &str, _spec: &JobSpec) -> ProviderResult<ProviderInstance> {
+        let offer = {
+            let mut guard = self.offers.lock().map_err(|e| {
+                ProviderError::Other(format!("offer queue poisoned: {e}"))
+            })?;
+            if guard.is_empty() {
+                return Err(ProviderError::Other(
+                    "offer queue exhausted — pod_count exceeded staged offers".into(),
+                ));
+            }
+            // Pop the front so first-pod = best-offer (offers are
+            // pre-sorted by reliability/price).
+            guard.remove(0)
+        };
+        let pod_index = self
+            .next_index
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let label = format!("{}-p{pod_index}", self.label_prefix);
+
+        let onstart_cmd = format!(
+            "set -eu\n\
+             export SOVEREIGN_BOOTSTRAP='{bootstrap_b64}'\n\
+             exec /entrypoint.sh\n",
+        );
+        let req = pod::CreateRequest {
+            offer_id: offer.id,
+            image: &self.image,
+            disk_gb: self.disk_gb,
+            onstart_cmd: &onstart_cmd,
+            env: "",
+            label: &label,
+            ssh: true,
+        };
+        let created = pod::create_instance(&req, &offer)
+            .map_err(|e| ProviderError::Other(format!("vastai create (pod {pod_index}): {e}")))?;
+        Ok(ProviderInstance {
+            instance_id: created.vast_id,
+            gpu_name: created.gpu_name,
+            cost_per_hour: created.cost_per_hour,
+        })
+    }
+
+    fn address(&self, instance_id: &str) -> ProviderResult<Option<PublicAddress>> {
+        // Address logic is identical to the single-offer path — every
+        // pod is the same `vastai show` shape regardless of which
+        // offer it was created against.
+        let raw = vastai_show_instance_raw(instance_id)
+            .map_err(|e| ProviderError::Other(format!("vastai show: {e}")))?;
+        let parsed: ShowInstance = serde_json::from_str(&raw)
+            .map_err(|e| ProviderError::Other(format!("vastai show json: {e}")))?;
+        if parsed.actual_status.as_deref() != Some("running") {
+            return Ok(None);
+        }
+        let Some(public) = parsed.public_ipaddr else {
+            return Ok(None);
+        };
+        let port_key = format!("{}/tcp", self.worker_port);
+        let Some(mappings) = parsed.ports.and_then(|m| m.get(&port_key).cloned()) else {
+            return Ok(None);
+        };
+        let Some(first) = mappings.into_iter().next() else {
+            return Ok(None);
+        };
+        let port: u16 = first
+            .host_port
+            .parse()
+            .map_err(|e| ProviderError::Other(format!("vastai HostPort parse: {e}")))?;
+        Ok(Some(PublicAddress { host: public, port }))
+    }
+
+    fn destroy(&self, instance_id: &str) -> ProviderResult<()> {
+        pod::destroy_instance(instance_id)
+            .map_err(|e| ProviderError::Other(format!("vastai destroy: {e}")))?;
+        Ok(())
+    }
+}
+
 /// Vast's `show instance` JSON has many more fields than we need; we
 /// deserialize only what `address()` consumes. Unknown fields are
 /// silently ignored (serde default).

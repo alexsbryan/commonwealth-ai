@@ -1,0 +1,24 @@
+# Build context filter for `Containerfile.local-test` only.
+#
+# The main `.containerignore` excludes `target/` because the production
+# Containerfile builds Rust inside the image. Our local-test image
+# copies the *already-built* binary from `target/release/`, so we need
+# a different filter:
+#
+#   * exclude everything (the cache + sources we don't need)
+#   * but DO include `target/release/sovereign-cli` and
+#     `sovereign/container/entrypoint.sh` — the only two things
+#     `Containerfile.local-test` COPYs in.
+#
+# Negation `!path` re-includes a path that earlier patterns excluded.
+# Order matters: include rules must come after the bulk exclude.
+
+# Bulky directories that have no business in any container build.
+sovereign/models/
+**/.git/
+
+# Everything under target/ EXCEPT the release binary.
+target/*
+!target/release
+target/release/*
+!target/release/sovereign-cli

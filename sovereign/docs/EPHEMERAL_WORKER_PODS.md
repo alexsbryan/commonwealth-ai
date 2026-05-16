@@ -42,11 +42,51 @@ Landed since the original MVP plan:
   ephemeral pod destroy reaps it cleanly. Selected by default;
   set `SOVEREIGN_WORKER_RUNNER=echo` to revert to the stub for
   wire-protocol validation.
+- **`daemon run --config <path>` flag** — needed by `SubprocessRunner`
+  to point the child daemon at the auto-generated pod-side config
+  (canonical `~/.sovereign/config.toml` doesn't exist on a fresh
+  pod). When set, bypasses the first-boot wizard short-circuit and
+  loads via `SetupConfig::load_from(path)`.
 - **Fetch-from-URL** — pod can pull large GGUFs directly from R2 /
   B2 / HTTP origins via `UploadEntry.fetch_url` instead of the
   owner's residential upload bandwidth. CLI ergonomics:
   `--upload-from-base-url <base>` rewrites every `--upload`
   filename into `<base>/<name>`.
+- **Multi-pod coordinator** — `MultiPodCoordinator::launch(spec, N)`
+  partitions a JobSpec's units round-robin across N pods (each
+  with a unique seed-derived TLS cert + owner-signed token),
+  fans out `create_and_run_with_blob` in parallel, returns a
+  `PoolHandle`. `PoolHandle::poll_until_complete` is a fan-in
+  drain with per-pod cursors and a stall timeout;
+  `destroy_all` is a fan-out teardown. CLI:
+  `sovereign pipeline pod pool --pods N --manifest <units.jsonl>
+  [--output <results.jsonl>] [--keep-alive]`. Tested with 3 real
+  TLS pods running EchoRunner.
+- **`MultiOfferVastWorkerProvider`** — companion `WorkerProvider`
+  for the pool path: dispenses one pre-picked Vast offer per
+  `create()` call (top-N by reliability + price), preserving the
+  no-cycle property that keeps `vastai` shell-outs out of
+  `sovereign-mesh`.
+- **Local-podman smoke harness** —
+  `sovereign/container/Containerfile.local-test` +
+  `scripts/pod` wrapper + `sovereign-mesh/tests/local_pod_smoke.rs`
+  validate the full wire protocol against real containers before
+  paying for Vast. Three `#[ignore]` tests: single-pod lifecycle
+  (boot → /health → upload → dispatch → poll → destroy), impostor
+  rejection at container boundary, three-pod pool drain. Run with:
+
+  ```
+  cargo test --package sovereign-mesh --test local_pod_smoke \
+    -- --ignored --nocapture
+  ```
+
+  Local-test image notes: ABI-aligned with the
+  `sovereign-vulkan` toolbox (Fedora-on-Fedora) so the host-built
+  binary's deps resolve; bypasses production `entrypoint.sh`
+  (which expects curl + a clock-skewed host); bind-mounts host
+  `/lib64` for the binary's dynamic deps. Production CUDA/ROCm
+  images build their own binary against the matching GPU stack
+  and skip all of this fixup.
 
 Successor to the legacy `pipeline pod up` flow that joined every Vast
 pod to the mesh as a full peer. That approach was shoehorned: it
