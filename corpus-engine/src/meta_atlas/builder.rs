@@ -269,6 +269,189 @@ struct Cluster {
     max_salience: f32,
 }
 
+/// Move 6 P7: partial rebuild for a single corpus.
+///
+/// When an atlas delta lands on `corpus_id` (Phase 5 hook), only
+/// that corpus's anchors in the meta-atlas need re-clustering. This
+/// function:
+///   1. Loads existing `canonical_atoms.json`.
+///   2. Drops every anchor whose `corpus_id == target_corpus`.
+///   3. Removes meta-atoms whose anchor list is empty after the drop.
+///   4. Re-walks the target corpus's atlas + classifies each atom.
+///   5. Inserts the new anchors back into the file's clusters
+///      (merging into existing meta-atoms by canonical_key, or
+///      creating new ones).
+///   6. Persists the result atomically.
+///
+/// Cost vs. full `build_meta_atlas`: O(target_atoms) instead of
+/// O(total_atoms across all atlases). For a newsworthy refresh that
+/// touches ~20 wiki atoms, the partial rebuild is ~milliseconds
+/// instead of seconds.
+///
+/// `meta_atlas_path` defaults to `default_meta_atlas_path()` when
+/// `None`.
+pub fn rebuild_for_corpus(
+    indexes_dir: &Path,
+    target_corpus_id: &str,
+    meta_atlas_path: Option<&Path>,
+) -> std::io::Result<MetaAtlasFile> {
+    use std::collections::BTreeSet;
+
+    let resolved_path = match meta_atlas_path {
+        Some(p) => p.to_path_buf(),
+        None => default_meta_atlas_path().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "default_meta_atlas_path returned None (no HOME)",
+            )
+        })?,
+    };
+
+    // Load existing file (or start fresh if absent).
+    let mut file = if resolved_path.exists() {
+        read_meta_atlas(&resolved_path)?
+    } else {
+        MetaAtlasFile {
+            schema_version: MetaAtlasFile::SCHEMA_VERSION.to_string(),
+            built_at: crate::stream_axes::timestamp_now(),
+            atlases_seen: Vec::new(),
+            atoms: Vec::new(),
+        }
+    };
+
+    // Drop anchors belonging to target_corpus_id; retire empty
+    // meta-atoms.
+    for atom in file.atoms.iter_mut() {
+        atom.anchors.retain(|a| a.corpus_id != target_corpus_id);
+    }
+    file.atoms.retain(|a| !a.anchors.is_empty());
+
+    // Drop the corpus's row from atlases_seen so we re-emit it
+    // below.
+    file.atlases_seen
+        .retain(|a| a.corpus_id != target_corpus_id);
+
+    // Re-walk the target corpus only.
+    let corpus_path = indexes_dir.join(target_corpus_id);
+    let atlas_dir = corpus_path.join(ATLAS_DIRNAME);
+    if atlas_dir.is_dir() {
+        let atoms_file = match read_atlas_atoms(&atlas_dir) {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(corpus = %target_corpus_id, error = %e, "rebuild_for_corpus: read_atlas_atoms failed");
+                // Persist what we have (anchors dropped) and return.
+                file.built_at = crate::stream_axes::timestamp_now();
+                write_meta_atlas(&file, &resolved_path)?;
+                return Ok(file);
+            }
+        };
+        let content_hash = atoms_content_hash(&atlas_dir).unwrap_or_default();
+        let stability = read_corpus_stability(&corpus_path);
+
+        if stability != Some(crate::stream_axes::Stability::Rolling) {
+            let mut contributed = 0usize;
+            // Build new anchors keyed by canonical_key (mirrors the
+            // full builder's pattern, but only for this corpus).
+            let mut new_anchors_by_key: HashMap<String, Vec<Anchor>> = HashMap::new();
+            let mut new_display_by_key: HashMap<String, String> = HashMap::new();
+            let mut new_aliases_by_key: HashMap<String, BTreeSet<String>> =
+                HashMap::new();
+
+            for env in &atoms_file.atoms {
+                let entity = match env {
+                    AtomEnvelope::Entity(e) => e,
+                    _ => continue,
+                };
+                if matches!(entity.entity_type, EntityType::Initiative) {
+                    continue;
+                }
+                let key = lookup_key(&entity.canonical_name);
+                if key.is_empty() {
+                    continue;
+                }
+                let articulation = super::classifier::classify_articulation(
+                    env,
+                    &entity.description,
+                );
+                let anchor = Anchor {
+                    corpus_id: target_corpus_id.to_string(),
+                    atom_id: entity.id.clone(),
+                    primary_chunk: entity.first_appearance.clone(),
+                    articulation,
+                    stability,
+                    salience: entity.salience,
+                    atlas_content_hash: content_hash.clone(),
+                };
+                new_anchors_by_key.entry(key.clone()).or_default().push(anchor);
+                new_display_by_key
+                    .entry(key.clone())
+                    .or_insert_with(|| entity.canonical_name.clone());
+                for alias in &entity.aliases {
+                    let a_key = lookup_key(alias);
+                    if !a_key.is_empty() && a_key != key {
+                        new_aliases_by_key
+                            .entry(key.clone())
+                            .or_default()
+                            .insert(a_key);
+                    }
+                }
+                contributed += 1;
+            }
+
+            // Merge new anchors into existing meta-atoms (or create
+            // new ones).
+            let mut by_key: HashMap<String, usize> = HashMap::new();
+            for (idx, atom) in file.atoms.iter().enumerate() {
+                by_key.insert(atom.canonical_key.clone(), idx);
+            }
+            for (key, anchors) in new_anchors_by_key {
+                if let Some(&idx) = by_key.get(&key) {
+                    file.atoms[idx].anchors.extend(anchors);
+                    if let Some(aliases) = new_aliases_by_key.get(&key) {
+                        file.atoms[idx]
+                            .aliases
+                            .extend(aliases.iter().cloned());
+                    }
+                } else {
+                    let display = new_display_by_key
+                        .remove(&key)
+                        .unwrap_or_else(|| key.clone());
+                    let aliases = new_aliases_by_key
+                        .remove(&key)
+                        .unwrap_or_default();
+                    file.atoms.push(MetaAtom {
+                        canonical_key: key,
+                        display,
+                        aliases,
+                        anchors,
+                    });
+                }
+            }
+
+            file.atlases_seen.push(AtlasSeen {
+                corpus_id: target_corpus_id.to_string(),
+                content_hash,
+                eligible_entities: contributed,
+                stability,
+            });
+        } else {
+            tracing::info!(
+                corpus = %target_corpus_id,
+                "rebuild_for_corpus: skipping Rolling-stability corpus from anchoring"
+            );
+        }
+    }
+
+    // Re-sort for deterministic output.
+    file.atoms.sort_by(|a, b| a.canonical_key.cmp(&b.canonical_key));
+    file.atlases_seen
+        .sort_by(|a, b| a.corpus_id.cmp(&b.corpus_id));
+    file.built_at = crate::stream_axes::timestamp_now();
+
+    write_meta_atlas(&file, &resolved_path)?;
+    Ok(file)
+}
+
 /// Atomically write a `MetaAtlasFile` to `out_path`. Creates parent
 /// dirs as needed. Writes to `<out_path>.tmp` then renames so a
 /// process kill mid-write doesn't leave a partial file in place.
@@ -470,6 +653,120 @@ mod tests {
         let file = build_meta_atlas(tmp.path()).unwrap();
         let keys: Vec<&str> = file.atoms.iter().map(|a| a.canonical_key.as_str()).collect();
         assert_eq!(keys, vec!["alpha", "zebra"]);
+    }
+
+    #[test]
+    fn rebuild_for_corpus_drops_old_and_inserts_new() {
+        let tmp = tempfile::tempdir().unwrap();
+        let indexes = tmp.path();
+
+        // Seed two corpora with one shared canonical entity.
+        write_atlas_with_meta(
+            indexes,
+            "wiki",
+            vec![make_entity(1, "Einstein", vec![], EntityType::Person, 0.5, None)],
+            Some(Stability::Frozen),
+        );
+        write_atlas_with_meta(
+            indexes,
+            "sep",
+            vec![make_entity(
+                1,
+                "Einstein",
+                vec![],
+                EntityType::Concept,
+                0.9,
+                Some("Quotable"),
+            )],
+            Some(Stability::Frozen),
+        );
+
+        let initial = build_meta_atlas(indexes).unwrap();
+        let meta_path = tmp.path().join("meta_atlas.json");
+        write_meta_atlas(&initial, &meta_path).unwrap();
+        let einstein = initial
+            .atoms
+            .iter()
+            .find(|a| a.canonical_key == "einstein")
+            .expect("einstein present");
+        assert_eq!(einstein.anchors.len(), 2);
+
+        // Update wiki's einstein to have a different salience; rebuild
+        // just wiki.
+        std::fs::remove_file(indexes.join("wiki/atlas/atoms.json")).unwrap();
+        let new_atoms = AtomsFile::new(vec![make_entity(
+            2,
+            "Einstein",
+            vec![],
+            EntityType::Person,
+            0.99,
+            None,
+        )]);
+        std::fs::write(
+            indexes.join("wiki/atlas/atoms.json"),
+            serde_json::to_string_pretty(&new_atoms).unwrap(),
+        )
+        .unwrap();
+
+        let after = rebuild_for_corpus(indexes, "wiki", Some(&meta_path)).unwrap();
+        let einstein = after
+            .atoms
+            .iter()
+            .find(|a| a.canonical_key == "einstein")
+            .expect("einstein still present");
+        // Two anchors: sep unchanged, wiki refreshed.
+        assert_eq!(einstein.anchors.len(), 2);
+        let wiki_anchor = einstein
+            .anchors
+            .iter()
+            .find(|a| a.corpus_id == "wiki")
+            .unwrap();
+        assert!((wiki_anchor.salience - 0.99).abs() < 1e-6);
+        let sep_anchor = einstein
+            .anchors
+            .iter()
+            .find(|a| a.corpus_id == "sep")
+            .unwrap();
+        assert!((sep_anchor.salience - 0.9).abs() < 1e-6);
+    }
+
+    #[test]
+    fn rebuild_for_corpus_removes_meta_atom_when_only_corpus_drops_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let indexes = tmp.path();
+        write_atlas_with_meta(
+            indexes,
+            "wiki",
+            vec![make_entity(
+                1,
+                "OnlyHere",
+                vec![],
+                EntityType::Person,
+                0.5,
+                None,
+            )],
+            Some(Stability::Frozen),
+        );
+        let initial = build_meta_atlas(indexes).unwrap();
+        let meta_path = tmp.path().join("meta.json");
+        write_meta_atlas(&initial, &meta_path).unwrap();
+        assert!(initial
+            .atoms
+            .iter()
+            .any(|a| a.canonical_key == "onlyhere"));
+
+        // Replace wiki atlas with one that doesn't contain OnlyHere.
+        let new_atoms = AtomsFile::new(vec![]);
+        std::fs::write(
+            indexes.join("wiki/atlas/atoms.json"),
+            serde_json::to_string_pretty(&new_atoms).unwrap(),
+        )
+        .unwrap();
+        let after = rebuild_for_corpus(indexes, "wiki", Some(&meta_path)).unwrap();
+        assert!(
+            !after.atoms.iter().any(|a| a.canonical_key == "onlyhere"),
+            "meta-atom should be retired when last anchor goes"
+        );
     }
 
     #[test]

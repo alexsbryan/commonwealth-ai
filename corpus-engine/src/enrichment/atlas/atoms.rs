@@ -22,6 +22,17 @@ use crate::enrichment::pipeline::atlas::{
 /// self-describing (`"entity-001"`, `"event-042"`) and cheap to emit.
 /// Use the builder constructors rather than `from_raw` unless you're
 /// deserialising or writing adapters for another store.
+///
+/// Two id shapes coexist (Move 6):
+///   - **Sequential** (`entity-0001`, `event-0042`, …) — the original
+///     v2.0 shape. Produced by `AtomId::entity(idx)` and friends.
+///     Migrated in place by `sovereign atlas migrate-ids`.
+///   - **Content-hash** (`entity-<16 hex>` derived from canonical
+///     fields) — produced by `AtomId::*_content_hash(...)`. Stable
+///     across re-extractions of the same conceptual atom. Required
+///     for incremental atlas updates: re-extracting an article
+///     gives back the same Einstein atom id every time, so
+///     cross-corpus edges + meta-atlas anchors survive deltas.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct AtomId(String);
 
@@ -67,6 +78,163 @@ impl AtomId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    // ── Move 6: content-hash constructors ──────────────────
+    //
+    // Each *_content_hash constructor takes the atom's identifying
+    // fields + the owning corpus_id and produces a stable id that
+    // re-extraction will reproduce exactly. Hash inputs are
+    // normalised where appropriate (canonical_name via lookup_key,
+    // enum types via their snake_case as_str_repr) so casing/punct
+    // variations resolve to the same id.
+    //
+    // Truncated to 16 hex chars (64 bits). Collision space is
+    // sufficient for <10M atoms per corpus by the birthday bound;
+    // a pre-deployment scan over the live atlas confirms zero
+    // collisions before migration is run.
+
+    /// Entity id: hash(lookup_key(canonical_name) | entity_type | corpus_id).
+    /// Doesn't depend on first_appearance so the id is stable when
+    /// the originating document is deleted or shifts.
+    pub fn entity_content_hash(
+        canonical_name: &str,
+        entity_type: &crate::enrichment::pipeline::atlas::EntityType,
+        corpus_id: &str,
+    ) -> Self {
+        let key = crate::atlas_canonical::lookup_key(canonical_name);
+        let input = format!("entity|{key}|{}|{corpus_id}", entity_type.as_str_repr());
+        Self(format!("entity-{}", short_hash(&input)))
+    }
+
+    /// Event id: hash(trimmed_description | event_type | first_section_id | corpus_id).
+    /// Less stable than Entity across re-extractions when LLM
+    /// wording shifts — acceptable for v1 since Event ids primarily
+    /// scope within one corpus.
+    pub fn event_content_hash(
+        description: &str,
+        event_type: &crate::enrichment::pipeline::atlas::EventType,
+        first_section_id: &str,
+        corpus_id: &str,
+    ) -> Self {
+        let input = format!(
+            "event|{}|{}|{first_section_id}|{corpus_id}",
+            description.trim(),
+            event_type.as_str_repr()
+        );
+        Self(format!("event-{}", short_hash(&input)))
+    }
+
+    /// State id: hash(entity_id | state_type | label | corpus_id).
+    pub fn state_content_hash(
+        entity_id: &AtomId,
+        state_type: &crate::enrichment::pipeline::atlas::StateType,
+        label: &str,
+        corpus_id: &str,
+    ) -> Self {
+        let input = format!(
+            "state|{}|{}|{}|{corpus_id}",
+            entity_id.as_str(),
+            state_type.as_str_repr(),
+            label.trim()
+        );
+        Self(format!("state-{}", short_hash(&input)))
+    }
+
+    /// Relation id: hash(sorted_participants | relation_type | label | corpus_id).
+    /// Participant order doesn't matter for relation identity (A↔B
+    /// is the same as B↔A), so sort before hashing.
+    pub fn relation_content_hash(
+        participants: &[AtomId],
+        relation_type: &crate::enrichment::pipeline::atlas::RelationType,
+        label: &str,
+        corpus_id: &str,
+    ) -> Self {
+        let mut sorted: Vec<&str> = participants.iter().map(|a| a.as_str()).collect();
+        sorted.sort();
+        let input = format!(
+            "relation|{}|{}|{}|{corpus_id}",
+            sorted.join(","),
+            relation_type.as_str_repr(),
+            label.trim()
+        );
+        Self(format!("relation-{}", short_hash(&input)))
+    }
+
+    /// Claim id: hash(content | discourse_act | epistemic_status | corpus_id).
+    pub fn claim_content_hash(
+        content: &str,
+        discourse_act: &crate::enrichment::pipeline::atlas::DiscourseAct,
+        epistemic_status: &crate::enrichment::pipeline::atlas::EpistemicStatus,
+        corpus_id: &str,
+    ) -> Self {
+        let input = format!(
+            "claim|{}|{}|{}|{corpus_id}",
+            content.trim(),
+            discourse_act.as_str_repr(),
+            epistemic_status.as_str_repr()
+        );
+        Self(format!("claim-{}", short_hash(&input)))
+    }
+
+    /// Question id: hash(content | question_type | corpus_id).
+    pub fn question_content_hash(
+        content: &str,
+        question_type: &crate::enrichment::pipeline::atlas::QuestionType,
+        corpus_id: &str,
+    ) -> Self {
+        let input = format!(
+            "question|{}|{}|{corpus_id}",
+            content.trim(),
+            question_type.as_str_repr()
+        );
+        Self(format!("question-{}", short_hash(&input)))
+    }
+
+    /// Configuration id: hash(label | corpus_id). Configurations are
+    /// section-level interpretive structure; their label is the
+    /// stable surrogate.
+    pub fn configuration_content_hash(label: &str, corpus_id: &str) -> Self {
+        let input = format!("config|{}|{corpus_id}", label.trim());
+        Self(format!("config-{}", short_hash(&input)))
+    }
+
+    /// ArgumentReconstruction id: hash(name | corpus_id).
+    pub fn argument_reconstruction_content_hash(name: &str, corpus_id: &str) -> Self {
+        let input = format!("argument|{}|{corpus_id}", name.trim());
+        Self(format!("argument-{}", short_hash(&input)))
+    }
+
+    /// Position id: hash(canonical_name | stance | corpus_id).
+    pub fn position_content_hash(canonical_name: &str, stance: &str, corpus_id: &str) -> Self {
+        let key = crate::atlas_canonical::lookup_key(canonical_name);
+        let input = format!("position|{key}|{}|{corpus_id}", stance.trim());
+        Self(format!("position-{}", short_hash(&input)))
+    }
+
+    /// Opposition id: hash(canonical_label | corpus_id).
+    pub fn opposition_content_hash(canonical_label: &str, corpus_id: &str) -> Self {
+        let key = crate::atlas_canonical::lookup_key(canonical_label);
+        let input = format!("opposition|{key}|{corpus_id}");
+        Self(format!("opposition-{}", short_hash(&input)))
+    }
+
+    /// True iff this id looks like a Move-6 content-hash id
+    /// (length matches `<type>-<16 hex>`). Used by the migration
+    /// module to skip already-migrated atoms.
+    pub fn is_content_hash(&self) -> bool {
+        let parts: Vec<&str> = self.0.splitn(2, '-').collect();
+        if parts.len() != 2 {
+            return false;
+        }
+        parts[1].len() == 16 && parts[1].chars().all(|c| c.is_ascii_hexdigit())
+    }
+}
+
+/// 16-char prefix of blake3 hex digest. 64-bit truncation; safe for
+/// <10M atoms per corpus by birthday bound.
+fn short_hash(input: &str) -> String {
+    let full = blake3::hash(input.as_bytes()).to_hex().to_string();
+    full[..16].to_string()
 }
 
 /// Reference to a specific passage in the corpus. Step 3a fills
@@ -703,6 +871,103 @@ mod tests {
         assert_eq!(AtomId::entity(1).as_str(), "entity-0001");
         assert_eq!(AtomId::event(42).as_str(), "event-0042");
         assert_eq!(AtomId::state(7).as_str(), "state-0007");
+    }
+
+    // ── Move 6: content-hash atom id stability tests ──────
+
+    #[test]
+    fn entity_content_hash_is_stable_across_calls() {
+        let a = AtomId::entity_content_hash("Albert Einstein", &EntityType::Person, "wikipedia");
+        let b = AtomId::entity_content_hash("Albert Einstein", &EntityType::Person, "wikipedia");
+        assert_eq!(a, b);
+        assert_eq!(a.as_str().len(), "entity-".len() + 16);
+        assert!(a.is_content_hash());
+    }
+
+    #[test]
+    fn entity_content_hash_normalises_canonical_name() {
+        // Lookup_key normalises case + punctuation; same key → same id.
+        let a = AtomId::entity_content_hash("Albert Einstein", &EntityType::Person, "wikipedia");
+        let b = AtomId::entity_content_hash("ALBERT-EINSTEIN", &EntityType::Person, "wikipedia");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn entity_content_hash_differs_across_corpora() {
+        let a = AtomId::entity_content_hash("Albert Einstein", &EntityType::Person, "wikipedia");
+        let b = AtomId::entity_content_hash("Albert Einstein", &EntityType::Person, "sep");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn entity_content_hash_differs_across_types() {
+        let a = AtomId::entity_content_hash("Mercury", &EntityType::Place, "wikipedia");
+        let b = AtomId::entity_content_hash("Mercury", &EntityType::Concept, "wikipedia");
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn relation_content_hash_ignores_participant_order() {
+        let p1 = AtomId::entity_content_hash("Alice", &EntityType::Person, "c");
+        let p2 = AtomId::entity_content_hash("Bob", &EntityType::Person, "c");
+        let a = AtomId::relation_content_hash(
+            &[p1.clone(), p2.clone()],
+            &crate::enrichment::pipeline::atlas::RelationType::Interpersonal,
+            "married_to",
+            "c",
+        );
+        let b = AtomId::relation_content_hash(
+            &[p2, p1],
+            &crate::enrichment::pipeline::atlas::RelationType::Interpersonal,
+            "married_to",
+            "c",
+        );
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn sequential_ids_are_not_content_hash() {
+        assert!(!AtomId::entity(1).is_content_hash());
+        assert!(!AtomId::event(42).is_content_hash());
+    }
+
+    #[test]
+    fn content_hash_ids_pass_is_content_hash_check() {
+        let id = AtomId::entity_content_hash("Test", &EntityType::Person, "c");
+        assert!(id.is_content_hash());
+    }
+
+    #[test]
+    fn all_atom_variants_have_content_hash_constructors() {
+        // Smoke that every variant compiles + emits a content-hash-shaped id.
+        use crate::enrichment::pipeline::atlas::*;
+        let parent = AtomId::entity_content_hash("e", &EntityType::Person, "c");
+        let ids = vec![
+            AtomId::entity_content_hash("e", &EntityType::Person, "c"),
+            AtomId::event_content_hash("d", &EventType::Action, "s0", "c"),
+            AtomId::state_content_hash(&parent, &StateType::Epistemic, "l", "c"),
+            AtomId::relation_content_hash(&[parent.clone()], &RelationType::Interpersonal, "l", "c"),
+            AtomId::claim_content_hash("c", &DiscourseAct::Assert, &EpistemicStatus::Confident, "c"),
+            AtomId::question_content_hash("q", &QuestionType::Thematic, "c"),
+            AtomId::configuration_content_hash("cfg", "c"),
+            AtomId::argument_reconstruction_content_hash("arg", "c"),
+            AtomId::position_content_hash("pos", "endorse", "c"),
+            AtomId::opposition_content_hash("X vs Y", "c"),
+        ];
+        for id in &ids {
+            assert!(id.is_content_hash(), "expected content-hash shape: {}", id.as_str());
+        }
+        // All distinct (different prefixes + different inputs).
+        let mut sorted: Vec<&str> = ids.iter().map(|a| a.as_str()).collect();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), ids.len(), "ids must be distinct");
+    }
+
+    #[test]
+    fn entity_content_hash_handles_unicode() {
+        let a = AtomId::entity_content_hash("Søren Kierkegaard", &EntityType::Person, "sep");
+        assert!(a.is_content_hash());
     }
 
     #[test]
