@@ -26,7 +26,7 @@ use commonwealth_core::mesh::NodeStatus;
 use commonwealth_core::partition;
 use commonwealth_state::MeshStore;
 use corpus_engine::error::{Error as CorpusError, Result as CorpusResult};
-use corpus_engine::update::newsworthy_watcher::NewsworthyHost;
+use corpus_engine::update::newsworthy_watcher::{CommittedDocs, NewsworthyHost};
 
 pub struct MeshNewsworthyHost {
     app_state: AppState,
@@ -186,5 +186,39 @@ impl NewsworthyHost for MeshNewsworthyHost {
                 }
             }
         });
+    }
+
+    /// Move 6 P5 wiring: log the per-doc delta + dispatch to the
+    /// existing on_chunks_committed full-rebuild path. The
+    /// incremental atlas path (P5.a.1) reads these doc_ids and
+    /// drives [`corpus_engine::enrichment::atlas::atoms_delta::apply_atom_delta`]
+    /// per-doc when `SOVEREIGN_ATLAS_INCREMENTAL=1` is set —
+    /// landing in tree before SEP ingest completes is unsafe (the
+    /// running daemon would emit content-hash ids mid-stream), so
+    /// the incremental code path lights up only after the
+    /// coordinated migration described in
+    /// `~/.claude/plans/move6-incremental-atlas.md`.
+    fn on_chunks_committed_with_docs(&self, committed: &[CommittedDocs]) {
+        let incremental_enabled = std::env::var("SOVEREIGN_ATLAS_INCREMENTAL")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        for c in committed {
+            tracing::info!(
+                corpus_id = %c.corpus_id,
+                role = %c.role,
+                doc_count = c.doc_ids.len(),
+                incremental_enabled,
+                "newsworthy.atlas_delta_received — per-doc delta from watcher; \
+                 falling back to full rebuild until SOVEREIGN_ATLAS_INCREMENTAL=1 \
+                 + atoms migrated to content-hash IDs"
+            );
+        }
+        // Defer to legacy full-rebuild path until P5.a.1 lands the
+        // incremental computation.
+        let legacy: Vec<(String, &'static str)> = committed
+            .iter()
+            .map(|c| (c.corpus_id.clone(), c.role))
+            .collect();
+        self.on_chunks_committed(&legacy);
     }
 }

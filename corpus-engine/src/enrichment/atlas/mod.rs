@@ -25,14 +25,18 @@
 
 pub mod analysis;
 pub mod atoms;
+pub mod atoms_delta;
 pub mod axis_catalog;
 pub mod cross_corpus;
+pub mod doc_to_atoms;
 pub mod edges;
 pub mod embeddings;
 pub mod ingestion;
+pub mod migrate_ids;
 pub mod registry;
 pub mod resolution;
 pub mod schema_validation;
+pub mod section_cache;
 pub mod strategies;
 pub mod summary;
 pub mod vital_tier;

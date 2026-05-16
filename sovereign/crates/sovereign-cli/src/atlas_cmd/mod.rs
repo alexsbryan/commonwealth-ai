@@ -21,7 +21,10 @@
 //! gains.
 
 pub mod budget;
+pub mod build_doc_index;
 pub mod inspect;
+pub mod migrate_ids;
+pub mod stats;
 pub mod status;
 pub mod wikipedia;
 
@@ -84,6 +87,9 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "list-corpora" => inspect::run_list_corpora(&args[1..]).await,
         "list-atoms" => inspect::run_list_atoms(&args[1..]).await,
         "show-atom" => inspect::run_show_atom(&args[1..]).await,
+        "migrate-ids" => migrate_ids::run(&args[1..]).await,
+        "build-doc-index" => build_doc_index::run(&args[1..]).await,
+        "stats" => stats::run(&args[1..]).await,
         other => {
             eprintln!("error: unknown atlas subcommand `{other}`");
             help::print(&HELP);

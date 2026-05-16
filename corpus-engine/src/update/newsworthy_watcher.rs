@@ -108,6 +108,40 @@ pub trait NewsworthyHost: Send + Sync {
     /// implements this against
     /// `corpus_engine::enrichment::atlas::postinstall::rebuild_structural_atlas`.
     fn on_chunks_committed(&self, _affected: &[(String, &'static str)]) {}
+
+    /// Move 6 P5: like `on_chunks_committed` but carries the
+    /// list of doc_ids (article titles) that received writes in
+    /// this tick, per (corpus_id, role) pair. This is the data
+    /// flow that enables incremental atlas updates — the host's
+    /// implementation can call
+    /// [`crate::enrichment::atlas::atoms_delta::apply_atom_delta`]
+    /// with the per-doc atom set rather than rebuilding the full
+    /// atlas over millions of atoms unrelated to this tick's delta.
+    ///
+    /// Default impl strips the doc_ids and delegates to the
+    /// existing `on_chunks_committed` so hosts that haven't been
+    /// updated keep working with their full-rebuild path.
+    fn on_chunks_committed_with_docs(&self, committed: &[CommittedDocs]) {
+        let legacy: Vec<(String, &'static str)> = committed
+            .iter()
+            .map(|c| (c.corpus_id.clone(), c.role))
+            .collect();
+        self.on_chunks_committed(&legacy);
+    }
+}
+
+/// Per-corpus delta record emitted by the watcher: which corpus
+/// received writes, what role it played in this tick (`"portal"`
+/// or `"refresh"`), and which source-doc ids carried the writes.
+/// Consumed by [`NewsworthyHost::on_chunks_committed_with_docs`].
+#[derive(Debug, Clone)]
+pub struct CommittedDocs {
+    pub corpus_id: String,
+    pub role: &'static str,
+    /// Article titles (or portal date strings) that received writes
+    /// this tick. The host uses these to drive a per-doc incremental
+    /// atlas update rather than a full rebuild.
+    pub doc_ids: Vec<String>,
 }
 
 /// Lifecycle of a tracked article.
@@ -174,6 +208,17 @@ pub struct TickReport {
     pub stale_marked: usize,
     pub errors: usize,
     pub portal_ingested: bool,
+    /// Move 6 P5: article titles that received writes this tick.
+    /// Populated alongside `refreshed`/`fetched` counters; passed
+    /// to the host's [`NewsworthyHost::on_chunks_committed_with_docs`]
+    /// hook so the host can run an incremental atlas update over
+    /// only these docs rather than rebuilding the full atlas.
+    pub refreshed_titles: Vec<String>,
+    pub fetched_titles: Vec<String>,
+    /// Move 6 P5: portal date strings (`YYYY-MM-DD`) that received
+    /// writes this tick. Used by the host for incremental atlas
+    /// update of the wikipedia-newsworthy corpus.
+    pub portal_doc_ids: Vec<String>,
     pub elapsed_ms: u64,
 }
 
@@ -554,9 +599,10 @@ impl WikipediaNewsworthyWatcher {
         // ── Step A: leader-only daily portal ingest ────────────────
         if report.role_leader {
             match self.run_leader_step(now).await {
-                Ok(ingested) => {
-                    report.portal_ingested = ingested;
-                    if ingested {
+                Ok(portal_date) => {
+                    report.portal_ingested = portal_date.is_some();
+                    if let Some(date_iso) = portal_date {
+                        report.portal_doc_ids.push(date_iso);
                         report.stale_marked = self
                             .sweep_window(now)
                             .await
@@ -615,7 +661,10 @@ impl WikipediaNewsworthyWatcher {
                             )
                             .await
                             {
-                                Ok(Ok(())) => report.refreshed += 1,
+                                Ok(Ok(())) => {
+                                    report.refreshed += 1;
+                                    report.refreshed_titles.push(article.title.clone());
+                                }
                                 Ok(Err(e)) => {
                                     tracing::warn!(
                                         title = %article.title,
@@ -652,7 +701,10 @@ impl WikipediaNewsworthyWatcher {
             )
             .await
             {
-                Ok(Ok(())) => report.fetched += 1,
+                Ok(Ok(())) => {
+                    report.fetched += 1;
+                    report.fetched_titles.push(article.title.clone());
+                }
                 Ok(Err(e)) => {
                     tracing::warn!(
                         title = %article.title,
@@ -677,26 +729,43 @@ impl WikipediaNewsworthyWatcher {
         // tags: "portal" for the wikipedia-newsworthy corpus_id
         // (small, fast to rebuild), "refresh" for the parent
         // wikipedia corpus (large; host may defer or throttle).
-        let mut affected: Vec<(String, &'static str)> = Vec::new();
+        // Move 6 P5: emit per-corpus delta records carrying the
+        // doc_ids that received writes this tick. Host's
+        // `on_chunks_committed_with_docs` defaults to delegating to
+        // the legacy `on_chunks_committed` (which still triggers a
+        // full rebuild); production hosts override to drive an
+        // incremental atlas update via `apply_atom_delta` keyed by
+        // these doc_ids.
+        let mut committed: Vec<CommittedDocs> = Vec::new();
         if report.portal_ingested {
-            affected.push((self.config.corpus_id.clone(), "portal"));
+            committed.push(CommittedDocs {
+                corpus_id: self.config.corpus_id.clone(),
+                role: "portal",
+                doc_ids: report.portal_doc_ids.clone(),
+            });
         }
         if report.refreshed + report.fetched > 0 {
-            affected.push((self.config.parent_corpus_id.clone(), "refresh"));
+            let mut doc_ids = report.refreshed_titles.clone();
+            doc_ids.extend(report.fetched_titles.clone());
+            committed.push(CommittedDocs {
+                corpus_id: self.config.parent_corpus_id.clone(),
+                role: "refresh",
+                doc_ids,
+            });
         }
-        if !affected.is_empty() {
-            let summary: Vec<String> = affected
+        if !committed.is_empty() {
+            let summary: Vec<String> = committed
                 .iter()
-                .map(|(id, role)| format!("{role}={id}"))
+                .map(|c| format!("{}={} ({} docs)", c.role, c.corpus_id, c.doc_ids.len()))
                 .collect();
             tracing::info!(
                 refreshed = report.refreshed,
                 fetched = report.fetched,
                 portal_ingested = report.portal_ingested,
                 affected = ?summary,
-                "newsworthy.atlas_rebuild_dispatch — notifying host to schedule atlas refresh for corpora that received writes this tick"
+                "newsworthy.atlas_dispatch — notifying host with per-doc delta for incremental atlas update"
             );
-            self.host.on_chunks_committed(&affected);
+            self.host.on_chunks_committed_with_docs(&committed);
         }
 
         Ok(report)
@@ -705,7 +774,7 @@ impl WikipediaNewsworthyWatcher {
     /// Leader-only daily portal-page ingest. Returns `true` when an
     /// ingest happened (revid changed since last fetch), `false` when
     /// the marker matched and we short-circuited.
-    async fn run_leader_step(&self, now: DateTime<Utc>) -> Result<bool> {
+    async fn run_leader_step(&self, now: DateTime<Utc>) -> Result<Option<String>> {
         let yesterday = (now - chrono::Duration::days(1)).date_naive();
         let date_iso = yesterday.format("%Y-%m-%d").to_string();
         let portal_page = format!(
@@ -734,7 +803,7 @@ impl WikipediaNewsworthyWatcher {
                 revid = observed_revid,
                 "newsworthy.portal_unchanged"
             );
-            return Ok(false);
+            return Ok(None);
         }
 
         // Index this portal page into wikipedia-newsworthy. The same
@@ -774,7 +843,7 @@ impl WikipediaNewsworthyWatcher {
             new_tracked = added,
             "newsworthy.portal_ingested"
         );
-        Ok(true)
+        Ok(Some(date_iso))
     }
 
     fn load_tracked(&self) -> Result<Vec<TrackedArticle>> {
