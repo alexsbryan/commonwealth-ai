@@ -46,6 +46,10 @@ tempfile = "3"
 which = "7"
 sha2 = { workspace = true }
 chrono = { workspace = true }
+# `eval_cmd::attribution` parses `### [ts] {user|assistant}` turn
+# headers in retrieved chunks to strip opposite-attribution spans
+# before scoring conversation-history bench questions.
+regex = "1"
 # Used by `awareness_cmd` (gated behind the `dev-tools` feature) for
 # direct SQLite reads — chunk-id → memory.body lookups for the
 # `awareness timeline --include-chunks` flag and selective row deletes

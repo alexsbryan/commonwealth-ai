@@ -878,10 +878,25 @@ async fn run_daemon(args: &[String]) -> i32 {
         // registry URL — the wikipedia-catalog dev variant could never
         // be installed because its data URL is not yet hosted.
         let recipes_dir = data_dir.join("recipes");
+        // Recipe enrichment (`[enrichment] enabled = true, type = "atlas"`)
+        // requires an InferenceFn — without one, `engine.ingest` logs
+        // "no InferenceFn was provided to CorpusEngine — skipping" and
+        // silently degrades to chunks-only ingest. The embedded daemon
+        // was the lone holdout (every other call site —
+        // `sovereign-server/src/main.rs:224`,
+        // `sovereign-desktop/src-tauri/src/state.rs:1053`,
+        // `sovereign-cli/src/main.rs:865`,
+        // `chat_cmd/bootstrap.rs:242` — wires this); surface symptom
+        // was conversations-personal landing 180 embedded chunks with
+        // no atlas/atoms.json. Same provider already drives embed +
+        // batch_embed above.
+        let inference_fn =
+            sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
         Arc::new(
             CorpusEngine::new(recipes_dir, indexes_dir, embed)
                 .with_embedding_model(&embed_model_name)
                 .with_batch_embed_fn(batch_embed)
+                .with_inference_fn(inference_fn)
                 .with_self_node_id(self_node_id.to_string()),
         )
     };

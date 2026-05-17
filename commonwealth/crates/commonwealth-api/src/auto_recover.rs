@@ -193,6 +193,23 @@ pub async fn try_recover_stranded_partitions(
             // failure modes (corrupt JSON) are recoverable.
             let raw = std::fs::read_to_string(&meta_path).unwrap_or_default();
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
+                // Defense in depth against the conversations-personal
+                // race (auto_ingest.rs gates on active_ingests, but
+                // any future caller of this function — manual CLI
+                // merge, recovery from a different loop — gets the
+                // same protection here). A partition with
+                // `ingestion_in_progress=true` is being actively
+                // written; merging it produces a zero-chunk canonical
+                // and then the in-flight pipeline trips over the
+                // consumed partition meta.
+                if v["ingestion_in_progress"].as_bool() == Some(true) {
+                    tracing::debug!(
+                        corpus = %corpus_id,
+                        partition = %entry.path().display(),
+                        "auto_recover: partition has ingestion_in_progress=true — skipping merge attempt"
+                    );
+                    return RecoveryOutcome::NotEnoughPartitions;
+                }
                 if let Some(arr) = v["processed_shards"].as_array() {
                     for s in arr.iter().filter_map(|x| x.as_u64()) {
                         shard_union.insert(s as usize);
@@ -614,5 +631,40 @@ mod tests {
             "second attempt inside cooldown should be blocked; got {:?}",
             second
         );
+    }
+
+    /// Regression: a partition with `ingestion_in_progress=true` is
+    /// being actively written; auto_recover must refuse to merge it
+    /// rather than racing the embed pipeline. Reproduced by the
+    /// conversations-personal install on 2026-05-17 — 180 chunks
+    /// embedded but never landed because auto_recover ran mid-ingest
+    /// and consumed the partition. The auto_ingest scheduler now
+    /// gates on AppState.active_ingests, but this defense lives
+    /// inside `try_recover_stranded_partitions` itself so any
+    /// alternate caller (manual CLI merge, future recovery loops)
+    /// is also protected.
+    #[tokio::test]
+    async fn refuses_merge_when_partition_ingestion_in_progress() {
+        let dir = tempfile::tempdir().unwrap();
+        let unique_corpus = format!("ing_{}", std::process::id());
+        let partition = dir
+            .path()
+            .join(format!("{unique_corpus}-partition-node-abcd"));
+        std::fs::create_dir_all(&partition).unwrap();
+        std::fs::write(
+            partition.join("_corpus_meta.json"),
+            r#"{"ingestion_in_progress":true,"processed_shards":[]}"#,
+        )
+        .unwrap();
+
+        let outcome = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
+        assert!(
+            matches!(outcome, RecoveryOutcome::NotEnoughPartitions),
+            "in-progress partition should short-circuit as NotEnoughPartitions \
+             (cheap, deterministic, re-evaluates on next tick); got {:?}",
+            outcome
+        );
+        // Partition was NOT consumed by the failed-merge path.
+        assert!(partition.join("_corpus_meta.json").exists());
     }
 }

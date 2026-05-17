@@ -1,0 +1,42 @@
+[corpus]
+id = "conversations-personal"
+name = "Personal claude.ai conversations"
+description = "Local-only ingest of the user's claude.ai chat export. Conversation-history retrieval surface for the user's own past chats. NEVER share — third parties the user discussed have not consented to gossip."
+license = "private"
+mesh_sharing = false
+size_compressed_gb = 0
+size_indexed_gb = 0
+
+# Convention: symlink the dump to a stable path so the recipe is not
+# tied to claude.ai's timestamp-suffixed download directory.
+#
+#   ln -sf ~/Downloads/data-<uuid>-*/conversations.json \
+#          ~/.sovereign/conversations/conversations.json
+#
+[acquire]
+type = "local_file"
+path = "~/.sovereign/conversations/conversations.json"
+
+[extract]
+type = "anthropic_export"
+
+[chunk]
+type = "threaded_turns"
+
+[index]
+fts = true
+vector = true
+
+# Atlas enrichment driven by the `conversational` domain
+# (`corpus-engine/src/enrichment/domains/conversational.rs`).
+# Required for `sovereign corpus scrub` to surface Person/Org
+# entities — only `personal` + `conversational` domains override
+# `entity_extraction_prompt`, which is the Phase 1b call that
+# writes typed Person/Organization/Initiative atoms to atlas/
+# atoms.json. The `conversational` domain also tunes clustering
+# for small-to-medium corpora (`min_cluster_size = 2`, vs the
+# default 50 that produced 0 clusters on a 180-chunk slice).
+[enrichment]
+enabled = true
+type = "atlas"
+domain = "conversational"

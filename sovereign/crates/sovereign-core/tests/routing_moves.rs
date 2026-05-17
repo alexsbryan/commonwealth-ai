@@ -93,6 +93,7 @@ fn classification_with(confidence: f32, alternatives: Vec<IntentCandidate>) -> R
         coarse_intent: Some("SIMPLE".into()),
         self_assessment: None,
         timing: None,
+        scope: None,
     }
 }
 
@@ -722,6 +723,7 @@ async fn deep_query_stream_emits_retrieval_and_synthesis_narration() {
             coarse_intent: Some("REASONING".into()),
             self_assessment: None,
             timing: None,
+            scope: None,
         },
     });
 

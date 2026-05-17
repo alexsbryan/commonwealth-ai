@@ -1495,6 +1495,15 @@ pub struct RouterClassification {
     /// the LLM-backed router so the runtime can roll the slice into
     /// the response metrics.
     pub timing: Option<RoutingTiming>,
+    /// Optional scope hint sourced from the nearest router exemplar.
+    /// Orthogonal to `primary.intent`; consumed downstream by
+    /// retrieval to bias corpus selection. Today's only value is
+    /// `Some("personal")` — set when the matched exemplar is tagged
+    /// with `scope = "personal"` in `sovereign/router/exemplars.toml`
+    /// (conversation-history / personal-vault shapes). `None` =
+    /// no scope hint (current default), retrieval uses every
+    /// installed knowledge corpus.
+    pub scope: Option<String>,
 }
 
 /// Iter6: per-call routing latency slice. Surfaces the cost of the
@@ -2553,6 +2562,7 @@ mod routing_policy_tests {
             coarse_intent: Some("SIMPLE".into()),
             self_assessment: None,
             timing: None,
+            scope: None,
         }
     }
 

@@ -90,6 +90,26 @@ pub struct Question {
     /// `knowledge_query`, `deep_query`, `complex_task`, etc.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expected_intent: Option<String>,
+    /// Attribution filter applied to retrieved chunks before scoring.
+    /// Only meaningful on conversation-history banks where chunks
+    /// carry `### [YYYY-MM-DD HH:MM] {user|assistant}` turn headers
+    /// (see `corpus_engine::chunkers::threaded_turns`):
+    ///
+    /// - `"both"` (default) — score against full chunk content
+    /// - `"user"` — strip assistant turn blocks before scoring, so a
+    ///   model's restatement of the user's question does not score
+    ///   as evidence
+    /// - `"assistant"` — strip user turn blocks; useful for "what
+    ///   answer did the model give about X" questions
+    ///
+    /// Non-conversation banks should leave this at default; the
+    /// filter is a no-op when chunk content has no turn headers.
+    #[serde(default = "default_attribution_mode")]
+    pub attribution_mode: String,
+}
+
+fn default_attribution_mode() -> String {
+    "both".to_string()
 }
 
 impl Question {
@@ -290,12 +310,43 @@ fn validate(bank: &EvalBank) -> Result<(), String> {
         if q.question.trim().is_empty() {
             return Err(format!("question `{}` has empty `question`", q.id));
         }
-        if q.expected_facts.is_empty() && q.expected_sources.is_empty() {
+        // Some archetypes intentionally have empty expected_facts +
+        // expected_sources because they're qualitative — judged by
+        // human inspection of retrieved chunks + synth output, not
+        // by strict-match scoring:
+        //   - `negative`: correct answer is "nothing retrieved"
+        //   - `cross_conv_synth`, `trend`, `temporal_slice`: broad
+        //     thematic prompts where the ground-truth surface set
+        //     can't be enumerated in advance (especially under blind
+        //     authoring where the author hasn't seen the corpus's
+        //     atom inventory). See sovereign/bench/conversation/
+        //     README.md.
+        let qualitative_archetypes = [
+            "negative",
+            "cross_conv_synth",
+            "trend",
+            "temporal_slice",
+        ];
+        if !qualitative_archetypes.contains(&q.category.as_str())
+            && q.expected_facts.is_empty()
+            && q.expected_sources.is_empty()
+        {
             return Err(format!(
-                "question `{}` has no expected_facts and no expected_sources \
-                 (would be unscoreable)",
-                q.id
+                "question `{}` (category `{}`) has no expected_facts and no \
+                 expected_sources (would be unscoreable). Either add expected_* \
+                 entries or move to a qualitative archetype: {:?}.",
+                q.id, q.category, qualitative_archetypes
             ));
+        }
+        match q.attribution_mode.as_str() {
+            "both" | "user" | "assistant" => {}
+            other => {
+                return Err(format!(
+                    "question `{}` has invalid attribution_mode `{}` \
+                     (must be one of: both, user, assistant)",
+                    q.id, other
+                ));
+            }
         }
     }
     Ok(())

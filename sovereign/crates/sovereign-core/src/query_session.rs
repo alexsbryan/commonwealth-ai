@@ -266,6 +266,7 @@ mod tests {
             coarse_intent: Some("SIMPLE".to_string()),
             self_assessment: None,
             timing: None,
+            scope: None,
         }
     }
 

@@ -1173,6 +1173,9 @@ fn chunker_max_chars(config: &ChunkerConfig) -> usize {
         // is responsible for keeping pieces chunk-sized.
         ChunkerConfig::Passthrough => usize::MAX,
         ChunkerConfig::PortalEventBullet { max_chars } => *max_chars,
+        // ThreadedTurns sizes chunks by turn-pair boundaries (no
+        // per-chunk char cap), like Passthrough.
+        ChunkerConfig::ThreadedTurns => usize::MAX,
     }
 }
 

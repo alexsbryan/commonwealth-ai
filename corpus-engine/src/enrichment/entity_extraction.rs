@@ -69,6 +69,24 @@ pub struct EntityExtractionResponse {
     pub organizations: Vec<OrganizationEntity>,
     #[serde(default)]
     pub initiatives: Vec<InitiativeEntity>,
+    /// Named created content — books, papers, recipes, films,
+    /// songs, podcasts, sermons, internal docs, etc. Added to the
+    /// schema for the conversational domain where the user often
+    /// references things they're reading, watching, citing, or
+    /// making. The `creator` field links to the author when the
+    /// conversation discusses them; the merger does NOT auto-
+    /// create a Person atom for the creator — the domain prompt
+    /// instructs the model to emit a separate Person when the
+    /// creator is discussed beyond bare citation.
+    #[serde(default)]
+    pub works: Vec<WorkEntity>,
+    /// Named ideas, mechanisms, traditions, techniques the user is
+    /// *thinking with*. Added for the conversational domain because
+    /// Concept atoms are the spine of cross-conversation trend
+    /// retrieval ("how has my view on X shifted") — without them
+    /// trend queries have nothing to anchor on.
+    #[serde(default)]
+    pub concepts: Vec<ConceptEntity>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -95,6 +113,34 @@ pub struct OrganizationEntity {
     /// requirements §3.1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relationship: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
+    pub mentions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WorkEntity {
+    pub name: String,
+    /// Coarse content kind ("book", "paper", "film", "podcast",
+    /// "recipe", "sermon", "song", "internal doc"). Surfaced in
+    /// downstream descriptions; not a closed taxonomy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Author / creator name when the conversation mentions one.
+    /// Free-text — the Person atom for the creator (if any) is
+    /// emitted separately per prompt guidance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creator: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
+    pub mentions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConceptEntity {
+    pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, deserialize_with = "deserialize_lenient_string_array")]
@@ -810,6 +856,52 @@ fn merge_responses(
             }
             if !it.participants.is_empty() {
                 pending_participants.push((id, it.participants.clone(), *batch_idx));
+            }
+        }
+
+        for w in &response.works {
+            // Fold creator + kind into the description so
+            // downstream consumers (digest, scrub candidates, atlas
+            // viewers) see all the conversational context at once.
+            // Skipping creator + kind entirely if absent keeps the
+            // description clean for plain entries.
+            let description = match (w.creator.as_ref(), w.kind.as_ref(), w.description.as_ref()) {
+                (Some(c), Some(k), Some(d)) => Some(format!("{k} by {c}: {d}")),
+                (Some(c), Some(k), None) => Some(format!("{k} by {c}")),
+                (Some(c), None, Some(d)) => Some(format!("by {c}: {d}")),
+                (None, Some(k), Some(d)) => Some(format!("{k}: {d}")),
+                (Some(c), None, None) => Some(format!("by {c}")),
+                (None, Some(k), None) => Some(k.clone()),
+                (None, None, d) => d.cloned(),
+            };
+            let id = upsert_entity(
+                &mut entities,
+                &mut by_folded_name,
+                EntityType::Work,
+                &w.name,
+                None,
+                w.kind.clone(),
+                description,
+                first_chunk(&w.mentions),
+            );
+            for m in &w.mentions {
+                mentions.push((id, m.clone()));
+            }
+        }
+
+        for c in &response.concepts {
+            let id = upsert_entity(
+                &mut entities,
+                &mut by_folded_name,
+                EntityType::Concept,
+                &c.name,
+                None,
+                None,
+                c.description.clone(),
+                first_chunk(&c.mentions),
+            );
+            for m in &c.mentions {
+                mentions.push((id, m.clone()));
             }
         }
     }

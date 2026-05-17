@@ -304,6 +304,9 @@ impl CorpusEngine {
             ExtractorConfig::AlignmentWorkspace {} => {
                 Box::new(extractors::alignment_workspace::AlignmentWorkspaceExtractor::default())
             }
+            ExtractorConfig::AnthropicExport {} => {
+                Box::new(extractors::anthropic_export::AnthropicExportExtractor::default())
+            }
             ExtractorConfig::XmlSections {
                 element,
                 title_attr,
@@ -359,6 +362,9 @@ impl CorpusEngine {
             ChunkerConfig::PortalEventBullet { max_chars } => Box::new(
                 chunkers::portal_event_bullet::PortalEventBulletChunker::new(*max_chars),
             ),
+            ChunkerConfig::ThreadedTurns => {
+                Box::new(chunkers::threaded_turns::ThreadedTurnsChunker::new())
+            }
         }
     }
 }

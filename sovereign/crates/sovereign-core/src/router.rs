@@ -275,6 +275,15 @@ pub struct LlmRouter {
     /// heuristic + LLM cascade. Ambiguous queries fall through to
     /// the existing path. Installed via `with_embed_router`.
     embed_router: Option<Arc<EmbedRouter>>,
+    /// Optional binary classifier for the personal-vs-external scope
+    /// axis. Independent of intent. When installed, called once per
+    /// query (reusing the embed_router's query embedding when both
+    /// are present) and the result populates
+    /// `RouterClassification.scope`. Downstream retrieval
+    /// (`prepare_knowledge_context` + `apply_atlas_grounding`) reads
+    /// scope to restrict to user-owned corpora when the classifier
+    /// fires `Some("personal")`.
+    scope_classifier: Option<Arc<crate::scope_classifier::PersonalScopeClassifier>>,
 }
 
 impl LlmRouter {
@@ -288,6 +297,7 @@ impl LlmRouter {
             store,
             skills,
             embed_router: None,
+            scope_classifier: None,
         }
     }
 
@@ -296,6 +306,17 @@ impl LlmRouter {
     /// every downstream heuristic + the LLM Pass 1/2 calls.
     pub fn with_embed_router(mut self, embed: Arc<EmbedRouter>) -> Self {
         self.embed_router = Some(embed);
+        self
+    }
+
+    /// Install a personal-scope binary classifier. Called once per
+    /// query (alongside the embed router when both are installed)
+    /// and the result populates `RouterClassification.scope`.
+    pub fn with_scope_classifier(
+        mut self,
+        classifier: Arc<crate::scope_classifier::PersonalScopeClassifier>,
+    ) -> Self {
+        self.scope_classifier = Some(classifier);
         self
     }
 
@@ -485,10 +506,29 @@ EXPRESSIVE
   NOT EXPRESSIVE: longer messages that embed a real question are
   the question type, not EXPRESSIVE.
 
+METALINGUAL
+  A question about how a SPECIFIC SOURCE (this codebase, a prior
+  exchange in this conversation, a named text) USES a word or
+  defines a term. Foregrounds the *words themselves*, not the
+  world the words point at (Jakobson's metalingual function).
+  Requires a source-anchor on the WORD: "in this codebase",
+  "earlier you said", "what did we agree on earlier about X",
+  "what does X mean in [author/paper]".
+  Examples: "What does 'agent' mean in this codebase?",
+            "How does Heidegger use the word 'Dasein'?",
+            "What did we agree on earlier about the schema?"
+  NOT METALINGUAL: questions about CONTENT recalled from a source.
+  "What books have I mentioned in our chats" is asking for the
+  BOOKS — content — not how the chats use the word "mentioned".
+  Use LOOKUP. Same for "what named people come up most often",
+  "what topics have I discussed", "have I ever talked about X".
+  These are LOOKUP/REASONING against the conversation corpus, not
+  questions about word usage.
+
 User message: "{message}"{corrections_note}{skill_hints}
 
 Respond with JSON only:
-{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE"}}"#,
+{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE|METALINGUAL"}}"#,
         )
     }
 
@@ -775,6 +815,122 @@ Reply with JSON only:
     ///   "in [author / framework]" → resolves to a named corpus.
     /// - **Ambient**: "here", "this" + definitional → resolves from
     ///   conversation context.
+    /// Heuristic check: personal-recall content question — first-person
+    /// (I / my / we / our) + a content-discourse verb (mentioned /
+    /// talked / discussed / brought up / come up / said / told) without
+    /// any source-anchor on the WORD itself. These are LOOKUP/REASONING
+    /// against the conversation corpus, NOT metalingual about word use.
+    ///
+    /// Pre-empts the LLM Pass 1 because the 4B Fast slot reliably
+    /// emits METALINGUAL with confidence 1.00 for "What books have I
+    /// mentioned in our chats?" style framings — the surface verb
+    /// "mentioned" looks like a word-usage signal, but the user is
+    /// asking for the books (content), not how the chats use the
+    /// word.
+    ///
+    /// High-precision floor:
+    /// - First-person marker present (`i `, `my `, `we `, `our `,
+    ///   `i've `, `i'm `, `we've `).
+    /// - Content-discourse verb present (the conversation-internal
+    ///   set the metalingual heuristic uses, but inverted to fire ON
+    ///   instead of off).
+    /// - No definitional-of-a-word marker (`mean`, `refers to`,
+    ///   `definition`, `defines`, `stand for`) — those keep the
+    ///   metalingual signal.
+    /// - No system-internal locator (`in this codebase`, `in this
+    ///   repo`) — those are real metalingual codebase-lookup
+    ///   questions about the system's own vocabulary.
+    fn looks_like_personal_recall(message: &str) -> bool {
+        let lower = message.to_lowercase();
+
+        const FIRST_PERSON_MARKERS: &[&str] = &[
+            "have i ",
+            "did i ",
+            "do i ",
+            "what did i ",
+            "what have i ",
+            "have we ",
+            "did we ",
+            "what did we ",
+            "what have we ",
+            // possessive
+            " my ",
+            " our ",
+            "across my ",
+            "across our ",
+            // contractions
+            "i've ",
+            "we've ",
+            "i'm ",
+            "we're ",
+        ];
+
+        const CONTENT_DISCOURSE_VERBS: &[&str] = &[
+            "mentioned",
+            "mention",
+            "talked",
+            "talk about",
+            "discussed",
+            "discuss",
+            "brought up",
+            "bring up",
+            "come up",
+            "came up",
+            "shared",
+            "told",
+            "tell",
+            "said",
+            "say",
+        ];
+
+        // Word-definition markers — keep metalingual signal for these.
+        const DEFINITIONAL_OF_WORD: &[&str] = &[
+            " mean ",
+            " mean?",
+            " means ",
+            " means?",
+            "refers to",
+            "refer to",
+            "definition",
+            "defines",
+            "stand for",
+        ];
+
+        // System-internal locators — keep metalingual for codebase
+        // vocabulary questions.
+        const SYSTEM_MARKERS: &[&str] = &[
+            "in this codebase",
+            "in this repo",
+            "in this repository",
+            "in this project",
+            "in this code",
+            "in our codebase",
+            "in our repo",
+            "in our system",
+            "in the codebase",
+            "in the repo",
+            "in sovereign",
+        ];
+
+        let has_first_person = FIRST_PERSON_MARKERS.iter().any(|m| lower.contains(m));
+        if !has_first_person {
+            return false;
+        }
+        let has_content_verb = CONTENT_DISCOURSE_VERBS.iter().any(|m| lower.contains(m));
+        if !has_content_verb {
+            return false;
+        }
+        let has_word_def = DEFINITIONAL_OF_WORD.iter().any(|m| lower.contains(m));
+        if has_word_def {
+            return false;
+        }
+        let has_system = SYSTEM_MARKERS.iter().any(|m| lower.contains(m));
+        if has_system {
+            return false;
+        }
+        true
+    }
+
     fn looks_like_metalingual(message: &str) -> bool {
         let lower = message.to_lowercase();
 
@@ -1675,38 +1831,56 @@ impl Router for LlmRouter {
         // Get active skill routing hints.
         let routing_hints = self.skills.routing_hints();
 
-        // Pre-check -2: inherit prior knowledge-family intent when
-        // the conversation already has an established knowledge
-        // thread. Structural detector — keys off
-        // `prior_assistant.metadata.intent`, no lexical pattern
-        // matching on the current message. See
-        // `inherits_prior_knowledge_intent` for the full rationale.
-        if let Some(inherited) = inherits_prior_knowledge_intent(context) {
+        // Pre-check -3: personal-recall content question. Fires BEFORE
+        // the embed router because the embed router's nearest-exemplar
+        // matching reliably picks ExpressiveQuery or MetalingualQuery
+        // for "Have I ever discussed X" / "Questions I keep coming back
+        // to" shapes — both intents skip retrieval entirely, defeating
+        // the whole point of the conversation-history corpus. The
+        // heuristic is high-precision: first-person marker
+        // (`have i `, `did i `, `my `, `our `, `i've `, ...) +
+        // content-discourse verb (`mentioned` / `talked` / `discussed`
+        // / `said` / `told`) with no word-definition or system-locator
+        // override. We compute the scope hint here too (when the
+        // classifier is installed) so retrieval sees the personal
+        // bias without paying a second embed call later.
+        //
+        // Must fire BEFORE `inherits_prior_knowledge_intent` —
+        // the inherit pre-check assumes personal-recall already
+        // short-circuited (see fn doc-comment).
+        if Self::looks_like_personal_recall(message) {
             let latency_ms = start.elapsed().as_millis() as i64;
             let hash = message_hash(message);
-            let intent_str = format!("{inherited:?}");
-            let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+            let _ = self.store.log_routing(&hash, "KnowledgeQuery", latency_ms).await;
             let _ = self
                 .store
-                .log_routing_meta(&hash, "KNOWLEDGE_THREAD_INHERIT", None)
+                .log_routing_meta(&hash, "PERSONAL_RECALL", None)
                 .await;
+            // Compute scope hint via the classifier (needs a fresh
+            // embedding — the embed router didn't run, so no shared
+            // vector to reuse). Skipped if no classifier installed.
+            let scope = match self.scope_classifier.as_ref() {
+                Some(cls) => cls.classify(message, &*self.inference).await.ok().flatten(),
+                None => None,
+            };
             eprintln!(
-                "[router] \"{}\" → {:?} (knowledge thread; inherited from prior turn)",
-                &message[..message.len().min(60)],
-                inherited,
+                "[router] \"{}\" → KnowledgeQuery (personal-recall heuristic; scope={:?})",
+                &message[..message.len().min(50)],
+                scope,
             );
             return Ok(RouterClassification {
                 primary: IntentCandidate {
-                    intent: inherited,
-                    confidence: 0.9,
+                    intent: Intent::KnowledgeQuery,
+                    confidence: 1.0,
                 },
                 alternatives: Vec::new(),
                 rationale: Some(
-                    "knowledge thread continuation — inherited intent from prior turn".into(),
+                    "first-person + content-discourse verb → personal-corpus lookup".to_string(),
                 ),
-                coarse_intent: Some("KNOWLEDGE_THREAD_INHERIT".to_string()),
+                coarse_intent: Some("PERSONAL_RECALL".to_string()),
                 self_assessment: None,
                 timing: None,
+                scope,
             });
         }
 
@@ -1720,51 +1894,76 @@ impl Router for LlmRouter {
         // (`looks_like_metalingual` etc.) for the common case while
         // still letting them act as a backstop for queries the
         // embed router declines.
+        // Scope is an axis ORTHOGONAL to intent — answered by its own
+        // binary classifier (`PersonalScopeClassifier`) running off
+        // the same query embedding the intent router uses. Stashed
+        // here so every return path below — embed-router verdict,
+        // topic-continuity, LLM-classifier fallback — sets it on the
+        // returned RouterClassification.
+        //
+        // The previous design routed scope through per-intent
+        // exemplar tags (`scope = "personal"` on individual rows in
+        // exemplars.toml). That collapsed because k=1 NN gives ONE
+        // intent its tag, and bench questions reliably landed near
+        // exemplars from OTHER intents, erasing the scope hint. See
+        // `scope_classifier.rs` module docs for the full post-mortem.
+        let mut scope_hint: Option<String> = None;
+
         if let Some(embed) = self.embed_router.as_ref() {
-            match embed.classify(message, &*self.inference).await {
-                Ok(Some(verdict)) => {
-                    let latency_ms = start.elapsed().as_millis() as i64;
-                    let hash = message_hash(message);
-                    let intent_str = format!("{:?}", verdict.intent);
-                    let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
-                    let _ = self
-                        .store
-                        .log_routing_meta(&hash, "EMBED_ROUTER", None)
-                        .await;
-                    eprintln!(
-                        "[router] \"{}\" → {:?} (embed: sim={:.3} margin={:.3} nearest={:?})",
-                        &message[..message.len().min(50)],
-                        verdict.intent,
-                        verdict.top_sim,
-                        verdict.margin,
-                        verdict.nearest_exemplar,
-                    );
-                    return Ok(RouterClassification {
-                        primary: IntentCandidate {
-                            intent: verdict.intent,
-                            // Map cosine similarity onto router
-                            // confidence — embed verdicts that
-                            // clear both gates are high-confidence
-                            // by construction. Pin to 0.95 (not
-                            // 1.0) so downstream decision policy
-                            // still treats this as "very likely"
-                            // rather than "unconditionally
-                            // certain"; leaves room for user
-                            // interpretation-redirect.
-                            confidence: 0.95,
-                        },
-                        alternatives: Vec::new(),
-                        rationale: Some(format!(
-                            "embed router: nearest exemplar {:?} (cosine {:.3}, margin {:.3})",
-                            verdict.nearest_exemplar, verdict.top_sim, verdict.margin
-                        )),
-                        coarse_intent: Some("EMBED_ROUTER".to_string()),
-                        self_assessment: None,
-                        timing: None,
-                    });
-                }
-                Ok(None) => {
-                    // Ambiguous — fall through to existing stack.
+            match embed
+                .classify_returning_embedding(message, &*self.inference)
+                .await
+            {
+                Ok((intent_verdict, query_embedding)) => {
+                    // Run scope classifier off the same embedding —
+                    // single embed call serves both decisions.
+                    if let Some(scope_cls) = self.scope_classifier.as_ref() {
+                        scope_hint = scope_cls.classify_from_embedding(&query_embedding);
+                    }
+                    if let Some(verdict) = intent_verdict {
+                        let latency_ms = start.elapsed().as_millis() as i64;
+                        let hash = message_hash(message);
+                        let intent_str = format!("{:?}", verdict.intent);
+                        let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+                        let _ = self
+                            .store
+                            .log_routing_meta(&hash, "EMBED_ROUTER", None)
+                            .await;
+                        eprintln!(
+                            "[router] \"{}\" → {:?} (embed: sim={:.3} margin={:.3} nearest={:?} scope={:?})",
+                            &message[..message.len().min(50)],
+                            verdict.intent,
+                            verdict.top_sim,
+                            verdict.margin,
+                            verdict.nearest_exemplar,
+                            scope_hint,
+                        );
+                        return Ok(RouterClassification {
+                            primary: IntentCandidate {
+                                intent: verdict.intent,
+                                // Embed verdicts that clear both gates
+                                // are high-confidence by construction.
+                                // Pin to 0.95 (not 1.0) so downstream
+                                // policy still treats this as "very
+                                // likely" rather than "unconditionally
+                                // certain"; leaves room for
+                                // user-driven interpretation-redirect.
+                                confidence: 0.95,
+                            },
+                            alternatives: Vec::new(),
+                            rationale: Some(format!(
+                                "embed router: nearest exemplar {:?} (cosine {:.3}, margin {:.3})",
+                                verdict.nearest_exemplar, verdict.top_sim, verdict.margin
+                            )),
+                            coarse_intent: Some("EMBED_ROUTER".to_string()),
+                            self_assessment: None,
+                            timing: None,
+                            scope: scope_hint.clone(),
+                        });
+                    }
+                    // Intent ambiguous — fall through. scope_hint is
+                    // already set (or None) above and survives
+                    // independently of the intent decision.
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -1773,6 +1972,17 @@ impl Router for LlmRouter {
                         "embed-router classify failed; falling through"
                     );
                 }
+            }
+        } else if let Some(scope_cls) = self.scope_classifier.as_ref() {
+            // No embed router installed — pay the scope embed call on
+            // its own. Rare path; production always installs both.
+            match scope_cls.classify(message, &*self.inference).await {
+                Ok(s) => scope_hint = s,
+                Err(e) => tracing::warn!(
+                    target: "router.scope",
+                    error = %e,
+                    "scope classifier failed; treating as None"
+                ),
             }
         }
 
@@ -1808,6 +2018,7 @@ impl Router for LlmRouter {
                 coarse_intent: Some("TOPIC_CONTINUITY".to_string()),
                 self_assessment: None,
                 timing: None,
+                scope: scope_hint.clone(),
             });
         }
 
@@ -1830,6 +2041,20 @@ impl Router for LlmRouter {
             && has_search
             && Self::needs_current_info(message);
 
+        // Pre-check 1a: personal-recall content question → force
+        // LOOKUP. First-person + content-discourse verb without a
+        // word-definition or system-locator marker means the user is
+        // asking what was SAID in the chats, not how the chats USE a
+        // word. Runs BEFORE force_metalingual so the LLM Pass 1's
+        // overzealous METALINGUAL emission on "What books have I
+        // mentioned" is pre-empted. See `looks_like_personal_recall`
+        // for the heuristic. Pairs with the centroid scope classifier
+        // (`scope_classifier.rs`) which marks these queries personal
+        // for retrieval-time corpus restriction.
+        let force_personal_recall = !force_conation
+            && !force_action
+            && Self::looks_like_personal_recall(message);
+
         // Pre-check 1b: metalingual shape → force METALINGUAL. Question
         // about the system's own vocabulary ("what does X mean in this
         // codebase"). Runs BEFORE comparison so "what's the difference
@@ -1837,6 +2062,7 @@ impl Router for LlmRouter {
         // not comparison-against-Wikipedia.
         let force_metalingual = !force_conation
             && !force_action
+            && !force_personal_recall
             && Self::looks_like_metalingual(message);
 
         // Pre-check 1c: commissive shape → force COMMISSION. First-
@@ -1845,6 +2071,7 @@ impl Router for LlmRouter {
         // fire after either without conflict.
         let force_commissive = !force_conation
             && !force_action
+            && !force_personal_recall
             && !force_metalingual
             && Self::looks_like_commissive(message);
 
@@ -1856,6 +2083,7 @@ impl Router for LlmRouter {
         // entities) doesn't get poached by the `compare ` content verb.
         let force_comparison = !force_conation
             && !force_action
+            && !force_personal_recall
             && !force_metalingual
             && !force_commissive
             && Self::looks_like_comparison(message);
@@ -1867,6 +2095,7 @@ impl Router for LlmRouter {
         // (and the tail-case refiner) handle the borderline ones.
         let force_expressive_short = !force_conation
             && !force_action
+            && !force_personal_recall
             && !force_metalingual
             && !force_commissive
             && !force_comparison
@@ -1882,6 +2111,7 @@ impl Router for LlmRouter {
         // runs the witness path on Relational skills.
         let force_expressive_memref = !force_conation
             && !force_action
+            && !force_personal_recall
             && !force_metalingual
             && !force_commissive
             && !force_comparison
@@ -1896,6 +2126,7 @@ impl Router for LlmRouter {
         // the imperative verb. Content processing never needs external reach.
         let force_content_reasoning = !force_conation
             && !force_action
+            && !force_personal_recall
             && !force_metalingual
             && !force_commissive
             && !force_comparison
@@ -1907,6 +2138,7 @@ impl Router for LlmRouter {
         // small fast models frequently mis-classify as SimpleQuery.
         let force_deep = !force_conation
             && !force_action
+            && !force_personal_recall
             && !force_metalingual
             && !force_commissive
             && !force_comparison
@@ -1923,6 +2155,7 @@ impl Router for LlmRouter {
         // caught earlier in `force_deep`).
         let force_lookup = !force_conation
             && !force_action
+            && !force_personal_recall
             && !force_metalingual
             && !force_commissive
             && !force_comparison
@@ -1951,6 +2184,14 @@ impl Router for LlmRouter {
                 intent: "ACTION".to_string(),
                 confidence: 1.0,
                 rationale: Some("current/time-sensitive signal → external tool".to_string()),
+            }
+        } else if force_personal_recall {
+            CoarseClassification {
+                intent: "LOOKUP".to_string(),
+                confidence: 1.0,
+                rationale: Some(
+                    "first-person + content-discourse verb → personal-corpus lookup".to_string(),
+                ),
             }
         } else if force_metalingual {
             CoarseClassification {
@@ -2116,6 +2357,7 @@ impl Router for LlmRouter {
                 parse_ms,
                 used_llm,
             }),
+            scope: scope_hint,
         })
     }
 }

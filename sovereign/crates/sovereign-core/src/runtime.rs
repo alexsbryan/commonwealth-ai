@@ -4229,12 +4229,55 @@ impl Runtime {
     /// Single canonical implementation; both intent paths
     /// (KnowledgeQuery + DeepQuery) call this rather than inlining
     /// the ~80-line graph-walk + fallback block.
+    /// Fetch a single chunk by its LanceDB row id from a specific
+    /// corpus. Used by atlas-grounding's direct-fetch path for atom
+    /// shapes whose `first_appearance.chunk_id` is numeric
+    /// (conversation, personal-vault) — bypassing the SEP/Wikipedia
+    /// FTS-by-article-slug path that doesn't apply when chunks
+    /// aren't titled by article. Returns `None` on any failure
+    /// (corpus not installed, index open failure, chunk_id not
+    /// present) — caller treats absence as a no-op.
+    ///
+    /// Opens the index per call. Acceptable today: the atlas-fetch
+    /// loop budget is small (~6 requests / query); opening is
+    /// dominated by the LanceDB manifest read which is cached after
+    /// the first hit. If profiling shows this is hot, the right
+    /// optimisation is a per-call index cache in `apply_atlas_grounding`,
+    /// not memoising across queries (atlas-grounding fires once per
+    /// chat turn).
+    async fn fetch_chunk_by_id(
+        &self,
+        corpus_id: &str,
+        chunk_id: u64,
+    ) -> Option<corpus_engine::ScoredChunk> {
+        let engine = self.corpus_engine.as_ref()?;
+        let indexes = engine.installed_indexes().await.ok()?;
+        let info = indexes.into_iter().find(|i| i.corpus_id == corpus_id)?;
+        let index = corpus_engine::index::CorpusIndex::open(&info.path)
+            .await
+            .ok()?;
+        let stored = index.get_chunks(&[chunk_id]).await.ok()?;
+        let s = stored.into_iter().next()?;
+        Some(corpus_engine::ScoredChunk {
+            content: s.content,
+            title: s.title,
+            url: None,
+            corpus_id: corpus_id.to_string(),
+            score: 0.0,
+            metadata: std::collections::HashMap::new(),
+            chunk_id: Some(s.id),
+            source_doc_id: None,
+            vector_distance: None,
+        })
+    }
+
     async fn apply_atlas_grounding(
         &self,
         query_text: &str,
         embedding: &[f32],
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         label: &str,
+        scope: Option<&str>,
     ) {
         if !atlas_grounding_enabled() {
             return;
@@ -4246,7 +4289,38 @@ impl Runtime {
             return;
         }
 
-        let corpus_ids = provider.loaded_corpus_ids();
+        let mut corpus_ids = provider.loaded_corpus_ids();
+        // Scope-driven atlas filtering. When the router classifies
+        // the query against a `scope = "personal"`-tagged exemplar
+        // (conversation-history / personal-vault shapes), restrict
+        // the atlas pool to user-owned corpora (mesh_sharing=false
+        // in IndexInfo). Without this, large public atlases
+        // (wikipedia at 1.6M atoms) drown small personal atlases
+        // (conversations-personal at ~200) in the global cosine
+        // race. The router's nearest exemplar is the load-bearing
+        // signal; downstream retrieval honors it here.
+        if scope == Some("personal") {
+            // Same sharp-signal limitation as the lance-side filter
+            // in `prepare_knowledge_query_plan` — see that block for
+            // the rationale + TODO. Pattern match is the immediate
+            // demonstrable wiring; recipe annotation is the proper
+            // long-form productionization.
+            const PERSONAL_CORPUS_PREFIXES: &[&str] =
+                &["conversations-", "personal-", "journal-", "inner-work-"];
+            let before = corpus_ids.len();
+            corpus_ids.retain(|id| {
+                PERSONAL_CORPUS_PREFIXES.iter().any(|p| id.starts_with(p))
+            });
+            if before != corpus_ids.len() {
+                tracing::info!(
+                    label,
+                    kept = corpus_ids.len(),
+                    dropped = before - corpus_ids.len(),
+                    scope = "personal",
+                    "atlas-grounding: scope-filtered to personal-corpus prefixes"
+                );
+            }
+        }
         let ctxs: Vec<Arc<crate::atlas_context::AtlasContext>> =
             corpus_ids.iter().filter_map(|id| provider.get(id)).collect();
         let graphs: Vec<Arc<crate::atlas_context::AtlasGraph>> =
@@ -4288,6 +4362,68 @@ impl Runtime {
                 if graph_added >= fetch_budget {
                     break;
                 }
+
+                // Shape-aware fetch. ChunkRequest.chunk_id is the
+                // atom's first_appearance.chunk_id. For SEP/Wikipedia
+                // atoms it's a section slug (`sec_00001`) and the
+                // FTS-by-article-slug path below resolves it via
+                // title-match. For conversation / personal-vault
+                // atoms it's the numeric LanceDB row id — FTS+title-
+                // match yields zero because the chunk title is the
+                // conversation name, not the chunk_id. Detect
+                // numeric ids and do a direct chunks_by_ids lookup
+                // against the source corpus identified by
+                // `article_slug` (which for non-SEP atlases is the
+                // corpus_id itself, per AtlasGraph::load_from_disk
+                // construction). Surfaced by conversations-personal
+                // 2026-05-17: atlas atoms scored 0.7+ in
+                // atlas_navigate but the FTS-fetch path produced
+                // graph_added=0.
+                if let Ok(chunk_id_num) = req.chunk_id.parse::<u64>() {
+                    if let Some(mut boosted) =
+                        self.fetch_chunk_by_id(&req.article_slug, chunk_id_num).await
+                    {
+                        let key = format!(
+                            "{}|{}",
+                            boosted.title.clone().unwrap_or_default(),
+                            truncate_chars(&boosted.content, 80)
+                        );
+                        if seen.insert(key) {
+                            boosted.score = req.score * 0.05;
+                            // Make atlas-fetched chunks competitive
+                            // in `cross_corpus_sort_cmp` against
+                            // lance-fetched chunks (which carry
+                            // vector_distance from hybrid search).
+                            // Map atom relevance to a synthetic
+                            // distance: high atlas score → low
+                            // distance (sorted to top); the runtime's
+                            // cross-corpus sort then keeps atlas
+                            // chunks above lance fillers when
+                            // truncating to KQ_MERGED_LIMIT.
+                            boosted.vector_distance = Some(
+                                (1.0_f32 - (req.score / 2.0).min(1.0)).max(0.0),
+                            );
+                            if !req.verbatim_excerpts.is_empty() {
+                                let mut head = String::from("[Atlas highlights]\n");
+                                for ex in &req.verbatim_excerpts {
+                                    head.push_str(ex);
+                                    head.push('\n');
+                                }
+                                head.push('\n');
+                                head.push_str(&boosted.content);
+                                boosted.content = head;
+                            }
+                            chunks.push(boosted);
+                            graph_added += 1;
+                            if graph_added >= fetch_budget {
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                // SEP/Wikipedia article-slug path.
                 let fts_hits = self
                     // Article slug + passage preview as FTS query
                     // (see eval-side runner.rs comment). Title-bias
@@ -4349,16 +4485,27 @@ impl Runtime {
                 provider.record_match(&ctx.atlas_corpus_id, &ctx.atlas_corpus_id);
             }
             if graph_added > 0 {
+                // Per-corpus breakdown of what graph-walk just pushed,
+                // so a downstream drop (cap / truncate / expand) can
+                // be pinned by comparing this against later sites
+                // (ARCH §0.1 glassbox).
+                let mut per_corpus: std::collections::BTreeMap<String, usize> =
+                    std::collections::BTreeMap::new();
+                let n = chunks.len();
+                for c in chunks.iter().skip(n - graph_added.min(n)) {
+                    *per_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+                }
                 tracing::info!(
                     label,
                     graph_added,
-                    "atlas-grounding: graph-walk fused"
+                    per_corpus = ?per_corpus,
+                    "atlas-grounding: graph-walk fused (per-corpus injected counts)"
                 );
             }
         } else {
-            // Fallback: bag-of-atoms (no graph layer loaded by this
-            // provider). Kept for older deployments + as a safety
-            // net during graph-layer rollout.
+            // No graph layer loaded for any provider. Direct bag-of-
+            // atoms injection — kept for older deployments + as a
+            // safety net during graph-layer rollout.
             let mut bag_added = 0usize;
             for corpus_id in &corpus_ids {
                 if let Some(ctx) = provider.get(corpus_id) {
@@ -5227,7 +5374,9 @@ impl Runtime {
         context: &ConversationContext,
         intent: &Intent,
     ) -> Vec<corpus_engine::ScoredChunk> {
-        let kc = self.prepare_knowledge_context(message, context, intent).await;
+        let kc = self
+            .prepare_knowledge_context(message, context, intent, None)
+            .await;
         kc.chunks
     }
 
@@ -5239,6 +5388,7 @@ impl Runtime {
         message: &str,
         context: &ConversationContext,
         intent: &Intent,
+        scope: Option<&str>,
     ) -> KnowledgeContext {
         // Document-attached messages are detected by the
         // `[Document attached: filename]` prefix. We only need to
@@ -5320,7 +5470,38 @@ impl Runtime {
                     None => Vec::new(),
                 }
             };
-            let (local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
+            let (mut local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
+
+            // Scope filter: when the router classified this turn as
+            // `scope = "personal"`, restrict the local hits to
+            // user-owned corpora so the synthesis prompt isn't
+            // dominated by general-knowledge sources. Prefix match
+            // is a TODO placeholder for recipe-level
+            // `[corpus] scope = "personal"` annotation — same
+            // pattern as the KQ plan path (see
+            // `prepare_knowledge_query_plan`).
+            if matches!(scope, Some("personal")) {
+                // TODO: replace prefix match with recipe-level
+                // `[corpus] scope = "personal"` annotation read from
+                // installed_indexes(). Mirror of the KQ plan path
+                // (see `prepare_knowledge_query_plan`).
+                const PERSONAL_CORPUS_PREFIXES: &[&str] =
+                    &["conversations-", "personal-", "journal-", "inner-work-"];
+                let before = local_scored.len();
+                local_scored.retain(|c| {
+                    PERSONAL_CORPUS_PREFIXES
+                        .iter()
+                        .any(|p| c.corpus_id.starts_with(p))
+                });
+                tracing::info!(
+                    kept = local_scored.len(),
+                    dropped = before.saturating_sub(local_scored.len()),
+                    scope = ?scope,
+                    label = %label,
+                    "prepare_knowledge_context: scope-filtered retrieval to personal-corpus prefixes"
+                );
+            }
+
             local_hits = local_scored.len();
             // Glass-box log: how many hits from local vs. mesh, and
             // which corpora did mesh claim to serve? If mesh_hits > 0
@@ -5392,7 +5573,7 @@ impl Runtime {
             // route and benefit equally from atlas grounding.
             // Same env override (`SOVEREIGN_ATLAS_GROUNDING=0`)
             // applies here.
-            self.apply_atlas_grounding(message, &corpus_embedding, &mut all_chunks, "DeepQuery")
+            self.apply_atlas_grounding(message, &corpus_embedding, &mut all_chunks, "DeepQuery", scope)
                 .await;
 
             // Also search StateStore for corpus-type documents (used by test
@@ -6556,6 +6737,7 @@ impl Runtime {
             coarse_intent: Some("CONTINUATION".to_string()),
             self_assessment: None,
             timing: None,
+            scope: None,
         };
         self.handle_message_stream_with_classification(
             message,
@@ -6634,6 +6816,7 @@ impl Runtime {
             coarse_intent: Some("REDIRECT".to_string()),
             self_assessment: None,
             timing: None,
+            scope: None,
         };
         let message = session.input.clone();
         let conversation_id = session.conversation_id.clone();
@@ -6846,6 +7029,7 @@ impl Runtime {
         );
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
+        let scope = classification.scope.clone();
 
         tracing::info!(
             intent = ?intent,
@@ -7062,7 +7246,9 @@ impl Runtime {
                 intent = ?intent,
                 "runtime: stream path — KnowledgeQuery/ComparisonQuery with token streaming"
             );
-            let plan = self.prepare_knowledge_query_plan(message, &context, &intent).await;
+            let plan = self
+                .prepare_knowledge_query_plan(message, &context, &intent, scope.as_deref())
+                .await;
 
             // PR5 — post-retrieval retrieval-miss diversion. Off-
             // target evidence shape (dispersed across ≥3 sources,
@@ -7395,7 +7581,7 @@ impl Runtime {
 
         // 4. Search knowledge + build prompt (shared with handle_simple).
         let kc = self
-            .prepare_knowledge_context(message, &context, &intent)
+            .prepare_knowledge_context(message, &context, &intent, scope.as_deref())
             .await;
 
         // Narration — DeepQuery / SimpleQuery streaming path. Mirrors
@@ -7898,11 +8084,13 @@ impl Runtime {
         );
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
+        let scope = classification.scope.clone();
 
         tracing::info!(
             intent = ?intent,
             coarse = ?coarse_intent,
             self_assessment = ?self_assessment,
+            scope = ?scope,
             tier = ?policy.tier,
             "runtime: routed"
         );
@@ -8140,7 +8328,13 @@ impl Runtime {
             }
             _ => {
                 self.handle_simple(
-                    message, conversation_id, &context, &intent, coarse_intent, self_assessment,
+                    message,
+                    conversation_id,
+                    &context,
+                    &intent,
+                    coarse_intent,
+                    self_assessment,
+                    scope.as_deref(),
                 )
                 .await
             }
@@ -8641,10 +8835,11 @@ impl Runtime {
         intent: &Intent,
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
+        scope: Option<&str>,
     ) -> Result<Response> {
         // Search knowledge + build prompt (shared with handle_message_stream).
         let mut kc = self
-            .prepare_knowledge_context(message, context, intent)
+            .prepare_knowledge_context(message, context, intent, scope)
             .await;
 
         // Witness override for relational + reasoning-shaped intents.
@@ -8873,6 +9068,7 @@ impl Runtime {
         message: &str,
         context: &ConversationContext,
         intent: &Intent,
+        scope: Option<&str>,
     ) -> KnowledgeQueryPlan {
         tracing::info!(message_chars = message.len(), "handle_knowledge_query: begin");
 
@@ -8940,6 +9136,53 @@ impl Runtime {
                 per_corpus_overrides.as_ref(),
             )
             .await;
+
+        // 2a'. Scope-driven retrieval filter. When the router classifies
+        //      the query as `scope = "personal"` (matched against
+        //      conversation-history / personal-vault exemplars in
+        //      sovereign/router/exemplars.toml), restrict the retrieval
+        //      pool to user-owned corpora (mesh_sharing=false). Without
+        //      this filter, conversations-personal lance hits get
+        //      crowded out by wikipedia / SEP chunks that semantically
+        //      match the QUERY SHAPE ("books", "chats", "discussions")
+        //      better than the actual conversation chunks do — even
+        //      though the user is asking ABOUT their own conversations
+        //      and wikipedia is irrelevant. Diagnostic trace
+        //      `post-apply_atlas_grounding` showed 17-23 conv chunks
+        //      in the bag pre-truncate, all dropped because their
+        //      vector_distance against abstract meta-questions was
+        //      higher than wikipedia's. (ARCH §0.1 — visible decision.)
+        if scope == Some("personal") {
+            // Sharp signal needed here: `mesh_sharing=false` covers
+            // many corpora the user marked private (wikipedia, SEP,
+            // codebase indexes) and so doesn't actually discriminate
+            // "the user's personal chat corpus" from "any private
+            // knowledge corpus". Diagnostic trace on the 2026-05-17
+            // synth run showed `kept=229 dropped=60` after the
+            // mesh_sharing filter — wikipedia and sep both survived
+            // because they were mesh_sharing=false in this install.
+            // TODO: replace with an explicit recipe-level annotation
+            // (`[corpus] scope = "personal"`) once schema lands. Today
+            // we match the corpus_id pattern so the scope plumbing is
+            // demonstrably end-to-end and the bench loop can close on
+            // real data. (ARCH §0.1 — visible decision, named TODO.)
+            const PERSONAL_CORPUS_PREFIXES: &[&str] =
+                &["conversations-", "personal-", "journal-", "inner-work-"];
+            let before = chunks.len();
+            chunks.retain(|c| {
+                PERSONAL_CORPUS_PREFIXES
+                    .iter()
+                    .any(|p| c.corpus_id.starts_with(p))
+            });
+            if before != chunks.len() {
+                tracing::info!(
+                    kept = chunks.len(),
+                    dropped = before - chunks.len(),
+                    scope = "personal",
+                    "KnowledgeQuery: scope-filtered retrieval to personal-corpus prefixes"
+                );
+            }
+        }
 
         // 2b. Entity boost — fetch articles named in the question via
         //     focused per-entity searches. See `prepare_knowledge_context`
@@ -9090,8 +9333,26 @@ impl Runtime {
         //     the full design rationale (cosine seeds → BFS expand
         //     over typed edges → FTS-fetch source chunks via atom
         //     evidence previews).
-        self.apply_atlas_grounding(message, &embedding, &mut chunks, "KnowledgeQuery")
+        self.apply_atlas_grounding(message, &embedding, &mut chunks, "KnowledgeQuery", scope)
             .await;
+        // Per-corpus snapshot RIGHT AFTER apply_atlas_grounding returns.
+        // Paired with the graph-walk trace inside apply (which shows
+        // what was pushed) and the post-truncate trace below — if
+        // counts here match the push trace but diverge from post-
+        // truncate, the drop is in sort+cap+truncate. (ARCH §0.1)
+        let post_atlas_per_corpus: std::collections::BTreeMap<String, usize> = {
+            let mut m: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for c in &chunks {
+                *m.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            m
+        };
+        tracing::info!(
+            n_chunks = chunks.len(),
+            per_corpus = ?post_atlas_per_corpus,
+            "handle_knowledge_query: post-apply_atlas_grounding (per-corpus)"
+        );
 
         // 3. Reweight by query relevance (mirrors prepare_knowledge_context),
         //    then sort by score, cap chunks-per-article for breadth, and
@@ -9197,10 +9458,22 @@ impl Runtime {
         }
 
         let search_ms = t_search.elapsed().as_millis() as u64;
+        // Per-corpus breakdown at this checkpoint — paired with the
+        // graph-walk trace upstream so any drop between the two is
+        // visible (ARCH §0.1 glassbox).
+        let post_truncate_per_corpus: std::collections::BTreeMap<String, usize> = {
+            let mut m: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for c in &chunks {
+                *m.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            m
+        };
         tracing::info!(
             chunks_found = chunks.len(),
             search_ms,
-            "handle_knowledge_query: corpus search done"
+            per_corpus = ?post_truncate_per_corpus,
+            "handle_knowledge_query: corpus search done (per-corpus survivors)"
         );
 
         // 4a. Empty results path — answer from parametric knowledge.
@@ -9361,6 +9634,9 @@ impl Runtime {
         // its job after a *wrong* article won evidence-shape dominance.
         // The fix lives in shape signals, not the expander, so this
         // log lets us see exactly when the wrong dominant survives.
+        // (Glassbox: paired with graph-walk + post-truncate traces
+        // upstream per ARCH §0.1; drops inside the expander surface
+        // here as a delta against the merge-cap total.)
         {
             use std::collections::HashMap;
             let mut by_corpus: HashMap<String, usize> = HashMap::new();
@@ -9390,6 +9666,7 @@ impl Runtime {
                 event = "post_expansion",
                 kind = expansion_kind,
                 fired = expansion_fired,
+                single_source_expansion,
                 total = chunks.len(),
                 by_corpus = ?corpus_pairs,
                 top5_articles = ?article_top,
@@ -10724,7 +11001,7 @@ impl Runtime {
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
     ) -> Result<Response> {
-        let plan = self.prepare_knowledge_query_plan(message, context, intent).await;
+        let plan = self.prepare_knowledge_query_plan(message, context, intent, None).await;
 
         // PR5 — non-streaming retrieval-miss diversion. Mirrors the
         // streaming path: dispersed noise → suppress synthesis +
