@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use tokio::sync::Mutex;
 
-use crate::llama::cpp::context::params::{LlamaContextParams, LlamaPoolingType};
+use crate::llama::cpp::context::params::LlamaContextParams;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
@@ -1657,28 +1657,31 @@ impl EmbedSlot {
         let n_seq_max: u32 = 16;
         let model = Arc::new(model);
 
-        // **C-side pooling forced to None.** MIGRATION 2026-05-17
-        // (llama-cpp-4 0.2.x): the binding's `embeddings_seq_ith`
-        // returns null whenever the loaded gguf's metadata reports
-        // `pooling_type=NONE`, and 0.2.x reads pooling from the gguf
-        // header instead of honouring `with_pooling_type` on the
-        // context params. The previous attempt — match the param to
-        // the gguf's intrinsic pooling (Last for Qwen3-Embedding) —
-        // hit `ggml_abort` inside `llama_init_from_model` at context
-        // construction. Both failure modes share a root cause: the
-        // 0.2.x build doesn't reliably support setting a non-None
-        // pooling type from the context-params side.
+        // **Pooling: gguf-driven.** We deliberately do NOT call
+        // `with_pooling_type(...)` here. The context default is
+        // `LLAMA_POOLING_TYPE_UNSPECIFIED`, which libllama interprets
+        // as "use the model's intrinsic pooling from gguf metadata"
+        // (`<arch>.pooling_type`, e.g. `qwen3.pooling_type=3` for
+        // Qwen3-Embedding → Last). See llama-context.cpp:158-164.
         //
-        // The fix is to take pooling out of llama.cpp entirely: build
-        // the context with `LlamaPoolingType::None` so every token's
-        // hidden state is exposed via `embeddings_ith`, then reduce
-        // app-side in [`pool_token_range_app_side`] using the
-        // strategy the family quirks declare (Mean / Last / Cls).
-        // Uniform across families, sidesteps both bugs, no behaviour
-        // change against pre-migration semantics — measured equal
-        // cosine similarity on the smoketest corpus.
-        let pooling_type = LlamaPoolingType::None;
-
+        // History: an earlier attempt forced `LlamaPoolingType::Last`
+        // explicitly to match the gguf, which provoked a `ggml_abort`
+        // in `llama_init_from_model` on the bundled 0.2.x libllama
+        // — apparently the explicit-set path on top of `embeddings=true`
+        // hits a code path the bundled tree miscompiles. A second
+        // attempt forced `LlamaPoolingType::None` and tried to do
+        // Mean/Last/Cls in Rust against `embeddings_ith` reads, but
+        // 0.2.x `embeddings_ith` returns null for the matching index
+        // when the embeddings buffer is laid out for a pooled run,
+        // so that path can't read what it needs either.
+        //
+        // Letting libllama do the pooling sidesteps both: it reads
+        // the gguf's `pooling_type` (the author's stated intent), and
+        // `embeddings_seq_ith(seq_id)` returns the pooled vector
+        // exactly as it did on the previous binding. Family-specific
+        // text prep — instruction prefix, EOS append, normalisation
+        // — stays in `EmbedQuirks`, where it belongs; libllama only
+        // owns the math.
         let n_threads = llama_threads_for_host();
         let wants_gpu =
             cfg!(any(target_os = "macos", target_os = "linux")) && requested_gpu_layers > 0;
@@ -1691,7 +1694,6 @@ impl EmbedSlot {
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_embeddings(true)
-                .with_pooling_type(pooling_type)
                 // GPU offload toggles. `with_offload_kqv(true)` puts
                 // the KV cache in GPU memory; `with_op_offload(true)`
                 // lets the GGML scheduler route compute ops to the GPU.
@@ -1742,18 +1744,19 @@ impl EmbedSlot {
             }
         };
 
-        let pooling_name = match embed_quirks.as_ref().map(|q| &q.pooling) {
+        let quirks_pooling = match embed_quirks.as_ref().map(|q| &q.pooling) {
             Some(PoolingStrategy::Last) => "last-token",
             Some(PoolingStrategy::Cls)  => "cls",
             _                           => "mean",
         };
-        // Report the actual backend so logs show whether GPU
-        // took (33 seq/sec on M2 Max Metal, measured; ~40+ seq/sec
-        // on Strix Halo Vulkan) or we fell back to CPU (2.8 seq/sec
-        // peak on M2 Max, 3.7-4.9 chunks/s on Strix Halo).
-        // Key diagnostic — a silent CPU fallback is the exact class
-        // of regression that triggered the benchmark-driven
-        // investigation of this path.
+        // libllama-reported pooling type at runtime — sourced from the
+        // gguf's `<arch>.pooling_type` after the UNSPECIFIED → hparams
+        // resolution in `llama_init_from_model`. Surfacing it next to
+        // the family-declared quirks pooling lets one log line catch
+        // the case where the gguf author and the family card disagree
+        // (which silently bakes the wrong embedding into chunks.lance
+        // without any other signal).
+        let runtime_pooling = format!("{:?}", ctx.pooling_type());
         let compute_backend = if used_gpu {
             gpu_backend_label()
         } else {
@@ -1763,7 +1766,8 @@ impl EmbedSlot {
             dims = n_embd,
             layers = model.n_layer(),
             size_mb = model.size() / (1024 * 1024),
-            pooling = pooling_name,
+            quirks_pooling,
+            runtime_pooling = %runtime_pooling,
             n_ctx = ctx_tokens,
             n_seq_max,
             max_input_tokens,
@@ -1806,8 +1810,7 @@ impl EmbedSlot {
         } else {
             text.to_string()
         };
-        let strategy = strategy_from_quirks(embed_quirks);
-        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens, &strategy)
+        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens)
     }
 
     /// Embed a query string, applying the query-side instruction prefix
@@ -1830,8 +1833,7 @@ impl EmbedSlot {
         } else {
             query.to_string()
         };
-        let strategy = strategy_from_quirks(embed_quirks);
-        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens, &strategy)
+        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens)
     }
 
     /// Single-sequence embedding routine. Kept alongside the
@@ -1844,7 +1846,6 @@ impl EmbedSlot {
         input: &str,
         n_embd: usize,
         max_input_tokens: usize,
-        strategy: &PoolingStrategy,
     ) -> Result<Vec<f32>> {
         ctx.clear_kv_cache();
 
@@ -1864,15 +1865,26 @@ impl EmbedSlot {
                 .add(token, i as i32, &[0], true)
                 .map_err(|e| Error::Inference(format!("Embed batch add failed: {e}")))?;
         }
+        // **Per-decode `set_embeddings(true)` is load-bearing.** The
+        // `with_embeddings(true)` on context params *should* persist
+        // for the lifetime of the context, but on the bundled
+        // llama-cpp-4 0.2.x libllama the `cparams.embeddings` flag
+        // ends up `false` by the time `output_reserve` runs at
+        // decode — `ctx->embd.data` never gets allocated and every
+        // read (`embeddings_seq_ith`, `embeddings_ith`,
+        // `get_embeddings`) returns null. Calling
+        // `llama_set_embeddings(true)` immediately before `decode`
+        // mirrors what llama-server does per request and is what
+        // unblocks the pooled-vector read. Don't remove without
+        // re-running the embed probe.
+        ctx.set_embeddings(true);
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
 
-        // Per-token embeddings read via `embeddings_ith` (logits=true
-        // was set on every batch entry above) and reduced app-side
-        // by the family-supplied strategy. See the EmbedSlot::load
-        // comment for the migration rationale.
-        let pooled = pool_token_range_app_side(ctx, 0, tokens.len(), n_embd, strategy)?;
-        Ok(l2_normalize(pooled))
+        let raw = ctx
+            .embeddings_seq_ith(0)
+            .map_err(|e| Error::Inference(format!("Failed to read embeddings: {e}")))?;
+        Ok(l2_normalize(raw.to_vec()))
     }
 
     /// Batch-embed multiple texts by packing distinct sequences
@@ -1973,15 +1985,6 @@ impl EmbedSlot {
             let mut tokens_in_batch = 0usize;
             let mut seqs_in_batch = 0usize;
             let sub_start = cursor;
-            // Per-sequence batch-index range, tracked so we can pool
-            // app-side after decode. (Pooling moved out of llama.cpp
-            // — see EmbedSlot::load migration note. The C-side
-            // `embeddings_seq_ith` returns null whenever the loaded
-            // gguf's metadata reports pooling_type=NONE, which is
-            // common in 0.2.x; app-side pooling sidesteps that.)
-            // Index `i` here corresponds to local seq_id `i`; the
-            // i-th entry is `(start_batch_idx, len)` for that seq.
-            let mut seq_token_ranges: Vec<(i32, usize)> = Vec::new();
 
             while cursor < prepared.len() {
                 let next_len = prepared[cursor].len().max(1);
@@ -2005,7 +2008,6 @@ impl EmbedSlot {
                     // Simpler: fabricate a synthetic token? Cheaper
                     // to skip. We'll handle below by post-filling.
                 } else {
-                    let seq_start_batch_idx = tokens_in_batch as i32;
                     for (pos, &tok) in toks.iter().enumerate() {
                         batch
                             .add(tok, pos as i32, &[seq_id], true)
@@ -2013,7 +2015,6 @@ impl EmbedSlot {
                                 Error::Inference(format!("Embed batch add failed: {e}"))
                             })?;
                     }
-                    seq_token_ranges.push((seq_start_batch_idx, toks.len()));
                     tokens_in_batch += next_len;
                     seqs_in_batch += 1;
                 }
@@ -2025,6 +2026,9 @@ impl EmbedSlot {
             // and we skip the decode entirely.
             if seqs_in_batch > 0 {
                 ctx_lock.ctx.clear_kv_cache();
+                // See run_embed_sync for why this per-decode toggle
+                // is load-bearing on llama-cpp-4 0.2.x.
+                ctx_lock.ctx.set_embeddings(true);
                 ctx_lock
                     .ctx
                     .decode(&mut batch)
@@ -2035,27 +2039,19 @@ impl EmbedSlot {
             // emit one embedding per input, mapping local seq_id
             // back to the original input slot. Empty inputs get
             // zero vectors of the right length. Non-empty inputs
-            // pool app-side from the batch-index range we recorded
-            // while building the batch (see seq_token_ranges).
-            let strategy = match slot.embed_quirks.as_ref().map(|q| &q.pooling) {
-                Some(PoolingStrategy::Last) => PoolingStrategy::Last,
-                Some(PoolingStrategy::Cls)  => PoolingStrategy::Cls,
-                _                           => PoolingStrategy::Mean,
-            };
-            let mut local_seq: usize = 0;
+            // read the libllama-pooled vector via `embeddings_seq_ith`.
+            let mut local_seq: i32 = 0;
             for local_idx in sub_start..cursor {
                 if prepared[local_idx].is_empty() {
                     results.push(vec![0.0; slot.n_embd]);
                 } else {
-                    let (start, len) = seq_token_ranges[local_seq];
-                    let pooled = pool_token_range_app_side(
-                        &ctx_lock.ctx,
-                        start,
-                        len,
-                        slot.n_embd,
-                        &strategy,
-                    )?;
-                    results.push(l2_normalize(pooled));
+                    let raw = ctx_lock
+                        .ctx
+                        .embeddings_seq_ith(local_seq)
+                        .map_err(|e| {
+                            Error::Inference(format!("Failed to read embedding: {e}"))
+                        })?;
+                    results.push(l2_normalize(raw.to_vec()));
                     local_seq += 1;
                 }
             }
@@ -2484,75 +2480,6 @@ impl RerankSlot {
             out.push(score);
         }
         Ok(out)
-    }
-}
-
-/// Resolve the pooling strategy from optional `EmbedQuirks`. None
-/// or unspecified strategies default to Mean — matches the prior
-/// fallback in `EmbedSlot::load`.
-fn strategy_from_quirks(quirks: Option<&EmbedQuirks>) -> PoolingStrategy {
-    match quirks.map(|q| &q.pooling) {
-        Some(PoolingStrategy::Last) => PoolingStrategy::Last,
-        Some(PoolingStrategy::Cls)  => PoolingStrategy::Cls,
-        _                           => PoolingStrategy::Mean,
-    }
-}
-
-/// **App-side embedding pooling.** Returns a single n_embd-sized
-/// vector pooled from `[start_idx, start_idx + len)` of the
-/// context's per-token embeddings.
-///
-/// **Why this lives in Rust rather than llama.cpp**: the 0.2.x
-/// binding's `embeddings_seq_ith` returns null whenever the loaded
-/// model's gguf reports `pooling_type=NONE`, even if we passed an
-/// explicit `with_pooling_type(Mean)` on the context params. The
-/// 0.1.x behavior (param wins over gguf metadata) was lost in the
-/// migration. By setting context pooling to `None` and pooling in
-/// Rust, we sidestep that mismatch and work uniformly across every
-/// embed gguf in our zoo regardless of its baked-in pooling field.
-///
-/// Strategy semantics:
-/// - `Mean` — average over all token vectors in the range.
-/// - `Last` — return only the last token's vector (range end - 1).
-/// - `Cls`  — return only the first token's vector (range start).
-///
-/// `len == 0` returns a zero vector — matches the prior
-/// embed_batch's empty-input contract.
-fn pool_token_range_app_side(
-    ctx: &crate::llama::cpp::context::LlamaContext<'_>,
-    start_idx: i32,
-    len: usize,
-    n_embd: usize,
-    strategy: &PoolingStrategy,
-) -> Result<Vec<f32>> {
-    if len == 0 {
-        return Ok(vec![0.0; n_embd]);
-    }
-    match strategy {
-        PoolingStrategy::Last => ctx
-            .embeddings_ith(start_idx + len as i32 - 1)
-            .map(|s| s.to_vec())
-            .map_err(|e| Error::Inference(format!("embeddings_ith (last) failed: {e}"))),
-        PoolingStrategy::Cls => ctx
-            .embeddings_ith(start_idx)
-            .map(|s| s.to_vec())
-            .map_err(|e| Error::Inference(format!("embeddings_ith (cls) failed: {e}"))),
-        _ => {
-            let mut sum = vec![0.0f32; n_embd];
-            for i in 0..len {
-                let raw = ctx
-                    .embeddings_ith(start_idx + i as i32)
-                    .map_err(|e| Error::Inference(format!("embeddings_ith (mean, i={i}) failed: {e}")))?;
-                for (a, b) in sum.iter_mut().zip(raw.iter()) {
-                    *a += b;
-                }
-            }
-            let inv = 1.0_f32 / (len as f32);
-            for x in sum.iter_mut() {
-                *x *= inv;
-            }
-            Ok(sum)
-        }
     }
 }
 
