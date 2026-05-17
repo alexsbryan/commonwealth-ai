@@ -871,41 +871,40 @@ impl ModelSlot {
         let mut tokens_in_string_n = 0usize;
         let role_trace_on = std::env::var("SOVEREIGN_TRACE_SAMPLER_ROLES").is_ok();
 
-        // **Jump-forward decoding (Tier 1).** After each sampled token,
-        // ask the constraint whether the FSM has exactly one legal next
-        // token. If so, emit it without paying a forward pass — its KV
-        // entry rides into the next batched decode alongside the
-        // sampled token. The mechanism turns N sequential 1-token
-        // decodes into one wider decode at the next ambiguous position;
-        // on batched-decode-friendly hardware (Strix Halo Vulkan,
-        // Metal) a 5-token batch is ~2-3× faster than 5 sequential
+        // **Jump-forward decoding.** After each sampled token, ask
+        // the constraint whether the FSM has exactly one legal next
+        // token (Tier 1, mask-cache) or a deterministic byte run that
+        // longest-matches into one or more vocab tokens (Tier 2,
+        // FSM-byte-walk + VocabTrie). Forced tokens are emitted
+        // without paying their own forward pass — their KV entries
+        // ride into the next batched decode alongside the sampled
+        // token. The mechanism turns N sequential 1-token decodes
+        // into one wider decode at the next ambiguous position; on
+        // batched-decode-friendly hardware (Strix Halo Vulkan, Metal)
+        // a 5-token batch is ~2-3× faster than 5 sequential
         // singletons.
         //
-        // Off by default. Opt in via `SOVEREIGN_JUMP_FWD_ENABLE=1`.
+        // **On by default** as of 2026-05-17. Measured ~15% tok/s lift
+        // on the non-MTP path with the Twin Earth extraction schema
+        // (Tier 1 alone captured 0% on Qwen3 BPE — see notes from that
+        // day for the empirical finding). Opt out via
+        // `SOVEREIGN_JUMP_FWD_DISABLE=1` for A/B or emergency
+        // rollback. Both tiers default on independently:
+        //   `SOVEREIGN_JUMP_FWD_DISABLE=1`   — kills the whole walk
+        //   `SOVEREIGN_JUMP_FWD_T2_DISABLE=1` — keeps Tier 1, kills Tier 2
+        //
         // Active only when the request has `structured_output` (the
         // constraint is what produces forced tokens) AND we're not
-        // inside a `<think>` block (thinking-tag detection runs the
-        // mask off — forced_next_token would return None anyway, but
-        // the gate keeps the loop's bookkeeping honest).
+        // inside a `<think>` block.
         //
         // `MAX_JUMP_FWD_RUN` caps the per-iteration batch width so a
         // pathological forced-byte cycle can't run the verify batch
         // beyond `n_batch_max`. 32 is well under typical n_batch
         // (2048+) and covers all realistic JSON-skeleton runs we've
         // measured (typically 3-15 tokens).
-        let jump_fwd_enabled = std::env::var("SOVEREIGN_JUMP_FWD_ENABLE")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        // **Tier 2 jump-forward.** When set, the forced-walk falls
-        // through from `forced_next_token` (Tier 1: vocab-token-level
-        // single-survivor) to `forced_next_run` (Tier 2: FSM byte-walk
-        // + vocab longest-match) on each Tier 1 miss. Two separate
-        // gates so we can A/B the marginal Tier 2 lift over Tier 1
-        // on the same daemon without a rebuild. Requires
-        // `SOVEREIGN_JUMP_FWD_ENABLE=1` to do anything.
-        let jump_fwd_t2_enabled = std::env::var("SOVEREIGN_JUMP_FWD_T2_ENABLE")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+        let jump_fwd_enabled = jump_fwd_enabled_from_env(|k| std::env::var(k).ok());
+        let jump_fwd_t2_enabled =
+            jump_fwd_t2_enabled_from_env(|k| std::env::var(k).ok());
         const MAX_JUMP_FWD_RUN: usize = 32;
         const MAX_FORCED_BYTES: usize = 64;
         let mut jump_fwd_n: usize = 0;
@@ -1472,10 +1471,25 @@ impl ModelSlot {
         let mut n_accepted_total: u64 = 0;
         let mut n_draft_calls: u64 = 0;
 
-        // Verification batch holds [last_token, drafts...]. Cap at
-        // n_draft_max + 1, bumped to n_batch_max if larger (the
-        // allocation is one-shot, reused via `clear()`).
-        let verify_cap = (n_draft_max as usize + 1).max(n_batch_max);
+        // Jump-forward state. Reads same env gates as generate_sync so
+        // the MTP path picks up the operating default automatically.
+        let jump_fwd_enabled = jump_fwd_enabled_from_env(|k| std::env::var(k).ok());
+        let jump_fwd_t2_enabled =
+            jump_fwd_t2_enabled_from_env(|k| std::env::var(k).ok());
+        const MAX_JUMP_FWD_RUN: usize = 32;
+        const MAX_FORCED_BYTES: usize = 64;
+        let mut jump_fwd_n: usize = 0;
+        let mut jump_fwd_runs: usize = 0;
+        let mut jump_fwd_max: usize = 0;
+        let mut jump_fwd_bytes_n: usize = 0;
+
+        // Verification batch holds [last_token, drafts...] OR
+        // [last_token, ...forced_run] on jump-forward iterations. Cap
+        // at max(n_draft_max + 1, MAX_JUMP_FWD_RUN + 1, n_batch_max).
+        // Allocation is one-shot, reused via `clear()`.
+        let verify_cap = (n_draft_max as usize + 1)
+            .max(MAX_JUMP_FWD_RUN + 1)
+            .max(n_batch_max);
         let mut verify = LlamaBatch::new(verify_cap, 1);
 
         let deadline_secs = inference_deadline_secs();
@@ -1500,6 +1514,151 @@ impl ModelSlot {
                 return Err(Error::Inference(format!(
                     "MTP inference deadline exceeded after {elapsed}s ({n_generated} tokens)"
                 )));
+            }
+
+            // === Jump-forward peek (Tier 2 byte-walk) ===
+            //
+            // **Peek-then-commit**, threshold-gated. Unlike the
+            // non-MTP path where we accept forced tokens incrementally
+            // (T1 + T2 chained), MTP's per-iteration cost model wants
+            // a yes/no decision on forced-only vs draft-with-MTP.
+            //
+            // `forced_next_run` returns all forced tokens up to the
+            // next ambiguity via a probe clone of the FSM — it does
+            // NOT mutate `sampler` state, so we can peek freely and
+            // discard if the run is too short to be worth a forced-
+            // only verify round.
+            //
+            // **Threshold motivation.** Draft iterations emit
+            // `1 + accept_rate × n_draft_max ≈ 1 + 0.73 × 3 ≈ 3.19`
+            // tokens on average. A forced-only iteration with K
+            // forced tokens emits `K + 1` (forced + bonus). Forced
+            // only beats the draft average at `K ≥ 3`. Smaller runs
+            // (K=1, K=2) are throughput-negative — the draft path's
+            // mask-constrained sampling will catch the same forced
+            // bytes as part of its 3-token speculation, and the
+            // overhead of a separate forced verify is uncompensated.
+            //
+            // T1 (mask-single-survivor) is implicit in T2's byte
+            // walk: any state where the mask has exactly one legal
+            // token is also a state where the FSM has a forced byte
+            // run terminating at that token. We use the byte walk
+            // exclusively here since on the MTP path we need the
+            // full run length to make the threshold call.
+            const MIN_FORCED_RUN_FOR_MTP: usize = 3;
+            let forced_peek: Vec<LlamaToken> = if jump_fwd_enabled
+                && jump_fwd_t2_enabled
+                && n_generated < max_tokens
+            {
+                sampler.forced_next_run(MAX_FORCED_BYTES)
+            } else {
+                Vec::new()
+            };
+            // Commit only when the run clears the threshold. Cap at
+            // MAX_JUMP_FWD_RUN so the verify batch stays bounded.
+            let mut forced_run: Vec<LlamaToken> = Vec::new();
+            if forced_peek.len() >= MIN_FORCED_RUN_FOR_MTP {
+                let cap = forced_peek.len().min(MAX_JUMP_FWD_RUN);
+                for &ftok in &forced_peek[..cap] {
+                    if model.is_eog_token(ftok) {
+                        break;
+                    }
+                    sampler.accept(ftok);
+                    let piece = model
+                        .token_to_piece(ftok, &mut decoder, true, None)
+                        .unwrap_or_default();
+                    output.push_str(&piece);
+                    jump_fwd_bytes_n += piece.len();
+                    forced_run.push(ftok);
+                    n_generated += 1;
+                    if n_generated >= max_tokens {
+                        break;
+                    }
+                }
+                if !forced_run.is_empty() {
+                    jump_fwd_runs += 1;
+                    jump_fwd_n += forced_run.len();
+                    if forced_run.len() > jump_fwd_max {
+                        jump_fwd_max = forced_run.len();
+                    }
+                }
+            }
+
+            // Forced-only verify round. No drafts; only commits the
+            // forced run + advances session state. Skips the regular
+            // draft-verify-accept block for this iteration.
+            if !forced_run.is_empty() {
+                verify.clear();
+                let k = forced_run.len();
+                // [last_token, forced_run[0], ..., forced_run[K-1]] at
+                // positions n_past..n_past+K. logits=true on every
+                // position so `session.process(&verify)` can inject
+                // pre-norm h uniformly — same invariant the draft path
+                // depends on.
+                verify
+                    .add(last_token, n_past, &[0], true)
+                    .map_err(|e| Error::Inference(format!("MTP forced verify add: {e}")))?;
+                for (i, &f) in forced_run.iter().enumerate() {
+                    verify
+                        .add(f, n_past + 1 + i as i32, &[0], true)
+                        .map_err(|e| Error::Inference(format!("MTP forced verify add: {e}")))?;
+                }
+                target_ctx
+                    .decode(&mut verify)
+                    .map_err(|e| Error::Inference(format!("MTP forced decode failed: {e}")))?;
+                session
+                    .process(&verify)
+                    .map_err(|e| Error::Inference(format!("MTP forced process failed: {e:?}")))?;
+                // **No `session.accept` here.** Upstream's
+                // `common_speculative_accept` asserts on the
+                // speculative impl pointer (`GGML_ASSERT(impl)`)
+                // which only gets set inside `session.draft`. On the
+                // forced-only path we skip drafting, so impl is null,
+                // and calling accept aborts the process. The session's
+                // internal positional reasoning is driven by the
+                // `position` arg of the next `session.draft` call —
+                // skipping accept here doesn't desync the head, it
+                // just means we didn't tell the speculative subsystem
+                // about positions it never proposed drafts for.
+                //
+                // **Bonus sample at idx k.** Mirrors the draft path's
+                // idx 0 bonus: the logit at position `n_past + k`
+                // (last forced token's logit-after) predicts what
+                // comes next in the still-ambiguous part of the
+                // schema. Sampling it here produces the next
+                // iteration's `last_token`. Without this sample we'd
+                // carry `last_token = forced_run[k-1]` into the next
+                // iteration, but that token's KV slot is already
+                // filled (by this verify) — the draft path's
+                // `verify.add(last_token, n_past, ...)` would then
+                // try to add a token at a position libllama already
+                // owns, surfacing as `Decode Error -1: n_tokens == 0`.
+                let next_token = sampler.sample(
+                    &*target_ctx,
+                    k as i32,
+                    SamplerRole::Explore,
+                );
+                sampler.accept(next_token);
+                if !model.is_eog_token(next_token) {
+                    let piece = model
+                        .token_to_piece(next_token, &mut decoder, true, None)
+                        .unwrap_or_default();
+                    output.push_str(&piece);
+                }
+                n_generated += 1;
+                last_token = next_token;
+                // Position arithmetic: the K forced tokens filled KV
+                // at n_past+1..n_past+k. last_token (next_token) is
+                // not yet in the KV — it'll be added by the next
+                // iteration's verify at position n_past + k + 1.
+                n_past += k as i32 + 1;
+                if n_generated >= max_tokens {
+                    break;
+                }
+                if model.is_eog_token(last_token) {
+                    break;
+                }
+                continue;
             }
 
             // Draft phase: ask the MTP head for up to n_draft_max
@@ -1641,6 +1800,11 @@ impl ModelSlot {
         // bugs).
         let has_schema = request.structured_output.is_some();
         let has_tools = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let jump_fwd_ratio = if n_generated > 0 {
+            jump_fwd_n as f64 / n_generated as f64
+        } else {
+            0.0
+        };
         tracing::info!(
             model = %model_id,
             n_draft_calls,
@@ -1653,6 +1817,13 @@ impl ModelSlot {
             tok_per_s = format!("{tok_per_s:.1}"),
             has_schema,
             has_tools,
+            jump_fwd_enabled,
+            jump_fwd_t2_enabled,
+            jump_fwd_n,
+            jump_fwd_runs,
+            jump_fwd_max,
+            jump_fwd_bytes_n,
+            jump_fwd_ratio = format!("{jump_fwd_ratio:.3}"),
             "mtp: end-of-generation"
         );
 
@@ -6402,6 +6573,76 @@ const THINK_BUDGET: usize = 512;
 /// (without any grammar sampler), and optionally owns a
 /// `JsonConstraint` that masks token logits in pure Rust before the
 /// chain runs. No call into `llama-grammar.cpp` ever fires.
+
+/// Resolve the jump-forward enable gate from an env-getter. Returns
+/// `true` (jump-forward active) by default; only an explicit
+/// `SOVEREIGN_JUMP_FWD_DISABLE` value of `"1"` or `"true"`
+/// (case-insensitive) turns it off. Generic over the env-getter so
+/// tests can pin behaviour without mutating process-global env (which
+/// races against parallel test execution).
+fn jump_fwd_enabled_from_env<F>(env_get: F) -> bool
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match env_get("SOVEREIGN_JUMP_FWD_DISABLE") {
+        Some(v) => !(v == "1" || v.eq_ignore_ascii_case("true")),
+        None => true,
+    }
+}
+
+/// Same shape as `jump_fwd_enabled_from_env` but for the Tier 2 gate.
+/// Independent of the master gate so an operator can keep Tier 1 on
+/// while disabling Tier 2 (e.g. to A/B the marginal Tier 2 lift on a
+/// running daemon).
+fn jump_fwd_t2_enabled_from_env<F>(env_get: F) -> bool
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match env_get("SOVEREIGN_JUMP_FWD_T2_DISABLE") {
+        Some(v) => !(v == "1" || v.eq_ignore_ascii_case("true")),
+        None => true,
+    }
+}
+
+#[cfg(test)]
+mod jump_fwd_env_tests {
+    use super::*;
+
+    #[test]
+    fn jump_fwd_default_is_on() {
+        assert!(jump_fwd_enabled_from_env(|_| None));
+        assert!(jump_fwd_t2_enabled_from_env(|_| None));
+    }
+
+    #[test]
+    fn jump_fwd_disabled_only_on_truthy() {
+        // Explicit truthy values disable.
+        assert!(!jump_fwd_enabled_from_env(|_| Some("1".to_string())));
+        assert!(!jump_fwd_enabled_from_env(|_| Some("true".to_string())));
+        assert!(!jump_fwd_enabled_from_env(|_| Some("TRUE".to_string())));
+        // Other values keep jump-forward on — "0", garbage, empty all
+        // mean "no, you're not disabling me".
+        assert!(jump_fwd_enabled_from_env(|_| Some("0".to_string())));
+        assert!(jump_fwd_enabled_from_env(|_| Some("false".to_string())));
+        assert!(jump_fwd_enabled_from_env(|_| Some("".to_string())));
+        assert!(jump_fwd_enabled_from_env(|_| Some("yes".to_string())));
+    }
+
+    #[test]
+    fn jump_fwd_t2_disable_independent_of_master_gate() {
+        // The two gates read different env vars; disabling one must
+        // not affect the other.
+        let only_t2_disabled =
+            |k: &str| if k == "SOVEREIGN_JUMP_FWD_T2_DISABLE" {
+                Some("1".to_string())
+            } else {
+                None
+            };
+        assert!(jump_fwd_enabled_from_env(only_t2_disabled));
+        assert!(!jump_fwd_t2_enabled_from_env(only_t2_disabled));
+    }
+}
+
 /// Which "role" the sampler is currently filling. The same primary
 /// slot serves multiple cognitive tasks per turn — picking the next
 /// tool and authoring its arguments behave very differently from
