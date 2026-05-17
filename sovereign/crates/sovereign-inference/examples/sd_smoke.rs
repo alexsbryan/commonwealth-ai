@@ -36,13 +36,13 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Instant;
 
-use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
-use llama_cpp_2::context::LlamaContext;
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel};
-use llama_cpp_2::token::LlamaToken;
+use llama_cpp_4::context::params::{LlamaContextParams, LlamaPoolingType};
+use llama_cpp_4::context::LlamaContext;
+use llama_cpp_4::llama_backend::LlamaBackend;
+use llama_cpp_4::llama_batch::LlamaBatch;
+use llama_cpp_4::model::params::LlamaModelParams;
+use llama_cpp_4::model::{AddBos, LlamaModel};
+use llama_cpp_4::token::LlamaToken;
 
 const STEP1_LABEL: &str = "[step 1/3] causal-LM logits sanity";
 const STEP2_LABEL: &str = "[step 2/3] tokenizer match";
@@ -81,7 +81,7 @@ fn main() -> ExitCode {
     println!(
         "  draft loaded: layers={} size_mb={} n_vocab={}",
         draft_model.n_layer(),
-        draft_model.size() / (1024 * 1024),
+        draft_model.model_size() / (1024 * 1024),
         draft_model.n_vocab()
     );
     let mut draft_ctx_step1 = new_causal_context(&backend, &draft_model, 4096);
@@ -102,7 +102,7 @@ fn main() -> ExitCode {
     println!(
         "  target loaded: layers={} size_mb={} n_vocab={}",
         target_model.n_layer(),
-        target_model.size() / (1024 * 1024),
+        target_model.model_size() / (1024 * 1024),
         target_model.n_vocab()
     );
     let (chat_prompts, pipeline_prompts) = sample_prompts();
@@ -200,11 +200,9 @@ fn new_causal_context(
         .with_n_ctx(NonZeroU32::new(n_ctx))
         .with_n_batch(n_ctx)
         .with_n_ubatch(512)
-        .with_n_seq_max(1)
         .with_embeddings(false)
         .with_pooling_type(LlamaPoolingType::None)
-        .with_offload_kqv(true)
-        .with_op_offload(true);
+        .with_offload_kqv(true);
     // Same Arc-extend-to-static pattern used by embedded.rs:1267-1297
     // and bench_decode.rs:108-114 — the context borrows the model and we
     // promise to keep the Arc alive at least as long.

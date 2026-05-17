@@ -175,6 +175,7 @@ mod tests {
             canonical_name: name.into(),
             aliases: vec![],
             entity_type: EntityType::Concept,
+            concept_kind: None,
             first_appearance: ChunkRef::new("sec_0001", None),
             description: "x".into(),
             defining_quote: None,

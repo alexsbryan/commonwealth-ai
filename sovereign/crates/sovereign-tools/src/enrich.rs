@@ -634,6 +634,25 @@ mod tests {
             path
         }
 
+        /// Per-test-module serialisation. Without this, parallel
+        /// `cargo test` workers can race fork+exec on the freshly-
+        /// written `fake-sovereign-cli.sh` and hit ETXTBSY: a sibling
+        /// worker has the file's path open in its fd table at the
+        /// moment a forked child reaches the `execve` of *this*
+        /// worker's just-written script. The kernel treats "any
+        /// process holds the inode open for write" as a write-busy
+        /// condition for exec. Tempdirs differ per test, but the
+        /// fork+exec window crosses fd tables. Serialising the e2e
+        /// path eliminates the race without dropping `cargo test`'s
+        /// parallelism for the rest of the file.
+        fn e2e_test_lock() -> std::sync::MutexGuard<'static, ()> {
+            static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+                std::sync::OnceLock::new();
+            LOCK.get_or_init(|| std::sync::Mutex::new(()))
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+        }
+
         /// Collect every EnrichProgress callback into a shared
         /// Vec. Returns the callback + the Vec handle.
         fn event_collector() -> (EnrichProgressFn, Arc<Mutex<Vec<EnrichProgress>>>) {
@@ -666,6 +685,7 @@ mod tests {
 
         #[tokio::test]
         async fn e2e_happy_path_emits_build_start_and_complete() {
+            let _guard = e2e_test_lock();
             // Minimal happy-path script: emit the start banner
             // + planned step list + one step-start + the
             // complete banner. Exit 0.
@@ -723,6 +743,7 @@ exit 0
 
         #[tokio::test]
         async fn e2e_nonzero_exit_without_complete_banner_synthesizes_aborted() {
+            let _guard = e2e_test_lock();
             // Script emits one step_start then exits 1 WITHOUT
             // printing a complete banner. The library should
             // synthesize `Aborted` so the UI's state machine
@@ -777,6 +798,7 @@ exit 1
 
         #[tokio::test]
         async fn e2e_cancellation_kills_subprocess_and_emits_cancelled() {
+            let _guard = e2e_test_lock();
             // Script streams a banner line, sleeps long enough
             // for the test to flip the cancel flag, then would
             // print more. The cancel should fire between the
@@ -843,6 +865,7 @@ exit 0
 
         #[tokio::test]
         async fn e2e_spawn_error_when_binary_does_not_exist() {
+            let _guard = e2e_test_lock();
             // Point `cli_path` at a nonexistent file — the
             // spawn itself fails, bubbling up as Err. The
             // library doesn't synthesize SpawnFailed here

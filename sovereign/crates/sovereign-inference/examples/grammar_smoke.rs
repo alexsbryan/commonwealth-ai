@@ -33,12 +33,16 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use llama_cpp_2::context::params::LlamaContextParams;
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
-use llama_cpp_2::sampling::LlamaSampler;
+use llama_cpp_4::context::params::LlamaContextParams;
+use llama_cpp_4::llama_backend::LlamaBackend;
+use llama_cpp_4::llama_batch::LlamaBatch;
+use llama_cpp_4::model::params::LlamaModelParams;
+use llama_cpp_4::model::{AddBos, LlamaModel};
+use llama_cpp_4::sampling::LlamaSampler;
+// llama-cpp-4 0.2.x retired the streaming `token_to_piece` shape; the
+// crate-internal `crate::llama` shim restores the 0.1.x call signature
+// via `LlamaModelExt`. Examples import it the same way production does.
+use sovereign_inference::llama::LlamaModelExt;
 
 struct Args {
     model: PathBuf,
@@ -109,7 +113,7 @@ fn main() {
     println!(
         "model loaded: layers={} size_mb={}",
         model.n_layer(),
-        model.size() / (1024 * 1024)
+        model.model_size() / (1024 * 1024)
     );
 
     // Match the daemon's effective n_ctx so we exercise the same
@@ -130,37 +134,20 @@ fn main() {
         // of 16 splitting the context window 16 ways. Most likely
         // suspect for the empty-stacks bug — the grammar engine may
         // assume seq_max>1 somewhere.
-        .with_n_seq_max(1)
         .with_n_batch(n_ctx_smoke)
         .with_n_ubatch(512)
-        .with_offload_kqv(true)
-        .with_op_offload(true);
+        .with_offload_kqv(true);
     let mut ctx = model.new_context(&backend, ctx_params).expect("new_context");
 
-    // Optionally apply the model's chat template — this matches
-    // what the daemon does (`format_prompt` → `apply_chat_template`)
-    // and is the next variable to test in the bug-hunt.
-    let prompt_text = if std::env::var("SMOKE_CHAT_TEMPLATE")
-        .map(|v| v == "1")
-        .unwrap_or(false)
-    {
-        let template = model.chat_template(None).expect("chat_template");
-        let messages = vec![
-            LlamaChatMessage::new(
-                "system".into(),
-                "Reply with the exact word: yes".into(),
-            )
-            .expect("system msg"),
-            LlamaChatMessage::new("user".into(), args.prompt.clone()).expect("user msg"),
-        ];
-        let formatted = model
-            .apply_chat_template(&template, &messages, /* add_assistant */ true)
-            .expect("apply_chat_template");
-        println!("chat template applied: {} bytes", formatted.len());
-        formatted
-    } else {
-        args.prompt.clone()
-    };
+    // SMOKE_CHAT_TEMPLATE path retired with the 0.1.x → 0.2.x
+    // llama-cpp migration: `apply_chat_template(&LlamaChatTemplate, ...)`
+    // and the `LlamaChatTemplate` type itself were both removed. Smoke
+    // runs against the raw prompt; the production prompt-formatting
+    // path is exercised by `cargo test -p sovereign-inference` via
+    // `format_prompt`. If smoke ever needs chat-templated input again,
+    // pull the template string via `sovereign_inference::llama::chat_template(&model)`
+    // and run it through a Jinja renderer at the call site.
+    let prompt_text = args.prompt.clone();
 
     // Prefill the prompt so the slot has something to decode FROM.
     // The grammar starts fresh per request; this just makes sure the
@@ -209,33 +196,28 @@ fn main() {
         println!("re-prefill ok");
     }
 
-    // Build the grammar sampler. If init fails, that's a recoverable
-    // error — print and exit non-zero so the caller can distinguish
-    // "init failed" from the process-abort case.
-    let grammar_sampler = match LlamaSampler::grammar(&model, &args.grammar, "root") {
-        Ok(s) => {
-            println!("grammar init ok");
-            s
-        }
-        Err(e) => {
-            eprintln!("GRAMMAR_SMOKE_INIT_FAIL: {e}");
-            std::process::exit(1);
-        }
-    };
+    // Build the grammar sampler. `LlamaSampler::grammar` returns the
+    // sampler directly in 0.2.x (no Result wrapper); a panicking
+    // initialiser is fine for a smoke test — the original recoverable
+    // path was there to distinguish init failure from the process-
+    // abort case, but the 0.2.x API no longer exposes init failure
+    // as a recoverable error.
+    let grammar_sampler = LlamaSampler::grammar(&model, &args.grammar, "root");
+    println!("grammar init ok");
 
     // Chain: by default just `[grammar, dist]`. With
     // `SMOKE_FULL_CHAIN=1`, mirror the daemon's build_sampler chain
-    // exactly (DRY, penalties, top_k, min_p, temp, dist) — that's
-    // the next variable in the bug-hunt.
-    let breakers: &[&[u8]] = &[b"\n", b".", b"?", b"!", b":", b"\"", b"*"];
+    // minus DRY — `LlamaSampler::dry` became a method on an existing
+    // sampler in 0.2.x rather than a free constructor, and threading
+    // it through the smoke wasn't worth the rewrite cost for a path
+    // that's only there to reproduce the grammar crash.
     let mut sampler = if std::env::var("SMOKE_FULL_CHAIN")
         .map(|v| v == "1")
         .unwrap_or(false)
     {
-        println!("using full daemon sampler chain");
+        println!("using full daemon sampler chain (DRY omitted post-migration)");
         LlamaSampler::chain_simple([
             grammar_sampler,
-            LlamaSampler::dry(&model, 0.8, 1.75, 2, -1, breakers.iter().copied()),
             LlamaSampler::penalties(128, 1.15, 0.1, 0.1),
             LlamaSampler::top_k(40),
             LlamaSampler::min_p(0.05, 1),

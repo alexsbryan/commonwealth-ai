@@ -871,6 +871,48 @@ impl ModelSlot {
         let mut tokens_in_string_n = 0usize;
         let role_trace_on = std::env::var("SOVEREIGN_TRACE_SAMPLER_ROLES").is_ok();
 
+        // **Jump-forward decoding (Tier 1).** After each sampled token,
+        // ask the constraint whether the FSM has exactly one legal next
+        // token. If so, emit it without paying a forward pass — its KV
+        // entry rides into the next batched decode alongside the
+        // sampled token. The mechanism turns N sequential 1-token
+        // decodes into one wider decode at the next ambiguous position;
+        // on batched-decode-friendly hardware (Strix Halo Vulkan,
+        // Metal) a 5-token batch is ~2-3× faster than 5 sequential
+        // singletons.
+        //
+        // Off by default. Opt in via `SOVEREIGN_JUMP_FWD_ENABLE=1`.
+        // Active only when the request has `structured_output` (the
+        // constraint is what produces forced tokens) AND we're not
+        // inside a `<think>` block (thinking-tag detection runs the
+        // mask off — forced_next_token would return None anyway, but
+        // the gate keeps the loop's bookkeeping honest).
+        //
+        // `MAX_JUMP_FWD_RUN` caps the per-iteration batch width so a
+        // pathological forced-byte cycle can't run the verify batch
+        // beyond `n_batch_max`. 32 is well under typical n_batch
+        // (2048+) and covers all realistic JSON-skeleton runs we've
+        // measured (typically 3-15 tokens).
+        let jump_fwd_enabled = std::env::var("SOVEREIGN_JUMP_FWD_ENABLE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        // **Tier 2 jump-forward.** When set, the forced-walk falls
+        // through from `forced_next_token` (Tier 1: vocab-token-level
+        // single-survivor) to `forced_next_run` (Tier 2: FSM byte-walk
+        // + vocab longest-match) on each Tier 1 miss. Two separate
+        // gates so we can A/B the marginal Tier 2 lift over Tier 1
+        // on the same daemon without a rebuild. Requires
+        // `SOVEREIGN_JUMP_FWD_ENABLE=1` to do anything.
+        let jump_fwd_t2_enabled = std::env::var("SOVEREIGN_JUMP_FWD_T2_ENABLE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        const MAX_JUMP_FWD_RUN: usize = 32;
+        const MAX_FORCED_BYTES: usize = 64;
+        let mut jump_fwd_n: usize = 0;
+        let mut jump_fwd_runs: usize = 0;
+        let mut jump_fwd_max: usize = 0;
+        let mut jump_fwd_bytes_n: usize = 0;
+
         while n_generated < max_tokens {
             if Instant::now() > deadline {
                 let elapsed = started_at.elapsed().as_secs();
@@ -1002,14 +1044,195 @@ impl ModelSlot {
 
             n_generated += 1;
 
+            // **Jump-forward walk.** When the constraint is active and
+            // we're outside the `<think>` block, ask the FSM whether
+            // the next legal token is uniquely determined. If so, emit
+            // it now and accumulate it into the next decode batch.
+            // Each forced token gets the same per-token bookkeeping
+            // (output, tail, tool-call JSON tracker, n_generated) the
+            // sampled token just ran — minus the think-tag detection
+            // since we're gated on `!in_think`.
+            //
+            // **Two-tier walk.** Tier 1 (`forced_next_token`) returns
+            // the unique vocab token whose mask leaves it as the lone
+            // survivor — O(1) on a warm cache. Tier 2
+            // (`forced_next_run`) walks the FSM at byte level and
+            // longest-matches the resulting forced byte run against
+            // the vocab trie — catches BPE-skeleton transitions where
+            // many tokens share a leading byte but only one or two
+            // multi-byte tokens cover the deterministic stretch.
+            // A pending queue smooths over the difference: Tier 1
+            // produces 1 token per call, Tier 2 produces N. Both feed
+            // into the same per-token bookkeeping below.
+            //
+            // Stops on: both tiers miss, MAX_JUMP_FWD_RUN cap, EOG
+            // token (defensive — tier methods already filter), or
+            // hitting `max_tokens`.
+            let mut forced_run: Vec<LlamaToken> = Vec::new();
+            let mut forced_hit_break = false;
+            let mut pending: std::collections::VecDeque<LlamaToken> =
+                std::collections::VecDeque::new();
+            if jump_fwd_enabled && !in_think && n_generated < max_tokens {
+                while forced_run.len() < MAX_JUMP_FWD_RUN && n_generated < max_tokens {
+                    if pending.is_empty() {
+                        // Try Tier 1 first — cheap O(1) on warm cache.
+                        if let Some(t) = sampler.forced_next_token() {
+                            pending.push_back(t);
+                        } else if jump_fwd_t2_enabled {
+                            // Tier 1 miss; fall through to Tier 2's
+                            // byte-walk + longest-match. Returns ALL
+                            // forced tokens up to the next ambiguity
+                            // in one call, all already cleared by the
+                            // probe FSM (caller still must `accept`
+                            // each via the sampler).
+                            let run = sampler.forced_next_run(MAX_FORCED_BYTES);
+                            if run.is_empty() {
+                                break;
+                            }
+                            pending.extend(run);
+                        } else {
+                            break;
+                        }
+                    }
+                    // Safe: we either populated pending above or hit a
+                    // break. If pending is somehow still empty here
+                    // (defensive against a Tier 2 race that returns an
+                    // empty Vec but reaches this point), bail.
+                    let Some(ftok) = pending.pop_front() else {
+                        break;
+                    };
+                    if model.is_eog_token(ftok) {
+                        // forced_next_token should not return EOG (it
+                        // guards on buffer_is_complete), but be safe:
+                        // hand control back to the sampler loop so the
+                        // existing EOG path runs cleanly.
+                        break;
+                    }
+                    sampler.accept(ftok);
+                    if let Ok(piece) = model.token_to_piece(ftok, &mut decoder, true, None) {
+                        if role_trace_on && tools_present {
+                            tracing::info!(
+                                role = ?SamplerRole::Explore,
+                                in_string = tc_json_in_string,
+                                depth = tc_json_depth,
+                                piece = %piece.replace('\n', "\\n"),
+                                "sampler_trace token (jump_fwd)"
+                            );
+                        }
+                        // Tail buffer + structural tag tracking. We're
+                        // outside <think> by construction here, but
+                        // keep the tail in sync so a subsequent
+                        // sampled token's tag detection sees the right
+                        // context.
+                        tail.push_str(&piece);
+                        if tail.len() > 32 {
+                            let mut drain_to = tail.len() - 32;
+                            while drain_to > 0 && !tail.is_char_boundary(drain_to) {
+                                drain_to -= 1;
+                            }
+                            tail.drain(..drain_to);
+                        }
+                        // tail can't open <think> here (forced bytes
+                        // are FSM-dictated JSON content, never the
+                        // open tag); a stray close-tag would only
+                        // appear in non-structured generation, which
+                        // doesn't reach this path.
+
+                        output.push_str(&piece);
+                        jump_fwd_bytes_n += piece.len();
+
+                        // Tool-call JSON tracker. Forced tokens
+                        // contribute bytes to a tool-call envelope
+                        // when one's active; if the envelope balances
+                        // on a forced byte, stop here so the loop's
+                        // existing close detection still fires on the
+                        // next iteration's check.
+                        if tools_present {
+                            if tail.contains("</tool_call>") {
+                                tracing::info!(
+                                    model = %model_id,
+                                    n_generated,
+                                    tail = %tail,
+                                    "inference: stopping on </tool_call> marker (jump_fwd)"
+                                );
+                                forced_run.push(ftok);
+                                n_generated += 1;
+                                forced_hit_break = true;
+                                break;
+                            }
+                            for b in piece.bytes() {
+                                if tc_json_escape_next {
+                                    tc_json_escape_next = false;
+                                    continue;
+                                }
+                                if tc_json_in_string {
+                                    match b {
+                                        b'\\' => tc_json_escape_next = true,
+                                        b'"' => tc_json_in_string = false,
+                                        _ => {}
+                                    }
+                                    continue;
+                                }
+                                match b {
+                                    b'"' => tc_json_in_string = true,
+                                    b'{' => {
+                                        tc_json_depth += 1;
+                                        tc_json_ever_opened = true;
+                                    }
+                                    b'}' => tc_json_depth -= 1,
+                                    _ => {}
+                                }
+                            }
+                            if tc_json_ever_opened && tc_json_depth == 0 {
+                                tracing::info!(
+                                    model = %model_id,
+                                    n_generated,
+                                    "inference: stopping on balanced JSON envelope (jump_fwd)"
+                                );
+                                forced_run.push(ftok);
+                                n_generated += 1;
+                                forced_hit_break = true;
+                                break;
+                            }
+                        }
+                    }
+                    forced_run.push(ftok);
+                    n_generated += 1;
+                }
+                if !forced_run.is_empty() {
+                    jump_fwd_runs += 1;
+                    jump_fwd_n += forced_run.len();
+                    if forced_run.len() > jump_fwd_max {
+                        jump_fwd_max = forced_run.len();
+                    }
+                }
+            }
+
             batch.clear();
-            let pos = (tokens.len() + n_generated - 1) as i32;
+            // Batched decode: [token, ...forced_run]. Sequential
+            // positions starting at `base_pos`; logits=true only on
+            // the final position, since the next iteration's
+            // `sampler.sample(ctx, -1, ...)` reads only the last logit.
+            // Saves softmax compute on intermediate positions when
+            // jump-forward fires.
+            let base_pos = (tokens.len() + n_generated - forced_run.len() - 1) as i32;
+            let want_sampled_logits = forced_run.is_empty();
             batch
-                .add(token, pos, &[0], true)
+                .add(token, base_pos, &[0], want_sampled_logits)
                 .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+            for (i, &ftok) in forced_run.iter().enumerate() {
+                let is_last = i + 1 == forced_run.len();
+                batch
+                    .add(ftok, base_pos + 1 + i as i32, &[0], is_last)
+                    .map_err(|e| Error::Inference(format!("Batch add (jump_fwd) failed: {e}")))?;
+            }
 
             ctx.decode(&mut batch)
                 .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+
+            if forced_hit_break {
+                break;
+            }
 
             // Budget forcing: inject </think> if the think block runs too long.
             if in_think && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET) && !think_budget_fired {
@@ -1064,6 +1287,42 @@ impl ModelSlot {
             );
             output = format!("<think>{output}");
         }
+
+        // End-of-generation telemetry — mirrors the MTP path's
+        // `mtp: end-of-generation` line so a single log analyzer can
+        // bucket per-request behaviour by path. Always emitted (no
+        // guard) so the operator can decompose throughput by
+        // `has_schema` / `jump_fwd_enabled`.
+        let elapsed_ms = started_at.elapsed().as_millis();
+        let tok_per_s = if elapsed_ms > 0 {
+            n_generated as f64 * 1000.0 / elapsed_ms as f64
+        } else {
+            0.0
+        };
+        let has_schema = request.structured_output.is_some();
+        let has_tools = tools_present;
+        let jump_fwd_ratio = if n_generated > 0 {
+            jump_fwd_n as f64 / n_generated as f64
+        } else {
+            0.0
+        };
+        tracing::info!(
+            model = %model_id,
+            prompt_tokens = tokens.len(),
+            n_generated,
+            elapsed_ms,
+            tok_per_s = format!("{tok_per_s:.1}"),
+            has_schema,
+            has_tools,
+            jump_fwd_enabled,
+            jump_fwd_t2_enabled,
+            jump_fwd_n,
+            jump_fwd_runs,
+            jump_fwd_max,
+            jump_fwd_bytes_n,
+            jump_fwd_ratio = format!("{jump_fwd_ratio:.3}"),
+            "inference: end-of-generation"
+        );
 
         Ok((output, tokens.len(), n_generated))
     }
@@ -6248,6 +6507,32 @@ impl ConstrainedSampler {
         if let Some(c) = self.constraint.as_mut() {
             c.accept(token);
         }
+    }
+
+    /// Returns `Some(token)` iff the active JSON-schema constraint has
+    /// exactly one legal token in its current state — the read surface
+    /// for jump-forward decoding. Returns `None` whenever no constraint
+    /// is active (free-form chat, completion without `structured_output`)
+    /// since there is nothing to short-circuit. Callers that emit the
+    /// returned token MUST follow with `accept(token)` to keep the FSM,
+    /// DRY, and penalty trackers in sync — same contract as
+    /// post-`sample` token handling.
+    pub fn forced_next_token(&mut self) -> Option<LlamaToken> {
+        self.constraint.as_mut().and_then(|c| c.forced_next_token())
+    }
+
+    /// **Tier 2 jump-forward.** Returns a sequence of tokens covering
+    /// the FSM's deterministic byte run via vocab longest-match. Each
+    /// returned token has already been `accept`-ed on the constraint
+    /// (FSM is advanced), so callers MUST also call `accept(token)` on
+    /// the sampler itself per token to keep DRY/penalty trackers in
+    /// sync. Returns empty when no constraint is active or no run is
+    /// available.
+    pub fn forced_next_run(&mut self, max_bytes: usize) -> Vec<LlamaToken> {
+        self.constraint
+            .as_mut()
+            .map(|c| c.forced_next_run(max_bytes))
+            .unwrap_or_default()
     }
 }
 
