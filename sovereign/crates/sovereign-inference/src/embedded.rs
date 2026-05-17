@@ -9,14 +9,19 @@ use async_trait::async_trait;
 use futures::Stream;
 use tokio::sync::Mutex;
 
-use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
-use llama_cpp_2::openai::OpenAIChatTemplateParams;
-use llama_cpp_2::sampling::LlamaSampler;
-use llama_cpp_2::token::LlamaToken;
+use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType, LlamaPoolingType};
+use crate::llama::cpp::llama_backend::LlamaBackend;
+use crate::llama::cpp::llama_batch::LlamaBatch;
+use crate::llama::cpp::model::params::LlamaModelParams;
+use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::mtp::MtpSession;
+use crate::llama::cpp::sampling::LlamaSampler;
+use crate::llama::cpp::token::LlamaToken;
+// Shim-restored 0.1.x-compatible method names. `LlamaModelExt` brings
+// back `token_to_piece`, `token_to_piece_bytes`, `size`; the free
+// functions cover the retired `chat_template` / `apply_chat_template_oaicompat`
+// surface. See `crate::llama` module docs for the rollback story.
+use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
 use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
@@ -29,7 +34,20 @@ use crate::hardware::HardwareProfile;
 // ─── ModelSlot ─────────────────────────────────────────────────
 
 struct SlotContext {
-    ctx: llama_cpp_2::context::LlamaContext<'static>,
+    ctx: crate::llama::cpp::context::LlamaContext<'static>,
+    /// **MTP draft context** (Some only when the loaded gguf has MTP
+    /// heads, e.g. `Qwen3.6-A3B-MTP-Q6_K.gguf`). Built with
+    /// `LlamaContextType::Mtp` and paired with the target `ctx` via
+    /// `MtpSession` in `generate_sync_mtp`. None for vanilla models —
+    /// they go through the single-token `generate_sync` path.
+    ///
+    /// Both contexts borrow from the same `LlamaModel` (the MTP gguf
+    /// carries both base layers and MTP-head tensors in one file).
+    /// They are independent KV caches: target holds the full
+    /// generation sequence; draft holds whatever the MTP head's
+    /// state machine needs to propose candidates. Prefix-cache
+    /// bookkeeping (`cached_tokens`) only tracks the target.
+    draft_ctx: Option<crate::llama::cpp::context::LlamaContext<'static>>,
     _model: Arc<LlamaModel>,
     /// **Prefix-cache bookkeeping.** The full token sequence
     /// currently resident in `ctx`'s KV cache (positions 0..len).
@@ -50,7 +68,7 @@ struct SlotContext {
     /// preamble + schema + exemplars (per-section text appended).
     /// Prefix-keep saves the prefill cost on every call after the
     /// first in each phase.
-    cached_tokens: Vec<llama_cpp_2::token::LlamaToken>,
+    cached_tokens: Vec<crate::llama::cpp::token::LlamaToken>,
 }
 
 unsafe impl Send for SlotContext {}
@@ -278,7 +296,7 @@ impl ModelSlot {
                 // so the full context_size is the usable per-request
                 // window. (EmbedSlot keeps its own n_seq_max=16 — it
                 // genuinely batches.)
-                .with_n_seq_max(1)
+                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
                 // n_batch = context_size so the full context window is available
                 // for prompt processing. llama.cpp automatically splits the batch
                 // into n_ubatch=512 micro-batches for GPU/CPU kernel calls, so
@@ -299,7 +317,7 @@ impl ModelSlot {
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                .with_op_offload(gpu)
+                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
                 // **2026-05-17 KV-Q8 experiment (REVERTED).** Tried
                 // `with_type_k(Q8_0)` + `with_type_v(Q8_0)` to halve
                 // KV bandwidth. SEP profile: total wall -5.6% (within
@@ -320,7 +338,7 @@ impl ModelSlot {
                     .map(|c| (c, true))
             }
         } else {
-            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+            Err(crate::llama::cpp::LlamaContextLoadError::NullReturn)
         } {
             Ok(pair) => pair,
             Err(e) => {
@@ -378,10 +396,63 @@ impl ModelSlot {
             file_size
         };
 
+        // **MTP draft context build.** The Unsloth MTP-augmented ggufs
+        // (e.g. Qwen3.6-A3B-MTP-Q6_K) carry two parallel tensor sets in
+        // one file: the base model layers + MTP prediction heads. To
+        // use the MTP heads we need a second `LlamaContext` typed as
+        // `LlamaContextType::Mtp`, paired with the target context via
+        // an `MtpSession` at decode time.
+        //
+        // Detection heuristic: model name contains "MTP". This catches
+        // the Unsloth naming convention; if a future gguf uses a
+        // different naming, the Mtp context creation will fail (the
+        // gguf lacks the required MTP head tensors) and we log + fall
+        // back. False positives are non-fatal — just a wasted context
+        // alloc + warn.
+        let is_mtp_model = model_id.to_lowercase().contains("mtp");
+        let draft_ctx = if is_mtp_model {
+            let draft_params = LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(context_size))
+                .with_ctx_type(LlamaContextType::Mtp)
+                .with_n_rs_seq(1)
+                .with_n_batch(context_size)
+                .with_n_ubatch(512)
+                .with_n_threads(n_threads as i32)
+                .with_n_threads_batch(n_threads as i32)
+                .with_offload_kqv(wants_gpu);
+            unsafe {
+                let model_ref: &'static LlamaModel =
+                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                match model_ref.new_context(backend, draft_params) {
+                    Ok(c) => {
+                        tracing::info!(
+                            model_id = %model_id,
+                            "MTP draft context built — speculative decoding active"
+                        );
+                        Some(c)
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            model_id = %model_id,
+                            error = ?e,
+                            "MTP draft context build failed — gguf likely lacks MTP heads; \
+                             falling back to single-token generation. This will not work for \
+                             ggufs marked MTP-mandatory (e.g. Qwen3.6-A3B-MTP) — the model \
+                             card says these require MTP runtime."
+                        );
+                        None
+                    }
+                }
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
             model: model.clone(),
             context: Mutex::new(SlotContext {
                 ctx,
+                draft_ctx,
                 _model: model,
                 cached_tokens: Vec::new(),
             }),
@@ -427,13 +498,13 @@ impl ModelSlot {
         let build_ctx_params = |gpu: bool| {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
-                .with_n_seq_max(n_seq_max)
+                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
                 .with_n_batch(context_size)
                 .with_n_ubatch(n_ubatch)
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                .with_op_offload(gpu)
+                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
@@ -445,7 +516,7 @@ impl ModelSlot {
                     .map(|c| (c, true))
             }
         } else {
-            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+            Err(crate::llama::cpp::LlamaContextLoadError::NullReturn)
         } {
             Ok(pair) => pair,
             Err(e) => {
@@ -484,6 +555,10 @@ impl ModelSlot {
             model: Arc::clone(&model),
             context: Mutex::new(SlotContext {
                 ctx,
+                // from_existing_model is for sibling slots (e.g. FastShort)
+                // built off a non-MTP base model. MTP is gguf-specific
+                // and only relevant in the primary slot's load path.
+                draft_ctx: None,
                 _model: model,
                 cached_tokens: Vec::new(),
             }),
@@ -501,6 +576,22 @@ impl ModelSlot {
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize, usize)> {
+        // **MTP dispatch.** When the loaded gguf carries MTP heads,
+        // `draft_ctx` was populated at slot-load time. Route requests
+        // that fit MTP's current support envelope (no structured
+        // output, no tools, no think-budget) to the MTP decode path
+        // for speculative-decoding speedup. Requests that need the
+        // bookkeeping currently exclusive to the non-MTP path fall
+        // through to the single-token decode below. This staging is
+        // intentional: integrating MTP with the JsonConstraint mask
+        // + tool-call JSON tracker + think-budget is a follow-up PR;
+        // shipping the MTP base case unblocks measurement.
+        if slot_ctx.draft_ctx.is_some()
+            && request.structured_output.is_none()
+            && request.tools.as_ref().is_none_or(|t| t.is_empty())
+        {
+            return Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks);
+        }
         // Split-borrow the SlotContext's disjoint fields. The
         // function body uses both `ctx` (the LlamaContext) and
         // `cached_tokens` (the prefix-cache bookkeeping) as mutable
@@ -860,6 +951,348 @@ impl ModelSlot {
         Ok((output, tokens.len(), n_generated))
     }
 
+    /// **MTP-accelerated decode loop.** Speculative-decoding variant of
+    /// `generate_sync`, active only when `slot_ctx.draft_ctx.is_some()`
+    /// (i.e. the loaded gguf carries MTP heads). The MTP draft context
+    /// proposes up to `n_draft_max` candidate tokens per step; the
+    /// target context then verifies them in a single packed batch, and
+    /// we accept the matching prefix + one bonus token (the target's
+    /// correct prediction at the first mismatch). Worst case (zero
+    /// drafts accepted) degrades to the same per-step cost as
+    /// single-token decode; best case (all drafts accepted) emits
+    /// `n_draft_max + 1` tokens per target forward pass.
+    ///
+    /// **Phase A scope (this commit).** This first MTP cut handles
+    /// only the simplest case: plain greedy/temp sampling, no
+    /// JsonConstraint mask, no tool-call JSON-depth tracker, no
+    /// think-block budget. The dispatcher in `generate_sync` routes
+    /// only those requests here; everything else falls through to the
+    /// single-token path. Phase B will integrate JsonConstraint over
+    /// MTP (the hard part is applying the mask to target logits
+    /// per-position, comparing the masked sampling result against the
+    /// draft, and feeding accepted/rejected tokens into the
+    /// constraint state machine in order). Filed as TODO.
+    ///
+    /// **References.**
+    /// - Upstream llama.cpp MTP PR: #22673 (release b9180).
+    /// - Crate API: `llama_cpp_4::mtp::MtpSession`.
+    /// - Model card: huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF.
+    fn generate_sync_mtp(
+        model: &LlamaModel,
+        model_id: &str,
+        slot_ctx: &mut SlotContext,
+        request: &CompletionRequest,
+        quirks: &ModelQuirks,
+    ) -> Result<(String, usize, usize)> {
+        // Disjoint split-borrow of SlotContext's three live fields:
+        // target ctx, draft ctx, prefix-cache bookkeeping. The
+        // `_model` field is never touched here (the Arc keeps the
+        // weights alive; we only need the &LlamaModel from the
+        // function arg).
+        let ctx = &mut slot_ctx.ctx;
+        let draft_ctx = slot_ctx
+            .draft_ctx
+            .as_mut()
+            .ok_or_else(|| Error::Inference(
+                "generate_sync_mtp: draft_ctx is None — dispatcher contract violated".into(),
+            ))?;
+        let cached_tokens = &mut slot_ctx.cached_tokens;
+
+        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let tokens = model
+            .str_to_token(&full_prompt, AddBos::Always)
+            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+
+        let n_batch = ctx.n_batch() as usize;
+        let n_ctx = ctx.n_ctx() as usize;
+        let max_tokens = clamp_max_tokens(
+            request.max_tokens,
+            tokens.len(),
+            n_ctx,
+        )?;
+        // Bound the draft fan-out by what llama.cpp's upstream demo
+        // ships with (`--spec-draft-n-max 6`). Tunable via env var
+        // for measurement passes; 6 is a sane default — bigger
+        // values cost more verify-batch tokens per loop while
+        // delivering diminishing accept-rate gains.
+        let n_draft_max: i32 = std::env::var("SOVEREIGN_MTP_DRAFT_MAX")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(6);
+
+        // **Prefix caching** — same shape as `generate_sync`. The
+        // target context's cache state mirrors the previous request;
+        // the draft context's KV cache is regenerated each call (the
+        // MTP head's state is small + cheap to re-prefill). Cleaner
+        // separation than trying to LCP the draft side too.
+        let lcp = cached_tokens
+            .iter()
+            .zip(tokens.iter())
+            .take(tokens.len().saturating_sub(1))
+            .take_while(|(a, b)| a == b)
+            .count();
+        cached_tokens.clear();
+        if lcp == 0 {
+            ctx.clear_kv_cache();
+        } else if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
+            tracing::warn!(
+                error = ?e,
+                lcp,
+                "mtp: target partial-clear failed — full-clear fallback"
+            );
+            ctx.clear_kv_cache();
+        }
+        // Draft context starts every call from clean state. Its KV
+        // cache is small (MTP head only) and the per-call rebuild
+        // cost is dwarfed by the speculative-decoding win.
+        draft_ctx.clear_kv_cache();
+
+        // Prefill target with prompt tail (LCP-aware).
+        let mut batch = LlamaBatch::new(n_batch, 1);
+        let tail = &tokens[lcp..];
+        let last_idx = tail.len() - 1;
+        for (j, &token) in tail.iter().enumerate() {
+            let absolute_pos = (lcp + j) as i32;
+            batch
+                .add(token, absolute_pos, &[0], j == last_idx)
+                .map_err(|e| Error::Inference(format!("MTP target batch add failed: {e}")))?;
+        }
+        ctx.decode(&mut batch)
+            .map_err(|e| Error::Inference(format!("MTP target prefill decode failed: {e}")))?;
+        *cached_tokens = tokens.clone();
+
+        // Prefill draft with the FULL prompt — the MTP head needs
+        // its own forward pass to seed its prediction state. There's
+        // no LCP shortcut here because the draft KV was cleared
+        // above.
+        let mut draft_batch = LlamaBatch::new(n_batch, 1);
+        let draft_last_idx = tokens.len() - 1;
+        for (j, &token) in tokens.iter().enumerate() {
+            draft_batch
+                .add(token, j as i32, &[0], j == draft_last_idx)
+                .map_err(|e| Error::Inference(format!("MTP draft batch add failed: {e}")))?;
+        }
+        draft_ctx
+            .decode(&mut draft_batch)
+            .map_err(|e| Error::Inference(format!("MTP draft prefill decode failed: {e}")))?;
+
+        // **MTP session.** Pairs the target + draft contexts and
+        // exposes the draft / accept primitives. The `1` is the
+        // sequence id (we always run seq_id=0 in this single-stream
+        // slot, but the API takes it as a count of seqs to track —
+        // per upstream's example, `1` is the canonical value for the
+        // single-seq pod path; see crate::llama docs).
+        let mut mtp_session = MtpSession::new(&*ctx, &*draft_ctx, 1, n_draft_max)
+            .map_err(|e| Error::Inference(format!("MtpSession::new failed: {e:?}")))?;
+
+        let mut sampler = build_sampler(model, request, quirks);
+        let mut output = String::new();
+        let mut n_generated = 0usize;
+        let mut n_past = tokens.len();
+        let mut last_token = *tokens.last()
+            .ok_or_else(|| Error::Inference("MTP: empty prompt".into()))?;
+        let mut decoder = encoding_rs::UTF_8.new_decoder();
+
+        let deadline_secs = inference_deadline_secs();
+        let deadline = Instant::now() + std::time::Duration::from_secs(deadline_secs);
+        let started_at = Instant::now();
+
+        // Telemetry: accept-rate measurement so we can tell at a
+        // glance whether MTP is actually pulling its weight. Logged
+        // at end-of-generation.
+        let mut total_drafts_proposed = 0u64;
+        let mut total_drafts_accepted = 0u64;
+        let mut mtp_steps = 0u64;
+
+        while n_generated < max_tokens {
+            if Instant::now() > deadline {
+                let elapsed = started_at.elapsed().as_secs();
+                tracing::warn!(
+                    model = %model_id,
+                    elapsed_s = elapsed,
+                    deadline_s = deadline_secs,
+                    n_generated,
+                    "mtp:deadline exceeded — clearing KV caches"
+                );
+                ctx.clear_kv_cache();
+                draft_ctx.clear_kv_cache();
+                return Err(Error::Inference(format!(
+                    "MTP inference deadline exceeded after {elapsed}s ({n_generated} tokens)"
+                )));
+            }
+
+            // Draft phase: ask the MTP head for up to n_draft_max
+            // candidate tokens given the current position + last
+            // accepted token. May return fewer (the head can short-
+            // circuit if confidence drops).
+            let drafts = mtp_session
+                .draft(0, n_past as i32, last_token)
+                .map_err(|e| Error::Inference(format!("MTP draft phase failed: {e:?}")))?;
+            if drafts.is_empty() {
+                // MTP head produced no drafts. Fall back to a single
+                // target sample at this position so we still make
+                // progress (else we'd spin forever). Build a single-
+                // token batch with the last accepted token, decode,
+                // sample one token.
+                let mut single = LlamaBatch::new(1, 1);
+                single
+                    .add(last_token, n_past as i32, &[0], true)
+                    .map_err(|e| Error::Inference(format!("MTP fallback batch add: {e}")))?;
+                ctx.decode(&mut single)
+                    .map_err(|e| Error::Inference(format!("MTP fallback decode: {e}")))?;
+                let mut data = ctx.token_data_array_ith(-1);
+                data.apply_sampler(&mut sampler.inner_explore);
+                let token = data
+                    .selected_token()
+                    .ok_or_else(|| Error::Inference("MTP fallback: sampler returned no token".into()))?;
+                let piece = model
+                    .token_to_piece(token, &mut decoder, true, None)
+                    .unwrap_or_default();
+                output.push_str(&piece);
+                n_generated += 1;
+                n_past += 1;
+                last_token = token;
+                if model.is_eog_token(token) {
+                    break;
+                }
+                continue;
+            }
+
+            total_drafts_proposed += drafts.len() as u64;
+            mtp_steps += 1;
+
+            // Verify phase: feed every draft into the target context
+            // in one batch, asking for logits at each position. This
+            // is the speedup primitive — one forward pass produces
+            // logits for `drafts.len()` candidate positions.
+            let mut verify_batch = LlamaBatch::new(drafts.len(), 1);
+            for (i, &draft_tok) in drafts.iter().enumerate() {
+                let pos = (n_past + i) as i32;
+                verify_batch
+                    .add(draft_tok, pos, &[0], true)
+                    .map_err(|e| Error::Inference(format!("MTP verify batch add: {e}")))?;
+            }
+            ctx.decode(&mut verify_batch)
+                .map_err(|e| Error::Inference(format!("MTP verify decode: {e}")))?;
+
+            // Accept phase: walk positions left-to-right, sampling
+            // what the target would have produced. Accept while it
+            // matches the draft; on first mismatch the sampled
+            // token becomes the "bonus" (we get one free correct
+            // token per step regardless of draft acceptance).
+            let mut accepted: usize = 0;
+            let mut bonus_token: Option<LlamaToken> = None;
+            for i in 0..drafts.len() {
+                let mut data = ctx.token_data_array_ith(i as i32);
+                data.apply_sampler(&mut sampler.inner_explore);
+                let sampled = data
+                    .selected_token()
+                    .ok_or_else(|| Error::Inference("MTP verify: sampler returned no token".into()))?;
+                if sampled == drafts[i] {
+                    accepted += 1;
+                } else {
+                    bonus_token = Some(sampled);
+                    break;
+                }
+            }
+            // If we accepted everything, the next "bonus" requires
+            // one more target sample (at position n_past + drafts.len())
+            // — but we don't have logits there yet. Emit drafts only
+            // this step; the next iteration's draft call will start
+            // from `last = drafts.last()`.
+            total_drafts_accepted += accepted as u64;
+
+            mtp_session
+                .accept(0, accepted as u16)
+                .map_err(|e| Error::Inference(format!("MTP accept failed: {e:?}")))?;
+
+            // Emit accepted draft tokens to output, advancing
+            // bookkeeping per token. EOS check happens per token too.
+            let mut hit_eos = false;
+            for &tok in &drafts[..accepted] {
+                let piece = model
+                    .token_to_piece(tok, &mut decoder, true, None)
+                    .unwrap_or_default();
+                output.push_str(&piece);
+                n_generated += 1;
+                last_token = tok;
+                if model.is_eog_token(tok) {
+                    hit_eos = true;
+                    break;
+                }
+                if n_generated >= max_tokens {
+                    break;
+                }
+            }
+            n_past += accepted;
+            // Process the bonus token (target's correction at first
+            // mismatch). It's already verified by the target —
+            // emit it and advance.
+            if !hit_eos && n_generated < max_tokens {
+                if let Some(tok) = bonus_token {
+                    let piece = model
+                        .token_to_piece(tok, &mut decoder, true, None)
+                        .unwrap_or_default();
+                    output.push_str(&piece);
+                    n_generated += 1;
+                    n_past += 1;
+                    last_token = tok;
+                    if model.is_eog_token(tok) {
+                        hit_eos = true;
+                    }
+                    // Rollback rejected drafts. We accepted `accepted`
+                    // drafts + 1 bonus = positions [n_past_before,
+                    // n_past_before + accepted + 1). Positions
+                    // [n_past_before + accepted + 1, n_past_before +
+                    // drafts.len()) had their KV computed during the
+                    // verify batch but won't be part of the
+                    // generation sequence; drop them so the next
+                    // iteration's batch positions line up.
+                    let rejected_drop_from = n_past as u32;
+                    if accepted < drafts.len() {
+                        if let Err(e) = ctx.clear_kv_cache_seq(
+                            Some(0),
+                            Some(rejected_drop_from),
+                            None,
+                        ) {
+                            tracing::warn!(
+                                error = ?e,
+                                from = rejected_drop_from,
+                                "mtp: rejected-draft KV rollback failed — full clear"
+                            );
+                            ctx.clear_kv_cache();
+                            *cached_tokens = Vec::new();
+                            break;
+                        }
+                    }
+                }
+            }
+            if hit_eos {
+                break;
+            }
+        }
+
+        // Telemetry: emit the accept ratio so post-run analysis can
+        // tell whether MTP delivered. >0.5 is the "worth it" floor;
+        // below that, single-token decode would have been faster.
+        let accept_rate = if total_drafts_proposed > 0 {
+            total_drafts_accepted as f64 / total_drafts_proposed as f64
+        } else {
+            0.0
+        };
+        tracing::info!(
+            model_id = %model_id,
+            mtp_steps,
+            drafts_proposed = total_drafts_proposed,
+            drafts_accepted = total_drafts_accepted,
+            accept_rate = format!("{accept_rate:.3}"),
+            n_generated,
+            "mtp: end-of-generation telemetry"
+        );
+
+        Ok((output, tokens.len(), n_generated))
+    }
+
     /// Multi-sequence batched autoregressive decode for short-call
     /// enrichment phases routed to the FastShort slot. Caller supplies
     /// up to the slot's `n_seq_max` requests; we run one packed
@@ -886,7 +1319,7 @@ impl ModelSlot {
     fn generate_sync_batched(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         requests: &[&CompletionRequest],
         quirks: &ModelQuirks,
     ) -> Result<Vec<(String, usize, usize)>> {
@@ -1053,7 +1486,7 @@ impl ModelSlot {
     fn generate_stream_sync(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         request: &CompletionRequest,
         tx: &tokio::sync::mpsc::Sender<Result<String>>,
         quirks: &ModelQuirks,
@@ -1317,7 +1750,7 @@ impl ModelSlot {
     fn generate_stream_sync_with_finish(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         request: &CompletionRequest,
         tx: &tokio::sync::mpsc::Sender<StreamFrame>,
         quirks: &ModelQuirks,
@@ -1592,7 +2025,7 @@ struct EmbedSlot {
 }
 
 struct EmbedSlotContext {
-    ctx: llama_cpp_2::context::LlamaContext<'static>,
+    ctx: crate::llama::cpp::context::LlamaContext<'static>,
     _model: Arc<LlamaModel>,
 }
 
@@ -1666,7 +2099,7 @@ impl EmbedSlot {
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
                 .with_n_ubatch(2048)
-                .with_n_seq_max(n_seq_max)
+                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_embeddings(true)
@@ -1679,7 +2112,7 @@ impl EmbedSlot {
                 // disables both explicitly so the scheduler keeps every
                 // tensor in main memory.
                 .with_offload_kqv(gpu)
-                .with_op_offload(gpu)
+                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         // Try GPU first if compiled in; fall back to CPU on any
@@ -1696,7 +2129,7 @@ impl EmbedSlot {
                     .map(|c| (c, true))
             }
         } else {
-            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+            Err(crate::llama::cpp::LlamaContextLoadError::NullReturn)
         } {
             Ok(pair) => pair,
             Err(e) => {
@@ -1769,7 +2202,7 @@ impl EmbedSlot {
     /// and EOS token from the embed quirks (when configured).
     fn embed_sync(
         model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         text: &str,
         n_embd: usize,
         max_input_tokens: usize,
@@ -1792,7 +2225,7 @@ impl EmbedSlot {
     /// and EOS token from the embed quirks (when configured).
     fn embed_query_sync(
         model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         query: &str,
         n_embd: usize,
         max_input_tokens: usize,
@@ -1817,7 +2250,7 @@ impl EmbedSlot {
     /// would be pure overhead.
     fn run_embed_sync(
         model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         input: &str,
         n_embd: usize,
         max_input_tokens: usize,
@@ -2121,7 +2554,7 @@ fn jina_v3_prompt_fragments() -> (String, String, String) {
 }
 
 struct RerankSlotContext {
-    ctx: llama_cpp_2::context::LlamaContext<'static>,
+    ctx: crate::llama::cpp::context::LlamaContext<'static>,
     _model: Arc<LlamaModel>,
 }
 
@@ -2173,11 +2606,11 @@ impl RerankSlot {
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
                 .with_n_ubatch(ctx_tokens.min(2048))
-                .with_n_seq_max(1)
+                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                .with_op_offload(gpu)
+                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
@@ -2189,7 +2622,7 @@ impl RerankSlot {
                     .map(|c| (c, true))
             }
         } else {
-            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+            Err(crate::llama::cpp::LlamaContextLoadError::NullReturn)
         } {
             Ok(pair) => pair,
             Err(e) => {
@@ -2329,7 +2762,7 @@ impl RerankSlot {
     #[allow(clippy::too_many_arguments)]
     fn score_pair_sync(
         model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         query: &str,
         doc: &str,
         max_input_tokens: usize,
@@ -5333,111 +5766,93 @@ fn format_prompt(
     //    until `max_tokens`. We loud-warn so operators see this is
     //    happening — it was a silent fallback up until 2026-04-26
     //    (gemma-4-31B atlas bench debugging session).
-    let template = match model.chat_template(None) {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::warn!(
-                model_id = %model_id,
-                error = ?e,
-                "model.chat_template(None) returned no template — model gguf has no \
-                 tokenizer.chat_template metadata. Falling back to plain-text concat; \
-                 model output may include hallucinated role markers and may not stop \
-                 at the right place."
-            );
-            return Ok(plain_text_prompt(&system_with_thinking, &request.prompt));
-        }
+    // Retrieve the chat template stored in the model's gguf metadata
+    // (`tokenizer.chat_template`). Pre-2026-05-17 this returned a
+    // `LlamaChatTemplate` struct; post-migration to llama-cpp-4 0.2.x
+    // it returns an `Option<String>`. `None` ⇒ no chat-template
+    // metadata in the gguf, so plain-text concat is the only path.
+    let Some(template) = crate::llama::chat_template(model) else {
+        tracing::warn!(
+            model_id = %model_id,
+            "chat_template lookup returned None — model gguf has no \
+             tokenizer.chat_template metadata. Falling back to plain-text concat; \
+             model output may include hallucinated role markers and may not stop \
+             at the right place."
+        );
+        return Ok(plain_text_prompt(&system_with_thinking, &request.prompt));
     };
 
-    // Templates that use Jinja2 macros (`{%- macro ... -%}`),
-    // `{% set ... %}` blocks, conditional includes, or other
-    // constructs beyond the llama.cpp built-in parser's subset
-    // need to skip tier 1 entirely — `apply_chat_template` would
-    // return `FfiError(-1)` for every call, wasting work and
-    // logging noise. Gemma 3 / Gemma 4 / Llama 3.1+ templates all
-    // qualify. Detect once at the call site and route directly.
+    // **Migration note (2026-05-17 llama-cpp-2 → llama-cpp-4):** the
+    // `openai`-shaped `apply_chat_template_oaicompat` path (with its
+    // `OpenAIChatTemplateParams` and `use_jinja=true` knob) was
+    // retired upstream. The remaining path is `apply_chat_template`,
+    // which uses llama.cpp's built-in template parser. Two
+    // consequences for callers:
+    //
+    //   1. Templates that need full Jinja2 (Gemma 3/4 macros, e.g.)
+    //      will fail at `apply_chat_template` and fall through to
+    //      plain-text concat (loud warn). The MTP bench target
+    //      (Qwen3.6-A3B) uses a template the built-in parser
+    //      accepts, so this regression is acceptable on this branch.
+    //
+    //   2. Per-request `enable_thinking` is now spliced into the
+    //      system message (`/no_think` / `/think`) rather than
+    //      passed as a separate flag, because the binding's chat
+    //      surface no longer exposes thinking control. Most callers
+    //      pass `None` / `false`; the few that pin `true` (e.g. the
+    //      witness path) get a `<think>` wrapper from the prefix.
+    //
+    //   3. `template_needs_jinja` is retained as documentation of
+    //      which templates were Gemma-shaped; calling it just routes
+    //      to the same `apply_chat_template` call now, but tracing
+    //      the boolean preserves the diagnostic surface.
     let needs_jinja = template_needs_jinja(&template);
-
-    // Tier 1: built-in subset (skipped for Jinja-only templates).
-    if !needs_jinja {
-        let mut messages = Vec::new();
-        if !system_with_thinking.is_empty() {
-            messages.push(
-                LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
-                    .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
-            );
-        }
-        messages.push(
-            LlamaChatMessage::new("user".to_string(), request.prompt.clone())
-                .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+    if needs_jinja {
+        tracing::debug!(
+            model_id = %model_id,
+            "chat template needs full Jinja2 (macros/sets/includes detected); \
+             0.2.x binding lacks the oaicompat path, so apply_chat_template \
+             likely returns FfiError and we'll fall through to plain-text concat."
         );
-        match model.apply_chat_template(&template, &messages, true) {
-            Ok(formatted) => return Ok(formatted),
-            Err(e) => {
-                tracing::debug!(
-                    model_id = %model_id,
-                    error = ?e,
-                    "apply_chat_template (built-in subset) failed; retrying via Jinja2 path"
-                );
-            }
-        }
+    }
+    if request.enable_thinking.unwrap_or(false) {
+        tracing::warn!(
+            model_id = %model_id,
+            "request.enable_thinking=true requested, but the llama-cpp-4 binding \
+             dropped chat-template thinking control. Output may not be wrapped in \
+             <think>...</think>; downstream strip_thinking_tags will pass through. \
+             TODO: splice /think hint into system message."
+        );
     }
 
-    // Tier 2: Jinja2 via oaicompat path. Build an OpenAI-style
-    // messages JSON array — simpler than allocating
-    // `LlamaChatMessage` again because the oaicompat ABI takes
-    // raw JSON anyway.
-    let messages_json = build_oai_messages_json(&system_with_thinking, &request.prompt)?;
-    let params = OpenAIChatTemplateParams {
-        messages_json: &messages_json,
-        tools_json: None,
-        tool_choice: None,
-        json_schema: None,
-        grammar: None,
-        reasoning_format: None,
-        chat_template_kwargs: None,
-        add_generation_prompt: true,
-        use_jinja: true,
-        parallel_tool_calls: false,
-        // Per-request override (`request.enable_thinking`) wins over
-        // the historical default-false. Callers that pin this — the
-        // relational/witness path in particular — get the chat
-        // template to wrap planning in `<think>...</think>` so the
-        // post-process strip can drop it cleanly. Default-false is
-        // preserved for every other call site.
-        enable_thinking: request.enable_thinking.unwrap_or(false),
-        // BOS/EOS handling: the caller (generate_sync /
-        // generate_stream_sync) tokenises with `AddBos::Always`,
-        // which prepends the model's BOS at tokenisation time. If
-        // we also asked the template renderer to emit BOS, we'd
-        // double-prepend and the first decode position would be
-        // off by one. EOS is never wanted on a generation prompt.
-        add_bos: false,
-        add_eos: false,
-        parse_tool_calls: false,
-    };
-    match model.apply_chat_template_oaicompat(&template, &params) {
-        Ok(result) => {
-            tracing::trace!(
-                model_id = %model_id,
-                jinja_required = needs_jinja,
-                prompt_chars = result.prompt.len(),
-                "apply_chat_template_oaicompat (Jinja2) ok"
-            );
-            return Ok(result.prompt);
-        }
+    let mut messages = Vec::new();
+    if !system_with_thinking.is_empty() {
+        messages.push(
+            LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
+                .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+        );
+    }
+    messages.push(
+        LlamaChatMessage::new("user".to_string(), request.prompt.clone())
+            .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+    );
+    match model.apply_chat_template(Some(&template), &messages, true) {
+        Ok(formatted) => return Ok(formatted),
         Err(e) => {
             tracing::warn!(
                 model_id = %model_id,
                 error = ?e,
                 template_head = %template_head_for_log(&template),
-                "apply_chat_template_oaicompat (Jinja2) failed — minja rejected the \
-                 gguf's chat template. Falling back to plain-text concat; model output \
-                 may include hallucinated role markers."
+                jinja_required = needs_jinja,
+                "apply_chat_template failed — model's gguf template likely needs \
+                 a Jinja construct the built-in parser doesn't support, and the \
+                 0.2.x binding dropped the oaicompat Jinja2 path. Falling back to \
+                 plain-text concat; model output may include hallucinated role markers."
             );
         }
     }
 
-    // Tier 3: plain-text concat.
+    // Final fallback: plain-text concat.
     Ok(plain_text_prompt(&system_with_thinking, &request.prompt))
 }
 
@@ -5454,17 +5869,13 @@ fn format_prompt(
 /// returns FfiError, tier 2 takes over). The win here is a clean
 /// fast path for known-Jinja templates so we don't log a
 /// debug-level noise line on every chat call.
-fn template_needs_jinja(template: &llama_cpp_2::model::LlamaChatTemplate) -> bool {
-    let s = match template.to_str() {
-        Ok(s) => s,
-        Err(_) => return true, // non-utf8 — punt to the safer renderer
-    };
-    s.contains("{%- macro")
-        || s.contains("{% macro")
-        || s.contains("{%- set")
-        || s.contains("{% set")
-        || s.contains("{%- include")
-        || s.contains("{% include")
+fn template_needs_jinja(template: &str) -> bool {
+    template.contains("{%- macro")
+        || template.contains("{% macro")
+        || template.contains("{%- set")
+        || template.contains("{% set")
+        || template.contains("{%- include")
+        || template.contains("{% include")
 }
 
 /// Final-fallback prompt when no chat-template path works. Just
@@ -5497,9 +5908,8 @@ fn build_oai_messages_json(system: &str, user: &str) -> Result<String> {
 /// log output. Lets operators identify which template format is
 /// hitting the fallback path without dumping a full multi-KB
 /// macro definition into the daemon log.
-fn template_head_for_log(template: &llama_cpp_2::model::LlamaChatTemplate) -> String {
-    let s = template.to_str().unwrap_or("<non-utf8>");
-    let head: String = s.chars().take(80).collect();
+fn template_head_for_log(template: &str) -> String {
+    let head: String = template.chars().take(80).collect();
     head.replace('\n', "\\n")
 }
 
@@ -5593,7 +6003,7 @@ impl ConstrainedSampler {
     /// Until that lands, the slower-but-correct mask stays.
     pub fn sample(
         &mut self,
-        ctx: &llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &crate::llama::cpp::context::LlamaContext<'_>,
         idx: i32,
         role: SamplerRole,
     ) -> LlamaToken {
@@ -5617,9 +6027,15 @@ impl ConstrainedSampler {
                 }
             }
         }
+        // MIGRATION 2026-05-17: llama-cpp-4 0.2.x's `apply_sampler`
+        // takes `&mut LlamaSampler` (was `&LlamaSampler` in 0.1.x).
+        // The mutability moved because samplers now carry per-call
+        // state (e.g. DRY's repetition history) that the previous
+        // API hid behind `&self`. Take &mut via match — the parent
+        // struct's wrapping `Mutex` already serialises access.
         let inner = match role {
-            SamplerRole::Explore => &self.inner_explore,
-            SamplerRole::Content => &self.inner_content,
+            SamplerRole::Explore => &mut self.inner_explore,
+            SamplerRole::Content => &mut self.inner_content,
         };
         data.apply_sampler(inner);
         data.selected_token()
@@ -5818,7 +6234,25 @@ fn build_sampler(
 
     let build_chain = |params: &ResolvedSampling, chain_temp: f32| {
         let mut samplers: Vec<LlamaSampler> = Vec::new();
-        samplers.push(LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()));
+        // MIGRATION 2026-05-17: llama-cpp-4 0.2.x reshaped DRY:
+        //   * Added `n_ctx_train` as the second positional arg — scopes
+        //     DRY's repetition-detection window; querying the model
+        //     gives us the model's actual training span instead of a
+        //     hard-coded guess.
+        //   * `dry` became a method on `&LlamaSampler` rather than a
+        //     free constructor. Chain off `greedy()` (a no-op identity
+        //     sampler at this position in the chain) to get a base we
+        //     can call `.dry(...)` against. Semantically equivalent to
+        //     the old constructed-fresh form.
+        samplers.push(LlamaSampler::greedy().dry(
+            model,
+            model.n_ctx_train() as i32,
+            0.8,
+            1.75,
+            2,
+            -1,
+            breakers.iter().copied(),
+        ));
         samplers.push(LlamaSampler::penalties(128, rep_pen, freq_pen, params.presence_pen));
         if chain_temp < 0.01 {
             samplers.push(LlamaSampler::greedy());

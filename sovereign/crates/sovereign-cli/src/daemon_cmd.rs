@@ -286,6 +286,13 @@ async fn run_daemon(args: &[String]) -> i32 {
     // model is lazy-loaded behind a high idle_secs gate). The
     // report still prints in that case so the diagnosis stays
     // visible in logs.
+    // Route llama.cpp's internal log into our tracing layer. Without
+    // this, gguf load failures and ggml backend diagnostics print to a
+    // dropped stderr (the daemon's child-style stdio capture swallows
+    // them) — the operator gets a bare "null result from llama cpp"
+    // with no actionable detail. Installed exactly once per process.
+    sovereign_inference::llama::install_log_tracing();
+
     {
         let hardware = sovereign_inference::hardware::HardwareProfile::detect();
         let slots = sovereign_inference::capacity::build_slots_from_config(&config);

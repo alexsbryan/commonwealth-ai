@@ -496,30 +496,50 @@ async fn fetch_and_validate(
     // **2026-05-16 incident**: a live SEP-on-Vast smoke wedged on a
     // 28 GB Darwin-36B fetch — `.bytes().await` errored at the
     // halfway mark and the prior `?`-propagated body-decode error
-    // skipped the retry budget entirely. Two fixes here: (a) stream
-    // via `bytes_stream()` so we don't buffer twice (reqwest's
-    // internal buffer + our Vec), and (b) catch chunk errors inside
-    // the retry loop instead of short-circuiting with `?`.
+    // skipped the retry budget entirely. Two fixes there: (a) stream
+    // via `bytes_stream()` so we don't buffer twice, and (b) catch
+    // chunk errors inside the retry loop.
+    //
+    // **2026-05-17 incident**: a 30 GB Q6_K fetch dropped twice in a
+    // row at ~21.5 GB on the Taiwan↔R2 path. Byte-0 retry forfeited
+    // ~13 min per drop; the second drop blew the per-attempt cost
+    // beyond the operator's patience. Fix: HTTP `Range: bytes=N-`
+    // resume — bytes/hasher persist across attempts, and the next
+    // attempt asks the origin to pick up from where the prior stream
+    // failed. Server may answer 206 (resume accepted, append) or 200
+    // (server ignored Range, reset accumulator and re-fetch full
+    // body). Both cases pinned by tests below.
     //
     // A SHA mismatch is a hard error — no retry. The owner signed the
     // wrong SHA into the blob, or the URL is serving different bytes;
     // both are user-actionable, not transient.
     use futures::StreamExt;
+    use reqwest::StatusCode;
     const PROGRESS_INTERVAL: u64 = 256 * 1024 * 1024;
     let attempts = 6;
     let mut delay = std::time::Duration::from_millis(250);
     let mut last_err = String::new();
+
+    // `bytes` and `hasher` are HOISTED out of the attempt loop so a
+    // mid-stream error doesn't forfeit the bytes we already received.
+    // On the next attempt we ask for `Range: bytes={bytes.len()}-`,
+    // and on a 206 we append; on a 200 we reset (server ignored Range).
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut hasher = Sha256::new();
+    // Total file size, set from the first non-resumed 200 response so
+    // progress % stays correct across reset/resume cycles. (206
+    // responses carry Content-Length for the partial body only.)
+    let mut total_size: Option<u64> = None;
+
     for attempt in 1..=attempts {
-        let resp = match client.get(url).send().await {
-            Ok(r) if r.status().is_success() => r,
-            Ok(r) => {
-                last_err = format!("status: {}", r.status());
-                if attempt < attempts {
-                    tokio::time::sleep(delay).await;
-                    delay = (delay * 2).min(std::time::Duration::from_secs(5));
-                }
-                continue;
-            }
+        let resuming = !bytes.is_empty();
+        let range_header = resuming.then(|| format!("bytes={}-", bytes.len()));
+        let mut req = client.get(url);
+        if let Some(r) = range_header.as_deref() {
+            req = req.header("Range", r);
+        }
+        let resp = match req.send().await {
+            Ok(r) => r,
             Err(e) => {
                 last_err = format!("send: {e}");
                 if attempt < attempts {
@@ -530,30 +550,87 @@ async fn fetch_and_validate(
             }
         };
 
-        // Pre-size if Content-Length is honest about the body length.
-        // Saves Vec doublings on a 28 GB transfer — going from a 16
-        // GB capacity to 32 GB on the last push would dominate
-        // memory peak.
-        let content_length = resp.content_length();
-        let mut bytes: Vec<u8> = match content_length {
-            Some(n) => Vec::with_capacity(n as usize),
-            None => Vec::new(),
-        };
-        let mut hasher = Sha256::new();
+        let status = resp.status();
+        if resuming {
+            // Server response to our Range request decides whether we
+            // append (206) or reset (200). 416 means the file shrank
+            // or our offset is past the end — reset and try a clean
+            // full fetch on the next attempt.
+            if status == StatusCode::PARTIAL_CONTENT {
+                tracing::info!(
+                    attempt,
+                    resume_from = bytes.len(),
+                    range = %range_header.as_deref().unwrap_or(""),
+                    "worker:url_fetch:range_resume_accepted (206)"
+                );
+            } else if status.is_success() {
+                tracing::warn!(
+                    attempt,
+                    resume_from = bytes.len(),
+                    status = %status,
+                    "worker:url_fetch:range_ignored — server returned 200 to a Range request; resetting accumulator"
+                );
+                bytes.clear();
+                hasher = Sha256::new();
+            } else if status == StatusCode::RANGE_NOT_SATISFIABLE {
+                tracing::warn!(
+                    attempt,
+                    resume_from = bytes.len(),
+                    "worker:url_fetch:range_unsatisfiable (416) — resetting to retry from byte 0"
+                );
+                bytes.clear();
+                hasher = Sha256::new();
+                last_err = format!("status: 416 (resume from byte {} rejected)", bytes.len());
+                if attempt < attempts {
+                    tokio::time::sleep(delay).await;
+                    delay = (delay * 2).min(std::time::Duration::from_secs(5));
+                }
+                continue;
+            } else {
+                last_err = format!("status: {status}");
+                if attempt < attempts {
+                    tokio::time::sleep(delay).await;
+                    delay = (delay * 2).min(std::time::Duration::from_secs(5));
+                }
+                continue;
+            }
+        } else if !status.is_success() {
+            last_err = format!("status: {status}");
+            if attempt < attempts {
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(std::time::Duration::from_secs(5));
+            }
+            continue;
+        }
+
+        // Capture total_size from the first 200 response (or refresh
+        // it from a 200-after-reset). 206 carries only the partial
+        // body length in Content-Length, so we ignore it for total
+        // tracking. Pre-size the Vec capacity once.
+        let body_content_length = resp.content_length();
+        if status == StatusCode::OK {
+            if let Some(n) = body_content_length {
+                total_size = Some(n);
+                if bytes.capacity() < n as usize {
+                    bytes.reserve(n as usize - bytes.capacity());
+                }
+            }
+        }
+
         let mut stream = resp.bytes_stream();
-        let mut received: u64 = 0;
-        let mut next_progress_at: u64 = PROGRESS_INTERVAL;
+        let mut next_progress_at: u64 =
+            ((bytes.len() as u64) / PROGRESS_INTERVAL + 1) * PROGRESS_INTERVAL;
         let mut chunk_err: Option<String> = None;
         while let Some(chunk) = stream.next().await {
             match chunk {
                 Ok(c) => {
                     hasher.update(&c);
                     bytes.extend_from_slice(&c);
-                    received = received.saturating_add(c.len() as u64);
-                    if received >= next_progress_at {
-                        let mb = received / (1024 * 1024);
-                        let pct = content_length
-                            .map(|n| format!("{:.1}%", (received as f64 / n as f64) * 100.0))
+                    let total_received = bytes.len() as u64;
+                    if total_received >= next_progress_at {
+                        let mb = total_received / (1024 * 1024);
+                        let pct = total_size
+                            .map(|n| format!("{:.1}%", (total_received as f64 / n as f64) * 100.0))
                             .unwrap_or_else(|| "?%".into());
                         tracing::info!(
                             mb_received = mb,
@@ -561,13 +638,13 @@ async fn fetch_and_validate(
                             attempt,
                             "worker: URL fetch progress"
                         );
-                        next_progress_at = received.saturating_add(PROGRESS_INTERVAL);
+                        next_progress_at = total_received.saturating_add(PROGRESS_INTERVAL);
                     }
                 }
                 Err(e) => {
                     chunk_err = Some(format!(
                         "body: {e} (after {} bytes on attempt {attempt})",
-                        received
+                        bytes.len()
                     ));
                     break;
                 }
@@ -580,7 +657,8 @@ async fn fetch_and_validate(
                     error = %last_err,
                     attempt,
                     remaining = attempts - attempt,
-                    "worker: URL fetch body errored mid-stream — retrying from byte 0"
+                    next_resume_from = bytes.len(),
+                    "worker:url_fetch:body_errored — next attempt will resume via Range"
                 );
                 tokio::time::sleep(delay).await;
                 delay = (delay * 2).min(std::time::Duration::from_secs(5));
@@ -591,7 +669,7 @@ async fn fetch_and_validate(
         // Stream consumed cleanly. Validate SHA against the
         // owner-signed expected digest; mismatch is non-retryable.
         let mut got = [0u8; 32];
-        got.copy_from_slice(&hasher.finalize());
+        got.copy_from_slice(&hasher.clone().finalize());
         if &got != expected_sha {
             return Err(format!(
                 "sha mismatch: expected {} got {} (not retried — owner-signed SHA is wrong)",
@@ -1469,5 +1547,216 @@ mod tests {
             1,
             "SHA mismatch must not retry — only one attempt expected"
         );
+    }
+
+    /// Regression for the 2026-05-17 SEP-on-Vast smoke: a 30 GB Q6_K
+    /// fetch dropped at ~21.5 GB twice in a row on Taiwan ↔ R2 path.
+    /// The byte-0 retry path forfeited ~13 min of fetch wall per drop.
+    ///
+    /// Range-resume invariant: after a mid-body chunk error, the next
+    /// attempt MUST send `Range: bytes=N-` where N is the bytes already
+    /// received, and MUST append the 206 Partial-Content body to the
+    /// existing accumulator (state + hasher) rather than starting over.
+    ///
+    /// This test pins three things:
+    ///   1. The Range header value equals bytes already received.
+    ///   2. The 206 partial-body is correctly appended (final SHA
+    ///      matches the FULL payload).
+    ///   3. Two attempts suffice — one truncated + one Range-resumed.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fetch_and_validate_resumes_via_range_header() {
+        use axum::body::Body as AxumBody;
+        use axum::extract::State;
+        use axum::http::{HeaderMap, StatusCode};
+        use axum::response::Response as AxumResponse;
+        use axum::routing::get;
+        use axum::Router;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use tokio::net::TcpListener;
+        use tokio::sync::oneshot;
+
+        let payload: Vec<u8> = (0..256 * 1024u32).map(|i| (i & 0xff) as u8).collect();
+        let mut hasher = Sha256::new();
+        hasher.update(&payload);
+        let mut expected = [0u8; 32];
+        expected.copy_from_slice(&hasher.finalize());
+
+        let attempts_counter = Arc::new(AtomicU32::new(0));
+        let observed_range = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let state_payload = Arc::new(payload.clone());
+
+        #[derive(Clone)]
+        struct AppState {
+            attempts: Arc<AtomicU32>,
+            observed_range: Arc<std::sync::Mutex<Vec<String>>>,
+            payload: Arc<Vec<u8>>,
+        }
+
+        async fn handler(State(state): State<AppState>, headers: HeaderMap) -> AxumResponse {
+            let n = state.attempts.fetch_add(1, Ordering::SeqCst);
+            let range = headers
+                .get("range")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            state.observed_range.lock().unwrap().push(range.clone());
+            if n == 0 {
+                // First attempt: serve only the first half, then close.
+                let half = state.payload.len() / 2;
+                let truncated = state.payload[..half].to_vec();
+                AxumResponse::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Length", state.payload.len().to_string())
+                    .body(AxumBody::from(truncated))
+                    .unwrap()
+            } else {
+                // Second attempt: serve from the offset the client
+                // requested via Range. Server speaks 206.
+                let offset = range
+                    .strip_prefix("bytes=")
+                    .and_then(|s| s.split('-').next())
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(0);
+                let tail = state.payload[offset..].to_vec();
+                let total = state.payload.len();
+                AxumResponse::builder()
+                    .status(StatusCode::PARTIAL_CONTENT)
+                    .header("Content-Length", tail.len().to_string())
+                    .header(
+                        "Content-Range",
+                        format!("bytes {offset}-{}/{total}", total - 1),
+                    )
+                    .body(AxumBody::from(tail))
+                    .unwrap()
+            }
+        }
+
+        let app = Router::new()
+            .route("/blob", get(handler))
+            .with_state(AppState {
+                attempts: attempts_counter.clone(),
+                observed_range: observed_range.clone(),
+                payload: state_payload,
+            });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = oneshot::channel::<()>();
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = rx.await;
+                })
+                .await
+                .ok();
+        });
+
+        let client = reqwest::Client::builder().build().unwrap();
+        let url = format!("http://{addr}/blob");
+        let result = fetch_and_validate(&client, &url, &expected).await;
+        let _ = tx.send(());
+
+        let bytes = result.expect("Range-resume must reconstruct full payload");
+        assert_eq!(bytes.len(), payload.len());
+        assert_eq!(bytes, payload);
+        let attempts = attempts_counter.load(Ordering::SeqCst);
+        assert_eq!(
+            attempts, 2,
+            "expected exactly 2 attempts (1 truncated + 1 Range-resume), got {attempts}",
+        );
+        let observed = observed_range.lock().unwrap().clone();
+        assert_eq!(observed.len(), 2);
+        assert_eq!(
+            observed[0], "",
+            "first attempt must not send Range — full fetch from byte 0"
+        );
+        let half = payload.len() / 2;
+        assert_eq!(
+            observed[1],
+            format!("bytes={half}-"),
+            "second attempt must request resume from where the prior attempt stopped"
+        );
+    }
+
+    /// Defence-in-depth: if the server ignores `Range` and returns 200
+    /// instead of 206 (some misconfigured CDNs do this), the fetcher
+    /// MUST reset its accumulator before reading the body. Otherwise
+    /// we'd prepend N stale bytes to a full re-served body and SHA
+    /// would silently mismatch with no clue why.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fetch_and_validate_resets_when_server_ignores_range() {
+        use axum::body::Body as AxumBody;
+        use axum::extract::State;
+        use axum::http::{HeaderMap, StatusCode};
+        use axum::response::Response as AxumResponse;
+        use axum::routing::get;
+        use axum::Router;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use tokio::net::TcpListener;
+        use tokio::sync::oneshot;
+
+        let payload: Vec<u8> = (0..256 * 1024u32).map(|i| (i & 0xff) as u8).collect();
+        let mut hasher = Sha256::new();
+        hasher.update(&payload);
+        let mut expected = [0u8; 32];
+        expected.copy_from_slice(&hasher.finalize());
+
+        let attempts_counter = Arc::new(AtomicU32::new(0));
+        let state_payload = Arc::new(payload.clone());
+
+        #[derive(Clone)]
+        struct AppState {
+            attempts: Arc<AtomicU32>,
+            payload: Arc<Vec<u8>>,
+        }
+
+        async fn handler(State(state): State<AppState>, _headers: HeaderMap) -> AxumResponse {
+            let n = state.attempts.fetch_add(1, Ordering::SeqCst);
+            if n == 0 {
+                // Attempt 1: truncated body, body-stream error.
+                let half = state.payload.len() / 2;
+                let truncated = state.payload[..half].to_vec();
+                AxumResponse::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Length", state.payload.len().to_string())
+                    .body(AxumBody::from(truncated))
+                    .unwrap()
+            } else {
+                // Attempt 2+: client sends Range, server IGNORES it
+                // and returns the full body as 200. Fetcher must
+                // reset its prior-half accumulator before reading.
+                AxumResponse::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Length", state.payload.len().to_string())
+                    .body(AxumBody::from(state.payload.as_ref().clone()))
+                    .unwrap()
+            }
+        }
+
+        let app = Router::new()
+            .route("/blob", get(handler))
+            .with_state(AppState {
+                attempts: attempts_counter.clone(),
+                payload: state_payload,
+            });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = oneshot::channel::<()>();
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = rx.await;
+                })
+                .await
+                .ok();
+        });
+
+        let client = reqwest::Client::builder().build().unwrap();
+        let url = format!("http://{addr}/blob");
+        let result = fetch_and_validate(&client, &url, &expected).await;
+        let _ = tx.send(());
+
+        let bytes = result.expect("fetcher must recover when server ignores Range");
+        assert_eq!(bytes.len(), payload.len());
+        assert_eq!(bytes, payload);
     }
 }

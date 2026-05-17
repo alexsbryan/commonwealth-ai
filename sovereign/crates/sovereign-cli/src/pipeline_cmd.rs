@@ -696,6 +696,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     let mut disk_gb: u32 = 80;
     let mut label: Option<String> = None;
     let mut max_price: f64 = 0.80;
+    let mut num_gpus: Option<u32> = None;
     let mut dry_run: bool = false;
     let mut job_id: Option<String> = None;
     let mut uploads: Vec<std::path::PathBuf> = Vec::new();
@@ -718,6 +719,7 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
             "--disk" => { i += 1; disk_gb = args[i].parse().unwrap_or(disk_gb); }
             "--label" => { i += 1; label = Some(args[i].clone()); }
             "--max-price" => { i += 1; max_price = args[i].parse().unwrap_or(max_price); }
+            "--num-gpus" => { i += 1; num_gpus = args[i].parse().ok(); }
             "--job-id" => { i += 1; job_id = Some(args[i].clone()); }
             "--upload" => { i += 1; uploads.push(std::path::PathBuf::from(args[i].clone())); }
             "--upload-from-base-url" => {
@@ -795,9 +797,12 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // `direct_port_count>=2` ensures the pod will get a public host
     // port for the worker daemon on :9742 (see EPHEMERAL_WORKER_PODS.md
     // §"Provider connectivity audit").
+    let num_gpus_clause = num_gpus
+        .map(|n| format!(" num_gpus={n}"))
+        .unwrap_or_default();
     let query = format!(
         "gpu_name={gpu_name} verified=true rentable=true cuda_max_good>=12.4 \
-         direct_port_count>=2 dph_total<={max_price}"
+         direct_port_count>=2 dph_total<={max_price}{num_gpus_clause}"
     );
     let offers = match pod::search_offers(&query, 50) {
         Ok(v) => v,

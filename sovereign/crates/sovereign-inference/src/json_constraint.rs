@@ -33,9 +33,13 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use llama_cpp_2::model::LlamaModel;
-use llama_cpp_2::token::LlamaToken;
-use llama_cpp_2::token::data_array::LlamaTokenDataArray;
+use crate::llama::cpp::model::LlamaModel;
+use crate::llama::cpp::token::LlamaToken;
+use crate::llama::cpp::token::data_array::LlamaTokenDataArray;
+// Shim-restored 0.1.x method names: `token_to_piece_bytes` lives on
+// the trait. JsonConstraint validates UTF-8 across token boundaries,
+// so it needs the lossless `Vec<u8>` form.
+use crate::llama::LlamaModelExt;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use serde_json::Value;
 use thiserror::Error;
@@ -2370,7 +2374,7 @@ fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
         // BPE token (≤16 bytes); the retry handles the long tail.
         let bytes = match model.token_to_piece_bytes(LlamaToken(id), 32, true, None) {
             Ok(b) => b,
-            Err(llama_cpp_2::TokenToStringError::InsufficientBufferSpace(neg)) => {
+            Err(crate::llama::cpp::TokenToStringError::InsufficientBufferSpace(neg)) => {
                 let needed = (-neg).try_into().unwrap_or(1024_usize).max(32);
                 model
                     .token_to_piece_bytes(LlamaToken(id), needed, true, None)

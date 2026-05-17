@@ -33,20 +33,16 @@ rayon = "1.10"
 # and bypasses the buggy ROCm+MoE path entirely. Revisit once #20176
 # lands a fix in a llama-cpp-2 release we can pin to.
 [target.'cfg(target_os = "macos")'.dependencies]
-llama-cpp-2 = { version = "0.1.145", features = ["metal", "llguidance"] }
-# Direct dep on the -sys crate to access the `llama_flash_attn_type`
-# enum constants. llama-cpp-2's `with_flash_attention_policy` takes
-# `llama_cpp_sys_2::llama_flash_attn_type` as its argument type but
-# doesn't re-export the enum, so callers need their own path to it.
-llama-cpp-sys-2 = "0.1.145"
+# llama-cpp-4 0.2.57 bundles llama.cpp b9180 (commit 64b38b561) which
+# includes MTP (Multi-Token Prediction) via upstream PR #22673 — our
+# reason for moving off llama-cpp-2 0.1.146. See `crate::llama` for
+# the migration shim that absorbs the API shape changes.
+llama-cpp-4 = { version = "0.2.57", features = ["metal"] }
+llama-cpp-sys-4 = "0.2.57"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-# NOTE: temporarily on "rocm" to keep host-side `cargo build` working
-# (this shell can't enter the sovereign-vulkan toolbox where the Vulkan
-# SDK lives). Flip to "vulkan" when restarting the daemon for SEP-grade
-# inference workloads — see issue #20176 commentary above.
-llama-cpp-2 = { version = "0.1.145", features = ["vulkan", "llguidance"] }
-llama-cpp-sys-2 = "0.1.145"
+llama-cpp-4 = { version = "0.2.57", features = ["vulkan"] }
+llama-cpp-sys-4 = "0.2.57"
 
 [dev-dependencies]
 tempfile = "3"
