@@ -479,7 +479,8 @@ local LLM author recipes too.
 A typed-relationship graph runs as a parallel module to the atlas pipelines.
 Recipe-author declares `[[enrichment.entity_types]]` and
 `[[enrichment.relationship_types]]`; the LLM extract prompt is generated
-from that schema (LLGuidance JSON-grammar constrained). Three built-in
+from that schema (in-house JSON-Schema mask, see `json_constraint.rs`).
+Three built-in
 graph-pattern detectors:
 
 - `circular_flow` — petgraph DiGraph + Tarjan SCC + DFS-based simple-cycle
@@ -762,7 +763,7 @@ without touching the trait.
 
 ### 4.3 Inference
 
-`sovereign-inference/embedded.rs` wraps `llama-cpp-2` with a lazy-loaded slot
+`sovereign-inference/embedded.rs` wraps `llama-cpp-4` with a lazy-loaded slot
 system:
 
 | Role (user-facing)  | Slot     | Purpose                                  | Typical model       |
@@ -793,6 +794,24 @@ relying on mesh peers — see `embedded.rs::primary_siblings_env` and the
 `models.toml` — five hardware profiles (`cpu_only`, `low_mem`, `default`,
 `high`, `very_high`) each declare `repo`, `file`, `family`, `quant`,
 `size_gb`, `thinking`. Per-slot `quirks_override` tunes family defaults.
+
+**Generation defaults (2026-05-17).** The chat-slot decode path is
+`generate_sync` with two-tier jump-forward decoding enabled by default
+(`SOVEREIGN_JUMP_FWD_DISABLE=1` / `SOVEREIGN_JUMP_FWD_T2_DISABLE=1` to
+opt out). Tier 1 (single-survivor token from the mask cache) is an O(1)
+read on warm states; Tier 2 (FSM byte-walk + `VocabTrie` longest-match)
+catches structural-skeleton runs Tier 1 misses on BPE vocabs. Both
+emit forced tokens into the next batched decode without paying a
+per-token forward pass — ~15% tok/s lift measured on the Twin Earth
+extraction schema (Tier 1 alone captured 0% on Qwen3 BPE; Tier 2
+captured 11.3%). When the loaded gguf carries MTP heads, the
+dispatcher additionally routes schema/no-tools requests through
+`generate_sync_mtp` (draft-verify-accept speculative decoding via the
+MTP head). Wiring jump-forward into the MTP loop so the two speedups
+compose is a tracked todo. Telemetry: per-request
+`inference: end-of-generation` line carries `jump_fwd_n` /
+`jump_fwd_runs` / `jump_fwd_bytes_n` so an operator can decompose
+throughput by which path produced which tokens.
 
 `model_family.rs` encodes per-family quirks: `ThinkingControl`, sampling
 defaults, `EmbedQuirks` (`PoolingStrategy`, `NormalizationStrategy`,
@@ -2315,7 +2334,7 @@ file or gap with an entry is sequenced work.
 | `commands.rs` (Tauri) split | `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) | Tauri's command-registration surface; splitting requires re-grouping by feature without breaking the IPC name registry. Coordination cost > current pain. |
 | `atos_cmd/run.rs` split | `sovereign-cli/src/atos_cmd/run.rs` (~4300 lines) | ATOS runner loop (§4.13). Subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, done-marker accept, run-record persistence all cohere as one state machine today. Split is one-file-per-stage when the stage boundaries stabilise. Landed 2026-05-06 in commits 032a0ad + 0229adb; the audit pass that produced this entry caught it. |
 | `mesh_cmd.rs` split | `sovereign-cli/src/mesh_cmd.rs` (~3000 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under mesh self-heal + cloud peering work. |
-| `json_constraint.rs` split | `sovereign-inference/src/json_constraint.rs` (~3100 lines) | LLGuidance JSON-Schema constraint integration. The grammar layer + tokenizer glue + diff coalescer cohere tightly; splitting requires the grammar API to stabilise upstream. |
+| `json_constraint.rs` split | `sovereign-inference/src/json_constraint.rs` (~4950 lines) | In-house JSON-Schema mask + per-state cache + Tier 1/Tier 2 jump-forward (`forced_next_token` / `forced_next_run`, vocab trie). Replaced llguidance after the daemon-side `LlamaSampler::grammar` crash (see `project_grammar_alpha_blocker` note). The mask, vocab trie, FSM byte-walk, and validity-bitmask compute all share state through `mask_cache` — splitting would re-introduce the single-Option cache pollution we just fixed. Defer until the FSM stops gaining schema features. |
 | `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~2600 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Holds lifecycle state machine (try_resume / create / join / leave / shutdown), HTTP listener wiring (7-router merge), background-task spawning (gossip, auto-collaborate, auto-resume, storage-snapshot, newsworthy-watcher), AppState construction with an order-sensitive `CorpusEngine` injection invariant, config reload, and mDNS/relay-IP helpers. Free extractions of pure helpers landed: `mesh_discovery.rs` (relay/IP enumeration); the `start_daemon()` order invariant is pinned by `sovereign-mesh/tests/daemon_wiring.rs` and the port-config plumbing is pinned by `tests/port_config.rs`. The load-bearing splits (`start_daemon()` → `app_state_builder.rs` + `background_tasks.rs`) are unblocked but stay deferred until the `MemberRecord.client_port` wire-protocol work (below) lands and a real two-daemon integration test against `start_daemon` itself can be built. |
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Adapts the local `InferenceProvider` to the `LocalInferenceService` shape that the mesh router calls, *and* synthesizes this node's OICP `CapabilityClaim`s for peer scoring. Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) have been extracted to `oicp_synthesis.rs`. Remaining concerns — wire-shape translation, tool-call envelope parsing (grammar vs. legacy marker), tool-profile policy — are tightly coupled to the `LocalInferenceService` impl and stay in the file until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~1900 lines) | `MeshInferenceProvider` (the OICP-aware router) plus throughput observation, manifest caching, and quarantine policy. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. Further split blocked on `select_peer` (~470 lines) — splitting it requires the OICP-cache key + peer-health weight semantics to stop moving; until then the routing logic reads more clearly as one method. |
