@@ -9,7 +9,8 @@ use async_trait::async_trait;
 use futures::Stream;
 use tokio::sync::Mutex;
 
-use crate::llama::cpp::context::params::LlamaContextParams;
+use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
+use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
@@ -34,6 +35,44 @@ use crate::hardware::HardwareProfile;
 
 struct SlotContext {
     ctx: crate::llama::cpp::context::LlamaContext<'static>,
+    /// **MTP draft context** — `Some` only when the loaded gguf
+    /// carries MTP heads (detected by `MTP` substring in the gguf
+    /// filename and confirmed by a successful
+    /// `LlamaContextType::Mtp` context build at slot load time).
+    ///
+    /// Both contexts borrow from the same `LlamaModel` (the MTP gguf
+    /// packs base layers + MTP-head tensors into one file) and both
+    /// require `with_n_rs_seq(>= n_draft_max)` so partial KV rollback
+    /// after rejected drafts succeeds — without it the target's
+    /// recurrent layers refuse `seq_rm` and the next verify batch
+    /// fails. See `generate_sync_mtp` for the loop, and the
+    /// project_mtp_invariants memory for the precise sequence of API
+    /// calls the loop must make.
+    ///
+    /// `generate_sync` dispatches to `generate_sync_mtp` only when
+    /// this is `Some` AND the request has no `structured_output` and
+    /// no `tools` — JsonConstraint + tool-call JSON tracking on the
+    /// MTP path are deferred to Phase B. Requests that don't qualify
+    /// fall through to the single-token decode path on the target
+    /// context, identical to non-MTP loads.
+    draft_ctx: Option<crate::llama::cpp::context::LlamaContext<'static>>,
+    /// **Persistent MTP session** — built ONCE at slot load via
+    /// `MtpSession::new(&target, &draft, ...)`, reused across every
+    /// request. The session's constructor calls upstream's
+    /// `common_speculative_init`, which installs
+    /// `set_embeddings_pre_norm(true)` on BOTH contexts so subsequent
+    /// decodes compute the pre-norm hidden state that the MTP draft
+    /// side needs. Creating the session AFTER the first decode of a
+    /// request causes the prefill to run without those hooks and the
+    /// next `session.process(batch)` reads garbage / dies silently.
+    /// Upstream's `examples/mtp/main.rs` creates the session at
+    /// startup for the same reason.
+    ///
+    /// `Some` iff `draft_ctx` is also `Some` — the two are built
+    /// together in `ModelSlot::load`. Per-request, only
+    /// `session.begin(seq_id, &tokens)` is called to reset per-seq
+    /// pending-h state.
+    mtp_session: Option<MtpSession>,
     _model: Arc<LlamaModel>,
     /// **Prefix-cache bookkeeping.** The full token sequence
     /// currently resident in `ctx`'s KV cache (positions 0..len).
@@ -271,8 +310,26 @@ impl ModelSlot {
                  model weights and ops stay on CPU"
             );
         }
+        // **MTP detection.** The Unsloth + community MTP-augmented
+        // ggufs (e.g. Qwen3.6-A3B-MTP-Q6_K) pack base layers + MTP
+        // prediction heads into a single file. Detect by `MTP`
+        // substring in the gguf filename — matches the community
+        // naming convention. False positives are non-fatal: the
+        // draft-context constructor returns an error when the gguf
+        // lacks MTP heads, we log + leave `draft_ctx = None`, and the
+        // slot falls back to single-token decode for every request.
+        //
+        // The target context needs `with_n_rs_seq(>= n_draft_max)`
+        // alongside the draft, otherwise partial KV rollback after
+        // rejected drafts fails inside the target's recurrent layers
+        // (Qwen3.6-A3B is hybrid Mamba/attention) and the next verify
+        // batch hits an M-RoPE position assert. n_draft_max=3 is the
+        // sweet spot per upstream; we set n_rs_seq=4 (one slot of
+        // headroom) on both contexts.
+        let is_mtp_model = model_id.to_lowercase().contains("mtp");
+        let mtp_n_rs_seq: u32 = 4;
         let build_ctx_params = |gpu: bool| {
-            LlamaContextParams::default()
+            let mut p = LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
                 // Chat slots are serial: a Mutex<SlotContext> guards the
                 // single context and generate_sync builds LlamaBatch with
@@ -289,7 +346,15 @@ impl ModelSlot {
                 // memory pressure is unchanged — only the Rust-side assertion limit
                 // is relaxed.
                 .with_n_batch(context_size)
-                .with_n_ubatch(512)
+                .with_n_ubatch(512);
+            if is_mtp_model {
+                // Only the target context type stays Default here; the
+                // draft context flips to Mtp below. `n_rs_seq` is what
+                // enables partial seq_rm on recurrent layers — see
+                // [[project_mtp_invariants]].
+                p = p.with_n_rs_seq(mtp_n_rs_seq);
+            }
+            p
                 // llama-cpp-2 defaults both thread counts to 4, which
                 // caps matmul at four cores regardless of machine
                 // size. Embedding prefill and chat prompt processing
@@ -354,6 +419,98 @@ impl ModelSlot {
             embed_compute_backend_label()
         };
 
+        // **MTP draft context.** Built only when the model name signals
+        // MTP. We try once on GPU (same offload policy as target). If
+        // the gguf actually lacks MTP heads — i.e. the name matched but
+        // the file doesn't carry the draft tensors — the binding returns
+        // an error here; log + leave `draft_ctx = None` and the slot
+        // falls back to single-token decode for every request. Don't
+        // fail the slot load over a missed name heuristic.
+        let draft_ctx = if is_mtp_model {
+            let draft_params = LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(context_size))
+                .with_ctx_type(LlamaContextType::Mtp)
+                .with_n_rs_seq(mtp_n_rs_seq)
+                .with_n_batch(context_size)
+                .with_n_ubatch(512)
+                .with_n_threads(n_threads as i32)
+                .with_n_threads_batch(n_threads as i32)
+                .with_offload_kqv(used_gpu);
+            unsafe {
+                let model_ref: &'static LlamaModel =
+                    &*(Arc::as_ptr(&model) as *const LlamaModel);
+                match model_ref.new_context(backend, draft_params) {
+                    Ok(c) => {
+                        tracing::info!(
+                            model_id = %model_id,
+                            n_rs_seq = mtp_n_rs_seq,
+                            "MTP draft context built — speculative-decoding path active for \
+                             requests without structured_output or tools"
+                        );
+                        Some(c)
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            model_id = %model_id,
+                            error = ?e,
+                            "MTP draft context build failed — name heuristic matched but the \
+                             gguf likely lacks MTP heads. Falling back to single-token decode \
+                             for this slot."
+                        );
+                        None
+                    }
+                }
+            }
+        } else {
+            None
+        };
+
+        // **MTP session — built ONCE here, reused across requests.**
+        // `MtpSession::new` calls upstream's `common_speculative_init`,
+        // which installs `set_embeddings_pre_norm(true)` on BOTH
+        // contexts. The hooks have to be in place BEFORE the first
+        // decode on the target — otherwise the prefill runs without
+        // computing pre-norm hidden states, and the subsequent
+        // `session.process(batch)` reads garbage and the C side dies.
+        // Upstream `examples/mtp/main.rs` builds the session at
+        // startup for the same reason.
+        //
+        // n_draft_max = 3 matches upstream's Qwen3.6-A3B-MTP sweet
+        // spot. Overridable via SOVEREIGN_MTP_DRAFT_MAX for
+        // measurement passes; n_rs_seq=4 on both contexts (set above)
+        // gives one slot of headroom for partial KV rollback.
+        let mtp_session = match (is_mtp_model, &draft_ctx) {
+            (true, Some(draft)) => {
+                let n_draft_max: i32 = std::env::var("SOVEREIGN_MTP_DRAFT_MAX")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .filter(|n: &i32| *n >= 1 && *n < (mtp_n_rs_seq as i32))
+                    .unwrap_or(3);
+                match MtpSession::new(&ctx, draft, 1, n_draft_max) {
+                    Ok(s) => {
+                        tracing::info!(
+                            model_id = %model_id,
+                            n_draft_max,
+                            need_embd = s.need_embd(),
+                            "MtpSession created — pre-norm embedding hooks installed on both ctxs"
+                        );
+                        Some(s)
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            model_id = %model_id,
+                            error = ?e,
+                            "MtpSession::new failed — falling back to single-token decode for \
+                             this slot. (draft_ctx was built; this means upstream rejected the \
+                             pairing at common_speculative_init.)"
+                        );
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+
         tracing::info!(
             model_id = %model_id,
             params = model.n_params(),
@@ -361,6 +518,7 @@ impl ModelSlot {
             size_mb = model.size() / (1024 * 1024),
             n_threads,
             compute_backend,
+            mtp = mtp_session.is_some(),
             "ModelSlot::load — slot ready"
         );
 
@@ -386,6 +544,8 @@ impl ModelSlot {
             model: model.clone(),
             context: Mutex::new(SlotContext {
                 ctx,
+                draft_ctx,
+                mtp_session,
                 _model: model,
                 cached_tokens: Vec::new(),
             }),
@@ -488,6 +648,13 @@ impl ModelSlot {
             model: Arc::clone(&model),
             context: Mutex::new(SlotContext {
                 ctx,
+                // Sibling slots (FastShort) are built off the primary
+                // model with different `n_seq_max`/`n_ubatch` for
+                // continuous-batched short calls. MTP is gguf-specific
+                // and only meaningful for serial decode on the primary
+                // slot, so the sibling stays vanilla.
+                draft_ctx: None,
+                mtp_session: None,
                 _model: model,
                 cached_tokens: Vec::new(),
             }),
@@ -505,6 +672,37 @@ impl ModelSlot {
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize, usize)> {
+        // **MTP dispatch (Phase A widened 2026-05-17).** Route to
+        // MTP when the slot has a draft context AND the request has
+        // no tools. Tools stay gated out because the tool-call
+        // JSON-depth tracker that stops generation at the close
+        // brace lives in the single-token path; MTP would emit
+        // unbounded text.
+        //
+        // `structured_output` is intentionally NOT gated. The
+        // `ConstrainedSampler::sample()` applies the JsonConstraint
+        // mask at every verify position, and the FSM state machine
+        // advances in lockstep with what we emit (accepted drafts +
+        // bonus next_token, never rejected drafts). The likely cost
+        // is reduced acceptance rate — the MTP head proposes drafts
+        // without seeing the schema, so masked-out drafts get
+        // rejected at the target's masked sample step. That's a
+        // graceful degradation we want to MEASURE, not avoid.
+        // See `has_schema` / `has_tools` fields on the MTP
+        // end-of-generation log to decompose acceptance rate by
+        // request shape.
+        //
+        // Disable via SOVEREIGN_MTP_DISABLE=1 for A/B measurement.
+        let mtp_disabled = std::env::var("SOVEREIGN_MTP_DISABLE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if !mtp_disabled
+            && slot_ctx.mtp_session.is_some()
+            && request.tools.as_ref().is_none_or(|t| t.is_empty())
+        {
+            return Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks);
+        }
+
         // Split-borrow the SlotContext's disjoint fields. The
         // function body uses both `ctx` (the LlamaContext) and
         // `cached_tokens` (the prefix-cache bookkeeping) as mutable
@@ -860,6 +1058,338 @@ impl ModelSlot {
             );
             output = format!("<think>{output}");
         }
+
+        Ok((output, tokens.len(), n_generated))
+    }
+
+    /// **MTP speculative-decoding loop (Phase A).** Direct port of the
+    /// upstream `examples/mtp` example with our `ConstrainedSampler` in
+    /// place of upstream's bare `LlamaSampler` so per-request sampling
+    /// params (temperature, top-p, …) are honoured. Active only when
+    /// `slot_ctx.draft_ctx.is_some()` — the dispatcher in `generate_sync`
+    /// gates on (no structured_output) AND (no tools), keeping the loop
+    /// free of the JsonConstraint mask + tool-call JSON tracker that
+    /// the single-token path runs.
+    ///
+    /// **Sequence of API calls is load-bearing.** See
+    /// [[project_mtp_invariants]] for the why behind each call; the
+    /// short version:
+    /// 1. Both contexts must be built with `with_n_rs_seq(>= n_draft_max)`.
+    ///    Without it, partial `clear_kv_cache_seq` on rejected drafts
+    ///    fails inside the target's recurrent layers and the next
+    ///    verify batch hits an M-RoPE position assert.
+    /// 2. After prefill decode: `session.process(&prefill)` then
+    ///    `session.begin(seq_id, &tokens)`. `process` injects target's
+    ///    pre-norm h into the draft side; `begin` initialises per-seq
+    ///    MTP state.
+    /// 3. Each loop iteration: `draft` → roll-back draft KV to `n_past`
+    ///    (drops draft()'s AR pre-advancement) → verify decode →
+    ///    `session.process(&verify)` → sample at each position and
+    ///    find longest matching prefix → roll back rejected suffix on
+    ///    BOTH ctxs → `session.accept(seq_id, n_accepted)`.
+    ///
+    /// **Phase A intentionally excludes:**
+    /// - Prefix caching. KVs are cleared at entry; SEP-pipeline phases
+    ///   that benefit most from prefix reuse all run on
+    ///   `generate_sync_batched` via FastShort, not on MTP.
+    /// - JsonConstraint mask, tool-call JSON tracker, think-block
+    ///   budget, sampler-role tracing — Phase B.
+    ///
+    /// **Telemetry:** end-of-generation log with `accept_rate` and
+    /// `tok_per_s` so the value of MTP per request is observable.
+    /// Upstream measured 52% acceptance + 32 tok/s on Strix Halo
+    /// Vulkan with Qwen3.6-A3B-MTP-Q6_K (2026-05-17 validation).
+    fn generate_sync_mtp(
+        model: &LlamaModel,
+        model_id: &str,
+        slot_ctx: &mut SlotContext,
+        request: &CompletionRequest,
+        quirks: &ModelQuirks,
+    ) -> Result<(String, usize, usize)> {
+        // Split-borrow the SlotContext's fields. Holds &mut to both
+        // ctxs simultaneously; the persistent MtpSession holds raw
+        // pointers internally and is not tracked by the borrow checker
+        // — that's what lets all three coexist as &muts on the same
+        // SlotContext.
+        let target_ctx = &mut slot_ctx.ctx;
+        let draft_ctx = slot_ctx
+            .draft_ctx
+            .as_mut()
+            .ok_or_else(|| Error::Inference(
+                "generate_sync_mtp: draft_ctx is None — dispatcher contract violated".into(),
+            ))?;
+        let session = slot_ctx
+            .mtp_session
+            .as_mut()
+            .ok_or_else(|| Error::Inference(
+                "generate_sync_mtp: mtp_session is None — dispatcher contract violated".into(),
+            ))?;
+        let cached_tokens = &mut slot_ctx.cached_tokens;
+        let n_draft_max = session.n_draft_max();
+
+        // Phase A clears both KVs and starts fresh — no prefix cache
+        // integration on this path yet. The non-MTP path keeps
+        // cached_tokens for itself; we clear it here so a return to
+        // the non-MTP path doesn't reuse a stale fingerprint.
+        target_ctx.clear_kv_cache();
+        draft_ctx.clear_kv_cache();
+        cached_tokens.clear();
+
+        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let tokens = model
+            .str_to_token(&full_prompt, AddBos::Always)
+            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        if tokens.is_empty() {
+            return Err(Error::Inference("MTP: empty prompt".into()));
+        }
+
+        let n_ctx = target_ctx.n_ctx() as usize;
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
+
+        // Prefill: decode the entire prompt as one batch with
+        // logits=true on every position. MTP needs that flag set
+        // throughout so pre-norm embeddings can be extracted for the
+        // draft context (`get_embeddings_pre_norm_ith` errors with
+        // `batch.logits[N] != true` otherwise — upstream invariant).
+        //
+        // The MTP session's `set_embeddings_pre_norm(true)` hook was
+        // installed on both contexts at slot-load time (see
+        // ModelSlot::load), so this prefill decode will compute and
+        // store the pre-norm hidden state that `session.process` reads
+        // back below.
+        let n_batch_max = target_ctx.n_batch() as usize;
+        let prefill_capacity = tokens.len().max(n_batch_max);
+        let mut prefill = LlamaBatch::new(prefill_capacity, 1);
+        for (i, &tok) in tokens.iter().enumerate() {
+            prefill
+                .add(tok, i as i32, &[0], true)
+                .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
+        }
+        target_ctx
+            .decode(&mut prefill)
+            .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
+
+        // `process(&prefill)` after every target decode is what injects
+        // target's pre-norm h into the draft side. `begin(seq_id,
+        // &tokens)` then resets per-seq pending-h state for THIS
+        // request (the session itself persists across requests). Both
+        // calls are load-bearing: skipping either makes the draft run
+        // uncalibrated and acceptance collapses.
+        session
+            .process(&prefill)
+            .map_err(|e| Error::Inference(format!("MTP process(prefill) failed: {e:?}")))?;
+        session
+            .begin(0, &tokens)
+            .map_err(|e| Error::Inference(format!("MTP begin failed: {e:?}")))?;
+
+        // Sample the first token from prefill's last logit position.
+        // Use ConstrainedSampler::Explore — no JSON-schema mask is
+        // installed on this path (dispatcher filtered structured
+        // requests out), so the sampler behaves as a plain chain
+        // of {temp/top-p/top-k/penalties} per the request quirks.
+        let mut sampler = build_sampler(model, request, quirks);
+        let mut last_token = sampler.sample(
+            &*target_ctx,
+            prefill.n_tokens() - 1,
+            SamplerRole::Explore,
+        );
+        sampler.accept(last_token);
+
+        let mut output = String::new();
+        let mut decoder = encoding_rs::UTF_8.new_decoder();
+        if let Ok(piece) = model.token_to_piece(last_token, &mut decoder, true, None) {
+            output.push_str(&piece);
+        }
+
+        let mut n_generated: usize = 1;
+        let mut n_past = tokens.len() as i32;
+        let mut n_drafts_total: u64 = 0;
+        let mut n_accepted_total: u64 = 0;
+        let mut n_draft_calls: u64 = 0;
+
+        // Verification batch holds [last_token, drafts...]. Cap at
+        // n_draft_max + 1, bumped to n_batch_max if larger (the
+        // allocation is one-shot, reused via `clear()`).
+        let verify_cap = (n_draft_max as usize + 1).max(n_batch_max);
+        let mut verify = LlamaBatch::new(verify_cap, 1);
+
+        let deadline_secs = inference_deadline_secs();
+        let deadline = Instant::now() + std::time::Duration::from_secs(deadline_secs);
+        let started_at = Instant::now();
+
+        while n_generated < max_tokens {
+            if model.is_eog_token(last_token) {
+                break;
+            }
+            if Instant::now() > deadline {
+                let elapsed = started_at.elapsed().as_secs();
+                tracing::warn!(
+                    model = %model_id,
+                    elapsed_s = elapsed,
+                    deadline_s = deadline_secs,
+                    n_generated,
+                    "mtp:deadline exceeded — clearing KV caches"
+                );
+                target_ctx.clear_kv_cache();
+                draft_ctx.clear_kv_cache();
+                return Err(Error::Inference(format!(
+                    "MTP inference deadline exceeded after {elapsed}s ({n_generated} tokens)"
+                )));
+            }
+
+            // Draft phase: ask the MTP head for up to n_draft_max
+            // candidate tokens given position + last accepted token.
+            // Returned vec can be shorter than n_draft_max if the head
+            // short-circuits on its own confidence drop.
+            let drafts = session
+                .draft(0, n_past, last_token)
+                .map_err(|e| Error::Inference(format!("MTP draft phase failed: {e:?}")))?;
+            n_draft_calls += 1;
+            n_drafts_total += drafts.len() as u64;
+
+            // Build verify batch: [last_token, drafts...], all with
+            // logits=true so the target produces per-position logits
+            // we can sample at to find the longest accepted prefix.
+            verify.clear();
+            verify
+                .add(last_token, n_past, &[0], true)
+                .map_err(|e| Error::Inference(format!("MTP verify batch add: {e}")))?;
+            for (i, d) in drafts.iter().enumerate() {
+                verify
+                    .add(*d, n_past + 1 + i as i32, &[0], true)
+                    .map_err(|e| Error::Inference(format!("MTP verify batch add: {e}")))?;
+            }
+            let n_verify = verify.n_tokens();
+
+            // Roll back draft KV to drop draft()'s AR pre-advancement.
+            // process(verify) below will re-decode the same positions
+            // on the draft side, this time with target's pre-norm h
+            // injected. Without this rollback the draft side's M-RoPE
+            // positions clash on the second pass.
+            draft_ctx
+                .clear_kv_cache_seq(Some(0), Some(n_past as u32), None)
+                .map_err(|e| Error::Inference(format!("MTP draft KV pre-verify rollback failed: {e:?}")))?;
+
+            target_ctx
+                .decode(&mut verify)
+                .map_err(|e| Error::Inference(format!("MTP verify decode failed: {e}")))?;
+            session
+                .process(&verify)
+                .map_err(|e| Error::Inference(format!("MTP process(verify) failed: {e:?}")))?;
+
+            // Sample at each output position; accept the longest prefix
+            // of the drafts where the target's sample equals the draft.
+            // Output index 0 corresponds to the logit AFTER last_token
+            // (predicts draft[0]). On a mismatch, the sampled token is
+            // the bonus (target's correction at the first mismatch
+            // position) — one free correct token per step regardless
+            // of draft acceptance.
+            let mut n_accepted: usize = 0;
+            let mut next_token = sampler.sample(&*target_ctx, 0, SamplerRole::Explore);
+            sampler.accept(next_token);
+            for (i, draft) in drafts.iter().enumerate() {
+                if next_token == *draft {
+                    n_accepted = i + 1;
+                    if (i + 1) < n_verify as usize {
+                        next_token = sampler.sample(
+                            &*target_ctx,
+                            (i + 1) as i32,
+                            SamplerRole::Explore,
+                        );
+                        sampler.accept(next_token);
+                    }
+                } else {
+                    break;
+                }
+            }
+            n_accepted_total += n_accepted as u64;
+
+            // After this step, positions [n_past, n_past + n_accepted]
+            // are committed (last_token + n_accepted drafts); next_token
+            // is the new generated token but its KV entry won't exist
+            // until we use it as last_token next iteration.
+            let new_n_past = n_past + 1 + n_accepted as i32;
+
+            // Roll back rejected suffix on BOTH contexts. After verify
+            // the target and draft both reach [0..n_past+drafts.len()];
+            // keep only up to position new_n_past - 1. Both rollbacks
+            // require n_rs_seq > 0 on their context.
+            if (n_accepted as i32) < drafts.len() as i32 {
+                target_ctx
+                    .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
+                    .map_err(|e| Error::Inference(format!("MTP target KV rollback failed: {e:?}")))?;
+                draft_ctx
+                    .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
+                    .map_err(|e| Error::Inference(format!("MTP draft KV rollback failed: {e:?}")))?;
+            }
+
+            session
+                .accept(0, n_accepted as u16)
+                .map_err(|e| Error::Inference(format!("MTP session.accept failed: {e:?}")))?;
+
+            // Emit accepted drafts + next_token. Each is checked for
+            // EOG independently; we cap at max_tokens and bail at EOG.
+            let mut hit_eos = false;
+            for &tok in &drafts[..n_accepted] {
+                if n_generated >= max_tokens {
+                    break;
+                }
+                let piece = model
+                    .token_to_piece(tok, &mut decoder, true, None)
+                    .unwrap_or_default();
+                output.push_str(&piece);
+                n_generated += 1;
+                if model.is_eog_token(tok) {
+                    hit_eos = true;
+                    break;
+                }
+            }
+            if hit_eos || n_generated >= max_tokens {
+                break;
+            }
+            let piece = model
+                .token_to_piece(next_token, &mut decoder, true, None)
+                .unwrap_or_default();
+            output.push_str(&piece);
+            n_generated += 1;
+            last_token = next_token;
+            n_past = new_n_past;
+        }
+
+        let elapsed_ms = started_at.elapsed().as_millis();
+        let accept_rate = if n_drafts_total > 0 {
+            n_accepted_total as f64 / n_drafts_total as f64
+        } else {
+            0.0
+        };
+        let tok_per_s = if elapsed_ms > 0 {
+            n_generated as f64 * 1000.0 / elapsed_ms as f64
+        } else {
+            0.0
+        };
+        // Per-request shape — lets a log analyzer compute "average
+        // accept_rate when has_schema=true" vs "false" to test the
+        // hypothesis that schema-masked drafts get rejected more
+        // often than unconstrained drafts. Similarly for has_tools
+        // (which currently shouldn't fire — dispatcher gates tools
+        // out — but logging it costs nothing and catches dispatch
+        // bugs).
+        let has_schema = request.structured_output.is_some();
+        let has_tools = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        tracing::info!(
+            model = %model_id,
+            n_draft_calls,
+            drafts_proposed = n_drafts_total,
+            drafts_accepted = n_accepted_total,
+            accept_rate = format!("{accept_rate:.3}"),
+            prompt_tokens = tokens.len(),
+            n_generated,
+            elapsed_ms,
+            tok_per_s = format!("{tok_per_s:.1}"),
+            has_schema,
+            has_tools,
+            "mtp: end-of-generation"
+        );
 
         Ok((output, tokens.len(), n_generated))
     }
