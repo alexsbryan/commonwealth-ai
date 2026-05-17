@@ -183,6 +183,10 @@ pub async fn run_worker_mode_with_signals(
     if let Some(dir) = models_dir {
         state.spawn_disk_dump_watcher(dir);
     }
+    // Capture `proxy_enabled` before `state` moves into worker_router
+    // — the boot log line below needs the flag for operator-side
+    // glassbox visibility.
+    let proxy_enabled = state.inference_proxy.is_some();
     let router = worker_router(state);
 
     let (cert_der, key_der) = self_signed_cert(&blob.seed)?;
@@ -194,10 +198,18 @@ pub async fn run_worker_mode_with_signals(
         .map_err(|e| WorkerDaemonError::Tls(format!("rustls config: {e}")))?;
 
     let addr = bind_addr.unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], WORKER_PORT)));
+    // Stamp the build's git SHA into the boot log so a stale
+    // container running pre-fix code is one grep away from
+    // diagnosis. See `sovereign/crates/sovereign-mesh/build.rs` for
+    // the stamp source. Falls back to "unknown" when `.git` isn't
+    // reachable AND `SOVEREIGN_GIT_SHA` wasn't set at build time.
+    let git_sha: &str = env!("SOVEREIGN_GIT_SHA");
     tracing::info!(
         addr = %addr,
         job_id = %blob.job_id,
         expected_uploads = blob.expected_uploads.len(),
+        git_sha = %git_sha,
+        proxy_enabled,
         "worker daemon listening"
     );
 

@@ -482,48 +482,124 @@ async fn fetch_and_validate(
     url: &str,
     expected_sha: &Sha256Digest,
 ) -> std::result::Result<Vec<u8>, String> {
-    // Brief retry loop — covers two real-world failure modes that
+    // Brief retry loop — covers four real-world failure modes that
     // shouldn't put the pod permanently in "uploads not ready":
     // (1) origin-server cold start (R2 / B2 occasionally 503s on the
-    //     first request to a recently-created object), and (2) DNS
-    //     propagation lag if the URL was just minted. Anything beyond
-    //     these (genuine misconfig, bad signature, file-not-there)
-    //     fails after the retry budget and stays failed.
+    //     first request to a recently-created object).
+    // (2) DNS propagation lag if the URL was just minted.
+    // (3) Body-stream interruption mid-transfer on long downloads
+    //     (a 28 GB GGUF over a 250 Mbps link is ~15 min — long
+    //     enough for an R2 edge to recycle a connection).
+    // (4) Decoded-length mismatch (rare; reqwest surfaces as
+    //     `error decoding response body`).
+    //
+    // **2026-05-16 incident**: a live SEP-on-Vast smoke wedged on a
+    // 28 GB Darwin-36B fetch — `.bytes().await` errored at the
+    // halfway mark and the prior `?`-propagated body-decode error
+    // skipped the retry budget entirely. Two fixes here: (a) stream
+    // via `bytes_stream()` so we don't buffer twice (reqwest's
+    // internal buffer + our Vec), and (b) catch chunk errors inside
+    // the retry loop instead of short-circuiting with `?`.
     //
     // A SHA mismatch is a hard error — no retry. The owner signed the
     // wrong SHA into the blob, or the URL is serving different bytes;
     // both are user-actionable, not transient.
+    use futures::StreamExt;
+    const PROGRESS_INTERVAL: u64 = 256 * 1024 * 1024;
     let attempts = 6;
     let mut delay = std::time::Duration::from_millis(250);
     let mut last_err = String::new();
     for attempt in 1..=attempts {
-        match client.get(url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                let bytes = resp
-                    .bytes()
-                    .await
-                    .map_err(|e| format!("body: {e}"))?
-                    .to_vec();
-                let mut h = Sha256::new();
-                h.update(&bytes);
-                let mut got = [0u8; 32];
-                got.copy_from_slice(&h.finalize());
-                if &got != expected_sha {
-                    return Err(format!(
-                        "sha mismatch: expected {} got {} (not retried — owner-signed SHA is wrong)",
-                        hex::encode(expected_sha),
-                        hex::encode(got),
-                    ));
+        let resp = match client.get(url).send().await {
+            Ok(r) if r.status().is_success() => r,
+            Ok(r) => {
+                last_err = format!("status: {}", r.status());
+                if attempt < attempts {
+                    tokio::time::sleep(delay).await;
+                    delay = (delay * 2).min(std::time::Duration::from_secs(5));
                 }
-                return Ok(bytes);
+                continue;
             }
-            Ok(resp) => last_err = format!("status: {}", resp.status()),
-            Err(e) => last_err = format!("send: {e}"),
+            Err(e) => {
+                last_err = format!("send: {e}");
+                if attempt < attempts {
+                    tokio::time::sleep(delay).await;
+                    delay = (delay * 2).min(std::time::Duration::from_secs(5));
+                }
+                continue;
+            }
+        };
+
+        // Pre-size if Content-Length is honest about the body length.
+        // Saves Vec doublings on a 28 GB transfer — going from a 16
+        // GB capacity to 32 GB on the last push would dominate
+        // memory peak.
+        let content_length = resp.content_length();
+        let mut bytes: Vec<u8> = match content_length {
+            Some(n) => Vec::with_capacity(n as usize),
+            None => Vec::new(),
+        };
+        let mut hasher = Sha256::new();
+        let mut stream = resp.bytes_stream();
+        let mut received: u64 = 0;
+        let mut next_progress_at: u64 = PROGRESS_INTERVAL;
+        let mut chunk_err: Option<String> = None;
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(c) => {
+                    hasher.update(&c);
+                    bytes.extend_from_slice(&c);
+                    received = received.saturating_add(c.len() as u64);
+                    if received >= next_progress_at {
+                        let mb = received / (1024 * 1024);
+                        let pct = content_length
+                            .map(|n| format!("{:.1}%", (received as f64 / n as f64) * 100.0))
+                            .unwrap_or_else(|| "?%".into());
+                        tracing::info!(
+                            mb_received = mb,
+                            percent = %pct,
+                            attempt,
+                            "worker: URL fetch progress"
+                        );
+                        next_progress_at = received.saturating_add(PROGRESS_INTERVAL);
+                    }
+                }
+                Err(e) => {
+                    chunk_err = Some(format!(
+                        "body: {e} (after {} bytes on attempt {attempt})",
+                        received
+                    ));
+                    break;
+                }
+            }
         }
-        if attempt < attempts {
-            tokio::time::sleep(delay).await;
-            delay = (delay * 2).min(std::time::Duration::from_secs(5));
+        if let Some(e) = chunk_err {
+            last_err = e;
+            if attempt < attempts {
+                tracing::warn!(
+                    error = %last_err,
+                    attempt,
+                    remaining = attempts - attempt,
+                    "worker: URL fetch body errored mid-stream — retrying from byte 0"
+                );
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(std::time::Duration::from_secs(5));
+            }
+            continue;
         }
+
+        // Stream consumed cleanly. Validate SHA against the
+        // owner-signed expected digest; mismatch is non-retryable.
+        let mut got = [0u8; 32];
+        got.copy_from_slice(&hasher.finalize());
+        if &got != expected_sha {
+            return Err(format!(
+                "sha mismatch: expected {} got {} (not retried — owner-signed SHA is wrong)",
+                hex::encode(expected_sha),
+                hex::encode(got),
+            ));
+        }
+        return Ok(bytes);
     }
     Err(last_err)
 }
@@ -1228,5 +1304,170 @@ mod tests {
         );
         let resp = app.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    /// Regression for the 2026-05-16 SEP-on-Vast incident: a 28 GB
+    /// R2 fetch errored mid-body and `fetch_and_validate`'s `?` on
+    /// the body-decode error short-circuited the 6-attempt retry
+    /// loop, leaving the pod wedged in "uploads not ready". After
+    /// the streaming rewrite, mid-stream body errors should:
+    ///   1. NOT propagate via `?`
+    ///   2. Trigger a retry from byte 0
+    ///   3. Succeed on a subsequent attempt when the upstream
+    ///      recovers
+    ///
+    /// We exercise this with an axum mock server that closes the
+    /// connection after N bytes on the first 2 attempts, then
+    /// serves the full body on attempt 3. The fetcher must reach a
+    /// good SHA inside the 6-attempt budget.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fetch_and_validate_retries_after_body_stream_error() {
+        use axum::body::Body as AxumBody;
+        use axum::extract::State;
+        use axum::http::StatusCode;
+        use axum::response::Response as AxumResponse;
+        use axum::routing::get;
+        use axum::Router;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use tokio::net::TcpListener;
+        use tokio::sync::oneshot;
+
+        // Payload the "good" attempt serves; SHA matches what we
+        // hand `fetch_and_validate`.
+        let payload: Vec<u8> = (0..256 * 1024u32).map(|i| (i & 0xff) as u8).collect();
+        let mut hasher = Sha256::new();
+        hasher.update(&payload);
+        let mut expected = [0u8; 32];
+        expected.copy_from_slice(&hasher.finalize());
+
+        let attempts_counter = Arc::new(AtomicU32::new(0));
+        let state_payload = Arc::new(payload.clone());
+
+        #[derive(Clone)]
+        struct AppState {
+            attempts: Arc<AtomicU32>,
+            payload: Arc<Vec<u8>>,
+        }
+
+        async fn handler(State(state): State<AppState>) -> AxumResponse {
+            let n = state.attempts.fetch_add(1, Ordering::SeqCst);
+            if n < 2 {
+                // Truncated body: declare a Content-Length but only
+                // send half the bytes, then close. Reqwest surfaces
+                // this as a body-stream error — exactly the failure
+                // mode the incident showed.
+                let half = state.payload.len() / 2;
+                let truncated = state.payload[..half].to_vec();
+                AxumResponse::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Length", state.payload.len().to_string())
+                    .body(AxumBody::from(truncated))
+                    .unwrap()
+            } else {
+                AxumResponse::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Length", state.payload.len().to_string())
+                    .body(AxumBody::from(state.payload.as_ref().clone()))
+                    .unwrap()
+            }
+        }
+
+        let app = Router::new()
+            .route("/blob", get(handler))
+            .with_state(AppState {
+                attempts: attempts_counter.clone(),
+                payload: state_payload,
+            });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = oneshot::channel::<()>();
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = rx.await;
+                })
+                .await
+                .ok();
+        });
+
+        let client = reqwest::Client::builder().build().unwrap();
+        let url = format!("http://{addr}/blob");
+        let result = fetch_and_validate(&client, &url, &expected).await;
+        let _ = tx.send(());
+
+        let bytes = result.expect("retry loop must recover within budget");
+        assert_eq!(bytes.len(), payload.len());
+        assert_eq!(bytes, payload);
+        let attempts = attempts_counter.load(Ordering::SeqCst);
+        assert!(
+            attempts >= 3,
+            "expected at least 3 attempts (2 truncated + 1 good), got {attempts}"
+        );
+    }
+
+    /// A SHA mismatch on a fully-received body must be a hard error
+    /// — no retry. The owner-signed digest is the trust root; if it
+    /// disagrees with what the URL serves, retrying buys nothing and
+    /// burns time.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fetch_and_validate_does_not_retry_on_sha_mismatch() {
+        use axum::body::Body as AxumBody;
+        use axum::http::StatusCode;
+        use axum::response::Response as AxumResponse;
+        use axum::routing::get;
+        use axum::Router;
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use tokio::net::TcpListener;
+        use tokio::sync::oneshot;
+
+        let attempts = Arc::new(AtomicU32::new(0));
+        let attempts_h = attempts.clone();
+        let handler = move || {
+            let a = attempts_h.clone();
+            async move {
+                a.fetch_add(1, Ordering::SeqCst);
+                AxumResponse::builder()
+                    .status(StatusCode::OK)
+                    .body(AxumBody::from("wrong-bytes"))
+                    .unwrap()
+            }
+        };
+        let app = Router::new().route("/blob", get(handler));
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = oneshot::channel::<()>();
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = rx.await;
+                })
+                .await
+                .ok();
+        });
+
+        // Expected digest of a different payload — the URL serves
+        // "wrong-bytes" but we tell the fetcher we expect SHA(b"hi").
+        let mut h = Sha256::new();
+        h.update(b"hi");
+        let mut expected = [0u8; 32];
+        expected.copy_from_slice(&h.finalize());
+
+        let client = reqwest::Client::builder().build().unwrap();
+        let url = format!("http://{addr}/blob");
+        let result = fetch_and_validate(&client, &url, &expected).await;
+        let _ = tx.send(());
+
+        match result {
+            Ok(_) => panic!("expected SHA mismatch error"),
+            Err(e) => assert!(
+                e.contains("sha mismatch"),
+                "expected sha-mismatch error, got: {e}"
+            ),
+        }
+        assert_eq!(
+            attempts.load(Ordering::SeqCst),
+            1,
+            "SHA mismatch must not retry — only one attempt expected"
+        );
     }
 }

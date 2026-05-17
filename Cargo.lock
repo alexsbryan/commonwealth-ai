@@ -9950,6 +9950,7 @@ dependencies = [
  "encoding_rs",
  "futures",
  "llama-cpp-2",
+ "llama-cpp-sys-2",
  "rayon",
  "reqwest 0.12.28",
  "serde",
