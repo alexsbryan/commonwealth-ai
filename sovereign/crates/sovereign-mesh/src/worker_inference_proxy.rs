@@ -193,7 +193,26 @@ async fn forward(
     headers: HeaderMap,
     body: Option<Bytes>,
 ) -> Response {
+    // Entry log + start-time capture. A request that takes 4 min to
+    // complete and a request that's hung for 4 min look identical from
+    // the owner side; pairing this with the exit log below lets an
+    // operator distinguish them with a single `vastai logs | grep
+    // proxy:`. The 2026-05-16 instrumentation audit called this out as
+    // a blind spot worth closing before SEP-on-Vast.
+    let started = std::time::Instant::now();
+    let body_bytes = body.as_ref().map(|b| b.len()).unwrap_or(0);
+    tracing::info!(
+        method = %method,
+        path,
+        request_bytes = body_bytes,
+        "proxy: forwarding to child"
+    );
+
     let Some(proxy) = state.inference_proxy.clone() else {
+        tracing::warn!(
+            path,
+            "proxy: 503 — inference proxy not configured on this pod"
+        );
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             "inference proxy not configured on this pod",
@@ -206,6 +225,11 @@ async fn forward(
         // scheduler's fan-out retry policy treats it as "try later".
         // `Retry-After` is a hint to clients that aren't part of the
         // mesh scheduler (e.g. a curl session during pod warmup).
+        tracing::info!(
+            path,
+            duration_ms = started.elapsed().as_millis() as u64,
+            "proxy: 503 — child not ready (model still warming up)"
+        );
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             [("retry-after", "10")],
@@ -245,7 +269,8 @@ async fn forward(
             tracing::warn!(
                 error = %e,
                 path,
-                "worker_inference_proxy: child daemon request failed"
+                duration_ms = started.elapsed().as_millis() as u64,
+                "proxy: 502 — child daemon request failed (likely SEGV / port closed)"
             );
             return (
                 StatusCode::BAD_GATEWAY,
@@ -259,6 +284,12 @@ async fn forward(
         Ok(s) => s,
         Err(_) => StatusCode::BAD_GATEWAY,
     };
+    tracing::info!(
+        path,
+        status = status.as_u16(),
+        ttfb_ms = started.elapsed().as_millis() as u64,
+        "proxy: headers received from child — streaming body"
+    );
 
     let mut owner_headers = HeaderMap::new();
     for (name, value) in response.headers().iter() {

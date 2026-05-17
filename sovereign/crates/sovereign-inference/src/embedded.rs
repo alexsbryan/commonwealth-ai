@@ -31,6 +31,26 @@ use crate::hardware::HardwareProfile;
 struct SlotContext {
     ctx: llama_cpp_2::context::LlamaContext<'static>,
     _model: Arc<LlamaModel>,
+    /// **Prefix-cache bookkeeping.** The full token sequence
+    /// currently resident in `ctx`'s KV cache (positions 0..len).
+    /// Used by `generate_sync` to compute the longest common prefix
+    /// with each new request's tokenized prompt — when the prefix
+    /// matches, we keep that portion of the KV cache and only
+    /// decode the new tail (positions `lcp..new_len`).
+    ///
+    /// Empty when the cache is known to be clean (post-clear), or
+    /// when the previous call cleared on error. Always updated AFTER
+    /// a successful prompt decode so a mid-decode failure rewinds to
+    /// "cache state unknown → clear next time" rather than leaving a
+    /// stale fingerprint.
+    ///
+    /// 2026-05-17 SEP-pipeline tuning: Phase 3 (cluster naming) has
+    /// 4-7 calls per article sharing ~100% of a 4500-token prompt,
+    /// and Phase 1 has 10 calls per article sharing the ~3000-token
+    /// preamble + schema + exemplars (per-section text appended).
+    /// Prefix-keep saves the prefill cost on every call after the
+    /// first in each phase.
+    cached_tokens: Vec<llama_cpp_2::token::LlamaToken>,
 }
 
 unsafe impl Send for SlotContext {}
@@ -280,6 +300,15 @@ impl ModelSlot {
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
                 .with_op_offload(gpu)
+                // **2026-05-17 KV-Q8 experiment (REVERTED).** Tried
+                // `with_type_k(Q8_0)` + `with_type_v(Q8_0)` to halve
+                // KV bandwidth. SEP profile: total wall -5.6% (within
+                // run variance), Phase 1 -9% throughput regression
+                // (the dominant phase). Net negative on the workload
+                // that matters. Likely the per-token quant/dequant
+                // overhead on Vulkan eats the bandwidth savings.
+                // Reverted to F16 KV. See git history for the
+                // experiment.
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
@@ -354,6 +383,7 @@ impl ModelSlot {
             context: Mutex::new(SlotContext {
                 ctx,
                 _model: model,
+                cached_tokens: Vec::new(),
             }),
             model_id,
             size_bytes,
@@ -455,6 +485,7 @@ impl ModelSlot {
             context: Mutex::new(SlotContext {
                 ctx,
                 _model: model,
+                cached_tokens: Vec::new(),
             }),
             model_id,
             size_bytes,
@@ -466,17 +497,19 @@ impl ModelSlot {
     fn generate_sync(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        slot_ctx: &mut SlotContext,
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize, usize)> {
-        // Clear KV cache before each new inference sequence.
-        // `clear_kv_cache()` is also called at the end of a successful run, but
-        // if a prior call failed mid-decode the cache is left dirty. Pre-clearing
-        // guarantees a clean slate regardless of the prior exit path, preventing
-        // M-RoPE position mismatch errors ("X = 830, Y = 0: X < Y required").
-        ctx.clear_kv_cache();
-
+        // Split-borrow the SlotContext's disjoint fields. The
+        // function body uses both `ctx` (the LlamaContext) and
+        // `cached_tokens` (the prefix-cache bookkeeping) as mutable
+        // references, which Rust's split-borrow rules permit on
+        // direct field access but NOT through a closure capture —
+        // hence taking `&mut SlotContext` here rather than two
+        // separate parameters at the call site.
+        let ctx = &mut slot_ctx.ctx;
+        let cached_tokens = &mut slot_ctx.cached_tokens;
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
 
         let tokens = model
@@ -491,16 +524,81 @@ impl ModelSlot {
             n_ctx,
         )?;
 
+        // **Prefix caching.** Compute the longest common prefix
+        // between what's currently in the KV cache (cached_tokens)
+        // and the new prompt's tokens. Keep the LCP portion of the
+        // cache and only prefill the new tail starting at position
+        // lcp. When lcp == 0 (first call or different prompt), this
+        // degrades to a full clear + full prefill — identical to
+        // the previous unconditional behaviour.
+        //
+        // Defensive full-clear-on-error: cached_tokens is emptied
+        // BEFORE the decode call, then repopulated AFTER success.
+        // A mid-decode failure leaves the cache in an unknown state
+        // but cached_tokens=[] forces the next call to full-clear
+        // first, preventing M-RoPE position mismatches.
+        //
+        // 2026-05-17 SEP-pipeline tuning. See SlotContext.cached_tokens
+        // for the workload justification.
+        let lcp = cached_tokens
+            .iter()
+            .zip(tokens.iter())
+            // Reserve the last position for fresh decode — the model
+            // needs at least one token of new context to produce
+            // logits. If the new prompt is *identical* to the cached
+            // one, force a 1-token re-prefill so the sampler still
+            // has a fresh logit distribution to draw from.
+            .take(tokens.len().saturating_sub(1))
+            .take_while(|(a, b)| a == b)
+            .count();
+        // Clear cached_tokens before any cache mutation — restored on
+        // success path below. If we crash between here and the
+        // post-decode update, next call sees cached_tokens=[] and
+        // does a defensive full clear.
+        cached_tokens.clear();
+        if lcp == 0 {
+            ctx.clear_kv_cache();
+        } else {
+            // Partial keep: drop positions [lcp, end) from the
+            // single sequence we use (seq_id=0). Positions [0, lcp)
+            // stay resident; the new tail decode below starts at
+            // position lcp.
+            if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
+                tracing::warn!(
+                    error = ?e,
+                    lcp,
+                    new_prompt_len = tokens.len(),
+                    "prefix_cache: partial clear failed — falling back to full clear"
+                );
+                ctx.clear_kv_cache();
+            }
+        }
+
         let mut batch = LlamaBatch::new(n_batch, 1);
-        let last_idx = tokens.len() - 1;
-        for (i, &token) in tokens.iter().enumerate() {
+        let tail = &tokens[lcp..];
+        let last_idx = tail.len() - 1;
+        for (j, &token) in tail.iter().enumerate() {
+            let absolute_pos = (lcp + j) as i32;
             batch
-                .add(token, i as i32, &[0], i == last_idx)
+                .add(token, absolute_pos, &[0], j == last_idx)
                 .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
         }
+        tracing::debug!(
+            cache_hit_tokens = lcp,
+            new_prefill_tokens = tail.len(),
+            new_prompt_len = tokens.len(),
+            "prefix_cache: prefill scope"
+        );
 
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
+        // Decode succeeded — record the new cached sequence so the
+        // next call can compute its LCP against this one. The decode
+        // loop below mutates `ctx` (KV grows by `n_generated` after
+        // each token), but we DON'T add generated tokens to
+        // cached_tokens because they're not part of the *prompt* the
+        // next request will share. Only the prompt is comparable.
+        *cached_tokens = tokens.clone();
 
         let mut sampler = build_sampler(model, request, quirks);
         let mut output = String::new();
@@ -4027,7 +4125,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
                 let mut ctx_lock = slot.context.blocking_lock();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
                 let (text, prompt_tokens, completion_tokens) = match result {
                     Ok(Ok(r)) => r,
@@ -4138,7 +4236,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         ModelSlot::generate_sync(
                             &slot.model,
                             &slot.model_id,
-                            &mut ctx_lock.ctx,
+                            &mut *ctx_lock,
                             &request,
                             &quirks,
                         )
@@ -4269,7 +4367,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
 
                 let (text, prompt_tokens, completion_tokens) = match result {
@@ -4344,7 +4442,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
 
                 let (text, prompt_tokens, completion_tokens) = match result {

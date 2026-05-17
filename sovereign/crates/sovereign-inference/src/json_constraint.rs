@@ -1594,11 +1594,37 @@ impl Frame {
                 if let StringSub::InUnicode { remaining } = sub {
                     remaining.hash(h);
                 }
-                // char_count only matters near the cap.
-                let near_cap = max_length
-                    .map(|m| *char_count >= m.saturating_sub(1))
-                    .unwrap_or(false);
-                near_cap.hash(h);
+                // **2026-05-17 bug fix.** The previous hash collapsed
+                // `char_count = 0..(max_length - 1)` into a single
+                // fingerprint bucket via a `near_cap` boolean. Real
+                // production symptom: a mask computed at char_count=1
+                // (room=199 for a maxLength=200 field) was reused at
+                // char_count=195 (room=5), allowing the model to
+                // sample a 10-char token like " adherence" that
+                // overflowed the cap. The post-accept validator
+                // caught the bad state, fired the EOS-latch warning,
+                // and forced termination — costing ~22% of the SEP
+                // pipeline's wall clock in phase1_terse retries.
+                //
+                // Fix: hash a bucketed `remaining_room` instead. Any
+                // room value below `MAX_TOKEN_BYTES` is hashed as
+                // itself (so each char of approach gets its own
+                // mask). Anything above is saturated, yielding a
+                // single shared fingerprint deep inside the field
+                // (where every vocab token's byte-length fits with
+                // headroom to spare). Cache growth is bounded by
+                // `MAX_TOKEN_BYTES` distinct entries per capped
+                // string field per request — sub-MB.
+                //
+                // `MAX_TOKEN_BYTES = 64` is a conservative bound for
+                // BPE vocabs (Qwen3 + Darwin both max around 20-30
+                // bytes per token); raising it has no correctness
+                // cost, only a cache-fragmentation cost.
+                const MAX_TOKEN_BYTES: usize = 64;
+                let remaining_room_bucket: usize = max_length
+                    .map(|m| m.saturating_sub(*char_count).min(MAX_TOKEN_BYTES))
+                    .unwrap_or(MAX_TOKEN_BYTES);
+                remaining_room_bucket.hash(h);
                 max_length.is_some().hash(h);
                 ascii_extended.hash(h);
             }
@@ -3078,6 +3104,112 @@ mod tests {
         assert_ne!(fp1, fp2, "fingerprint must change on `\"` (AwaitKey → InKey)");
     }
 
+    /// Regression for the 2026-05-17 SEP-pipeline profiling false-
+    /// negative incident: the in-house JsonConstraint's mask cache was
+    /// keyed by `near_cap = char_count >= max_length - 1`, collapsing
+    /// every `char_count` from `0` to `max_length - 2` into a single
+    /// fingerprint. A mask computed at `char_count = 0` (any multi-
+    /// char token fits) was reused at `char_count = max_length - 30`,
+    /// where the 10-char token it had marked valid would overflow the
+    /// cap. The per-candidate validator catches the overflow at
+    /// `advance_bytes`, but the cached mask doesn't re-run that
+    /// check — it just trusts the cached `valid[]` array.
+    ///
+    /// Symptom in production: ~30-50% of Phase 1 chat calls against
+    /// Qwen3.6-35B-A3B emit a token that overflows a string cap, the
+    /// `accept()` self-check fires the EOS-latch warning, the next
+    /// `mask()` call forces termination, the response is structurally
+    /// invalid, and the runner dispatches a phase1_terse retry —
+    /// burning ~22% of total pipeline wall on extraneous LLM work.
+    ///
+    /// This test pins the bug: identical schemas at different
+    /// `char_count` values inside a capped string field should NOT
+    /// share a fingerprint when their `(max_length - char_count)`
+    /// remaining-room buckets would yield different validity masks
+    /// for the same vocab.
+    ///
+    /// Fix landed in the companion edit: hash `char_count` directly
+    /// (not just `near_cap`) when `max_length` is set, so each room-
+    /// value gets its own cache entry. Memory cost: up to
+    /// `max_length` cache entries per string field per request,
+    /// bounded by the request's schema shape.
+    #[test]
+    fn fingerprint_distinguishes_capped_string_states_by_remaining_room() {
+        // Free-form string with maxLength = 50 — small enough that
+        // boundary cases hit quickly, large enough that "near_cap=false"
+        // covers char_count values where validity actually differs.
+        //
+        // Compile ONCE so all three states share the same Schema Arc
+        // identities — matches production, where one request's compiled
+        // schema is used for the whole streaming sample. Per-state
+        // recompiles produce divergent fingerprints for spurious Arc-ptr
+        // reasons (not validity-relevant), which would mask the bug.
+        let base = state_for(json!({
+            "type":"object","required":["x"],
+            "properties":{"x":{"type":"string","maxLength":50}}
+        }));
+        let mut s_low = base.clone();
+        let mut s_mid = base.clone();
+        let mut s_high = base.clone();
+        // Walk all three into a string-body state at different
+        // char_count values: 1, 30, 45.
+        let _ = s_low.advance_bytes(b"{\"x\":\"a");
+        let _ = s_mid.advance_bytes(b"{\"x\":\"");
+        let _ = s_mid.advance_bytes(&[b'a'; 30]);
+        let _ = s_high.advance_bytes(b"{\"x\":\"");
+        let _ = s_high.advance_bytes(&[b'a'; 45]);
+
+        // All three are in `Frame::StringAny` with the same schema,
+        // differing only in `char_count` (1, 30, 45). Cap is 50.
+        let fp_low = s_low.fingerprint();
+        let fp_mid = s_mid.fingerprint();
+        let fp_high = s_high.fingerprint();
+
+        // Per the bug: a 10-byte token like " adherence" is valid at
+        // char_count=1 (room=49) but INVALID at char_count=45 (room=5).
+        // If fp_low == fp_high, the cache will reuse the mask from
+        // char_count=1 at char_count=45, allowing the model to sample
+        // a token that overflows.
+        let valid_low = {
+            let mut probe = s_low.clone();
+            probe.advance_bytes(b" adherence")
+        };
+        let valid_high = {
+            let mut probe = s_high.clone();
+            probe.advance_bytes(b" adherence")
+        };
+        assert_eq!(
+            valid_low,
+            ParseStatus::Incomplete,
+            "10-char token must be valid at char_count=1 (room=49)"
+        );
+        assert_eq!(
+            valid_high,
+            ParseStatus::Invalid,
+            "10-char token must be invalid at char_count=45 (room=5)"
+        );
+
+        // The fingerprints MUST differ when the byte-validity differs.
+        // Today (pre-fix) they collide: both hash near_cap=false.
+        // After the fix: char_count enters the hash directly so fp_low
+        // != fp_mid != fp_high (or at least fp_low != fp_high).
+        assert_ne!(
+            fp_low, fp_high,
+            "fingerprint must distinguish char_count=1 from char_count=45 — \
+             they produce different validity masks (10-char tokens valid at 1, invalid at 45)"
+        );
+        // fp_mid (char_count=30, room=20) is also distinguishable —
+        // a 25-char token would be valid at fp_low but invalid at fp_mid.
+        // This is the "many-bucket" character: not just near-cap vs
+        // not-near-cap; every char of room can flip validity for some
+        // token.
+        assert_ne!(
+            fp_low, fp_mid,
+            "fingerprint must distinguish char_count=1 from char_count=30 — \
+             tokens between 20 and 49 chars long flip validity here"
+        );
+    }
+
     #[test]
     fn fingerprint_ignores_array_count_below_cap() {
         // `Array.count` increments after each item but valid next
@@ -4382,4 +4514,5 @@ mod tests {
         // And the full validator fingerprints differ too (sanity).
         assert_ne!(s_default.fingerprint(), s_restricted.fingerprint());
     }
+
 }

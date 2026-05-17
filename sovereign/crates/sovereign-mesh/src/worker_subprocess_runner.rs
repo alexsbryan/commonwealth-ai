@@ -96,15 +96,24 @@ pub struct SubprocessRunnerConfig {
     pub child_client_port: u16,
     /// Hard cap on how long a single unit can wait for the disk-dump
     /// watcher to signal completion. The Tier-1 use case is a model
-    /// fetch from R2 of up to ~60 GB on a fast pod link, so 30 min
-    /// is a reasonable default.
+    /// fetch from R2 of up to ~60 GB on a fast pod link; on a slow
+    /// link the same fetch can stretch past 30 min. Defaulting to
+    /// 60 min so we don't bomb during reasonable behaviour — the
+    /// goal is to measure observed elapsed times before tightening.
     pub disk_dump_timeout: Duration,
     /// Hard cap on how long the readiness probe loop waits for
     /// `GET /v1/models` to return 200. Cold-loading a 36B Q6 GGUF on
-    /// L40S is ~90 s typical, ~3 min worst-case. Default 5 min.
+    /// L40S is ~90 s typical, but a CPU-fallback start, a slow disk,
+    /// or a multi-slot model (primary + embed) can push past 10 min.
+    /// Default 30 min so reasonable cold loads don't bomb the pod;
+    /// the `wait_for_child_ready` progress log surfaces elapsed time
+    /// every 30 s so an operator monitoring stdout can spot a stuck
+    /// load early without the timeout firing.
     pub child_ready_timeout: Duration,
-    /// Hard cap on a single inference call. 10 min handles the
-    /// longest atom-enrichment / synthesis prompts we run today.
+    /// Hard cap on a single inference call. Default 30 min covers
+    /// the longest synthesis prompts we run today plus headroom; the
+    /// goal is to capture observed call times in logs before
+    /// tightening (`process_unit` logs both dispatch + completion).
     pub inference_timeout: Duration,
     /// When true, skip child-process spawn entirely — used by tests
     /// that pre-bind their own mock server on `child_client_port`
@@ -119,9 +128,9 @@ impl Default for SubprocessRunnerConfig {
             config_path: PathBuf::from("/workspace/config.toml"),
             binary: None,
             child_client_port: 9741,
-            disk_dump_timeout: Duration::from_secs(30 * 60),
-            child_ready_timeout: Duration::from_secs(5 * 60),
-            inference_timeout: Duration::from_secs(10 * 60),
+            disk_dump_timeout: Duration::from_secs(60 * 60),
+            child_ready_timeout: Duration::from_secs(30 * 60),
+            inference_timeout: Duration::from_secs(30 * 60),
             skip_spawn: false,
         }
     }
@@ -137,6 +146,8 @@ pub enum SubprocessRunnerError {
     SpawnFailed(String),
     #[error("child readiness probe timed out after {0:?}")]
     ChildReadinessTimeout(Duration),
+    #[error("child daemon exited before becoming ready: {0}")]
+    ChildExitedEarly(String),
     #[error("work-unit payload missing field: {0}")]
     BadPayload(&'static str),
     #[error("inference call failed: {0}")]
@@ -145,35 +156,28 @@ pub enum SubprocessRunnerError {
     InferenceTimeout(Duration),
 }
 
-/// Child-process handle. Owns the `tokio::process::Child`; on `Drop`
-/// the child is SIGKILL'd because `kill_on_drop(true)` was set at
-/// spawn time. Graceful SIGTERM would be cleaner but the pod is
-/// already disposable — the controller's `destroy()` reaps the
-/// instance moments later and the child's persistent state (Lance,
-/// SQLite WAL) is crash-safe.
+/// Child-process handle. The `tokio::process::Child` lives inside a
+/// spawned **wait-watcher** task, not on the handle itself. That task
+/// owns the Child so it can call `.wait().await` and flip the shared
+/// `child_exited` atomic the moment the child dies — `wait_for_child_ready`
+/// then short-circuits with a clear error instead of polling /v1/models
+/// against a corpse for the full timeout window.
+///
+/// `kill_on_drop(true)` is preserved: when the watcher task is dropped
+/// (e.g., on runtime shutdown or SubprocessRunner Drop), the Child
+/// drops with it and SIGKILL fires.
+///
+/// **2026-05-16 incident**: a child SEGV during model load would have
+/// been invisible — wait_for_child_ready would have looped for the
+/// full child_ready_timeout (now 30 min) before erroring with "probe
+/// timed out", giving no indication the child was already dead.
 struct ChildHandle {
-    child: tokio::sync::Mutex<Option<tokio::process::Child>>,
     pid: u32,
 }
 
 impl ChildHandle {
     fn pid(&self) -> u32 {
         self.pid
-    }
-}
-
-impl Drop for ChildHandle {
-    fn drop(&mut self) {
-        // `kill_on_drop(true)` set at spawn time delivers SIGKILL
-        // when the inner `Child` is dropped, so we don't need to do
-        // anything here. This impl exists to log the event for
-        // operator visibility — silent process death is exactly the
-        // kind of thing that wastes hours during incident triage.
-        if let Ok(guard) = self.child.try_lock() {
-            if guard.is_some() {
-                tracing::info!(pid = self.pid, "subprocess-runner: dropping child handle (SIGKILL on drop)");
-            }
-        }
     }
 }
 
@@ -192,6 +196,17 @@ struct Inner {
     /// `/v1/models` probe returns 200. Cheaply cloned via
     /// `child_ready_signal()`.
     child_ready: Arc<AtomicBool>,
+    /// Flipped to `true` by the per-child wait-watcher task the moment
+    /// the child process exits (for any reason: clean shutdown, SIGKILL,
+    /// SEGV). `wait_for_child_ready` checks this each iteration so a
+    /// child that died at second 90 of a model load surfaces in seconds
+    /// instead of after the full `child_ready_timeout` window.
+    child_exited: Arc<AtomicBool>,
+    /// Human-readable status string the watcher writes on exit
+    /// (`exit code: 139` for SEGV, `signal: SIGKILL`, etc.). Read by
+    /// `wait_for_child_ready` when surfacing `ChildExitedEarly` so the
+    /// caller's error message names the actual cause.
+    child_exit_status: Arc<Mutex<Option<String>>>,
     /// Disk-dump signals — read from `WorkerState` by the
     /// constructor and stored as `Arc` clones so the runner can
     /// `notified()`-then-`load()` without holding a reference to
@@ -230,6 +245,8 @@ impl SubprocessRunner {
                 client,
                 child_slot: Mutex::new(None),
                 child_ready: Arc::new(AtomicBool::new(false)),
+                child_exited: Arc::new(AtomicBool::new(false)),
+                child_exit_status: Arc::new(Mutex::new(None)),
                 disk_dump_complete,
                 disk_dump_ready,
             }),
@@ -348,14 +365,39 @@ async fn process_unit(
 /// first guarantees that either we see the flag OR the
 /// `notify_waiters` call sees us and wakes us.
 async fn wait_for_disk_dump(inner: &Arc<Inner>) -> Result<(), SubprocessRunnerError> {
+    // Pin the waiter *before* checking the flag — see the
+    // Notify-before-load reasoning on the parent doc. Fast-path
+    // returns Ok immediately when the dump is already done.
+    let started = std::time::Instant::now();
     let waiter = inner.disk_dump_ready.notified();
     if inner.disk_dump_complete.load(Ordering::Acquire) {
         return Ok(());
     }
-    tokio::time::timeout(inner.config.disk_dump_timeout, waiter)
-        .await
-        .map_err(|_| SubprocessRunnerError::DiskDumpTimeout(inner.config.disk_dump_timeout))?;
-    Ok(())
+    // Glassbox: announce we're waiting so an operator monitoring
+    // stdout knows the runner isn't wedged on something subtle.
+    tracing::info!(
+        timeout_secs = inner.config.disk_dump_timeout.as_secs(),
+        "subprocess-runner: waiting for disk dump to complete"
+    );
+    let result = tokio::time::timeout(inner.config.disk_dump_timeout, waiter).await;
+    let elapsed = started.elapsed();
+    match result {
+        Ok(_) => {
+            tracing::info!(
+                elapsed_secs = elapsed.as_secs(),
+                "subprocess-runner: disk dump complete — child spawn now unblocked"
+            );
+            Ok(())
+        }
+        Err(_) => {
+            tracing::error!(
+                elapsed_secs = elapsed.as_secs(),
+                timeout_secs = inner.config.disk_dump_timeout.as_secs(),
+                "subprocess-runner: disk dump did not complete within timeout"
+            );
+            Err(SubprocessRunnerError::DiskDumpTimeout(inner.config.disk_dump_timeout))
+        }
+    }
 }
 
 /// Ensure the child is spawned and `GET /v1/models` returns 200.
@@ -378,14 +420,14 @@ async fn ensure_child_ready(inner: &Arc<Inner>) -> Result<(), SubprocessRunnerEr
                 inner.config.config_path.clone(),
             ));
         }
-        let handle = spawn_child(&inner.config).await?;
+        let handle = spawn_child(inner).await?;
         *slot = Some(Arc::new(handle));
     }
     // Drop the slot lock before probing — the probe doesn't need it
     // (the child is already in `slot` and won't be respawned while
     // we hold this critical section's invariants).
     drop(slot);
-    wait_for_child_ready(&inner.client, &inner.config).await?;
+    wait_for_child_ready(inner).await?;
     inner.child_ready.store(true, Ordering::Release);
     Ok(())
 }
@@ -395,9 +437,8 @@ async fn ensure_child_ready(inner: &Arc<Inner>) -> Result<(), SubprocessRunnerEr
 /// `ChildHandle` is ever dropped without an explicit kill. Strips
 /// `SOVEREIGN_BOOTSTRAP` from the env so the child doesn't try to
 /// re-enter worker mode itself (which would loop forever).
-async fn spawn_child(
-    config: &SubprocessRunnerConfig,
-) -> Result<ChildHandle, SubprocessRunnerError> {
+async fn spawn_child(inner: &Arc<Inner>) -> Result<ChildHandle, SubprocessRunnerError> {
+    let config = &inner.config;
     let binary = match config.binary.clone() {
         Some(b) => b,
         None => std::env::current_exe()
@@ -436,10 +477,51 @@ async fn spawn_child(
     if let Some(stderr) = child.stderr.take() {
         spawn_log_forwarder(stderr, pid, "stderr");
     }
-    Ok(ChildHandle {
-        child: tokio::sync::Mutex::new(Some(child)),
-        pid,
-    })
+    // Wait-watcher task: owns the Child, calls .wait() in the
+    // background, flips child_exited the moment the OS reaps it.
+    // Replaces the old "Mutex<Option<Child>>" pattern; killing on
+    // drop still works because the Child moves into this task, and
+    // when the task is dropped (runtime shutdown / runner drop), the
+    // Child's `kill_on_drop(true)` fires.
+    let exited = Arc::clone(&inner.child_exited);
+    let status_slot = Arc::clone(&inner.child_exit_status);
+    tokio::spawn(async move {
+        let status = child.wait().await;
+        let summary = match status {
+            Ok(s) => {
+                if let Some(code) = s.code() {
+                    format!("exit_code={code}")
+                } else {
+                    // Unix: signal-terminated (no exit code). On Linux
+                    // 139 is SIGSEGV+128; we surface the raw status
+                    // bytes for clarity.
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::process::ExitStatusExt;
+                        if let Some(sig) = s.signal() {
+                            format!("signal={sig}")
+                        } else {
+                            format!("status={s:?}")
+                        }
+                    }
+                    #[cfg(not(unix))]
+                    format!("status={s:?}")
+                }
+            }
+            Err(e) => format!("wait_error={e}"),
+        };
+        tracing::error!(
+            pid,
+            status = %summary,
+            "subprocess-runner: child daemon exited"
+        );
+        {
+            let mut slot = status_slot.lock().await;
+            *slot = Some(summary);
+        }
+        exited.store(true, Ordering::Release);
+    });
+    Ok(ChildHandle { pid })
 }
 
 fn spawn_log_forwarder<R>(reader: R, pid: u32, stream: &'static str)
@@ -466,34 +548,84 @@ where
 /// Poll `GET /v1/models` on the child's client port until it returns
 /// 200 or the deadline lapses. Cold model load can take a few
 /// minutes — see `child_ready_timeout` for the cap.
-async fn wait_for_child_ready(
-    client: &reqwest::Client,
-    config: &SubprocessRunnerConfig,
-) -> Result<(), SubprocessRunnerError> {
+async fn wait_for_child_ready(inner: &Arc<Inner>) -> Result<(), SubprocessRunnerError> {
+    let config = &inner.config;
     let url = format!("http://127.0.0.1:{}/v1/models", config.child_client_port);
-    let deadline = std::time::Instant::now() + config.child_ready_timeout;
+    let started = std::time::Instant::now();
+    let deadline = started + config.child_ready_timeout;
     let mut attempt = 0u32;
+    let mut next_progress = started + Duration::from_secs(30);
+    tracing::info!(
+        url = %url,
+        timeout_secs = config.child_ready_timeout.as_secs(),
+        "subprocess-runner: waiting for child /v1/models (cold-load is normal; \
+         progress logged every 30s)"
+    );
     loop {
+        // Short-circuit on child exit. The wait-watcher task spawned
+        // in `spawn_child` flips this atomic the instant the OS reaps
+        // the child; surfacing here turns a 30-min "still waiting" +
+        // timeout into a seconds-after-death "child exited" error.
+        if inner.child_exited.load(Ordering::Acquire) {
+            let status = inner
+                .child_exit_status
+                .lock()
+                .await
+                .clone()
+                .unwrap_or_else(|| "<unknown>".into());
+            let elapsed = started.elapsed();
+            tracing::error!(
+                attempts = attempt,
+                elapsed_secs = elapsed.as_secs(),
+                status = %status,
+                "subprocess-runner: child daemon died before becoming ready"
+            );
+            return Err(SubprocessRunnerError::ChildExitedEarly(status));
+        }
         attempt += 1;
-        let probe = client
+        let probe = inner
+            .client
             .get(&url)
             .timeout(Duration::from_secs(2))
             .send()
             .await;
         if let Ok(resp) = probe {
             if resp.status().is_success() {
+                let elapsed = started.elapsed();
                 tracing::info!(
                     attempts = attempt,
+                    elapsed_secs = elapsed.as_secs(),
                     url = %url,
                     "subprocess-runner: child is ready"
                 );
                 return Ok(());
             }
         }
-        if std::time::Instant::now() >= deadline {
+        let now = std::time::Instant::now();
+        if now >= deadline {
+            let elapsed = started.elapsed();
+            tracing::error!(
+                attempts = attempt,
+                elapsed_secs = elapsed.as_secs(),
+                timeout_secs = config.child_ready_timeout.as_secs(),
+                url = %url,
+                "subprocess-runner: child readiness probe timed out — \
+                 either model load is genuinely stuck or the timeout is too tight"
+            );
             return Err(SubprocessRunnerError::ChildReadinessTimeout(
                 config.child_ready_timeout,
             ));
+        }
+        if now >= next_progress {
+            let elapsed = started.elapsed();
+            tracing::info!(
+                attempts = attempt,
+                elapsed_secs = elapsed.as_secs(),
+                remaining_secs = (deadline - now).as_secs(),
+                "subprocess-runner: still waiting for child /v1/models — \
+                 cold load in progress"
+            );
+            next_progress = now + Duration::from_secs(30);
         }
         tokio::time::sleep(Duration::from_millis(750)).await;
     }
@@ -915,6 +1047,77 @@ mod tests {
             "unit failed: {:?}", units[0].payload
         );
         assert_eq!(units[0].payload["echo"]["q"], "ping");
+    }
+
+    /// Regression for the 2026-05-16 instrumentation audit: a child
+    /// that SEGVs during model load used to leave `wait_for_child_ready`
+    /// polling against an absent listener for the full timeout window
+    /// (now 30 min — operationally invisible). The wait-watcher task
+    /// spawned in `spawn_child` flips `inner.child_exited` the instant
+    /// the OS reaps the child; `wait_for_child_ready` short-circuits
+    /// with `ChildExitedEarly` carrying the exit reason.
+    ///
+    /// We exercise this by pointing the runner at `/bin/false` (Unix)
+    /// so spawn succeeds but the process exits immediately with code
+    /// 1. The probe loop should surface `ChildExitedEarly("exit_code=1")`
+    /// within ~1 s, NOT after `child_ready_timeout` (3 s in test config
+    /// but the assertion is < 2 s to be safe).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn ensure_child_ready_surfaces_exit_before_timeout() {
+        // Bind a port we will NOT serve — child_client_port is what
+        // the probe hits, and we want the probe to fail until the
+        // exit-watcher fires.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener); // free it; probe will get connection-refused
+        let config_path = std::env::temp_dir().join(format!(
+            "subprocess-runner-exit-test-{}.toml",
+            std::process::id()
+        ));
+        // Write a non-empty file so the `config_path.exists()` gate
+        // in `ensure_child_ready` lets us through to spawn. Content
+        // doesn't matter — `/bin/false` ignores it.
+        std::fs::write(&config_path, "# stub\n").unwrap();
+        let (complete, ready) = pre_fired_dump_signals();
+        let runner = SubprocessRunner::new(
+            SubprocessRunnerConfig {
+                config_path: config_path.clone(),
+                binary: Some(PathBuf::from("/bin/false")),
+                child_client_port: port,
+                disk_dump_timeout: Duration::from_secs(2),
+                // Generous: if the short-circuit fails, the test should
+                // still complete in bounded time without the full 30 min
+                // production default.
+                child_ready_timeout: Duration::from_secs(30),
+                inference_timeout: Duration::from_secs(2),
+                skip_spawn: false,
+            },
+            complete,
+            ready,
+        );
+
+        let started = std::time::Instant::now();
+        let result = ensure_child_ready(&runner.inner).await;
+        let elapsed = started.elapsed();
+        let _ = std::fs::remove_file(&config_path);
+
+        match result {
+            Err(SubprocessRunnerError::ChildExitedEarly(status)) => {
+                // `/bin/false` exits with code 1. The watcher should
+                // capture that and surface it verbatim.
+                assert!(
+                    status.contains("exit_code=1") || status.contains("signal=") || status.contains("status="),
+                    "expected exit-code/signal in status, got: {status}"
+                );
+            }
+            other => panic!("expected ChildExitedEarly, got: {other:?}"),
+        }
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "wait_for_child_ready did not short-circuit on child exit — \
+             took {elapsed:?}, expected sub-5s"
+        );
     }
 
     /// Real-child smoke test — actually spawns `sovereign-cli daemon

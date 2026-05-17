@@ -218,10 +218,21 @@ impl Default for ControllerConfig {
     fn default() -> Self {
         Self {
             address_poll_interval: Duration::from_secs(5),
-            address_poll_timeout: Duration::from_secs(180),
+            // Vast occasionally takes 5+ minutes to assign a public
+            // address on a busy host. 10 min default keeps the
+            // controller from bombing during reasonable Vast latency;
+            // the goal is to measure observed times before tightening.
+            address_poll_timeout: Duration::from_secs(600),
             health_poll_interval: Duration::from_secs(3),
-            health_poll_timeout: Duration::from_secs(300),
-            uploads_poll_timeout: Duration::from_secs(30 * 60),
+            // The pod-side worker daemon binds + serves quickly
+            // (~seconds) but the *entrypoint script* runs container
+            // boot + rclone fetch beforehand. Default 15 min so an
+            // 80 GB model fetch from R2 doesn't bomb the health
+            // wait; tighten once we have measurements.
+            health_poll_timeout: Duration::from_secs(900),
+            // 60 min mirrors `SubprocessRunnerConfig.disk_dump_timeout`
+            // — the slower side of the same fetch.
+            uploads_poll_timeout: Duration::from_secs(60 * 60),
             completed_poll_interval: Duration::from_secs(30),
             // 12 hours: a long SEP fanout finishes in ~6h on an L40S;
             // doubling that leaves headroom for retries + owner restart.

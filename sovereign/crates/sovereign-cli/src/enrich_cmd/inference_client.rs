@@ -643,6 +643,19 @@ impl DaemonInferenceClient {
         } else {
             0.0
         };
+        // Extract finish_reason from choices[0].finish_reason. Standard
+        // OpenAI shape: "stop" (EOS), "length" (max_tokens), "tool_calls".
+        // Added 2026-05-17 during the SEP-pipeline profiling pass —
+        // distinguishing EOS vs Length is essential for diagnosing
+        // truncated-output failures (we were seeing 361-token completions
+        // with no signal whether the model hit EOS or the daemon clamped
+        // max_tokens). Daemon-side population: see
+        // `sovereign_mesh::inference_adapter::translate_finish_reason`.
+        let finish_reason = v
+            .pointer("/choices/0/finish_reason")
+            .and_then(|s| s.as_str())
+            .unwrap_or("?")
+            .to_string();
         tracing::info!(
             phase = %phase_label,
             model = %model_label,
@@ -650,6 +663,7 @@ impl DaemonInferenceClient {
             total_tokens,
             completion_tokens,
             tok_per_s = format!("{tok_per_s:.1}"),
+            finish_reason = %finish_reason,
             "inference_client: /v1/chat/completions ok"
         );
         Ok(content.to_string())
@@ -946,7 +960,17 @@ impl DaemonInferenceClient {
 
     /// Call `/v1/embeddings` for a single text. Uses a shorter timeout
     /// than chat since embeds are fast.
+    ///
+    /// **Per-call timing logged at info** under the
+    /// `inference_client: /v1/embeddings ok` event — same shape as the
+    /// chat-call telemetry at the top of this module, so a single log
+    /// parser (e.g. `scripts/profile-enrich.py`) can aggregate both
+    /// surfaces uniformly. Added 2026-05-17 during the SEP-pipeline
+    /// profiling pass; the absence of this log line was concealing
+    /// how much wall time the per-item embed pattern was costing.
     pub async fn embed_one(&self, text: &str) -> Result<Vec<f32>> {
+        let started = std::time::Instant::now();
+        let text_len_chars = text.chars().count();
         let url = format!("{}/v1/embeddings", self.base_url);
         let body = serde_json::json!({
             "model": self.embed_model,
@@ -986,10 +1010,19 @@ impl DaemonInferenceClient {
                     "embed response missing data[0].embedding: {payload}"
                 ))
             })?;
-        Ok(arr
+        let out: Vec<f32> = arr
             .iter()
             .map(|x| x.as_f64().unwrap_or(0.0) as f32)
-            .collect())
+            .collect();
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        tracing::info!(
+            model = %self.embed_model,
+            elapsed_ms,
+            text_len_chars,
+            embed_dim = out.len(),
+            "inference_client: /v1/embeddings ok"
+        );
+        Ok(out)
     }
 
     /// Wrap this client as the `(EmbedFn, ChatCompletionFn)` pair that
