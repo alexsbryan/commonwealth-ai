@@ -1,0 +1,100 @@
+# Scope classifier examples — consumed by
+# `sovereign_core::scope_classifier::PersonalScopeClassifier`.
+#
+# Binary classifier for the orthogonal-to-intent axis: does this
+# query ask about the user's own history (chats, journals, notes,
+# prior decisions) or about external knowledge (facts, definitions,
+# how-tos, syntheses against public sources)?
+#
+# Implementation: centroid-of-embeddings. At boot we embed every
+# example, take the per-class mean, and L2-normalise to get one
+# centroid per class. At query time we score
+# `cos(q, c_personal) - cos(q, c_external)` and return
+# `Some("personal")` when the margin clears a threshold AND the
+# personal similarity itself is high enough that generic queries
+# matching neither centroid don't false-positive into personal.
+#
+# Authoring principles:
+#   1. NEVER paraphrase a question from a benchmark you intend to
+#      evaluate this classifier on. Coaching to the test is worse
+#      than missing the question — it produces inflated numbers
+#      that hide the architectural problem.
+#   2. Cover the natural QUERY SHAPES, not specific domains. A
+#      shape is "first-person possessive recall", "view evolution",
+#      "conversational anchor". A domain is "books" or "pickleball".
+#      Use varied domains so shape is the only signal that
+#      generalises.
+#   3. ~20 per class is enough — embedding centroid converges fast
+#      on a single binary axis. More examples mostly help with
+#      ambiguous border cases.
+#   4. Personal examples should NOT all begin "I" or "my". Mix in
+#      conversational referents ("did you and I talk about…"),
+#      reflexive patterns ("what have I been turning over"), and
+#      relational shapes ("who do I bring up most").
+#   5. External examples should span definitional, procedural,
+#      historical, comparative, and quantitative — the full
+#      surface of knowledge-query the system already serves well.
+
+[personal]
+examples = [
+    # first-person possessive + content recall
+    "What did I say last week about my garden?",
+    "Remind me what I shared about my mother.",
+    # conversational anchor
+    "Did I ever tell you about my trip to Kyoto?",
+    "Across our conversations, what hobbies have I picked up?",
+    "Did I mention anything about backpacking before?",
+    # reflexive / introspective pattern
+    "What have I been turning over in my head lately?",
+    "Where am I usually stuck in my thinking?",
+    "What ideas have I been wrestling with lately?",
+    # view evolution
+    "How has my mood about this project shifted?",
+    "Has my position on remote work changed over the past year?",
+    # recurring / aggregation
+    "Are there themes I keep returning to in our chats?",
+    "What patterns do you notice in how I describe my work?",
+    # past-action recall
+    "What did I decide about the move?",
+    "When did I commit to changing my diet?",
+    # existential / has-it-ever
+    "Have I ever talked about chess openings?",
+    "Did we discuss what I want to do after the sabbatical?",
+    # emotional / disclosure recall
+    "What kinds of things make me anxious in past chats?",
+    "What have I shared about feeling overwhelmed?",
+    # relational
+    "Which of my friendships have I described as hard?",
+    "Who are the people I bring up the most?",
+]
+
+[external]
+examples = [
+    # definitional
+    "What is the capital of Mongolia?",
+    "What does the Stoic concept of amor fati mean?",
+    # procedural / how-to
+    "How does TCP congestion control work?",
+    "How do hydraulic brakes work on a bicycle?",
+    "How does a quartz watch keep time?",
+    # comparative
+    "Compare Kantian and utilitarian ethics.",
+    "Explain the difference between RNA and DNA.",
+    # historical
+    "When did the Roman Empire fall?",
+    "Tell me about the Treaty of Westphalia.",
+    "When did Japan open to the West?",
+    "What's the history of the printing press?",
+    # authorial / cultural lookup
+    "Who wrote Moby Dick?",
+    "Summarize the plot of Anna Karenina.",
+    # scientific / quantitative
+    "Why is the sky blue?",
+    "How many planets are in our solar system?",
+    "What's the boiling point of mercury?",
+    "What is the lifespan of a redwood tree?",
+    "Explain the Doppler effect.",
+    "What does the term entropy mean in physics?",
+    # health / general knowledge
+    "What are the symptoms of vitamin D deficiency?",
+]

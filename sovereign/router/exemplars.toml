@@ -527,3 +527,85 @@ query = "How are you doing today?"
 [[example]]
 intent = "simple_query"
 query = "What's 17 times 24?"
+
+# ── conversation-history KQ — content recall against the user's
+#    own chat corpus. Disambiguates from `metalingual_query`
+#    (which is about how WE NAME things in our system) by
+#    pointing at CONTENT the user discussed in past sessions.
+#
+# Misroute sources fixed by these (per routing-only bench
+# 2026-05-17, conversation/questions):
+#   - "When did I decide to pause hiring..." was routed
+#     ExpressiveQuery via "Why is this job decision feeling so
+#     heavy?" — that's emotional disclosure, this is content recall.
+#   - "Have I ever talked about <topic>" was routed
+#     MetalingualQuery via "What did we discuss earlier about
+#     routing?" — routing is a system word; <topic> is content.
+#   - "What did I work through in chats over the past week" was
+#     routed MetalingualQuery via the same exemplar.
+
+# Each of these carries `scope = "personal"` — an orthogonal axis
+# the embed router forwards to RouterClassification.scope.
+# Downstream retrieval (prepare_knowledge_context +
+# apply_atlas_grounding) reads scope to restrict to user-owned
+# corpora instead of competing in the global cosine race against
+# wikipedia / SEP / etc.
+#
+# Design principle: this set is intentionally small (one exemplar
+# per query-shape axis) and uses domains DISJOINT from the
+# conversation-history bench so the router learns the SHAPE rather
+# than memorising bench wording. When adding to this set, ask:
+# does this exemplar cover a new query shape, or is it a paraphrase
+# of an existing one? Only the former earns a slot.
+#
+# Axes covered (one exemplar each):
+#   A. First-person possessive + factual recall on a content area
+#      that's mine ("what did I say about my X")
+#   B. Explicit conversational referent ("in our chats / past
+#      conversations / we've discussed")
+#   C. Existential negation / has-it-ever-come-up
+#   D. Reflexive pattern over time ("what have I been struggling
+#      with / drawn to / wrestling with")
+#   E. View evolution ("how has my thinking about X changed")
+#   F. Recurring / aggregation ("what tensions keep showing up")
+#
+# Intent labels mix knowledge_query (single-shot recall) and
+# deep_query (multi-conversation synthesis) — but the scope tag is
+# the load-bearing signal, so both intents enter the same
+# personal-corpus retrieval filter downstream.
+
+# A. first-person possessive + factual recall
+[[example]]
+intent = "knowledge_query"
+scope = "personal"
+query = "What did I say about my houseplant care routine?"
+
+# B. explicit conversational referent
+[[example]]
+intent = "knowledge_query"
+scope = "personal"
+query = "Across our past conversations, which hiking trails have I mentioned?"
+
+# C. existential negation / has-it-ever-come-up
+[[example]]
+intent = "knowledge_query"
+scope = "personal"
+query = "Have I ever brought up sourdough bread baking in any chat?"
+
+# D. reflexive pattern over time
+[[example]]
+intent = "deep_query"
+scope = "personal"
+query = "What have I been wrestling with creatively over the last few months?"
+
+# E. view evolution
+[[example]]
+intent = "deep_query"
+scope = "personal"
+query = "How has my thinking about commuting changed since I moved?"
+
+# F. recurring / aggregation
+[[example]]
+intent = "deep_query"
+scope = "personal"
+query = "What tensions keep showing up in how I describe my mornings?"

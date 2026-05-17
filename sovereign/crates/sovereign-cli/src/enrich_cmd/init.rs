@@ -1086,8 +1086,24 @@ fn parse_args(args: &[String]) -> Result<ParsedInit, String> {
                 .get("top_in_corpus_by_centrality")
                 .and_then(|x| x.as_array())
             {
+                // Two producers, two shapes — accept both:
+                //   - `enrich triage-candidates --json` writes objects
+                //     `{name, inbound, outbound, centrality}` (richer
+                //     shape with degree info)
+                //   - `atlas_postinstall::build_triage_candidates`
+                //     (the daemon's post-install hook) writes plain
+                //     strings. Without tolerating both, the post-
+                //     install tier-2 launch fails at `enrich init`
+                //     with "JSON had no top_in_corpus_by_centrality
+                //     entries" even though the JSON has 33 entries.
+                //     Surfaced by conversations-personal install
+                //     2026-05-17.
                 for entry in arr {
-                    if let Some(name) = entry.get("name").and_then(|n| n.as_str()) {
+                    if let Some(name) = entry.as_str() {
+                        out.push(name.to_string());
+                    } else if let Some(name) =
+                        entry.get("name").and_then(|n| n.as_str())
+                    {
                         out.push(name.to_string());
                     }
                 }

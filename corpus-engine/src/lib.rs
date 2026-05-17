@@ -26,6 +26,7 @@ pub mod extractors;
 pub mod filters;
 pub mod git_archaeology;
 pub mod index;
+pub mod pii;
 pub mod progress;
 pub mod recipe;
 pub mod recipe_builtin;

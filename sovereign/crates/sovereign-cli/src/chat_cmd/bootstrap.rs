@@ -328,6 +328,30 @@ pub async fn build_session_with_skills(
             }
         }
     }
+    if let Some(path) = resolve_scope_examples_path() {
+        match sovereign_core::scope_classifier::PersonalScopeClassifier::load(
+            &path,
+            Arc::clone(&inference),
+        )
+        .await
+        {
+            Ok(scope_cls) => {
+                eprintln!(
+                    "Router scope classifier: {} personal / {} external examples from {}",
+                    scope_cls.personal_count(),
+                    scope_cls.external_count(),
+                    path.display()
+                );
+                llm_router = llm_router.with_scope_classifier(Arc::new(scope_cls));
+            }
+            Err(e) => {
+                eprintln!(
+                    "warn: scope classifier load failed ({}); routing without personal-scope bias",
+                    e
+                );
+            }
+        }
+    }
     let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
@@ -797,6 +821,24 @@ fn resolve_router_exemplars_path() -> Option<PathBuf> {
         }
     }
     let default = PathBuf::from("sovereign/router/exemplars.toml");
+    if default.is_file() {
+        return Some(default);
+    }
+    None
+}
+
+/// Resolve the path to `router/scope_examples.toml`. Mirrors
+/// `resolve_router_exemplars_path` — `$SOVEREIGN_SCOPE_EXAMPLES`
+/// override, then in-repo canonical, then `None` so the classifier
+/// is silently skipped in deployments that don't ship the examples.
+fn resolve_scope_examples_path() -> Option<PathBuf> {
+    if let Ok(env) = std::env::var("SOVEREIGN_SCOPE_EXAMPLES") {
+        let p = PathBuf::from(env);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let default = PathBuf::from("sovereign/router/scope_examples.toml");
     if default.is_file() {
         return Some(default);
     }

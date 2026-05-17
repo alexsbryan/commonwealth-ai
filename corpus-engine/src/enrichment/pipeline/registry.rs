@@ -43,6 +43,9 @@ impl PipelineRegistry {
         r.register(super::pipelines::obsidian_atlas::PIPELINE_ID, || {
             Arc::new(super::pipelines::obsidian_atlas::ObsidianAtlasPipeline::new())
         });
+        r.register(super::pipelines::conversation_atlas::PIPELINE_ID, || {
+            Arc::new(super::pipelines::conversation_atlas::ConversationAtlasPipeline::new())
+        });
         r
     }
 

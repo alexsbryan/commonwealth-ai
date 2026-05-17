@@ -17,6 +17,7 @@ pub mod registry;
 pub mod router;
 pub mod router_embed;
 pub mod runtime;
+pub mod scope_classifier;
 pub mod gap;
 pub mod setup_config;
 pub mod skills;

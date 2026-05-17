@@ -24,6 +24,7 @@ mod git_archaeology_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod corpus_catalog_cmd;
+mod corpus_scrub_cmd;
 mod meta_atlas_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;

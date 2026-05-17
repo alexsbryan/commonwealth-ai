@@ -27,6 +27,7 @@
 //! routing and aggregation layers, which are tunable in their own
 //! right.
 
+pub mod attribution;
 pub mod bank;
 pub mod report;
 pub mod runner;

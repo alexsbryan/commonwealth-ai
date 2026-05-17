@@ -123,13 +123,36 @@ pub struct AtlasContextFilter {
 
 impl Default for AtlasContextFilter {
     fn default() -> Self {
+        // Defaults are tuned for Wikipedia/SEP-scale corpora where
+        // Tier-2 extracted entities carry multi-sentence descriptions.
+        // Small-corpus atom schemas (the `conversational` domain
+        // produces ~0-150 char descriptions; arch-principles structural
+        // atoms similarly short) would be filtered to zero here. Two
+        // env knobs let the operator relax the filter at boot without
+        // rebuilding:
+        //   - SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS=<N> overrides the
+        //     200-char floor. `0` admits every atom.
+        //   - SOVEREIGN_ATLAS_INCLUDE_DEPTHS=<csv> overrides the
+        //     `extracted`-only depth filter. `*` admits every depth.
+        // The cache signature (`signature()`) bakes both, so a cache
+        // populated under one filter is correctly ignored under
+        // another — no risk of cross-contaminating loaded atoms.
+        let min_chars = std::env::var("SOVEREIGN_ATLAS_MIN_DESCRIPTION_CHARS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(200);
+        let depth_allowlist = match std::env::var("SOVEREIGN_ATLAS_INCLUDE_DEPTHS") {
+            Ok(v) if v.trim() == "*" => Vec::new(),
+            Ok(v) => v
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+            Err(_) => vec!["extracted".to_string()],
+        };
         Self {
-            min_description_chars: 200,
-            // Only Tier-2 extracted entities by default. Structural
-            // entities have one-line article-lead descriptions that
-            // dilute retrieval; they're loaded if the operator
-            // explicitly opts in via `with_filter`.
-            depth_allowlist: vec!["extracted".to_string()],
+            min_description_chars: min_chars,
+            depth_allowlist,
             max_entries: None,
             top_k: 3,
             include_claims: false,
