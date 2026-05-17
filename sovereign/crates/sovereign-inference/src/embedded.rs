@@ -9,12 +9,11 @@ use async_trait::async_trait;
 use futures::Stream;
 use tokio::sync::Mutex;
 
-use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType, LlamaPoolingType};
+use crate::llama::cpp::context::params::{LlamaContextParams, LlamaPoolingType};
 use crate::llama::cpp::llama_backend::LlamaBackend;
 use crate::llama::cpp::llama_batch::LlamaBatch;
 use crate::llama::cpp::model::params::LlamaModelParams;
 use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
-use crate::llama::cpp::mtp::MtpSession;
 use crate::llama::cpp::sampling::LlamaSampler;
 use crate::llama::cpp::token::LlamaToken;
 // Shim-restored 0.1.x-compatible method names. `LlamaModelExt` brings
@@ -35,19 +34,6 @@ use crate::hardware::HardwareProfile;
 
 struct SlotContext {
     ctx: crate::llama::cpp::context::LlamaContext<'static>,
-    /// **MTP draft context** (Some only when the loaded gguf has MTP
-    /// heads, e.g. `Qwen3.6-A3B-MTP-Q6_K.gguf`). Built with
-    /// `LlamaContextType::Mtp` and paired with the target `ctx` via
-    /// `MtpSession` in `generate_sync_mtp`. None for vanilla models —
-    /// they go through the single-token `generate_sync` path.
-    ///
-    /// Both contexts borrow from the same `LlamaModel` (the MTP gguf
-    /// carries both base layers and MTP-head tensors in one file).
-    /// They are independent KV caches: target holds the full
-    /// generation sequence; draft holds whatever the MTP head's
-    /// state machine needs to propose candidates. Prefix-cache
-    /// bookkeeping (`cached_tokens`) only tracks the target.
-    draft_ctx: Option<crate::llama::cpp::context::LlamaContext<'static>>,
     _model: Arc<LlamaModel>,
     /// **Prefix-cache bookkeeping.** The full token sequence
     /// currently resident in `ctx`'s KV cache (positions 0..len).
@@ -396,63 +382,10 @@ impl ModelSlot {
             file_size
         };
 
-        // **MTP draft context build.** The Unsloth MTP-augmented ggufs
-        // (e.g. Qwen3.6-A3B-MTP-Q6_K) carry two parallel tensor sets in
-        // one file: the base model layers + MTP prediction heads. To
-        // use the MTP heads we need a second `LlamaContext` typed as
-        // `LlamaContextType::Mtp`, paired with the target context via
-        // an `MtpSession` at decode time.
-        //
-        // Detection heuristic: model name contains "MTP". This catches
-        // the Unsloth naming convention; if a future gguf uses a
-        // different naming, the Mtp context creation will fail (the
-        // gguf lacks the required MTP head tensors) and we log + fall
-        // back. False positives are non-fatal — just a wasted context
-        // alloc + warn.
-        let is_mtp_model = model_id.to_lowercase().contains("mtp");
-        let draft_ctx = if is_mtp_model {
-            let draft_params = LlamaContextParams::default()
-                .with_n_ctx(NonZeroU32::new(context_size))
-                .with_ctx_type(LlamaContextType::Mtp)
-                .with_n_rs_seq(1)
-                .with_n_batch(context_size)
-                .with_n_ubatch(512)
-                .with_n_threads(n_threads as i32)
-                .with_n_threads_batch(n_threads as i32)
-                .with_offload_kqv(wants_gpu);
-            unsafe {
-                let model_ref: &'static LlamaModel =
-                    &*(Arc::as_ptr(&model) as *const LlamaModel);
-                match model_ref.new_context(backend, draft_params) {
-                    Ok(c) => {
-                        tracing::info!(
-                            model_id = %model_id,
-                            "MTP draft context built — speculative decoding active"
-                        );
-                        Some(c)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            model_id = %model_id,
-                            error = ?e,
-                            "MTP draft context build failed — gguf likely lacks MTP heads; \
-                             falling back to single-token generation. This will not work for \
-                             ggufs marked MTP-mandatory (e.g. Qwen3.6-A3B-MTP) — the model \
-                             card says these require MTP runtime."
-                        );
-                        None
-                    }
-                }
-            }
-        } else {
-            None
-        };
-
         Ok(Self {
             model: model.clone(),
             context: Mutex::new(SlotContext {
                 ctx,
-                draft_ctx,
                 _model: model,
                 cached_tokens: Vec::new(),
             }),
@@ -555,10 +488,6 @@ impl ModelSlot {
             model: Arc::clone(&model),
             context: Mutex::new(SlotContext {
                 ctx,
-                // from_existing_model is for sibling slots (e.g. FastShort)
-                // built off a non-MTP base model. MTP is gguf-specific
-                // and only relevant in the primary slot's load path.
-                draft_ctx: None,
                 _model: model,
                 cached_tokens: Vec::new(),
             }),
@@ -576,22 +505,6 @@ impl ModelSlot {
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize, usize)> {
-        // **MTP dispatch.** When the loaded gguf carries MTP heads,
-        // `draft_ctx` was populated at slot-load time. Route requests
-        // that fit MTP's current support envelope (no structured
-        // output, no tools, no think-budget) to the MTP decode path
-        // for speculative-decoding speedup. Requests that need the
-        // bookkeeping currently exclusive to the non-MTP path fall
-        // through to the single-token decode below. This staging is
-        // intentional: integrating MTP with the JsonConstraint mask
-        // + tool-call JSON tracker + think-budget is a follow-up PR;
-        // shipping the MTP base case unblocks measurement.
-        if slot_ctx.draft_ctx.is_some()
-            && request.structured_output.is_none()
-            && request.tools.as_ref().is_none_or(|t| t.is_empty())
-        {
-            return Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks);
-        }
         // Split-borrow the SlotContext's disjoint fields. The
         // function body uses both `ctx` (the LlamaContext) and
         // `cached_tokens` (the prefix-cache bookkeeping) as mutable
@@ -951,347 +864,6 @@ impl ModelSlot {
         Ok((output, tokens.len(), n_generated))
     }
 
-    /// **MTP-accelerated decode loop.** Speculative-decoding variant of
-    /// `generate_sync`, active only when `slot_ctx.draft_ctx.is_some()`
-    /// (i.e. the loaded gguf carries MTP heads). The MTP draft context
-    /// proposes up to `n_draft_max` candidate tokens per step; the
-    /// target context then verifies them in a single packed batch, and
-    /// we accept the matching prefix + one bonus token (the target's
-    /// correct prediction at the first mismatch). Worst case (zero
-    /// drafts accepted) degrades to the same per-step cost as
-    /// single-token decode; best case (all drafts accepted) emits
-    /// `n_draft_max + 1` tokens per target forward pass.
-    ///
-    /// **Phase A scope (this commit).** This first MTP cut handles
-    /// only the simplest case: plain greedy/temp sampling, no
-    /// JsonConstraint mask, no tool-call JSON-depth tracker, no
-    /// think-block budget. The dispatcher in `generate_sync` routes
-    /// only those requests here; everything else falls through to the
-    /// single-token path. Phase B will integrate JsonConstraint over
-    /// MTP (the hard part is applying the mask to target logits
-    /// per-position, comparing the masked sampling result against the
-    /// draft, and feeding accepted/rejected tokens into the
-    /// constraint state machine in order). Filed as TODO.
-    ///
-    /// **References.**
-    /// - Upstream llama.cpp MTP PR: #22673 (release b9180).
-    /// - Crate API: `llama_cpp_4::mtp::MtpSession`.
-    /// - Model card: huggingface.co/unsloth/Qwen3.6-35B-A3B-MTP-GGUF.
-    fn generate_sync_mtp(
-        model: &LlamaModel,
-        model_id: &str,
-        slot_ctx: &mut SlotContext,
-        request: &CompletionRequest,
-        quirks: &ModelQuirks,
-    ) -> Result<(String, usize, usize)> {
-        // Disjoint split-borrow of SlotContext's three live fields:
-        // target ctx, draft ctx, prefix-cache bookkeeping. The
-        // `_model` field is never touched here (the Arc keeps the
-        // weights alive; we only need the &LlamaModel from the
-        // function arg).
-        let ctx = &mut slot_ctx.ctx;
-        let draft_ctx = slot_ctx
-            .draft_ctx
-            .as_mut()
-            .ok_or_else(|| Error::Inference(
-                "generate_sync_mtp: draft_ctx is None — dispatcher contract violated".into(),
-            ))?;
-        let cached_tokens = &mut slot_ctx.cached_tokens;
-
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
-        let tokens = model
-            .str_to_token(&full_prompt, AddBos::Always)
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
-
-        let n_batch = ctx.n_batch() as usize;
-        let n_ctx = ctx.n_ctx() as usize;
-        let max_tokens = clamp_max_tokens(
-            request.max_tokens,
-            tokens.len(),
-            n_ctx,
-        )?;
-        // Bound the draft fan-out by what llama.cpp's upstream demo
-        // ships with (`--spec-draft-n-max 6`). Tunable via env var
-        // for measurement passes; 6 is a sane default — bigger
-        // values cost more verify-batch tokens per loop while
-        // delivering diminishing accept-rate gains.
-        let n_draft_max: i32 = std::env::var("SOVEREIGN_MTP_DRAFT_MAX")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(6);
-
-        // **Prefix caching** — same shape as `generate_sync`. The
-        // target context's cache state mirrors the previous request;
-        // the draft context's KV cache is regenerated each call (the
-        // MTP head's state is small + cheap to re-prefill). Cleaner
-        // separation than trying to LCP the draft side too.
-        let lcp = cached_tokens
-            .iter()
-            .zip(tokens.iter())
-            .take(tokens.len().saturating_sub(1))
-            .take_while(|(a, b)| a == b)
-            .count();
-        cached_tokens.clear();
-        if lcp == 0 {
-            ctx.clear_kv_cache();
-        } else if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
-            tracing::warn!(
-                error = ?e,
-                lcp,
-                "mtp: target partial-clear failed — full-clear fallback"
-            );
-            ctx.clear_kv_cache();
-        }
-        // Draft context starts every call from clean state. Its KV
-        // cache is small (MTP head only) and the per-call rebuild
-        // cost is dwarfed by the speculative-decoding win.
-        draft_ctx.clear_kv_cache();
-
-        // Prefill target with prompt tail (LCP-aware).
-        let mut batch = LlamaBatch::new(n_batch, 1);
-        let tail = &tokens[lcp..];
-        let last_idx = tail.len() - 1;
-        for (j, &token) in tail.iter().enumerate() {
-            let absolute_pos = (lcp + j) as i32;
-            batch
-                .add(token, absolute_pos, &[0], j == last_idx)
-                .map_err(|e| Error::Inference(format!("MTP target batch add failed: {e}")))?;
-        }
-        ctx.decode(&mut batch)
-            .map_err(|e| Error::Inference(format!("MTP target prefill decode failed: {e}")))?;
-        *cached_tokens = tokens.clone();
-
-        // Prefill draft with the FULL prompt — the MTP head needs
-        // its own forward pass to seed its prediction state. There's
-        // no LCP shortcut here because the draft KV was cleared
-        // above.
-        let mut draft_batch = LlamaBatch::new(n_batch, 1);
-        let draft_last_idx = tokens.len() - 1;
-        for (j, &token) in tokens.iter().enumerate() {
-            draft_batch
-                .add(token, j as i32, &[0], j == draft_last_idx)
-                .map_err(|e| Error::Inference(format!("MTP draft batch add failed: {e}")))?;
-        }
-        draft_ctx
-            .decode(&mut draft_batch)
-            .map_err(|e| Error::Inference(format!("MTP draft prefill decode failed: {e}")))?;
-
-        // **MTP session.** Pairs the target + draft contexts and
-        // exposes the draft / accept primitives. The `1` is the
-        // sequence id (we always run seq_id=0 in this single-stream
-        // slot, but the API takes it as a count of seqs to track —
-        // per upstream's example, `1` is the canonical value for the
-        // single-seq pod path; see crate::llama docs).
-        let mut mtp_session = MtpSession::new(&*ctx, &*draft_ctx, 1, n_draft_max)
-            .map_err(|e| Error::Inference(format!("MtpSession::new failed: {e:?}")))?;
-
-        let mut sampler = build_sampler(model, request, quirks);
-        let mut output = String::new();
-        let mut n_generated = 0usize;
-        let mut n_past = tokens.len();
-        let mut last_token = *tokens.last()
-            .ok_or_else(|| Error::Inference("MTP: empty prompt".into()))?;
-        let mut decoder = encoding_rs::UTF_8.new_decoder();
-
-        let deadline_secs = inference_deadline_secs();
-        let deadline = Instant::now() + std::time::Duration::from_secs(deadline_secs);
-        let started_at = Instant::now();
-
-        // Telemetry: accept-rate measurement so we can tell at a
-        // glance whether MTP is actually pulling its weight. Logged
-        // at end-of-generation.
-        let mut total_drafts_proposed = 0u64;
-        let mut total_drafts_accepted = 0u64;
-        let mut mtp_steps = 0u64;
-
-        while n_generated < max_tokens {
-            if Instant::now() > deadline {
-                let elapsed = started_at.elapsed().as_secs();
-                tracing::warn!(
-                    model = %model_id,
-                    elapsed_s = elapsed,
-                    deadline_s = deadline_secs,
-                    n_generated,
-                    "mtp:deadline exceeded — clearing KV caches"
-                );
-                ctx.clear_kv_cache();
-                draft_ctx.clear_kv_cache();
-                return Err(Error::Inference(format!(
-                    "MTP inference deadline exceeded after {elapsed}s ({n_generated} tokens)"
-                )));
-            }
-
-            // Draft phase: ask the MTP head for up to n_draft_max
-            // candidate tokens given the current position + last
-            // accepted token. May return fewer (the head can short-
-            // circuit if confidence drops).
-            let drafts = mtp_session
-                .draft(0, n_past as i32, last_token)
-                .map_err(|e| Error::Inference(format!("MTP draft phase failed: {e:?}")))?;
-            if drafts.is_empty() {
-                // MTP head produced no drafts. Fall back to a single
-                // target sample at this position so we still make
-                // progress (else we'd spin forever). Build a single-
-                // token batch with the last accepted token, decode,
-                // sample one token.
-                let mut single = LlamaBatch::new(1, 1);
-                single
-                    .add(last_token, n_past as i32, &[0], true)
-                    .map_err(|e| Error::Inference(format!("MTP fallback batch add: {e}")))?;
-                ctx.decode(&mut single)
-                    .map_err(|e| Error::Inference(format!("MTP fallback decode: {e}")))?;
-                let mut data = ctx.token_data_array_ith(-1);
-                data.apply_sampler(&mut sampler.inner_explore);
-                let token = data
-                    .selected_token()
-                    .ok_or_else(|| Error::Inference("MTP fallback: sampler returned no token".into()))?;
-                let piece = model
-                    .token_to_piece(token, &mut decoder, true, None)
-                    .unwrap_or_default();
-                output.push_str(&piece);
-                n_generated += 1;
-                n_past += 1;
-                last_token = token;
-                if model.is_eog_token(token) {
-                    break;
-                }
-                continue;
-            }
-
-            total_drafts_proposed += drafts.len() as u64;
-            mtp_steps += 1;
-
-            // Verify phase: feed every draft into the target context
-            // in one batch, asking for logits at each position. This
-            // is the speedup primitive — one forward pass produces
-            // logits for `drafts.len()` candidate positions.
-            let mut verify_batch = LlamaBatch::new(drafts.len(), 1);
-            for (i, &draft_tok) in drafts.iter().enumerate() {
-                let pos = (n_past + i) as i32;
-                verify_batch
-                    .add(draft_tok, pos, &[0], true)
-                    .map_err(|e| Error::Inference(format!("MTP verify batch add: {e}")))?;
-            }
-            ctx.decode(&mut verify_batch)
-                .map_err(|e| Error::Inference(format!("MTP verify decode: {e}")))?;
-
-            // Accept phase: walk positions left-to-right, sampling
-            // what the target would have produced. Accept while it
-            // matches the draft; on first mismatch the sampled
-            // token becomes the "bonus" (we get one free correct
-            // token per step regardless of draft acceptance).
-            let mut accepted: usize = 0;
-            let mut bonus_token: Option<LlamaToken> = None;
-            for i in 0..drafts.len() {
-                let mut data = ctx.token_data_array_ith(i as i32);
-                data.apply_sampler(&mut sampler.inner_explore);
-                let sampled = data
-                    .selected_token()
-                    .ok_or_else(|| Error::Inference("MTP verify: sampler returned no token".into()))?;
-                if sampled == drafts[i] {
-                    accepted += 1;
-                } else {
-                    bonus_token = Some(sampled);
-                    break;
-                }
-            }
-            // If we accepted everything, the next "bonus" requires
-            // one more target sample (at position n_past + drafts.len())
-            // — but we don't have logits there yet. Emit drafts only
-            // this step; the next iteration's draft call will start
-            // from `last = drafts.last()`.
-            total_drafts_accepted += accepted as u64;
-
-            mtp_session
-                .accept(0, accepted as u16)
-                .map_err(|e| Error::Inference(format!("MTP accept failed: {e:?}")))?;
-
-            // Emit accepted draft tokens to output, advancing
-            // bookkeeping per token. EOS check happens per token too.
-            let mut hit_eos = false;
-            for &tok in &drafts[..accepted] {
-                let piece = model
-                    .token_to_piece(tok, &mut decoder, true, None)
-                    .unwrap_or_default();
-                output.push_str(&piece);
-                n_generated += 1;
-                last_token = tok;
-                if model.is_eog_token(tok) {
-                    hit_eos = true;
-                    break;
-                }
-                if n_generated >= max_tokens {
-                    break;
-                }
-            }
-            n_past += accepted;
-            // Process the bonus token (target's correction at first
-            // mismatch). It's already verified by the target —
-            // emit it and advance.
-            if !hit_eos && n_generated < max_tokens {
-                if let Some(tok) = bonus_token {
-                    let piece = model
-                        .token_to_piece(tok, &mut decoder, true, None)
-                        .unwrap_or_default();
-                    output.push_str(&piece);
-                    n_generated += 1;
-                    n_past += 1;
-                    last_token = tok;
-                    if model.is_eog_token(tok) {
-                        hit_eos = true;
-                    }
-                    // Rollback rejected drafts. We accepted `accepted`
-                    // drafts + 1 bonus = positions [n_past_before,
-                    // n_past_before + accepted + 1). Positions
-                    // [n_past_before + accepted + 1, n_past_before +
-                    // drafts.len()) had their KV computed during the
-                    // verify batch but won't be part of the
-                    // generation sequence; drop them so the next
-                    // iteration's batch positions line up.
-                    let rejected_drop_from = n_past as u32;
-                    if accepted < drafts.len() {
-                        if let Err(e) = ctx.clear_kv_cache_seq(
-                            Some(0),
-                            Some(rejected_drop_from),
-                            None,
-                        ) {
-                            tracing::warn!(
-                                error = ?e,
-                                from = rejected_drop_from,
-                                "mtp: rejected-draft KV rollback failed — full clear"
-                            );
-                            ctx.clear_kv_cache();
-                            *cached_tokens = Vec::new();
-                            break;
-                        }
-                    }
-                }
-            }
-            if hit_eos {
-                break;
-            }
-        }
-
-        // Telemetry: emit the accept ratio so post-run analysis can
-        // tell whether MTP delivered. >0.5 is the "worth it" floor;
-        // below that, single-token decode would have been faster.
-        let accept_rate = if total_drafts_proposed > 0 {
-            total_drafts_accepted as f64 / total_drafts_proposed as f64
-        } else {
-            0.0
-        };
-        tracing::info!(
-            model_id = %model_id,
-            mtp_steps,
-            drafts_proposed = total_drafts_proposed,
-            drafts_accepted = total_drafts_accepted,
-            accept_rate = format!("{accept_rate:.3}"),
-            n_generated,
-            "mtp: end-of-generation telemetry"
-        );
-
-        Ok((output, tokens.len(), n_generated))
-    }
 
     /// Multi-sequence batched autoregressive decode for short-call
     /// enrichment phases routed to the FastShort slot. Caller supplies
@@ -2085,11 +1657,27 @@ impl EmbedSlot {
         let n_seq_max: u32 = 16;
         let model = Arc::new(model);
 
-        let pooling_type = match embed_quirks.as_ref().map(|q| &q.pooling) {
-            Some(PoolingStrategy::Last) => LlamaPoolingType::Last,
-            Some(PoolingStrategy::Cls)  => LlamaPoolingType::Cls,
-            _                           => LlamaPoolingType::Mean,
-        };
+        // **C-side pooling forced to None.** MIGRATION 2026-05-17
+        // (llama-cpp-4 0.2.x): the binding's `embeddings_seq_ith`
+        // returns null whenever the loaded gguf's metadata reports
+        // `pooling_type=NONE`, and 0.2.x reads pooling from the gguf
+        // header instead of honouring `with_pooling_type` on the
+        // context params. The previous attempt — match the param to
+        // the gguf's intrinsic pooling (Last for Qwen3-Embedding) —
+        // hit `ggml_abort` inside `llama_init_from_model` at context
+        // construction. Both failure modes share a root cause: the
+        // 0.2.x build doesn't reliably support setting a non-None
+        // pooling type from the context-params side.
+        //
+        // The fix is to take pooling out of llama.cpp entirely: build
+        // the context with `LlamaPoolingType::None` so every token's
+        // hidden state is exposed via `embeddings_ith`, then reduce
+        // app-side in [`pool_token_range_app_side`] using the
+        // strategy the family quirks declare (Mean / Last / Cls).
+        // Uniform across families, sidesteps both bugs, no behaviour
+        // change against pre-migration semantics — measured equal
+        // cosine similarity on the smoketest corpus.
+        let pooling_type = LlamaPoolingType::None;
 
         let n_threads = llama_threads_for_host();
         let wants_gpu =
@@ -2218,7 +1806,8 @@ impl EmbedSlot {
         } else {
             text.to_string()
         };
-        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens)
+        let strategy = strategy_from_quirks(embed_quirks);
+        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens, &strategy)
     }
 
     /// Embed a query string, applying the query-side instruction prefix
@@ -2241,7 +1830,8 @@ impl EmbedSlot {
         } else {
             query.to_string()
         };
-        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens)
+        let strategy = strategy_from_quirks(embed_quirks);
+        Self::run_embed_sync(model, ctx, &prepared, n_embd, max_input_tokens, &strategy)
     }
 
     /// Single-sequence embedding routine. Kept alongside the
@@ -2254,6 +1844,7 @@ impl EmbedSlot {
         input: &str,
         n_embd: usize,
         max_input_tokens: usize,
+        strategy: &PoolingStrategy,
     ) -> Result<Vec<f32>> {
         ctx.clear_kv_cache();
 
@@ -2276,10 +1867,12 @@ impl EmbedSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
 
-        let raw = ctx
-            .embeddings_seq_ith(0)
-            .map_err(|e| Error::Inference(format!("Failed to read embeddings: {e}")))?;
-        Ok(l2_normalize(raw.to_vec()))
+        // Per-token embeddings read via `embeddings_ith` (logits=true
+        // was set on every batch entry above) and reduced app-side
+        // by the family-supplied strategy. See the EmbedSlot::load
+        // comment for the migration rationale.
+        let pooled = pool_token_range_app_side(ctx, 0, tokens.len(), n_embd, strategy)?;
+        Ok(l2_normalize(pooled))
     }
 
     /// Batch-embed multiple texts by packing distinct sequences
@@ -2380,6 +1973,15 @@ impl EmbedSlot {
             let mut tokens_in_batch = 0usize;
             let mut seqs_in_batch = 0usize;
             let sub_start = cursor;
+            // Per-sequence batch-index range, tracked so we can pool
+            // app-side after decode. (Pooling moved out of llama.cpp
+            // — see EmbedSlot::load migration note. The C-side
+            // `embeddings_seq_ith` returns null whenever the loaded
+            // gguf's metadata reports pooling_type=NONE, which is
+            // common in 0.2.x; app-side pooling sidesteps that.)
+            // Index `i` here corresponds to local seq_id `i`; the
+            // i-th entry is `(start_batch_idx, len)` for that seq.
+            let mut seq_token_ranges: Vec<(i32, usize)> = Vec::new();
 
             while cursor < prepared.len() {
                 let next_len = prepared[cursor].len().max(1);
@@ -2403,6 +2005,7 @@ impl EmbedSlot {
                     // Simpler: fabricate a synthetic token? Cheaper
                     // to skip. We'll handle below by post-filling.
                 } else {
+                    let seq_start_batch_idx = tokens_in_batch as i32;
                     for (pos, &tok) in toks.iter().enumerate() {
                         batch
                             .add(tok, pos as i32, &[seq_id], true)
@@ -2410,6 +2013,7 @@ impl EmbedSlot {
                                 Error::Inference(format!("Embed batch add failed: {e}"))
                             })?;
                     }
+                    seq_token_ranges.push((seq_start_batch_idx, toks.len()));
                     tokens_in_batch += next_len;
                     seqs_in_batch += 1;
                 }
@@ -2430,19 +2034,28 @@ impl EmbedSlot {
             // Walk the inputs that belonged to this sub-batch and
             // emit one embedding per input, mapping local seq_id
             // back to the original input slot. Empty inputs get
-            // zero vectors of the right length.
-            let mut local_seq: i32 = 0;
+            // zero vectors of the right length. Non-empty inputs
+            // pool app-side from the batch-index range we recorded
+            // while building the batch (see seq_token_ranges).
+            let strategy = match slot.embed_quirks.as_ref().map(|q| &q.pooling) {
+                Some(PoolingStrategy::Last) => PoolingStrategy::Last,
+                Some(PoolingStrategy::Cls)  => PoolingStrategy::Cls,
+                _                           => PoolingStrategy::Mean,
+            };
+            let mut local_seq: usize = 0;
             for local_idx in sub_start..cursor {
                 if prepared[local_idx].is_empty() {
                     results.push(vec![0.0; slot.n_embd]);
                 } else {
-                    let raw = ctx_lock
-                        .ctx
-                        .embeddings_seq_ith(local_seq)
-                        .map_err(|e| {
-                            Error::Inference(format!("Failed to read embedding: {e}"))
-                        })?;
-                    results.push(l2_normalize(raw.to_vec()));
+                    let (start, len) = seq_token_ranges[local_seq];
+                    let pooled = pool_token_range_app_side(
+                        &ctx_lock.ctx,
+                        start,
+                        len,
+                        slot.n_embd,
+                        &strategy,
+                    )?;
+                    results.push(l2_normalize(pooled));
                     local_seq += 1;
                 }
             }
@@ -2871,6 +2484,75 @@ impl RerankSlot {
             out.push(score);
         }
         Ok(out)
+    }
+}
+
+/// Resolve the pooling strategy from optional `EmbedQuirks`. None
+/// or unspecified strategies default to Mean — matches the prior
+/// fallback in `EmbedSlot::load`.
+fn strategy_from_quirks(quirks: Option<&EmbedQuirks>) -> PoolingStrategy {
+    match quirks.map(|q| &q.pooling) {
+        Some(PoolingStrategy::Last) => PoolingStrategy::Last,
+        Some(PoolingStrategy::Cls)  => PoolingStrategy::Cls,
+        _                           => PoolingStrategy::Mean,
+    }
+}
+
+/// **App-side embedding pooling.** Returns a single n_embd-sized
+/// vector pooled from `[start_idx, start_idx + len)` of the
+/// context's per-token embeddings.
+///
+/// **Why this lives in Rust rather than llama.cpp**: the 0.2.x
+/// binding's `embeddings_seq_ith` returns null whenever the loaded
+/// model's gguf reports `pooling_type=NONE`, even if we passed an
+/// explicit `with_pooling_type(Mean)` on the context params. The
+/// 0.1.x behavior (param wins over gguf metadata) was lost in the
+/// migration. By setting context pooling to `None` and pooling in
+/// Rust, we sidestep that mismatch and work uniformly across every
+/// embed gguf in our zoo regardless of its baked-in pooling field.
+///
+/// Strategy semantics:
+/// - `Mean` — average over all token vectors in the range.
+/// - `Last` — return only the last token's vector (range end - 1).
+/// - `Cls`  — return only the first token's vector (range start).
+///
+/// `len == 0` returns a zero vector — matches the prior
+/// embed_batch's empty-input contract.
+fn pool_token_range_app_side(
+    ctx: &crate::llama::cpp::context::LlamaContext<'_>,
+    start_idx: i32,
+    len: usize,
+    n_embd: usize,
+    strategy: &PoolingStrategy,
+) -> Result<Vec<f32>> {
+    if len == 0 {
+        return Ok(vec![0.0; n_embd]);
+    }
+    match strategy {
+        PoolingStrategy::Last => ctx
+            .embeddings_ith(start_idx + len as i32 - 1)
+            .map(|s| s.to_vec())
+            .map_err(|e| Error::Inference(format!("embeddings_ith (last) failed: {e}"))),
+        PoolingStrategy::Cls => ctx
+            .embeddings_ith(start_idx)
+            .map(|s| s.to_vec())
+            .map_err(|e| Error::Inference(format!("embeddings_ith (cls) failed: {e}"))),
+        _ => {
+            let mut sum = vec![0.0f32; n_embd];
+            for i in 0..len {
+                let raw = ctx
+                    .embeddings_ith(start_idx + i as i32)
+                    .map_err(|e| Error::Inference(format!("embeddings_ith (mean, i={i}) failed: {e}")))?;
+                for (a, b) in sum.iter_mut().zip(raw.iter()) {
+                    *a += b;
+                }
+            }
+            let inv = 1.0_f32 / (len as f32);
+            for x in sum.iter_mut() {
+                *x *= inv;
+            }
+            Ok(sum)
+        }
     }
 }
 
