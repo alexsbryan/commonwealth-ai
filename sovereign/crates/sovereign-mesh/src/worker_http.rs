@@ -170,6 +170,15 @@ pub struct WorkerState {
     /// The pluggable enrichment runner. Wrapped in Arc so handlers can
     /// hand a cloned callback to it.
     pub runner: Arc<dyn WorkerRunner>,
+    /// Optional pod-side inference proxy. When `Some`, the worker
+    /// router mounts `/v1/chat/completions`, `/v1/models`,
+    /// `/v1/embeddings`, and `/oicp/v1/capabilities`, forwarding each
+    /// to the child daemon at `child_base_url`. When `None`, those
+    /// routes are not mounted at all — a fresh `WorkerState` from
+    /// `from_blob` is proxy-disabled, the same shape every existing
+    /// test exercised before pinned-pod inference shipped.
+    /// Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+    pub inference_proxy: Option<Arc<crate::worker_inference_proxy::InferenceProxyConfig>>,
 }
 
 /// Per-file upload bookkeeping. We accumulate bytes in memory for the
@@ -228,6 +237,7 @@ impl WorkerState {
             disk_dump_complete,
             disk_dump_ready,
             runner,
+            inference_proxy: None,
         })
     }
 
@@ -524,12 +534,23 @@ async fn fetch_and_validate(
 /// over the pod's seed-derived TLS cert. Every route is gated by the
 /// worker-token middleware — no unauthenticated handler exists.
 pub fn worker_router(state: Arc<WorkerState>) -> Router {
-    Router::new()
+    let mut router = Router::new()
         .route("/internal/worker/upload", post(upload_handler))
         .route("/internal/worker/job", post(dispatch_handler))
         .route("/internal/worker/completed", get(completed_handler))
         .route("/internal/worker/job", delete(shutdown_handler))
-        .route("/internal/worker/health", get(health_handler))
+        .route("/internal/worker/health", get(health_handler));
+    // Pinned-pod inference proxy. Mounted only when the pod was
+    // configured with an `InferenceProxyConfig` — otherwise these
+    // routes don't exist and a request hits the 404 path before the
+    // auth layer runs. This is the design from
+    // docs/PINNED_WORKER_AS_INFERENCE_PEER.md §3: same router, same
+    // auth middleware, no second permission system.
+    if state.inference_proxy.is_some() {
+        router =
+            router.merge(crate::worker_inference_proxy::inference_proxy_routes());
+    }
+    router
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_worker_token,

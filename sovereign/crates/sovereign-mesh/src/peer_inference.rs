@@ -487,6 +487,22 @@ impl MeshInferenceProvider {
         me
     }
 
+    /// Variant that accepts an arbitrary `PeerEndpointSource` AND an
+    /// externally-owned in-flight publisher. The composite-source
+    /// case — gossiped peers + pinned worker pods — uses this so the
+    /// daemon's `AppState` shares an Arc with the MIP's guards while
+    /// still routing through a non-`EmbeddedDaemon` source.
+    /// Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+    pub fn with_peer_source_and_publisher(
+        local: Arc<dyn InferenceProvider>,
+        mesh: Arc<dyn PeerEndpointSource>,
+        publisher: Arc<AtomicU32>,
+    ) -> Self {
+        let mut me = Self::with_peer_source(local, mesh);
+        me.in_flight_publisher = publisher;
+        me
+    }
+
     /// Hand out a shared reference to the gossiped in-flight counter.
     /// Mostly useful for tests asserting on the published value
     /// directly. In production the daemon prefers
@@ -728,9 +744,20 @@ impl MeshInferenceProvider {
                 .trim_end_matches('/');
             let url = format!("{root}/oicp/v1/capabilities");
             let started = Instant::now();
-            let mut req = self.http.get(&url);
+            // Pinned worker pods serve their TLS-pinned manifest on
+            // the same `:9742` listener as inference — use the pod's
+            // pinned client + worker bearer to reach it. The default
+            // mesh `self.http` would fail TLS verification.
+            let (client, bearer) = match &peer.transport {
+                Some(t) => (t.client.clone(), Some(t.bearer.clone())),
+                None => (self.http.clone(), None),
+            };
+            let mut req = client.get(&url);
             if let Some(ref id_hex) = local_node_id_hex {
                 req = req.header("X-Node-Id", id_hex);
+            }
+            if let Some(b) = bearer {
+                req = req.bearer_auth(b);
             }
             match req.send().await {
                 Ok(resp) if resp.status().is_success() => {
@@ -910,10 +937,22 @@ impl MeshInferenceProvider {
                 Some(m) => m,
                 None => continue,
             };
-            let raw = match score_manifest_for_request(&manifest, req_oicp) {
+            let mut raw = match score_manifest_for_request(&manifest, req_oicp) {
                 Some(c) => c,
                 None => continue,
             };
+            // Pinned worker pods have no "users" beyond the owner —
+            // the mesh's local-affinity bias (which scales peer scores
+            // by their willingness to serve outside requests) doesn't
+            // apply. Normalising claim_affinity to 1.0 makes the
+            // `effective_affinity / claim_affinity` ratio inside
+            // `adjust_for_observations` collapse to a neutral
+            // multiplier so a pinned pod isn't penalised for failing
+            // to advertise mesh-affinity it has no concept of.
+            // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md hard part 3.
+            if peer.transport.is_some() {
+                raw.claim_affinity = 1.0;
+            }
             // Apply operational adjustments. Locality is derived
             // from the manifest-fetch RTT (see PR-F) — same round
             // trip, no extra probe — so LAN deployments actually
@@ -1220,11 +1259,21 @@ impl MeshInferenceProvider {
                 None => continue,
             };
             if let Some(model) = manifest.models.iter().find(|m| m.id == model_id) {
-                let claim_affinity = model
-                    .claims
-                    .first()
-                    .map(|c| c.effective_affinity())
-                    .unwrap_or(0.0);
+                // Pinned worker pods are scored with neutral affinity
+                // (1.0) — see the carve-out in `select_peer`. Without
+                // this the gather path would yield 0.0 for a pinned
+                // pod's claim affinity (if the child's manifest didn't
+                // populate one) and the candidate would silently drop
+                // out of the load-balance comparison.
+                let claim_affinity = if peer.transport.is_some() {
+                    1.0
+                } else {
+                    model
+                        .claims
+                        .first()
+                        .map(|c| c.effective_affinity())
+                        .unwrap_or(0.0)
+                };
                 // Same gossip-override policy as `select_peer`: when
                 // the peer publishes its self-reported in-flight,
                 // trust it over our local view, which sees only
@@ -1389,6 +1438,30 @@ fn explicit_model_id(request: &CompletionRequest) -> Option<&str> {
         .filter(|s| !s.is_empty())
 }
 
+/// Build the per-peer `RemoteApiProvider` for one routing attempt.
+///
+/// Branches on `peer.transport`:
+/// - `None` (default mesh peer): plain-HTTP client, no bearer.
+/// - `Some(t)` (pinned worker pod): TLS-pinned client + owner-signed
+///   `WorkerToken` bearer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+///
+/// One call site per branch — every place in this file that hits a
+/// peer over HTTP goes through here, so the pinned-pod carve-out
+/// can't accidentally regress when a new routing path is added.
+fn provider_for_peer(peer: &PeerInferenceEndpoint, url: &str) -> RemoteApiProvider {
+    const PEER_CONTEXT: u32 = 32_768;
+    match &peer.transport {
+        Some(t) => RemoteApiProvider::with_client_and_bearer(
+            url,
+            t.client.clone(),
+            t.bearer.clone(),
+            "mesh-peer",
+            PEER_CONTEXT,
+        ),
+        None => RemoteApiProvider::new(url, None, "mesh-peer", PEER_CONTEXT),
+    }
+}
+
 #[async_trait]
 impl InferenceProvider for MeshInferenceProvider {
     async fn complete(&self, request: &CompletionRequest) -> Result<CompletionResponse> {
@@ -1459,7 +1532,7 @@ impl InferenceProvider for MeshInferenceProvider {
                     self.record_dispatch(Some(&peer.name)).await;
                     let mut last_transport_err: Option<String> = None;
                     for url in &peer.base_urls {
-                        let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
+                        let rp = provider_for_peer(&peer, url);
                         match rp.complete(request).await {
                             Ok(mut resp) => {
                                 resp.model_id = peer_cand.model_id.clone();
@@ -1515,7 +1588,7 @@ impl InferenceProvider for MeshInferenceProvider {
                 "mesh-inference: routing complete() to peer"
             );
             for url in &peer.base_urls {
-                let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
+                let rp = provider_for_peer(&peer, url);
                 match rp.complete(request).await {
                     Ok(mut resp) => {
                         // Prefer the peer's OICP-advertised model
@@ -1625,7 +1698,7 @@ impl InferenceProvider for MeshInferenceProvider {
                         .await;
                     let mut last_transport_err: Option<String> = None;
                     for url in &peer.base_urls {
-                        let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
+                        let rp = provider_for_peer(&peer, url);
                         match rp.complete_stream(request).await {
                             Ok(stream) => {
                                 let attribution =
@@ -1695,7 +1768,7 @@ impl InferenceProvider for MeshInferenceProvider {
                 .ledger_emission_for(&peer.node_id, &peer_cand.model_id, &peer.name)
                 .await;
             for url in &peer.base_urls {
-                let rp = RemoteApiProvider::new(url, None, "mesh-peer", 32_768);
+                let rp = provider_for_peer(&peer, url);
                 match rp.complete_stream(request).await {
                     Ok(stream) => {
                         let model_id =

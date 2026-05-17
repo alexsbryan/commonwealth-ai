@@ -1,6 +1,23 @@
 # Pinned worker pods as inference peers
 
-**Status.** Spec. Not yet implemented.
+**Status.** Shipped (2026-05-16). Owner-side wiring landed in
+`sovereign-mesh/src/{pinned_transport,pinned_worker_source,pinned_pod_snapshot}.rs`,
+pod-side proxy in `sovereign-mesh/src/worker_inference_proxy.rs`, CLI
+glue in `sovereign-cli/src/pipeline_cmd.rs` (`pod up` writes snapshot,
+`pod down` deletes it) and `sovereign-cli/src/daemon_cmd.rs` (daemon
+loads snapshots and builds the composite source at startup). 27 new
+unit tests cover transport / source / snapshot / proxy round-trips;
+the existing `tests/worker_e2e.rs` still validates TLS pinning
+end-to-end. See SYSTEM_OVERVIEW.md §5.12 for the system-level map.
+
+Deferred from v1 (still open):
+
+- Hot-reload of the pinned source — today the daemon picks up new
+  pods only on restart.
+- HTTP register/unregister endpoint for runtime pod attach.
+- Live-Vast E2E in CI; unit + proxy tests cover the plumbing.
+
+The spec below is preserved as the design record.
 
 **Goal.** Let `sovereign pipeline run` route inference work to an
 ephemeral worker pod (e.g. a Vast L40S rented via `pod up`) the

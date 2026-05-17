@@ -907,10 +907,52 @@ async fn run_daemon(args: &[String]) -> i32 {
     // populated `AppState.slot_aliases`. The trait-object form is
     // what the daemon needs; the typed form is what the alias
     // installer needs.
+    // Compose the gossiped-mesh source with any pinned worker pod
+    // snapshots persisted on disk. `pod up` writes one snapshot per
+    // pod into `~/.sovereign/worker-pods/`; this loop loads them at
+    // daemon startup and registers each with the inference scheduler
+    // so subsequent `chat/completions` calls can route to them.
+    // Empty when no pods are configured (the common case) —
+    // pinned_source.peer_inference_endpoints() returns an empty Vec
+    // and the composite degrades to mesh-only.
+    // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+    let pinned_source = Arc::new(
+        sovereign_mesh::pinned_worker_source::PinnedWorkerEndpointSource::new(),
+    );
+    if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
+        let snapshots = sovereign_mesh::pinned_pod_snapshot::load_all_snapshots(&dir);
+        for snap in snapshots {
+            match snap.to_pinned_pod() {
+                Ok(pod) => {
+                    tracing::info!(
+                        vast_id = %snap.vast_id,
+                        host = %snap.host,
+                        port = snap.port,
+                        node_id = %pod.node_id,
+                        "daemon_cmd: registered pinned worker pod with inference scheduler"
+                    );
+                    pinned_source.register(pod).await;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        vast_id = %snap.vast_id,
+                        error = %e,
+                        "daemon_cmd: pinned-pod snapshot rejected — skipping"
+                    );
+                }
+            }
+        }
+    }
+    let composite_source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> = Arc::new(
+        sovereign_mesh::pinned_worker_source::CompositeEndpointSource::new(
+            Arc::clone(&daemon) as Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource>,
+            Arc::clone(&pinned_source),
+        ),
+    );
     let mesh_provider = Arc::new(
-        sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+        sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
             Arc::clone(&provider),
-            Arc::clone(&daemon),
+            composite_source,
         ),
     );
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
@@ -2687,10 +2729,22 @@ async fn run_worker_daemon(args: &[String]) -> i32 {
     // is known-good. Production default is `subprocess`.
     let runner_kind = std::env::var("SOVEREIGN_WORKER_RUNNER")
         .unwrap_or_else(|_| "subprocess".to_string());
-    let runner: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> = match runner_kind.as_str() {
+    // Keep the runner as both `Arc<dyn WorkerRunner>` (for the worker
+    // daemon entrypoint) and — in the subprocess case — as a typed
+    // `Arc<SubprocessRunner>` so we can call `child_ready_signal()`
+    // to wire the pod-side inference proxy. Without this typed
+    // sibling the proxy can never be enabled because the trait
+    // object hides the readiness flag.
+    let (runner, inference_proxy): (
+        Arc<dyn sovereign_mesh::worker_http::WorkerRunner>,
+        Option<Arc<sovereign_mesh::worker_inference_proxy::InferenceProxyConfig>>,
+    ) = match runner_kind.as_str() {
         "echo" => {
             eprintln!("[worker-daemon] runner: echo (stub — no inference will run)");
-            Arc::new(sovereign_mesh::worker_daemon::EchoRunner)
+            // Echo runner has no child daemon — leave the proxy
+            // disabled. The /v1/* routes return 404 and the wire
+            // protocol stays at /internal/worker/*.
+            (Arc::new(sovereign_mesh::worker_daemon::EchoRunner), None)
         }
         other => {
             if other != "subprocess" {
@@ -2707,11 +2761,30 @@ async fn run_worker_daemon(args: &[String]) -> i32 {
                 config_path: config_path.clone(),
                 ..Default::default()
             };
-            Arc::new(sovereign_mesh::worker_subprocess_runner::SubprocessRunner::new(
-                cfg,
-                signals.0.clone(),
-                signals.1.clone(),
-            ))
+            let child_port = cfg.child_client_port;
+            let subprocess =
+                Arc::new(sovereign_mesh::worker_subprocess_runner::SubprocessRunner::new(
+                    cfg,
+                    signals.0.clone(),
+                    signals.1.clone(),
+                ));
+            // Build the proxy config from the same readiness atomic
+            // the subprocess runner flips when `/v1/models` first
+            // returns 200. The proxy reads it on every request so
+            // owner-side scheduler calls naturally 503 during the
+            // ~90s model warmup instead of seeing ECONNREFUSED.
+            let proxy = Arc::new(
+                sovereign_mesh::worker_inference_proxy::InferenceProxyConfig::for_local_child(
+                    format!("http://127.0.0.1:{child_port}"),
+                    subprocess.child_ready_signal(),
+                ),
+            );
+            eprintln!(
+                "[worker-daemon] inference proxy enabled (→ http://127.0.0.1:{child_port}) — \
+                 owner-side mesh scheduler can now route /v1/chat/completions to this pod"
+            );
+            let trait_obj: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> = subprocess;
+            (trait_obj, Some(proxy))
         }
     };
 
@@ -2721,6 +2794,7 @@ async fn run_worker_daemon(args: &[String]) -> i32 {
         None,
         Some(models_dir),
         Some(signals),
+        inference_proxy,
     )
     .await
     {

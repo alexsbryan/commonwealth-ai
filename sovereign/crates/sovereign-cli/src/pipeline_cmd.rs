@@ -924,22 +924,48 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         runner_config: serde_json::json!({}),
     };
 
-    // create_and_run mints the blob, calls vastai create, polls for
-    // address, waits for health, uploads files. It does NOT dispatch
-    // a job (units is empty); the pod stays in "uploads ready" state
-    // for follow-up commands.
-    let (handle, instance) = match controller.create_and_run(&spec).await {
-        Ok(t) => t,
-        Err(e) => {
-            eprintln!("pod up failed: {e}");
-            // Best-effort cleanup: if `instance_id` was created but
-            // the rest of the lifecycle failed, the operator can run
-            // `vastai destroy instance <id>` manually. Surfacing the
-            // error is more important than guessing the instance id
-            // here.
-            return 1;
+    // create_and_run_with_blob mints the blob, calls vastai create,
+    // polls for address, waits for health, uploads files. It does
+    // NOT dispatch a job (units is empty); the pod stays in
+    // "uploads ready" state for follow-up commands. The `_with_blob`
+    // variant also yields the bootstrap blob so we can persist a
+    // pinned-pod snapshot for the inference scheduler.
+    let (handle, instance, blob, _client) =
+        match controller.create_and_run_with_blob(&spec).await {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("pod up failed: {e}");
+                // Best-effort cleanup: if `instance_id` was created but
+                // the rest of the lifecycle failed, the operator can run
+                // `vastai destroy instance <id>` manually. Surfacing the
+                // error is more important than guessing the instance id
+                // here.
+                return 1;
+            }
+        };
+
+    // Persist a pinned-pod snapshot so the daemon's inference
+    // scheduler picks the pod up on next startup (or via the
+    // `--extra-worker` flag). Failure to write the snapshot is
+    // non-fatal — the pod still runs; the operator just won't get
+    // automatic inference routing to it until they re-run pod up
+    // or write the file themselves.
+    // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md §3.6.
+    if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
+        let capabilities =
+            capabilities_for_gpu(&instance.gpu_name);
+        let snapshot = sovereign_mesh::pinned_pod_snapshot::PinnedPodSnapshot::new(
+            instance.instance_id.clone(),
+            handle.host(),
+            handle.port(),
+            blob,
+            capabilities,
+        );
+        match sovereign_mesh::pinned_pod_snapshot::save_snapshot(&dir, &snapshot) {
+            Ok(p) => println!("wrote snapshot at {} (inference routing enabled)", p.display()),
+            Err(e) => eprintln!("warning: snapshot write failed ({e}) — inference routing disabled"),
         }
-    };
+    }
 
     let rec = ledger::PodRecord {
         vast_id: instance.instance_id.clone(),
@@ -1043,6 +1069,19 @@ fn cmd_pod_down(args: &[String]) -> i32 {
         // Continue to ledger close — operator may have already
         // destroyed the pod manually and just wants to clean up.
     }
+
+    // Remove the pinned-pod snapshot so the daemon's inference
+    // scheduler stops considering this pod. Idempotent — a pod that
+    // never wrote a snapshot (older pod-up before the inference
+    // wiring shipped) just returns false here.
+    // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md §3.6.
+    if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
+        match sovereign_mesh::pinned_pod_snapshot::delete_snapshot(&dir, &vast_id) {
+            Ok(true) => println!("removed pinned-pod snapshot for {vast_id}"),
+            Ok(false) => {}
+            Err(e) => eprintln!("warning: snapshot delete failed: {e}"),
+        }
+    }
     match ledger::close(&path, &vast_id) {
         Ok(rec) => {
             let total = ledger::accrued_cost(&rec);
@@ -1076,6 +1115,33 @@ fn truncate(s: &str, max: usize) -> String {
         let mut t: String = s.chars().take(max.saturating_sub(1)).collect();
         t.push('…');
         t
+    }
+}
+
+/// Operator-stamped capabilities for a rented GPU. Best-effort:
+/// covers the GPU families we routinely rent on Vast (L40S, A6000,
+/// H100, RTX 4090) with a default fallback. Tuning these tighter is
+/// future work; the inference scheduler's throughput-observation
+/// loop self-corrects once real traffic flows.
+///
+/// `system_ram_gb` is the Vast offer's *host* RAM — the pod's child
+/// daemon reads this for slot sizing. A miscalibration just biases
+/// routing, no correctness risk.
+fn capabilities_for_gpu(gpu_name: &str) -> sovereign_mesh::pinned_worker_source::PodCapabilities {
+    let upper = gpu_name.to_ascii_uppercase();
+    let system_ram_gb = if upper.contains("H100") {
+        192
+    } else if upper.contains("L40S") || upper.contains("A6000") || upper.contains("L40") {
+        128
+    } else if upper.contains("RTX 4090") || upper.contains("RTX_4090") {
+        64
+    } else {
+        64
+    };
+    sovereign_mesh::pinned_worker_source::PodCapabilities {
+        system_ram_gb,
+        benchmark: None,
+        current_in_flight: None,
     }
 }
 
