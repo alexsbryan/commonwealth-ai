@@ -1184,6 +1184,11 @@ impl EmbeddedDaemon {
                 system_ram_gb: m.capabilities.hardware.system_ram_gb,
                 benchmark: m.capabilities.benchmark.clone(),
                 current_in_flight: m.capabilities.current_in_flight,
+                // Mesh peers always use the default plain-HTTP transport
+                // — TLS pinning is reserved for ephemeral worker pods,
+                // which surface through `PinnedWorkerEndpointSource` in
+                // a separate path.
+                transport: None,
             })
             .collect()
     }
@@ -1991,6 +1996,21 @@ pub struct PeerInferenceEndpoint {
     /// scoring falls back to `peer_observations` in that case.
     /// See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
     pub current_in_flight: Option<u32>,
+    /// How to actually open a connection to this endpoint.
+    ///
+    /// `None` is the default mesh transport — plain HTTP to `base_urls`,
+    /// gossip-issued bearer (or no bearer). `Some(transport)` means
+    /// route through a TLS-pinned `reqwest::Client` carrying the
+    /// owner-signed `WorkerToken`, the way ephemeral worker pods are
+    /// authenticated. See `crate::pinned_transport`.
+    ///
+    /// The scoring, manifest fetch, throughput tracking, and fan-out
+    /// fallback paths in `peer_inference.rs` are oblivious to this
+    /// field — they only consume `node_id`, `name`, `base_urls`, and
+    /// the load signals. The hot-path call site that actually opens
+    /// the HTTP connection is the only place that branches on it.
+    /// Spec: `sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`.
+    pub transport: Option<crate::pinned_transport::PinnedTransport>,
 }
 
 impl Default for EmbeddedDaemon {

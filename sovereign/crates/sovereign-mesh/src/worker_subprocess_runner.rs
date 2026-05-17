@@ -186,7 +186,12 @@ struct Inner {
     /// then sets `child_ready` and releases. Subsequent dispatches
     /// take the fast path via the atomic.
     child_slot: Mutex<Option<Arc<ChildHandle>>>,
-    child_ready: AtomicBool,
+    /// `Arc<AtomicBool>` (not bare AtomicBool) so the pod-side
+    /// inference proxy in `worker_inference_proxy.rs` can observe the
+    /// same readiness signal — flip happens once when the child's
+    /// `/v1/models` probe returns 200. Cheaply cloned via
+    /// `child_ready_signal()`.
+    child_ready: Arc<AtomicBool>,
     /// Disk-dump signals — read from `WorkerState` by the
     /// constructor and stored as `Arc` clones so the runner can
     /// `notified()`-then-`load()` without holding a reference to
@@ -224,7 +229,7 @@ impl SubprocessRunner {
                 config,
                 client,
                 child_slot: Mutex::new(None),
-                child_ready: AtomicBool::new(false),
+                child_ready: Arc::new(AtomicBool::new(false)),
                 disk_dump_complete,
                 disk_dump_ready,
             }),
@@ -237,6 +242,15 @@ impl SubprocessRunner {
     pub async fn child_pid(&self) -> u32 {
         let slot = self.inner.child_slot.lock().await;
         slot.as_ref().map(|h| h.pid()).unwrap_or(0)
+    }
+
+    /// Hand out the shared "child daemon ready" signal. The pod-side
+    /// inference proxy in `worker_inference_proxy.rs` clones this and
+    /// reads it on every forward — without sharing, the proxy would
+    /// have to poll the child independently and the warmup window
+    /// would surface as confusing connection-refused errors.
+    pub fn child_ready_signal(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.inner.child_ready)
     }
 }
 

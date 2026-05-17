@@ -60,6 +60,13 @@ pub mod worker_daemon;
 pub mod worker_http;
 pub mod worker_pod;
 pub mod worker_subprocess_runner;
+pub mod worker_inference_proxy;
+// Pinned-pod inference routing — lets ephemeral worker pods join the
+// mesh scheduler's inference pool as one more peer, scored by the
+// same load balancer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+pub mod pinned_transport;
+pub mod pinned_worker_source;
+pub mod pinned_pod_snapshot;
 
 pub use daemon::EmbeddedDaemon;
 pub use work_atlas_broadcaster::MeshBroadcaster;

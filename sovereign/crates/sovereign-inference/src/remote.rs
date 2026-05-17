@@ -69,6 +69,31 @@ impl RemoteApiProvider {
         }
     }
 
+    /// Construct with a pre-built `reqwest::Client` and an explicit
+    /// bearer token. Used by the mesh scheduler when routing to a
+    /// pinned worker pod: the client carries a TLS pin to the pod's
+    /// seed-derived cert and the bearer is the owner-signed
+    /// `WorkerToken` the worker daemon's auth middleware validates.
+    ///
+    /// Equivalent to `new` in every other respect — request build,
+    /// streaming, and OICP envelope handling are unchanged because
+    /// they only consume `self.client` and `self.api_key`.
+    pub fn with_client_and_bearer(
+        endpoint: &str,
+        client: reqwest::Client,
+        bearer: String,
+        model_id: &str,
+        context_size: u32,
+    ) -> Self {
+        Self {
+            client,
+            endpoint: endpoint.trim_end_matches('/').to_string(),
+            api_key: Some(bearer),
+            model_id: model_id.to_string(),
+            context_size,
+        }
+    }
+
     fn build_request(&self, request: &CompletionRequest) -> serde_json::Value {
         let mut messages = Vec::new();
 

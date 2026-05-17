@@ -226,6 +226,7 @@ async fn joiner_streams_through_mesh_and_attributes_peer() {
         system_ram_gb: 64,
         benchmark: None,
         current_in_flight: None,
+        transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
@@ -303,6 +304,7 @@ async fn local_only_sharding_never_routes_to_peer() {
         system_ram_gb: 64,
         benchmark: None,
         current_in_flight: None,
+        transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
@@ -358,6 +360,7 @@ async fn explicit_peer_model_id_routes_to_peer_without_oicp_envelope() {
         system_ram_gb: 64,
         benchmark: None,
         current_in_flight: None,
+        transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
@@ -405,6 +408,7 @@ async fn explicit_unknown_model_id_errors_instead_of_silent_substitution() {
         system_ram_gb: 64,
         benchmark: None,
         current_in_flight: None,
+        transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });
@@ -448,6 +452,7 @@ async fn empty_model_id_falls_through_to_oicp_path() {
         system_ram_gb: 64,
         benchmark: None,
         current_in_flight: None,
+        transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> =
         Arc::new(StubPeerSource { peers });

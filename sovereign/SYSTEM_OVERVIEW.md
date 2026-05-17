@@ -197,6 +197,10 @@ crates/
     ├── worker_http.rs        #   Pod-side router: /internal/worker/{upload,job,completed} + auth middleware
     ├── worker_controller.rs  #   Owner-side controller + WorkerProvider trait + reqwest TLS pinning
     ├── worker_daemon.rs      #   `daemon run --worker-mode` entry: HTTPS termination on :9742 from seed-derived cert
+    ├── worker_inference_proxy.rs #   Pod-side TLS-pinned proxy: /v1/chat/completions etc. → child daemon
+    ├── pinned_transport.rs   #   TLS-pinned reqwest client + WorkerToken bearer for pinned pods
+    ├── pinned_worker_source.rs #  PinnedWorkerEndpointSource + CompositeEndpointSource for inference scheduler
+    ├── pinned_pod_snapshot.rs #   On-disk PinnedPodSnapshot (~/.sovereign/worker-pods/*.json)
     └── projects.rs types.rs
 
 skills/                       # 8 skills: research-analyst, epistemic-research, codebase-navigator,
@@ -2019,6 +2023,88 @@ Open polish items not in scope for the launch:
   plus the contribution-reads HTTP bridge `mesh_get_contributions`
   needs for full functionality in supervisor mode.
 - Graceful SIGTERM-with-grace on daemon shutdown (libc-based; small).
+
+### 5.12 Pinned worker pods as inference peers
+
+Ephemeral worker pods (Vast L40S rented via `pipeline pod up`) join the
+mesh scheduler's inference pool as one more peer, scored by the same
+OICP load balancer that picks between BeefyMac and a local primary
+slot. Pods aren't gossiped — they're owner-private, TLS-pinned, and
+authenticated by an Ed25519 `WorkerToken`. Spec:
+`sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`.
+
+What ships:
+
+- **`PeerInferenceEndpoint.transport: Option<PinnedTransport>`**
+  (`sovereign-mesh/src/daemon.rs`). `None` is the default plain-HTTP
+  mesh peer; `Some(t)` carries a pre-built TLS-pinned `reqwest::Client`
+  + the owner-signed bearer. Every outbound HTTP path in
+  `peer_inference.rs` (4 call sites, plus manifest fetch) branches on
+  this through one `provider_for_peer(&peer, url)` helper so the
+  pinned-pod carve-out can't accidentally regress when a new routing
+  path is added.
+- **`pinned_transport.rs`** — derives a TLS-pinned client + synthetic
+  `NodeId` from a bootstrap blob's seed. `synthetic_node_id_from_seed`
+  domain-separates from the pubkey thumbprint so the scheduler's
+  per-peer hashmap key can't collide with the TLS pin.
+- **`pinned_worker_source.rs`** — `PinnedWorkerEndpointSource`
+  (register/deregister/list) + `CompositeEndpointSource` that
+  concatenates a mesh source with a pinned source. The composite
+  suppresses ledger emission for pinned-pod node ids — pods are the
+  owner's own paid compute, not gifted peer compute.
+- **`pinned_pod_snapshot.rs`** — on-disk snapshot format at
+  `~/.sovereign/worker-pods/<vast-id>.json` carrying the bootstrap
+  blob + host:port + operator-stamped capabilities. `pod up` writes
+  one (atomic write-then-rename); `pod down` deletes it. The daemon
+  loads every snapshot on startup and registers each pod with the
+  inference scheduler.
+- **Pod-side proxy** (`worker_inference_proxy.rs`) — the worker
+  daemon's `:9742` listener serves `POST /v1/chat/completions`,
+  `POST /v1/embeddings`, `GET /v1/models`, `GET /oicp/v1/capabilities`
+  when an `InferenceProxyConfig` is wired. Each request is forwarded
+  to the child daemon at `http://127.0.0.1:9741` via streaming
+  reqwest (`bytes_stream` + axum `Body::from_stream`) so SSE token
+  pacing is preserved through the TLS tunnel. The same Ed25519
+  `require_worker_token` middleware that gates `/internal/worker/*`
+  covers these — no second auth layer. Until the child daemon's
+  `/v1/models` probe returns 200, the proxy 503s with `Retry-After`
+  so the owner sees a transient-error pattern (which the scheduler's
+  fan-out retry tolerates) rather than `ECONNREFUSED` (which is
+  opaque).
+- **Affinity carve-out** in `peer_inference.rs`: pinned pods have no
+  "users" beyond the owner, so the scheduler normalises
+  `claim_affinity = 1.0` for any peer with `transport.is_some()`.
+  Without this, a pinned pod whose child manifest didn't advertise
+  outside-user serving would be silently penalised in the scoring
+  ratio.
+
+Invariants pinned by tests:
+
+- The pod's TLS cert is deterministic from the blob's seed
+  (`deterministic_cert_from_seed` in `pinned_transport.rs`) — the
+  owner's snapshot-reload flow depends on byte-identical cert
+  derivation.
+- A pinned pod's synthetic node id never collides with its pubkey
+  thumbprint (`synthetic_node_id_differs_from_pod_thumbprint`).
+- `PinnedTransport`'s Debug impl redacts the bearer.
+- `CompositeEndpointSource::ledger_emission_for` returns `None` for
+  every registered pinned node id, regardless of what the inner mesh
+  source would have emitted.
+- `worker_inference_proxy` returns 503 when `child_ready` is false
+  and 401 when the bearer is missing.
+- `load_all_snapshots` skips corrupt/non-JSON files rather than
+  bailing the whole daemon startup.
+
+Out of scope for v1 (deferred):
+
+- Hot-reload of the pinned source (today: daemon picks up new pods on
+  restart only — `pipeline pod up` writes the snapshot but the
+  running daemon doesn't auto-re-scan the directory).
+- HTTP register/unregister endpoint for runtime pod attach.
+- Stream-pacing regression test against a real SSE child.
+- Real-Vast E2E in CI (the unit + proxy tests cover the plumbing; a
+  live Vast test belongs in the integration suite that already runs
+  `tests/worker_e2e.rs`).
 
 ---
 
