@@ -506,29 +506,10 @@ EXPRESSIVE
   NOT EXPRESSIVE: longer messages that embed a real question are
   the question type, not EXPRESSIVE.
 
-METALINGUAL
-  A question about how a SPECIFIC SOURCE (this codebase, a prior
-  exchange in this conversation, a named text) USES a word or
-  defines a term. Foregrounds the *words themselves*, not the
-  world the words point at (Jakobson's metalingual function).
-  Requires a source-anchor on the WORD: "in this codebase",
-  "earlier you said", "what did we agree on earlier about X",
-  "what does X mean in [author/paper]".
-  Examples: "What does 'agent' mean in this codebase?",
-            "How does Heidegger use the word 'Dasein'?",
-            "What did we agree on earlier about the schema?"
-  NOT METALINGUAL: questions about CONTENT recalled from a source.
-  "What books have I mentioned in our chats" is asking for the
-  BOOKS — content — not how the chats use the word "mentioned".
-  Use LOOKUP. Same for "what named people come up most often",
-  "what topics have I discussed", "have I ever talked about X".
-  These are LOOKUP/REASONING against the conversation corpus, not
-  questions about word usage.
-
 User message: "{message}"{corrections_note}{skill_hints}
 
 Respond with JSON only:
-{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE|METALINGUAL"}}"#,
+{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE"}}"#,
         )
     }
 
