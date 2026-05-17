@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::Stream;
-use llama_cpp_2::llama_backend::LlamaBackend;
+use crate::llama::cpp::llama_backend::LlamaBackend;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::model_family::ModelFamily;
