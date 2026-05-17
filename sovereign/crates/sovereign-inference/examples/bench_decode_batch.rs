@@ -37,13 +37,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use llama_cpp_2::context::params::LlamaContextParams;
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel};
-use llama_cpp_2::sampling::LlamaSampler;
-use llama_cpp_2::token::LlamaToken;
+use llama_cpp_4::context::params::LlamaContextParams;
+use llama_cpp_4::llama_backend::LlamaBackend;
+use llama_cpp_4::llama_batch::LlamaBatch;
+use llama_cpp_4::model::params::LlamaModelParams;
+use llama_cpp_4::model::{AddBos, LlamaModel};
+use llama_cpp_4::sampling::LlamaSampler;
+use llama_cpp_4::token::LlamaToken;
 
 #[derive(Clone, Copy, Debug)]
 enum Backend {
@@ -98,7 +98,7 @@ fn main() {
     println!(
         "model loaded: layers={} size_mb={}",
         model.n_layer(),
-        model.size() / (1024 * 1024)
+        model.model_size() / (1024 * 1024)
     );
     println!();
 
@@ -116,7 +116,7 @@ fn main() {
 
     for cfg in &args.sweep {
         let total_ctx = cfg.n_seq * cfg.n_ctx_per_seq;
-        let (offload_kqv, op_offload) = match args.backend {
+        let (offload_kqv, _op_offload) = match args.backend {
             Backend::CpuOnly => (false, false),
             Backend::GpuFull => (true, true),
             Backend::GpuOpsOnly => (false, true),
@@ -125,11 +125,9 @@ fn main() {
             .with_n_ctx(NonZeroU32::new(total_ctx))
             .with_n_batch(total_ctx)
             .with_n_ubatch(args.n_ubatch)
-            .with_n_seq_max(cfg.n_seq)
             .with_n_threads(args.threads as i32)
             .with_n_threads_batch(args.threads as i32)
-            .with_offload_kqv(offload_kqv)
-            .with_op_offload(op_offload);
+            .with_offload_kqv(offload_kqv);
         let mut ctx = unsafe {
             let model_ref: &'static LlamaModel =
                 &*(Arc::as_ptr(&model) as *const LlamaModel);
@@ -194,7 +192,7 @@ struct RunResult {
 ///      when it hits `gen_tokens`. Wall stops when all seqs retire.
 fn run_k_calls(
     model: &LlamaModel,
-    ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+    ctx: &mut llama_cpp_4::context::LlamaContext<'_>,
     prompt_text: &str,
     k: usize,
     n_seq: u32,

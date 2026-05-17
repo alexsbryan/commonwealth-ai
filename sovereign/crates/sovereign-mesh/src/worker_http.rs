@@ -1601,13 +1601,56 @@ mod tests {
                 .unwrap_or_default();
             state.observed_range.lock().unwrap().push(range.clone());
             if n == 0 {
-                // First attempt: serve only the first half, then close.
+                // First attempt: stream the first half in small frames
+                // with a brief delay before the trailing error, then
+                // error out — simulates a Cloudflare-style mid-body
+                // drop. Three subtleties that this fixture had to
+                // navigate to work on hyper 1.x + reqwest 0.12:
+                // 1. hyper 1.x panics if a fixed-length body is shorter
+                //    than its declared Content-Length. So we go
+                //    streamed (no Content-Length header → chunked).
+                // 2. With one large chunk + immediate error, reqwest
+                //    treats the whole body as a single failed buffer
+                //    and the client sees zero bytes accumulated — the
+                //    production resume path only triggers when at
+                //    least one frame already landed on the client.
+                //    Split into many small frames.
+                // 3. Without a yield between the last Ok frame and the
+                //    Err, hyper coalesces them into one TCP write and
+                //    reqwest yields zero Ok chunks before the Err.
+                //    A tokio sleep between the last Ok and the Err
+                //    forces hyper to flush the body frames before the
+                //    error closes the connection.
                 let half = state.payload.len() / 2;
-                let truncated = state.payload[..half].to_vec();
+                let mut frames: Vec<Result<Bytes, std::io::Error>> = Vec::new();
+                const FRAME: usize = 16 * 1024;
+                let mut sent = 0usize;
+                while sent < half {
+                    let end = (sent + FRAME).min(half);
+                    frames.push(Ok(Bytes::copy_from_slice(&state.payload[sent..end])));
+                    sent = end;
+                }
+                use futures::stream::StreamExt;
+                let ok_stream = futures::stream::iter(frames).then(|item| async move {
+                    // Small per-frame yield so hyper actually flushes
+                    // each chunk to the wire as a separate write.
+                    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+                    item
+                });
+                let err_stream = futures::stream::once(async {
+                    // Generous trailing delay so reqwest's body reader
+                    // has consumed and yielded the prior frames before
+                    // the connection-reset error arrives.
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    Err::<Bytes, std::io::Error>(std::io::Error::new(
+                        std::io::ErrorKind::ConnectionReset,
+                        "simulated mid-body drop",
+                    ))
+                });
+                let body_stream = ok_stream.chain(err_stream);
                 AxumResponse::builder()
                     .status(StatusCode::OK)
-                    .header("Content-Length", state.payload.len().to_string())
-                    .body(AxumBody::from(truncated))
+                    .body(AxumBody::from_stream(body_stream))
                     .unwrap()
             } else {
                 // Second attempt: serve from the offset the client
