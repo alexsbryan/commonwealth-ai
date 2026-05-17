@@ -219,6 +219,14 @@ impl BackgroundWatcher for LintWatcher {
     }
 
     async fn on_files_changed(&self, paths: Vec<PathBuf>) {
+        // Sample up to 5 paths for diagnostic logging — helps catch the
+        // "watcher loop on its own build artifacts" pattern by showing
+        // which paths leaked through `interesting_coordinator_paths`.
+        let sample: Vec<String> = paths
+            .iter()
+            .take(5)
+            .map(|p| p.display().to_string())
+            .collect();
         if let Err(e) = self.store.mark_stale(&paths).await {
             tracing::warn!("LintWatcher: failed to mark stale: {e}");
         }
@@ -229,11 +237,13 @@ impl BackgroundWatcher for LintWatcher {
             self.rerun_pending.store(true, Ordering::SeqCst);
             tracing::info!(
                 count = paths.len(),
+                ?sample,
                 "LintWatcher: files changed during in-flight run; queued rerun"
             );
         } else {
             tracing::info!(
                 count = paths.len(),
+                ?sample,
                 "LintWatcher: files changed, starting lint"
             );
             self.spawn_run(false).await;

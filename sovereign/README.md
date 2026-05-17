@@ -96,8 +96,16 @@ Lost the key? The plaintext is never stored (only a BLAKE3 hash lives on disk). 
 
 **macOS:**
 ```sh
+# Xcode Command Line Tools — provides clang + the C++ stdlib headers
+# that llama-cpp-sys-4's bindgen step needs. Without these, the build
+# fails with `'memory' file not found` partway through llama-cpp-sys-4.
+xcode-select --install   # no-op if already installed
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 brew install cmake
+# Persist the SDK root so bindgen finds <memory> et al. across new
+# shells — Apple's clang doesn't read this from a global default.
+echo 'export SDKROOT="$(xcrun --show-sdk-path)"' >> ~/.zshrc
+export SDKROOT="$(xcrun --show-sdk-path)"
 ```
 
 **Linux (Ubuntu/Debian):**
