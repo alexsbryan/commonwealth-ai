@@ -1,28 +1,79 @@
-# Workspace-root cargo config. Applies whenever cargo is invoked
-# from `/home/alexbryan/dev/commonwealth-ai/` or any subdirectory.
+# Workspace-root cargo config. Applies whenever cargo is invoked from this
+# repo or any subdirectory.
 #
-# Linker-search-path override for llama.cpp .so resolution.
+# ---------------------------------------------------------------------------
+# Per-triple linker overrides.
 #
-# Some Linux toolboxes ship a stale `libllama.so` / `libggml*.so` /
-# `libmtmd.so` in /usr/lib64 (often older than what llama-cpp-sys-4
-# bundles). With those present, the linker picks them up via
-# `-L /usr/lib64` (emitted as a search path by other sys crates)
-# BEFORE the freshly-built bundled .so's under
-# `target/llama-cmake-cache/*/lib64`, and the build fails with
-# `undefined symbol: common_speculative_*` (the bundled tree has
-# the 3-arg `common_speculative_begin`; the stale one has the older
-# 2-arg version).
+# macOS: lld (via Homebrew). Falls back gracefully if lld absent — comment
+# the line out and Cargo will use the system ld64. If Xcode CLT >= 15 the
+# default ld_prime is comparable in speed; lld stays here for the older CLT
+# on this machine.
 #
-# Operator-installed fix: drop bundled .so's into /usr/local/lib64
-# and arrange ldconfig to search it FIRST (so the dynamic loader
-# also finds the right versions at runtime). The rustflags below
-# tells rustc to add /usr/local/lib64 to the link-time search path
-# before any build-script-emitted ones — cargo prepends RUSTFLAGS-
-# supplied -L args, so the bundled-matching .so's there win over
-# /usr/lib64. Empty effect on systems where /usr/local/lib64 is
-# absent — the path is just skipped.
+# macOS rpath: lld's macOS backend does NOT inject the implicit @loader_path
+# rpath that ld64 adds by default. llama-cpp-sys-4 ships libggml-*.dylib
+# co-located with the binary in target/<profile>/; without explicit rpath
+# args here, `sovereign-cli` crashes at startup with
+# `dyld: Library not loaded: @rpath/libggml-base.0.dylib (no LC_RPATH's found)`.
+# See `invariant_macos_lld_rpath.md` in project memory. Don't strip these.
 #
-# See `feedback_system_libllama_masks_bundled.md` in the project
-# memory for the full story + the one-time `cp + ldconfig` recipe.
-[build]
-rustflags = ["-L", "native=/usr/local/lib64"]
+# Linux: mold (via dnf/apt). Requires clang as the linker driver because
+# gcc's -fuse-ld passthrough is finicky across distros.
+#
+# Linux -L /usr/local/lib64 search-path override:
+#   Some Linux toolboxes ship a stale `libllama.so` / `libggml*.so` /
+#   `libmtmd.so` in /usr/lib64 (often older than what llama-cpp-sys-4
+#   bundles). With those present, the linker picks them up via
+#   `-L /usr/lib64` (emitted as a search path by other sys crates)
+#   BEFORE the freshly-built bundled .so's under
+#   `target/llama-cmake-cache/*/lib64`, and the build fails with
+#   `undefined symbol: common_speculative_*` (the bundled tree has
+#   the 3-arg `common_speculative_begin`; the stale one has the older
+#   2-arg version).
+#
+#   Operator-installed fix: drop bundled .so's into /usr/local/lib64
+#   and arrange ldconfig to search it FIRST (so the dynamic loader
+#   also finds the right versions at runtime). The `-L native=/usr/local/lib64`
+#   flag below tells rustc to add that dir to the link-time search path
+#   before any build-script-emitted ones — cargo prepends RUSTFLAGS-
+#   supplied -L args, so the bundled-matching .so's there win over
+#   /usr/lib64. Empty effect on systems where /usr/local/lib64 is
+#   absent — the path is just skipped.
+#
+#   See `feedback_system_libllama_masks_bundled.md` in project memory for
+#   the full story + the one-time `cp + ldconfig` recipe. The flag is
+#   duplicated into each Linux target block (rather than living in
+#   `[build]`) because Cargo replaces — not merges — `[build].rustflags`
+#   whenever a target-specific `rustflags` entry exists.
+#
+# sccache is intentionally NOT set here as rustc-wrapper — it would break
+# on any machine without sccache installed. Set RUSTC_WRAPPER=sccache in
+# your shell profile per machine.
+# ---------------------------------------------------------------------------
+
+[target.aarch64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-fuse-ld=lld",
+  "-C", "link-arg=-Wl,-rpath,@loader_path",
+  "-C", "link-arg=-Wl,-rpath,@executable_path",
+]
+
+[target.x86_64-apple-darwin]
+rustflags = [
+  "-C", "link-arg=-fuse-ld=lld",
+  "-C", "link-arg=-Wl,-rpath,@loader_path",
+  "-C", "link-arg=-Wl,-rpath,@executable_path",
+]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = [
+  "-C", "link-arg=-fuse-ld=mold",
+  "-L", "native=/usr/local/lib64",
+]
+
+[target.aarch64-unknown-linux-gnu]
+linker = "clang"
+rustflags = [
+  "-C", "link-arg=-fuse-ld=mold",
+  "-L", "native=/usr/local/lib64",
+]

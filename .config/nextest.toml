@@ -1,0 +1,62 @@
+# cargo-nextest config. Picked up automatically when nextest runs
+# from this repo root. Per-machine overrides go in
+# ~/.config/nextest.toml.
+#
+# Profiles:
+# - default : interactive dev runs (you typing `cargo nextest run`)
+# - ci      : full regression gates (longer slow-timeout, retries on)
+# - quick   : tight-loop iteration (fail-fast on, short slow-timeout)
+
+[profile.default]
+# Don't bail on first failure — surface every red test in one run.
+fail-fast = false
+
+# Mark a test "slow" after 60s and kill after 3 slow strikes (180s wall).
+# A handful of integration tests (mesh discovery, llama-cpp model load)
+# legitimately need longer — override per-test via [[profile.default.overrides]]
+# below as you find them.
+slow-timeout = { period = "60s", terminate-after = 3 }
+
+# Per-test stdout/stderr only printed when the test fails — less noise.
+failure-output = "immediate-final"
+success-output = "never"
+
+# Status reporter density. "fail" keeps output tight during long runs.
+status-level = "fail"
+final-status-level = "slow"
+
+[profile.default.junit]
+# Drop a junit.xml so CI surfaces individual test names in PR UI.
+path = "junit.xml"
+
+# ── CI profile ─────────────────────────────────────────────────────────────
+# Triggered by `cargo nextest run --profile ci`.
+[profile.ci]
+fail-fast = false
+slow-timeout = { period = "120s", terminate-after = 2 }
+retries = { backoff = "exponential", count = 2, delay = "2s", jitter = true }
+failure-output = "immediate-final"
+success-output = "never"
+status-level = "all"
+final-status-level = "slow"
+
+[profile.ci.junit]
+path = "junit.xml"
+
+# ── Quick profile ──────────────────────────────────────────────────────────
+# `cargo nextest run --profile quick` — for tight-loop debugging.
+[profile.quick]
+fail-fast = true
+slow-timeout = { period = "30s", terminate-after = 1 }
+failure-output = "immediate"
+status-level = "pass"
+
+# ── Per-test overrides ─────────────────────────────────────────────────────
+# Long-running integration tests that need more headroom. Add entries
+# here as you discover legitimately-slow tests; default to fixing the
+# test before extending the timeout.
+#
+# Example:
+# [[profile.default.overrides]]
+# filter = "test(/mesh::discovery::/)"
+# slow-timeout = { period = "180s", terminate-after = 2 }
