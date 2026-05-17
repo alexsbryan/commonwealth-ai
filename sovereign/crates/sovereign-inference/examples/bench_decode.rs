@@ -41,12 +41,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use llama_cpp_2::context::params::LlamaContextParams;
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel};
-use llama_cpp_2::sampling::LlamaSampler;
+use llama_cpp_4::context::params::LlamaContextParams;
+use llama_cpp_4::llama_backend::LlamaBackend;
+use llama_cpp_4::llama_batch::LlamaBatch;
+use llama_cpp_4::model::params::LlamaModelParams;
+use llama_cpp_4::model::{AddBos, LlamaModel};
+use llama_cpp_4::sampling::LlamaSampler;
 
 #[derive(Clone, Copy, Debug)]
 enum Backend {
@@ -78,7 +78,7 @@ fn main() {
     println!(
         "model loaded: layers={} size_mb={}",
         model.n_layer(),
-        model.size() / (1024 * 1024)
+        model.model_size() / (1024 * 1024)
     );
     println!();
 
@@ -91,7 +91,7 @@ fn main() {
     );
 
     for &n_threads in &args.thread_counts {
-        let (offload_kqv, op_offload) = match args.backend {
+        let (offload_kqv, _op_offload) = match args.backend {
             Backend::CpuOnly => (false, false),
             Backend::MetalFull => (true, true),
             Backend::MetalOpsOnly => (false, true),
@@ -102,8 +102,7 @@ fn main() {
             .with_n_ubatch(512)
             .with_n_threads(n_threads as i32)
             .with_n_threads_batch(n_threads as i32)
-            .with_offload_kqv(offload_kqv)
-            .with_op_offload(op_offload);
+            .with_offload_kqv(offload_kqv);
 
         let mut ctx = unsafe {
             let model_ref: &'static LlamaModel =
@@ -135,7 +134,7 @@ fn main() {
 ///   (prompt_eval_ms, decode_ms, prompt_tokens, decode_tokens).
 fn run_turn(
     model: &LlamaModel,
-    ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+    ctx: &mut llama_cpp_4::context::LlamaContext<'_>,
     prompt_text: &str,
     gen_tokens: usize,
 ) -> (u64, u64, usize, usize) {

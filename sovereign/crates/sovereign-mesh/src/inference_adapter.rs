@@ -1399,13 +1399,22 @@ mod adapter_translation_tests {
         assert!(super::tool_envelope_schema_for(&req).is_none());
     }
 
+    /// Per-test-module lock for tests that mutate
+    /// `SOVEREIGN_FORCE_TOOL_CALLS`. Three callers, all in this file.
+    /// The promise "tests run fast so the race won't matter" turned
+    /// out to be a flake under repo-wide parallel `cargo test` — pin
+    /// it with an actual mutex.
+    fn force_tool_calls_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+            std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
+
     #[test]
     fn force_tool_calls_env_engages_schema_when_choice_omitted() {
-        // SAFETY: tests modify process env. Each test that touches this
-        // var must restore. Cargo's default test harness runs tests in
-        // parallel within a file — explicit serialization via a mutex
-        // would be safer in a larger suite. For now, the env var name is
-        // unique to this codebase and these two tests run fast.
+        let _guard = force_tool_calls_env_lock();
         std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
         let req = req_with_tool_choice(Some(vec![tool_def("write")]), None);
         let schema = super::tool_envelope_schema_for_with_env(&req);
@@ -1415,6 +1424,7 @@ mod adapter_translation_tests {
 
     #[test]
     fn force_tool_calls_env_overrides_auto() {
+        let _guard = force_tool_calls_env_lock();
         // Operator opted in via env: even an explicit "auto" gets
         // upgraded to "required" so the grammar engages. The opt-in
         // is global to the daemon; clients that need text-only turns
@@ -1431,6 +1441,7 @@ mod adapter_translation_tests {
 
     #[test]
     fn force_tool_calls_env_respects_explicit_none() {
+        let _guard = force_tool_calls_env_lock();
         // tool_choice="none" semantically means "model must NOT call a
         // tool". Even with the env var set, refuse to override that.
         std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");

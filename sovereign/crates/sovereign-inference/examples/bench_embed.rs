@@ -25,11 +25,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel};
+use llama_cpp_4::context::params::{LlamaContextParams, LlamaPoolingType};
+use llama_cpp_4::llama_backend::LlamaBackend;
+use llama_cpp_4::llama_batch::LlamaBatch;
+use llama_cpp_4::model::params::LlamaModelParams;
+use llama_cpp_4::model::{AddBos, LlamaModel};
 
 // Metal / CPU toggles for the experiment.
 #[derive(Clone, Copy, Debug)]
@@ -70,7 +70,7 @@ fn main() {
         "model loaded: dims={} layers={} size_mb={}",
         n_embd,
         model.n_layer(),
-        model.size() / (1024 * 1024)
+        model.model_size() / (1024 * 1024)
     );
     println!();
 
@@ -88,7 +88,7 @@ fn main() {
         // A fresh context per configuration — context params
         // include n_threads, and llama-cpp-2 doesn't let us
         // change them mid-flight.
-        let (offload_kqv, op_offload) = match args.backend {
+        let (offload_kqv, _op_offload) = match args.backend {
             Backend::CpuOnly => (false, false),
             Backend::MetalFull => (true, true),
             Backend::MetalOpsOnly => (false, true),
@@ -97,11 +97,9 @@ fn main() {
             .with_n_ctx(NonZeroU32::new(args.n_ctx))
             .with_n_batch(args.n_ctx)
             .with_n_ubatch(args.n_ubatch)
-            .with_n_seq_max(args.n_seq_max)
             .with_embeddings(true)
             .with_pooling_type(LlamaPoolingType::Mean)
             .with_offload_kqv(offload_kqv)
-            .with_op_offload(op_offload)
             .with_n_threads(n_threads as i32)
             .with_n_threads_batch(n_threads as i32);
         let mut ctx = unsafe {
@@ -136,7 +134,7 @@ fn main() {
 /// the total tokens processed so the caller can compute tok/sec.
 fn run_batch(
     model: &LlamaModel,
-    ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+    ctx: &mut llama_cpp_4::context::LlamaContext<'_>,
     texts: &[String],
     n_ctx: u32,
     n_seq_max: u32,

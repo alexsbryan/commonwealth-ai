@@ -1422,6 +1422,70 @@ impl ValidatorState {
             ParseStatus::Incomplete
         }
     }
+
+    /// Returns `Some(byte)` iff exactly one byte is legal in the
+    /// current FSM state — the byte-level building block for Tier 2
+    /// jump-forward decoding. None on ambiguity (≥2 legal bytes),
+    /// degenerate-no-legal-bytes, or root-complete.
+    ///
+    /// Mechanically: for each candidate byte 0..256, clone `self` and
+    /// call `advance`. A non-Invalid result means the byte was
+    /// accepted. Short-circuits as soon as a second legal byte is
+    /// found — so ambiguous states (the common case during string
+    /// bodies, key prefixes) usually terminate after the first 2-3
+    /// trials rather than walking the full 256.
+    ///
+    /// Cheap by construction: `ValidatorState` clones at Arc-pointer
+    /// granularity (every heavy field on `Frame` is Arc-wrapped),
+    /// so 256 clones cost ~stack-depth × atomic increments — well
+    /// under the cost of one full-vocab parser walk (which Tier 1's
+    /// mask path performs).
+    pub(crate) fn forced_next_byte(&self) -> Option<u8> {
+        if self.root_complete {
+            return None;
+        }
+        let mut found: Option<u8> = None;
+        for b in 0u16..=255u16 {
+            let b = b as u8;
+            let mut probe = self.clone();
+            if !matches!(probe.advance(b), ParseStatus::Invalid) {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(b);
+            }
+        }
+        found
+    }
+
+    /// Walks `forced_next_byte` forward, advancing an internal probe
+    /// state by each forced byte, and returns the deterministic byte
+    /// sequence the FSM emits from this state. Stops on ambiguity,
+    /// when the probe reaches `Complete`, or when `max_bytes` is
+    /// reached. Empty when the very first state is ambiguous.
+    ///
+    /// Pure of side effects on `self` — the walk runs entirely on
+    /// clones. The caller advances `self` separately via `accept`
+    /// after the vocab longest-match resolves the byte run into
+    /// tokens (see `JsonConstraint::forced_next_run`).
+    pub(crate) fn forced_byte_run(&self, max_bytes: usize) -> Vec<u8> {
+        let mut out = Vec::with_capacity(max_bytes.min(16));
+        let mut probe = self.clone();
+        while out.len() < max_bytes {
+            let Some(b) = probe.forced_next_byte() else {
+                break;
+            };
+            // Advance probe by the forced byte. `forced_next_byte`
+            // already verified b is non-Invalid from this exact state,
+            // so this advance cannot return Invalid — defensive check
+            // bails if it somehow does.
+            if matches!(probe.advance(b), ParseStatus::Invalid) {
+                break;
+            }
+            out.push(b);
+        }
+        out
+    }
 }
 
 /// Content-based fingerprint of a Schema enum value. Hashes the
@@ -2396,6 +2460,125 @@ fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
     arc
 }
 
+/// Byte-keyed trie over the model's vocab. Each terminal node carries
+/// the `LlamaToken` whose bytes end at that node; descending the trie
+/// with a byte sequence and tracking the deepest terminal hit gives
+/// the longest vocab token that's a prefix of the input.
+///
+/// Tier 2 jump-forward decoding queries this with the FSM's forced
+/// byte run to find the biggest single token that covers as many of
+/// those bytes as possible — saving a forward pass for each token
+/// the trie consumes from the run.
+///
+/// Built once per model, cached for the daemon's lifetime alongside
+/// `vocab_cache`. Memory cost: ~25-35 MB for a 150K-token vocab with
+/// ~3-byte average length (HashMap-of-byte children per node). The
+/// trie is read-only after construction, so it's safe to share via
+/// `Arc` across threads.
+pub struct VocabTrie {
+    root: VocabTrieNode,
+}
+
+struct VocabTrieNode {
+    /// Children indexed by the next byte in a token's byte sequence.
+    /// Sparse via HashMap — most internal nodes have only a few
+    /// children, so a 256-slot array would waste a lot of memory.
+    children: HashMap<u8, Box<VocabTrieNode>>,
+    /// Set iff a vocab token ends exactly at this node. None on
+    /// purely-internal nodes (the bytes accumulated to here are a
+    /// prefix of some token but not themselves a complete token).
+    token: Option<LlamaToken>,
+}
+
+impl VocabTrieNode {
+    fn new() -> Self {
+        Self {
+            children: HashMap::new(),
+            token: None,
+        }
+    }
+}
+
+impl VocabTrie {
+    /// Build a trie from a vocab byte map. Empty token byte sequences
+    /// (holes for unknown-type tokens) are skipped. On the unlikely
+    /// case of two tokens with identical byte sequences (BPE merges
+    /// occasionally produce these), the smaller token id wins —
+    /// arbitrary but deterministic.
+    pub fn new(vocab_bytes: &[Vec<u8>]) -> Self {
+        let mut root = VocabTrieNode::new();
+        for (id, bytes) in vocab_bytes.iter().enumerate() {
+            if bytes.is_empty() {
+                continue;
+            }
+            let mut node = &mut root;
+            for &b in bytes {
+                node = node
+                    .children
+                    .entry(b)
+                    .or_insert_with(|| Box::new(VocabTrieNode::new()));
+            }
+            if node.token.is_none() {
+                node.token = Some(LlamaToken(id as i32));
+            }
+        }
+        Self { root }
+    }
+
+    /// Walk `bytes` from the root, tracking the deepest terminal node
+    /// hit. Returns `(token, consumed)` where `consumed` is the number
+    /// of bytes the matched token covers from the start of `bytes`.
+    /// `None` when no vocab token is a prefix of `bytes` (the input's
+    /// first byte has no trie child).
+    pub fn longest_match(&self, bytes: &[u8]) -> Option<(LlamaToken, usize)> {
+        let mut node = &self.root;
+        let mut best: Option<(LlamaToken, usize)> = None;
+        for (i, &b) in bytes.iter().enumerate() {
+            let Some(child) = node.children.get(&b) else {
+                break;
+            };
+            node = child.as_ref();
+            if let Some(t) = node.token {
+                best = Some((t, i + 1));
+            }
+        }
+        best
+    }
+}
+
+/// Per-process cache of `VocabTrie` instances, keyed by `LlamaModel`
+/// pointer. Mirrors `vocab_cache`'s shape: one entry per model,
+/// populated lazily on first jump-forward request against that model.
+fn vocab_trie_cache() -> &'static Mutex<HashMap<usize, Arc<VocabTrie>>> {
+    static CACHE: OnceLock<Mutex<HashMap<usize, Arc<VocabTrie>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Get-or-build the model's `VocabTrie`. Reuses `vocab_bytes_for` so
+/// the trie and the bytes share their lifetime — both are persistent
+/// for the daemon's lifetime once created.
+pub(crate) fn vocab_trie_for(model: &LlamaModel) -> Arc<VocabTrie> {
+    let key = model as *const LlamaModel as usize;
+    {
+        let guard = vocab_trie_cache()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(t) = guard.get(&key) {
+            return t.clone();
+        }
+    }
+    let vocab_bytes = vocab_bytes_for(model);
+    let trie = Arc::new(VocabTrie::new(&vocab_bytes));
+    let mut guard = vocab_trie_cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some(existing) = guard.get(&key) {
+        return existing.clone();
+    }
+    guard.insert(key, trie.clone());
+    trie
+}
+
 /// Per-process cache of non-Latin token denylists, keyed by
 /// `LlamaModel` pointer. Mirrors `vocab_cache`'s lifecycle.
 fn non_latin_denylist_cache() -> &'static Mutex<HashMap<usize, Arc<Vec<bool>>>> {
@@ -2511,6 +2694,84 @@ fn apply_cached_mask(
     }
 }
 
+/// One entry in the per-state validity cache. `valid` is the
+/// vocab-sized bitmask (the hot read for `apply_cached_mask`); `single`
+/// records the lone surviving token when exactly one token is legal in
+/// this state. The latter is the input to jump-forward decoding —
+/// callers that opt in (via `forced_next_token`) can emit the token
+/// without paying for a forward pass at that position.
+///
+/// Computed once per state on cache miss; both fields share the same
+/// FIFO eviction lifetime under [`MASK_CACHE_MAX_ENTRIES`].
+#[derive(Debug, Clone)]
+struct MaskCacheEntry {
+    valid: Arc<Vec<bool>>,
+    single: Option<LlamaToken>,
+}
+
+/// Walk a freshly-computed validity bitmask and return `Some(token)` iff
+/// exactly one position is `true`. Short-circuits on the second hit so
+/// the cost is bounded by `2 * first_true_index` in the worst case.
+fn single_survivor(valid: &[bool]) -> Option<LlamaToken> {
+    let mut found: Option<LlamaToken> = None;
+    for (i, &v) in valid.iter().enumerate() {
+        if v {
+            if found.is_some() {
+                return None;
+            }
+            found = Some(LlamaToken(i as i32));
+        }
+    }
+    found
+}
+
+/// Full-vocab walk of the FSM at `state`, returning the per-token
+/// validity bitmask. The hot reused-elsewhere computation behind both
+/// `JsonConstraint::mask` (which writes the bitmask onto a
+/// `LlamaTokenDataArray` via `apply_cached_mask`) and
+/// `JsonConstraint::forced_next_token` (which only needs the bitmask
+/// to detect single-survivor states). Pure of side effects.
+///
+/// `buffer_is_complete=true` is the "root-closed" branch: only EOG
+/// and whitespace tokens are legal. `buffer_is_complete=false` runs
+/// the per-candidate `advance_bytes` parse — the cost driver, which
+/// is why we cache the resulting bitmask per FSM fingerprint.
+fn compute_validity_bitmask(
+    state: &ValidatorState,
+    vocab_bytes: &[Vec<u8>],
+    eog_tokens: &[i32],
+    buffer_is_complete: bool,
+) -> Vec<bool> {
+    use rayon::iter::IntoParallelIterator;
+    let n_vocab = vocab_bytes.len();
+    (0..n_vocab)
+        .into_par_iter()
+        .map_init(
+            || state.clone(),
+            |worker_state, id| {
+                let token_id = id as i32;
+                if eog_tokens.contains(&token_id) {
+                    return buffer_is_complete;
+                }
+                let bytes = match vocab_bytes.get(id) {
+                    Some(b) if !b.is_empty() => b,
+                    _ => return false,
+                };
+                if buffer_is_complete {
+                    return bytes
+                        .iter()
+                        .all(|b| matches!(b, b' ' | b'\t' | b'\n' | b'\r'));
+                }
+                let mut candidate = worker_state.clone();
+                !matches!(
+                    candidate.advance_bytes(bytes),
+                    ParseStatus::Invalid
+                )
+            },
+        )
+        .collect()
+}
+
 /// State carried across sample steps: the cached parser state at the
 /// end of `emitted`, the emitted buffer itself (kept for diagnostics
 /// + post-accept validation), and a lazily-cached vocab byte map.
@@ -2526,6 +2787,12 @@ pub struct JsonConstraint {
     /// for unknown-type tokens are empty Vec). Shared across requests
     /// against the same model via `vocab_cache`.
     vocab_bytes: Arc<Vec<Vec<u8>>>,
+    /// Byte-keyed trie over the vocab. Used by Tier 2 jump-forward
+    /// (`forced_next_run`) to longest-match the FSM's forced byte
+    /// sequence against the largest single vocab token. Shared
+    /// per-model via `vocab_trie_cache` so a 25-35 MB trie isn't
+    /// rebuilt per request.
+    vocab_trie: Arc<VocabTrie>,
     eos_token: i32,
     /// **Every** end-of-generation token id, not just `token_eos()`.
     /// Modern chat-tuned models expose multiple EOG tokens (Qwen's
@@ -2571,7 +2838,7 @@ pub struct JsonConstraint {
     /// that wiped on every state transition; the multi-entry map
     /// closes that gap. Bounded by [`MASK_CACHE_MAX_ENTRIES`] to
     /// stay well under the per-request VRAM budget.
-    mask_cache: HashMap<u64, Arc<Vec<bool>>>,
+    mask_cache: HashMap<u64, MaskCacheEntry>,
     /// Insertion-order tracking for the simple LRU bound on
     /// `mask_cache`. Approximate LRU — we only push on miss-and-
     /// insert, not on hits — but the working set for a Phase 1
@@ -2634,6 +2901,7 @@ impl JsonConstraint {
     pub fn new(schema: &Value, model: &LlamaModel) -> Result<Self, ConstraintError> {
         let compiled = compile_schema(schema)?;
         let vocab_bytes = vocab_bytes_for(model);
+        let vocab_trie = vocab_trie_for(model);
         let eos_token = model.token_eos().0;
         // Enumerate every EOG token id so the mask can clamp them
         // all when the buffer is incomplete. Walk the vocab once;
@@ -2662,6 +2930,7 @@ impl JsonConstraint {
             emitted: Vec::new(),
             state,
             vocab_bytes,
+            vocab_trie,
             eos_token,
             eog_tokens,
             emitted_invalid: false,
@@ -2720,7 +2989,8 @@ impl JsonConstraint {
         // `string → comma → next_key → string` cycle paid for the
         // string-body mask twice. The map closes that.
         let fingerprint = self.state.fingerprint();
-        if let Some(valid) = self.mask_cache.get(&fingerprint).cloned() {
+        if let Some(entry) = self.mask_cache.get(&fingerprint) {
+            let valid = entry.valid.clone();
             apply_cached_mask(data, &valid, eog_tokens, buffer_is_complete, vocab_bytes);
             self.record_mask_timing(timing_start, true);
             return;
@@ -2778,21 +3048,153 @@ impl JsonConstraint {
                 valid[id] = entry.logit().is_finite();
             }
         }
-        self.insert_mask_cache(fingerprint, valid);
+        let single = single_survivor(&valid);
+        self.insert_mask_cache(
+            fingerprint,
+            MaskCacheEntry { valid: Arc::new(valid), single },
+        );
 
         self.record_mask_timing(timing_start, false);
     }
 
-    /// Insert a freshly-computed `(fingerprint, valid)` pair into the
-    /// mask cache, enforcing the entry-count bound. When the bound is
-    /// tripped we evict the oldest insertion (approximate FIFO; the
-    /// state distribution is small enough that true LRU isn't worth
-    /// the extra bookkeeping).
-    fn insert_mask_cache(&mut self, fingerprint: u64, valid: Vec<bool>) {
+    /// Returns `Some(token)` iff exactly one token is legal in the
+    /// current FSM state — the building block for jump-forward
+    /// decoding. The caller can emit the returned token, advance the
+    /// FSM via `accept`, and defer the forward pass into a later
+    /// batched decode at the next ambiguous position.
+    ///
+    /// Returns `None` (let the sampler chain run) in three situations:
+    /// 1. **`emitted_invalid` is latched.** Every non-EOG is masked,
+    ///    so EOG would be the unique survivor — but bypassing the
+    ///    sampler's EOG handling on the latched path is a footgun. Let
+    ///    the sampler resolve the terminal.
+    /// 2. **Buffer is structurally complete.** EOG + trailing
+    ///    whitespace are legal; the sampler picks based on logits and
+    ///    we don't want jump-forward to short-circuit that choice.
+    /// 3. **Ambiguous state** — two or more tokens survive the mask.
+    ///    The normal path: the sampler chain picks based on model
+    ///    logits.
+    ///
+    /// First call on a state pays the full vocab × parser walk (same
+    /// cost as the next `mask()` call would have paid); both populate
+    /// the shared `mask_cache`, so subsequent calls on the same
+    /// fingerprint are O(1).
+    pub fn forced_next_token(&mut self) -> Option<LlamaToken> {
+        if self.emitted_invalid {
+            return None;
+        }
+        if matches!(self.state.eof_status(), ParseStatus::Complete) {
+            return None;
+        }
+        let fingerprint = self.state.fingerprint();
+        if let Some(entry) = self.mask_cache.get(&fingerprint) {
+            return entry.single;
+        }
+        // Cache miss — compute the bitmask via the shared vocab walk
+        // and store it. This pre-populates `mask_cache` so a subsequent
+        // `mask()` call on the same state takes the hot cache-hit path.
+        let vocab_bytes = self.vocab_bytes.clone();
+        let eog_tokens = self.eog_tokens.clone();
+        let valid = compute_validity_bitmask(&self.state, &vocab_bytes, &eog_tokens, false);
+        let single = single_survivor(&valid);
+        self.insert_mask_cache(
+            fingerprint,
+            MaskCacheEntry { valid: Arc::new(valid), single },
+        );
+        single
+    }
+
+    /// **Tier 2 jump-forward.** Walks the FSM byte-by-byte to discover
+    /// the deterministic byte sequence emitted from the current state,
+    /// then longest-matches that against the vocab to produce the
+    /// largest possible single tokens covering it.
+    ///
+    /// **Does NOT mutate `self.state`** — the walk runs on a clone.
+    /// The caller is responsible for `accept`-ing each returned token
+    /// via the sampler (which advances inner chains + the constraint
+    /// FSM in lockstep, same contract as the sampled-token path).
+    /// This is the symmetric mirror of `forced_next_token`, which
+    /// also returns without accepting.
+    ///
+    /// Returns the emitted token sequence. Empty when:
+    /// - The constraint has latched invalid.
+    /// - The buffer is structurally complete (sampler handles EOG).
+    /// - The first FSM state is ambiguous at byte level.
+    /// - The vocab trie has no token covering the first forced byte
+    ///   (degenerate; shouldn't happen on a healthy BPE).
+    ///
+    /// Bounded by `max_bytes` of forced sequence per re-walk — once
+    /// the byte run exhausts (or longest-match fails), returns
+    /// whatever tokens fit.
+    ///
+    /// **Composes with Tier 1.** A caller running both should try
+    /// `forced_next_token` first (O(1) cache hit when warm) and fall
+    /// through to this on miss. The two tiers are complementary:
+    /// Tier 1 catches "exactly one vocab token survives the mask" via
+    /// the existing per-vocab walk; Tier 2 catches the BPE-skeleton
+    /// case where many tokens survive but the FSM forces a byte run
+    /// that one or two large tokens can cover.
+    pub fn forced_next_run(&mut self, max_bytes: usize) -> Vec<LlamaToken> {
+        let mut out = Vec::new();
+        if self.emitted_invalid {
+            return out;
+        }
+        if matches!(self.state.eof_status(), ParseStatus::Complete) {
+            return out;
+        }
+        // Probe walks the FSM without touching `self.state`. Each
+        // iteration: derive the deterministic byte run from probe's
+        // current state, longest-match it against the vocab to pick
+        // a token, advance probe by exactly the token's bytes (the
+        // first `consumed` bytes of the run), repeat. The byte run
+        // is re-derived each iteration because consuming a token may
+        // expose forced bytes beyond what the previous walk reached.
+        let mut probe = self.state.clone();
+        loop {
+            let bytes = probe.forced_byte_run(max_bytes);
+            if bytes.is_empty() {
+                break;
+            }
+            let Some((token, consumed)) = self.vocab_trie.longest_match(&bytes) else {
+                // No vocab token starts with the next forced byte —
+                // degenerate state; surrender the rest of the run to
+                // the sampler.
+                break;
+            };
+            // Sanity: a healthy trie always advances by ≥1 byte on a
+            // hit. Guard against zero-byte matches (which would loop
+            // forever) defensively.
+            if consumed == 0 {
+                break;
+            }
+            // Advance the probe by exactly the token's bytes. We use
+            // the byte-run slice rather than re-looking-up
+            // `vocab_bytes[token]` because the trie's `consumed`
+            // already tells us how many bytes the token covers.
+            if matches!(
+                probe.advance_bytes(&bytes[..consumed]),
+                ParseStatus::Invalid
+            ) {
+                // Self-consistency violation: the trie thought these
+                // bytes formed a vocab token, but the FSM rejects.
+                // Bail rather than emit a token the caller would
+                // accept and desync the real FSM on.
+                break;
+            }
+            out.push(token);
+        }
+        out
+    }
+
+    /// Insert a freshly-computed entry into the mask cache, enforcing
+    /// the entry-count bound. When the bound is tripped we evict the
+    /// oldest insertion (approximate FIFO; the state distribution is
+    /// small enough that true LRU isn't worth the extra bookkeeping).
+    fn insert_mask_cache(&mut self, fingerprint: u64, entry: MaskCacheEntry) {
         if self.mask_cache.contains_key(&fingerprint) {
             // Defensive — should be unreachable on the miss path, but
             // overwrite rather than double-insert if we hit it.
-            self.mask_cache.insert(fingerprint, Arc::new(valid));
+            self.mask_cache.insert(fingerprint, entry);
             return;
         }
         while self.mask_cache.len() >= MASK_CACHE_MAX_ENTRIES {
@@ -2803,7 +3205,7 @@ impl JsonConstraint {
                 break;
             }
         }
-        self.mask_cache.insert(fingerprint, Arc::new(valid));
+        self.mask_cache.insert(fingerprint, entry);
         self.mask_cache_order.push(fingerprint);
     }
 
@@ -4519,4 +4921,400 @@ mod tests {
         assert_ne!(s_default.fingerprint(), s_restricted.fingerprint());
     }
 
+    // ─── forced_next_token / jump-forward tests ───────────────────
+    //
+    // Pin the single-legal-token short-circuit that future jump-forward
+    // decoding reads. Tests construct a `JsonConstraint` against a
+    // hand-crafted vocab so we control which tokens are legal at each
+    // FSM state without needing a real model.
+
+    /// Build a JsonConstraint with a synthetic vocab. Available only in
+    /// the test module — production code goes through
+    /// `JsonConstraint::new` which derives vocab from `LlamaModel`.
+    fn constraint_with_vocab(
+        schema_json: serde_json::Value,
+        vocab_bytes: Vec<Vec<u8>>,
+        eog_tokens: Vec<i32>,
+    ) -> JsonConstraint {
+        let compiled = compile_schema(&schema_json).unwrap();
+        let state = ValidatorState::new(compiled.clone());
+        let vocab_trie = Arc::new(VocabTrie::new(&vocab_bytes));
+        JsonConstraint {
+            schema: compiled,
+            emitted: Vec::new(),
+            state,
+            vocab_bytes: Arc::new(vocab_bytes),
+            vocab_trie,
+            eos_token: 0,
+            eog_tokens,
+            emitted_invalid: false,
+            mask_cache: HashMap::new(),
+            mask_cache_order: Vec::new(),
+            timing: None,
+        }
+    }
+
+    /// Vocab that lets us reach unambiguous + ambiguous states on the
+    /// same enum schema. Token-id layout:
+    ///   0 `{`         1 `}`         2 `"`         3 `"x`
+    ///   4 `:`         5 `a`         6 `b`         7 `xy` (off-schema)
+    fn jump_fwd_vocab() -> Vec<Vec<u8>> {
+        vec![
+            b"{".to_vec(),
+            b"}".to_vec(),
+            b"\"".to_vec(),
+            b"\"x".to_vec(),
+            b":".to_vec(),
+            b"a".to_vec(),
+            b"b".to_vec(),
+            b"xy".to_vec(),
+        ]
+    }
+
+    /// Schema that forces a single byte (`a`) at the value position via
+    /// a one-element string enum. After advancing into the value
+    /// position, only the `a` token is legal — exactly the single-
+    /// survivor case jump-forward is meant to detect.
+    fn jump_fwd_schema() -> serde_json::Value {
+        json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string", "enum": ["a"]}},
+            "additionalProperties": false
+        })
+    }
+
+    #[test]
+    fn forced_next_token_returns_single_survivor_in_deterministic_state() {
+        let mut c = constraint_with_vocab(jump_fwd_schema(), jump_fwd_vocab(), vec![]);
+        // Advance directly through the parser; we control the bytes
+        // emitted so we don't need a sampler in the loop.
+        let st = c.state.advance_bytes(b"{\"x\":\"");
+        assert!(
+            !matches!(st, ParseStatus::Invalid),
+            "fixture bytes must not poison the FSM"
+        );
+        // Only token 5 (`a`) survives the mask at this position — the
+        // value body must start with the enum's first byte.
+        assert_eq!(c.forced_next_token(), Some(LlamaToken(5)));
+    }
+
+    #[test]
+    fn forced_next_token_returns_none_in_ambiguous_state() {
+        let mut c = constraint_with_vocab(jump_fwd_schema(), jump_fwd_vocab(), vec![]);
+        // After `{` the FSM expects a key prefix — both token 2 (`"`)
+        // and token 3 (`"x`) are valid prefixes. Two survivors → None.
+        let _ = c.state.advance_bytes(b"{");
+        assert_eq!(c.forced_next_token(), None);
+    }
+
+    #[test]
+    fn forced_next_token_returns_none_when_latched_invalid() {
+        let mut c = constraint_with_vocab(jump_fwd_schema(), jump_fwd_vocab(), vec![]);
+        // Drive to a state that would otherwise have a single survivor,
+        // then latch invalid. The unique-survivor short-circuit must
+        // defer to the sampler's EOG handling.
+        let _ = c.state.advance_bytes(b"{\"x\":\"");
+        c.emitted_invalid = true;
+        assert_eq!(c.forced_next_token(), None);
+    }
+
+    #[test]
+    fn forced_next_token_returns_none_when_buffer_is_complete() {
+        let mut c = constraint_with_vocab(jump_fwd_schema(), jump_fwd_vocab(), vec![]);
+        // Drive to a structurally complete buffer.
+        let st = c.state.advance_bytes(b"{\"x\":\"a\"}");
+        assert!(
+            matches!(st, ParseStatus::Complete),
+            "fixture must reach Complete; got {:?}",
+            st
+        );
+        // EOG + whitespace tokens are legal here — the sampler picks.
+        // forced_next_token must not short-circuit that choice.
+        assert_eq!(c.forced_next_token(), None);
+    }
+
+    #[test]
+    fn forced_next_token_populates_shared_mask_cache() {
+        let mut c = constraint_with_vocab(jump_fwd_schema(), jump_fwd_vocab(), vec![]);
+        let _ = c.state.advance_bytes(b"{\"x\":\"");
+        let fp = c.state.fingerprint();
+        assert!(!c.mask_cache.contains_key(&fp), "cache must start cold");
+        let _ = c.forced_next_token();
+        assert!(
+            c.mask_cache.contains_key(&fp),
+            "forced_next_token must pre-populate the mask cache so a \
+             subsequent mask() call takes the hot path"
+        );
+        // And the cached entry's `single` field matches the returned
+        // value — sanity on the share.
+        assert_eq!(
+            c.mask_cache.get(&fp).unwrap().single,
+            Some(LlamaToken(5))
+        );
+    }
+
+    // ─── ValidatorState byte-walk tests (Tier 2 building block) ──
+
+    #[test]
+    fn forced_next_byte_returns_some_in_deterministic_state() {
+        // After advancing through `{"x":"`, the schema's enum value
+        // "a" forces the next byte to be `a`. This is the byte-level
+        // equivalent of the Tier 1 single-survivor check, but doesn't
+        // depend on the vocab structure — we're asking the FSM
+        // directly.
+        let mut s = state_for(json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string", "enum": ["a"]}},
+            "additionalProperties": false
+        }));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        assert_eq!(s.forced_next_byte(), Some(b'a'));
+    }
+
+    #[test]
+    fn forced_next_byte_returns_none_when_multiple_bytes_legal() {
+        // After `{`, the FSM expects either `"` (start key) or
+        // whitespace before the key. Two legal byte families → None.
+        let mut s = state_for(json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string"}}
+        }));
+        let _ = s.advance_bytes(b"{");
+        assert_eq!(s.forced_next_byte(), None);
+    }
+
+    #[test]
+    fn forced_next_byte_returns_none_when_root_complete() {
+        let mut s = state_for(json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string", "enum": ["a"]}},
+            "additionalProperties": false
+        }));
+        let st = s.advance_bytes(b"{\"x\":\"a\"}");
+        assert!(matches!(st, ParseStatus::Complete));
+        assert_eq!(s.forced_next_byte(), None);
+    }
+
+    #[test]
+    fn forced_byte_run_walks_deterministic_sequence() {
+        // After `{"x":"`, we're inside the StringEnum body. The only
+        // legal next byte is `a` (the enum value). After `a`, the
+        // enum is satisfied so the only legal next byte is `"`
+        // (close string). After that, the FSM is back in the object
+        // expecting `,` or `}` with whitespace allowed — ambiguous.
+        //
+        // We start at `{"x":"` rather than `{"x":` because the
+        // colon-to-value boundary allows whitespace, so multiple
+        // bytes are legal there and the run would terminate empty.
+        let mut s = state_for(json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string", "enum": ["a"]}},
+            "additionalProperties": false
+        }));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        let run = s.forced_byte_run(64);
+        assert_eq!(
+            run, b"a\"",
+            "forced run from inside the enum body must spell out the \
+             enum value + close quote (then terminate at the \
+             whitespace-ambiguous post-value position)"
+        );
+    }
+
+    #[test]
+    fn forced_byte_run_caps_at_max_bytes() {
+        // Same fixture; cap below the natural run length of 2.
+        let mut s = state_for(json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string", "enum": ["a"]}},
+            "additionalProperties": false
+        }));
+        let _ = s.advance_bytes(b"{\"x\":\"");
+        let run = s.forced_byte_run(1);
+        assert_eq!(run.len(), 1, "cap honored");
+        assert_eq!(run, b"a", "cap takes the prefix of the natural run");
+    }
+
+    // ─── VocabTrie tests ─────────────────────────────────────────
+
+    #[test]
+    fn vocab_trie_longest_match_returns_longest_prefix_token() {
+        // Vocab with overlapping prefixes: token 1 covers `,"`, token 2
+        // covers `,"name`. `longest_match` must return token 2 (the
+        // longer match) when the input contains both.
+        let vocab = vec![
+            b"".to_vec(),
+            b",\"".to_vec(),
+            b",\"name".to_vec(),
+            b",".to_vec(),
+        ];
+        let trie = VocabTrie::new(&vocab);
+        let (tok, consumed) = trie.longest_match(b",\"name\":\"...").unwrap();
+        assert_eq!(tok, LlamaToken(2), "longest match wins over shorter alternative");
+        assert_eq!(consumed, 6, "consumed = byte length of `,\"name`");
+    }
+
+    #[test]
+    fn vocab_trie_longest_match_falls_back_to_shorter_when_no_full_match() {
+        // Vocab has `,` (1 byte) and `,"name` (6 bytes). Input starts
+        // with `,"o...` — `,"name` doesn't match (`o` != `n`), but `,"`
+        // also doesn't match because we didn't add it. Should return
+        // the shorter `,` match (1 byte).
+        let vocab = vec![
+            b"".to_vec(),
+            b",".to_vec(),
+            b",\"name".to_vec(),
+        ];
+        let trie = VocabTrie::new(&vocab);
+        let (tok, consumed) = trie.longest_match(b",\"other").unwrap();
+        assert_eq!(tok, LlamaToken(1));
+        assert_eq!(consumed, 1, "single-byte match wins when longer path is interrupted");
+    }
+
+    #[test]
+    fn vocab_trie_longest_match_returns_none_when_first_byte_unknown() {
+        // Vocab has only `a` tokens; input starts with `b`.
+        let vocab = vec![
+            b"".to_vec(),
+            b"a".to_vec(),
+            b"ab".to_vec(),
+        ];
+        let trie = VocabTrie::new(&vocab);
+        assert!(trie.longest_match(b"bc").is_none());
+        assert!(trie.longest_match(b"").is_none());
+    }
+
+    #[test]
+    fn vocab_trie_longest_match_handles_prefix_only_internal_node() {
+        // `ab` is in vocab but `a` is not. Input is `ab...`. The trie
+        // descends through the internal `a` node (no terminal there)
+        // and lands on the `ab` terminal — that's the match.
+        let vocab = vec![
+            b"".to_vec(),
+            b"ab".to_vec(),
+        ];
+        let trie = VocabTrie::new(&vocab);
+        let (tok, consumed) = trie.longest_match(b"abc").unwrap();
+        assert_eq!(tok, LlamaToken(1));
+        assert_eq!(consumed, 2);
+    }
+
+    #[test]
+    fn vocab_trie_longest_match_when_input_is_strict_prefix_of_token() {
+        // Input is shorter than any vocab token but does descend the
+        // trie. No terminal hit along the way → None.
+        let vocab = vec![
+            b"".to_vec(),
+            b"abc".to_vec(),
+        ];
+        let trie = VocabTrie::new(&vocab);
+        assert!(
+            trie.longest_match(b"ab").is_none(),
+            "no terminal along the descent — strict prefix doesn't match"
+        );
+    }
+
+    // ─── forced_next_run tests (Tier 2 integration) ──────────────
+
+    #[test]
+    fn forced_next_run_emits_largest_matching_token() {
+        // Vocab includes a single token covering `a"` (the whole
+        // post-`{"x":"` forced run). Tier 2 must emit that one token,
+        // not two single-byte tokens.
+        let vocab = vec![
+            b"{".to_vec(),       // 0
+            b"}".to_vec(),       // 1
+            b"\"".to_vec(),      // 2
+            b":".to_vec(),       // 3
+            b"a".to_vec(),       // 4
+            b"a\"".to_vec(),     // 5  ← preferred (covers 2 bytes)
+            b"x".to_vec(),       // 6
+        ];
+        let schema = json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string", "enum": ["a"]}},
+            "additionalProperties": false
+        });
+        let mut c = constraint_with_vocab(schema, vocab, vec![]);
+        let _ = c.state.advance_bytes(b"{\"x\":\"");
+        let run = c.forced_next_run(64);
+        assert_eq!(run, vec![LlamaToken(5)], "must pick the longest matching token");
+    }
+
+    #[test]
+    fn forced_next_run_chains_multiple_tokens_until_ambiguity() {
+        // No multi-byte token spans the full `a"` run. Tier 2 should
+        // emit two single-byte tokens (`a`, then `"`), advancing the
+        // FSM between them.
+        let vocab = vec![
+            b"{".to_vec(),
+            b"}".to_vec(),
+            b"\"".to_vec(),    // 2
+            b":".to_vec(),
+            b"a".to_vec(),     // 4
+        ];
+        let schema = json!({
+            "type": "object",
+            "required": ["x"],
+            "properties": {"x": {"type": "string", "enum": ["a"]}},
+            "additionalProperties": false
+        });
+        let mut c = constraint_with_vocab(schema, vocab, vec![]);
+        let _ = c.state.advance_bytes(b"{\"x\":\"");
+        let run = c.forced_next_run(64);
+        assert_eq!(
+            run,
+            vec![LlamaToken(4), LlamaToken(2)],
+            "two single-byte tokens covering the forced byte run"
+        );
+    }
+
+    #[test]
+    fn forced_next_run_empty_when_state_ambiguous() {
+        let vocab = jump_fwd_vocab();
+        let mut c = constraint_with_vocab(jump_fwd_schema(), vocab, vec![]);
+        let _ = c.state.advance_bytes(b"{");
+        assert!(c.forced_next_run(64).is_empty());
+    }
+
+    #[test]
+    fn forced_next_run_empty_when_latched_invalid() {
+        let vocab = jump_fwd_vocab();
+        let mut c = constraint_with_vocab(jump_fwd_schema(), vocab, vec![]);
+        let _ = c.state.advance_bytes(b"{\"x\":\"");
+        c.emitted_invalid = true;
+        assert!(c.forced_next_run(64).is_empty());
+    }
+
+    #[test]
+    fn forced_next_run_empty_when_buffer_complete() {
+        let vocab = jump_fwd_vocab();
+        let mut c = constraint_with_vocab(jump_fwd_schema(), vocab, vec![]);
+        let _ = c.state.advance_bytes(b"{\"x\":\"a\"}");
+        assert!(c.forced_next_run(64).is_empty());
+    }
+
+    #[test]
+    fn forced_byte_run_empty_when_first_state_ambiguous() {
+        // After `{` with multi-key schema, the FSM expects either a
+        // key opening `"` or whitespace. Ambiguous → run empty.
+        let mut s = state_for(json!({
+            "type": "object",
+            "required": ["a", "b"],
+            "properties": {
+                "a": {"type": "string"},
+                "b": {"type": "string"}
+            }
+        }));
+        let _ = s.advance_bytes(b"{");
+        let run = s.forced_byte_run(64);
+        assert!(run.is_empty(), "ambiguous state must return empty run");
+    }
 }
