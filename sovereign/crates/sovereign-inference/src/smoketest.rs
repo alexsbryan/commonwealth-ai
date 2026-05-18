@@ -41,11 +41,11 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Instant;
 
-use llama_cpp_2::context::params::LlamaContextParams;
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaModel};
+use crate::llama::cpp::context::params::LlamaContextParams;
+use crate::llama::cpp::llama_backend::LlamaBackend;
+use crate::llama::cpp::llama_batch::LlamaBatch;
+use crate::llama::cpp::model::params::LlamaModelParams;
+use crate::llama::cpp::model::{AddBos, LlamaModel};
 
 /// Marker flag the parent passes to its own exe to enter
 /// smoketest mode. Hidden — never advertised to end users.
@@ -168,11 +168,12 @@ fn run(args: SmokeArgs) -> ExitCode {
     let wants_gpu = args.n_gpu_layers > 0;
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(NonZeroU32::new(args.n_ctx))
-        .with_n_seq_max(1)
+        // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
         .with_n_batch(args.n_ctx)
         .with_n_ubatch(512)
         .with_offload_kqv(wants_gpu)
-        .with_op_offload(wants_gpu);
+        ;
+        // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
     let mut ctx = match model.new_context(&backend, ctx_params) {
         Ok(c) => c,
         Err(e) => {

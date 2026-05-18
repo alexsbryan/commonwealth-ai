@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # sovereign ephemeral-worker container, CUDA flavor.
 #
 # Sister image to `Containerfile` (ROCm). Runs in worker mode —
@@ -56,9 +57,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       --allow-change-held-packages \
       build-essential cmake git curl ca-certificates pkg-config libssl-dev \
       protobuf-compiler libprotobuf-dev \
-      clang libclang-dev llvm-dev python3 \
+      clang libclang-dev llvm-dev lld python3 \
       libnccl-dev libnccl2 \
  && rm -rf /var/lib/apt/lists/*
+
+# sccache caches rustc + nvcc + cc/c++ output keyed by content hash.
+# Wins on every rebuild — the CUDA kernel compile and the llama-cpp /
+# lancedb dep tree are the slow paths and both benefit. Pulled from
+# upstream release (musl static binary, no glibc coupling to base).
+RUN curl -L https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
+      | tar xz -C /tmp \
+ && mv /tmp/sccache-*/sccache /usr/local/bin/sccache \
+ && chmod +x /usr/local/bin/sccache \
+ && rm -rf /tmp/sccache-*
 
 ENV PROTOC=/usr/bin/protoc
 ENV PROTOC_INCLUDE=/usr/include
@@ -88,7 +99,23 @@ ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
 # `cargo:rustc-link-lib=nccl`, so the static archive's symbols stay
 # unresolved at the final binary link. Inject `-lnccl` here so rustc
 # appends it to the link command.
-ENV RUSTFLAGS="-C link-arg=-lnccl"
+#
+# `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld — measurable
+# win on the final sovereign-cli link (lancedb + arrow + llama-cpp pull
+# in a lot of object files).
+ENV RUSTFLAGS="-C link-arg=-lnccl -C link-arg=-fuse-ld=lld"
+
+# sccache wiring. CARGO_INCREMENTAL=0 is mandatory — sccache can't cache
+# anything while rustc emits per-crate incremental fragments. The CMAKE
+# launcher vars route ggml-cuda's nvcc / cc / c++ compiles through
+# sccache as well; that's the biggest single win for CUDA rebuilds
+# (each SM in CMAKE_CUDA_ARCHITECTURES compiles all kernels separately).
+ENV RUSTC_WRAPPER=sccache
+ENV CARGO_INCREMENTAL=0
+ENV SCCACHE_DIR=/root/.cache/sccache
+ENV CMAKE_C_COMPILER_LAUNCHER=sccache
+ENV CMAKE_CXX_COMPILER_LAUNCHER=sccache
+ENV CMAKE_CUDA_COMPILER_LAUNCHER=sccache
 
 # Build context = commonwealth-ai/ workspace root. Post-monorepo (May
 # 2026) the single workspace Cargo.toml + Cargo.lock live here; each
@@ -155,12 +182,33 @@ WORKDIR /workspace
 # host driver versions vary widely). Single-GPU pods don't need NCCL.
 # With this patch, ncclCommInitAll is never called and the daemon
 # starts cleanly on any host with a CUDA-capable driver.
-RUN cargo fetch
-RUN find /root/.cargo/registry/src -path '*/llama-cpp-sys-2-*/llama.cpp/ggml/CMakeLists.txt' \
-  | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
-  && find /root/.cargo/registry/src -path '*/llama-cpp-sys-2-*/llama.cpp/ggml/CMakeLists.txt' \
-  | xargs grep -n GGML_CUDA_NCCL
-RUN cargo build --release --bin sovereign-cli
+#
+# BuildKit cache mounts persist the cargo registry, git checkouts,
+# target dir, and sccache across rebuilds. First build is cold; every
+# subsequent rebuild reuses dep compiles + cached nvcc artifacts. The
+# sed patch runs inside the same mount as fetch so the registry the
+# build sees is the patched one. `sharing=locked` serializes parallel
+# builds against the same cache; flip to `shared` if doing multi-arch
+# matrix builds.
+#
+# The compiled binary is copied out of the cached target dir into
+# /usr/local/bin so the runtime stage can COPY --from=build from a
+# real image layer (cache mounts don't survive across stages).
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    cargo fetch \
+ && find /root/.cargo/registry/src -path '*/llama-cpp-sys-2-*/llama.cpp/ggml/CMakeLists.txt' \
+    | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
+ && find /root/.cargo/registry/src -path '*/llama-cpp-sys-2-*/llama.cpp/ggml/CMakeLists.txt' \
+    | xargs grep -n GGML_CUDA_NCCL
+
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
+    --mount=type=cache,target=/workspace/target \
+    cargo build --release --bin sovereign-cli \
+ && cp /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli \
+ && sccache --show-stats
 
 # ─── CUDA preflight binary ───────────────────────────────────────────
 # A tiny native test that mirrors llama.cpp's `ggml_cuda_init` path —
@@ -228,7 +276,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libnccl2 libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli
+COPY --from=build /usr/local/bin/sovereign-cli /usr/local/bin/sovereign-cli
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
 
 WORKDIR /workspace

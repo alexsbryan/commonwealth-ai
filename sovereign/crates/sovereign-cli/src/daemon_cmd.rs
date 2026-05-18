@@ -286,6 +286,13 @@ async fn run_daemon(args: &[String]) -> i32 {
     // model is lazy-loaded behind a high idle_secs gate). The
     // report still prints in that case so the diagnosis stays
     // visible in logs.
+    // Route llama.cpp's internal log into our tracing layer. Without
+    // this, gguf load failures and ggml backend diagnostics print to a
+    // dropped stderr (the daemon's child-style stdio capture swallows
+    // them) — the operator gets a bare "null result from llama cpp"
+    // with no actionable detail. Installed exactly once per process.
+    sovereign_inference::llama::install_log_tracing();
+
     {
         let hardware = sovereign_inference::hardware::HardwareProfile::detect();
         let slots = sovereign_inference::capacity::build_slots_from_config(&config);
@@ -343,6 +350,29 @@ async fn run_daemon(args: &[String]) -> i32 {
     // Build the embedded llama.cpp provider from the three GGUF slots.
     // Synchronous — load happens inline; model files are mmapped so
     // cold-start latency is dominated by disk I/O on first reference.
+    //
+    // **Family resolution.** The embed slot's family identity decides
+    // its app-side pooling strategy, normalisation, and the document /
+    // query instruction prefixes via `EmbedQuirks`. After the
+    // llama-cpp-4 0.2.x migration the C-side pooling type is forced
+    // to `None` in `EmbedSlot::load` (the binding returns null from
+    // `embeddings_seq_ith` on every gguf whose header says NONE, and
+    // setting any other type ggml_aborts the context constructor for
+    // Qwen3-Embedding); pooling moved into Rust against the per-token
+    // `embeddings_ith` reads. The family lookup is therefore what
+    // selects the right strategy (Last for Qwen3-Embedding, Mean for
+    // BERT-style) and the right text prep on the input — keeping it
+    // resolved here means the slot loader and the mesh-advertisement
+    // path read from a single source of truth.
+    let resolved_embed_family = config
+        .models
+        .embed
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(|name| {
+            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_family_for_file(name)
+        })
+        .unwrap_or(ModelFamily::Unknown);
     let provider: Arc<dyn InferenceProvider> = match EmbeddedLlamaCpp::load_full_with_families(
         config.models.fast_path(),
         Some(&config.models.primary),
@@ -366,7 +396,13 @@ async fn run_daemon(args: &[String]) -> i32 {
         None, // gpu_layers — auto-detect
         ModelFamily::Unknown,
         ModelFamily::Unknown,
-        ModelFamily::Unknown,
+        // Manifest-resolved embed family: drives app-side pooling
+        // strategy + document/query instruction prefixes. The C-side
+        // pooling is fixed to `None` inside `EmbedSlot::load` (see
+        // the rationale there) so passing a non-Unknown family no
+        // longer triggers the ggml_abort that motivated the earlier
+        // hard-coded `Unknown` here.
+        resolved_embed_family.clone(),
         // code slot is Qwen3-Coder-30B-A3B-Instruct (the only code
         // GGUF we ship today). Pinning the family to Qwen3 picks up
         // Qwen's recommended sampling defaults — top_k=20 (vs the
@@ -1141,15 +1177,11 @@ async fn run_daemon(args: &[String]) -> i32 {
             // BYOM paths that don't match any manifest row fall
             // through to `ModelFamily::Unknown` → Mean + Application
             // (safe default for generic mean-pool BERT embedders).
-            let embed_filename = config
-                .models
-                .embed
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
-            let embed_family = sovereign_core::models_manifest::DEFAULT_MANIFEST
-                .embed_family_for_file(embed_filename)
-                .unwrap_or(ModelFamily::Unknown);
+            // Reuse `resolved_embed_family` from provider construction
+            // (above) — same manifest lookup, same answer. Keeping a
+            // single source of truth prevents the slot loader and the
+            // mesh advertiser drifting apart on pooling defaults.
+            let embed_family = resolved_embed_family;
             let embed_quirks = embed_family.default_quirks().embed;
             let pooling = embed_quirks
                 .as_ref()

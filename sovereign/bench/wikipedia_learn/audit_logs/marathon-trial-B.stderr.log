@@ -1,0 +1,39 @@
+filter: --thread-id `computing_history` → kept 1 of 13 threads
+loaded thread bank `wikipedia-learn-v0` — 1 threads, 12 turns, target corpus `wikipedia`
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX-I-Compact
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.sovereign/indexes
+Corpora:     arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), commonwealth (2021 chunks), commonwealth-ai (18924 chunks), commonwealth-ai-arch-principles (58 chunks), commonwealth-ai-system-overview (61 chunks), conversation-history (91 chunks), conversations-personal (267 chunks), corpus-engine (4925 chunks), drift-target (0 chunks), folder-9ef2f912ea2e (850 chunks), institutional-notes (9 chunks), oicp-types (76 chunks), sep (187967 chunks), sovereign (13765 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), watched-959ee8a8f330 (973 chunks), wikipedia (1869218 chunks)
+Tools:       10 registered
+Router embed exemplars: 117 loaded from sovereign/router/exemplars.toml
+Temperature: 0 (override)
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1561915 canonical atoms across 13 corpus(es)
+  → thread computing_history (12 turns)
+[router] "Who was Charles Babbage?" → KnowledgeQuery (coarse=LOOKUP, confidence=1.00)
+    turn 0 fact=1.00 src=1.00 58302ms
+[router] "What was the Analytical Engine he designed?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.67 src=1.00 33690ms
+[router] "Who worked alongside him on its mathematics?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.33 src=1.00 29737ms
+[router] "What did she contribute that was genuinely new?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=1.00 src=0.00 27128ms
+[router] "How did computing develop from there in the next century?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.00 src=1.00 25573ms
+[router] "What did Alan Turing add to the theoretical foundation?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 5 fact=1.00 src=1.00 30629ms
+[router] "What role did he play during World War II?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 6 fact=0.67 src=1.00 286496ms
+[router] "After the war, what architecture became standard for the fir" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 7 fact=0.33 src=0.50 27894ms
+[router] "How did that design differ from what Turing had proposed?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 8 fact=0.67 src=0.50 28652ms
+[router] "What hardware breakthrough in the 1950s made smaller compute" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 9 fact=1.00 src=0.00 257852ms
+[router] "And what did Intel's founders do with that technology in the" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 10 fact=1.00 src=0.50 33262ms
+[router] "Going back to Babbage's original vision — how close did th" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 11 fact=0.33 src=1.00 32399ms
+wrote thread run JSON to sovereign/bench/wikipedia_learn/baselines/threads-marathon-trial-B.json

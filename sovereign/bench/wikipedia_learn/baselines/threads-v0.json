@@ -1,0 +1,1508 @@
+{
+  "bank": "wikipedia-learn-v0",
+  "corpus": "wikipedia",
+  "started_at": "2026-05-17T20:25:13.184552+00:00",
+  "finished_at": "2026-05-17T20:31:33.432769+00:00",
+  "threads": [
+    {
+      "thread_id": "einstein_1905",
+      "category": "learner_factual",
+      "description": "Student builds from 'who is Einstein' → 1905 Annus Mirabilis → photoelectric → Nobel resolution",
+      "conversation_id": "1fe54fdb-0418-49a7-8873-488f28d3bae9",
+      "turns": [
+        {
+          "turn_index": 0,
+          "turn_id": "einstein_1905_t0",
+          "question": "Who was Albert Einstein?",
+          "answer": "Albert Einstein (1879–1955) was one of the most prominent physicists and philosophers of science in twentieth-century history. His scientific contributions include relativity theory—both special (1905) and general—and he became \"perhaps the world's first celebrity scientist\" after Eddington's 1919 eclipse observations confirmed predictions that shattered long-standing paradigms dating back to the seventeenth century. He also pursued unified field theories unsuccessfully until at least the early 1940 [Source: Albert Einstein; Theory of everything].\n\nPhilosophically, Einstein developed an original synthesis drawing from neo-Kantianism and conventionalism with a distinctive blend of realism and holist underdetermination — his philosophical thinking was driven by physics itself rather than abstract theorizing alone [Source: einstein-philscience]. His work on simultaneity in special relativity (1905) sparked enduring debate about whether time conventions were necessary or merely convenient within relativistic frameworks [Source: spacetime-convensimul], while he engaged deeply with quantum mechanics through debates with Bohr over entanglement and action at a distance [Source: physics-holism; equivME].\n\nEinstein's worldview was profoundly shaped by Baruch Spinoza, whom he called \"master and model\" for understanding the natural basis of morality. He equated God with Nature — an impersonal deity revealed in orderly harmony rather than one concerned with human affairs — responding to this view when asked directly by Rabbi Herbert S. Goldstein via telegram in 1929 [Source: Baruch Spinoza]. By his later years, Einstein described himself as \"a lonely old chap who is mainly known because he doesn't wear socks,\" reflecting on how fame had become a curious burden alongside genuine scientific achievement [Source: Theory of everything].",
+          "reasoning_chars": 2657,
+          "stream_wall_ms": 241156,
+          "total_latency_ms": 238295,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "physicist",
+              "relativity"
+            ],
+            "missing": [
+              "theoretical"
+            ],
+            "total_expected": 3,
+            "ratio": 0.6666667
+          },
+          "source_recall": {
+            "matched": [
+              "Albert Einstein"
+            ],
+            "missing": [],
+            "total_expected": 1,
+            "ratio": 1.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "sep",
+              "title": "einstein-philscience",
+              "url": "https://plato.stanford.edu/entries/einstein-philscience/",
+              "score": 0.0,
+              "snippet": "einstein-philscience\n\nWorks by year"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "spacetime-convensimul",
+              "url": "https://plato.stanford.edu/entries/spacetime-convensimul/",
+              "score": 0.0,
+              "snippet": "spacetime-convensimul\n\nEinstein, Albert: philosophy of science |  Reichenbach, Hans |  Salmon, Wesley"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Albert Einstein",
+              "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Bose–Einstein_statistics",
+              "score": 0.0,
+              "snippet": "Albert Einstein\n\nEinstein's sketches for this project may be seen in the Einstein Archive in the library of the Leiden University."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "physics-holism",
+              "url": "https://plato.stanford.edu/entries/physics-holism/",
+              "score": 0.0,
+              "snippet": "physics-holism\n\n-->Einstein, Albert: Einstein-Bohr debates--> |  Bell’s Theorem |  Einstein, Albert: philosophy of science |  intrinsic vs. extrinsic properties |  quantum mechanics |  quantum..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "normalize_collapses_underscores_and_case",
+              "url": null,
+              "score": 0.0,
+              "snippet": "normalize_collapses_underscores_and_case\n\n    }\n\n    #[test]\n    fn normalize_collapses_underscores_and_case() {\n        assert_eq!(normalize_title(\"Albert Einstein\"), \"albert einstein\");\n       ..."
+            },
+            {
+              "corpus_id": "corpus-engine",
+              "title": "normalize_collapses_underscores_and_case",
+              "url": null,
+              "score": 0.0,
+              "snippet": "normalize_collapses_underscores_and_case\n\n    }\n\n    #[test]\n    fn normalize_collapses_underscores_and_case() {\n        assert_eq!(normalize_title(\"Albert Einstein\"), \"albert einstein\");\n       ..."
+            },
+            {
+              "corpus_id": "folder-9ef2f912ea2e",
+              "title": "From Dictatorship to Democracy",
+              "url": null,
+              "score": 0.0,
+              "snippet": "From Dictatorship to Democracy\n\nof Nonviolent Action (3 vols.) by Gene Sharp.  Boston:  \n  Extending Horizons Books, Porter Sargent Publishers, 1973.\n\n5.  Self-Liberation  by  Gene  Sharp  with  the ..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Albert Einstein",
+              "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Childhood,_youth_and_education",
+              "score": 0.0,
+              "snippet": "Albert Einstein\n\nWhile in Italy as a teenager, he wrote an essay entitled \"On the Investigation of the State of the Ether in a Magnetic Field\"."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Albert Einstein",
+              "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Other_investigations",
+              "score": 0.0,
+              "snippet": "Albert Einstein\n\nEinstein conducted other investigations that were unsuccessful and abandoned. These pertain to force, superconductivity, and other research."
+            },
+            {
+              "corpus_id": "corpus-engine",
+              "title": "strip_leading_title_drops_title_and_blank_lines",
+              "url": null,
+              "score": 0.0,
+              "snippet": "strip_leading_title_drops_title_and_blank_lines\n\n    }\n\n    #[test]\n    fn strip_leading_title_drops_title_and_blank_lines() {\n        let body = \"Albert Einstein\\n\\nAlbert Einstein was a..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "einstein-philscience",
+              "url": "https://plato.stanford.edu/entries/einstein-philscience/",
+              "score": 0.0,
+              "snippet": "einstein-philscience\n\nWorks by year"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "spacetime-convensimul",
+              "url": "https://plato.stanford.edu/entries/spacetime-convensimul/",
+              "score": 0.0,
+              "snippet": "spacetime-convensimul\n\nEinstein, Albert: philosophy of science |  Reichenbach, Hans |  Salmon, Wesley"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Theory of everything",
+              "url": "https://en.wikipedia.org/wiki/Theory_of_everything#Early_20th_century",
+              "score": 0.0,
+              "snippet": "Theory of everything\n\nEinstein wrote to a friend in the early 1940s, \"I have become a lonely old chap who is mainly known because he doesn't wear socks and who is exhibited as a curiosity on special..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Albert Einstein",
+              "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1921–1923:_Coming_to_terms_with_fame",
+              "score": 0.0,
+              "snippet": "Albert Einstein\n\nwho had shattered a paradigm that had been basic to physicists' understanding of the universe since the seventeenth century."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "equivME",
+              "url": "https://plato.stanford.edu/entries/equivME/",
+              "score": 0.0,
+              "snippet": "equivME\n\nEinstein, Albert: philosophy of science |  ontological commitment |  space and time: inertial frames"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Isaac Newton",
+              "url": "https://en.wikipedia.org/wiki/Isaac_Newton#Fame",
+              "score": 0.0,
+              "snippet": "Isaac Newton\n\nhas existed such and so great an ornament of the human race! He was born on 25th December 1642, and died on 20th March 1726.\n\nIn 2005, a dual survey of both the public and of members of..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Albert Einstein",
+              "url": "https://en.wikipedia.org/wiki/Albert_Einstein#Bose–Einstein_statistics",
+              "score": 0.0,
+              "snippet": "Albert Einstein\n\nEinstein's sketches for this project may be seen in the Einstein Archive in the library of the Leiden University."
+            },
+            {
+              "corpus_id": "conversation-history",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "[user] [Document attached: 11._Erwin_Schrodinger_-_What_is_Life__1944_.pdf]\n\nCan you summarize the core arguments within this document?\n\n[user] [Document attached:..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Albert Einstein",
+              "url": "https://en.wikipedia.org/wiki/Albert_Einstein#1921–1923:_Coming_to_terms_with_fame",
+              "score": 0.0,
+              "snippet": "Albert Einstein\n\nWith Eddington's eclipse observations widely reported not just in academic journals but by the popular press as well, Einstein became \"perhaps the world's first celebrity scientist\",..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Baruch Spinoza",
+              "url": "https://en.wikipedia.org/wiki/Baruch_Spinoza#Legacy",
+              "score": 0.0,
+              "snippet": "Baruch Spinoza\n\nhe characterized Spinoza as his \"master and model\" in understanding the naturalistic basis of morality.\n\nAlbert Einstein named Spinoza as the philosopher who exerted the most..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "spacetime-convensimul",
+              "url": "https://plato.stanford.edu/entries/spacetime-convensimul/",
+              "score": 0.0,
+              "snippet": "spacetime-convensimul\n\nIn his first paper on the special theory of relativity, Einstein indicated that the question of whether or not two spatially separated events were simultaneous did not..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "spacetime-convensimul",
+              "url": "https://plato.stanford.edu/entries/spacetime-convensimul/",
+              "score": 0.0,
+              "snippet": "spacetime-convensimul\n\nThe debate about the conventionality of simultaneity is usually carried on within the framework of the special theory of relativity. Even prior to the advent of that theory,..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "einstein-philscience",
+              "url": "https://plato.stanford.edu/entries/einstein-philscience/",
+              "score": 0.0,
+              "snippet": "einstein-philscience\n\nAlbert Einstein (1879–1955) is well known as the most prominent physicist of the twentieth century. His contributions to twentieth-century philosophy of science, though of..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "einstein-philscience",
+              "url": "https://plato.stanford.edu/entries/einstein-philscience/",
+              "score": 0.0,
+              "snippet": "einstein-philscience\n\nLate in 1944, Albert Einstein received a letter from Robert Thornton, a young African-American philosopher of science who had just finished his Ph.D. under Herbert Feigl at..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 1,
+          "turn_id": "einstein_1905_t1",
+          "question": "What did he publish in 1905?",
+          "answer": "I'm having trouble identifying who \"he\" refers to — there's no prior reference in this message. Could you let me know whose work you'd like me to look at? \n\nFrom the sources available, several notable figures published significant works in 1905:\n\n- **Albert Einstein** had four papers published in *Annalen der Physik* (the famous Annus Mirabilis papers)\n- **Banjo Paterson** released *Old Bush Songs*, a collection of bush ballads he'd been assembling since 1895\n- **T.S. Eliot** had his first published poem (\"A Fable For Feasters\") appear in February 1905 in the Smith Academy Record, with another surviving poem appearing that April\n- **Claude Debussy** completed *La mer* on March 5, and arranged it for piano four hands later that year",
+          "reasoning_chars": 1183,
+          "stream_wall_ms": 18239,
+          "total_latency_ms": 15530,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "Annus Mirabilis"
+            ],
+            "missing": [
+              "photoelectric",
+              "Brownian motion",
+              "special relativity",
+              "mass-energy"
+            ],
+            "total_expected": 5,
+            "ratio": 0.2
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Albert Einstein"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Siméon Denis Poisson",
+              "url": "https://en.wikipedia.org/wiki/Sim%C3%A9on_Denis_Poisson#Wave_propagation",
+              "score": 0.0,
+              "snippet": "Siméon Denis Poisson\n\nPoisson also published a memoir on the theory of waves (Mém. ft. l'acad., 1825)."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "boole",
+              "url": "https://plato.stanford.edu/entries/boole/",
+              "score": 0.0,
+              "snippet": "boole\n\nDuring the last 10 years of his career, from 1855 to 1864, Boole published 17 papers on mathematics and two mathematics books, one on differential equations and one on difference equations...."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "T. S. Eliot",
+              "url": "https://en.wikipedia.org/wiki/T._S._Eliot#Early_life_and_education",
+              "score": 0.0,
+              "snippet": "T. S. Eliot\n\nFrom 1898 to 1905, Eliot attended Smith Academy, the boys college preparatory division of Washington University, where his studies included Latin, Ancient Greek, French, and German. He..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "friedrich-lange",
+              "url": "https://plato.stanford.edu/entries/friedrich-lange/",
+              "score": 0.0,
+              "snippet": "friedrich-lange\n\nThese political conflicts pushed Lange’s plans to publish short works for the working class into the background. He did publish two smaller works (Lange 1863b, 1865c). He was also..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "bolzano",
+              "url": "https://plato.stanford.edu/entries/bolzano/",
+              "score": 0.0,
+              "snippet": "bolzano\n\nBolzano did not shy away from taking up also practical problems in publications and writing about them, for instance, about the improvement of poorhouses and about the elimination of misery..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "levinas",
+              "url": "https://plato.stanford.edu/entries/levinas/",
+              "score": 0.0,
+              "snippet": "levinas\n\nBooks published posthumously:"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "The House of Mirth",
+              "url": "https://en.wikipedia.org/wiki/The_House_of_Mirth#Adaptations",
+              "score": 0.0,
+              "snippet": "The House of Mirth\n\nThe novel The House of Mirth (1905) has been adapted to radio, the stage and the cinema."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "goedel",
+              "url": "https://plato.stanford.edu/entries/goedel/",
+              "score": 0.0,
+              "snippet": "goedel\n\nThe 1930s were a prodigious decade for Gödel. After publishing his 1929 dissertation in 1930, he published his groundbreaking incompleteness theorems in 1931, on the basis of which he was..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Nicolaus Copernicus",
+              "url": "https://en.wikipedia.org/wiki/Nicolaus_Copernicus#Tolosani",
+              "score": 0.0,
+              "snippet": "Nicolaus Copernicus\n\nof Copernicanism was written a year later, in 1545, in an appendix to his unpublished work, On the Truth of Sacred Scripture."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Langston Hughes",
+              "url": "https://en.wikipedia.org/wiki/Langston_Hughes#Abstract",
+              "score": 0.0,
+              "snippet": "Langston Hughes\n\nHis first poetry collection, The Weary Blues, was published in 1926. Hughes eventually graduated from Lincoln University.\n\nIn addition to poetry, Hughes wrote plays and published..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "John Dewey",
+              "url": "https://en.wikipedia.org/wiki/John_Dewey#Career",
+              "score": 0.0,
+              "snippet": "John Dewey\n\nAfter two years as a high-school teacher in Oil City, Pennsylvania, and one year as an elementary school teacher in the small town of Charlotte, Vermont, Dewey decided that he was..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Jean-Philippe Rameau",
+              "url": "https://en.wikipedia.org/wiki/Jean-Philippe_Rameau#Early_years,_1683–1732",
+              "score": 0.0,
+              "snippet": "Jean-Philippe Rameau\n\nharpsichord works that make up his first book of Pièces de Clavecin, which show the influence of his friend Louis Marchand.\n\nIn 1709, he moved back to Dijon to take over his..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Banjo Paterson",
+              "url": "https://en.wikipedia.org/wiki/Banjo_Paterson#Works",
+              "score": 0.0,
+              "snippet": "Banjo Paterson\n\nWhile there has been much debate about what inspired the words, the song became one of his most widely known and sung ballads.\n\nIn addition, he wrote the lyrics for songs with piano..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "boole",
+              "url": "https://plato.stanford.edu/entries/boole/",
+              "score": 0.0,
+              "snippet": "boole\n\nBoole’s mathematical publications span the 24 years from 1841 to 1864, the year he died from pneumonia. Breaking these 24 years into three segments, the first 6 years (1841–1846), the ..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Battle Hymn of the Republic",
+              "url": "https://en.wikipedia.org/wiki/Battle_Hymn_of_the_Republic#Lyrics",
+              "score": 0.0,
+              "snippet": "Battle Hymn of the Republic\n\nHowe submitted the lyrics she wrote to The Atlantic Monthly, and it was first published in the February 1862 issue of the magazine."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of electromagnetic theory",
+              "url": "https://en.wikipedia.org/wiki/History_of_electromagnetic_theory#Einstein's_Annus_Mirabilis",
+              "score": 0.0,
+              "snippet": "History of electromagnetic theory\n\nIn 1905, while he was working in the patent office, Albert Einstein had four papers published in the Annalen der Physik, the leading German physics journal. These..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "La mer (Debussy)",
+              "url": "https://en.wikipedia.org/wiki/La_mer_(Debussy)#Background_and_composition",
+              "score": 0.0,
+              "snippet": "La mer (Debussy)\n\nas it was too reminiscent of ballet and the less specific theme of the dialogue between the wind and the sea took its place.\n\nDebussy completed La mer on 5 March 1905 and took the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "marx",
+              "url": "https://plato.stanford.edu/entries/marx/",
+              "score": 0.0,
+              "snippet": "marx\n\nMarx’s critique of political economy remains controversial. He never succeeded in fixing and realising the wider project that he envisaged. Volume One of Capital, published in 1867, was the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Alfred Binet",
+              "url": "https://en.wikipedia.org/wiki/Alfred_Binet#Later_career_and_the_Binet–Simon_test",
+              "score": 0.0,
+              "snippet": "Alfred Binet\n\nPhD advisor Emmery Blin, who had devised a set of 20 questions to determine what the children referred to him were capable of.\n\nBinet and Simon worked closely to develop more tests and..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "neutral-monism",
+              "url": "https://plato.stanford.edu/entries/neutral-monism/",
+              "score": 0.0,
+              "snippet": "neutral-monism\n\nThe primary source for Mach’s views on neutral monism are a number of essays and chapters contained in his books that were originally published in Mach 1886, 1894, and 1905. The..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "friedrich-lange",
+              "url": "https://plato.stanford.edu/entries/friedrich-lange/",
+              "score": 0.0,
+              "snippet": "friedrich-lange\n\nFriedrich Albert Lange (b. 1828, d. 1875) was a German philosopher, pedagogist, political activist, and journalist. Lange is a significant figure among the mid nineteenth century..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "friedrich-lange",
+              "url": "https://plato.stanford.edu/entries/friedrich-lange/",
+              "score": 0.0,
+              "snippet": "friedrich-lange\n\nLange played a significant role in the German labour movement and in the development of social democratic thought. He articulated a socialist Darwinism that was an alternative to..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "friedrich-lange",
+              "url": "https://plato.stanford.edu/entries/friedrich-lange/",
+              "score": 0.0,
+              "snippet": "friedrich-lange\n\nLange’s sympathetic critique of materialism, his philosophical naturalism, and his political activism unite his diverse achievements, and distinguish him among nineteenth century..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "marx",
+              "url": "https://plato.stanford.edu/entries/marx/",
+              "score": 0.0,
+              "snippet": "marx\n\nKarl Marx (1818–1883) is often treated as a revolutionary, an activist rather than a philosopher, whose works inspired the foundation of many communist regimes in the twentieth century. It is..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "marx",
+              "url": "https://plato.stanford.edu/entries/marx/",
+              "score": 0.0,
+              "snippet": "marx\n\nThe themes picked out here include Marx’s philosophical anthropology, his theory of history, his economic analysis, his critical engagement with contemporary capitalist society (raising..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "marx",
+              "url": "https://plato.stanford.edu/entries/marx/",
+              "score": 0.0,
+              "snippet": "marx\n\nMarx’s early writings are dominated by an understanding of alienation, a distinct type of social ill whose diagnosis looks to rest on a controversial account of human nature and its..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Alfred Binet",
+              "url": "https://en.wikipedia.org/wiki/Alfred_Binet",
+              "score": 0.0,
+              "snippet": "Alfred Binet, born Alfredo Binetti, was a French psychologist who together with Théodore Simon invented the first practical intelligence test, the Binet–Simon test. In 1904, Binet took part in a..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Alfred Binet",
+              "url": "https://en.wikipedia.org/wiki/Alfred_Binet",
+              "score": 0.0,
+              "snippet": "Alfred Binet\n\nThe full version was published in 1908, and slightly revised in 1911, just before Binet's death."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Alfred Binet",
+              "url": "https://en.wikipedia.org/wiki/Alfred_Binet#Abstract",
+              "score": 0.0,
+              "snippet": "Alfred Binet (French:; 8 July 1857 – 18 October 1911), born Alfredo Binetti, was a French psychologist who together with Théodore Simon invented the first practical intelligence test, the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Banjo Paterson",
+              "url": "https://en.wikipedia.org/wiki/Banjo_Paterson",
+              "score": 0.0,
+              "snippet": "Banjo Paterson\n\nAndrew Barton \"Banjo\" Paterson, was an Australian bush poet, journalist and author, widely considered one of the greatest writers of Australia's colonial period. Born in rural New..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Banjo Paterson",
+              "url": "https://en.wikipedia.org/wiki/Banjo_Paterson#Abstract",
+              "score": 0.0,
+              "snippet": "Banjo Paterson\n\nAndrew Barton \" Banjo \" Paterson, CBE (17 February 1864 – 5 February 1941) was an Australian bush poet, journalist and author, widely considered one of the greatest writers of..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Banjo Paterson",
+              "url": "https://en.wikipedia.org/wiki/Banjo_Paterson#Early_life",
+              "score": 0.0,
+              "snippet": "Banjo Paterson\n\nAndrew Barton Paterson was born on 17 February 1864 at the property \"Narrambla\", near Orange, New South Wales, the eldest son of Andrew Bogle Paterson, a Scottish immigrant from..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 2,
+          "turn_id": "einstein_1905_t2",
+          "question": "Tell me more about the photoelectric one.",
+          "answer": "I don't have reliable information on a specific article titled \"the photoelectric one.\" What appears to be indexed here is a collection of generic web search results about the Photoelectric Effect as a scientific phenomenon—general encyclopedia-style summaries rather than an authored piece with identifiable authorship and publication details.\n\nIf you're looking for content from a specific published source (e.g., a textbook, journal article, or book), please provide:\n- A recognizable title or subtitle\n- Any identifying features like chapter/section references\n- Or if this refers to Albert Einstein's 1905 paper (\"On the Photoelectric Effect\"), I can share general knowledge about that work without fabricating attribution.",
+          "reasoning_chars": 1944,
+          "stream_wall_ms": 8354,
+          "total_latency_ms": 6334,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "light quanta",
+              "discrete",
+              "Planck",
+              "metal surface"
+            ],
+            "total_expected": 4,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [
+              "Photoelectric effect"
+            ],
+            "missing": [
+              "Albert Einstein"
+            ],
+            "total_expected": 2,
+            "ratio": 0.5
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nThe photoelectric effect is the emission of electrons from a material caused by electromagnetic radiation such as ultraviolet light. Electrons emitted in this manner are called..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nThe experimental results instead show that electrons are dislodged only when the light exceeds a certain frequency—regardless of the light's intensity or duration of exposure...."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nStudy of the photoelectric effect led to important steps in understanding the quantum nature of light and electrons and influenced the formation of the concept of..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Abstract",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nThe photoelectric effect is the emission of electrons from a material caused by electromagnetic radiation such as ultraviolet light. Electrons emitted in this manner are called..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Abstract",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nsolids. The effect has found use in electronic devices specialized for light detection and precisely timed electron emission.\n\nThe experimental results disagree with classical..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Abstract",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\npropagating through space, but a swarm of discrete energy packets, known as photons —term coined by Gilbert N. Lewis in 1926.\n\nEmission of conduction electrons from typical..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Emission_mechanism",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nThe photons of a light beam have a characteristic energy, called photon energy, which is proportional to the frequency of the light. In the photoemission process, when an..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Emission_mechanism",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nwill not depend on the intensity of the incoming light of a given frequency, but only on the energy of the individual photons.\n\nWhile free electrons can absorb any energy when..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Emission_mechanism",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nhighest occupied states will have the highest kinetic energy. In metals, those electrons will be emitted from the Fermi level.\n\nWhen the photoelectron is emitted into a solid..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Experimental_observation_of_photoelectric_emission",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nEven though photoemission can occur from any material, it is most readily observed from metals and other conductors. This is because the process produces a charge imbalance..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Experimental_observation_of_photoelectric_emission",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nUV lamps and radio-frequency plasma sources, ultraviolet lasers, and synchrotron insertion device light sources prevail.\n\nThe classical setup to observe the photoelectric effect..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Photoelectric effect",
+              "url": "https://en.wikipedia.org/wiki/Photoelectric_effect#Experimental_observation_of_photoelectric_emission",
+              "score": 0.0,
+              "snippet": "Photoelectric effect\n\nphotoelectric current attains a saturation value. This current can only increase with the increase of the intensity of light.\n\nAn increasing negative voltage prevents all but..."
+            },
+            {
+              "corpus_id": "corpus-engine",
+              "title": "ingests_simple_article_and_resolves_neighbors",
+              "url": null,
+              "score": 0.0,
+              "snippet": "ingests_simple_article_and_resolves_neighbors\n\n    }\n\n    #[tokio::test]\n    async fn ingests_simple_article_and_resolves_neighbors() {\n        let g =..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 3,
+          "turn_id": "einstein_1905_t3",
+          "question": "Did that idea win him a Nobel Prize?",
+          "answer": "I want to make sure I give you the right shape of answer.",
+          "reasoning_chars": 0,
+          "stream_wall_ms": 2887,
+          "total_latency_ms": null,
+          "intent": null,
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "1921",
+              "Nobel Prize in Physics",
+              "photoelectric effect"
+            ],
+            "total_expected": 3,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Albert Einstein"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [],
+          "error": null
+        },
+        {
+          "turn_index": 4,
+          "turn_id": "einstein_1905_t4",
+          "question": "Why didn't relativity win the Nobel instead?",
+          "answer": "Yes, it did — but not for relativity. The Nobel Committee awarded him the prize specifically *\"for his discovery of the law governing the photo-electric effect\"* (notably omitting any mention of special or general relativity).\n\nThe reason is historical rather than scientific: by 1921 when he received the award, the photoelectric work was well-established experimentally (Millikan's careful measurements had confirmed Einstein's equation), whereas relativity remained controversial and unverified in many quarters. The famous Eddington eclipse observations that first tested general relativity were only a couple years old at this point, and some physicists still regarded them as inconclusive. Relativistic physics simply hadn't yet achieved the kind of broad consensus needed for Nobel recognition — it took decades before even his own peers fully accepted what he'd proposed.",
+          "reasoning_chars": 830,
+          "stream_wall_ms": 19165,
+          "total_latency_ms": 12779,
+          "intent": "DeepQuery",
+          "fact_recall": {
+            "matched": [
+              "controversial",
+              "experimental"
+            ],
+            "missing": [
+              "philosophical"
+            ],
+            "total_expected": 3,
+            "ratio": 0.6666667
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Albert Einstein"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Planck constant",
+              "url": "https://en.wikipedia.org/wiki/Planck_constant#Photoelectric_effect",
+              "score": 0.0,
+              "snippet": "Planck constant\n\nThe photoelectric effect is the emission of electrons (called \"photoelectrons\") from a surface when light is shone on it. It was first observed by Alexandre Edmond Becquerel in 1839,..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of special relativity",
+              "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Acceptance_of_special_relativity",
+              "score": 0.0,
+              "snippet": "History of special relativity\n\nPlanck, in 1909, compared the implications of the modern relativity principle — he particularly referred to the relativity of time – with the revolution by the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Nobel Prize",
+              "url": "https://en.wikipedia.org/wiki/Nobel_Prize#Recognition_time_lag",
+              "score": 0.0,
+              "snippet": "Nobel Prize\n\nAccords. A controversy was caused by awarding the 2009 Nobel Peace Prize to Barack Obama during his first year as US president.\n\nAwards for physics, chemistry, and medicine are typically..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Nobel Prize",
+              "url": "https://en.wikipedia.org/wiki/Nobel_Prize#Formation_of_Foundation",
+              "score": 0.0,
+              "snippet": "Nobel Prize\n\nAccording to his will and testament read in Stockholm on 30 December 1896, a foundation established by Alfred Nobel would reward those who serve humanity. The Nobel Prize was funded by..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Tests of general relativity",
+              "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity#Mössbauer_rotor_experiment",
+              "score": 0.0,
+              "snippet": "Tests of general relativity\n\nBe that as it may, an early 21st Century re-examination of these endeavors called into question the validity of the past obtained results claiming to have verified time..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Tests of general relativity",
+              "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity#Binary_pulsars",
+              "score": 0.0,
+              "snippet": "Tests of general relativity\n\nsmall that it is unlikely it will be observed in the near future (Earth radiates about 200 watts of gravitational radiation).\n\nThe radiation of gravitational waves has..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of general relativity",
+              "url": "https://en.wikipedia.org/wiki/History_of_general_relativity#Developing_general_relativity",
+              "score": 0.0,
+              "snippet": "History of general relativity\n\nabout nature\"; fellow laureate Paul Dirac was quoted saying it was \"probably the greatest scientific discovery ever made\".\n\nThere have been claims that scrutiny of the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "spacetime-bebecome",
+              "url": "https://plato.stanford.edu/entries/spacetime-bebecome/",
+              "score": 0.0,
+              "snippet": "spacetime-bebecome\n\nOn the other hand, the distinguished philosopher and logician Arthur Prior thought that the above conclusion showed that special relativity is an incomplete view of reality..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Relativistic Doppler effect",
+              "url": "https://en.wikipedia.org/wiki/Relativistic_Doppler_effect#Source_and_receiver_both_in_circular_motion_around_a_common_center",
+              "score": 0.0,
+              "snippet": "Relativistic Doppler effect\n\nthe Mössbauer absorption process was unaffected by rotation. They concluded that their findings supported special relativity.\n\nThis conclusion generated some..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of special relativity",
+              "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Priority",
+              "score": 0.0,
+              "snippet": "History of special relativity\n\nSome claim that Poincaré and Lorentz, not Einstein, are the true discoverers of special relativity. For more see the article on relativity priority dispute."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "genrel-early",
+              "url": "https://plato.stanford.edu/entries/genrel-early/",
+              "score": 0.0,
+              "snippet": "genrel-early\n\nthe philosophical theory of relativity, i.e., the discovery of the definitional character of the metric in all its details, holds independently of experience.… a philosophical result..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "C. V. Raman",
+              "url": "https://en.wikipedia.org/wiki/C._V._Raman#Reception_and_outcome",
+              "score": 0.0,
+              "snippet": "C. V. Raman\n\nof the Hughes Medal to Raman in 1930 as \"among the best three or four discoveries in experimental physics in the last decade\".\n\nRaman was confident that he would win the Nobel Prize in..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Gravitational wave",
+              "url": "https://en.wikipedia.org/wiki/Gravitational_wave",
+              "score": 0.0,
+              "snippet": "Gravitational wave\n\nThe 2017 Nobel Prize in Physics was subsequently awarded to Rainer Weiss, Kip Thorne and Barry Barish for their role in the direct detection of gravitational waves."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "symmetry-breaking",
+              "url": "https://plato.stanford.edu/entries/symmetry-breaking/",
+              "score": 0.0,
+              "snippet": "symmetry-breaking\n\nThe principle of relativity as adopted by Einstein (1905, p. 395 of the English translation) simply asserts that:"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "spacetime-iframes",
+              "url": "https://plato.stanford.edu/entries/spacetime-iframes/",
+              "score": 0.0,
+              "snippet": "spacetime-iframes\n\nEinstein, Albert: philosophy of science |  general relativity: early philosophical interpretations of |  geometry: in the 19th century |  space and time: conventionality of..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Andre Geim",
+              "url": "https://en.wikipedia.org/wiki/Andre_Geim#Nobel_Prize_in_Physics",
+              "score": 0.0,
+              "snippet": "Andre Geim\n\nOn 5 October 2010, Geim was awarded the 2010 Nobel Prize in Physics jointly with Novoselov \"for groundbreaking experiments regarding the two-dimensional material graphene\". Upon hearing..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "needs_current_info_recent_year",
+              "url": null,
+              "score": 0.0,
+              "snippet": "needs_current_info_recent_year\n\n    }\n\n    #[test]\n    fn needs_current_info_recent_year() {\n        assert!(LlmRouter::needs_current_info(\"Who won the Nobel Prize in 2025?\"));\n       ..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Brian Schmidt",
+              "url": "https://en.wikipedia.org/wiki/Brian_Schmidt#Science_advocacy",
+              "score": 0.0,
+              "snippet": "Brian Schmidt\n\nThe publicity that came with winning the Nobel Prize has given Schmidt the opportunity to help the public understand why science is important to society, and to champion associated..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "social-choice",
+              "url": "https://plato.stanford.edu/entries/social-choice/",
+              "score": 0.0,
+              "snippet": "social-choice\n\nThis view was influenced by neoclassical economics, associated with scholars such as Vilfredo Pareto (1848–1923), Lionel Robbins (1898–1984), John Hicks (1904–1989), co-winner of..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "or states, private property or regulation—omits a third possibility that has worked, empirically, across wildly different cultures and resource types: communities governing themselves through..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Nobel Prize",
+              "url": "https://en.wikipedia.org/wiki/Nobel_Prize",
+              "score": 0.0,
+              "snippet": "Nobel Prize\n\nThe Nobel Prizes are five separate prizes awarded to those who, during the preceding year, have conferred the greatest benefit to humankind, as established by the 1895 will of Swedish..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Nobel Prize",
+              "url": "https://en.wikipedia.org/wiki/Nobel_Prize",
+              "score": 0.0,
+              "snippet": "Nobel Prize\n\nA prize may not be shared among more than three individuals, although the Nobel Peace Prize can be awarded to organisations of more than three people. Nobel Prizes are not awarded..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of special relativity",
+              "url": "https://en.wikipedia.org/wiki/History_of_special_relativity",
+              "score": 0.0,
+              "snippet": "History of special relativity\n\nThe history of special relativity consists of many theoretical results and empirical findings obtained by Albert A. Michelson, Hendrik Lorentz, Henri Poincaré and..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of special relativity",
+              "url": "https://en.wikipedia.org/wiki/History_of_special_relativity#Introduction",
+              "score": 0.0,
+              "snippet": "History of special relativity\n\nAlthough Isaac Newton based his physics on absolute time and space, he also adhered to the principle of relativity of Galileo Galilei restating it precisely for..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Tests of general relativity",
+              "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity",
+              "score": 0.0,
+              "snippet": "Tests of general relativity serve to establish observational evidence for the theory of general relativity. The first three tests, proposed by Albert Einstein in 1915, concerned the \"anomalous\"..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Tests of general relativity",
+              "url": "https://en.wikipedia.org/wiki/Tests_of_general_relativity",
+              "score": 0.0,
+              "snippet": "Tests of general relativity\n\nIn the 1970s, scientists began to make additional tests, starting with Irwin Shapiro's measurement of the relativistic time delay in radar signal travel time near the..."
+            }
+          ],
+          "error": null
+        }
+      ],
+      "judge": {
+        "coverage": {
+          "matched": [
+            "physicist",
+            "relativity",
+            "Annus Mirabilis",
+            "photoelectric",
+            "special relativity",
+            "1921",
+            "Nobel Prize in Physics",
+            "photoelectric effect",
+            "controversial",
+            "experimental",
+            "philosophical"
+          ],
+          "missing": [
+            "theoretical",
+            "Brownian motion",
+            "mass-energy",
+            "light quanta",
+            "discrete",
+            "Planck",
+            "metal surface"
+          ],
+          "total_expected": 18,
+          "ratio": 0.6111111
+        },
+        "per_fact": [
+          {
+            "fact": "physicist",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "one of the most prominent physicists and philosophers"
+          },
+          {
+            "fact": "theoretical",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "relativity",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "His scientific contributions include relativity theory—both special (1905) and general—and he became 'perhaps the world's first celebrity scientist' after Eddington's 1919 eclipse observations confirmed predictions that shattered long-standing paradigms dating back to the seventeenth century."
+          },
+          {
+            "fact": "Annus Mirabilis",
+            "present": true,
+            "evidence_turn": 1,
+            "evidence_quote": "**Albert Einstein** had four papers published in *Annalen der Physik* (the famous Annus Mirabilis papers)"
+          },
+          {
+            "fact": "photoelectric",
+            "present": true,
+            "evidence_turn": 3,
+            "evidence_quote": "*for his discovery of the law governing the photo-electric effect*"
+          },
+          {
+            "fact": "Brownian motion",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "special relativity",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "His scientific contributions include relativity theory — both special (1905)"
+          },
+          {
+            "fact": "mass-energy",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "light quanta",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "discrete",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "Planck",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "metal surface",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "1921",
+            "present": true,
+            "evidence_turn": 4,
+            "evidence_quote": "by 1921 when he received the award"
+          },
+          {
+            "fact": "Nobel Prize in Physics",
+            "present": true,
+            "evidence_turn": 3,
+            "evidence_quote": "*for his discovery of the law*"
+          },
+          {
+            "fact": "photoelectric effect",
+            "present": true,
+            "evidence_turn": 3,
+            "evidence_quote": "*for his discovery of the* photo-electric *effect*"
+          },
+          {
+            "fact": "controversial",
+            "present": true,
+            "evidence_turn": 4,
+            "evidence_quote": "whereas relativity remained controversial and unverified in many quarters"
+          },
+          {
+            "fact": "experimental",
+            "present": true,
+            "evidence_turn": 4,
+            "evidence_quote": "the photoelectric work was well-established experimentally (Millikan's careful measurements had confirmed Einstein's equation)"
+          },
+          {
+            "fact": "philosophical",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "Philosophically, Einstein developed an original synthesis drawing from neo-Kantianism and conventionalism with a distinctive blend of realism and holist underdetermination"
+          }
+        ]
+      },
+      "degradation": {
+        "first_failure_turn": 0,
+        "fact_recall_slope": -0.020000000298023235,
+        "latency_ms_per_turn": [
+          238295,
+          15530,
+          6334,
+          null,
+          12779
+        ]
+      }
+    },
+    {
+      "thread_id": "wwii_causal",
+      "category": "learner_causal",
+      "description": "Causal regression: why WWII → why Germany rearmed → why Versailles failed → why WWI ended that way",
+      "conversation_id": "7aa99927-f632-404d-88ab-6a6a1d4df425",
+      "turns": [
+        {
+          "turn_index": 0,
+          "turn_id": "wwii_causal_t0",
+          "question": "What caused World War II to break out in 1939?",
+          "answer": "World War II broke out in Europe on **1 September 1939** when Nazi Germany invaded Poland [Source: Causes of World War II]. The United Kingdom and France declared war on Germany two days later [Source: Invasion of Poland; Causes of World War II]. Several interlocking factors made this outbreak possible:\n\n## Unresolved tensions after World War I\nThe Treaty of Versailles left deep grievances—particularly over territorial losses, reparations, and the \"war guilt\" clause—that fed German revanchism throughout the 1920s and 1930s [Source: Causes of World War II].\n\n## Rise of fascism and militarism\nFascist regimes in Europe (especially Nazi Germany under Hitler) and militaristic expansionism by Japan created aggressive powers willing to use force for territorial gain. In Asia, Japan had already invaded Manchuria in September 1931 as a prelude to broader conquest [Source: Causes of World War II; World War II].\n\n## The Spanish Civil War (1936–1939)\nGermany and Italy supported Francisco Franco's Nationalists while the Soviet Union backed Spain's democratically elected government. This conflict served as a testing ground for new weapons and tactics that would later be deployed across Europe [Source: Causes of World War II].\n\n## German annexations and appeasement\nIn March 1938 Germany annexed Austria with little international response. Hitler then pressed claims on Czechoslovakia's Sudetenland, which Britain and France conceded in the **Munich Agreement** under Prime Minister Neville Chamberlain's policy of appeasement—against the wishes of the Czechoslovak government itself [Source: World War II]. When Germany broke this agreement by invading Prague in March 1939 (with Slovaks declaring independence), it ended British-French appeasement for good [Source: Causes of World War II].\n\n## The Molotov–Ribbentrop Pact\nGermany signed a non-aggression pact with the Soviet Union that secretly divided Eastern Europe between them. This gave Hitler confidence to invade Poland without fearing a two-front war, while ensuring Stalin would not oppose German expansion westward at least initially [Source: Invasion of Poland; World War II].\n\n## Historiographical debate on timing\nHistorians disagree about what specifically triggered the outbreak in September 1939 rather than later. **Timothy Mason** argued that Germany faced an economic crisis and \"flight into war\" was imposed on Hitler by structural pressures—a view he characterized as a \"barbaric variant of social imperialism.\" British historian **Richard Overy** countered that while Germany had real economic problems in 1939, those alone could not explain why Hitler chose to go to war then [Source: Causes of World War II].\n\nThe invasion of Poland itself was not expected by any party—Germany, Britain, France, or the Soviet Union—to produce a conflict surpassing World War I in scale. It would be months before Hitler realized his peace overtures with Britain and France were futile, but the combined European and Pacific conflicts ultimately produced what became truly a world war [Source: Invasion of Poland].",
+          "reasoning_chars": 945,
+          "stream_wall_ms": 25022,
+          "total_latency_ms": 21983,
+          "intent": "DeepQuery",
+          "fact_recall": {
+            "matched": [
+              "invasion of Poland",
+              "September 1939",
+              "Hitler",
+              "appeasement"
+            ],
+            "missing": [],
+            "total_expected": 4,
+            "ratio": 1.0
+          },
+          "source_recall": {
+            "matched": [
+              "World War II"
+            ],
+            "missing": [],
+            "total_expected": 1,
+            "ratio": 1.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Sexual slavery",
+              "url": "https://en.wikipedia.org/wiki/Sexual_slavery#During_armed_conflict_and_war",
+              "score": 0.0,
+              "snippet": "Sexual slavery\n\nRape and sexual violence have accompanied warfare in virtually every known historical era. Before the 19th century, military circles supported the notion that all persons, including..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Conscription",
+              "url": "https://en.wikipedia.org/wiki/Conscription",
+              "score": 0.0,
+              "snippet": "|quote=Conscripts guarded the home front, while European professionals were sent overseas}}\n\n, New York City, June 5, 1917]]\n\ninvaded the Soviet Union, 1941]]\nDuring the [[Eastern Front (World War..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Kim Ku",
+              "url": "https://en.wikipedia.org/wiki/Kim_Ku#Failure_to_unite_the_independence_movement_(1939–1940)",
+              "score": 0.0,
+              "snippet": "Kim Ku\n\nThey disagreed on who would command the armed forces and to what extent they should collaborate with the right-leaning Kuomintang. Shortly after the breakdown of the talks, Germany invaded..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "World War II",
+              "url": "https://en.wikipedia.org/wiki/World_War_II#Start_and_end_dates",
+              "score": 0.0,
+              "snippet": "World War II began in Europe on 1 September 1939 with the German invasion of Poland and the United Kingdom and France 's declaration of war on Germany two days later on 3 September 1939. Dates for..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Invasion of Poland",
+              "url": "https://en.wikipedia.org/wiki/Invasion_of_Poland#Aftermath",
+              "score": 0.0,
+              "snippet": "Invasion of Poland\n\nNavy succeeded in evacuating to Britain as well. German personnel losses were less than their enemies (c. 16,000 killed).\n\nNone of the parties to the conflict—Germany, the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "World War II",
+              "url": "https://en.wikipedia.org/wiki/World_War_II#Asia",
+              "score": 0.0,
+              "snippet": "World War II\n\nThe Kuomintang (KMT) party in China launched a unification campaign against regional warlords and nominally unified China in the mid-1920s, but was soon embroiled in a civil war against..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Causes of World War II",
+              "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_II#Mason-Overy_debate:_\"Flight_into_War\"_theory",
+              "score": 0.0,
+              "snippet": "Causes of World War II\n\nMason thought German foreign policy was driven by domestic political considerations, and the launch the war in 1939 was best understood as a \"barbaric variant of social..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "World War I",
+              "url": "https://en.wikipedia.org/wiki/World_War_I",
+              "score": 0.0,
+              "snippet": "World War I or the First World War, also known as the Great War, was a global conflict between two coalitions: the Allies and the Central Powers. Fighting took place mainly in Europe and the Middle..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Causes of World War II",
+              "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_II#Mason-Overy_debate:_\"Flight_into_War\"_theory",
+              "score": 0.0,
+              "snippet": "Causes of World War II\n\nIn the late 1980s, the British historian Richard Overy was involved in a historical dispute with Timothy Mason that played out mostly over the pages of the Past and Present..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "brouwer",
+              "url": "https://plato.stanford.edu/entries/brouwer/",
+              "score": 0.0,
+              "snippet": "brouwer\n\n1912 Elected member of the Royal Academy of Sciences (during World War II “Dutch Academy of Sciences”, afterward “Royal Dutch Academy of Sciences”)."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "World War II",
+              "url": "https://en.wikipedia.org/wiki/World_War_II",
+              "score": 0.0,
+              "snippet": "World War II\n\nThe causes of World War II included unresolved tensions in the aftermath of World War I and the rises of fascism in Europe and militarism in Japan, and it was preceded by events..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Causes of World War I",
+              "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_I#Primacy_of_offensive_and_war_by_timetable",
+              "score": 0.0,
+              "snippet": "Causes of World War I\n\npreparations, which threatened to force the Germans to take counter-measures before mediation could begin to take effect.\"\n\nClark also states: \"The Germans declared war on..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "World War II",
+              "url": "https://en.wikipedia.org/wiki/World_War_II#European_occupations_and_agreements",
+              "score": 0.0,
+              "snippet": "World War II\n\nIn Europe, Germany and Italy were becoming more aggressive. In March 1938, Germany annexed Austria, again provoking little response from other European powers. Encouraged, Hitler began..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Eastern Front (World War II)",
+              "url": "https://en.wikipedia.org/wiki/Eastern_Front_(World_War_II)#Background",
+              "score": 0.0,
+              "snippet": "Eastern Front (World War II)\n\nAgreement in which the Soviet Union gave Germany the resources necessary to launch military operations in Eastern Europe.\n\nOn 1 September 1939 Germany invaded Poland,..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Royal Navy",
+              "url": "https://en.wikipedia.org/wiki/Royal_Navy",
+              "score": 0.0,
+              "snippet": "The rising power and increasing belligerence of the Japanese Empire after World War I, however, resulted in the construction of the Singapore Naval Base, which was completed in 1938, less than four..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "World War II",
+              "url": "https://en.wikipedia.org/wiki/World_War_II#Abstract",
+              "score": 0.0,
+              "snippet": "World War II\n\nThe causes of World War II included unresolved tensions in the aftermath of World War I and the rises of fascism in Europe and militarism in Japan, and it was preceded by events..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Causes of World War I",
+              "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_I#Primacy_of_offensive_and_war_by_timetable",
+              "score": 0.0,
+              "snippet": "Causes of World War I\n\npartial mobilization made the Russians realize by 29 July that it would be impossible to interfere with a general mobilization.\n\nOnly a general mobilization could be carried..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "(declining birth rates, declining workforce participation, \"quiet quitting\"). These look incoherent because they are — they're symptoms of dislocation searching for political form, and the form..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Causes of World War II",
+              "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_II#Spanish_Civil_War",
+              "score": 0.0,
+              "snippet": "Causes of World War II\n\nBetween 1936 and 1939, Germany and Italy lent support to the Nationalists led by general Francisco Franco in Spain, and the Soviet Union supported the existing democratically..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Causes of World War II",
+              "url": "https://en.wikipedia.org/wiki/Causes_of_World_War_II#German_occupation_and_Slovak_independence",
+              "score": 0.0,
+              "snippet": "Causes of World War II\n\nIn March 1939, breaking the Munich Agreement, German troops invaded Prague, and with the Slovaks declaring independence, Czechoslovakia disappeared as a country. The entire..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Conscription",
+              "url": "https://en.wikipedia.org/wiki/Conscription",
+              "score": 0.0,
+              "snippet": "Conscription is the state-mandated enlistment of people in a national service, mainly a military service. Conscription dates back to antiquity and it continues in some countries to the present day..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Conscription",
+              "url": "https://en.wikipedia.org/wiki/Conscription",
+              "score": 0.0,
+              "snippet": "Conscription\n\nThose conscripted may evade service, sometimes by leaving the country, and seeking asylum in another country. Some selection systems accommodate these attitudes by providing alternative..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Conscription",
+              "url": "https://en.wikipedia.org/wiki/Conscription",
+              "score": 0.0,
+              "snippet": "Conscription\n\nStates involved in wars or interstate rivalries are most likely to implement conscription, and democracies are less likely than autocracies to implement conscription. With a few..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Sexual slavery",
+              "url": "https://en.wikipedia.org/wiki/Sexual_slavery",
+              "score": 0.0,
+              "snippet": "Sexual slavery\n\nKarayuki-san Sexual slavery and sexual exploitation is an attachment of any ownership right over one or more people with the intent of coercing or otherwise forcing them to engage in..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Sexual slavery",
+              "url": "https://en.wikipedia.org/wiki/Sexual_slavery",
+              "score": 0.0,
+              "snippet": "Sexual slavery\n\nMoreover, slavery's reach extends beyond explicit sexual exploitation. Instances of non-consensual sexual activity are interwoven with systems designed for primarily non-sexual..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Sexual slavery",
+              "url": "https://en.wikipedia.org/wiki/Sexual_slavery",
+              "score": 0.0,
+              "snippet": "Sexual slavery\n\nThe Vienna Declaration and Programme of Action calls for an international effort to make people aware of sexual slavery and that sexual slavery is an abuse of human rights. The..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Eastern Front (World War II)",
+              "url": "https://en.wikipedia.org/wiki/Eastern_Front_(World_War_II)",
+              "score": 0.0,
+              "snippet": "Eastern Front (World War II)\n\nThe Eastern Front, also known as the Great Patriotic War in the Soviet Union and its successor states, and the German–Soviet War in modern Germany and Ukraine, was a..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Eastern Front (World War II)",
+              "url": "https://en.wikipedia.org/wiki/Eastern_Front_(World_War_II)",
+              "score": 0.0,
+              "snippet": "Eastern Front (World War II)\n\nThe Axis forces, led by Nazi Germany, began their advance into the Soviet Union under the codename Operation Barbarossa on 22 June 1941, the opening date of the Eastern..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Eastern Front (World War II)",
+              "url": "https://en.wikipedia.org/wiki/Eastern_Front_(World_War_II)",
+              "score": 0.0,
+              "snippet": "Eastern Front (World War II)\n\nThe Eastern Front concluded with the capture of Berlin, followed by the signing of the German Instrument of Surrender on 8 May, a day that marked the end of the Eastern..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 1,
+          "turn_id": "wwii_causal_t1",
+          "question": "Why was Hitler able to invade in the first place?",
+          "answer": "I want to make sure I give you the right shape of answer.",
+          "reasoning_chars": 0,
+          "stream_wall_ms": 9518,
+          "total_latency_ms": null,
+          "intent": null,
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "rearmament",
+              "Wehrmacht",
+              "Rhineland",
+              "Anschluss"
+            ],
+            "total_expected": 4,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Adolf Hitler",
+              "Nazi Germany"
+            ],
+            "total_expected": 2,
+            "ratio": 0.0
+          },
+          "retrieved": [],
+          "error": null
+        },
+        {
+          "turn_index": 2,
+          "turn_id": "wwii_causal_t2",
+          "question": "But hadn't Germany been disarmed after the previous war?",
+          "answer": "I want to make sure I give you the right shape of answer.",
+          "reasoning_chars": 0,
+          "stream_wall_ms": 6428,
+          "total_latency_ms": null,
+          "intent": null,
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "Treaty of Versailles",
+              "100,000 troops",
+              "demilitarized"
+            ],
+            "total_expected": 3,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Treaty of Versailles"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [],
+          "error": null
+        },
+        {
+          "turn_index": 3,
+          "turn_id": "wwii_causal_t3",
+          "question": "So what made that treaty fail?",
+          "answer": "I want to make sure I give you the right shape of answer.",
+          "reasoning_chars": 0,
+          "stream_wall_ms": 6507,
+          "total_latency_ms": null,
+          "intent": null,
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "reparations",
+              "Great Depression",
+              "weak enforcement",
+              "resentment"
+            ],
+            "total_expected": 4,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Treaty of Versailles",
+              "Weimar Republic"
+            ],
+            "total_expected": 2,
+            "ratio": 0.0
+          },
+          "retrieved": [],
+          "error": null
+        },
+        {
+          "turn_index": 4,
+          "turn_id": "wwii_causal_t4",
+          "question": "Were there voices at the time who predicted it would?",
+          "answer": "I want to make sure I give you the right shape of answer.",
+          "reasoning_chars": 0,
+          "stream_wall_ms": 4979,
+          "total_latency_ms": null,
+          "intent": null,
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "Keynes",
+              "Economic Consequences of the Peace",
+              "Foch"
+            ],
+            "total_expected": 3,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Treaty of Versailles"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [],
+          "error": null
+        }
+      ],
+      "judge": {
+        "coverage": {
+          "matched": [
+            "invasion of Poland",
+            "September 1939",
+            "Hitler",
+            "appeasement",
+            "Anschluss",
+            "Treaty of Versailles",
+            "demilitarized"
+          ],
+          "missing": [
+            "rearmament",
+            "Wehrmacht",
+            "Rhineland",
+            "100,000 troops",
+            "reparations",
+            "Great Depression",
+            "weak enforcement",
+            "resentment",
+            "Keynes",
+            "Economic Consequences of the Peace",
+            "Foch"
+          ],
+          "total_expected": 18,
+          "ratio": 0.3888889
+        },
+        "per_fact": [
+          {
+            "fact": "invasion of Poland",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "Nazi Germany invaded Poland"
+          },
+          {
+            "fact": "September 1939",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "**1 September 1939** when Nazi Germany invaded Poland"
+          },
+          {
+            "fact": "Hitler",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "especially Nazi Germany under Hitler"
+          },
+          {
+            "fact": "appeasement",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "Chamberlain's policy of appeasement—against the wishes of the Czechoslovak government itself"
+          },
+          {
+            "fact": "rearmament",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "Wehrmacht",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "Rhineland",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "Anschluss",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "Germany annexed Austria"
+          },
+          {
+            "fact": "Treaty of Versailles",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "The Treaty of Versailles left deep grievances—particularly over territorial losses, reparations, and the 'war guilt' clause—that fed German revanchism throughout the 1920s and 1930s [Source: Causes of World War II]."
+          },
+          {
+            "fact": "100,000 troops",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "demilitarized",
+            "present": true,
+            "evidence_turn": 0,
+            "evidence_quote": "The Treaty of Versailles left deep grievanc"
+          },
+          {
+            "fact": "reparations",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "Great Depression",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "weak enforcement",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "resentment",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "Keynes",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "Economic Consequences of the Peace",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          },
+          {
+            "fact": "Foch",
+            "present": false,
+            "evidence_turn": null,
+            "evidence_quote": "(absent)"
+          }
+        ]
+      },
+      "degradation": {
+        "first_failure_turn": 1,
+        "fact_recall_slope": -0.2,
+        "latency_ms_per_turn": [
+          21983,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    }
+  ]
+}

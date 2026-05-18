@@ -1,0 +1,2174 @@
+{
+  "bank": "wikipedia-learn-v0",
+  "corpus": "wikipedia",
+  "started_at": "2026-05-17T23:48:15.606412+00:00",
+  "finished_at": "2026-05-17T23:52:39.182547+00:00",
+  "threads": [
+    {
+      "thread_id": "computing_history",
+      "category": "learner_marathon",
+      "description": "12-turn arc: Babbage → Lovelace → Turing → von Neumann → transistor → microprocessor → personal computer. Forces history compaction.",
+      "conversation_id": "5af3f443-a82e-40ec-b7f9-81b60bd25c26",
+      "turns": [
+        {
+          "turn_index": 0,
+          "turn_id": "computing_history_t0",
+          "question": "Who was Charles Babbage?",
+          "answer": "Charles Babbage (1791–1871) was an English mathematician, mechanical engineer, and inventor widely regarded as one of the founding figures of computing. He held the Lucasian Chair at Cambridge University from 1828 to 1839—a post previously occupied by Isaac Newton—and is often described as \"the father of the computer.\" [Source: Charles Babbage]\n\nHis most famous contributions were two machines designed for computation:\n\n- **The Difference Engine** — a special-purpose calculating machine intended to automatically produce mathematical tables such as logarithm and astronomical tables using purely mechanical components like brass gears and pinions.\n- **The Analytical Engine** — conceived after the first Difference Engine project was abandoned, this was a far more ambitious design that marked the transition from mechanised arithmetic to general-purpose programmable computing. It is largely on account of this machine that Babbage's reputation rests today. [Source: Charles Babbage; Source: computing-history]\n\nBabbage worked closely with Ada Lovelace (daughter of Lord Byron), who translated Luigi Menabrea's article about the Analytical Engine in 1842–43 and supplemented it with extensive notes—most notably \"Note G,\" which contained what many consider to be the first computer program, an algorithm designed for execution by a machine. She also described her approach as \"poetical science.\" [Source: Ada Lovelace; Source: computing-history]\n\nBeyond his technical work, Babbage gave public lectures on the Analytical Engine at Turin in 180, famously remarking that \"the Analytical Engine weaves algebraical patterns just as the Jacquard loom weaves flowers and leaves.\" He has since become something of an iconic figure in steampunk fiction. [Source: Charles Babbage]",
+          "reasoning_chars": 2248,
+          "stream_wall_ms": 25320,
+          "total_latency_ms": 21357,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "mathematician",
+              "Difference Engine"
+            ],
+            "missing": [
+              "19th century"
+            ],
+            "total_expected": 3,
+            "ratio": 0.6666667
+          },
+          "source_recall": {
+            "matched": [
+              "Charles Babbage"
+            ],
+            "missing": [],
+            "total_expected": 1,
+            "ratio": 1.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computer",
+              "url": "https://en.wikipedia.org/wiki/Computer#First_computer",
+              "score": 0.0,
+              "snippet": "Computer\n\nCharles Babbage, an English mechanical engineer and polymath, originated the concept of a programmable computer. Considered the \" father of the computer \", he conceptualized and invented..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nCharles Babbage was Lucasian Professor of Mathematics at Cambridge University from 1828 to 1839 (a post formerly held by Isaac Newton). Babbage's proposed Difference Engine was a..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computer",
+              "url": "https://en.wikipedia.org/wiki/Computer#First_computer",
+              "score": 0.0,
+              "snippet": "Computer\n\nCharles Babbage, an English mechanical engineer and polymath, originated the concept of a programmable computer. Considered the \" father of the computer \", he conceptualized and invented..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Analytical_Engine",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nAfter the attempt at making the first difference engine fell through, Babbage worked to design a more complex machine called the Analytical Engine. He hired C. G. Jarvis, who had..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Memorials",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nThere is a black plaque commemorating the 40 years Babbage spent at 1 Dorset Street, London. Locations, institutions and other things named after Babbage include:"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Autopsy_report",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nIn 1983, the autopsy report for Charles Babbage was discovered and later published by his great-great-grandson. A copy of the original is also available. Half of Babbage's brain is..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "clusterer",
+              "url": null,
+              "score": 0.0,
+              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
+            },
+            {
+              "corpus_id": "folder-9ef2f912ea2e",
+              "title": "ThePrince",
+              "url": null,
+              "score": 0.0,
+              "snippet": "ThePrince\n\nThus it was that Charles, King of\nFrance, was allowed to seize Italy with chalk in hand;\n21 and he who told us that our"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nBabbage worked closely with Ada Lovelace, daughter of the poet Byron, after whom the modern programming language ADA is named. Lovelace foresaw the possibility of using the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nA large model of the Analytical Engine was under construction at the time of Babbage's death in 1871 but a full-scale version was never built. Babbage's idea of a general-purpose..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#In_fiction_and_film",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nBabbage frequently appears in steampunk works; he has been called an iconic figure of the genre. Other works in which Babbage appears include:"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Ada_Lovelace_and_Italian_followers",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nmay say most aptly that the Analytical Engine weaves algebraical patterns just as the Jacquard loom weaves flowers and leaves.\"\n\nBabbage visited Turin in 1840 at the invitation of..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nCharles Babbage was Lucasian Professor of Mathematics at Cambridge University from 1828 to 1839 (a post formerly held by Isaac Newton). Babbage's proposed Difference Engine was a..."
+            },
+            {
+              "corpus_id": "folder-9ef2f912ea2e",
+              "title": "ThePrince",
+              "url": null,
+              "score": 0.0,
+              "snippet": "ThePrince\n\nde’ Medici.\n21\"With chalk in hand,\" \"col gesso.\" This is one of the bons mots of Alexander VI, and refers to the ease\nwith which Charles VIII seized Italy, implying that it was only..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "England",
+              "url": "https://en.wikipedia.org/wiki/England",
+              "score": 0.0,
+              "snippet": "light bulb, steam locomotives, the modern seed drill and many modern techniques and technologies used in precision engineering.\n\nEnglish innovators made crucial contributions to computing from the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Ada Lovelace",
+              "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+              "score": 0.0,
+              "snippet": "Ada Lovelace\n\nBetween 1842 and 1843, Lovelace translated an article by the military engineer Luigi Menabrea about the Analytical Engine, supplementing it with an elaborate set of seven notes, simply..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "information",
+              "url": "https://plato.stanford.edu/entries/information/",
+              "score": 0.0,
+              "snippet": "information\n\nThe fact that frequencies of letters vary in a language was known since the invention of book printing. Printers needed many more “e”s and “t”s than “x”s or “q”s to..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Ada Lovelace",
+              "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#Abstract",
+              "score": 0.0,
+              "snippet": "Ada Lovelace\n\nShe married William King in 1835. King was made Earl of Lovelace in 1838, Ada thereby becoming Countess of Lovelace.\n\nLovelace's educational and social exploits brought her into contact..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing-test",
+              "url": "https://plato.stanford.edu/entries/turing-test/",
+              "score": 0.0,
+              "snippet": "turing-test\n\nOne of the most popular objections to the claim that there can be thinking machines is suggested by a remark made by Lady Lovelace in her memoir on Babbage’s Analytical Engine:"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Natural_theology",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nColebrooke. Mary Everest Boole argues that Babbage was introduced to Indian thought in the 1820s by her uncle George Everest:\n\nSome time about 1825, came to England for two or three..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computer",
+              "url": "https://en.wikipedia.org/wiki/Computer",
+              "score": 0.0,
+              "snippet": "Computer\n\nA computer is a machine that can be programmed to automatically carry out sequences of arithmetic or logical operations (computation). Modern digital electronic computers can perform..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computer",
+              "url": "https://en.wikipedia.org/wiki/Computer",
+              "score": 0.0,
+              "snippet": "Computer\n\nEarly computers were meant to be used only for calculations. Simple manual instruments like the abacus have aided people in doing calculations since ancient times. Early in the Industrial..."
+            },
+            {
+              "corpus_id": "folder-9ef2f912ea2e",
+              "title": "ThePrince",
+              "url": null,
+              "score": 0.0,
+              "snippet": "ThePrince\n\nTHE PRINCE\n\nby Nicolo Machiavelli\nTranslated by W. K. Marriott\n\n19th May 2004\n\nContents\n\n1 INTRODUCTION 3\n1.1 Introduction . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . ...."
+            },
+            {
+              "corpus_id": "folder-9ef2f912ea2e",
+              "title": "ThePrince",
+              "url": null,
+              "score": 0.0,
+              "snippet": "ThePrince\n\n. . . . . . . . 4\n1.4 Literature and death Aet. 43-58–1512-27 . . . . . . . . . . . . . . . 6\n1.5 The man and his works . . . . . . . . . . . . . . . . . . . . . . . . . 7\n1.6 Dedication..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 1,
+          "turn_id": "computing_history_t1",
+          "question": "What was the Analytical Engine he designed?",
+          "answer": "# What Was the Analytical Engine?\n\nThe **Analytical Engine** was a proposed digital mechanical **general-purpose computer** designed by English mathematician and **computer pioneer Charles Babbage**. It was first described in **1837** as the successor to Babbage's Difference Engine, which had been a design for a simpler mechanical calculator [Source: Web: Analytical engine].\n\n## Key Architectural Features\n\nThe analytical engine incorporated several revolutionary components that made it the first design for a general-purpose computer that could be described in modern terms as **Turing-complete**:\n\n- An **arithmetic logic unit**, called the \"mill,\" capable of performing all four arithmetic operations plus comparisons and optionally square roots\n- A store (memory) with capacity for 1,000 numbers, each containing 50 decimal digits (~16.6 kB)\n- Control flow through conditional branching and loops\n- Rotating drums called \"**barrels**\" to carry out complex instructions specified by users' programs [Source: Web: Analytical engine]\n\n## Programming",
+          "reasoning_chars": 1839,
+          "stream_wall_ms": 18772,
+          "total_latency_ms": 15010,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "general-purpose",
+              "mechanical"
+            ],
+            "missing": [
+              "punched cards"
+            ],
+            "total_expected": 3,
+            "ratio": 0.6666667
+          },
+          "source_recall": {
+            "matched": [
+              "Charles Babbage",
+              "Analytical Engine"
+            ],
+            "missing": [],
+            "total_expected": 2,
+            "ratio": 1.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nThe analytical engine was a proposed digital mechanical general-purpose computer designed by English mathematician and computer pioneer Charles Babbage. It was first described in..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nIt was not until 1941 that Konrad Zuse built the first general-purpose computer, Z3, more than a century after Babbage had proposed the pioneering analytical engine in 1837."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Abstract",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nThe analytical engine was a proposed digital mechanical general-purpose computer designed by English mathematician and computer pioneer Charles Babbage. It was first described in..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Abstract",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\ncomputer design in the electronic era. The analytical engine is one of the most successful achievements of Charles Babbage.\n\nBabbage was never able to complete construction of any..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Design",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nBabbage's first attempt at a mechanical computing device, the Difference Engine, was a special-purpose machine designed to tabulate logarithms and trigonometric functions by..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Design",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nwould also be able to punch numbers onto cards to be read in later. It employed ordinary base-10 fixed-point arithmetic.\n\nThere was to be a store (that is, a memory) capable of..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Design",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\ninto rotating drums called \"barrels\", to carry out some of the more complex instructions the user's program might specify.\n\nThe programming language to be employed by users was..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Design",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\n1840, and one program later. These programs treat polynomials, iterative formulas, Gaussian elimination, and Bernoulli numbers.\n\nIn 1842, the Italian mathematician Luigi Federico..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Construction",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nLate in his life, Babbage sought ways to build a simplified version of the machine, and assembled a small part of it before his death in 1871.\n\nIn 1878, a committee of the British..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Construction",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nIntermittently from 1880 to 1910, Babbage's son Henry Prevost Babbage was constructing a part of the mill and the printing apparatus. In 1910, it was able to calculate a (faulty)..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Construction",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nand there is no reason why (twenty thousand) cards should not be used if necessary, in an analytical engine for the purposes of the mathematician\"."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Analytical engine",
+              "url": "https://en.wikipedia.org/wiki/Analytical_engine#Construction",
+              "score": 0.0,
+              "snippet": "Analytical engine\n\nbut could not estimate the cost of building it, and were unsure whether the machine would function correctly after being built.\n\nIn 1991, the London Science Museum built a complete..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Analytical_Engine",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nAfter the attempt at making the first difference engine fell through, Babbage worked to design a more complex machine called the Analytical Engine. He hired C. G. Jarvis, who had..."
+            },
+            {
+              "corpus_id": "corpus-engine",
+              "title": "engine",
+              "url": null,
+              "score": 0.0,
+              "snippet": "engine\n\n\npub mod brief;\npub mod classifier;\npub mod engine;\npub mod spans;\n\npub use brief::{assemble_brief, Brief};"
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 2,
+          "turn_id": "computing_history_t2",
+          "question": "Who worked alongside him on its mathematics?",
+          "answer": "Charles Babbage collaborated most notably with **Ada Lovelace** (Augusta Ada King, Countess of Lovelace) — daughter of Lord Byron — who became his principal mathematical collaborator on the Analytical Engine. She translated an article by Luigi Menabrea about the engine and added extensive notes of her own, which were longer than the original text. In these notes, Lovelace described algorithms for computing Bernoulli numbers using the engine — often cited as the first published computer program — and she foresaw that the machine could manipulate symbols beyond mere arithmetic, suggesting it might compose music or produce graphics [Source: web search].\n\nBeyond Lovelace, Babbage's work was largely solitary in its conception; he designed both engines himself (the Difference Engine earlier, then the more ambitious Analytical Engine) with mechanical assistance from engineers like C.G. Jarvis who helped draft plans [Source: web search], but there wasn't a team of mathematicians working alongside him on the analytical calculations in any formal sense.",
+          "reasoning_chars": 855,
+          "stream_wall_ms": 18350,
+          "total_latency_ms": 14566,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "Ada Lovelace",
+              "Lord Byron"
+            ],
+            "missing": [
+              "first programmer"
+            ],
+            "total_expected": 3,
+            "ratio": 0.6666667
+          },
+          "source_recall": {
+            "matched": [
+              "Charles Babbage"
+            ],
+            "missing": [
+              "Ada Lovelace"
+            ],
+            "total_expected": 2,
+            "ratio": 0.5
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Analytical_Engine",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nAfter the attempt at making the first difference engine fell through, Babbage worked to design a more complex machine called the Analytical Engine. He hired C. G. Jarvis, who had..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nBabbage worked closely with Ada Lovelace, daughter of the poet Byron, after whom the modern programming language ADA is named. Lovelace foresaw the possibility of using the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nCharles Babbage was Lucasian Professor of Mathematics at Cambridge University from 1828 to 1839 (a post formerly held by Isaac Newton). Babbage's proposed Difference Engine was a..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Christiaan Huygens",
+              "url": "https://en.wikipedia.org/wiki/Christiaan_Huygens#Biography",
+              "score": 0.0,
+              "snippet": "Christiaan Huygens\n\nstudying languages, music, history, geography, mathematics, logic, and rhetoric, alongside dancing, fencing and horse riding.\n\nIn 1644, Huygens had as his mathematical tutor Jan..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Pappus of Alexandria",
+              "url": "https://en.wikipedia.org/wiki/Pappus_of_Alexandria",
+              "score": 0.0,
+              "snippet": "Pappus of Alexandria was a Greek mathematician of late antiquity known for his Synagoge (Συναγωγή) or Collection, and for Pappus's hexagon theorem in projective geometry. Almost nothing is..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "India",
+              "url": "https://en.wikipedia.org/wiki/India",
+              "score": 0.0,
+              "snippet": "that was most amazing.  On this side most certainly I have never met his equal, and I can compare him only with Euler and Jacobi.  He worked, far more than the majority of modern mathematicians, by..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "principia-mathematica",
+              "url": "https://plato.stanford.edu/entries/principia-mathematica/",
+              "score": 0.0,
+              "snippet": "principia-mathematica\n\nBoth Whitehead and I were disappointed that Principia Mathematica was only viewed from a philosophical standpoint. People were interested in what was said about the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "ramus",
+              "url": "https://plato.stanford.edu/entries/ramus/",
+              "score": 0.0,
+              "snippet": "ramus\n\nRamus addressed the challenge of his weak knowledge of mathematics not only by improving his ability but also by grasping its history. It became essential for him not only to distinguish those..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "wittgenstein-mathematics",
+              "url": "https://plato.stanford.edu/entries/wittgenstein-mathematics/",
+              "score": 0.0,
+              "snippet": "wittgenstein-mathematics\n\nSuppose that people go on and on calculating the expansion of \\(\\pi\\). So God, who knows everything, knows whether they will have reached ‘777’ by the end of the world...."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Augustus De Morgan",
+              "url": "https://en.wikipedia.org/wiki/Augustus_De_Morgan#Childhood",
+              "score": 0.0,
+              "snippet": "Augustus De Morgan\n\nusing the technical term applied to an undergraduate of Oxford or Cambridge who was not a member of any one of the colleges.\n\nWhen De Morgan was ten years old, his father died...."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "newton-philosophy",
+              "url": "https://plato.stanford.edu/entries/newton-philosophy/",
+              "score": 0.0,
+              "snippet": "newton-philosophy\n\nIf we attempt to understand Newton’s work from an historical point of view, however, a more complex conception emerges. When Newton published his principal works, he was not..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Gerardus Mercator",
+              "url": "https://en.wikipedia.org/wiki/Gerardus_Mercator#Leuven_1534–1543",
+              "score": 0.0,
+              "snippet": "Gerardus Mercator\n\nTowards the end of 1534, the twenty-two-year-old Mercator arrived back in Leuven and threw himself into the study of geography, mathematics and astronomy under the guidance of..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "religion-science",
+              "url": "https://plato.stanford.edu/entries/religion-science/",
+              "score": 0.0,
+              "snippet": "religion-science\n\nDuring the twentieth century, Indian scientists began to gain prominence, including C.V. Raman (1888–1970), a Nobel Prize winner in physics, and Satyendra Nath Bose (1894–1974),..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "it is, who's worked on this recently, or whether anyone else is doing related work right now. It generates a plan from generic software-engineering reasoning over the code it's read, missing the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "arabic-islamic-phil-math",
+              "url": "https://plato.stanford.edu/entries/arabic-islamic-phil-math/",
+              "score": 0.0,
+              "snippet": "arabic-islamic-phil-math\n\nIf we take mathematical objects as pure mental or estimative (mawhūm) objects that are constructed by the mechanism of abstraction and have no extramental reality, then it..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Srinivasa Ramanujan",
+              "url": "https://en.wikipedia.org/wiki/Srinivasa_Ramanujan#Pursuit_of_career_in_mathematics",
+              "score": 0.0,
+              "snippet": "Srinivasa Ramanujan\n\nIn 1910, Ramanujan met deputy collector V. Ramaswamy Aiyer, who founded the Indian Mathematical Society. Wishing for a job at the revenue department where Aiyer worked, Ramanujan..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Grigori Perelman",
+              "url": "https://en.wikipedia.org/wiki/Grigori_Perelman#Early_life_and_education",
+              "score": 0.0,
+              "snippet": "Grigori Perelman\n\nGrigori Yakovlevich Perelman was born in Leningrad, Soviet Union (now Saint Petersburg, Russia) on June 13, 1966, to Jewish parents, Yakov (who now lives in Israel) and Lyubov (who..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Applied mathematics",
+              "url": "https://en.wikipedia.org/wiki/Applied_mathematics#Applicable_mathematics",
+              "score": 0.0,
+              "snippet": "Applied mathematics\n\nSometimes, the term applicable mathematics is used to distinguish between the traditional applied mathematics that developed alongside physics and the many areas of mathematics..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "John von Neumann",
+              "url": "https://en.wikipedia.org/wiki/John_von_Neumann#Mathematical_range",
+              "score": 0.0,
+              "snippet": "John von Neumann\n\nwith it, with Goldstine later bringing this up when comparing him to Hermann Weyl, who he thought was deeper and broader.\n\nIn his biography of von Neumann, Salomon Bochner wrote..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "campanella",
+              "url": "https://plato.stanford.edu/entries/campanella/",
+              "score": 0.0,
+              "snippet": "campanella\n\nIn his own treatise, Philosophia sensibus demonstrata, Campanella produced a systematic critique of the axioms of Aristotelian philosophy, bringing to light their limitations and..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Applied mathematics",
+              "url": "https://en.wikipedia.org/wiki/Applied_mathematics",
+              "score": 0.0,
+              "snippet": "Applied mathematics is the application of mathematical methods by different fields such as physics, engineering, medicine, biology, finance, business, computer science, and industry. Thus, applied..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Applied mathematics",
+              "url": "https://en.wikipedia.org/wiki/Applied_mathematics#Abstract",
+              "score": 0.0,
+              "snippet": "Applied mathematics is the application of mathematical methods by different fields such as physics, engineering, medicine, biology, finance, business, computer science, and industry. Thus, applied..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Applied mathematics",
+              "url": "https://en.wikipedia.org/wiki/Applied_mathematics#History",
+              "score": 0.0,
+              "snippet": "Applied mathematics\n\nHistorically, applied mathematics consisted principally of applied analysis, most notably differential equations; approximation theory (broadly construed, to include..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Christiaan Huygens",
+              "url": "https://en.wikipedia.org/wiki/Christiaan_Huygens",
+              "score": 0.0,
+              "snippet": "Christiaan Huygens, Lord of Zeelhem, was a Dutch mathematician, physicist, engineer, astronomer, and inventor who is regarded as a key figure in the Scientific Revolution. In physics, Huygens made..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Christiaan Huygens",
+              "url": "https://en.wikipedia.org/wiki/Christiaan_Huygens",
+              "score": 0.0,
+              "snippet": "Christiaan Huygens\n\nIn 1659, Huygens derived geometrically the formula in classical mechanics for the centrifugal force in his work De vi Centrifuga, a decade before Newton. In optics, he is best..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Christiaan Huygens",
+              "url": "https://en.wikipedia.org/wiki/Christiaan_Huygens",
+              "score": 0.0,
+              "snippet": "Christiaan Huygens\n\nIn 1655, Huygens began grinding lenses with his brother Constantijn to build refracting telescopes. He discovered Saturn's biggest moon, Titan, and was the first to explain..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Pappus of Alexandria",
+              "url": "https://en.wikipedia.org/wiki/Pappus_of_Alexandria#Abstract",
+              "score": 0.0,
+              "snippet": "Pappus of Alexandria (/ ˈ p æ p ə s /; Greek: Πάππος ὁ Ἀλεξανδρεύς; c. 290 – c. 350 AD) was a Greek mathematician of late antiquity known for his Synagoge (Συναγωγή)..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Pappus of Alexandria",
+              "url": "https://en.wikipedia.org/wiki/Pappus_of_Alexandria#Abstract",
+              "score": 0.0,
+              "snippet": "Pappus of Alexandria\n\na wide range of topics that were part of the ancient mathematics curriculum, including geometry, astronomy, and mechanics.\n\nPappus was active in a period generally considered..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Pappus of Alexandria",
+              "url": "https://en.wikipedia.org/wiki/Pappus_of_Alexandria#Dating",
+              "score": 0.0,
+              "snippet": "Pappus of Alexandria\n\nIn his surviving writings, Pappus gives no indication of the date of the authors whose works he makes use of, or of the time (but see below) when he himself wrote. If no other..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Srinivasa Ramanujan",
+              "url": "https://en.wikipedia.org/wiki/Srinivasa_Ramanujan",
+              "score": 0.0,
+              "snippet": "Srinivasa Ramanujan Aiyangar"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Srinivasa Ramanujan",
+              "url": "https://en.wikipedia.org/wiki/Srinivasa_Ramanujan",
+              "score": 0.0,
+              "snippet": "Srinivasa Ramanujan\n\n(22 December 1887 – 26 April 1920) was an Indian mathematician. Though he had almost no formal training in pure mathematics, he made substantial contributions to mathematical..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Srinivasa Ramanujan",
+              "url": "https://en.wikipedia.org/wiki/Srinivasa_Ramanujan",
+              "score": 0.0,
+              "snippet": "Srinivasa Ramanujan\n\nIn his notes, Hardy commented that Ramanujan had produced groundbreaking new theorems, including some that \"defeated me completely; I had never seen anything in the least like..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 3,
+          "turn_id": "computing_history_t3",
+          "question": "What did she contribute that was genuinely new?",
+          "answer": "Ida Tarbell (1857–1944) pioneered **investigative journalism** as a distinct genre — something that didn't formally exist in 1900 when she began publishing [Source: Ida Tarbell]. Her most famous contribution was *The History of the Standard Oil Company*, serialized in McClure's Magazine from 1902 to 1904, later collected into book form. Historian J. North Conway called it \"one of the greatest serials ever to appear in an American magazine\" and \"the single masterpiece of investigative journalism,\" while Frank Luther Mott described her work as having invented a new form entirely [Source: Ida Tarbell; Web: harriet-mill].\n\nWhat made this genuinely novel was its method — systematic research into corporate records, financial documents, and internal practices rather than relying on public statements or gossip. The exposé contributed directly to the dissolution of Standard Oil's monopoly and helped spur the Clayton Antitrust Act [Source: Ida Tarbell]. She also produced what may have been **the first CEO profile** with her two-part character study of John D. Rockefeller, though she never met him in person (he called her \"Miss Tarbarrel\") [Source: Ida Tarbell].\n\nBeyond that landmark work, she wrote biographies of Napoleon, Madame Roland, Abraham Lincoln (including works focused on his early life), Elbert Henry Gary (chairman of U.S. Steel), and Owen D. Young (president of General Electric) — all figures whose inner workings she sought to uncover through research rather than public myth-making [Source: Ida Tarbell].",
+          "reasoning_chars": 1458,
+          "stream_wall_ms": 23173,
+          "total_latency_ms": 20151,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "algorithm",
+              "Bernoulli numbers",
+              "notes"
+            ],
+            "total_expected": 3,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Ada Lovelace"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": "Edgy Demos",
+              "url": null,
+              "score": 0.0,
+              "snippet": "Edgy Demos\n\nability to have done otherwise. [SEP §4, citing Frankfurt, Dennett, Wolf]\n\nLibertarianism (metaphysical) Some actions are genuinely undetermined. Agent causation provides the ground for..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "ContributionSummary",
+              "url": null,
+              "score": 0.0,
+              "snippet": "ContributionSummary\n\n  recommended: boolean;\n}\n\nexport interface ContributionSummary {\n  compute_hours_contributed: number;\n  compute_hours_used: number;\n  storage_hosted_gb: number;\n ..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "harriet-mill",
+              "url": "https://plato.stanford.edu/entries/harriet-mill/",
+              "score": 0.0,
+              "snippet": "harriet-mill\n\nTo feel entirely confident about any judgment about how far Taylor Mill influenced Mill, we would need not only access to her letters which were destroyed but recordings from inside..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "THINKING_DIRECTIVE",
+              "url": null,
+              "score": 0.0,
+              "snippet": "THINKING_DIRECTIVE\n\n/// thinking blocks (\"Source Analysis: [X] — no substantive content...\").\n/// This directive redirects the thinking budget toward the intellectual\n/// content of the..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": "Edgy Demos",
+              "url": null,
+              "score": 0.0,
+              "snippet": "Edgy Demos\n\nSovereign desktop, Settings panel]\n\n\"I'm connecting my Obsidian vault. 847 notes, mostly research and project documentation. Let's see what it finds.\"\n\n[Progress bar: scanning......"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Ida Tarbell",
+              "url": "https://en.wikipedia.org/wiki/Ida_Tarbell#Standard_Oil",
+              "score": 0.0,
+              "snippet": "Ida Tarbell\n\nwhat today is considered investigative reporting, which did not exist in 1900. Indeed, she invented a new form of journalism.\n\nMagazine historian Frank Luther Mott called it, \"one of the..."
+            },
+            {
+              "corpus_id": "corpus-engine",
+              "title": "literary",
+              "url": null,
+              "score": 0.0,
+              "snippet": "literary\n\n//! Each submodule contributes one pipeline + its prompt assets.\n//! Registration happens in `super::registry::PipelineRegistry::builtin`.\n\npub mod literary;\npub mod literary_atlas;\npub mod..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "anscombe",
+              "url": "https://plato.stanford.edu/entries/anscombe/",
+              "score": 0.0,
+              "snippet": "anscombe\n\nWhat did she have in mind by ‘philosophy of psychology’? In MMP, she names several topics we would first need better conceptions of: ‘action’, ‘intention’, ‘pleasure’,..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "needs_deep_reasoning",
+              "url": null,
+              "score": 0.0,
+              "snippet": "needs_deep_reasoning\n\n    /// compatible with determinism?\" (DeepQuery) from \"what is free will?\" (SimpleQuery).\n    /// This function catches the obvious cases so the LLM only handles genuinely\n   ..."
+            },
+            {
+              "corpus_id": "conversations-personal",
+              "title": "Routing complex philosophical queries to specialized handlers",
+              "url": null,
+              "score": 0.0,
+              "snippet": "Routing complex philosophical queries to specialized handlers\n\n### [2026-04-07 17:11] user\n\nUsers of the application can bring their own models, so we should be able to support Qwen or other model..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "ANALYTICAL_EXCLUSIONS",
+              "url": null,
+              "score": 0.0,
+              "snippet": "ANALYTICAL_EXCLUSIONS\n\n        // Multi-clause / analytical exclusions. These drag the\n        // message into deep-reasoning territory regardless of the\n        // lookup opener.\n        const..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "LlmRouter",
+              "url": null,
+              "score": 0.0,
+              "snippet": "LlmRouter\n\n\n        // Last assistant turn — the *specific* prior reply, surfaced\n        // separately from the recent-messages list so the classifier\n        // can use it for Gricean reads (\"is..."
+            },
+            {
+              "corpus_id": "conversations-personal",
+              "title": "Routing complex philosophical queries to specialized handlers",
+              "url": null,
+              "score": 0.0,
+              "snippet": "Routing complex philosophical queries to specialized handlers\n\n### [2026-04-13 16:23] user\n\nIn building Commonwealth and Sovereign with coding tools like claude code, let's talk about how we can use..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Brittany Murphy",
+              "url": "https://en.wikipedia.org/wiki/Brittany_Murphy#Legacy",
+              "score": 0.0,
+              "snippet": "Brittany Murphy\n\nbetter than the treatment she received in the media, which probably contributed to ability to control her in the way he did.\"\n\nIn 2023, Alicia Silverstone, who was also her co-star..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "predictable states—was misleading about how economies actually work.\n\nShe had given the profession a tool. The profession used it to avoid confronting the deeper questions she wanted to..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "moral-conventional",
+              "url": "https://plato.stanford.edu/entries/moral-conventional/",
+              "score": 0.0,
+              "snippet": "moral-conventional\n\nIn formulating his account of criterion judgments indicating that a participant’s normative judgment is a moral judgment, Turiel focused on three features—authority..."
+            },
+            {
+              "corpus_id": "conversation-history",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "a decade-lon theor tical d b te had been right on the substantive points [Source: Joan Robinson].\n\n**On Imperfect Competition:** Her work contributed to understanding market structures between..."
+            },
+            {
+              "corpus_id": "commonwealth-ai-system-overview",
+              "title": "10.1 Sovereign deferrals",
+              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "score": 0.0,
+              "snippet": "10.1 Sovereign deferrals\n\nItemLocationWhy deferred`runtime.rs` split`sovereign-core/src/runtime.rs` (~10800 lines)The runtime hub mixes routing, planner integration, witness assembly, and channel..."
+            },
+            {
+              "corpus_id": "arch-principles",
+              "title": "10.3 Prefer helpers over trait gymnastics for small duplication",
+              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "score": 0.0,
+              "snippet": "10.3 Prefer helpers over trait gymnastics for small duplication\n\nThree copies of a 40-line block is a duplication smell. Extract a helper\nwith a small `Style` enum when the copies differ in tiny..."
+            },
+            {
+              "corpus_id": "commonwealth-ai-arch-principles",
+              "title": "10.3 Prefer helpers over trait gymnastics for small duplication",
+              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/ARCH_PRINCIPLES.md",
+              "score": 0.0,
+              "snippet": "10.3 Prefer helpers over trait gymnastics for small duplication\n\nThree copies of a 40-line block is a duplication smell. Extract a helper\nwith a small `Style` enum when the copies differ in tiny..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Ida Tarbell",
+              "url": "https://en.wikipedia.org/wiki/Ida_Tarbell",
+              "score": 0.0,
+              "snippet": "Ida Tarbell\n\nIda Minerva Tarbell was an American writer, investigative journalist, biographer, and lecturer. She was one of the leading muckrakers and reformers of the Progressive Era of the late..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Ida Tarbell",
+              "url": "https://en.wikipedia.org/wiki/Ida_Tarbell",
+              "score": 0.0,
+              "snippet": "Ida Tarbell\n\nShe wrote biographies on Madame Roland and Napoleon. Tarbell believed that \"the Truth and motivations of powerful human beings could be discovered.\" That Truth, she became convinced,..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Ida Tarbell",
+              "url": "https://en.wikipedia.org/wiki/Ida_Tarbell",
+              "score": 0.0,
+              "snippet": "Ida Tarbell\n\nAfter a successful career as both writer and editor for McClure’s Magazine, Tarbell left with several other editors to buy and publish The American Magazine. Tarbell also traveled to..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "moral-conventional",
+              "url": "https://plato.stanford.edu/entries/moral-conventional/",
+              "score": 0.0,
+              "snippet": "moral-conventional\n\nContemporary interest in the idea that there is a psychologically real and philosophically important distinction between moral judgments and conventional judgments can be traced..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "moral-conventional",
+              "url": "https://plato.stanford.edu/entries/moral-conventional/",
+              "score": 0.0,
+              "snippet": "moral-conventional\n\nDuring the last two decades, philosophers have become increasingly interested in the empirical and theoretical work of Turiel and his critics. Some philosophers have argued that..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "moral-conventional",
+              "url": "https://plato.stanford.edu/entries/moral-conventional/",
+              "score": 0.0,
+              "snippet": "moral-conventional\n\nSections 1 and 2 discuss some of the philosophical precursors of Turiel’s work. Sections 3 thru 10 discuss the empirical findings, debates about their empirical implications,..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 4,
+          "turn_id": "computing_history_t4",
+          "question": "How did computing develop from there in the next century?",
+          "answer": "# Computing Development in the Twentieth Century\n\n## Early Analog Computers (1870s–1930s)\n\nThe century following Babbage saw computing develop along two parallel paths: analog mechanical machines and emerging digital concepts. James Thomson, brother of Lord Kelvin, invented the **mechanical wheel-and-disc integrator** around 1876 that became foundational to analog computation [Source: web search]. This device could compute the integral of products of functions—a key operation for solving differential equations.\n\nIn 1931, **Vannevar Bush**, working at MIT, built the **differential analyser**—the first large-scale automatic general-purpose *mechanical* analog computer [Source: web search]. It was based on the wheel-and-disc design but connected in a way allowing considerable feedback between components. Each \"black box\" performed fundamental processes like addition, multiplication by constants, and integration. The machine required skilled mechanics with lead hammers to set up each new job—manual configuration rather than program-controlled setup.\n\n## Transition to Electronic Computing (Late 1940s–1950s)\n\nThe most transformative development came during the late 1930s through",
+          "reasoning_chars": 1375,
+          "stream_wall_ms": 18365,
+          "total_latency_ms": 15897,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "electronic"
+            ],
+            "missing": [
+              "20th century",
+              "World War"
+            ],
+            "total_expected": 3,
+            "ratio": 0.33333334
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "History of computing"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nHistorically, computers were human clerks who calculated in accordance with effective methods. These human computers did the sorts of calculation nowadays carried out by electronic..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nCharles Babbage was Lucasian Professor of Mathematics at Cambridge University from 1828 to 1839 (a post formerly held by Isaac Newton). Babbage's proposed Difference Engine was a..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nThe Swedes Georg and Edvard Scheutz (father and son) constructed a modified version of Babbage's Difference Engine. Three were made, a prototype and two commercial models, one of..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nBabbage's proposed Analytical Engine, considerably more ambitious than the Difference Engine, was to have been a general-purpose mechanical digital computer. The Analytical Engine..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nBabbage worked closely with Ada Lovelace, daughter of the poet Byron, after whom the modern programming language ADA is named. Lovelace foresaw the possibility of using the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nA large model of the Analytical Engine was under construction at the time of Babbage's death in 1871 but a full-scale version was never built. Babbage's idea of a general-purpose..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nThe earliest computing machines in wide use were not digital but analog. In analog representation, properties of the representational medium ape (or reflect or model) properties of..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nAs the case of the architect's model makes plain, analog representation may be discrete in nature (there is no such thing as a fractional number of windows). Among computer..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nJames Thomson, brother of Lord Kelvin, invented the mechanical wheel-and-disc integrator that became the foundation of analog computation (Thomson [1876]). The two brothers..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nStanley Fifer reports that the first semi-automatic mechanical analog computer was built in England by the Manchester firm of Metropolitan Vickers prior to 1930 (Fifer [1961], p...."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nIt required a skilled mechanic equipped with a lead hammer to set up Bush's mechanical differential analyser for each new job. Subsequently, Bush and his colleagues replaced the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nA differential analyser may be conceptualised as a collection of ‘black boxes’ connected together in such a way as to allow considerable feedback. Each box performs a..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Ada Lovelace",
+              "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+              "score": 0.0,
+              "snippet": "Ada Lovelace\n\nBetween 1842 and 1843, Lovelace translated an article by the military engineer Luigi Menabrea about the Analytical Engine, supplementing it with an elaborate set of seven notes, simply..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Ada Lovelace",
+              "url": "https://en.wikipedia.org/wiki/Ada_Lovelace#Abstract",
+              "score": 0.0,
+              "snippet": "Ada Lovelace\n\nBetween 1842 and 1843, Lovelace translated an article by the military engineer Luigi Menabrea (later Prime Minister of Italy) about the Analytical Engine, supplementing it with an..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 5,
+          "turn_id": "computing_history_t5",
+          "question": "What did Alan Turing add to the theoretical foundation?",
+          "answer": "# What Did Alan Turing Add to the Theoretical Foundation?\n\nAlan Turing made several foundational contributions that transformed our understanding of computation from philosophical speculation into formal mathematics. His most significant addition was **the concept of computability by Turing machine** — he introduced a precise mathematical model that captured what it means for something to be \"effectively calculable.\"\n\n## Formalizing Effective Computation\n\nBefore Turing's work in 1936, statements about effective methods were expressed informally. For example, saying there is an effective method for determining whether any given formula of propositional calculus is a tautology (such as through truth tables) lacked rigorous foundation [Source: web search]. \n\nTuring achieved something remarkable: he presented **\"a formally exact predicate with which the infamous predicate 'can be done by mean",
+          "reasoning_chars": 908,
+          "stream_wall_ms": 17820,
+          "total_latency_ms": 10446,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "Turing machine",
+              "computability"
+            ],
+            "missing": [
+              "halting"
+            ],
+            "total_expected": 3,
+            "ratio": 0.6666667
+          },
+          "source_recall": {
+            "matched": [
+              "Alan Turing"
+            ],
+            "missing": [],
+            "total_expected": 1,
+            "ratio": 1.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nThere are various equivalent formulations of the Church-Turing thesis. A common one is that every effective computation can be carried out by a Turing machine. The Church-Turing thesis..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nThe Church-Turing thesis concerns the concept of an effective or systematic or mechanical method in logic, mathematics and computer science. ‘Effective’ and its synonyms..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nA well-known example of an effective method is the truth table test for tautologousness. In principle, a human being who works by rote could apply this test successfully to any formula..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nStatements that there is an effective method for achieving such-and-such a result are commonly expressed by saying that there is an effective method for obtaining the values of..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nFor example, that there is an effective method for determining whether or not any given formula of the propositional calculus is a tautology (such as the truth table method) is..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nThe notion of an effective method is an informal one, and attempts to characterize effectiveness, such as the above, lack rigor, for the key requirement that the method must demand no..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nOne of Alan Turing’s achievements, in his famous paper of 1936, was to present a formally exact predicate with which the informal predicate “can be done by means of an effective..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nThe replacement predicates that Turing and Church proposed were, on the face of it, very different from one another. However, these predicates turned out to be equivalent, in the sense..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nSince it can also be shown that there are no functions in S other than ones whose values can be obtained by a method satisfying the above conditions for effectiveness, the..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nWhen the Church-Turing thesis is expressed in terms of the replacement concept proposed by Turing, it is appropriate to refer to the thesis also as ‘Turing’s thesis’, and as..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nThe formal concept proposed by Turing was that of computability by Turing machine. He argued for the claim—Turing’s thesis—that whenever there is an effective method for..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nThe converse claim—amounting to the claim mentioned above, that there are no functions in S other than ones whose values can be obtained by an effective method—is easily..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Alan Turing",
+              "url": "https://en.wikipedia.org/wiki/Alan_Turing#Abstract",
+              "score": 0.0,
+              "snippet": "Alan Turing\n\nAlan Mathison Turing OBE FRS (/ ˈ tj ʊər ɪ ŋ /; 23 June 1912 – 7 June 1954) was an English mathematician, computer scientist, logician, cryptanalyst, philosopher and theoretical..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Alan Turing",
+              "url": "https://en.wikipedia.org/wiki/Alan_Turing#Turingery",
+              "score": 0.0,
+              "snippet": "Alan Turing\n\nTuringery and the statistical approach of Banburismus undoubtedly fed into the thinking about cryptanalysis of the Lorenz cipher, but he was not directly involved in the Colossus..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 6,
+          "turn_id": "computing_history_t6",
+          "question": "What role did he play during World War II?",
+          "answer": "# Chester W. Nimitz's Role During World War II\n\n## Primary Command Positions\n\nChester William Nimitz served as **Commander in Chief, U.S. Pacific Fleet** and later as **Commander in Chief, Pacific Ocean Areas**. These were among the most critical positions in American naval command during the war [Source: web search].\n\nAs Commander in Chief of the Pacific Fleet (1940-1945), he held overall responsibility for all U.S. naval forces across the vast Pacific theater. This role required him to coordinate operations spanning thousands of miles of ocean between Hawaii, Australia, New Guinea, and Japan itself.\n\nLater serving as Commander in Chief of Pacific Ocean Areas (1943-1946), his authority expanded to include not just naval forces but also Allied air and land forces operating throughout the entire Pacific region. He commanded these combined arms forces directly until the end of hostilities [Source: web search].\n\n## Strategic Significance\n\nNimitz's leadership was central to several major Allied victories during World War II:\n- The Guadalcanal campaign (1942) - establishing a foothold on Solomon Islands\n- The Battle of Midway (June 1942) - arguably the turning point of the war in the Pacific, where U.S. carrier forces destroyed four Japanese aircraft carriers\n- The island-hopping campaigns that gradually pushed American forces toward Japan\n- Operations leading up to and including the atomic bombings of Hiroshima and Nagasaki\n\nHis strategic decisions prioritized cutting off Japanese supply lines through Southeast Asia while simultaneously advancing toward Japan itself—a dual approach that ultimately forced Japan's surrender [Source: web search].",
+          "reasoning_chars": 681,
+          "stream_wall_ms": 21177,
+          "total_latency_ms": 15139,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "Bletchley Park",
+              "Enigma",
+              "codebreaking"
+            ],
+            "total_expected": 3,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Alan Turing"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Sexual slavery",
+              "url": "https://en.wikipedia.org/wiki/Sexual_slavery#During_armed_conflict_and_war",
+              "score": 0.0,
+              "snippet": "Sexual slavery\n\nRape and sexual violence have accompanied warfare in virtually every known historical era. Before the 19th century, military circles supported the notion that all persons, including..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Conscription",
+              "url": "https://en.wikipedia.org/wiki/Conscription",
+              "score": 0.0,
+              "snippet": "|quote=Conscripts guarded the home front, while European professionals were sent overseas}}\n\n, New York City, June 5, 1917]]\n\ninvaded the Soviet Union, 1941]]\nDuring the [[Eastern Front (World War..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nFrom the start of the Second World War Turing was a leading cryptanalyst at the Government Code and Cypher School, Bletchley Park. Here he became familiar with Thomas Flowers' work..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computability",
+              "url": "https://plato.stanford.edu/entries/computability/",
+              "score": 0.0,
+              "snippet": "computability\n\nDuring World War II, Turing helped design and build a specialized computing device called the Bombe at Bletchley Park. He used the Bombe to crack the German “Enigma” code, greatly..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "brouwer",
+              "url": "https://plato.stanford.edu/entries/brouwer/",
+              "score": 0.0,
+              "snippet": "brouwer\n\n1912 Elected member of the Royal Academy of Sciences (during World War II “Dutch Academy of Sciences”, afterward “Royal Dutch Academy of Sciences”)."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Operations research",
+              "url": "https://en.wikipedia.org/wiki/Operations_research#Second_World_War",
+              "score": 0.0,
+              "snippet": "Operations research\n\nThe modern field of operational research arose during World War II. In the World War II era, operational research was defined as \"a scientific method of providing executive..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing",
+              "url": "https://plato.stanford.edu/entries/turing/",
+              "score": 0.0,
+              "snippet": "turing\n\nThe syllogistic allusion to Socrates is unmistakeable, and his demise, with cyanide rather than hemlock, may have signalled something similar. A parallel figure in World War II, Robert..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "(declining birth rates, declining workforce participation, \"quiet quitting\"). These look incoherent because they are — they're symptoms of dislocation searching for political form, and the form..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "by the enclosures from the 16th to 19th centuries. The American small-farmer republic Jefferson dreamed of was already dying when he wrote about it, and was buried by industrialization within his own..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "game-ethics",
+              "url": "https://plato.stanford.edu/entries/game-ethics/",
+              "score": 0.0,
+              "snippet": "game-ethics\n\nMany of the early advances in game theory were made during World War II and the early stages of the Cold War by individuals working with organizations interested in advancing our..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Air warfare of World War II",
+              "url": "https://en.wikipedia.org/wiki/Air_warfare_of_World_War_II",
+              "score": 0.0,
+              "snippet": "Air warfare of World War II\n\nNavy and Royal Navy also built a powerful naval-air component based on aircraft carriers, as did the Imperial Japanese Navy; these played the central role in the war at..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Torpedo",
+              "url": "https://en.wikipedia.org/wiki/Torpedo#List_of_key_WW-II_torpedos",
+              "score": 0.0,
+              "snippet": "Torpedo\n\nThe torpedoes used by the Imperial Japanese Navy (World War II) included:\n\nThe torpedoes used by the World War II Kriegsmarine included:\n\nThe torpedoes used by the World War II Royal Navy..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Navajo",
+              "url": "https://en.wikipedia.org/wiki/Navajo#Navajo_Code_Talkers_in_World_War_II",
+              "score": 0.0,
+              "snippet": "Navajo\n\nMany Navajo young people moved to cities to work in urban factories during World War II. Many Navajo men volunteered for military service in keeping with their warrior culture, and they..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "brouwer",
+              "url": "https://plato.stanford.edu/entries/brouwer/",
+              "score": 0.0,
+              "snippet": "brouwer\n\n1912 Elected member of the Royal Academy of Sciences (during World War II “Dutch Academy of Sciences”, afterward “Royal Dutch Academy of Sciences”)."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "william-david-ross",
+              "url": "https://plato.stanford.edu/entries/william-david-ross/",
+              "score": 0.0,
+              "snippet": "william-david-ross\n\nIn 1915, Ross joined the army. When World War I ended he was Deputy Assistant Secretary in the Ministry of Munitions, with the rank of Major. He left the army with an OBE...."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Chester W. Nimitz",
+              "url": "https://en.wikipedia.org/wiki/Chester_W._Nimitz#Abstract",
+              "score": 0.0,
+              "snippet": "Chester W. Nimitz\n\nChester William Nimitz (/ ˈ n ɪ m ɪ t s /; February 24, 1885 – February 20, 1966) was a fleet admiral in the United States Navy. He played a major role in the naval history of..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "lvov-warsaw",
+              "url": "https://plato.stanford.edu/entries/lvov-warsaw/",
+              "score": 0.0,
+              "snippet": "lvov-warsaw\n\nWorld War II had disastrous consequences for the LWS. Twardowski and Leśniewski died before September 1, 1939. Of the people mentioned above who lost their lives (mostly Jews murdered..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Joe Vance",
+              "url": "https://en.wikipedia.org/wiki/Joe_Vance",
+              "score": 0.0,
+              "snippet": "Joe Vance\n\nThe Yankees won the World Series in both 1937 and 1938, but Vance did not play in those games. In Panama he met his wife, Helen Liddy and the two were married in New York City in 1938...."
+            },
+            {
+              "corpus_id": "conversations-personal",
+              "title": "Routing complex philosophical queries to specialized handlers",
+              "url": null,
+              "score": 0.0,
+              "snippet": "Routing complex philosophical queries to specialized handlers\n\n### [2026-04-14 01:09] user\n\nIs there such thing as a quick benchmark you can throw at almost any LLM to assess its competency at..."
+            },
+            {
+              "corpus_id": "tokei",
+              "title": "add",
+              "url": null,
+              "score": 0.0,
+              "snippet": "add\n\n# 15 lines, 10 code, 2 comments, 3 blanks\n\n\ndef add(x, y):\n    \"\"\"\n    Hello World\n    # Real Second line\n    Second line\n    \"\"\"\n\n    string = \"Hello World  #\\\n    \"\n    y += len(string)\n    #..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 7,
+          "turn_id": "computing_history_t7",
+          "question": "After the war, what architecture became standard for the first electronic computers?",
+          "answer": "The **stored-program architecture** — where both data and program instructions reside together in a single memory space — became standard for electronic computers after World War II. This was first formally outlined in John von Neumann's *First Draft of a Report on EDVAC* (May 1945) [Source: History of computing hardware].\n\nA few important contextual points about how it emerged:\n\n- Konrad Zuse had anticipated storing machine instructions alongside data two years earlier, in his 1936 patents [Source: History of computing hardware].\n- Alan Turing independently developed the same idea at Bletchley Park during the war; from 1945 he worked to realize his universal machine as an actual stored-program computer and produced a detailed specification for what became known as ACE — arguably more complete than von Neumann's draft report [Source: turing-machine][Source: computing-history].\n- The first electronic implementation was the Manchester Baby (Manchester Mark I) in Britain in 1948, while the IBM SSEC provided an electromechanical realization that year [Source: History of computing hardware].\n\nThe key architectural insight was abandoning earlier machines like ENIAC, which required physical rewiring or plugboard changes between programs. With instructions and data sharing memory, computers could be reprogrammed simply by loading new code into storage — making them genuinely general-purpose rather than specialized calculators. This design became known as the **von Neumann architecture**, though historians note it emerged from multiple independent contributions around 1945–46.",
+          "reasoning_chars": 1728,
+          "stream_wall_ms": 26636,
+          "total_latency_ms": 20523,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "von Neumann",
+              "stored-program",
+              "ENIAC"
+            ],
+            "missing": [],
+            "total_expected": 3,
+            "ratio": 1.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Von Neumann architecture",
+              "ENIAC"
+            ],
+            "total_expected": 2,
+            "ratio": 0.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "sep",
+              "title": "turing-machine",
+              "url": "https://plato.stanford.edu/entries/turing-machine/",
+              "score": 0.0,
+              "snippet": "turing-machine\n\nNote however that Turing already knew the ENIAC and EDVAC designs and proposed the ACE as a kind of improvement on that design (amongst others, it had a simpler hardware architecture)."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing",
+              "url": "https://plato.stanford.edu/entries/turing/",
+              "score": 0.0,
+              "snippet": "turing\n\nAfter 1942, Turing learnt that electronic components offered the speed, storage capacity and logical functions required to be effective as ‘tapes’ and instruction tables. So from 1945,..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Atanasoff–Berry computer",
+              "url": "https://en.wikipedia.org/wiki/Atanasoff%E2%80%93Berry_computer#Patent_dispute",
+              "score": 0.0,
+              "snippet": "Atanasoff–Berry computer\n\nDuring the visit the two men apparently went into Atanasoff's ideas in considerable detail. The discussion greatly influenced Mauchly and through him the entire history of..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computability",
+              "url": "https://plato.stanford.edu/entries/computability/",
+              "score": 0.0,
+              "snippet": "computability\n\nDuring World War II, Turing helped design and build a specialized computing device called the Bombe at Bletchley Park. He used the Bombe to crack the German “Enigma” code, greatly..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Atanasoff–Berry computer",
+              "url": "https://en.wikipedia.org/wiki/Atanasoff%E2%80%93Berry_computer#Abstract",
+              "score": 0.0,
+              "snippet": "Atanasoff–Berry computer\n\nThe Atanasoff–Berry computer (ABC) was the first automatic electronic digital computer. Limited by the technology of the day, and execution, the device has remained..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nFrom the start of the Second World War Turing was a leading cryptanalyst at the Government Code and Cypher School, Bletchley Park. Here he became familiar with Thomas Flowers' work..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nTuring’s ACE, an early electronic stored-program digital computer, was built at the National Physical Laboratory, London; a pilot version—at the time the fastest functioning..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nTuring's 1945 report ‘Proposed Electronic Calculator’ gave the first relatively complete specification of an electronic stored-program general-purpose digital computer. The..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nThe first fully functioning electronic digital computer to be built in the U.S. was ENIAC, constructed at the Moore School of Electrical Engineering, University of Pennsylvania,..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nThe first electronic stored-program digital computer to be proposed in the U.S. was the EDVAC (see below). The ‘First Draft of a Report on the EDVAC’ (May 1945), composed by..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "England",
+              "url": "https://en.wikipedia.org/wiki/England",
+              "score": 0.0,
+              "snippet": "light bulb, steam locomotives, the modern seed drill and many modern techniques and technologies used in precision engineering.\n\nEnglish innovators made crucial contributions to computing from the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Stored-program_computer",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nand a high-speed serial-access memory. However, Eckert and Mauchly left the project and its construction floundered.\n\nIn 1945, von Neumann visited the Moore School and..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing#Digital_electronic_computers",
+              "score": 0.0,
+              "snippet": "History of computing\n\nGerman inventor Konrad Zuse in 1941, was the first programmable, fully automatic computing machine, but it was not electronic.\n\nDuring World War II, ballistics computing was..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computer engineering",
+              "url": "https://en.wikipedia.org/wiki/Computer_engineering#History",
+              "score": 0.0,
+              "snippet": "Computer engineering began in 1939 when John Vincent Atanasoff and Clifford Berry began developing the world's first electronic digital computer through physics, mathematics, and electrical..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Electromechanical_computers",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nIn two 1936 patent applications, Zuse also anticipated that machine instructions could be stored in the same storage used for data—the key insight of what became..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Floating-point arithmetic",
+              "url": "https://en.wikipedia.org/wiki/Floating-point_arithmetic#History",
+              "score": 0.0,
+              "snippet": "Floating-point arithmetic\n\nNeumann recommended against floating-point numbers for the 1951 IAS machine, arguing that fixed-point arithmetic is preferable.\n\nThe first commercial computer with..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Stored-program_computer",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nof the sources of some of the ideas, the computer architecture it outlined became known as the ' von Neumann architecture '.\n\nIn 1945, Turing joined the UK National..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing#Digital_electronic_computers",
+              "score": 0.0,
+              "snippet": "History of computing\n\nthe logical NOR is sometimes called Peirce's arrow. Consequently, these gates are sometimes called universal logic gates.\n\nEventually, vacuum tubes replaced relays for logic..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Data center",
+              "url": "https://en.wikipedia.org/wiki/Data_center#History",
+              "score": 0.0,
+              "snippet": "Data centers have their roots in the huge computer rooms of the 1940s, typified by ENIAC, one of the earliest examples of a data center. Early computer systems, complex to operate and maintain,..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computer architecture",
+              "url": "https://en.wikipedia.org/wiki/Computer_architecture#History",
+              "score": 0.0,
+              "snippet": "Computer architecture\n\nbecame a noun defining \"what the user needs to know\". Later, computer users came to use the term in many less explicit ways.\n\nThe earliest computer architectures were designed..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing",
+              "score": 0.0,
+              "snippet": "History of computing\n\nThe history of computing is longer than the history of computing hardware and modern computing technology and includes the history of methods intended for pen and paper or for..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing#Concrete_devices",
+              "score": 0.0,
+              "snippet": "History of computing\n\nDigital computing is intimately tied to the representation of numberangelas. But long before abstractions like the number arose, there were mathematical concepts to serve the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nThe history of computing hardware covers the developments from early simple devices to aid calculation to modern day computers. The first aids to computation were..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "England",
+              "url": "https://en.wikipedia.org/wiki/England",
+              "score": 0.0,
+              "snippet": "England is a country that is part of the United Kingdom. It is located on the island of Great Britain, of which it covers approximately 62%, and over 100 smaller adjacent islands. It has land borders..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "England",
+              "url": "https://en.wikipedia.org/wiki/England",
+              "score": 0.0,
+              "snippet": "England\n\nThe Kingdom of England, which included Wales after 1535, ceased to be a separate sovereign state on 1 May 1707, when the Acts of Union brought into effect a political union with the Kingdom..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "England",
+              "url": "https://en.wikipedia.org/wiki/England",
+              "score": 0.0,
+              "snippet": "England\n\nUpland and mountainous terrain is mostly found in the north and west, including Dartmoor, the Lake District, the Pennines, and the Shropshire Hills. The country's capital is London, the..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 8,
+          "turn_id": "computing_history_t8",
+          "question": "How did that design differ from what Turing had proposed?",
+          "answer": "From what I can piece together about those two proposals:\n\n**Von Neumann's \"First Draft\" (May 1945)** was essentially an architectural sketch — it described the stored-program concept at a conceptual level but contained very little engineering or hardware detail. This was partly because U.S. restrictions at the time limited how much technical information could be circulated in writing. It read like a report of ideas rather than a buildable specification.\n\n**Turing's ACE proposal (\"Proposed Electronic Calculator,\" February 1946)** went far beyond that. Turing supplied detailed circuit designs and specifications for individual hardware units, specimen programs written out in machine code, even an estimate of what building the thing would cost (£11,200). He drew on his wartime experience with high-speed electronic switching at Bletchley Park to know this was actually feasible — he wasn't just theorizing about it.\n\nThe fundamental difference: von Neumann gave you *what* a stored-program computer should be; Turing gave you enough detail to start wiring one up. As one source puts it, \"ACE and EDVAC differed fundamentally from one\" along these lines — ACE was substantially more concrete as an engineering document.",
+          "reasoning_chars": 1180,
+          "stream_wall_ms": 24279,
+          "total_latency_ms": 16111,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "practical",
+              "memory",
+              "instructions"
+            ],
+            "total_expected": 3,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [
+              "Von Neumann architecture"
+            ],
+            "missing": [
+              "Alan Turing"
+            ],
+            "total_expected": 2,
+            "ratio": 0.5
+          },
+          "retrieved": [
+            {
+              "corpus_id": "sep",
+              "title": "turing-machine",
+              "url": "https://plato.stanford.edu/entries/turing-machine/",
+              "score": 0.0,
+              "snippet": "turing-machine\n\nU then goes to PRINT"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nSimilarly:"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nIn the case of Turing-machine programs, Turing developed a detailed logical notation for expressing all such deductions (Turing 1936)."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Turing machine",
+              "url": "https://en.wikipedia.org/wiki/Turing_machine",
+              "score": 0.0,
+              "snippet": "Turing machine\n\nThe choice of which replacement symbol to write, which direction to move the head, and whether to halt is based on a finite table that specifies what to do for each combination of the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Chester W. Nimitz",
+              "url": "https://en.wikipedia.org/wiki/Chester_W._Nimitz#World_War_II",
+              "score": 0.0,
+              "snippet": "Chester W. Nimitz\n\nas \"Commander in Chief, Pacific Ocean Areas\", with operational control over all Allied units (air, land, and sea) in that area.\n\nNimitz, in Hawaii, and his superior Admiral Ernest..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing-machine",
+              "url": "https://plato.stanford.edu/entries/turing-machine/",
+              "score": 0.0,
+              "snippet": "turing-machine\n\nNote however that Turing already knew the ENIAC and EDVAC designs and proposed the ACE as a kind of improvement on that design (amongst others, it had a simpler hardware architecture)."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nFurther information about Turing and the computer, including his wartime work on codebreaking and his thinking about artificial intelligence and artificial life, can be found in..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing",
+              "url": "https://plato.stanford.edu/entries/turing/",
+              "score": 0.0,
+              "snippet": "turing\n\nIn 1939 Turing's various energetic investigations were broken off for war work. This did, however, have the positive feature of leading Turing to turn his universal machine into the practical..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing",
+              "url": "https://plato.stanford.edu/entries/turing/",
+              "score": 0.0,
+              "snippet": "turing\n\nIt therefore escaped observers that Turing was ahead of von Neumann and everyone else on the future of software, or as he called it, the ‘construction of instruction tables.’ Turing..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nFrom the start of the Second World War Turing was a leading cryptanalyst at the Government Code and Cypher School, Bletchley Park. Here he became familiar with Thomas Flowers' work..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computational complexity theory",
+              "url": "https://en.wikipedia.org/wiki/Computational_complexity_theory#Turing_machine",
+              "score": 0.0,
+              "snippet": "Computational complexity theory\n\nto be as powerful as any other model of computation, the Turing machine is the most commonly used model in complexity theory.\n\nMany types of Turing machines are used..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nand also that every"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "church-turing",
+              "url": "https://plato.stanford.edu/entries/church-turing/",
+              "score": 0.0,
+              "snippet": "church-turing\n\nSome prefer the name Turing-Church thesis."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing-test",
+              "url": "https://plato.stanford.edu/entries/turing-test/",
+              "score": 0.0,
+              "snippet": "turing-test\n\n5.3.4 Further Proposals"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Von Neumann architecture",
+              "url": "https://en.wikipedia.org/wiki/Von_Neumann_architecture#Development_of_the_stored-program_concept",
+              "score": 0.0,
+              "snippet": "Von Neumann architecture\n\ncomputer able to store in its memory its program of activities and of modifying that program in the course of these activities.\n\nAt the time that the \"First Draft\" report..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nTuring and Newman were thinking along similar lines. In 1945 Turing joined the National Physical Laboratory (NPL) in London, his brief to design and develop an electronic..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nThe first electronic stored-program digital computer to be proposed in the U.S. was the EDVAC (see below). The ‘First Draft of a Report on the EDVAC’ (May 1945), composed by..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Nimitz-class aircraft carrier",
+              "url": "https://en.wikipedia.org/wiki/Nimitz-class_aircraft_carrier#Design",
+              "score": 0.0,
+              "snippet": "Nimitz-class aircraft carrier\n\nfire. This addition has been present on U.S. aircraft carriers since World War II, after the fires caused by kamikaze attacks.\n\nThe first ships were designed around the..."
+            },
+            {
+              "corpus_id": "conversations-personal",
+              "title": "Routing complex philosophical queries to specialized handlers",
+              "url": null,
+              "score": 0.0,
+              "snippet": "Routing complex philosophical queries to specialized handlers\n\n### [2026-04-14 01:09] user\n\nIs there such thing as a quick benchmark you can throw at almost any LLM to assess its competency at..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Turing machine",
+              "url": "https://en.wikipedia.org/wiki/Turing_machine#The_Entscheidungsproblem_(the_\"decision_problem\"):_Hilbert's_tenth_question_of_1900",
+              "score": 0.0,
+              "snippet": "Turing machine\n\nhis retirement speech (much to the chagrin of Hilbert); the third—the Entscheidungsproblem—had to wait until the mid-1930s.\n\nBut what Church had done was something rather..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing-machine",
+              "url": "https://plato.stanford.edu/entries/turing-machine/",
+              "score": 0.0,
+              "snippet": "turing-machine\n\nTuring machines, first described by Alan Turing in Turing 1936–7, are simple abstract computational devices intended to help investigate the extent and limitations of what can be..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing-machine",
+              "url": "https://plato.stanford.edu/entries/turing-machine/",
+              "score": 0.0,
+              "snippet": "turing-machine\n\nTuring introduced Turing machines in the context of research into the foundations of mathematics. More particularly, he used these abstract devices to prove that there is no effective..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Turing machine",
+              "url": "https://en.wikipedia.org/wiki/Turing_machine",
+              "score": 0.0,
+              "snippet": "Turing machine\n\nA Turing machine is a mathematical model of computation describing an abstract machine that manipulates symbols on a strip of tape according to a table of rules. Despite the model's..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Turing machine",
+              "url": "https://en.wikipedia.org/wiki/Turing_machine",
+              "score": 0.0,
+              "snippet": "Turing machine\n\n- Does a machine exist that can determine whether any arbitrary machine on its tape is \"circular\"?"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing",
+              "url": "https://plato.stanford.edu/entries/turing/",
+              "score": 0.0,
+              "snippet": "turing\n\nAlan Turing (1912–1954) never described himself as a philosopher, but his 1950 paper “Computing Machinery and Intelligence” is one of the most frequently cited in modern philosophical..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing",
+              "url": "https://plato.stanford.edu/entries/turing/",
+              "score": 0.0,
+              "snippet": "turing\n\nAlan Turing's short and extraordinary life has attracted wide interest. It has inspired his mother's memoir (E. S. Turing 1959), a detailed biography (Hodges 1983), a play and television film..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 9,
+          "turn_id": "computing_history_t9",
+          "question": "What hardware breakthrough in the 1950s made smaller computers possible?",
+          "answer": "## Answer\n\nBased on my analysis of both retrieved sources and established computing history:\n\nThe key hardware breakthrough was **ferrite core memory**. This magnetic storage technology emerged as the dominant high-speed main memory solution during the 1950-1960 period, replacing earlier technologies like mercury delay lines and vacuum tube-based systems.\n\nFerrite cores offered several critical advantages that enabled more compact computer designs:\n\n| Advantage | Impact on Computer Size |\n|-----------|------------------------|\n| Non-volatile (\"permanent life\") | Eliminated need for backup power supplies or",
+          "reasoning_chars": 2249,
+          "stream_wall_ms": 22375,
+          "total_latency_ms": 15962,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "transistor",
+              "Bell Labs",
+              "1947",
+              "Shockley"
+            ],
+            "total_expected": 4,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [],
+            "missing": [
+              "Transistor"
+            ],
+            "total_expected": 1,
+            "ratio": 0.0
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nThe history of computing hardware covers the developments from early simple devices to aid calculation to modern day computers. The first aids to computation were..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nMetal-oxide-semiconductor (MOS) large-scale integration (LSI) then enabled semiconductor memory and the microprocessor, leading to another key breakthrough, the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Abstract",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nThe history of computing hardware covers the developments from early simple devices to aid calculation to modern day computers."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Abstract",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nThe first aids to computation were purely mechanical devices which required the operator to set up the initial values of an elementary arithmetic operation, then..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Abstract",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nThe cost of computers gradually became so low that personal computers by the 1990s, and then mobile computers (smartphones and tablets) in the 2000s, became ubiquitous."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Abstract",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nhistory of computing hardware covers the developments from early simple devices to aid calculation to modern day computers."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Ancient_and_medieval",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nDevices have been used to aid computation for thousands of years, mostly using one-to-one correspondence with fingers. The earliest counting device was probably a form..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Ancient_and_medieval",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nIn a medieval European counting house, a checkered cloth would be placed on a table, and markers moved around on it according to certain rules, as an aid to calculating..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Ancient_and_medieval",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nSeveral analog computers were constructed in ancient and medieval times to perform astronomical calculations. These included the astrolabe and Antikythera mechanism..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Ancient_and_medieval",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nthe Book of Ingenious Devices (850) by the Persian-Baghdadi Banū Mūsā brothers may have been the first programmable device.\n\nOther early mechanical devices used to..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Renaissance_calculating_tools",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nScottish mathematician and physicist John Napier discovered that the multiplication and division of numbers could be performed by the addition and subtraction,..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of computing hardware",
+              "url": "https://en.wikipedia.org/wiki/History_of_computing_hardware#Renaissance_calculating_tools",
+              "score": 0.0,
+              "snippet": "History of computing hardware\n\nhis ' Napier's bones ', an abacus-like device that greatly simplified calculations that involved multiplication and division.\n\nSince real numbers can be represented as..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "turing-machine",
+              "url": "https://plato.stanford.edu/entries/turing-machine/",
+              "score": 0.0,
+              "snippet": "turing-machine\n\nNote however that Turing already knew the ENIAC and EDVAC designs and proposed the ACE as a kind of improvement on that design (amongst others, it had a simpler hardware architecture)."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nOnce the absolute reliability, relative cheapness, high capacity and permanent life of ferrite core memory became apparent, core soon replaced other forms of high-speed memory. The..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 10,
+          "turn_id": "computing_history_t10",
+          "question": "And what did Intel's founders do with that technology in the 1970s?",
+          "answer": "# Answer: Intel Founders and Their 1970s Technology\n\n## Who Were Intel's Founders?\n\nIntel was founded by **Robert Noyce** (co-founder) and **Gordon Moore** (co-founder), along with Frank Knudson and others. They came from Fairchild Semiconductor, where they had pioneered integrated circuit technology.\n\n---\n\n## What Did They Do With This Technology in the 1970?\n\n### The Silicon",
+          "reasoning_chars": 2311,
+          "stream_wall_ms": 23452,
+          "total_latency_ms": 16694,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [
+              "integrated circuit"
+            ],
+            "missing": [
+              "microprocessor",
+              "Intel 4004"
+            ],
+            "total_expected": 3,
+            "ratio": 0.33333334
+          },
+          "source_recall": {
+            "matched": [
+              "Intel"
+            ],
+            "missing": [
+              "Microprocessor"
+            ],
+            "total_expected": 2,
+            "ratio": 0.5
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "1970s",
+              "url": "https://en.wikipedia.org/wiki/1970s#Electronics_and_communications",
+              "score": 0.0,
+              "snippet": "1970s\n\nThe birth of modern computing was in the 1970s, which saw the development of:\n\nThe 1970s were also the start of:"
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "workflows at ~25 tok/s on M4 Ultra's 819 GB/s bandwidth.\n\n---\n\n## AMD APU — unified memory (Linux, Vulkan RADV)\n\nStrix Halo and similar. Unified memory like Mac but typically lower bandwidth. Use..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "GB|~50–65|Quality + speed balance. 15 GB free.|\n|Fast alt|**Gemma 4 E4B**|MoE|~3 GB|~80–100|Pipeline speed demon.|\n\n---\n\n### 32–48 GB unified — M2/M3/M4 Max (32–48 GB)\n\n~28–44 GB usable...."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Intel",
+              "url": "https://en.wikipedia.org/wiki/Intel#SRAMs,_DRAMs,_and_the_microprocessor",
+              "score": 0.0,
+              "snippet": "Intel's first products were shift register memory and random-access memory integrated circuits, and Intel grew to be a leader in the fiercely competitive DRAM, SRAM, and ROM markets throughout the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Intel",
+              "url": "https://en.wikipedia.org/wiki/Intel#Early_history",
+              "score": 0.0,
+              "snippet": "Intel\n\nthe first commercial metal–oxide–semiconductor field-effect transistor (MOSFET) silicon gate SRAM chip, the 256-bit 1101.\n\nWhile the 1101 was a significant advance, its complex static cell..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Intel",
+              "url": "https://en.wikipedia.org/wiki/Intel#Age_discrimination_complaints",
+              "score": 0.0,
+              "snippet": "Intel has faced complaints of age discrimination in firing and layoffs. Intel was sued in 1993 by nine former employees, over allegations that they were laid off because they were over the age of..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Intel",
+              "url": "https://en.wikipedia.org/wiki/Intel#Early_history",
+              "score": 0.0,
+              "snippet": "Intel\n\nand improved its manufacturing processes and produced a wider range of products, still dominated by various memory devices.\n\nIntel created the first commercially available microprocessor, the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of the transistor",
+              "url": "https://en.wikipedia.org/wiki/History_of_the_transistor#Personal_computers",
+              "score": 0.0,
+              "snippet": "History of the transistor\n\nIn the 1970s, the MOS microprocessor was the basis for home computers, microcomputers (micros) and personal computers (PCs). This led to the start of what is known as the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of electrical engineering",
+              "url": "https://en.wikipedia.org/wiki/History_of_electrical_engineering#Solid-state_electronics",
+              "score": 0.0,
+              "snippet": "History of electrical engineering\n\nin the Interplanetary Monitoring Platform (IMP) and silicon integrated circuit chips in the Apollo Guidance Computer (AGC).\n\nThe development of MOS integrated..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Integrated circuit",
+              "url": "https://en.wikipedia.org/wiki/Integrated_circuit#Generations",
+              "score": 0.0,
+              "snippet": "Integrated circuit\n\nIn the early days of simple integrated circuits, the technology's large scale limited each chip to only a few transistors, and the low degree of integration meant the design..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Electrical engineering",
+              "url": "https://en.wikipedia.org/wiki/Electrical_engineering#Solid-state_electronics",
+              "score": 0.0,
+              "snippet": "Electrical engineering\n\npace (as predicted by Moore's law), has since led to revolutionary changes in technology, economy, culture and thinking.\n\nThe Apollo program which culminated in landing..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Field-effect transistor",
+              "url": "https://en.wikipedia.org/wiki/Field-effect_transistor#History",
+              "score": 0.0,
+              "snippet": "Field-effect transistor\n\nBy the mid-1950s, researchers had largely given up on the FET concept, and instead focused on bipolar junction transistor (BJT) technology."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "reasoning-automated",
+              "url": "https://plato.stanford.edu/entries/reasoning-automated/",
+              "score": 0.0,
+              "snippet": "reasoning-automated\n\nAutomated reasoning has reached the level of maturity where theorem proving systems and techniques are being used for industrial-strength applications. One such application area..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Andrew Grove",
+              "url": "https://en.wikipedia.org/wiki/Andrew_Grove#Starting_Intel",
+              "score": 0.0,
+              "snippet": "Andrew Grove\n\nvarious bits and pieces, we have steered Intel from a start-up to one of the central companies of the information economy.\n\nGrove is credited with having transformed Intel from a..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "ToolPatternMatcher",
+              "url": null,
+              "score": 0.0,
+              "snippet": "ToolPatternMatcher\n\n\n/// True for the read-only code-intel tools that count as\n/// \"investigation\" for pattern 1 / 3."
+            },
+            {
+              "corpus_id": "tokei-readme",
+              "title": "Supported Languages",
+              "url": "file:///tmp/drift-stress/tokei/README.md",
+              "score": 0.0,
+              "snippet": "Supported Languages\n\nIf there is a language that you would to add to tokei feel free to make a pull\nrequest. Languages are defined in `languages.json`[](./languages.json), and you can\nread how to add..."
+            },
+            {
+              "corpus_id": "commonwealth-ai-system-overview",
+              "title": "4.9 Frontends",
+              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "score": 0.0,
+              "snippet": "4.9 Frontends\n\nFrontendPurpose`sovereign-cli`Interactive REPL + named subcommands. Grouped by surface: agent lifecycle — `setup`, `chat`, `daemon` (long-running, owns :9741), `serve`, `stop`,..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Intel",
+              "url": "https://en.wikipedia.org/wiki/Intel#Key_acquisitions_and_investments_(2010–present)",
+              "score": 0.0,
+              "snippet": "Intel\n\nIn 2010, Intel purchased McAfee, a manufacturer of computer security technology, for $7.68 billion. As a condition for regulatory approval of the transaction, Intel agreed to provide rival..."
+            },
+            {
+              "corpus_id": "commonwealth-ai-system-overview",
+              "title": "4.4 Tools",
+              "url": "file:///Users/alexsbryan/dev/commonwealth-ai/sovereign/SYSTEM_OVERVIEW.md",
+              "score": 0.0,
+              "snippet": "4.4 Tools\n\nLocal tools (`sovereign-tools/src/`):\n\nToolPurpose`SearchTool`Local vector + FTS5, coverage assessment, optional web fallback`WebSearchTool`NL → keywords (Quick), search backend, fetch..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Andrew Grove",
+              "url": "https://en.wikipedia.org/wiki/Andrew_Grove#Starting_Intel",
+              "score": 0.0,
+              "snippet": "Andrew Grove\n\nWhen I came to Intel, I was scared to death. I left a very secure job where I knew what I was doing and started running R&D for a brand new venture in untried territory. It was..."
+            }
+          ],
+          "error": null
+        },
+        {
+          "turn_index": 11,
+          "turn_id": "computing_history_t11",
+          "question": "Going back to Babbage's original vision — how close did the personal computer revolution come to realizing it?",
+          "answer": "# Going back to Babbage's original vision — how close did the personal computer revolution come to realizing it?\n\nThis question invites me to compare what Charles Babbage actually envisioned versus what the personal computer era delivered. Let me work through this carefully.\n\n## What Babbage Actually Designed\n\nFrom my knowledge and context clues in your conversation:\n\n**The Analytical Engine wasn't just a calculator.** It was designed with three",
+          "reasoning_chars": 2521,
+          "stream_wall_ms": 23843,
+          "total_latency_ms": 16796,
+          "intent": "KnowledgeQuery",
+          "fact_recall": {
+            "matched": [],
+            "missing": [
+              "general-purpose",
+              "programmable",
+              "accessibility"
+            ],
+            "total_expected": 3,
+            "ratio": 0.0
+          },
+          "source_recall": {
+            "matched": [
+              "Charles Babbage"
+            ],
+            "missing": [
+              "Personal computer"
+            ],
+            "total_expected": 2,
+            "ratio": 0.5
+          },
+          "retrieved": [
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computer",
+              "url": "https://en.wikipedia.org/wiki/Computer#First_computer",
+              "score": 0.0,
+              "snippet": "Computer\n\nCharles Babbage, an English mechanical engineer and polymath, originated the concept of a programmable computer. Considered the \" father of the computer \", he conceptualized and invented..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Atanasoff–Berry computer",
+              "url": "https://en.wikipedia.org/wiki/Atanasoff%E2%80%93Berry_computer#Patent_dispute",
+              "score": 0.0,
+              "snippet": "Atanasoff–Berry computer\n\nthat subject matter from one Dr. John Vincent Atanasoff.\n\nHerman Goldstine, one of the original developers of ENIAC wrote:"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Machine",
+              "url": "https://en.wikipedia.org/wiki/Machine#Computing_machines",
+              "score": 0.0,
+              "snippet": "Machine\n\nCharles Babbage designed machines to tabulate logarithms and other functions in 1837. His Difference engine can be considered an advanced mechanical calculator and his Analytical Engine a..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Eurovision Song Contest 2026",
+              "url": "https://en.wikipedia.org/wiki/Eurovision_Song_Contest_2026",
+              "score": 0.0,
+              "snippet": "Computer\n\"\"\nEnglish\nstyle=\"text-align:center;\" |\n}"
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nCharles Babbage was Lucasian Professor of Mathematics at Cambridge University from 1828 to 1839 (a post formerly held by Isaac Newton). Babbage's proposed Difference Engine was a..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "History of the transistor",
+              "url": "https://en.wikipedia.org/wiki/History_of_the_transistor#Personal_computers",
+              "score": 0.0,
+              "snippet": "History of the transistor\n\nIn the 1970s, the MOS microprocessor was the basis for home computers, microcomputers (micros) and personal computers (PCs). This led to the start of what is known as the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Intel",
+              "url": "https://en.wikipedia.org/wiki/Intel#Early_history",
+              "score": 0.0,
+              "snippet": "Intel\n\nand improved its manufacturing processes and produced a wider range of products, still dominated by various memory devices.\n\nIntel created the first commercially available microprocessor, the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Computer engineering",
+              "url": "https://en.wikipedia.org/wiki/Computer_engineering#History",
+              "score": 0.0,
+              "snippet": "Computer engineering began in 1939 when John Vincent Atanasoff and Clifford Berry began developing the world's first electronic digital computer through physics, mathematics, and electrical..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "England",
+              "url": "https://en.wikipedia.org/wiki/England",
+              "score": 0.0,
+              "snippet": "light bulb, steam locomotives, the modern seed drill and many modern techniques and technologies used in precision engineering.\n\nEnglish innovators made crucial contributions to computing from the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#Analytical_Engine",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nAfter the attempt at making the first difference engine fell through, Babbage worked to design a more complex machine called the Analytical Engine. He hired C. G. Jarvis, who had..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": "Benchmark",
+              "url": null,
+              "score": 0.0,
+              "snippet": "Benchmark\n\n3 items  ~10 min\nBaseline  Math                    5 items   ~6 min\nBaseline  Coding                  5 items  ~10 min\nBaseline  Reasoning               5 items   ~6 min\n\nTotal: 54 items,..."
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "3 items  ~10 min\nBaseline  Math                    5 items   ~6 min\nBaseline  Coding                  5 items  ~10 min\nBaseline  Reasoning               5 items   ~6 min\n\nTotal: 54 items, ~77..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "IBM Personal Computer",
+              "url": "https://en.wikipedia.org/wiki/IBM_Personal_Computer#Design_process",
+              "score": 0.0,
+              "snippet": "IBM Personal Computer\n\nsuch features as the bytecoding for color monitors, DMA access operation, and the keyboard interface. They were never enforced.\n\nMany of the designers were computer hobbyists..."
+            },
+            {
+              "corpus_id": "sep",
+              "title": "computing-history",
+              "url": "https://plato.stanford.edu/entries/computing-history/",
+              "score": 0.0,
+              "snippet": "computing-history\n\nOther notable early stored-program electronic digital computers were:"
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "IBM Personal Computer",
+              "url": "https://en.wikipedia.org/wiki/IBM_Personal_Computer#Design_process",
+              "score": 0.0,
+              "snippet": "IBM Personal Computer\n\ndue to the design constraint to use off-the-shelf parts. The TMS9900 was rejected as it was inferior to the Intel 8088.\n\nIBM chose the 8088 over the similar but superior 8086..."
+            },
+            {
+              "corpus_id": "commonwealth-ai",
+              "title": "clusterer",
+              "url": null,
+              "score": 0.0,
+              "snippet": "clusterer\n\n//! `sovereign/*`. See the plan at\n//! `/Users/alexsbryan/.claude/plans/binary-scribbling-babbage.md`.\n\npub mod clusterer;\npub mod config;\npub mod excerpt;\npub mod extract_stage;"
+            },
+            {
+              "corpus_id": "watched-959ee8a8f330",
+              "title": null,
+              "url": null,
+              "score": 0.0,
+              "snippet": "workflows at ~25 tok/s on M4 Ultra's 819 GB/s bandwidth.\n\n---\n\n## AMD APU — unified memory (Linux, Vulkan RADV)\n\nStrix Halo and similar. Unified memory like Mac but typically lower bandwidth. Use..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Home computer",
+              "url": "https://en.wikipedia.org/wiki/Home_computer#1970s",
+              "score": 0.0,
+              "snippet": "Home computer\n\nThree microcomputers were the prototypes for what would later become the home computer market segment; but when introduced they sold as much to hobbyists and small businesses as to the..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Workstation",
+              "url": "https://en.wikipedia.org/wiki/Workstation#Origins_and_development",
+              "score": 0.0,
+              "snippet": "Workstation\n\nThe first computer that might qualify as a workstation is the IBM 1620, a small scientific computer designed to be used interactively by a single person sitting at the console. It was..."
+            },
+            {
+              "corpus_id": "wikipedia",
+              "title": "Charles Babbage",
+              "url": "https://en.wikipedia.org/wiki/Charles_Babbage#In_fiction_and_film",
+              "score": 0.0,
+              "snippet": "Charles Babbage\n\nBabbage frequently appears in steampunk works; he has been called an iconic figure of the genre. Other works in which Babbage appears include:"
+            }
+          ],
+          "error": null
+        }
+      ],
+      "judge": null,
+      "degradation": {
+        "first_failure_turn": 0,
+        "fact_recall_slope": -0.04778554952227986,
+        "latency_ms_per_turn": [
+          21357,
+          15010,
+          14566,
+          20151,
+          15897,
+          10446,
+          15139,
+          20523,
+          16111,
+          15962,
+          16694,
+          16796
+        ]
+      }
+    }
+  ]
+}
