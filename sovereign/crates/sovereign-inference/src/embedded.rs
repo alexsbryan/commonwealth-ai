@@ -591,7 +591,13 @@ impl ModelSlot {
         let build_ctx_params = |gpu: bool| {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
-                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
+                // Re-introduced in the sovereign vendor of llama-cpp-4
+                // (see workspace `[patch.crates-io]`). Without this the
+                // C-side context defaults to n_seq_max=1 and the
+                // continuous-batched coalescer fails with "Decode
+                // Error -1: n_tokens == 0" the moment a batch carries
+                // a second sequence — forensic trace 2026-05-18.
+                .with_n_seq_max(n_seq_max)
                 .with_n_batch(context_size)
                 .with_n_ubatch(n_ubatch)
                 .with_n_threads(n_threads as i32)
@@ -1434,13 +1440,34 @@ impl ModelSlot {
         // Tokenize every request up-front. `format_prompt` runs the
         // production chat-template renderer (system + user + thinking
         // injection per `quirks`).
+        let forensic = std::env::var("SOVEREIGN_FORENSIC").ok().as_deref() == Some("1");
         let tokenized: Vec<Vec<LlamaToken>> = requests
             .iter()
-            .map(|r| {
+            .enumerate()
+            .map(|(idx, r)| {
                 let prompt = format_prompt(model, model_id, r, quirks)?;
-                model
+                let toks = model
                     .str_to_token(&prompt, AddBos::Always)
-                    .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))
+                    .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+                if forensic && toks.is_empty() {
+                    // Forensic for the n_tokens==0 batched-prefill bug
+                    // (root cause: llama-cpp-4 0.2.x retired
+                    // `with_n_seq_max`; fixed via vendor crate, see
+                    // workspace `[patch.crates-io]`). Kept as opt-in
+                    // diagnostic for any future batched-prefill
+                    // failure mode. Gated by SOVEREIGN_FORENSIC=1.
+                    let mut end = prompt.len().min(400);
+                    while end > 0 && !prompt.is_char_boundary(end) { end -= 1; }
+                    tracing::warn!(
+                        slot_idx = idx,
+                        prompt_chars = prompt.len(),
+                        prompt_head = %&prompt[..end],
+                        system_message_present = r.system_message.is_some(),
+                        user_prompt_chars = r.prompt.len(),
+                        "batched-prefill: request tokenized to zero tokens — will fail the batch"
+                    );
+                }
+                Ok(toks)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -1480,8 +1507,35 @@ impl ModelSlot {
                 batch_pos += 1;
             }
         }
+        // Forensic: count tokens that actually made it into the
+        // batch. Original use: distinguish "we never added tokens"
+        // (upstream bug — empty tokenization or skipped add) from
+        // "we added tokens but llama_cpp reports 0" (FFI-side bug).
+        // Root cause for the historical n_tokens == 0 failure was
+        // llama-cpp-4 0.2.x retiring `with_n_seq_max`; fixed in the
+        // vendored crate. Counter still feeds the error message
+        // below (cheap, always-on). Verbose pre-decode warning is
+        // opt-in via SOVEREIGN_FORENSIC=1 for future regressions.
+        let batch_n_tokens = batch.n_tokens();
+        if forensic && batch_n_tokens == 0 {
+            let prompt_summaries: Vec<(usize, usize)> = tokenized
+                .iter()
+                .zip(requests.iter())
+                .map(|(t, r)| (t.len(), r.prompt.len()))
+                .collect();
+            tracing::warn!(
+                n_requests = requests.len(),
+                batch_capacity = batch.n_tokens(),
+                tokenized_lens = ?tokenized.iter().map(|t| t.len()).collect::<Vec<_>>(),
+                prompt_summaries = ?prompt_summaries,
+                "batched prefill: about to decode with 0 tokens — root-cause for n_tokens == 0 error"
+            );
+        }
         ctx.decode(&mut batch).map_err(|e| {
-            Error::Inference(format!("Batched prefill decode failed: {e}"))
+            Error::Inference(format!(
+                "Batched prefill decode failed: {e} (batch_n_tokens={batch_n_tokens}, n_requests={})",
+                requests.len()
+            ))
         })?;
 
         // ── Per-seq decode state ────────────────────────────────────
@@ -2220,7 +2274,11 @@ impl EmbedSlot {
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
                 .with_n_ubatch(2048)
-                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
+                // EmbedSlot genuinely batches across sequences. The
+                // vendored llama-cpp-4 (workspace `[patch.crates-io]`)
+                // re-introduces `with_n_seq_max` so seq_id > 0 doesn't
+                // hit "Decode Error -1: n_tokens == 0".
+                .with_n_seq_max(16)
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_embeddings(true)

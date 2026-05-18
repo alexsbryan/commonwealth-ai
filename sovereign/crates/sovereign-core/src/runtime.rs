@@ -644,6 +644,46 @@ fn truncate_chars(s: &str, max_chars: usize) -> String {
 /// containing em-dashes. Walk backward to the nearest char boundary
 /// before slicing; if we also find a word boundary within the
 /// remaining content, prefer that for readability.
+/// Emit a `retrieval_audit::pipeline_stage` event listing the top-40
+/// (title, corpus_id, score) tuples plus total count at the named
+/// stage. Forensic instrument for tracing chunk attrition across
+/// the noise floor / cap / reservation / truncate pipeline — see
+/// marathon T3 trace (2026-05-18) for the use-case that motivated it.
+///
+/// Gated behind `SOVEREIGN_FORENSIC=1` so production runs pay no
+/// cost. Set the env var on the eval CLI (or daemon, depending on
+/// which Runtime instance you want to instrument) to surface the
+/// events.
+fn audit_pipeline_stage(
+    chunks: &[corpus_engine::ScoredChunk],
+    stage: &'static str,
+    query: &str,
+) {
+    if std::env::var("SOVEREIGN_FORENSIC").ok().as_deref() != Some("1") {
+        return;
+    }
+    let comp: Vec<(String, String, f32)> = chunks
+        .iter()
+        .take(40)
+        .map(|c| {
+            (
+                c.corpus_id.clone(),
+                c.title.clone().unwrap_or_default(),
+                c.score,
+            )
+        })
+        .collect();
+    tracing::info!(
+        target: "retrieval_audit",
+        event = "pipeline_stage",
+        stage,
+        total = chunks.len(),
+        query = %truncate_with_ellipsis(query, 120),
+        top40 = ?comp,
+        "retrieval_audit: pipeline_stage"
+    );
+}
+
 fn truncate_with_ellipsis(content: &str, max_bytes: usize) -> String {
     if content.len() > max_bytes {
         let mut cut = max_bytes;
@@ -1156,15 +1196,38 @@ pub(crate) fn atlas_grounding_enabled() -> bool {
     }
 }
 
-/// neither the title nor the content (lowercased) contains any of the
-/// substantive query tokens. Anything with even one overlap is kept;
-/// the reweight + sort + cap downstream handles ranking.
-pub(crate) fn drop_no_overlap_chunks(
+/// Noise-floor filter with optional title-expand augmentation. The
+/// `protected` list (typically the title-expand titles) contributes
+/// its tokens to the substring check — chunks pass if title or
+/// content contains any query token OR any token from a protected
+/// title. The per-chunk substring rule stays uniform; we don't
+/// bypass entire articles wholesale.
+///
+/// Marathon T3 (2026-05-18) — query "What did she contribute that
+/// was genuinely new?" + protected ["Ada Lovelace", "Charles Babbage"]:
+/// augmented tokens {contribute, genuinely, ada, lovelace, charles,
+/// babbage}. Lovelace lead/bio chunks pass because they contain
+/// "Lovelace". Off-topic noise chunks (no token overlap) still drop.
+///
+/// Earlier v33 design used a per-article bypass for protected titles.
+/// That kept ALL chunks from a protected article — including off-
+/// topic biographical chunks — and pushed them through `RRF + cap +
+/// truncate` ahead of topic-anchored chunks. Marathon T6/T7/T8 went
+/// from working (ans_ch ~1300) to empty visible answers (think-
+/// collapse on bloated context) under the bypass. Token augmentation
+/// avoids that: the survival queue is still ranked by score, and
+/// off-topic chunks from a protected article without query overlap
+/// still drop.
+pub(crate) fn drop_no_overlap_chunks_with_protected(
     chunks: Vec<corpus_engine::ScoredChunk>,
     query: &str,
+    protected: &[String],
 ) -> Vec<corpus_engine::ScoredChunk> {
-    let query_tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
-    if query_tokens.is_empty() {
+    let mut tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+    for p in protected {
+        tokens.extend(extract_tokens(p, EVIDENCE_TITLE_MIN_TOKEN_LEN));
+    }
+    if tokens.is_empty() {
         return chunks;
     }
     chunks
@@ -1172,14 +1235,14 @@ pub(crate) fn drop_no_overlap_chunks(
         .filter(|c| {
             let title = c.title.as_deref().unwrap_or("");
             let title_tokens = extract_tokens(title, EVIDENCE_TITLE_MIN_TOKEN_LEN);
-            let title_hit = query_tokens
+            let title_hit = tokens
                 .iter()
                 .any(|q| title_tokens.iter().any(|t| t == q));
             if title_hit {
                 return true;
             }
             let content_lower = c.content.to_lowercase();
-            query_tokens.iter().any(|q| content_lower.contains(q.as_str()))
+            tokens.iter().any(|q| content_lower.contains(q.as_str()))
         })
         .collect()
 }
@@ -5459,13 +5522,24 @@ impl Runtime {
         // both title and content. These survived hybrid RRF on a weak
         // tangential signal (one shared FTS token in a 1024-char
         // chunk, or vector similarity to phrasing rather than topic);
-        // they fill prompt budget the model can't act on.
+        // they fill prompt budget the model can't act on. Title-expand
+        // titles augment the token set so abstract / anaphoric
+        // questions don't lose their fan-out chunks at this stage.
+        let title_expand_protected_dq: Vec<String> = title_expand_titles_dq
+            .as_ref()
+            .map(|v| v.clone())
+            .unwrap_or_default();
         let pre_floor = all_chunks.len();
-        all_chunks = drop_no_overlap_chunks(all_chunks, message);
+        all_chunks = drop_no_overlap_chunks_with_protected(
+            all_chunks,
+            message,
+            &title_expand_protected_dq,
+        );
         if all_chunks.len() < pre_floor {
             tracing::info!(
                 pre_floor,
                 post_floor = all_chunks.len(),
+                title_expand_titles = ?title_expand_protected_dq,
                 "DeepQuery: noise floor dropped no-overlap chunks"
             );
         }
@@ -8820,8 +8894,6 @@ impl Runtime {
         context: &ConversationContext,
         intent: &Intent,
     ) -> KnowledgeQueryPlan {
-        use std::cmp::Ordering;
-
         tracing::info!(message_chars = message.len(), "handle_knowledge_query: begin");
 
         // 1. Embed the query using the query-side function (applies
@@ -9013,19 +9085,34 @@ impl Runtime {
                 "KnowledgeQuery: title-expand retrieval"
             );
         }
+        audit_pipeline_stage(&chunks, "after_title_expand", message);
 
         // 2c. Noise floor — drop chunks with zero query-token overlap
-        //     in title or content. These are pure-RRF noise that fills
-        //     prompt budget without contributing signal.
+        //     in title or content. Title-expand titles augment the
+        //     token set so anaphoric / open-ended queries don't drop
+        //     correctly-fanned-out chunks just because the user's
+        //     surface phrasing omits the entity name. See
+        //     `drop_no_overlap_chunks_with_protected` for the v33
+        //     bypass-vs-augment design history.
+        let title_expand_protected: Vec<String> = title_expand_titles
+            .as_ref()
+            .map(|v| v.clone())
+            .unwrap_or_default();
         let pre_floor = chunks.len();
-        let mut chunks = drop_no_overlap_chunks(chunks, message);
+        let mut chunks = drop_no_overlap_chunks_with_protected(
+            chunks,
+            message,
+            &title_expand_protected,
+        );
         if chunks.len() < pre_floor {
             tracing::info!(
                 pre_floor,
                 post_floor = chunks.len(),
+                title_expand_titles = ?title_expand_protected,
                 "KnowledgeQuery: noise floor dropped no-overlap chunks"
             );
         }
+        audit_pipeline_stage(&chunks, "after_noise_floor", message);
 
         // 2d. Atlas grounding — graph-walk navigation when the
         //     provider exposes the graph layer; bag-of-atoms top-K
@@ -9095,7 +9182,9 @@ impl Runtime {
                 );
             }
         }
+        audit_pipeline_stage(&chunks, "after_cap_and_reserve", message);
         chunks.truncate(KQ_MERGED_LIMIT);
+        audit_pipeline_stage(&chunks, "after_truncate", message);
 
         // Naturalistic audit — post-merge composition. Answers "after
         // cap + truncate, which corpus and which article actually has
@@ -9211,6 +9300,16 @@ impl Runtime {
         // regardless of evidence shape. The whole point of the split
         // is to keep these off the primary slot; letting the evidence
         // shape escalate to PrimarySynthesis would defeat that.
+        //
+        // v32 attempted "junk-retrieval escalation": shape.is_off_target()
+        // + entities non-empty → force PrimarySynthesis + parametric-
+        // authorization system message. Net negative on marathon
+        // variance test because the marathon T3 question ("What did
+        // she contribute that was genuinely new?") has no extracted
+        // proper-noun entity, so the escalation didn't fire on the
+        // canonical failure case. The real variance lever is upstream
+        // (why don't title-expand'd Lovelace chunks survive merge?),
+        // not in synth routing. Reverted.
         let route = if matches!(intent, Intent::ComparisonQuery) {
             SynthesisRoute::FastFocused
         } else {
@@ -10451,7 +10550,6 @@ impl Runtime {
         _conversation_id: &str,
         context: &ConversationContext,
     ) -> Result<Response> {
-        use std::cmp::Ordering;
         let locator = parse_metalingual_locator(message);
         tracing::info!(?locator, "MetalingualQuery: parsed locator");
 
