@@ -137,7 +137,7 @@ fn detect_gpu() -> (bool, Option<String>, Option<u64>, bool) {
         // Check llama.cpp backend devices for a non-CPU device.
         #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
         {
-            let devices = llama_cpp_2::list_llama_ggml_backend_devices();
+            let devices = crate::llama::list_llama_ggml_backend_devices();
             for dev in &devices {
                 if dev.memory_total > 0 && dev.name.to_lowercase() != "cpu" {
                     return (

@@ -1,0 +1,680 @@
+# Wikipedia multi-turn learner bench
+#
+# Each thread simulates a curious learner who asks chained follow-up
+# questions of a tutor that has Wikipedia in its corpus. Turns ASSUME
+# prior context (pronouns, anaphora, topic continuity) — answering
+# correctly requires conversational memory, not just retrieval.
+#
+# Scoring (see eval_cmd::runner::run_thread_synth):
+#   - per-turn (deterministic, no LLM):
+#       fact_recall    keyword substrings in retrieved chunks OR final answer
+#       source_recall  expected article titles in top-K retrieval
+#       prompt_tokens  context size at this turn (for the degradation curve)
+#       wall_ms        wall time
+#   - per-thread (one LLM judge call on primary at thread end):
+#       holistic_coverage  did the conversation cover the union of expected_facts
+#       per_fact_evidence  which turn each fact was answered in (judge picks)
+#
+# Headline metric: degradation curve = per-turn fact_recall plotted vs
+# turn_index AND vs prompt_tokens, across all threads. Slope + first-
+# failure-turn surface where the conversational substrate breaks.
+#
+# Authoring rules:
+#   - Each turn USES the prior turn (pronoun, "that", "those"). The
+#     turn-0 question is the only one that's standalone.
+#   - At least one turn per thread should be answerable EITHER way
+#     (with or without prior context) so the bench can compute
+#     context-poisoning delta later.
+#   - Expected facts: 2-4 per turn, keyword-rich, terse. Proper nouns
+#     + dates + numbers travel best through the substring scorer.
+#   - Expected sources: only titles known to exist in the wikipedia
+#     corpus (Vital Articles L5).
+
+[bank]
+name = "wikipedia-learn-v0"
+corpus = "wikipedia"
+description = """
+Multi-turn learner bench. Two hand-authored chains in v0 — einstein_1905
+(factual drill) and wwii_causal (causal regression). Used to surface
+conversational-memory regressions and context-poisoning slope.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 45000
+max_per_question_ms = 90000
+
+
+# ── Thread 1 ─────────────────────────────────────────────────────────
+# Factual drill-down. Tutor starts at the figure, learner zooms into
+# 1905, then drills into one paper, then asks about the Nobel
+# resolution. Coreference required from turn 1 onward ("he", "that
+# paper", "this idea").
+
+[[threads]]
+id = "einstein_1905"
+category = "learner_factual"
+description = "Student builds from 'who is Einstein' → 1905 Annus Mirabilis → photoelectric → Nobel resolution"
+
+[[threads.turns]]
+question = "Who was Albert Einstein?"
+expected_facts = ["physicist", "theoretical", "relativity"]
+expected_sources = ["Albert Einstein"]
+
+[[threads.turns]]
+question = "What did he publish in 1905?"
+expected_facts = ["Annus Mirabilis", "photoelectric", "Brownian motion", "special relativity", "mass-energy"]
+expected_sources = ["Albert Einstein"]
+notes = "Coref: 'he' → Einstein. Tests whether prior turn carries the subject."
+
+[[threads.turns]]
+question = "Tell me more about the photoelectric one."
+expected_facts = ["light quanta", "discrete", "Planck", "metal surface"]
+expected_sources = ["Photoelectric effect", "Albert Einstein"]
+notes = "Topic narrowing — 'the photoelectric one' picks one of four prior papers."
+
+[[threads.turns]]
+question = "Did that idea win him a Nobel Prize?"
+expected_facts = ["1921", "Nobel Prize in Physics", "photoelectric effect"]
+expected_sources = ["Albert Einstein"]
+notes = "'That idea' chains two turns back. 'Him' chains three turns back."
+
+[[threads.turns]]
+question = "Why didn't relativity win the Nobel instead?"
+expected_facts = ["controversial", "experimental", "philosophical"]
+expected_sources = ["Albert Einstein"]
+notes = "Compare/contrast within the same conversation thread. Comparative against turn 1 + turn 3."
+
+
+# ── Thread 2 ─────────────────────────────────────────────────────────
+# Causal regression. Learner asks WHY each event happened, walking
+# backward through the causal chain leading to WWII. Tests whether
+# retrieval stays on the WWII corpus subset as the conversation
+# drifts further from any single keyword.
+
+[[threads]]
+id = "wwii_causal"
+category = "learner_causal"
+description = "Causal regression: why WWII → why Germany rearmed → why Versailles failed → why WWI ended that way"
+
+[[threads.turns]]
+question = "What caused World War II to break out in 1939?"
+expected_facts = ["invasion of Poland", "September 1939", "Hitler", "appeasement"]
+expected_sources = ["World War II"]
+
+[[threads.turns]]
+question = "Why was Hitler able to invade in the first place?"
+expected_facts = ["rearmament", "Wehrmacht", "Rhineland", "Anschluss"]
+expected_sources = ["Adolf Hitler", "Nazi Germany"]
+notes = "Coref: 'Hitler' explicit but 'in the first place' implies the prior turn's framing."
+
+[[threads.turns]]
+question = "But hadn't Germany been disarmed after the previous war?"
+expected_facts = ["Treaty of Versailles", "100,000 troops", "demilitarized"]
+expected_sources = ["Treaty of Versailles"]
+notes = "'The previous war' = WWI; never named in this turn. Pure context-dependent reference."
+
+[[threads.turns]]
+question = "So what made that treaty fail?"
+expected_facts = ["reparations", "Great Depression", "weak enforcement", "resentment"]
+expected_sources = ["Treaty of Versailles", "Weimar Republic"]
+notes = "'That treaty' chains one turn back."
+
+[[threads.turns]]
+question = "Were there voices at the time who predicted it would?"
+expected_facts = ["Keynes", "Economic Consequences of the Peace", "Foch"]
+expected_sources = ["Treaty of Versailles"]
+notes = "'It would' = the treaty would fail. Two layers of pronoun + ellipsis."
+
+
+# ── Thread 3 ─────────────────────────────────────────────────────────
+# Marathon — 12-turn historical arc through the evolution of computing.
+# Purpose: exceed the rolling-window history budget (CONV_HISTORY_TURNS
+# = 8 messages = 4 turns of pairs) so the system prompt's "Prior
+# conversation" block must drop early turns. That's the failure mode
+# this thread is designed to surface: when the model is asked about a
+# topic in turn 11 that was established in turn 1, can the system
+# still anchor retrieval and resolve coreference?
+#
+# Without a compaction strategy, the answer is no — the early turns
+# fall off the prompt and the model loses the chain. The bench's job
+# here is to *prove* that, then drive the design of a compaction
+# primitive (Fast-slot summary of the dropped tail, prepended to the
+# system prompt as "Earlier in the conversation:").
+#
+# Turns alternate between drilling into a single figure and pivoting
+# to the next era, mimicking how a curious learner threads chronology.
+
+[[threads]]
+id = "computing_history"
+category = "learner_marathon"
+description = "12-turn arc: Babbage → Lovelace → Turing → von Neumann → transistor → microprocessor → personal computer. Forces history compaction."
+
+[[threads.turns]]
+question = "Who was Charles Babbage?"
+expected_facts = ["mathematician", "Difference Engine", "19th century"]
+expected_sources = ["Charles Babbage"]
+
+[[threads.turns]]
+question = "What was the Analytical Engine he designed?"
+expected_facts = ["general-purpose", "mechanical", "punched cards"]
+expected_sources = ["Charles Babbage", "Analytical Engine"]
+notes = "Coref 'he' → Babbage. T1 anchored on a sub-concept introduced in T0."
+
+[[threads.turns]]
+question = "Who worked alongside him on its mathematics?"
+expected_facts = ["Ada Lovelace", "Lord Byron", "first programmer"]
+expected_sources = ["Ada Lovelace", "Charles Babbage"]
+notes = "Two coref hops: 'him' → Babbage (T0), 'its' → Analytical Engine (T1)."
+
+[[threads.turns]]
+question = "What did she contribute that was genuinely new?"
+expected_facts = ["algorithm", "Bernoulli numbers", "notes"]
+expected_sources = ["Ada Lovelace"]
+notes = "'She' → Lovelace, established T2. The bench is a learner chain so this is the natural follow-up."
+
+[[threads.turns]]
+question = "How did computing develop from there in the next century?"
+expected_facts = ["20th century", "electronic", "World War"]
+expected_sources = ["History of computing"]
+notes = "Temporal pivot — from Lovelace's era forward to 20th c."
+
+[[threads.turns]]
+question = "What did Alan Turing add to the theoretical foundation?"
+expected_facts = ["Turing machine", "computability", "halting"]
+expected_sources = ["Alan Turing"]
+notes = "Named-entity pivot. Topic should follow."
+
+[[threads.turns]]
+question = "What role did he play during World War II?"
+expected_facts = ["Bletchley Park", "Enigma", "codebreaking"]
+expected_sources = ["Alan Turing"]
+notes = "'He' → Turing. Pivot from theory to wartime application within same person."
+
+[[threads.turns]]
+question = "After the war, what architecture became standard for the first electronic computers?"
+expected_facts = ["von Neumann", "stored-program", "ENIAC"]
+expected_sources = ["Von Neumann architecture", "ENIAC"]
+notes = "TURN 8 — at this point the history window starts dropping T0/T1 pairs. Babbage/Lovelace context begins to fade from prompt."
+
+[[threads.turns]]
+question = "How did that design differ from what Turing had proposed?"
+expected_facts = ["practical", "memory", "instructions"]
+expected_sources = ["Von Neumann architecture", "Alan Turing"]
+notes = "'That design' = von Neumann's. Critical: requires both T7 (Turing wartime) AND T6 (Turing theory) context. If compaction is broken, this fails."
+
+[[threads.turns]]
+question = "What hardware breakthrough in the 1950s made smaller computers possible?"
+expected_facts = ["transistor", "Bell Labs", "1947", "Shockley"]
+expected_sources = ["Transistor"]
+notes = "Temporal pivot to mid-20th c. Topic should pivot to hardware."
+
+[[threads.turns]]
+question = "And what did Intel's founders do with that technology in the 1970s?"
+expected_facts = ["microprocessor", "Intel 4004", "integrated circuit"]
+expected_sources = ["Intel", "Microprocessor"]
+notes = "'That technology' = transistor (T10). Coref one turn back."
+
+[[threads.turns]]
+question = "Going back to Babbage's original vision — how close did the personal computer revolution come to realizing it?"
+expected_facts = ["general-purpose", "programmable", "accessibility"]
+expected_sources = ["Charles Babbage", "Personal computer"]
+notes = "TURN 12 — explicit callback to T0/T1. By this point Babbage is far outside the rolling history window. Without compaction, the model has no anchor for 'Babbage's original vision' beyond its own training. This is the load-bearing test."
+
+
+# ── Thread 4 ─────────────────────────────────────────────────────────
+# Factual drill — Darwin's voyage to natural selection. Six turns
+# threading biography → field observation → theoretical synthesis →
+# publication → reception. Sister to einstein_1905: builds a coherent
+# scientific-bio arc to test whether retrieval stays on the subject
+# article across mid-conversation pivots from biography to ideas.
+
+[[threads]]
+id = "darwin_origin"
+category = "learner_factual"
+description = "6-turn arc: Darwin → Beagle → finches → natural selection → Origin of Species → Wallace + reception"
+
+[[threads.turns]]
+question = "Who was Charles Darwin?"
+expected_facts = ["naturalist", "evolution", "19th century"]
+expected_sources = ["Charles Darwin"]
+
+[[threads.turns]]
+question = "What was his most famous voyage?"
+expected_facts = ["Beagle", "1831", "South America", "Galápagos"]
+expected_sources = ["Charles Darwin", "Second voyage of HMS Beagle"]
+notes = "Coref 'his' → Darwin."
+
+[[threads.turns]]
+question = "What did he observe on the Galápagos that mattered most?"
+expected_facts = ["finches", "tortoises", "variation", "island"]
+expected_sources = ["Darwin's finches", "Galápagos Islands"]
+notes = "'He' → Darwin, 'the Galápagos' established T1."
+
+[[threads.turns]]
+question = "What theory did those observations eventually lead to?"
+expected_facts = ["natural selection", "adaptation", "common descent"]
+expected_sources = ["Natural selection", "Charles Darwin"]
+notes = "'Those observations' chains two turns back to T2 finches/tortoises."
+
+[[threads.turns]]
+question = "When did he publish the book that laid it out?"
+expected_facts = ["On the Origin of Species", "1859"]
+expected_sources = ["On the Origin of Species"]
+notes = "'It' = natural selection theory (T3). 'The book' = Origin. Tests two-hop coref."
+
+[[threads.turns]]
+question = "Was anyone else circling the same idea independently?"
+expected_facts = ["Alfred Russel Wallace", "Linnean Society", "joint"]
+expected_sources = ["Alfred Russel Wallace"]
+notes = "Pivot to parallel discoverer. Topic should expand to Wallace without losing Darwin context."
+
+
+# ── Thread 5 ─────────────────────────────────────────────────────────
+# Causal regression — French Revolution. Six turns chaining backward
+# from the event through fiscal, intellectual, and structural causes.
+# Companion to wwii_causal: same backward-causal shape applied to a
+# pre-industrial revolution where the dominant Wikipedia article is
+# rich enough to support either deep drilling or pivot to satellites
+# (Estates-General, Enlightenment, Bastille).
+
+[[threads]]
+id = "french_revolution_causal"
+category = "learner_causal"
+description = "Causal regression: why French Revolution → why fiscal crisis → why estates failed → why Enlightenment ideas spread → why monarchy couldn't reform"
+
+[[threads.turns]]
+question = "What was the French Revolution?"
+expected_facts = ["1789", "France", "monarchy", "overthrow"]
+expected_sources = ["French Revolution"]
+
+[[threads.turns]]
+question = "What triggered it in 1789 specifically?"
+expected_facts = ["fiscal crisis", "Estates-General", "Bastille", "tax"]
+expected_sources = ["French Revolution", "Storming of the Bastille"]
+notes = "Coref 'it' → the revolution. Causal: surface trigger."
+
+[[threads.turns]]
+question = "Why was the treasury empty?"
+expected_facts = ["American Revolutionary War", "deficit", "loans", "Louis XVI"]
+expected_sources = ["Louis XVI", "Causes of the French Revolution"]
+notes = "Drills into the fiscal cause — one layer deeper."
+
+[[threads.turns]]
+question = "Why couldn't the king just raise taxes to cover it?"
+expected_facts = ["nobility", "privilege", "exempt", "parlement"]
+expected_sources = ["Ancien Régime", "Estates of the realm"]
+notes = "'The king' = Louis XVI (T2). Causal: structural obstacle."
+
+[[threads.turns]]
+question = "What ideas were circulating that made resistance feel justified?"
+expected_facts = ["Enlightenment", "Rousseau", "Voltaire", "social contract"]
+expected_sources = ["Age of Enlightenment"]
+notes = "Causal pivot from structural to intellectual."
+
+[[threads.turns]]
+question = "How did all of this turn so violent so fast?"
+expected_facts = ["Reign of Terror", "Robespierre", "guillotine", "1793"]
+expected_sources = ["Reign of Terror"]
+notes = "'All of this' = the established causal chain. Tests whether the conversation arc still anchors."
+
+
+# ── Thread 6 ─────────────────────────────────────────────────────────
+# Synthesis — Industrial Revolution causes. Seven turns asking the
+# learner to combine evidence across multiple Wikipedia articles
+# (steam engine, enclosure, coal, colonialism, textile, factory, spread).
+# Tests cross-article synthesis quality: a single-article retrieval
+# (just "Industrial Revolution") would surface a survey but miss the
+# specifics each follow-up zooms into. Title-expand should name 2-3
+# distinct article targets per turn.
+
+[[threads]]
+id = "industrial_revolution_synthesis"
+category = "learner_synthesis"
+description = "Synthesis: Industrial Revolution causes — coal, steam, enclosure, colonies, textile mills, factories, spread"
+
+[[threads.turns]]
+question = "What was the Industrial Revolution?"
+expected_facts = ["18th century", "Britain", "manufacturing", "machinery"]
+expected_sources = ["Industrial Revolution"]
+
+[[threads.turns]]
+question = "Why did it start in Britain specifically?"
+expected_facts = ["coal", "iron", "colonies", "agricultural"]
+expected_sources = ["Industrial Revolution"]
+notes = "Multi-cause synthesis. No single article fully answers."
+
+[[threads.turns]]
+question = "What was the role of the steam engine?"
+expected_facts = ["James Watt", "Newcomen", "power", "pumping"]
+expected_sources = ["Steam engine", "James Watt"]
+notes = "Drills into one cause; cross-cite to Watt biography."
+
+[[threads.turns]]
+question = "How did agricultural changes free up the labor force?"
+expected_facts = ["enclosure", "common land", "displaced", "wage labor"]
+expected_sources = ["Enclosure", "British Agricultural Revolution"]
+notes = "Pivots from technology to labor markets. 'Agricultural changes' is abstract — needs entity expansion."
+
+[[threads.turns]]
+question = "What did the early factories look like in practice?"
+expected_facts = ["textile", "cotton", "mill", "long hours"]
+expected_sources = ["Factory system", "Cotton mill"]
+notes = "Concrete pivot. Should land on factory + textile articles."
+
+[[threads.turns]]
+question = "Who benefited and who didn't?"
+expected_facts = ["capitalists", "workers", "child labor", "urbanization"]
+expected_sources = ["Industrial Revolution", "Working class"]
+notes = "Normative pivot. Tests whether retrieval surfaces class-impact content."
+
+[[threads.turns]]
+question = "How did this whole pattern spread to other countries?"
+expected_facts = ["Belgium", "Germany", "United States", "19th century"]
+expected_sources = ["Industrial Revolution"]
+notes = "Synthesis recap + temporal pivot. 'This whole pattern' = everything from T0-T5."
+
+
+# ── Thread 7 ─────────────────────────────────────────────────────────
+# Synthesis — Scientific Revolution. Six turns chaining figures who
+# made the heliocentric / mechanical worldview possible. Tests
+# whether retrieval handles classic "what's the chain of names" arcs
+# with proper temporal sequencing.
+
+[[threads]]
+id = "scientific_revolution_synthesis"
+category = "learner_synthesis"
+description = "Synthesis: Scientific Revolution figures — Copernicus → Galileo → Kepler → Newton → method → Enlightenment legacy"
+
+[[threads.turns]]
+question = "What was the Scientific Revolution?"
+expected_facts = ["16th century", "17th century", "Europe", "natural philosophy"]
+expected_sources = ["Scientific Revolution"]
+
+[[threads.turns]]
+question = "Who first proposed that the Earth orbits the Sun?"
+expected_facts = ["Nicolaus Copernicus", "heliocentric", "1543", "De revolutionibus"]
+expected_sources = ["Nicolaus Copernicus", "Copernican heliocentrism"]
+notes = "Concrete entity. Tests title-expand on a named individual."
+
+[[threads.turns]]
+question = "Who proved that idea observationally?"
+expected_facts = ["Galileo Galilei", "telescope", "moons of Jupiter", "phases of Venus"]
+expected_sources = ["Galileo Galilei"]
+notes = "'That idea' = heliocentric model. Anaphora across one turn."
+
+[[threads.turns]]
+question = "What mathematical laws described the planet motions?"
+expected_facts = ["Johannes Kepler", "elliptical orbits", "three laws"]
+expected_sources = ["Johannes Kepler", "Kepler's laws of planetary motion"]
+notes = "Pivot to math description; no proper noun in question."
+
+[[threads.turns]]
+question = "And who finally unified all of this under a single theory?"
+expected_facts = ["Isaac Newton", "universal gravitation", "Principia Mathematica", "1687"]
+expected_sources = ["Isaac Newton", "Philosophiæ Naturalis Principia Mathematica"]
+notes = "Synthesis turn. 'All of this' refers to T1-T3 figures + ideas."
+
+[[threads.turns]]
+question = "Why did this period reshape philosophy as well as science?"
+expected_facts = ["Enlightenment", "rationalism", "Descartes", "empiricism"]
+expected_sources = ["Age of Enlightenment"]
+notes = "Pivot to influence on philosophy. Forces cross-corpus (SEP for rationalism/empiricism)."
+
+
+# ── Thread 8 ─────────────────────────────────────────────────────────
+# Comparative — Newton vs Einstein on gravity. Five turns drawing a
+# bounded contrast along shared axes (description of phenomenon,
+# predictions, test cases, replacement scope). Sister to the existing
+# ComparisonQuery bench, but as a chained learner conversation rather
+# than a single comparison question.
+
+[[threads]]
+id = "newton_einstein_compare"
+category = "learner_comparative"
+description = "5-turn compare: Newton's gravity vs Einstein's general relativity along shared physics axes"
+
+[[threads.turns]]
+question = "How did Newton describe gravity?"
+expected_facts = ["force", "inverse square", "universal", "instantaneous"]
+expected_sources = ["Newton's law of universal gravitation", "Isaac Newton"]
+
+[[threads.turns]]
+question = "How did Einstein describe it differently?"
+expected_facts = ["spacetime", "curvature", "general relativity", "geometry"]
+expected_sources = ["General relativity", "Albert Einstein"]
+notes = "'It' = gravity (T0). Forces contrast against established T0 description."
+
+[[threads.turns]]
+question = "Which one correctly predicted the bending of starlight?"
+expected_facts = ["Einstein", "1919", "Eddington", "solar eclipse"]
+expected_sources = ["Tests of general relativity", "Eddington experiment"]
+notes = "Specific test case — both candidates in question, only one match."
+
+[[threads.turns]]
+question = "What about Mercury's orbit — does Newton's version explain the perihelion shift?"
+expected_facts = ["perihelion precession", "anomaly", "Le Verrier", "general relativity"]
+expected_sources = ["Tests of general relativity", "Mercury (planet)"]
+notes = "Failure case for Newton. Tests whether retrieval finds the specific anomaly + its resolution."
+
+[[threads.turns]]
+question = "So is Newton wrong, or just incomplete?"
+expected_facts = ["approximation", "low gravity", "low velocity", "limiting case"]
+expected_sources = ["General relativity", "Newton's law of universal gravitation"]
+notes = "Normative synthesis. Bench checks for nuanced 'approximation in regime' answer, not binary."
+
+
+# ── Thread 9 ─────────────────────────────────────────────────────────
+# Comparative — Buddhism vs Christianity on suffering and ethics.
+# Five turns. Cross-corpus heavy (SEP has multiple religious-philosophy
+# entries; Wikipedia has the main religion articles). Tests whether
+# retrieval composes evidence from both corpora on a comparative axis.
+
+[[threads]]
+id = "buddhism_christianity_compare"
+category = "learner_comparative"
+description = "5-turn compare: Buddhism vs Christianity on suffering, ethics, and salvation"
+
+[[threads.turns]]
+question = "When and where did Buddhism originate?"
+expected_facts = ["Siddhartha Gautama", "India", "5th century BCE", "Bodh Gaya"]
+expected_sources = ["Buddhism", "Gautama Buddha"]
+
+[[threads.turns]]
+question = "And Christianity?"
+expected_facts = ["Jesus", "Judea", "1st century", "crucifixion"]
+expected_sources = ["Christianity", "Jesus"]
+notes = "Elliptical follow-up. Topic should pivot from Buddhism origins to Christianity origins."
+
+[[threads.turns]]
+question = "How do the two traditions explain why people suffer?"
+expected_facts = ["Four Noble Truths", "dukkha", "original sin", "fall"]
+expected_sources = ["Four Noble Truths", "Original sin"]
+notes = "Comparison query. Needs chunks from both sides."
+
+[[threads.turns]]
+question = "What does each say is the way out of suffering?"
+expected_facts = ["Eightfold Path", "nirvana", "salvation", "grace", "Jesus"]
+expected_sources = ["Noble Eightfold Path", "Salvation in Christianity"]
+notes = "Parallel structure. Topic = liberation soteriology."
+
+[[threads.turns]]
+question = "Where do the two diverge most sharply on ethics?"
+expected_facts = ["non-attachment", "compassion", "love thy neighbor", "moral law"]
+expected_sources = ["Buddhist ethics", "Christian ethics"]
+notes = "Divergence axis. Forces specific contrast rather than generic comparison."
+
+
+# ── Thread 10 ────────────────────────────────────────────────────────
+# Boundary — non-existent figure recovery. Four turns testing whether
+# the system refuses to fabricate when retrieval misses (no Wikipedia
+# article for the queried entity), then recovers gracefully when the
+# user clarifies. This is the "honest ignorance" test.
+#
+# Scoring quirk: expected_facts here are CLARIFICATION/REFUSAL keywords
+# the assistant should emit, not bench-content facts. A hallucinating
+# system would emit confident biographical claims; a calibrated system
+# says "I don't have information on …" or asks for context.
+
+[[threads]]
+id = "nonexistent_entity_boundary"
+category = "learner_boundary"
+description = "4-turn boundary: fabricated entity → refusal → user clarifies → real entity → answer"
+
+[[threads.turns]]
+question = "Tell me about the mathematician Edward Hampshire-Wells."
+expected_facts = ["no information", "couldn't find", "not sure", "no record"]
+expected_sources = []
+notes = "Edward Hampshire-Wells is fabricated. Calibrated system refuses; hallucinating one invents a biography. Bench checks for refusal markers."
+
+[[threads.turns]]
+question = "Hm, maybe I'm thinking of someone else. Did you mean Hampshire-Wells from the 19th century?"
+expected_facts = ["no information", "couldn't find", "no record", "clarify"]
+expected_sources = []
+notes = "User restates the fabricated name. System should hold its ground, not invent on second ask."
+
+[[threads.turns]]
+question = "Sorry — I meant the mathematician Karl Weierstrass. What was his work?"
+expected_facts = ["Karl Weierstrass", "real analysis", "epsilon-delta", "19th century"]
+expected_sources = ["Karl Weierstrass"]
+notes = "User course-corrects. System should now retrieve confidently for the real entity."
+
+[[threads.turns]]
+question = "Why was that approach influential?"
+expected_facts = ["rigor", "calculus", "limits", "foundation"]
+expected_sources = ["Karl Weierstrass", "Mathematical analysis"]
+notes = "'That approach' = Weierstrass's epsilon-delta (T2). Tests whether the boundary refusals in T0-T1 disrupted normal-context retrieval."
+
+
+# ── Thread 11 ────────────────────────────────────────────────────────
+# Boundary — disambiguation. Five turns starting from an ambiguous
+# name with multiple plausible referents. Tests whether the system
+# asks for clarification or commits to one referent silently.
+
+[[threads]]
+id = "ambiguous_name_boundary"
+category = "learner_boundary"
+description = "5-turn boundary: ambiguous 'Smith' name → disambiguate → user picks → continue with chosen referent"
+
+[[threads.turns]]
+question = "Who was Adam Smith?"
+expected_facts = ["Scottish", "philosopher", "economist", "18th century"]
+expected_sources = ["Adam Smith"]
+notes = "Famous enough to disambiguate to the philosopher by default. Tests baseline confidence."
+
+[[threads.turns]]
+question = "What's the difference between his moral philosophy and his economics?"
+expected_facts = ["Theory of Moral Sentiments", "Wealth of Nations", "sympathy", "self-interest"]
+expected_sources = ["The Theory of Moral Sentiments", "The Wealth of Nations"]
+notes = "Two-book contrast. Tests retrieval of both works."
+
+[[threads.turns]]
+question = "Is there a tension between the two views?"
+expected_facts = ["Adam Smith problem", "scholars debate", "compatible"]
+expected_sources = ["Adam Smith"]
+notes = "Scholarly meta-question. Tests whether retrieval finds the named 'Adam Smith problem' debate."
+
+[[threads.turns]]
+question = "And what about Smith the physicist — the modern one?"
+expected_facts = ["which", "many", "clarify", "context", "specify"]
+expected_sources = []
+notes = "Disambiguation needed: 'Smith the physicist' is genuinely ambiguous (multiple modern physicists named Smith). Calibrated system asks; hallucinating one picks one and fabricates."
+
+[[threads.turns]]
+question = "Forget it — back to Adam Smith. Was he ever criticized in his own time?"
+expected_facts = ["criticism", "contemporary", "mercantilist"]
+expected_sources = ["Adam Smith"]
+notes = "User abandons ambiguous probe. System should re-anchor on the established Adam Smith subject."
+
+
+# ── Thread 12 ────────────────────────────────────────────────────────
+# Contested — atomic bombings of Japan. Six turns covering the event,
+# the strategic case for, the strategic case against, casualty
+# estimates, modern historiography, and the ethical debate. Tests
+# whether retrieval surfaces multiple POVs rather than collapsing to
+# one narrative.
+#
+# Wikipedia tags some articles as POV-contested (see
+# `contested_titles_for_chunks` in runtime.rs). This thread should
+# trip the contested-marker surface on the synthesis side.
+
+[[threads]]
+id = "atomic_bombing_contested"
+category = "learner_contested"
+description = "6-turn contested: atomic bombings of Hiroshima/Nagasaki — facts, strategic debate, ethical debate"
+
+[[threads.turns]]
+question = "What happened at Hiroshima and Nagasaki in August 1945?"
+expected_facts = ["August 6", "August 9", "atomic bomb", "United States", "Japan"]
+expected_sources = ["Atomic bombings of Hiroshima and Nagasaki"]
+
+[[threads.turns]]
+question = "What was the argument in favor of dropping the bombs?"
+expected_facts = ["invasion", "casualties", "shorten the war", "Truman", "Operation Downfall"]
+expected_sources = ["Atomic bombings of Hiroshima and Nagasaki", "Operation Downfall"]
+notes = "Pro side. Should pull specific strategic justification chunks."
+
+[[threads.turns]]
+question = "And the argument against?"
+expected_facts = ["civilian", "war crime", "alternative", "Soviet entry"]
+expected_sources = ["Debate over the atomic bombings of Hiroshima and Nagasaki"]
+notes = "Con side. Should land on the dedicated 'Debate' article."
+
+[[threads.turns]]
+question = "How many people were killed?"
+expected_facts = ["thousands", "estimates", "radiation", "uncertain"]
+expected_sources = ["Atomic bombings of Hiroshima and Nagasaki"]
+notes = "Casualty figures — historically contested numbers."
+
+[[threads.turns]]
+question = "What do modern historians generally conclude?"
+expected_facts = ["debate continues", "no consensus", "revisionist", "Alperovitz"]
+expected_sources = ["Debate over the atomic bombings of Hiroshima and Nagasaki"]
+notes = "Historiographic meta-question. Tests retrieval of historian-debate content."
+
+[[threads.turns]]
+question = "Was it ethically justifiable?"
+expected_facts = ["necessity", "proportionality", "civilian", "just war"]
+expected_sources = ["Debate over the atomic bombings of Hiroshima and Nagasaki", "Just war theory"]
+notes = "Normative question. Forces cross-corpus (SEP for just war + Wikipedia for the debate)."
+
+
+# ── Thread 13 ────────────────────────────────────────────────────────
+# Contested — Columbus legacy. Five turns covering the voyage, the
+# traditional discovery narrative, the indigenous perspective, modern
+# historical revision, and current memorialization debates. Sister
+# to atomic_bombing_contested but on a longer-running historical
+# revision arc.
+
+[[threads]]
+id = "columbus_legacy_contested"
+category = "learner_contested"
+description = "5-turn contested: Columbus — voyage, traditional narrative, indigenous view, modern revision, monuments"
+
+[[threads.turns]]
+question = "What did Christopher Columbus do?"
+expected_facts = ["1492", "Caribbean", "Spain", "Bahamas", "voyage"]
+expected_sources = ["Christopher Columbus"]
+
+[[threads.turns]]
+question = "Why was he celebrated as a hero for so long?"
+expected_facts = ["discovery", "New World", "Columbus Day", "explorer"]
+expected_sources = ["Christopher Columbus", "Columbus Day"]
+notes = "Traditional narrative side. 'He' → Columbus (T0)."
+
+[[threads.turns]]
+question = "What does the indigenous perspective on his voyages emphasize instead?"
+expected_facts = ["enslavement", "disease", "colonization", "Taíno", "violence"]
+expected_sources = ["Christopher Columbus", "Indigenous peoples of the Americas"]
+notes = "Counter-narrative. Tests whether retrieval surfaces the dedicated indigenous-impact content."
+
+[[threads.turns]]
+question = "How have historians revised the older account?"
+expected_facts = ["scholarly", "primary sources", "Las Casas", "revisionist"]
+expected_sources = ["Christopher Columbus"]
+notes = "Historiographic pivot."
+
+[[threads.turns]]
+question = "Why are monuments to him still controversial today?"
+expected_facts = ["removal", "Indigenous Peoples' Day", "protest", "memorialization"]
+expected_sources = ["List of monuments and memorials to Christopher Columbus", "Indigenous Peoples' Day"]
+notes = "Contemporary debate. Tests retrieval on the modern political dimension."

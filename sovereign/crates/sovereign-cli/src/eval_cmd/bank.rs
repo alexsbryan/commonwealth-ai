@@ -162,6 +162,112 @@ pub fn load_bank(path: &Path) -> Result<EvalBank, String> {
     Ok(bank)
 }
 
+/// Multi-turn thread bank. Parallel to `EvalBank` but carries
+/// `[[threads]]` instead of `[[questions]]`. Each thread is a chain
+/// of turns scored under a single `conversation_id`, so retrieval
+/// and synthesis see the prior turns' history. See
+/// `sovereign/bench/wikipedia_learn/threads.toml` for the reference
+/// shape and `eval_cmd::runner::run_thread_synth` for the runner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvalThreadBank {
+    pub bank: BankMeta,
+    pub threads: Vec<Thread>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Thread {
+    pub id: String,
+    pub category: String,
+    #[serde(default)]
+    pub description: String,
+    pub turns: Vec<Turn>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Turn {
+    pub question: String,
+    #[serde(default)]
+    pub expected_facts: Vec<String>,
+    #[serde(default)]
+    pub expected_sources: Vec<String>,
+    #[serde(default)]
+    pub notes: String,
+}
+
+impl Thread {
+    /// Synthetic turn id used in per-turn report rows.
+    pub fn turn_id(&self, turn_index: usize) -> String {
+        format!("{}_t{}", self.id, turn_index)
+    }
+
+    /// Union of all expected_facts across turns. The thread-level
+    /// judge scores against this set rather than per-turn lists —
+    /// one LLM call covers the whole transcript.
+    pub fn aggregated_expected_facts(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        for t in &self.turns {
+            for f in &t.expected_facts {
+                let key = f.to_lowercase();
+                if seen.insert(key) {
+                    out.push(f.clone());
+                }
+            }
+        }
+        out
+    }
+}
+
+pub fn load_thread_bank(path: &Path) -> Result<EvalThreadBank, String> {
+    let bytes =
+        fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let bank: EvalThreadBank =
+        toml::from_str(&bytes).map_err(|e| format!("parse {}: {e}", path.display()))?;
+    validate_threads(&bank)?;
+    Ok(bank)
+}
+
+fn validate_threads(bank: &EvalThreadBank) -> Result<(), String> {
+    if bank.bank.name.trim().is_empty() {
+        return Err("bank.name is empty".into());
+    }
+    if bank.bank.corpus.trim().is_empty() {
+        return Err("bank.corpus is empty".into());
+    }
+    if bank.threads.is_empty() {
+        return Err("bank has zero threads".into());
+    }
+
+    let mut seen: HashSet<&str> = HashSet::with_capacity(bank.threads.len());
+    for th in &bank.threads {
+        if th.id.trim().is_empty() {
+            return Err("thread with empty id".into());
+        }
+        if !seen.insert(th.id.as_str()) {
+            return Err(format!("duplicate thread id `{}`", th.id));
+        }
+        if th.turns.is_empty() {
+            return Err(format!("thread `{}` has zero turns", th.id));
+        }
+        for (i, turn) in th.turns.iter().enumerate() {
+            if turn.question.trim().is_empty() {
+                return Err(format!(
+                    "thread `{}` turn {i} has empty `question`",
+                    th.id
+                ));
+            }
+            if turn.expected_facts.is_empty() && turn.expected_sources.is_empty() {
+                return Err(format!(
+                    "thread `{}` turn {i} has no expected_facts and no expected_sources \
+                     (would be unscoreable)",
+                    th.id
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn validate(bank: &EvalBank) -> Result<(), String> {
     if bank.bank.name.trim().is_empty() {
         return Err("bank.name is empty".into());
@@ -258,6 +364,119 @@ category = "factual"
 question = "?"
 "#;
         assert!(round_trip(src).unwrap_err().contains("unscoreable"));
+    }
+
+    fn round_trip_threads(toml_str: &str) -> Result<EvalThreadBank, String> {
+        let bank: EvalThreadBank = toml::from_str(toml_str).map_err(|e| e.to_string())?;
+        validate_threads(&bank)?;
+        Ok(bank)
+    }
+
+    #[test]
+    fn parses_minimal_thread_bank() {
+        let src = r#"
+[bank]
+name = "learn-demo"
+corpus = "wikipedia"
+
+[[threads]]
+id = "t1"
+category = "learner_factual"
+
+[[threads.turns]]
+question = "Who was Einstein?"
+expected_facts = ["physicist"]
+
+[[threads.turns]]
+question = "What did he do in 1905?"
+expected_facts = ["photoelectric"]
+expected_sources = ["Albert Einstein"]
+"#;
+        let b = round_trip_threads(src).unwrap();
+        assert_eq!(b.threads.len(), 1);
+        assert_eq!(b.threads[0].turns.len(), 2);
+        assert_eq!(b.threads[0].turn_id(1), "t1_t1");
+        let agg = b.threads[0].aggregated_expected_facts();
+        assert_eq!(agg, vec!["physicist".to_string(), "photoelectric".to_string()]);
+    }
+
+    #[test]
+    fn rejects_duplicate_thread_ids() {
+        let src = r#"
+[bank]
+name = "demo"
+corpus = "wikipedia"
+
+[[threads]]
+id = "t1"
+category = "c"
+[[threads.turns]]
+question = "Q?"
+expected_facts = ["a"]
+
+[[threads]]
+id = "t1"
+category = "c"
+[[threads.turns]]
+question = "Q?"
+expected_facts = ["a"]
+"#;
+        assert!(round_trip_threads(src).unwrap_err().contains("duplicate"));
+    }
+
+    #[test]
+    fn rejects_empty_turns() {
+        let src = r#"
+[bank]
+name = "demo"
+corpus = "wikipedia"
+
+[[threads]]
+id = "t1"
+category = "c"
+"#;
+        let err = round_trip_threads(src).unwrap_err();
+        assert!(err.contains("zero turns") || err.contains("missing field"));
+    }
+
+    #[test]
+    fn rejects_unscoreable_turn() {
+        let src = r#"
+[bank]
+name = "demo"
+corpus = "wikipedia"
+
+[[threads]]
+id = "t1"
+category = "c"
+[[threads.turns]]
+question = "?"
+"#;
+        assert!(round_trip_threads(src).unwrap_err().contains("unscoreable"));
+    }
+
+    #[test]
+    fn aggregated_facts_deduped_case_insensitive() {
+        let src = r#"
+[bank]
+name = "demo"
+corpus = "wikipedia"
+
+[[threads]]
+id = "t1"
+category = "c"
+[[threads.turns]]
+question = "Q1?"
+expected_facts = ["Einstein", "1905"]
+[[threads.turns]]
+question = "Q2?"
+expected_facts = ["einstein", "photoelectric"]
+"#;
+        let b = round_trip_threads(src).unwrap();
+        let agg = b.threads[0].aggregated_expected_facts();
+        // "Einstein" + "1905" + "photoelectric" — second "einstein" deduped.
+        assert_eq!(agg.len(), 3);
+        assert_eq!(agg[0], "Einstein");
     }
 
     #[test]

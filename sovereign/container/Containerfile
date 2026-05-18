@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # sovereign ephemeral-worker container, ROCm flavor.
 #
 # Builds an image that runs `sovereign-cli daemon run --worker-mode`.
@@ -47,9 +48,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake git curl ca-certificates pkg-config libssl-dev \
       protobuf-compiler libprotobuf-dev \
-      clang libclang-dev llvm-dev python3 \
+      clang libclang-dev llvm-dev lld python3 \
       hipblas-dev rocblas-dev \
  && rm -rf /var/lib/apt/lists/*
+
+# sccache caches rustc + hipcc + cc/c++ output keyed by content hash.
+# Same wiring as Containerfile.cuda — see that file for rationale.
+RUN curl -L https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
+      | tar xz -C /tmp \
+ && mv /tmp/sccache-*/sccache /usr/local/bin/sccache \
+ && chmod +x /usr/local/bin/sccache \
+ && rm -rf /tmp/sccache-*
 
 # Where prost-build / lance-* find the well-known google/protobuf/*.proto
 # imports. `libprotobuf-dev` installs them under /usr/include.
@@ -93,7 +102,20 @@ ENV hipblaslt_ROOT=/opt/rocm
 # (`R_X86_64_32`), which the default linux x86_64 PIE link rejects with
 # "recompile with -fPIC". Drop PIE for this binary — analogous to the
 # `-lnccl` link-arg in Containerfile.cuda.
-ENV RUSTFLAGS="-C link-arg=-no-pie"
+#
+# `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld on the
+# final sovereign-cli link.
+ENV RUSTFLAGS="-C link-arg=-no-pie -C link-arg=-fuse-ld=lld"
+
+# sccache wiring. CARGO_INCREMENTAL=0 mandatory — see Containerfile.cuda.
+# CMAKE_HIP_COMPILER_LAUNCHER routes ggml-hip's hipcc compiles through
+# sccache; biggest single win for ROCm rebuilds.
+ENV RUSTC_WRAPPER=sccache
+ENV CARGO_INCREMENTAL=0
+ENV SCCACHE_DIR=/root/.cache/sccache
+ENV CMAKE_C_COMPILER_LAUNCHER=sccache
+ENV CMAKE_CXX_COMPILER_LAUNCHER=sccache
+ENV CMAKE_HIP_COMPILER_LAUNCHER=sccache
 
 # Build context = commonwealth-ai/ workspace root. Post-monorepo (May
 # 2026) the single workspace Cargo.toml + Cargo.lock live here; each
@@ -123,7 +145,18 @@ COPY sovereign/crates/    ./sovereign/crates/
 COPY sovereign/contrib/   ./sovereign/contrib/
 COPY sovereign/.opencode/ ./sovereign/.opencode/
 
-RUN cargo build --release --bin sovereign-cli
+# BuildKit cache mounts persist the cargo registry, git checkouts,
+# target dir, and sccache across rebuilds. See Containerfile.cuda for
+# the full explanation. Binary copied out of the cached target dir into
+# /usr/local/bin so the runtime stage's COPY --from=build pulls from a
+# real image layer (cache mounts don't survive across stages).
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
+    --mount=type=cache,target=/workspace/target \
+    cargo build --release --bin sovereign-cli \
+ && cp /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli \
+ && sccache --show-stats
 
 # ─── Runtime stage ───────────────────────────────────────────────────
 FROM docker.io/rocm/dev-ubuntu-22.04:7.2
@@ -143,7 +176,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli
+COPY --from=build /usr/local/bin/sovereign-cli /usr/local/bin/sovereign-cli
 
 # Workspace volume — RunPod mounts /workspace by default; our entrypoint
 # arranges /workspace/models for owner uploads and /workspace/data for
