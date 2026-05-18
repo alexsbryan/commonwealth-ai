@@ -1196,38 +1196,28 @@ pub(crate) fn atlas_grounding_enabled() -> bool {
     }
 }
 
-/// Noise-floor filter with optional title-expand augmentation. The
-/// `protected` list (typically the title-expand titles) contributes
-/// its tokens to the substring check — chunks pass if title or
-/// content contains any query token OR any token from a protected
-/// title. The per-chunk substring rule stays uniform; we don't
-/// bypass entire articles wholesale.
+/// Noise floor: drop chunks whose title nor content (lowercased)
+/// contains any substantive query token. Anything with even one
+/// overlap is kept; reweight + sort + cap downstream handle ranking.
 ///
-/// Marathon T3 (2026-05-18) — query "What did she contribute that
-/// was genuinely new?" + protected ["Ada Lovelace", "Charles Babbage"]:
-/// augmented tokens {contribute, genuinely, ada, lovelace, charles,
-/// babbage}. Lovelace lead/bio chunks pass because they contain
-/// "Lovelace". Off-topic noise chunks (no token overlap) still drop.
-///
-/// Earlier v33 design used a per-article bypass for protected titles.
-/// That kept ALL chunks from a protected article — including off-
-/// topic biographical chunks — and pushed them through `RRF + cap +
-/// truncate` ahead of topic-anchored chunks. Marathon T6/T7/T8 went
-/// from working (ans_ch ~1300) to empty visible answers (think-
-/// collapse on bloated context) under the bypass. Token augmentation
-/// avoids that: the survival queue is still ranked by score, and
-/// off-topic chunks from a protected article without query overlap
-/// still drop.
-pub(crate) fn drop_no_overlap_chunks_with_protected(
+/// Title-expand augmentation explored (v36 / 2026-05-18). Adding
+/// title-expand tokens to the survival set kept ALL chunks from the
+/// named article (because every chunk's title contains the title
+/// token), turning retrieval monocultural — `expand_from_dominant_
+/// source` then doubled down on the already-dominant article. On a
+/// 13-thread eval, 6 threads regressed on `fact_recall` (buddhism
+/// -0.24, darwin -0.15, industrial -0.14, einstein -0.13, wwii -0.10,
+/// columbus -0.10) vs the v28 baseline. Marathon T6/T7/T8 stayed
+/// clean (no v33-style bypass), but the cross-thread cost was net
+/// negative. Reverted. See `bench/wikipedia_learn/V36_FINDINGS.md`
+/// for the full trace + the principled reservation-only path
+/// (option C) handed to the next iteration.
+pub(crate) fn drop_no_overlap_chunks(
     chunks: Vec<corpus_engine::ScoredChunk>,
     query: &str,
-    protected: &[String],
 ) -> Vec<corpus_engine::ScoredChunk> {
-    let mut tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
-    for p in protected {
-        tokens.extend(extract_tokens(p, EVIDENCE_TITLE_MIN_TOKEN_LEN));
-    }
-    if tokens.is_empty() {
+    let query_tokens = extract_tokens(query, EVIDENCE_TITLE_MIN_TOKEN_LEN);
+    if query_tokens.is_empty() {
         return chunks;
     }
     chunks
@@ -1235,14 +1225,14 @@ pub(crate) fn drop_no_overlap_chunks_with_protected(
         .filter(|c| {
             let title = c.title.as_deref().unwrap_or("");
             let title_tokens = extract_tokens(title, EVIDENCE_TITLE_MIN_TOKEN_LEN);
-            let title_hit = tokens
+            let title_hit = query_tokens
                 .iter()
                 .any(|q| title_tokens.iter().any(|t| t == q));
             if title_hit {
                 return true;
             }
             let content_lower = c.content.to_lowercase();
-            tokens.iter().any(|q| content_lower.contains(q.as_str()))
+            query_tokens.iter().any(|q| content_lower.contains(q.as_str()))
         })
         .collect()
 }
@@ -5522,24 +5512,14 @@ impl Runtime {
         // both title and content. These survived hybrid RRF on a weak
         // tangential signal (one shared FTS token in a 1024-char
         // chunk, or vector similarity to phrasing rather than topic);
-        // they fill prompt budget the model can't act on. Title-expand
-        // titles augment the token set so abstract / anaphoric
-        // questions don't lose their fan-out chunks at this stage.
-        let title_expand_protected_dq: Vec<String> = title_expand_titles_dq
-            .as_ref()
-            .map(|v| v.clone())
-            .unwrap_or_default();
+        // they fill prompt budget the model can't act on. See KQ
+        // path comment for the v33 / v36 protection design history.
         let pre_floor = all_chunks.len();
-        all_chunks = drop_no_overlap_chunks_with_protected(
-            all_chunks,
-            message,
-            &title_expand_protected_dq,
-        );
+        all_chunks = drop_no_overlap_chunks(all_chunks, message);
         if all_chunks.len() < pre_floor {
             tracing::info!(
                 pre_floor,
                 post_floor = all_chunks.len(),
-                title_expand_titles = ?title_expand_protected_dq,
                 "DeepQuery: noise floor dropped no-overlap chunks"
             );
         }
@@ -9088,27 +9068,17 @@ impl Runtime {
         audit_pipeline_stage(&chunks, "after_title_expand", message);
 
         // 2c. Noise floor — drop chunks with zero query-token overlap
-        //     in title or content. Title-expand titles augment the
-        //     token set so anaphoric / open-ended queries don't drop
-        //     correctly-fanned-out chunks just because the user's
-        //     surface phrasing omits the entity name. See
-        //     `drop_no_overlap_chunks_with_protected` for the v33
-        //     bypass-vs-augment design history.
-        let title_expand_protected: Vec<String> = title_expand_titles
-            .as_ref()
-            .map(|v| v.clone())
-            .unwrap_or_default();
+        //     in title or content. These are pure-RRF noise that fills
+        //     prompt budget without contributing signal. See
+        //     `drop_no_overlap_chunks` for the v33 / v36 design
+        //     history (both attempts at protecting title-expand
+        //     chunks at this stage regressed the cross-thread bench).
         let pre_floor = chunks.len();
-        let mut chunks = drop_no_overlap_chunks_with_protected(
-            chunks,
-            message,
-            &title_expand_protected,
-        );
+        let mut chunks = drop_no_overlap_chunks(chunks, message);
         if chunks.len() < pre_floor {
             tracing::info!(
                 pre_floor,
                 post_floor = chunks.len(),
-                title_expand_titles = ?title_expand_protected,
                 "KnowledgeQuery: noise floor dropped no-overlap chunks"
             );
         }

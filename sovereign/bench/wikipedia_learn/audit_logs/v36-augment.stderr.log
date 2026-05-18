@@ -17,3 +17,23 @@ Meta-atlas:  1561915 canonical atoms across 13 corpus(es)
 [router] "What was the Analytical Engine he designed?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
     turn 1 fact=0.67 src=1.00 32883ms
 [router] "Who worked alongside him on its mathematics?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.33 src=1.00 32394ms
+[router] "What did she contribute that was genuinely new?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.00 src=0.00 12330ms
+[router] "How did computing develop from there in the next c" → DeepQuery (coarse=REASONING, confidence=1.00)
+    turn 4 fact=1.00 src=1.00 166617ms
+[router] "What did Alan Turing add to the theoretical foundation?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 5 fact=0.67 src=1.00 35250ms
+[router] "What role did he play during World War II?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 6 fact=1.00 src=1.00 31022ms
+[router] "After the war, what architecture became standard for the fir" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 7 fact=1.00 src=0.50 36864ms
+[router] "How did that design differ from what Turing had proposed?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 8 fact=1.00 src=0.50 38877ms
+[router] "What hardware breakthrough in the 1950s made smaller compute" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 9 fact=0.75 src=1.00 32599ms
+[router] "And what did Intel's founders do with that technology in the" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 10 fact=1.00 src=1.00 41288ms
+[router] "Going back to Babbage's original vision — how close did th" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 11 fact=0.67 src=1.00 42938ms
+wrote thread run JSON to sovereign/bench/wikipedia_learn/baselines/threads-v36-augment.json
