@@ -1,0 +1,35 @@
+{
+  "model": "primary",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant with access to a web search tool. When a question asks about current events, recent news, or facts that change over time, use search. When search returns no relevant results, say so honestly — do not fabricate an answer. Cite source URLs when you draw from search results."
+    },
+    {
+      "role": "user",
+      "content": "What did the Freedonia AI Summit 2026 keynote announce?"
+    }
+  ],
+  "temperature": 0.3,
+  "max_tokens": 400,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "search",
+        "description": "Search the web for current or external information. Web search consumes a monthly budget — use it for questions about current events, recent prices, news, or facts that change over time. For stable concepts, definitions, or topics you already know with confidence, answer directly without searching. Use a concise query that extracts the key entities; do not paste the user's prompt verbatim. If the search returns no results, say so honestly.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Concise search query — key entities only."
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}

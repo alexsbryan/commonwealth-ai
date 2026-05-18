@@ -1,0 +1,6 @@
+# 03_skip_search_static_definition
+#
+# Stable, well-trodden computer science concept. The model has this
+# in training — searching is wasteful (budget) and unnecessary.
+
+should_call_search = false

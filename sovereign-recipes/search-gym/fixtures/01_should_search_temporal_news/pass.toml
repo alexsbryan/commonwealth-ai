@@ -1,0 +1,29 @@
+# 01_should_search_temporal_news
+#
+# Temporal news question — model should reach for search. Tight
+# query-shape constraints catch the two main failure modes:
+#   - Not searching at all (treats this as a training-data question)
+#   - Verbatim-echoing the user prompt as the query
+
+should_call_search = true
+expected_first_tool = "search"
+max_search_calls = 1
+
+# The model should extract entities; "spacex" and "starship" must both
+# show up somewhere in the query.
+expected_query_contains = ["spacex", "starship"]
+
+# Anti-verbatim — the user prompt's literal phrasing must not be
+# echoed back. If the model emits "what happened with the latest" it
+# has not reformulated.
+expected_query_not_contains = ["what happened with"]
+
+# Cap on query length. Short queries beat paragraphs for search APIs.
+expected_query_max_tokens = 8
+
+# After search, the synthesis turn must cite at least one URL from
+# the mock response.
+must_cite_url_from_mock = 1
+
+# And it must not fabricate URLs.
+must_not_cite_url_outside_mock = true

@@ -1,0 +1,15 @@
+{
+  "query": "nvda stock price",
+  "results": [
+    {
+      "title": "NVIDIA Corp (NVDA) Stock Quote",
+      "url": "https://example.com/finance/nvda-quote",
+      "snippet": "NVDA — $872.43 ▲ +1.27% as of 3:58 PM ET. Day range: 861.10 – 879.55. Volume: 38.2M. P/E (ttm): 64.1."
+    },
+    {
+      "title": "NVDA after-hours: small drop following Q1 guidance refresh",
+      "url": "https://example.com/finance/nvda-after-hours",
+      "snippet": "NVIDIA shares ticked down 0.4% in after-hours trading following the company's quarterly guidance update."
+    }
+  ]
+}

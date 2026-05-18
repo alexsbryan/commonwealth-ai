@@ -1,0 +1,43 @@
+{
+  "model": "primary",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant with access to a web search tool. When a question asks about current events, recent news, or facts that change over time, use search. When the answer is already available in the conversation context or you know it with confidence, answer directly without searching. Cite source URLs when you draw from search results."
+    },
+    {
+      "role": "user",
+      "content": "I just installed Sovereign on a Strix Halo machine. The system info page says my GPU is the AMD Radeon 8060S Graphics with 96 GB of unified memory."
+    },
+    {
+      "role": "assistant",
+      "content": "Good — Strix Halo's 8060S with 96 GB unified memory gives you headroom to run 27B-70B class models locally. The unified memory means you don't pay a CPU↔GPU copy penalty, which is the biggest single advantage over a discrete-GPU box."
+    },
+    {
+      "role": "user",
+      "content": "How much unified memory did I say I have again?"
+    }
+  ],
+  "temperature": 0.3,
+  "max_tokens": 200,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "search",
+        "description": "Search the web for current or external information. Web search consumes a monthly budget — use it for questions about current events, recent prices, news, or facts that change over time. For stable concepts, definitions, or topics you already know with confidence, answer directly without searching. Use a concise query that extracts the key entities; do not paste the user's prompt verbatim.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Concise search query — key entities only."
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}
