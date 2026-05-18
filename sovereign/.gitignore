@@ -19,6 +19,10 @@ crates/sovereign-desktop/src-tauri/binaries/tessdata/
 .sovereign/notes.db
 .sovereign/notes.db-shm
 .sovereign/notes.db-wal
+# Mesh state — per-host work-atlas / peer bookkeeping, binary, not for source control
+.sovereign/mesh.db
+.sovereign/mesh.db-shm
+.sovereign/mesh.db-wal
 
 # Bench data artifacts — regenerable from scripts in the same dir, too
 # large or session-specific to source-control. Scaffolding (README.md,
