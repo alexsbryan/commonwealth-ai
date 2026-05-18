@@ -58,6 +58,7 @@ mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;
 mod rough_edges_cmd;
+mod search_gym_cmd;
 mod serve_cmd;
 mod service_install;
 mod setup_cmd;
@@ -208,6 +209,7 @@ const HELP: Help = Help {
             ("recipe",  "Run a corpus ingestion recipe"),
             ("pipeline", "Generic ingestion driver — durable worklist + retry + pause-resume"),
             ("bench",   "Throughput + correctness benchmarks for enrichment LLM tasks"),
+            ("search-gym", "Correctness harness for web-search-during-inference (mock-replay)"),
             ("atlas",   "Atlas-style structural enrichment (Wikipedia link graph today)"),
             ("eval",    "Run a question bank against a corpus; measure retrieval quality"),
             ("tools",   "Invoke code-intelligence tools from the CLI (list / describe / call)"),
@@ -662,6 +664,11 @@ async fn async_main() {
             }
             "bench" => {
                 let code = bench_cmd::run_bench(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "search-gym" => {
+                util::tracing_init::init_tracing("sovereign_cli=info");
+                let code = search_gym_cmd::run_search_gym(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "chat" => {

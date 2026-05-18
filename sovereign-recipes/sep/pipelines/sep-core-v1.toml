@@ -88,6 +88,15 @@ stderr_pattern  = "Phase \\d+ validation failed|atom schema violation"
 bucket          = "parquet_missing"
 stderr_pattern  = "sep\\.parquet.*not found|run `sovereign corpus acquire sep`"
 
+# Catches exit-127 cascades — the typical cause is a `cargo build` racing
+# against in-flight pipeline subprocess spawns (cargo's atomic-rename of
+# target/release/sovereign-cli exposes a window where new shell-outs
+# can't resolve `sovereign` on PATH). Bucketing this loudly means a
+# future cascade self-diagnoses instead of pooling into `unknown`.
+[[enrich.failure_classifier]]
+bucket          = "binary_missing"
+stderr_pattern  = "sovereign: command not found|sovereign: No such file"
+
 [dispatch]
 max_attempts = 3
 lease_secs   = 7200

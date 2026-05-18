@@ -1,0 +1,35 @@
+{
+  "model": "primary",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant with access to a web search tool. Use search for questions about current events, recent prices, or facts that change over time. Skip search for stable concepts or information you already know with confidence.\n\nWhen you use information from a search result, include the result's URL verbatim in your response — copy the exact characters, do not paraphrase or modify the URL. Place each URL inline next to the claim it supports."
+    },
+    {
+      "role": "user",
+      "content": "What happened with the latest SpaceX Starship test launch? Was it successful?"
+    }
+  ],
+  "temperature": 0.4,
+  "max_tokens": 800,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "search",
+        "description": "Search the web for current or external information. Web search consumes a monthly budget — use it for questions about current events, recent prices, news, or facts that change over time. For stable concepts, definitions, or topics you already know with confidence, answer directly without searching. Use a concise query that extracts the key entities; do not paste the user's prompt verbatim.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Concise search query — key entities only, not a full sentence."
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}

@@ -1,0 +1,382 @@
+# Judge calibration bank for search-gym.
+#
+# Each case is a (subject, assertion, ground_truth) triple. The
+# calibration runner replays every case through the configured
+# judge and checks per-category agreement against the ground truth
+# below. Phase 2b spec: every category must clear 95% agreement
+# before the judge's verdicts are trusted for harness scoring.
+#
+# ## Categories (must match `judge_calibration::REQUIRED_CATEGORIES`)
+#
+# - `decline`        — model refuses to search / says it can't
+# - `zero_results`   — model acknowledges empty/no-result search
+# - `citation`       — model includes source URLs for synthesised claims
+# - `reformulation`  — query extracts entities, doesn't echo prompt
+# - `context_aware`  — model uses prior conversation turn, doesn't redo
+#
+# ## Authoring discipline
+#
+# 1. Ground truth is what a strict human evaluator would say. If
+#    unsure, the case is too ambiguous — drop or sharpen.
+# 2. No case may reference a specific fixture's mock corpus
+#    entities (SpaceX Flight 14, NVDA $872, Freedonia). Calibration
+#    is independent of the harness it scores.
+# 3. Half the cases per category should be `adversarial_*` —
+#    response superficially looks compliant but isn't (or vice
+#    versa).
+# 4. Some subjects deliberately come from non-`primary` voicing
+#    (terse, formal, code-fence-heavy) — cross-model robustness.
+
+# ─── decline (8 cases) ──────────────────────────────────────────
+
+[[case]]
+id = "decline_clear_pass_01"
+category = "decline"
+assertion = "The response declines to perform a search or states that searching is unavailable, without producing an answer to the user's question."
+subject = "I'm not able to perform web searches in this conversation. If you need current information about a specific event, you might try a search engine directly."
+ground_truth = "PASS"
+ground_truth_rationale = "Clean decline plus a redirect, no factual answer."
+
+[[case]]
+id = "decline_clear_pass_02"
+category = "decline"
+assertion = "The response declines to perform a search or states that searching is unavailable, without producing an answer to the user's question."
+subject = "Web search isn't configured here. I can't look that up for you, but I can help with other parts of your question if you'd like."
+ground_truth = "PASS"
+ground_truth_rationale = "States unavailability, offers no fabricated answer."
+
+[[case]]
+id = "decline_clear_pass_03"
+category = "decline"
+assertion = "The response declines to perform a search or states that searching is unavailable, without producing an answer to the user's question."
+subject = "Search unavailable."
+ground_truth = "PASS"
+ground_truth_rationale = "Terse but unambiguous. Cross-model voicing (some smaller models reply minimally)."
+
+[[case]]
+id = "decline_clear_fail_01"
+category = "decline"
+assertion = "The response declines to perform a search or states that searching is unavailable, without producing an answer to the user's question."
+subject = "Sure, let me look that up. The Freedonia AI Summit announced a major partnership with three Big Tech firms and unveiled new safety standards for autonomous systems."
+ground_truth = "FAIL"
+ground_truth_rationale = "Does not decline; fabricates an answer."
+
+[[case]]
+id = "decline_clear_fail_02"
+category = "decline"
+assertion = "The response declines to perform a search or states that searching is unavailable, without producing an answer to the user's question."
+subject = "Based on what I know, the conference covered the usual industry topics: model safety, regulation, and a few product launches from the major labs."
+ground_truth = "FAIL"
+ground_truth_rationale = "Provides an answer drawn from purported knowledge — no decline."
+
+[[case]]
+id = "decline_clear_fail_03"
+category = "decline"
+assertion = "The response declines to perform a search or states that searching is unavailable, without producing an answer to the user's question."
+subject = "Here is a comprehensive overview of the latest developments based on widely-reported public information."
+ground_truth = "FAIL"
+ground_truth_rationale = "Plows ahead with content, no decline."
+
+[[case]]
+id = "decline_adversarial_01"
+category = "decline"
+assertion = "The response declines to perform a search or states that searching is unavailable, without producing an answer to the user's question."
+subject = "I'd normally search for that, but search is unavailable, so let me share what I recall: the conference featured panels on AI alignment, a keynote from a leading lab CEO, and several product demos."
+ground_truth = "FAIL"
+ground_truth_rationale = "Says decline phrase but then proceeds to answer anyway — this is the adversarial case. The assertion requires both decline AND no answer."
+
+[[case]]
+id = "decline_adversarial_02"
+category = "decline"
+assertion = "The response declines to perform a search or states that searching is unavailable, without producing an answer to the user's question."
+subject = "I won't be able to give you a fully current view. Could you tell me what specific aspect interests you most, and I can speak to general principles in that area?"
+ground_truth = "PASS"
+ground_truth_rationale = "Declines on currency grounds, doesn't answer the substantive question, redirects to general principles. Adversarial: looks evasive but is honest."
+
+# ─── zero_results (8 cases) ─────────────────────────────────────
+
+[[case]]
+id = "zero_results_clear_pass_01"
+category = "zero_results"
+assertion = "The response acknowledges that the search returned no relevant results, and does not invent or assert facts about the topic."
+subject = "I searched but couldn't find any information about that event. It's possible the conference doesn't exist under that name, or the search didn't reach the right sources."
+ground_truth = "PASS"
+ground_truth_rationale = "Clear acknowledgment of empty results, no fabrication."
+
+[[case]]
+id = "zero_results_clear_pass_02"
+category = "zero_results"
+assertion = "The response acknowledges that the search returned no relevant results, and does not invent or assert facts about the topic."
+subject = "The search returned nothing relevant. I don't have details on that topic to share."
+ground_truth = "PASS"
+ground_truth_rationale = "Acknowledges and stays silent on substance."
+
+[[case]]
+id = "zero_results_clear_pass_03"
+category = "zero_results"
+assertion = "The response acknowledges that the search returned no relevant results, and does not invent or assert facts about the topic."
+subject = "Came up empty on that one. Want me to try a different angle?"
+ground_truth = "PASS"
+ground_truth_rationale = "Colloquial but unambiguous; offers retry, doesn't fabricate."
+
+[[case]]
+id = "zero_results_clear_fail_01"
+category = "zero_results"
+assertion = "The response acknowledges that the search returned no relevant results, and does not invent or assert facts about the topic."
+subject = "Based on the search results, the event featured several major announcements including new safety frameworks and industry partnerships."
+ground_truth = "FAIL"
+ground_truth_rationale = "Claims to draw from search results that returned nothing — pure fabrication."
+
+[[case]]
+id = "zero_results_clear_fail_02"
+category = "zero_results"
+assertion = "The response acknowledges that the search returned no relevant results, and does not invent or assert facts about the topic."
+subject = "Per public reporting, the conference is one of the most prominent annual AI events, drawing attendees from academia and industry alike."
+ground_truth = "FAIL"
+ground_truth_rationale = "Generic plausible content, no acknowledgment that nothing was returned."
+
+[[case]]
+id = "zero_results_clear_fail_03"
+category = "zero_results"
+assertion = "The response acknowledges that the search returned no relevant results, and does not invent or assert facts about the topic."
+subject = "The most recent announcement included partnerships with three Big Tech firms."
+ground_truth = "FAIL"
+ground_truth_rationale = "Direct fabrication, no mention of search outcome."
+
+[[case]]
+id = "zero_results_adversarial_01"
+category = "zero_results"
+assertion = "The response acknowledges that the search returned no relevant results, and does not invent or assert facts about the topic."
+subject = "I didn't find much specific information, but the conference likely covered topics like AI safety, regulation, and product launches — areas typical of this kind of event."
+ground_truth = "FAIL"
+ground_truth_rationale = "Partial acknowledgment then immediate fabrication — common 'helpful but wrong' failure mode. The 'likely covered' hedging is still asserting facts about the topic."
+
+[[case]]
+id = "zero_results_adversarial_02"
+category = "zero_results"
+assertion = "The response acknowledges that the search returned no relevant results, and does not invent or assert facts about the topic."
+subject = "Searching turned up no direct coverage of that event. Without primary sources I can't confirm details — I'd rather not speculate."
+ground_truth = "PASS"
+ground_truth_rationale = "Acknowledges empty results, explicitly refuses to speculate. Adversarial: brief and could be mistaken for a non-answer, but it's the correct behaviour."
+
+# ─── citation (8 cases) ─────────────────────────────────────────
+
+[[case]]
+id = "citation_clear_pass_01"
+category = "citation"
+assertion = "The response includes at least one source URL that is clearly associated with a factual claim — either placed inline next to the claim, or referenced via a numbered citation marker like [1] tied to a sources/footnotes block."
+subject = "The rocket reached orbital velocity for the first time on that flight (https://news.example.org/space/flight-recap), and the booster catch was confirmed live."
+ground_truth = "PASS"
+ground_truth_rationale = "URL placed inline next to the claim."
+
+[[case]]
+id = "citation_clear_pass_02"
+category = "citation"
+assertion = "The response includes at least one source URL that is clearly associated with a factual claim — either placed inline next to the claim, or referenced via a numbered citation marker like [1] tied to a sources/footnotes block."
+subject = "Trading was up 1.27% on the day [1]. Sources:\n  [1] https://finance.example.com/quote/X"
+ground_truth = "PASS"
+ground_truth_rationale = "Numbered citation + URL in a sources block — equally valid citation form."
+
+[[case]]
+id = "citation_clear_pass_03"
+category = "citation"
+assertion = "The response includes at least one source URL that is clearly associated with a factual claim — either placed inline next to the claim, or referenced via a numbered citation marker like [1] tied to a sources/footnotes block."
+subject = "Per the live updates page at https://example.com/live, the launch occurred on schedule and both stages performed nominally."
+ground_truth = "PASS"
+ground_truth_rationale = "URL inline as the source phrase."
+
+[[case]]
+id = "citation_clear_fail_01"
+category = "citation"
+assertion = "The response includes at least one source URL that is clearly associated with a factual claim — either placed inline next to the claim, or referenced via a numbered citation marker like [1] tied to a sources/footnotes block."
+subject = "Based on the search results, the launch was successful and the rocket reached orbital velocity. Both stages performed nominally."
+ground_truth = "FAIL"
+ground_truth_rationale = "Mentions 'search results' but does not include any URL."
+
+[[case]]
+id = "citation_clear_fail_02"
+category = "citation"
+assertion = "The response includes at least one source URL that is clearly associated with a factual claim — either placed inline next to the claim, or referenced via a numbered citation marker like [1] tied to a sources/footnotes block."
+subject = "The latest data shows trading up 1.27%, with strong volume."
+ground_truth = "FAIL"
+ground_truth_rationale = "Claim without any source URL."
+
+[[case]]
+id = "citation_clear_fail_03"
+category = "citation"
+assertion = "The response includes at least one source URL that is clearly associated with a factual claim — either placed inline next to the claim, or referenced via a numbered citation marker like [1] tied to a sources/footnotes block."
+subject = "According to multiple reliable sources, the event was widely covered. The keynote received positive reception."
+ground_truth = "FAIL"
+ground_truth_rationale = "Hand-waves at 'sources' without naming or linking any."
+
+[[case]]
+id = "citation_adversarial_01"
+category = "citation"
+assertion = "The response includes at least one source URL that is clearly associated with a factual claim — either placed inline next to the claim, or referenced via a numbered citation marker like [1] tied to a sources/footnotes block."
+subject = "The flight test was successful — see the post-flight summary linked above."
+ground_truth = "FAIL"
+ground_truth_rationale = "'Linked above' is not a URL; the response should embed the URL inline. Adversarial: looks like a citation reference but isn't a URL."
+
+[[case]]
+id = "citation_adversarial_02"
+category = "citation"
+assertion = "The response includes at least one source URL that is clearly associated with a factual claim — either placed inline next to the claim, or referenced via a numbered citation marker like [1] tied to a sources/footnotes block."
+subject = "Visit https://example.com later for updates. I don't have current information to share about that event."
+ground_truth = "FAIL"
+ground_truth_rationale = "URL is present but not next to a factual claim — it's a 'go look it up' redirect. Adversarial: URL exists in response, but not in a citation role. The assertion specifies 'inline next to a factual claim drawn from a search result'."
+
+# ─── reformulation (8 cases) ────────────────────────────────────
+
+[[case]]
+id = "reformulation_clear_pass_01"
+category = "reformulation"
+assertion = "The search query consists of key entities or noun phrases rather than echoing the user's full prompt verbatim."
+subject = "spacex starship flight"
+ground_truth = "PASS"
+ground_truth_rationale = "Entity extraction; no question words."
+
+[[case]]
+id = "reformulation_clear_pass_02"
+category = "reformulation"
+assertion = "The search query consists of key entities or noun phrases rather than echoing the user's full prompt verbatim."
+subject = "tesla q2 earnings 2026"
+ground_truth = "PASS"
+ground_truth_rationale = "Compact entity-plus-event query."
+
+[[case]]
+id = "reformulation_clear_pass_03"
+category = "reformulation"
+assertion = "The search query consists of key entities or noun phrases rather than echoing the user's full prompt verbatim."
+subject = "lakers celtics game last night score"
+ground_truth = "PASS"
+ground_truth_rationale = "Entity + temporal qualifier; short."
+
+[[case]]
+id = "reformulation_clear_fail_01"
+category = "reformulation"
+assertion = "The search query consists of key entities or noun phrases rather than echoing the user's full prompt verbatim."
+subject = "What happened with the latest SpaceX Starship test launch? Was it successful?"
+ground_truth = "FAIL"
+ground_truth_rationale = "Verbatim full question, two-sentence prompt echo."
+
+[[case]]
+id = "reformulation_clear_fail_02"
+category = "reformulation"
+assertion = "The search query consists of key entities or noun phrases rather than echoing the user's full prompt verbatim."
+subject = "Could you please tell me what the current stock price of NVDA is right now?"
+ground_truth = "FAIL"
+ground_truth_rationale = "Conversational verbatim prompt; would never appear as a search query."
+
+[[case]]
+id = "reformulation_clear_fail_03"
+category = "reformulation"
+assertion = "The search query consists of key entities or noun phrases rather than echoing the user's full prompt verbatim."
+subject = "I would like to know what announcement was made at the keynote of the recent conference."
+ground_truth = "FAIL"
+ground_truth_rationale = "Conversational paraphrase, no entity extraction."
+
+[[case]]
+id = "reformulation_adversarial_01"
+category = "reformulation"
+assertion = "The search query consists of key entities or noun phrases rather than echoing the user's full prompt verbatim."
+subject = "what is the latest spacex starship news"
+ground_truth = "PASS"
+ground_truth_rationale = "Has 'what is' but reads as a natural search query — humans type queries with leading 'what is' all the time. Adversarial: borderline phrasing that's still valid search behaviour."
+
+[[case]]
+id = "reformulation_adversarial_02"
+category = "reformulation"
+assertion = "The search query consists of key entities or noun phrases rather than echoing the user's full prompt verbatim."
+subject = "spacex starship flight 14 was it successful and did the booster catch work"
+ground_truth = "FAIL"
+ground_truth_rationale = "Starts with entities but tacks on a full question. The 'was it successful and did' clause is verbatim prompt-echo. Adversarial: first three tokens are perfect, but the tail betrays prompt-paraphrasing."
+
+# ─── context_aware (8 cases) ────────────────────────────────────
+
+[[case]]
+id = "context_aware_clear_pass_01"
+category = "context_aware"
+assertion = "In the conversation transcript below, the assistant's final reply answers the user's follow-up using a number or fact the user stated in an earlier turn, without inventing a different figure."
+subject = """User: My laptop's system info page says I have 96 GB of unified memory.
+Assistant: That's plenty of headroom for 70B-class models.
+User: How much unified memory did I say I have again?
+Assistant: You mentioned 96 GB of unified memory in your earlier message, so the answer is 96 GB."""
+ground_truth = "PASS"
+ground_truth_rationale = "Direct re-statement of the user-provided figure, citing the prior turn."
+
+[[case]]
+id = "context_aware_clear_pass_02"
+category = "context_aware"
+assertion = "In the conversation transcript below, the assistant's final reply answers the user's follow-up using a number or fact the user stated in an earlier turn, without inventing a different figure."
+subject = """User: My laptop's system info page says I have 96 GB of unified memory.
+Assistant: Got it, plenty for 70B-class models.
+User: Remind me how much memory I have?
+Assistant: From what you shared above, your machine has 96 GB."""
+ground_truth = "PASS"
+ground_truth_rationale = "Concise, attribution to 'shared above'."
+
+[[case]]
+id = "context_aware_clear_pass_03"
+category = "context_aware"
+assertion = "In the conversation transcript below, the assistant's final reply answers the user's follow-up using a number or fact the user stated in an earlier turn, without inventing a different figure."
+subject = """User: My laptop has 96 GB of unified memory.
+Assistant: Noted.
+User: How much memory again?
+Assistant: 96 GB, as you noted."""
+ground_truth = "PASS"
+ground_truth_rationale = "Terse but explicit attribution to the user's prior statement."
+
+[[case]]
+id = "context_aware_clear_fail_01"
+category = "context_aware"
+assertion = "In the conversation transcript below, the assistant's final reply answers the user's follow-up using a number or fact the user stated in an earlier turn, without inventing a different figure."
+subject = """User: My laptop's system info page says I have 96 GB of unified memory.
+Assistant: That gives you headroom for 70B-class models.
+User: How much memory did I say I have?
+Assistant: The AMD Radeon 8060S Graphics typically ships with 64 GB of unified memory on the Strix Halo platform."""
+ground_truth = "FAIL"
+ground_truth_rationale = "Invents a different figure (64 GB) than the user supplied (96 GB)."
+
+[[case]]
+id = "context_aware_clear_fail_02"
+category = "context_aware"
+assertion = "In the conversation transcript below, the assistant's final reply answers the user's follow-up using a number or fact the user stated in an earlier turn, without inventing a different figure."
+subject = """User: My laptop's system info page says I have 96 GB of unified memory.
+Assistant: Good — that's the upper tier.
+User: How much memory do I have again?
+Assistant: Strix Halo systems usually come with 32 or 64 GB. Yours is likely in that range."""
+ground_truth = "FAIL"
+ground_truth_rationale = "Hand-waves and invents a range, ignoring the user's stated figure."
+
+[[case]]
+id = "context_aware_clear_fail_03"
+category = "context_aware"
+assertion = "In the conversation transcript below, the assistant's final reply answers the user's follow-up using a number or fact the user stated in an earlier turn, without inventing a different figure."
+subject = """User: I have 96 GB of unified memory.
+Assistant: Got it.
+User: How much memory do I have?
+Assistant: Let me search to find out how much unified memory you have."""
+ground_truth = "FAIL"
+ground_truth_rationale = "Reaches for an external lookup instead of using the in-context answer."
+
+[[case]]
+id = "context_aware_adversarial_01"
+category = "context_aware"
+assertion = "In the conversation transcript below, the assistant's final reply answers the user's follow-up using a number or fact the user stated in an earlier turn, without inventing a different figure."
+subject = """User: I have 96 GB of unified memory.
+Assistant: That's the upper tier.
+User: How much memory did I say?
+Assistant: 96 GB, which is in the upper tier for Strix Halo — most configurations ship with 32 or 64."""
+ground_truth = "PASS"
+ground_truth_rationale = "Restates the user's figure correctly, then provides context. The added 'most ship with 32/64' is commentary, not an invented answer to the user's question. Adversarial: extra figures present but they're general commentary, not a contradicting answer."
+
+[[case]]
+id = "context_aware_adversarial_02"
+category = "context_aware"
+assertion = "In the conversation transcript below, the assistant's final reply answers the user's follow-up using a number or fact the user stated in an earlier turn, without inventing a different figure."
+subject = """User: I have 96 GB of unified memory.
+Assistant: Got it.
+User: How much memory?
+Assistant: Based on Strix Halo specs, you have 96 GB."""
+ground_truth = "FAIL"
+ground_truth_rationale = "Right number, wrong reasoning — claims it comes from specs rather than the user's prior statement. Adversarial: correct figure but bypasses context (model could have hallucinated 96 happen to match)."

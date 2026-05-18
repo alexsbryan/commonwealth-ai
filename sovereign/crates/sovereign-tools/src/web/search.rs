@@ -1,9 +1,12 @@
+use std::path::PathBuf;
+
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use sovereign_core::error::{Error, Result};
 
 /// A search result from any backend.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SearchResult {
     pub title: String,
     pub url: String,
@@ -22,6 +25,14 @@ pub enum SearchBackend {
     /// AI-native search, pre-extracted content. API key required.
     /// 1000 free queries/month.
     Tavily { api_key: String },
+
+    /// Deterministic fixture-replay backend for the search-gym harness.
+    /// Resolves a query to a pre-recorded response file under
+    /// `<corpus_path>/<sha256(normalized_query)>.json`. A missing file
+    /// is a loud error — the mock never silently falls through to a
+    /// live provider. Production code paths cannot construct this
+    /// variant without an on-disk corpus path, which they never have.
+    Mock { corpus_path: PathBuf },
 }
 
 impl SearchBackend {
@@ -30,6 +41,7 @@ impl SearchBackend {
             Self::DuckDuckGo => "DuckDuckGo",
             Self::Brave { .. } => "Brave",
             Self::Tavily { .. } => "Tavily",
+            Self::Mock { .. } => "Mock",
         }
     }
 }
@@ -49,7 +61,179 @@ pub async fn search(
         SearchBackend::Tavily { api_key } => {
             search_tavily(client, api_key, query, max_results).await
         }
+        SearchBackend::Mock { corpus_path } => {
+            search_mock(corpus_path, query, max_results)
+        }
     }
+}
+
+// ─── Mock backend (gym fixtures) ───────────────────────────────
+
+/// Normalize a query for fixture-resolution: lowercase, trim, collapse
+/// internal whitespace. Punctuation is preserved — gym authors who
+/// want trailing-`?` insensitivity should strip in the recipe.
+fn normalize_query(query: &str) -> String {
+    let lowered = query.to_lowercase();
+    let mut out = String::with_capacity(lowered.len());
+    let mut prev_was_space = false;
+    for ch in lowered.trim().chars() {
+        if ch.is_whitespace() {
+            if !prev_was_space {
+                out.push(' ');
+                prev_was_space = true;
+            }
+        } else {
+            out.push(ch);
+            prev_was_space = false;
+        }
+    }
+    out
+}
+
+/// SHA-256 of the normalized query, hex-encoded. Public so the gym
+/// runner can compute fixture paths without re-implementing the
+/// hashing rule.
+pub fn mock_fixture_hash(query: &str) -> String {
+    let normalized = normalize_query(query);
+    let digest = Sha256::digest(normalized.as_bytes());
+    hex_encode(&digest)
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
+}
+
+#[derive(Debug, Deserialize)]
+struct MockResponse {
+    /// Human-readable echo of the query this fixture was recorded for.
+    /// Not used for matching — present so `grep` over the corpus is
+    /// useful. The match is purely hash-based.
+    #[serde(default)]
+    #[allow(dead_code)]
+    query: String,
+    results: Vec<SearchResult>,
+}
+
+/// An `aliases.toml` entry. Lets fixture authors give files
+/// human-readable names and bind multiple query phrasings to one
+/// response — which beats hash-mining every variant the model might
+/// emit. Schema is intentionally tiny so a typo'd field fails loudly
+/// instead of being silently ignored.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MockAliasEntry {
+    file: String,
+    aliases: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct MockAliasIndex {
+    #[serde(default, rename = "entry")]
+    entries: Vec<MockAliasEntry>,
+}
+
+/// Try to resolve `normalized_query` to a fixture file via the
+/// `aliases.toml` index. Returns:
+///   - `Ok(Some(filename))` on alias hit
+///   - `Ok(None)` if the index doesn't exist OR no alias matches
+///   - `Err(_)` if the index exists but is malformed (fail loud)
+///
+/// Per-call file read is fine: aliases.toml is small (~KB) and the
+/// gym's search rate is bounded by replay count, not throughput.
+fn lookup_alias(
+    corpus_path: &std::path::Path,
+    normalized_query: &str,
+) -> Result<Option<String>> {
+    let index_path = corpus_path.join("aliases.toml");
+    let body = match std::fs::read_to_string(&index_path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            return Err(Error::Execution(format!(
+                "mock aliases index unreadable: file={} ({e})",
+                index_path.display()
+            )))
+        }
+    };
+    let index: MockAliasIndex = toml::from_str(&body).map_err(|e| {
+        Error::Execution(format!(
+            "mock aliases index malformed: file={} ({e})",
+            index_path.display()
+        ))
+    })?;
+
+    // Substring containment, not exact-equal. The model routinely
+    // adds qualifying suffixes ("...today", "...announcement",
+    // "...success status") that strict equality would miss. Aliases
+    // function as canonical topic phrasings; a query is considered a
+    // match if any alias appears as a contiguous normalized substring
+    // of the query. First-match-wins, so author-side specificity
+    // controls ambiguity (don't list "stock" as an alias for one
+    // company; do list "nvda stock price").
+    for entry in &index.entries {
+        if entry.aliases.iter().any(|a| {
+            let a_norm = normalize_query(a);
+            !a_norm.is_empty() && normalized_query.contains(&a_norm)
+        }) {
+            return Ok(Some(entry.file.clone()));
+        }
+    }
+    Ok(None)
+}
+
+fn search_mock(
+    corpus_path: &std::path::Path,
+    query: &str,
+    max_results: usize,
+) -> Result<Vec<SearchResult>> {
+    let normalized = normalize_query(query);
+
+    // Two-tier lookup: aliases.toml first (human-readable filenames,
+    // multiple phrasings per file), then hash fallback for fixtures
+    // authored before aliases or for one-off responses.
+    let (path, lookup_mode) = match lookup_alias(corpus_path, &normalized)? {
+        Some(filename) => (corpus_path.join(&filename), "alias"),
+        None => {
+            let hash = mock_fixture_hash(query);
+            (corpus_path.join(format!("{hash}.json")), "hash")
+        }
+    };
+
+    let body = std::fs::read_to_string(&path).map_err(|e| {
+        // The error message names the mode that failed so the fixture
+        // author knows whether they need to add an alias or record a
+        // new file. Keep the query echo for grep-ability.
+        Error::Execution(format!(
+            "mock search fixture missing ({lookup_mode}): query={query:?} \
+             expected_file={} ({e})",
+            path.display()
+        ))
+    })?;
+
+    let parsed: MockResponse = serde_json::from_str(&body).map_err(|e| {
+        Error::Execution(format!(
+            "mock search fixture malformed: file={} ({e})",
+            path.display()
+        ))
+    })?;
+
+    tracing::debug!(
+        mode = %lookup_mode,
+        file = %path.file_name().and_then(|s| s.to_str()).unwrap_or(""),
+        results = parsed.results.len(),
+        "web_search: mock cache_hit=true"
+    );
+
+    let mut results = parsed.results;
+    results.truncate(max_results);
+    Ok(results)
 }
 
 // ─── DuckDuckGo (free, zero-config) ───────────────────────────
@@ -707,5 +891,257 @@ mod tests {
             .name(),
             "Tavily"
         );
+        assert_eq!(
+            SearchBackend::Mock {
+                corpus_path: std::path::PathBuf::from("/tmp/x")
+            }
+            .name(),
+            "Mock"
+        );
+    }
+
+    // ─── Mock-backend invariants ──────────────────────────────────
+    //
+    // Pin three structural properties:
+    //   1. Query normalization is stable (the fixture-author can
+    //      compute the hash off-line and trust it will match).
+    //   2. A missing fixture is a loud failure (`Err`), never silent
+    //      zero-results — the whole point of the mock is that the
+    //      harness sees what the model asked for, even when the
+    //      author hasn't recorded it.
+    //   3. A present fixture returns the recorded results, truncated
+    //      to `max_results`.
+
+    #[test]
+    fn mock_normalize_lowercases_and_collapses_whitespace() {
+        assert_eq!(normalize_query("Hello  World"), "hello world");
+        assert_eq!(normalize_query("  leading and trailing  "), "leading and trailing");
+        assert_eq!(normalize_query("Tabs\tand\nnewlines"), "tabs and newlines");
+    }
+
+    #[test]
+    fn mock_hash_is_stable_across_whitespace_changes() {
+        // Pin the hash so a future "improvement" to normalization
+        // doesn't silently invalidate every recorded fixture.
+        assert_eq!(
+            mock_fixture_hash("hello world"),
+            mock_fixture_hash("  HELLO   world  ")
+        );
+    }
+
+    #[test]
+    fn mock_missing_fixture_is_loud_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let err = search_mock(tmp.path(), "no fixture for this query", 10)
+            .expect_err("missing fixture must error");
+        let msg = format!("{err}");
+        assert!(msg.contains("mock search fixture missing"), "msg={msg}");
+        assert!(msg.contains("no fixture for this query"), "msg={msg}");
+    }
+
+    #[test]
+    fn mock_present_fixture_returns_results_truncated() {
+        let tmp = tempfile::tempdir().unwrap();
+        let query = "spacex starship launch";
+        let hash = mock_fixture_hash(query);
+        let body = serde_json::json!({
+            "query": query,
+            "results": [
+                {"title": "Result 1", "url": "https://example.com/1", "snippet": "..."},
+                {"title": "Result 2", "url": "https://example.com/2", "snippet": "..."},
+                {"title": "Result 3", "url": "https://example.com/3", "snippet": "..."},
+            ]
+        });
+        std::fs::write(tmp.path().join(format!("{hash}.json")), body.to_string()).unwrap();
+
+        let out = search_mock(tmp.path(), query, 2).unwrap();
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].url, "https://example.com/1");
+        assert_eq!(out[1].url, "https://example.com/2");
+    }
+
+    // ─── Alias-resolution invariants ─────────────────────────────
+    //
+    // `aliases.toml` lets one response file serve multiple query
+    // phrasings. The lookup is two-tier — aliases first, hash
+    // fallback — so existing hash-keyed fixtures keep working and
+    // the new ergonomics are purely additive.
+
+    fn write_alias_file(dir: &std::path::Path, filename: &str, results: Vec<(&str, &str, &str)>) {
+        let arr: Vec<_> = results
+            .into_iter()
+            .map(|(t, u, s)| serde_json::json!({"title": t, "url": u, "snippet": s}))
+            .collect();
+        let body = serde_json::json!({"query": "fixture", "results": arr}).to_string();
+        std::fs::write(dir.join(filename), body).unwrap();
+    }
+
+    #[test]
+    fn mock_alias_resolves_multiple_phrasings_to_one_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_alias_file(
+            tmp.path(),
+            "spacex.json",
+            vec![("Flight 14", "https://example.com/flight-14", "...")],
+        );
+        std::fs::write(
+            tmp.path().join("aliases.toml"),
+            r#"
+[[entry]]
+file = "spacex.json"
+aliases = [
+  "spacex starship test launch",
+  "latest spacex starship flight",
+  "spacex starship",
+]
+"#,
+        )
+        .unwrap();
+
+        for q in &[
+            "spacex starship test launch",
+            "Latest SpaceX Starship Flight",  // case + whitespace normalized
+            "  spacex   starship  ",
+        ] {
+            let out = search_mock(tmp.path(), q, 10).unwrap();
+            assert_eq!(out.len(), 1, "query={q:?}");
+            assert_eq!(out[0].url, "https://example.com/flight-14");
+        }
+    }
+
+    #[test]
+    fn mock_alias_matches_via_substring_containment() {
+        // The model routinely appends qualifying suffixes/prefixes.
+        // Substring matching means an alias like "nvda stock price"
+        // catches "nvda stock price today" and "current nvda stock
+        // price", without the author having to enumerate every
+        // variant.
+        let tmp = tempfile::tempdir().unwrap();
+        write_alias_file(
+            tmp.path(),
+            "nvda.json",
+            vec![("NVDA quote", "https://example.com/nvda", "...")],
+        );
+        std::fs::write(
+            tmp.path().join("aliases.toml"),
+            r#"
+[[entry]]
+file = "nvda.json"
+aliases = ["nvda stock price"]
+"#,
+        )
+        .unwrap();
+
+        for q in &[
+            "NVDA stock price",                    // exact
+            "NVDA stock price today",              // suffix
+            "current NVDA stock price",            // prefix
+            "what's the NVDA stock price right now", // both
+        ] {
+            let out = search_mock(tmp.path(), q, 10).unwrap();
+            assert_eq!(out.len(), 1, "query={q:?}");
+        }
+    }
+
+    #[test]
+    fn mock_alias_does_not_overmatch_unrelated_queries() {
+        // Substring-match is one-way: the alias must appear in the
+        // query, not the reverse. A query that doesn't contain the
+        // full alias falls through to the hash path (and errors if
+        // no hash file).
+        let tmp = tempfile::tempdir().unwrap();
+        write_alias_file(
+            tmp.path(),
+            "nvda.json",
+            vec![("NVDA quote", "https://example.com/nvda", "...")],
+        );
+        std::fs::write(
+            tmp.path().join("aliases.toml"),
+            r#"
+[[entry]]
+file = "nvda.json"
+aliases = ["nvda stock price"]
+"#,
+        )
+        .unwrap();
+
+        // "nvda" alone is a substring of "what is nvda", but the
+        // full alias "nvda stock price" is not — so this should
+        // fall through to hash (and fail).
+        let err = search_mock(tmp.path(), "what is nvda", 10).unwrap_err();
+        assert!(format!("{err}").contains("mock search fixture missing (hash)"));
+    }
+
+    #[test]
+    fn mock_alias_miss_falls_back_to_hash() {
+        let tmp = tempfile::tempdir().unwrap();
+        let q = "uncovered query phrasing";
+        let hash = mock_fixture_hash(q);
+        write_alias_file(
+            tmp.path(),
+            &format!("{hash}.json"),
+            vec![("Hash-keyed", "https://example.com/h", "...")],
+        );
+        // aliases.toml exists but doesn't cover this query.
+        std::fs::write(
+            tmp.path().join("aliases.toml"),
+            r#"
+[[entry]]
+file = "something_else.json"
+aliases = ["completely different"]
+"#,
+        )
+        .unwrap();
+
+        let out = search_mock(tmp.path(), q, 10).unwrap();
+        assert_eq!(out[0].url, "https://example.com/h");
+    }
+
+    #[test]
+    fn mock_missing_alias_toml_is_not_an_error() {
+        // The aliases index is optional — a fixture corpus that
+        // only uses hash-keyed files must still work.
+        let tmp = tempfile::tempdir().unwrap();
+        let q = "hash-only fixture";
+        let hash = mock_fixture_hash(q);
+        write_alias_file(
+            tmp.path(),
+            &format!("{hash}.json"),
+            vec![("X", "https://example.com/x", "...")],
+        );
+        let out = search_mock(tmp.path(), q, 10).unwrap();
+        assert_eq!(out[0].url, "https://example.com/x");
+    }
+
+    #[test]
+    fn mock_malformed_aliases_toml_is_loud_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("aliases.toml"), "this is not valid toml [[[").unwrap();
+        let err = search_mock(tmp.path(), "anything", 10).expect_err("malformed aliases must error");
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("aliases index malformed"),
+            "msg={msg}"
+        );
+    }
+
+    #[test]
+    fn mock_alias_typo_field_fails_loudly() {
+        // `aliasses` instead of `aliases` — fixture-author typo
+        // should surface, not silently match nothing.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("aliases.toml"),
+            r#"
+[[entry]]
+file = "x.json"
+aliasses = ["whatever"]
+"#,
+        )
+        .unwrap();
+        let err = search_mock(tmp.path(), "anything", 10)
+            .expect_err("unknown field must error");
+        let msg = format!("{err}");
+        assert!(msg.contains("aliases index malformed"), "msg={msg}");
     }
 }
