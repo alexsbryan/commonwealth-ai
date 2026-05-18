@@ -1,0 +1,221 @@
+# Wikipedia multi-turn learner bench
+#
+# Each thread simulates a curious learner who asks chained follow-up
+# questions of a tutor that has Wikipedia in its corpus. Turns ASSUME
+# prior context (pronouns, anaphora, topic continuity) — answering
+# correctly requires conversational memory, not just retrieval.
+#
+# Scoring (see eval_cmd::runner::run_thread_synth):
+#   - per-turn (deterministic, no LLM):
+#       fact_recall    keyword substrings in retrieved chunks OR final answer
+#       source_recall  expected article titles in top-K retrieval
+#       prompt_tokens  context size at this turn (for the degradation curve)
+#       wall_ms        wall time
+#   - per-thread (one LLM judge call on primary at thread end):
+#       holistic_coverage  did the conversation cover the union of expected_facts
+#       per_fact_evidence  which turn each fact was answered in (judge picks)
+#
+# Headline metric: degradation curve = per-turn fact_recall plotted vs
+# turn_index AND vs prompt_tokens, across all threads. Slope + first-
+# failure-turn surface where the conversational substrate breaks.
+#
+# Authoring rules:
+#   - Each turn USES the prior turn (pronoun, "that", "those"). The
+#     turn-0 question is the only one that's standalone.
+#   - At least one turn per thread should be answerable EITHER way
+#     (with or without prior context) so the bench can compute
+#     context-poisoning delta later.
+#   - Expected facts: 2-4 per turn, keyword-rich, terse. Proper nouns
+#     + dates + numbers travel best through the substring scorer.
+#   - Expected sources: only titles known to exist in the wikipedia
+#     corpus (Vital Articles L5).
+
+[bank]
+name = "wikipedia-learn-v0"
+corpus = "wikipedia"
+description = """
+Multi-turn learner bench. Two hand-authored chains in v0 — einstein_1905
+(factual drill) and wwii_causal (causal regression). Used to surface
+conversational-memory regressions and context-poisoning slope.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 45000
+max_per_question_ms = 90000
+
+
+# ── Thread 1 ─────────────────────────────────────────────────────────
+# Factual drill-down. Tutor starts at the figure, learner zooms into
+# 1905, then drills into one paper, then asks about the Nobel
+# resolution. Coreference required from turn 1 onward ("he", "that
+# paper", "this idea").
+
+[[threads]]
+id = "einstein_1905"
+category = "learner_factual"
+description = "Student builds from 'who is Einstein' → 1905 Annus Mirabilis → photoelectric → Nobel resolution"
+
+[[threads.turns]]
+question = "Who was Albert Einstein?"
+expected_facts = ["physicist", "theoretical", "relativity"]
+expected_sources = ["Albert Einstein"]
+
+[[threads.turns]]
+question = "What did he publish in 1905?"
+expected_facts = ["Annus Mirabilis", "photoelectric", "Brownian motion", "special relativity", "mass-energy"]
+expected_sources = ["Albert Einstein"]
+notes = "Coref: 'he' → Einstein. Tests whether prior turn carries the subject."
+
+[[threads.turns]]
+question = "Tell me more about the photoelectric one."
+expected_facts = ["light quanta", "discrete", "Planck", "metal surface"]
+expected_sources = ["Photoelectric effect", "Albert Einstein"]
+notes = "Topic narrowing — 'the photoelectric one' picks one of four prior papers."
+
+[[threads.turns]]
+question = "Did that idea win him a Nobel Prize?"
+expected_facts = ["1921", "Nobel Prize in Physics", "photoelectric effect"]
+expected_sources = ["Albert Einstein"]
+notes = "'That idea' chains two turns back. 'Him' chains three turns back."
+
+[[threads.turns]]
+question = "Why didn't relativity win the Nobel instead?"
+expected_facts = ["controversial", "experimental", "philosophical"]
+expected_sources = ["Albert Einstein"]
+notes = "Compare/contrast within the same conversation thread. Comparative against turn 1 + turn 3."
+
+
+# ── Thread 2 ─────────────────────────────────────────────────────────
+# Causal regression. Learner asks WHY each event happened, walking
+# backward through the causal chain leading to WWII. Tests whether
+# retrieval stays on the WWII corpus subset as the conversation
+# drifts further from any single keyword.
+
+[[threads]]
+id = "wwii_causal"
+category = "learner_causal"
+description = "Causal regression: why WWII → why Germany rearmed → why Versailles failed → why WWI ended that way"
+
+[[threads.turns]]
+question = "What caused World War II to break out in 1939?"
+expected_facts = ["invasion of Poland", "September 1939", "Hitler", "appeasement"]
+expected_sources = ["World War II"]
+
+[[threads.turns]]
+question = "Why was Hitler able to invade in the first place?"
+expected_facts = ["rearmament", "Wehrmacht", "Rhineland", "Anschluss"]
+expected_sources = ["Adolf Hitler", "Nazi Germany"]
+notes = "Coref: 'Hitler' explicit but 'in the first place' implies the prior turn's framing."
+
+[[threads.turns]]
+question = "But hadn't Germany been disarmed after the previous war?"
+expected_facts = ["Treaty of Versailles", "100,000 troops", "demilitarized"]
+expected_sources = ["Treaty of Versailles"]
+notes = "'The previous war' = WWI; never named in this turn. Pure context-dependent reference."
+
+[[threads.turns]]
+question = "So what made that treaty fail?"
+expected_facts = ["reparations", "Great Depression", "weak enforcement", "resentment"]
+expected_sources = ["Treaty of Versailles", "Weimar Republic"]
+notes = "'That treaty' chains one turn back."
+
+[[threads.turns]]
+question = "Were there voices at the time who predicted it would?"
+expected_facts = ["Keynes", "Economic Consequences of the Peace", "Foch"]
+expected_sources = ["Treaty of Versailles"]
+notes = "'It would' = the treaty would fail. Two layers of pronoun + ellipsis."
+
+
+# ── Thread 3 ─────────────────────────────────────────────────────────
+# Marathon — 12-turn historical arc through the evolution of computing.
+# Purpose: exceed the rolling-window history budget (CONV_HISTORY_TURNS
+# = 8 messages = 4 turns of pairs) so the system prompt's "Prior
+# conversation" block must drop early turns. That's the failure mode
+# this thread is designed to surface: when the model is asked about a
+# topic in turn 11 that was established in turn 1, can the system
+# still anchor retrieval and resolve coreference?
+#
+# Without a compaction strategy, the answer is no — the early turns
+# fall off the prompt and the model loses the chain. The bench's job
+# here is to *prove* that, then drive the design of a compaction
+# primitive (Fast-slot summary of the dropped tail, prepended to the
+# system prompt as "Earlier in the conversation:").
+#
+# Turns alternate between drilling into a single figure and pivoting
+# to the next era, mimicking how a curious learner threads chronology.
+
+[[threads]]
+id = "computing_history"
+category = "learner_marathon"
+description = "12-turn arc: Babbage → Lovelace → Turing → von Neumann → transistor → microprocessor → personal computer. Forces history compaction."
+
+[[threads.turns]]
+question = "Who was Charles Babbage?"
+expected_facts = ["mathematician", "Difference Engine", "19th century"]
+expected_sources = ["Charles Babbage"]
+
+[[threads.turns]]
+question = "What was the Analytical Engine he designed?"
+expected_facts = ["general-purpose", "mechanical", "punched cards"]
+expected_sources = ["Charles Babbage", "Analytical Engine"]
+notes = "Coref 'he' → Babbage. T1 anchored on a sub-concept introduced in T0."
+
+[[threads.turns]]
+question = "Who worked alongside him on its mathematics?"
+expected_facts = ["Ada Lovelace", "Lord Byron", "first programmer"]
+expected_sources = ["Ada Lovelace", "Charles Babbage"]
+notes = "Two coref hops: 'him' → Babbage (T0), 'its' → Analytical Engine (T1)."
+
+[[threads.turns]]
+question = "What did she contribute that was genuinely new?"
+expected_facts = ["algorithm", "Bernoulli numbers", "notes"]
+expected_sources = ["Ada Lovelace"]
+notes = "'She' → Lovelace, established T2. The bench is a learner chain so this is the natural follow-up."
+
+[[threads.turns]]
+question = "How did computing develop from there in the next century?"
+expected_facts = ["20th century", "electronic", "World War"]
+expected_sources = ["History of computing"]
+notes = "Temporal pivot — from Lovelace's era forward to 20th c."
+
+[[threads.turns]]
+question = "What did Alan Turing add to the theoretical foundation?"
+expected_facts = ["Turing machine", "computability", "halting"]
+expected_sources = ["Alan Turing"]
+notes = "Named-entity pivot. Topic should follow."
+
+[[threads.turns]]
+question = "What role did he play during World War II?"
+expected_facts = ["Bletchley Park", "Enigma", "codebreaking"]
+expected_sources = ["Alan Turing"]
+notes = "'He' → Turing. Pivot from theory to wartime application within same person."
+
+[[threads.turns]]
+question = "After the war, what architecture became standard for the first electronic computers?"
+expected_facts = ["von Neumann", "stored-program", "ENIAC"]
+expected_sources = ["Von Neumann architecture", "ENIAC"]
+notes = "TURN 8 — at this point the history window starts dropping T0/T1 pairs. Babbage/Lovelace context begins to fade from prompt."
+
+[[threads.turns]]
+question = "How did that design differ from what Turing had proposed?"
+expected_facts = ["practical", "memory", "instructions"]
+expected_sources = ["Von Neumann architecture", "Alan Turing"]
+notes = "'That design' = von Neumann's. Critical: requires both T7 (Turing wartime) AND T6 (Turing theory) context. If compaction is broken, this fails."
+
+[[threads.turns]]
+question = "What hardware breakthrough in the 1950s made smaller computers possible?"
+expected_facts = ["transistor", "Bell Labs", "1947", "Shockley"]
+expected_sources = ["Transistor"]
+notes = "Temporal pivot to mid-20th c. Topic should pivot to hardware."
+
+[[threads.turns]]
+question = "And what did Intel's founders do with that technology in the 1970s?"
+expected_facts = ["microprocessor", "Intel 4004", "integrated circuit"]
+expected_sources = ["Intel", "Microprocessor"]
+notes = "'That technology' = transistor (T10). Coref one turn back."
+
+[[threads.turns]]
+question = "Going back to Babbage's original vision — how close did the personal computer revolution come to realizing it?"
+expected_facts = ["general-purpose", "programmable", "accessibility"]
+expected_sources = ["Charles Babbage", "Personal computer"]
+notes = "TURN 12 — explicit callback to T0/T1. By this point Babbage is far outside the rolling history window. Without compaction, the model has no anchor for 'Babbage's original vision' beyond its own training. This is the load-bearing test."

@@ -912,6 +912,22 @@ pub struct ConversationContext {
     /// pre-pass failed soft (it must never block a turn).
     #[serde(default)]
     pub temporal_tensions: Vec<TemporalTension>,
+    /// Compacted summary of conversation turns that fell outside the
+    /// rolling visible-history window. Populated by the runtime via
+    /// a Fast-slot summarization call when `conversation.messages`
+    /// exceeds `CONV_HISTORY_TURNS` (see `runtime.rs`). `None` when
+    /// the conversation is still short enough that every turn fits
+    /// in the visible window — no compaction needed.
+    ///
+    /// Consumed by `build_system_message` → `format_conversation_history`
+    /// to prepend an "Earlier in the conversation:" block before the
+    /// verbatim recent turns. Surfaced by
+    /// `sovereign/bench/wikipedia_learn` 2026-05-17 marathon thread:
+    /// turn 11's callback to "Babbage's original vision" (introduced
+    /// in turn 0) fails when T0 has rolled off the visible window
+    /// without a compacted anchor.
+    #[serde(default)]
+    pub compacted_history: Option<String>,
 }
 
 /// A pairwise tension between a prior memory the user expressed
@@ -2438,6 +2454,7 @@ mod knowledge_view_digest_tests {
             topic_context: None,
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
+            compacted_history: None,
         }
     }
 
