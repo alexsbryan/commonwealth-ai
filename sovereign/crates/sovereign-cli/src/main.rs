@@ -707,6 +707,7 @@ async fn async_main() {
                 // actually running.
                 util::tracing_init::init_tracing(
                     "sovereign_cli=info,\
+                     sovereign_core=info,\
                      sovereign_mesh=info,\
                      sovereign_inference=info,\
                      corpus_engine=info,\

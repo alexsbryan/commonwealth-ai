@@ -82,6 +82,64 @@ Answer:"#;
 /// can correlate to the row written by `log_routing`. Public so
 /// integration tests can reproduce the hash without reaching into
 /// implementation internals.
+/// Inherit a prior knowledge-family intent when the conversation has
+/// established an active knowledge thread. Returns `Some(intent)` to
+/// short-circuit downstream classification when:
+///
+///   1. There is at least one prior assistant turn (the conversation
+///      is past the first exchange), AND
+///   2. That prior turn classified as a knowledge-family intent
+///      (`KnowledgeQuery` / `DeepQuery` / `ComparisonQuery`) as
+///      persisted in `metadata.provenance.intent` or
+///      `metadata.intent`.
+///
+/// Purely structural — no lexical pattern matching on the current
+/// message. The earlier `looks_like_anaphoric_followup` keyed off a
+/// hand-maintained list of lead words ("Who"/"After"/"Going back to"
+/// fell outside it, dropping marathon turns onto the NotImplemented
+/// stall path). We replace that with the principle: if the prior
+/// turn was a knowledge answer, the next turn under the same
+/// conversation_id is part of the same knowledge thread until the
+/// downstream classifier produces strong evidence otherwise. This
+/// pre-check fires BEFORE the embed router, so the embed router's
+/// high-confidence non-knowledge verdicts (which run downstream of
+/// the personal-recall heuristic in the wider stack) never see the
+/// case where they'd otherwise hijack the thread.
+///
+/// Personal-recall framings ("Have I mentioned X before?") are
+/// handled by the upstream `looks_like_personal_recall` pre-check
+/// (where present) — it fires earlier and short-circuits before this
+/// function is reached.
+///
+/// Surfaced by sovereign/bench/wikipedia_learn 2026-05-17 marathon
+/// (v9→v10).
+fn inherits_prior_knowledge_intent(
+    context: &ConversationContext,
+) -> Option<Intent> {
+    let prior_assistant = context
+        .conversation
+        .messages
+        .iter()
+        .rev()
+        .find(|m| m.role == Role::Assistant)?;
+    // Streaming KnowledgeQuery persists snake_case `metadata.intent`
+    // + CamelCase `metadata.provenance.intent`; other intents
+    // persist CamelCase in `metadata.intent` directly. Normalize.
+    let metadata = prior_assistant.metadata.as_ref()?;
+    let raw_intent = metadata
+        .get("provenance")
+        .and_then(|p| p.get("intent"))
+        .and_then(|v| v.as_str())
+        .or_else(|| metadata.get("intent").and_then(|v| v.as_str()))?;
+    let normalized = raw_intent.to_lowercase().replace('_', "");
+    match normalized.as_str() {
+        "knowledgequery" => Some(Intent::KnowledgeQuery),
+        "deepquery" => Some(Intent::DeepQuery),
+        "comparisonquery" => Some(Intent::ComparisonQuery),
+        _ => None,
+    }
+}
+
 pub fn message_hash(message: &str) -> String {
     let mut hasher = DefaultHasher::new();
     message.hash(&mut hasher);
@@ -1617,6 +1675,41 @@ impl Router for LlmRouter {
         // Get active skill routing hints.
         let routing_hints = self.skills.routing_hints();
 
+        // Pre-check -2: inherit prior knowledge-family intent when
+        // the conversation already has an established knowledge
+        // thread. Structural detector — keys off
+        // `prior_assistant.metadata.intent`, no lexical pattern
+        // matching on the current message. See
+        // `inherits_prior_knowledge_intent` for the full rationale.
+        if let Some(inherited) = inherits_prior_knowledge_intent(context) {
+            let latency_ms = start.elapsed().as_millis() as i64;
+            let hash = message_hash(message);
+            let intent_str = format!("{inherited:?}");
+            let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+            let _ = self
+                .store
+                .log_routing_meta(&hash, "KNOWLEDGE_THREAD_INHERIT", None)
+                .await;
+            eprintln!(
+                "[router] \"{}\" → {:?} (knowledge thread; inherited from prior turn)",
+                &message[..message.len().min(60)],
+                inherited,
+            );
+            return Ok(RouterClassification {
+                primary: IntentCandidate {
+                    intent: inherited,
+                    confidence: 0.9,
+                },
+                alternatives: Vec::new(),
+                rationale: Some(
+                    "knowledge thread continuation — inherited intent from prior turn".into(),
+                ),
+                coarse_intent: Some("KNOWLEDGE_THREAD_INHERIT".to_string()),
+                self_assessment: None,
+                timing: None,
+            });
+        }
+
         // Pre-check -1: embedding-based intent classification.
         // When installed AND confident (top-similarity + margin both
         // pass the configured thresholds), the embed router commits
@@ -2168,6 +2261,7 @@ mod tests {
             topic_context: None,
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
+            compacted_history: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -2203,6 +2297,7 @@ mod tests {
             topic_context: None,
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
+            compacted_history: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
