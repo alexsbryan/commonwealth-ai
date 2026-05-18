@@ -1865,6 +1865,42 @@ impl Router for LlmRouter {
             });
         }
 
+        // Pre-check -2: inherit prior knowledge-family intent when
+        // the conversation already has an established knowledge
+        // thread. Structural detector — keys off
+        // `prior_assistant.metadata.intent`, no lexical pattern
+        // matching on the current message. See
+        // `inherits_prior_knowledge_intent` for the full rationale.
+        if let Some(inherited) = inherits_prior_knowledge_intent(context) {
+            let latency_ms = start.elapsed().as_millis() as i64;
+            let hash = message_hash(message);
+            let intent_str = format!("{inherited:?}");
+            let _ = self.store.log_routing(&hash, &intent_str, latency_ms).await;
+            let _ = self
+                .store
+                .log_routing_meta(&hash, "KNOWLEDGE_THREAD_INHERIT", None)
+                .await;
+            eprintln!(
+                "[router] \"{}\" → {:?} (knowledge thread; inherited from prior turn)",
+                &message[..message.len().min(60)],
+                inherited,
+            );
+            return Ok(RouterClassification {
+                primary: IntentCandidate {
+                    intent: inherited,
+                    confidence: 0.9,
+                },
+                alternatives: Vec::new(),
+                rationale: Some(
+                    "knowledge thread continuation — inherited intent from prior turn".into(),
+                ),
+                coarse_intent: Some("KNOWLEDGE_THREAD_INHERIT".to_string()),
+                self_assessment: None,
+                timing: None,
+                scope: None,
+            });
+        }
+
         // Pre-check -1: embedding-based intent classification.
         // When installed AND confident (top-similarity + margin both
         // pass the configured thresholds), the embed router commits
