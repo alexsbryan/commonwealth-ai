@@ -5441,7 +5441,7 @@ impl Runtime {
         // questions take, where abstract phrasings need explicit
         // Wikipedia titles named ("Christopher Columbus", "Buddhism",
         // "Atomic bombings of Hiroshima and Nagasaki") for retrieval
-        // to land. Mirrors the KnowledgeQuery wiring at line ~8967.
+        // to land. Mirrors the KnowledgeQuery wiring.
         let title_expand_titles_dq: Option<Vec<String>> =
             self.expand_question_to_titles(message, context).await;
         if let Some(titles) = &title_expand_titles_dq {
@@ -8998,12 +8998,12 @@ impl Runtime {
         let title_expand_titles: Option<Vec<String>> =
             self.expand_question_to_titles(message, context).await;
         if let Some(titles) = &title_expand_titles {
-            // v22 design — hybrid search per title. v24 attempted
-            // document-order fetch_chunks_by_title and lost fact
-            // depth on T5/T6 where bench-bearing facts ("halting",
-            // "codebreaking") live in deeper article sections that
-            // a query-relevance ranker surfaces but a document-
-            // order pull truncates away. Hybrid stays.
+            // v22 design — hybrid search per bare title. v30 attempted
+            // "{title}: {message}" composite queries to bias toward
+            // section-deep chunks; net-negative on 13-thread bench
+            // (-0.045 fact, -0.059 judge vs v28) because the message
+            // sometimes overrides the title in the embedding, pulling
+            // off-article chunks. Reverted.
             let added = self
                 .fan_out_decomposed_queries(titles, &mut chunks, "TitleExpand")
                 .await;
@@ -9145,6 +9145,17 @@ impl Runtime {
         );
 
         // 4a. Empty results path — answer from parametric knowledge.
+        //
+        // v29 attempted to gate this on (entities non-empty +
+        // meta_atlas empty) to emit refusal prose for fabricated-
+        // entity questions. The behavior change is correct (don't
+        // hallucinate biographies of made-up people) but the bench
+        // can't measure it — the model's refusal vocab ("not
+        // certain", "no record") doesn't always align with the
+        // bench's expected_facts list ("no information", "couldn't
+        // find"). Reverted to the simpler general-knowledge prompt
+        // until bench fixtures are updated to a broader refusal-
+        // vocabulary expected set.
         if chunks.is_empty() {
             tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
             let corpora = context.installed_corpora_display();

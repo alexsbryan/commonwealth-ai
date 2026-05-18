@@ -73,6 +73,7 @@ const RUN_HELP: Help = Help {
             ("--no-judge",     "Skip the LLM-as-judge \"instructor mode\" pass under --synth. Default: judge runs alongside the strict scorer to catch paraphrased coverage."),
             ("--threads",      "Multi-turn mode. Bank must be a `[[threads]]` shape (see sovereign/bench/wikipedia_learn/threads.toml). Each thread walks N follow-up turns under one conversation_id; per-turn deterministic scoring + one thread-level LLM judge call. Implies --synth pipeline. Disables --routing-only / --with-atlas / retrieval-only mode."),
             ("--thread-id <id>", "Filter --threads mode to a single thread by id. Useful for fast iteration on one fixture (e.g. `--thread-id computing_history`)."),
+            ("--judge-trials <N>", "Run the LLM judge N times per thread on the same transcript. Default 1 (single-judge). N>1 enables multi-judge: per-fact present_count out of N, coverage from majority vote (≥⌈N/2⌉), coverage_mean as the continuous signal. Adds ~Nx10s per thread (~Nx2min for the 13-thread bank). Targets judge-side variance — cheaper than multi-trial of the whole synth pipeline."),
             ("--format text|json", "Stdout format (default: text)."),
             ("--output <path>", "Also write the full run as pretty JSON to this path."),
             ("--with-atlas <ids>", "Comma-separated list of atlas corpus ids; each is embedded once and the per-question retrieval pools their entries via global cosine top-K (the multi-article SEP pilot path). One id is the single-atlas case. Off by default."),
@@ -192,6 +193,17 @@ struct RunArgs {
     /// fast iteration on a single fixture (e.g. the marathon thread)
     /// without paying the cost of running the whole bank.
     thread_id_filter: Option<String>,
+    /// Number of judge passes per thread. Default 1. With N>1, the
+    /// runner runs the LLM judge prompt N times on the same transcript
+    /// and aggregates: per-fact `present_count / N` (fractional
+    /// coverage), and reports the mean ± range. Targets judge-side
+    /// variance — the bench substrate is deterministic at temperature=0
+    /// so re-running the synth pipeline rarely changes the answer, but
+    /// the judge's binary present/absent verdict can flip on
+    /// borderline cases. Multi-trial of the synth pipeline costs
+    /// ~Nx wall time per iteration; multi-judge costs ~+Nx10s per
+    /// thread (~6min for N=3 on the 13-thread bank).
+    judge_trials: usize,
 }
 
 impl Default for RunArgs {
@@ -215,6 +227,7 @@ impl Default for RunArgs {
             essay_judge: false,
             threads: false,
             thread_id_filter: None,
+            judge_trials: 1,
         }
     }
 }
@@ -287,6 +300,20 @@ async fn cmd_run(args: &[String]) -> i32 {
                     return 2;
                 };
                 a.thread_id_filter = Some(v.clone());
+            }
+            "--judge-trials" => {
+                i += 1;
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: --judge-trials needs a positive integer");
+                    return 2;
+                };
+                match v.parse::<usize>() {
+                    Ok(n) if n >= 1 => a.judge_trials = n,
+                    _ => {
+                        eprintln!("error: --judge-trials expects a positive integer, got `{v}`");
+                        return 2;
+                    }
+                }
             }
             "--format" => {
                 i += 1;
@@ -427,7 +454,8 @@ async fn cmd_run(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        let run = threads::run_thread_bank(&session, &bank, !a.no_judge).await;
+        let judge_trials = if a.no_judge { 0 } else { a.judge_trials };
+        let run = threads::run_thread_bank(&session, &bank, judge_trials).await;
         match a.format {
             OutputFormat::Text => threads::print_threads_text(&run),
             OutputFormat::Json => {
