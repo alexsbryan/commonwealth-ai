@@ -79,9 +79,25 @@ pub struct TurnResult {
 pub struct ThreadJudge {
     /// Aggregated coverage — what fraction of the thread's expected
     /// facts the judge marked `present=yes` somewhere in the transcript.
+    /// Under multi-trial (judge_trials > 1) the coverage is computed
+    /// from per-fact majority: a fact is "present" if ≥ ⌈N/2⌉ trials
+    /// marked it so. `coverage_mean` carries the fractional mean
+    /// across trials (sum-of-present / N / total_expected).
     pub coverage: ScoreSnapshot,
     pub per_fact: Vec<ThreadFactEvidence>,
+    /// Number of judge trials this thread's verdict aggregates over.
+    /// `1` is the single-judge default; >1 indicates multi-judge with
+    /// the per-fact `present_count` capturing how many trials agreed.
+    #[serde(default = "default_judge_trials")]
+    pub trials: usize,
+    /// Mean coverage across the N trials. Equals `coverage.ratio`
+    /// when trials=1. Useful as a continuous signal next to the
+    /// majority-vote binary in `coverage`.
+    #[serde(default)]
+    pub coverage_mean: Option<f32>,
 }
+
+fn default_judge_trials() -> usize { 1 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThreadFactEvidence {
@@ -91,6 +107,12 @@ pub struct ThreadFactEvidence {
     /// or the judge couldn't attribute it.
     pub evidence_turn: Option<usize>,
     pub evidence_quote: String,
+    /// Number of trials (of `ThreadJudge::trials`) that marked this
+    /// fact present. Equals `1` (present) or `0` (absent) under
+    /// single-judge. Under multi-judge, ranges 0..=N; `present` is
+    /// derived as `present_count >= ⌈N/2⌉` (majority).
+    #[serde(default)]
+    pub present_count: usize,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -110,13 +132,13 @@ pub struct DegradationCurve {
 pub async fn run_thread_bank(
     session: &ChatSession,
     bank: &EvalThreadBank,
-    judge: bool,
+    judge_trials: usize,
 ) -> ThreadEvalRun {
     let started_at = chrono::Utc::now().to_rfc3339();
     let mut threads = Vec::with_capacity(bank.threads.len());
     for th in &bank.threads {
         eprintln!("  → thread {} ({} turns)", th.id, th.turns.len());
-        let result = run_thread_synth(session, th, judge).await;
+        let result = run_thread_synth(session, th, judge_trials).await;
         threads.push(result);
     }
     let finished_at = chrono::Utc::now().to_rfc3339();
@@ -129,7 +151,11 @@ pub async fn run_thread_bank(
     }
 }
 
-async fn run_thread_synth(session: &ChatSession, thread: &Thread, judge: bool) -> ThreadResult {
+async fn run_thread_synth(
+    session: &ChatSession,
+    thread: &Thread,
+    judge_trials: usize,
+) -> ThreadResult {
     let conversation_id = uuid::Uuid::new_v4().to_string();
     let mut turns: Vec<TurnResult> = Vec::with_capacity(thread.turns.len());
 
@@ -149,10 +175,12 @@ async fn run_thread_synth(session: &ChatSession, thread: &Thread, judge: bool) -
     }
 
     let degradation = compute_degradation(&turns);
-    let judge_result = if judge {
+    let judge_result = if judge_trials == 0 {
+        None
+    } else if judge_trials == 1 {
         score_thread_coverage(session, thread, &turns).await
     } else {
-        None
+        score_thread_coverage_multi(session, thread, &turns, judge_trials).await
     };
 
     ThreadResult {
@@ -464,8 +492,11 @@ async fn score_thread_coverage(
                         present: false,
                         evidence_turn: None,
                         evidence_quote: format!("(inference failed: {e})"),
+                        present_count: 0,
                     })
                     .collect(),
+                trials: 1,
+                coverage_mean: Some(0.0),
             });
         }
     };
@@ -486,8 +517,11 @@ async fn score_thread_coverage(
                         present: false,
                         evidence_turn: None,
                         evidence_quote: "(parse failed)".into(),
+                        present_count: 0,
                     })
                     .collect(),
+                trials: 1,
+                coverage_mean: Some(0.0),
             });
         }
     };
@@ -527,6 +561,7 @@ async fn score_thread_coverage(
             present,
             evidence_turn,
             evidence_quote,
+            present_count: if present { 1 } else { 0 },
         });
     }
 
@@ -535,9 +570,108 @@ async fn score_thread_coverage(
         missing: missing_facts,
         total_expected: facts.len(),
     };
+    let coverage_snap: ScoreSnapshot = coverage_score.into();
+    let coverage_mean = coverage_snap.ratio;
     Some(ThreadJudge {
-        coverage: coverage_score.into(),
+        coverage: coverage_snap,
         per_fact,
+        trials: 1,
+        coverage_mean,
+    })
+}
+
+/// Multi-trial variant of `score_thread_coverage`. Runs the judge
+/// prompt N times against the SAME transcript, aggregates per-fact
+/// `present_count`, derives `present` from majority vote
+/// (≥ ⌈N/2⌉ trials agree). Reports both the binary coverage and the
+/// mean coverage across trials. See the `ThreadJudge` docstring for
+/// the rationale: multi-trial of the synth pipeline costs Nx wall;
+/// multi-judge of the same transcript only costs Nx the judge call
+/// (~10s/thread × 13 threads × N), which is the right granularity
+/// for catching judge-side flips on borderline facts without paying
+/// the synth-side cost.
+async fn score_thread_coverage_multi(
+    session: &ChatSession,
+    thread: &Thread,
+    turns: &[TurnResult],
+    trials: usize,
+) -> Option<ThreadJudge> {
+    if trials == 0 {
+        return None;
+    }
+    let mut trial_results: Vec<ThreadJudge> = Vec::with_capacity(trials);
+    for t in 0..trials {
+        eprintln!("  [thread-judge] trial {}/{} for {}", t + 1, trials, thread.id);
+        if let Some(j) = score_thread_coverage(session, thread, turns).await {
+            trial_results.push(j);
+        }
+    }
+    if trial_results.is_empty() {
+        return None;
+    }
+
+    // Aggregate per fact: count trials marking present, build evidence
+    // from the first trial that marked it present (so the snippet is
+    // a real quote, not a synthesised average).
+    let facts = thread.aggregated_expected_facts();
+    let majority_floor = (trials + 1) / 2; // ⌈N/2⌉
+    let mut per_fact: Vec<ThreadFactEvidence> = Vec::with_capacity(facts.len());
+    let mut matched: Vec<String> = Vec::new();
+    let mut missing: Vec<String> = Vec::new();
+    let mut trial_sums: Vec<usize> = vec![0; trials]; // per-trial matched count for coverage_mean
+    for (fact_idx, fact) in facts.iter().enumerate() {
+        let mut present_count = 0usize;
+        let mut first_present_evidence: Option<&ThreadFactEvidence> = None;
+        for (t_idx, trial) in trial_results.iter().enumerate() {
+            if let Some(e) = trial.per_fact.get(fact_idx) {
+                if e.present {
+                    present_count += 1;
+                    trial_sums[t_idx] += 1;
+                    if first_present_evidence.is_none() {
+                        first_present_evidence = Some(e);
+                    }
+                }
+            }
+        }
+        let present = present_count >= majority_floor;
+        if present {
+            matched.push(fact.clone());
+        } else {
+            missing.push(fact.clone());
+        }
+        let (evidence_turn, evidence_quote) = match first_present_evidence {
+            Some(e) => (e.evidence_turn, e.evidence_quote.clone()),
+            None => (None, "(absent in all trials)".into()),
+        };
+        per_fact.push(ThreadFactEvidence {
+            fact: fact.clone(),
+            present,
+            evidence_turn,
+            evidence_quote,
+            present_count,
+        });
+    }
+
+    let coverage_score = FactScore {
+        matched,
+        missing,
+        total_expected: facts.len(),
+    };
+    let coverage_snap: ScoreSnapshot = coverage_score.into();
+    // Mean coverage across trials: average of (matched_in_trial / total)
+    let total = facts.len() as f32;
+    let coverage_mean = if total > 0.0 && !trial_sums.is_empty() {
+        let sum: f32 = trial_sums.iter().map(|&n| n as f32 / total).sum();
+        Some(sum / trial_sums.len() as f32)
+    } else {
+        None
+    };
+
+    Some(ThreadJudge {
+        coverage: coverage_snap,
+        per_fact,
+        trials: trial_results.len(),
+        coverage_mean,
     })
 }
 
