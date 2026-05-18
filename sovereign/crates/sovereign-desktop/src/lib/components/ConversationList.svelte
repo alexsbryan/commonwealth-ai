@@ -323,22 +323,6 @@
     text-transform: uppercase;
   }
 
-  .settings-btn {
-    color: var(--text-muted);
-    padding: 5px;
-    border-radius: var(--radius);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.2s, background 0.2s;
-    flex-shrink: 0;
-  }
-
-  .settings-btn:hover {
-    color: var(--text-secondary);
-    background: var(--bg-surface);
-  }
-
   /* ── New button ── */
   .list-header {
     padding: 0 10px 10px;
@@ -384,29 +368,6 @@
     transition: all 0.2s;
   }
   .recipe-author-btn:hover {
-    background: var(--accent-dim);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .inner-work-btn {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 6px;
-    width: 100%;
-    margin-top: 6px;
-    padding: 6px 12px;
-    background: transparent;
-    border: 1px dashed var(--border-mid);
-    border-radius: var(--radius);
-    color: var(--text-muted);
-    font-size: 0.78rem;
-    letter-spacing: 0.02em;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .inner-work-btn:hover {
     background: var(--accent-dim);
     border-color: var(--accent);
     color: var(--accent);

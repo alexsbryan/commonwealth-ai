@@ -50,7 +50,10 @@
 
   type RailMode = "chat" | "inner_work" | "atlas" | "settings";
 
-  let view: AppView = $state("loading");
+  // `let view: AppView = $state("loading")` would narrow `view` to the
+  // literal type `"loading"`, breaking every later `view === "chat"`
+  // comparison. The generic form keeps the full union.
+  let view = $state<AppView>("loading");
 
   // The rail is visible in all post-onboarding views. recipe_author
   // maps to "chat" on the rail since it's a sub-surface of outer work.
@@ -332,7 +335,7 @@
   function handleRailNavigate(mode: "chat" | "inner_work" | "atlas" | "settings") {
     // Close reading surface when leaving outer work to keep layout clean.
     if (mode !== "chat" && readingSession.isOpen) {
-      readingSession.close();
+      readingSession.closeReading();
     }
     // Tapping the already-active inner work icon toggles the history drawer.
     if (mode === "inner_work" && view === "inner_work") {
@@ -426,7 +429,11 @@
           class:active={view === "inner_work"}
           aria-hidden={view !== "inner_work"}
         >
-          <InnerWorkSurface onExit={() => (view = "chat")} historyToggle={innerWorkHistoryToggle} />
+          <InnerWorkSurface
+            onExit={() => (view = "chat")}
+            historyToggle={innerWorkHistoryToggle}
+            active={view === "inner_work"}
+          />
         </div>
       {/if}
 

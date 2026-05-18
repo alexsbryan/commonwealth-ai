@@ -15,14 +15,12 @@ crates/sovereign-desktop/src-tauri/binaries/tessdata/
 # Sovereign code intelligence
 .sovereign/project.json
 .sovereign/scip/
-# SQLite notes database — personal session notes, binary, not for source control
-.sovereign/notes.db
-.sovereign/notes.db-shm
-.sovereign/notes.db-wal
-# Mesh state — per-host work-atlas / peer bookkeeping, binary, not for source control
-.sovereign/mesh.db
-.sovereign/mesh.db-shm
-.sovereign/mesh.db-wal
+# SQLite databases (notes.db, features.db, mesh.db, …) — personal
+# session state, binary, not for source control. Glob covers the db
+# file itself plus its -shm / -wal / -journal sidecars in one rule so
+# new dbs are caught automatically.
+.sovereign/*.db
+.sovereign/*.db-*
 
 # Bench data artifacts — regenerable from scripts in the same dir, too
 # large or session-specific to source-control. Scaffolding (README.md,
