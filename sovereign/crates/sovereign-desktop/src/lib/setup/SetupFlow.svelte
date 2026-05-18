@@ -142,8 +142,20 @@
       {#if isDownloadPhase(progress.phase.kind) && fmtEta(progress.eta_seconds)}
         <p class="eta">{fmtEta(progress.eta_seconds)}</p>
       {/if}
-    {:else if failed.recoverable}
+    {:else}
+      <!-- Even non-recoverable backend errors get a retry path: many
+           "unrecoverable" diagnoses (mkdir, save-config) are actually
+           transient permission / disk-space races, and giving the
+           user *some* action beats the previous behaviour of stranding
+           them on an error sentence with no button. The hint line
+           below tells them where to look if retry keeps failing. -->
       <button class="retry" onclick={retry}>Try again</button>
+      {#if !failed.recoverable}
+        <p class="report-hint">
+          If this keeps happening, please share <code>~/.sovereign/logs</code>
+          when reporting.
+        </p>
+      {/if}
     {/if}
   </div>
 </div>
@@ -171,7 +183,7 @@
   }
 
   .sentence {
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-sans);
     font-size: 1.05rem;
     font-weight: 400;
     line-height: 1.5;
@@ -194,7 +206,7 @@
   }
 
   .retry {
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.82rem;
     font-weight: 500;
     letter-spacing: 0.07em;
@@ -217,5 +229,22 @@
   .retry:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 3px;
+  }
+
+  .report-hint {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+    color: var(--text-muted);
+    margin: 6px 0 0;
+  }
+
+  .report-hint code {
+    font-family: var(--font-mono);
+    background: var(--bg-surface);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--text-secondary);
   }
 </style>

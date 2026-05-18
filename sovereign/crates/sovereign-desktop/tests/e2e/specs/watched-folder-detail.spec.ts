@@ -128,16 +128,14 @@ test.describe("watched-folder detail panel", () => {
 
     // Open Settings → Local Knowledge tab where the watched-folder
     // surface lives.
-    await page.locator(".settings-btn").click();
-    await page.locator(".settings-panel").waitFor();
-    // Some specs see only a subset of tabs depending on stub
-    // shape; assert at least the panel mounted, then click via
-    // a targeted text + class selector that handles the
-    // "Knowledge" vs "Local Knowledge" disambiguation. The
-    // .nav-item class scopes us to the left rail.
+    await page.getByTestId("nav-settings").click();
+    await page.locator(".cfg").waitFor();
+    // The Settings panel uses `.cfg` as its root and `.toc-item`
+    // buttons for the left rail. Disambiguate "Local Knowledge"
+    // from "Knowledge" via exact text match.
     const localKnowledgeTab = page
-      .locator(".settings-nav .nav-item")
-      .filter({ hasText: "Local Knowledge" });
+      .locator(".cfg-toc .toc-item")
+      .filter({ hasText: /^Local Knowledge$/ });
     await expect(localKnowledgeTab).toBeVisible();
     await localKnowledgeTab.click();
 
@@ -280,11 +278,11 @@ test.describe("watched-folder detail panel", () => {
       }));
     });
 
-    await page.locator(".settings-btn").click();
-    await page.locator(".settings-panel").waitFor();
+    await page.getByTestId("nav-settings").click();
+    await page.locator(".cfg").waitFor();
     await page
-      .locator(".settings-nav .nav-item")
-      .filter({ hasText: "Local Knowledge" })
+      .locator(".cfg-toc .toc-item")
+      .filter({ hasText: /^Local Knowledge$/ })
       .click();
     await page
       .locator(".card")
@@ -358,11 +356,11 @@ test.describe("watched-folder detail panel", () => {
       }));
     });
 
-    await page.locator(".settings-btn").click();
-    await page.locator(".settings-panel").waitFor();
+    await page.getByTestId("nav-settings").click();
+    await page.locator(".cfg").waitFor();
     await page
-      .locator(".settings-nav .nav-item")
-      .filter({ hasText: "Local Knowledge" })
+      .locator(".cfg-toc .toc-item")
+      .filter({ hasText: /^Local Knowledge$/ })
       .click();
     await page
       .locator(".card")

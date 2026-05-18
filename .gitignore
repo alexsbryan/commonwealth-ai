@@ -12,14 +12,13 @@
 # .sovereign/sovereign.toml is workspace config (tracked); every other
 # entry in .sovereign/ is per-host bookkeeping or alignment-corpus
 # territory and must NOT sync via this repo.
-.sovereign/notes.db
-.sovereign/notes.db-journal
-.sovereign/notes.db-wal
-.sovereign/notes.db-shm
-.sovereign/features.db
-.sovereign/features.db-journal
-.sovereign/features.db-wal
-.sovereign/features.db-shm
+#
+# SQLite databases + their sidecar files (-shm, -wal, -journal) are
+# per-host runtime state. Match them generically so a new db (mesh.db,
+# atos.db, …) doesn't silently sneak into a commit before someone
+# remembers to add an explicit rule.
+.sovereign/*.db
+.sovereign/*.db-*
 .sovereign/features/
 .sovereign/atos-demo/
 .sovereign/project.json

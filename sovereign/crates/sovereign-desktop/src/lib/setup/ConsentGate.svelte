@@ -1,5 +1,6 @@
 <script lang="ts">
   import { recordFirstMeshConsent } from "../api";
+  import InkStamp from "../components/onboarding/InkStamp.svelte";
 
   interface Props {
     onChoice: () => void;
@@ -26,6 +27,7 @@
 
 <div class="gate">
   <div class="gate-content">
+    <div class="mark"><InkStamp size="md" active={false} /></div>
     <p class="line line-primary">A mesh is a network of friends.</p>
     <p class="line line-secondary">
       When their machines need help with a thought, your machine could lend a
@@ -60,15 +62,15 @@
 </div>
 
 <style>
-  /* Matches WelcomeThreshold — same conditioned-page substrate so
-     the consent dialog feels like the natural next sentence after
-     "let's prepare it." */
+  /* Matches WelcomeThreshold + SetupFlow — same Lavender Court
+     substrate so the consent gate feels like the natural next
+     sentence after "Ready." */
   .gate {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
-    background: oklch(98% 0.006 250);
+    background: var(--bg-primary);
   }
 
   .gate-content {
@@ -79,8 +81,12 @@
     padding: 0 32px;
   }
 
+  .mark {
+    margin-bottom: 22px;
+  }
+
   .line {
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-sans);
     font-size: 1.05rem;
     font-weight: 400;
     line-height: 1.5;
@@ -89,15 +95,15 @@
   }
 
   .line-primary {
-    color: oklch(22% 0.015 250);
+    color: var(--text-primary);
   }
 
   .line-secondary {
-    color: oklch(45% 0.012 250);
+    color: var(--text-secondary);
   }
 
   .line-tertiary {
-    color: oklch(60% 0.010 250);
+    color: var(--text-muted);
     margin-bottom: 32px;
   }
 
@@ -108,27 +114,29 @@
   }
 
   .choice {
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.82rem;
     font-weight: 500;
     letter-spacing: 0.07em;
-    color: oklch(22% 0.015 250);
+    color: var(--text-primary);
     background: none;
-    border: 1px solid oklch(72% 0.010 250 / 0.55);
+    border: 1px solid var(--border-bright);
     padding: 10px 24px;
-    border-radius: 5px;
+    border-radius: var(--radius);
     cursor: pointer;
-    transition: border-color 180ms ease, background 180ms ease;
+    transition: border-color 180ms ease, background 180ms ease,
+      color 180ms ease;
     -webkit-font-smoothing: antialiased;
   }
 
   .choice:hover:not(:disabled) {
-    border-color: oklch(45% 0.012 250 / 0.8);
-    background: oklch(96% 0.005 250);
+    border-color: var(--accent);
+    color: var(--accent-light);
+    background: var(--bg-surface);
   }
 
   .choice:focus-visible {
-    outline: 2px solid oklch(55% 0.04 250);
+    outline: 2px solid var(--accent);
     outline-offset: 3px;
   }
 
@@ -137,16 +145,18 @@
     cursor: progress;
   }
 
-  /* Both buttons read as equal weight in the UI — the consent decision
-     is genuinely the user's, not a "recommended path." */
+  /* Both buttons read as equal weight — the consent decision is
+     genuinely the user's, not a "recommended path." Secondary is
+     tinted slightly cooler so the pair reads as two options, not
+     one CTA + one cancel. */
   .choice-secondary {
-    color: oklch(45% 0.012 250);
+    color: var(--text-secondary);
   }
 
   .error {
     margin-top: 16px;
-    color: oklch(50% 0.15 25);
+    color: var(--error);
+    font-family: var(--font-sans);
     font-size: 0.9rem;
-    font-family: "Outfit", system-ui, sans-serif;
   }
 </style>
