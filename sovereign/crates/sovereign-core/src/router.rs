@@ -2074,15 +2074,24 @@ impl Router for LlmRouter {
         // force_content_reasoning, force_deep) pin `coarse.confidence`
         // to 1.0 at the match-arm above where they're constructed;
         // otherwise the LLM Pass 1 asserted confidence flows through.
-        // Parse failures collapse to `intent == ""` with confidence
-        // 0.0, which would map to `MoveKind::Ask` — but we've already
-        // defaulted to `Intent::KnowledgeQuery` in that branch, so
-        // override confidence to 1.0 to keep the safe-fallback
-        // committing (never silently confabulate via the Ask move).
+        //
+        // Empirical issue (v26 bench audit, 2026-05-17): the Pass 1
+        // schema only emits `{"intent": "<enum>"}` — no confidence
+        // field. `parse_coarse` defaults the missing field to 0.0,
+        // which then maps every LLM-routed turn to MoveKind::Ask
+        // (the clarification-card placeholder). New-thread T0s like
+        // "What did Christopher Columbus do?" and "When and where did
+        // Buddhism originate?" routed correctly to LOOKUP/REASONING
+        // but were Ask'd into a non-answer placeholder. Treat a
+        // successfully-parsed intent as the LLM's commit signal
+        // regardless of the absent confidence field; pre-check
+        // heuristics still pin 1.0 explicitly when they fire.
         let primary_confidence = if coarse.intent.is_empty() {
             1.0
-        } else {
+        } else if coarse.confidence > 0.0 {
             coarse.confidence
+        } else {
+            1.0
         };
 
         // PR2: populate alternatives for every classification. The
