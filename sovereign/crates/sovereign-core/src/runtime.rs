@@ -5436,6 +5436,25 @@ impl Runtime {
             );
         }
 
+        // Title expansion (opt-in via SOVEREIGN_TITLE_EXPAND=1).
+        // DeepQuery is the path many comparative/contested/synthesis
+        // questions take, where abstract phrasings need explicit
+        // Wikipedia titles named ("Christopher Columbus", "Buddhism",
+        // "Atomic bombings of Hiroshima and Nagasaki") for retrieval
+        // to land. Mirrors the KnowledgeQuery wiring at line ~8967.
+        let title_expand_titles_dq: Option<Vec<String>> =
+            self.expand_question_to_titles(message, context).await;
+        if let Some(titles) = &title_expand_titles_dq {
+            let added = self
+                .fan_out_decomposed_queries(titles, &mut all_chunks, "TitleExpand")
+                .await;
+            tracing::info!(
+                titles = ?titles,
+                chunks_added = added,
+                "DeepQuery: title-expand retrieval"
+            );
+        }
+
         // Noise floor — drop chunks with zero query-token overlap in
         // both title and content. These survived hybrid RRF on a weak
         // tangential signal (one shared FTS token in a 1024-char
@@ -5493,6 +5512,19 @@ impl Runtime {
             all_chunks.retain(|c| seen.insert((c.corpus_id.clone(), c.content.clone())));
         }
         all_chunks = cap_chunks_per_article(all_chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
+        // Title-expand reservation. Mirrors the KnowledgeQuery
+        // wiring — pins chunks from title-expand titles before the
+        // KQ_MERGED_LIMIT truncate so the multi-source expander below
+        // can't displace them by picking a different dominant article.
+        if let Some(titles) = &title_expand_titles_dq {
+            if !titles.is_empty() {
+                all_chunks = reserve_chunks_per_entity(
+                    all_chunks,
+                    titles,
+                    COMPARISON_PER_ENTITY_RESERVE,
+                );
+            }
+        }
         all_chunks.truncate(KQ_MERGED_LIMIT);
 
         // Multi-source cohesion expansion. DeepQuery is the path
