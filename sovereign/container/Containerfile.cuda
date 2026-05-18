@@ -92,6 +92,22 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ARG CUDA_ARCHITECTURES="80;86;89;90"
 ENV CUDA_PATH=/usr/local/cuda
 ENV CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
+# Link-time discovery of `libcuda.so` (the CUDA driver stub). The
+# devel image ships the stub at /usr/local/cuda/lib64/stubs/libcuda.so
+# but (a) doesn't add the dir to ld's search path, and (b) ships only
+# the unversioned `libcuda.so` even though libggml-cuda.so embeds the
+# `libcuda.so.1` SONAME at NEEDED — so the linker fails the transitive
+# lookup when linking llama.cpp's `mtmd`-gated tool binaries
+# (llama-tokenize, llama-batched-bench, llama-fit-params, etc.) with
+# `undefined reference to cuMemRelease`. The symlink + LIBRARY_PATH
+# satisfies the build-time link; runtime resolution swaps in the real
+# driver via the runtime image's NVIDIA mount. Standard "build in
+# non-GPU container against CUDA toolkit" pattern.
+ENV LIBRARY_PATH=/usr/local/cuda/lib64/stubs:${LIBRARY_PATH:-}
+RUN ln -sf libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1 \
+ && ln -sf /usr/local/cuda/lib64/stubs/libcuda.so   /usr/lib/x86_64-linux-gnu/libcuda.so \
+ && ln -sf /usr/local/cuda/lib64/stubs/libcuda.so.1 /usr/lib/x86_64-linux-gnu/libcuda.so.1 \
+ && ldconfig
 
 # llama-cpp-sys-2's bundled llama.cpp has unconditional NCCL calls in
 # ggml-cuda.cu (single-GPU builds still reference the multi-GPU
@@ -161,10 +177,10 @@ header = '[target.\'cfg(target_os = "linux")\'.dependencies]'
 pattern = (
     re.escape(header)
     + r'(?:[ \t]*\n(?:[ \t]*#[^\n]*\n|[ \t]*\n)*)'
-    + r'(llama-cpp-2\s*=\s*\{[^\n]*\})'
+    + r'(llama-cpp-4\s*=\s*\{[^\n]*\})'
 )
 m = re.search(pattern, src)
-assert m, "couldn't find Linux llama-cpp-2 line under " + header
+assert m, "couldn't find Linux llama-cpp-4 line under " + header
 line = m.group(1)
 new_line, n = re.subn(r'"(rocm|vulkan)"', '"cuda"', line, count=1)
 assert n == 1, f"expected one rocm/vulkan token to swap, found {n}: {line!r}"
@@ -197,9 +213,9 @@ WORKDIR /workspace
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
     --mount=type=cache,target=/root/.cargo/git,sharing=locked \
     cargo fetch \
- && find /root/.cargo/registry/src -path '*/llama-cpp-sys-2-*/llama.cpp/ggml/CMakeLists.txt' \
+ && find /root/.cargo/registry/src -path '*/llama-cpp-sys-4-*/llama.cpp/ggml/CMakeLists.txt' \
     | xargs sed -i 's|option(GGML_CUDA_NCCL\s*"[^"]*"\s*ON)|option(GGML_CUDA_NCCL "" OFF)|' \
- && find /root/.cargo/registry/src -path '*/llama-cpp-sys-2-*/llama.cpp/ggml/CMakeLists.txt' \
+ && find /root/.cargo/registry/src -path '*/llama-cpp-sys-4-*/llama.cpp/ggml/CMakeLists.txt' \
     | xargs grep -n GGML_CUDA_NCCL
 
 RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
@@ -278,6 +294,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=build /usr/local/bin/sovereign-cli /usr/local/bin/sovereign-cli
 COPY --from=build /usr/local/bin/cuda-preflight /usr/local/bin/cuda-preflight
+# llama.cpp's shared libs (BUILD_SHARED_LIBS=ON in the build stage). The
+# binary records them as DT_NEEDED with no RPATH (build.rs sets
+# CMAKE_SKIP_INSTALL_RPATH=ON), so they must land in a system search
+# path. The cmake install prefix uses a content-derived hash; glob
+# resolves it without coupling to a specific layout. ldconfig refreshes
+# /etc/ld.so.cache after the copy.
+COPY --from=build /workspace/target/llama-cmake-cache/*/lib/lib*.so* /usr/local/lib/
+# Stub libcuda.so so the binary's dynamic linker is satisfied on hosts
+# without a GPU (e.g. local podman smoke tests). On real Vast pods the
+# NVIDIA Container Toolkit bind-mounts the real libcuda.so.1 from the
+# host driver — that mount takes precedence at runtime. The runtime
+# image doesn't ship CUDA stubs by default; copy from the devel build
+# stage where they live at /usr/local/cuda/lib64/stubs/.
+COPY --from=build /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so
+RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/lib/x86_64-linux-gnu/libcuda.so.1 \
+ && ldconfig
 
 WORKDIR /workspace
 RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign

@@ -972,7 +972,42 @@ async fn run_daemon(args: &[String]) -> i32 {
     );
     if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
         let snapshots = sovereign_mesh::pinned_pod_snapshot::load_all_snapshots(&dir);
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        // 2026-05-18: silently expired tokens caused a 6h SEP-on-Vast
+        // outage. Registering an already-expired snapshot means every
+        // routed inference call gets `token expired` from the pod and
+        // is retried via mesh fallback — wasteful and confusing. Skip
+        // expired snapshots loudly here so the operator sees the
+        // problem at daemon start, not after burning a night of GPU.
+        const NEAR_EXPIRY_WARN_SECS: u64 = 4 * 3600; // 4h
         for snap in snapshots {
+            let expires_unix = snap.bootstrap_blob.expires_unix;
+            if expires_unix <= now_unix {
+                tracing::error!(
+                    vast_id = %snap.vast_id,
+                    expires_unix,
+                    expired_secs_ago = now_unix.saturating_sub(expires_unix),
+                    "daemon_cmd: pinned-pod snapshot token EXPIRED — \
+                     skipping (tear down with `sovereign pipeline pod down {id}` \
+                     or relaunch with `--ttl-hours <N>` to refresh)",
+                    id = snap.vast_id,
+                );
+                continue;
+            }
+            let remaining = expires_unix.saturating_sub(now_unix);
+            if remaining < NEAR_EXPIRY_WARN_SECS {
+                tracing::warn!(
+                    vast_id = %snap.vast_id,
+                    expires_unix,
+                    remaining_secs = remaining,
+                    "daemon_cmd: pinned-pod snapshot token near expiry \
+                     (<4h remaining) — plan a fresh `pipeline pod up` if \
+                     your run will outlast it"
+                );
+            }
             match snap.to_pinned_pod() {
                 Ok(pod) => {
                     tracing::info!(
@@ -980,6 +1015,7 @@ async fn run_daemon(args: &[String]) -> i32 {
                         host = %snap.host,
                         port = snap.port,
                         node_id = %pod.node_id,
+                        expires_in_h = remaining as f64 / 3600.0,
                         "daemon_cmd: registered pinned worker pod with inference scheduler"
                     );
                     pinned_source.register(pod).await;
