@@ -140,7 +140,7 @@
     padding: 8px 16px;
     background: oklch(95% 0.04 80);
     color: oklch(28% 0.08 50);
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.85rem;
     border-bottom: 1px solid oklch(82% 0.06 70 / 0.6);
     -webkit-font-smoothing: antialiased;
@@ -198,7 +198,7 @@
     background: oklch(98% 0.005 250);
     border: 1px solid oklch(82% 0.010 250 / 0.6);
     border-radius: 4px;
-    font-family: "Outfit", system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.78rem;
     color: oklch(35% 0.012 250);
   }

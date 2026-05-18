@@ -27,6 +27,59 @@
     is_setup_complete: () => true,
     is_first_run: () => false,
     mark_first_run_complete: () => undefined,
+    // Default: resolve immediately. Onboarding specs override this with
+    // a handler that drives `setup-progress` events on a fake clock —
+    // see specs/onboarding.spec.ts for the scripted-progress helpers.
+    complete_setup_auto: () => undefined,
+    start_default_corpus_install: () => undefined,
+    // Contribution controls (W3 Sharing tab). Default to a fresh
+    // unpaused machine — covers the section's happy-path render
+    // without spec-side overrides.
+    get_contribution_status: () => ({
+      ceiling: 1,
+      in_flight: 0,
+      paused_until: null,
+      pause_remaining_secs: null,
+      yield_peers_to_foreground: false,
+      yielding_secs_remaining: null,
+    }),
+    get_recent_contributions: () => [],
+    set_contribution_ceiling: ({ max }) => ({
+      ceiling: max === null ? Number.MAX_SAFE_INTEGER : max,
+      in_flight: 0,
+      paused_until: null,
+      pause_remaining_secs: null,
+      yield_peers_to_foreground: false,
+      yielding_secs_remaining: null,
+    }),
+    pause_contributions: ({ durationSecs }) => ({
+      ceiling: 1,
+      in_flight: 0,
+      paused_until: Math.floor(Date.now() / 1000) + durationSecs,
+      pause_remaining_secs: durationSecs,
+      yield_peers_to_foreground: false,
+      yielding_secs_remaining: null,
+    }),
+    resume_contributions: () => ({
+      ceiling: 1,
+      in_flight: 0,
+      paused_until: null,
+      pause_remaining_secs: null,
+      yield_peers_to_foreground: false,
+      yielding_secs_remaining: null,
+    }),
+    // First-mesh-join consent. Default `null` (= not yet recorded) is
+    // accurate for a fresh install; the consent gate appears.
+    get_first_mesh_consent: () => null,
+    record_first_mesh_consent: ({ shareGpu }) => {
+      window.__sovereign_test__._lastConsent = { shareGpu };
+      return {
+        share_gpu: !!shareGpu,
+        ceiling: 0.5,
+        recorded_at_unix: Math.floor(Date.now() / 1000),
+      };
+    },
+    rename_conversation: () => undefined,
     detect_bootstrap: () => ({
       daemon_running: false,
       client_port: 9741,
@@ -390,6 +443,12 @@
     lastCancel() {
       return this._lastCancel ?? null;
     },
+    /** Read-only peek at the most recent record_first_mesh_consent call.
+     *  `{ shareGpu: true | false }` once the user has chosen; null
+     *  before that. */
+    lastConsent() {
+      return this._lastConsent ?? null;
+    },
     /** Reset the shim between tests (Playwright recreates the page,
      *  but call this if you re-use a page across cases). */
     reset() {
@@ -400,6 +459,7 @@
       nextEventId = 1;
       this._lastStreamStart = null;
       this._lastCancel = null;
+      this._lastConsent = null;
     },
   };
 })();

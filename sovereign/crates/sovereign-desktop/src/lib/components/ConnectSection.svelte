@@ -151,16 +151,22 @@
 </section>
 
 <style>
+  /* Lavender Court substrate — matches the rest of Settings. The
+     previous palette inverted: light-card sections + a dark code
+     block. With the section ported to dark, the code block now sits
+     a step DEEPER (--bg-input) rather than inverting the substrate,
+     and the env rows use --bg-secondary so they read as inset
+     panels against the page. */
   .connect {
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
-    color: oklch(28% 0.015 250);
+    font-family: var(--font-sans);
+    color: var(--text-secondary);
     -webkit-font-smoothing: antialiased;
   }
 
   .h3 {
     font-size: 0.95rem;
     font-weight: 600;
-    color: oklch(22% 0.015 250);
+    color: var(--text-primary);
     margin: 28px 0 8px;
     letter-spacing: -0.005em;
   }
@@ -171,7 +177,7 @@
 
   .hint {
     font-size: 0.88rem;
-    color: oklch(50% 0.012 250);
+    color: var(--text-muted);
     margin: 0 0 14px;
     line-height: 1.5;
     max-width: 540px;
@@ -189,76 +195,85 @@
     align-items: center;
     gap: 10px;
     padding: 8px 12px;
-    background: oklch(97% 0.005 250);
-    border: 1px solid oklch(90% 0.008 250);
-    border-radius: 5px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
   }
 
   .env-key {
     font-size: 0.78rem;
     font-weight: 600;
     letter-spacing: 0.04em;
-    color: oklch(40% 0.012 250);
+    color: var(--text-muted);
     min-width: 140px;
   }
 
   .env-value {
     flex: 1 1 auto;
-    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 0.82rem;
-    color: oklch(22% 0.015 250);
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  /* Recessed code block — the deepest background in the palette so
+     the one-liner reads as a terminal-ish snippet without leaving
+     the page's dark register. */
   .cmd {
     display: flex;
     align-items: center;
     gap: 10px;
     padding: 10px 12px;
-    background: oklch(20% 0.012 250);
-    border-radius: 5px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     margin-bottom: 14px;
   }
 
   .cmd-text {
     flex: 1 1 auto;
-    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 0.82rem;
-    color: oklch(94% 0.006 80);
+    color: var(--accent-light);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .copy {
-    font-family: "Outfit", system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.78rem;
     font-weight: 500;
     letter-spacing: 0.04em;
     background: none;
-    border: 1px solid oklch(70% 0.010 250 / 0.6);
-    color: oklch(35% 0.012 250);
+    border: 1px solid var(--border-mid);
+    color: var(--text-secondary);
     padding: 4px 12px;
-    border-radius: 4px;
+    border-radius: var(--radius);
     cursor: pointer;
-    transition: background 140ms ease, border-color 140ms ease;
+    transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
     flex-shrink: 0;
   }
 
   .copy:hover {
-    border-color: oklch(45% 0.012 250);
-    background: oklch(96% 0.005 250);
+    border-color: var(--accent);
+    color: var(--accent-light);
+    background: var(--bg-surface);
   }
 
+  /* Inside the recessed code block, the copy button picks up the
+     accent tint so it reads as part of the snippet's affordance
+     rather than a generic page button. */
   .cmd .copy {
-    color: oklch(90% 0.006 80);
-    border-color: oklch(60% 0.020 80 / 0.5);
+    color: var(--accent);
+    border-color: rgba(201, 168, 76, 0.32);
   }
 
   .cmd .copy:hover {
-    background: oklch(30% 0.012 250);
+    background: var(--accent-dim);
+    border-color: var(--accent);
   }
 
   .models {
@@ -275,24 +290,24 @@
   }
 
   .model code {
-    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 0.78rem;
-    background: oklch(96% 0.008 250);
-    border: 1px solid oklch(90% 0.008 250);
-    color: oklch(30% 0.012 250);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
     padding: 3px 8px;
-    border-radius: 4px;
+    border-radius: var(--radius);
   }
 
   .error {
-    color: oklch(45% 0.15 25);
+    color: var(--error);
     font-size: 0.88rem;
     margin: 0 0 10px;
   }
 
   .meta {
     font-size: 0.78rem;
-    color: oklch(58% 0.012 250);
+    color: var(--text-muted);
     margin: 0;
   }
 </style>

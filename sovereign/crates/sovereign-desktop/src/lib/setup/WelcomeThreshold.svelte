@@ -1,4 +1,6 @@
 <script lang="ts">
+  import InkStamp from "../components/onboarding/InkStamp.svelte";
+
   interface Props {
     onBegin: () => void;
   }
@@ -8,6 +10,7 @@
 
 <div class="threshold">
   <div class="threshold-content">
+    <div class="mark"><InkStamp size="md" active={false} /></div>
     <p class="line line-primary">A place to write, think, and remember.</p>
     <p class="line line-secondary">Everything stays on this machine.</p>
     <p class="line line-tertiary">Let's prepare it.</p>
@@ -16,69 +19,76 @@
 </div>
 
 <style>
-  /* Same conditioned-page substrate as Inner Work — off-white, cool-blue ink.
-     The threshold is the first thing the user sees; it sets the register
-     for everything that follows. */
+  /* Lavender Court substrate — matches loading, setup, and the
+     post-onboarding app surfaces. The previous off-white was an
+     orphan that created a dark→light→dark flip across the flow. */
   .threshold {
     display: flex;
     align-items: center;
     justify-content: center;
     height: 100%;
-    background: oklch(98% 0.006 250);
+    background: var(--bg-primary);
   }
 
   .threshold-content {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    max-width: 420px;
+    gap: 4px;
+    max-width: 460px;
     padding: 0 32px;
   }
 
+  .mark {
+    margin-bottom: 22px;
+  }
+
   .line {
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-sans);
     font-size: 1.05rem;
     font-weight: 400;
     line-height: 1.5;
-    margin: 0 0 4px;
+    margin: 0;
     letter-spacing: -0.005em;
   }
 
   .line-primary {
-    color: oklch(22% 0.015 250);
+    color: var(--text-primary);
   }
 
   .line-secondary {
-    color: oklch(45% 0.012 250);
+    color: var(--text-secondary);
   }
 
   .line-tertiary {
-    color: oklch(60% 0.010 250);
+    color: var(--text-muted);
     margin-bottom: 32px;
   }
 
   .begin-btn {
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.82rem;
     font-weight: 500;
     letter-spacing: 0.07em;
-    color: oklch(22% 0.015 250);
+    color: var(--text-primary);
     background: none;
-    border: 1px solid oklch(72% 0.010 250 / 0.55);
+    border: 1px solid var(--border-bright);
     padding: 10px 28px;
-    border-radius: 5px;
+    border-radius: var(--radius);
     cursor: pointer;
-    transition: border-color 180ms ease, background 180ms ease;
+    transition: border-color 180ms ease, background 180ms ease,
+      color 180ms ease;
     -webkit-font-smoothing: antialiased;
   }
 
   .begin-btn:hover {
-    border-color: oklch(45% 0.012 250 / 0.8);
-    background: oklch(96% 0.005 250);
+    border-color: var(--accent);
+    color: var(--accent-light);
+    background: var(--bg-surface);
   }
 
   .begin-btn:focus-visible {
-    outline: 2px solid oklch(55% 0.04 250);
+    outline: 2px solid var(--accent);
     outline-offset: 3px;
   }
 </style>

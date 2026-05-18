@@ -241,8 +241,11 @@ test.describe("inner work surface — Phase 3a echoes", () => {
     await expect(page.locator(".echo-dot")).toHaveCount(1, { timeout: 1_500 });
 
     // Click the dot — the EchoOverlay opens with the prior paragraph.
+    // The page already carries another `role="dialog"` (the inner-work
+    // history drawer); name the overlay by its aria-label so the locator
+    // is unambiguous.
     await page.locator(".echo-dot").click();
-    const overlay = page.locator('[role="dialog"]');
+    const overlay = page.getByRole("dialog", { name: "Echo from earlier writing" });
     await expect(overlay).toBeVisible();
     await expect(overlay).toContainText("uncertainty about whether the project");
 
@@ -292,7 +295,7 @@ test.describe("inner work surface — Phase 3a echoes", () => {
     // Click it — the overlay shows the recalled memory's fragment
     // and a relative date label sourced from `created_at`.
     await page.locator(".echo-dot").click();
-    const overlay = page.locator('[role="dialog"]');
+    const overlay = page.getByRole("dialog", { name: "Echo from earlier writing" });
     await expect(overlay).toBeVisible();
     await expect(overlay).toContainText("can't carry");
     await expect(overlay).toContainText("3 days ago");

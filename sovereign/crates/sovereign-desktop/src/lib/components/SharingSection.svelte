@@ -251,16 +251,20 @@
 </section>
 
 <style>
+  /* Lavender Court substrate — matches every other section inside
+     Settings. The previous off-white / dark-ink palette was an
+     orphan that rendered as a light card floating in the dark
+     Configuration page. */
   .sharing {
-    font-family: "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif;
-    color: oklch(28% 0.015 250);
+    font-family: var(--font-sans);
+    color: var(--text-secondary);
     -webkit-font-smoothing: antialiased;
   }
 
   .h3 {
     font-size: 0.95rem;
     font-weight: 600;
-    color: oklch(22% 0.015 250);
+    color: var(--text-primary);
     margin: 28px 0 8px;
     letter-spacing: -0.005em;
   }
@@ -271,7 +275,7 @@
 
   .hint {
     font-size: 0.88rem;
-    color: oklch(50% 0.012 250);
+    color: var(--text-muted);
     margin: 0 0 14px;
     line-height: 1.5;
     max-width: 540px;
@@ -289,24 +293,25 @@
     font-size: 0.82rem;
     font-weight: 500;
     letter-spacing: 0.04em;
-    color: oklch(35% 0.012 250);
+    color: var(--text-secondary);
     background: none;
-    border: 1px solid oklch(82% 0.010 250 / 0.6);
+    border: 1px solid var(--border-mid);
     padding: 7px 14px;
-    border-radius: 5px;
+    border-radius: var(--radius);
     cursor: pointer;
     transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
   }
 
   .preset:hover:not(:disabled) {
-    border-color: oklch(60% 0.012 250);
-    background: oklch(96% 0.005 250);
+    border-color: var(--border-bright);
+    background: var(--bg-surface);
+    color: var(--text-primary);
   }
 
   .preset.active {
-    border-color: oklch(38% 0.06 250);
-    background: oklch(96% 0.02 250);
-    color: oklch(22% 0.06 250);
+    border-color: var(--accent);
+    background: var(--accent-dim);
+    color: var(--accent-light);
   }
 
   .preset:disabled {
@@ -324,18 +329,19 @@
     font-family: inherit;
     font-size: 0.82rem;
     font-weight: 500;
-    color: oklch(28% 0.015 250);
+    color: var(--text-secondary);
     background: none;
-    border: 1px solid oklch(78% 0.010 250 / 0.6);
+    border: 1px solid var(--border-mid);
     padding: 7px 14px;
-    border-radius: 5px;
+    border-radius: var(--radius);
     cursor: pointer;
-    transition: border-color 160ms ease, background 160ms ease;
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
   }
 
   .action:hover:not(:disabled) {
-    border-color: oklch(50% 0.012 250);
-    background: oklch(96% 0.005 250);
+    border-color: var(--accent);
+    color: var(--accent-light);
+    background: var(--bg-surface);
   }
 
   .action:disabled {
@@ -343,28 +349,32 @@
     cursor: progress;
   }
 
+  /* Status pills — semantic alert tints layered on the dark
+     substrate. The colour cues stay (warning amber for paused,
+     mesh lavender for yielding), but anchored to the design tokens
+     so they coexist with the dark Settings background. */
   .state {
     font-size: 0.88rem;
     margin: 0 0 14px;
     padding: 8px 12px;
-    border-radius: 5px;
+    border-radius: var(--radius);
   }
 
   .state-paused {
-    background: oklch(94% 0.04 60);
-    color: oklch(35% 0.08 50);
-    border: 1px solid oklch(82% 0.06 60 / 0.6);
+    background: rgba(201, 168, 76, 0.08);
+    color: var(--warning);
+    border: 1px solid rgba(201, 168, 76, 0.32);
   }
 
   .state-yielding {
-    background: oklch(96% 0.03 200);
-    color: oklch(35% 0.06 220);
-    border: 1px solid oklch(82% 0.04 220 / 0.6);
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
+    border: 1px solid rgba(155, 135, 196, 0.32);
     margin-top: 12px;
   }
 
   .error {
-    color: oklch(45% 0.15 25);
+    color: var(--error);
     font-size: 0.88rem;
     margin: 12px 0 0;
   }
@@ -373,9 +383,10 @@
     list-style: none;
     padding: 0;
     margin: 0 0 14px;
-    border: 1px solid oklch(90% 0.008 250);
-    border-radius: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
     overflow: hidden;
+    background: var(--bg-secondary);
   }
 
   .feed-item {
@@ -385,7 +396,7 @@
     gap: 12px;
     padding: 8px 14px;
     font-size: 0.85rem;
-    border-bottom: 1px solid oklch(94% 0.006 250);
+    border-bottom: 1px solid var(--border);
   }
 
   .feed-item:last-child {
@@ -393,7 +404,7 @@
   }
 
   .feed-text {
-    color: oklch(28% 0.015 250);
+    color: var(--text-secondary);
     flex: 1 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -401,14 +412,14 @@
   }
 
   .feed-time {
-    color: oklch(55% 0.012 250);
+    color: var(--text-muted);
     font-size: 0.78rem;
     flex-shrink: 0;
   }
 
   .meta {
     font-size: 0.85rem;
-    color: oklch(55% 0.012 250);
+    color: var(--text-muted);
     margin: 14px 0 0;
   }
 </style>
