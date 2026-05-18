@@ -296,6 +296,31 @@ impl WorkerRunner for SubprocessRunner {
             });
         }
     }
+
+    /// Trigger child-daemon spawn right after the disk-dump watcher
+    /// finishes, instead of waiting for the first dispatched unit.
+    /// `ensure_child_ready` is idempotent + serialized via `child_slot`,
+    /// so a later dispatch racing this task just fast-paths.
+    ///
+    /// Fire-and-forget into `tokio::spawn` — the disk-dump watcher
+    /// caller stays non-blocking.
+    fn eager_spawn(&self) {
+        let inner = self.inner.clone();
+        tokio::spawn(async move {
+            if let Err(e) = ensure_child_ready(&inner).await {
+                tracing::warn!(
+                    error = %e,
+                    "subprocess-runner: eager child spawn failed — \
+                     proxy will return 503 until a dispatch retries it"
+                );
+            } else {
+                tracing::info!(
+                    "subprocess-runner: eager child spawn complete — \
+                     pinned-inference proxy is ready"
+                );
+            }
+        });
+    }
 }
 
 /// Process one work unit end-to-end. Each step is an independent
@@ -838,6 +863,40 @@ mod tests {
         assert!(
             err.contains("disk-dump never completed"),
             "expected disk-dump timeout, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn eager_spawn_flips_child_ready_without_dispatch() {
+        // Pinned-inference proxy uses `child_ready` as its 503 gate;
+        // before this hook, only `dispatch` could flip it, so a
+        // pinned-pod-as-inference-peer deployment had to ship a fake
+        // job manifest to warm the proxy. eager_spawn closes that
+        // gap. Test: pre-fire dump signals (mimicking the watcher
+        // having just landed), call eager_spawn, expect child_ready
+        // to flip to true after the mock /v1/models probe succeeds.
+        let (port, ready_called) = spawn_mock_child(0).await;
+        let (complete, ready) = pre_fired_dump_signals();
+        let runner = SubprocessRunner::new(test_config(port), complete, ready);
+        let child_ready = runner.child_ready_signal();
+        assert!(
+            !child_ready.load(Ordering::Acquire),
+            "child_ready should start false"
+        );
+
+        // No dispatch — only the eager hook.
+        runner.eager_spawn();
+
+        let deadline = std::time::Instant::now() + Duration::from_millis(3000);
+        while !child_ready.load(Ordering::Acquire) {
+            if std::time::Instant::now() >= deadline {
+                panic!("child_ready never flipped to true after eager_spawn");
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(
+            ready_called.load(Ordering::Acquire),
+            "mock child should have served at least one /v1/models probe"
         );
     }
 

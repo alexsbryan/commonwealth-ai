@@ -710,7 +710,15 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // URL. This is the ergonomic primitive for the common case
     // where every model is staged in one R2/B2 bucket.
     let mut upload_from_base: Option<String> = None;
-    let mut bootstrap_ttl_hours: u64 = 12;
+    // Token TTL covers the longest plausible owner-side workflow. SEP and
+    // wikipedia ingest runs commonly take 30-50h; the prior 12h default
+    // expired mid-run, after which every owner request to the pod 401'd
+    // with `token expired` while still billing for the GPU. 48h is the
+    // largest window that's still bounded for blast-radius purposes (the
+    // bootstrap blob is the credential — a leaked blob is good until
+    // expiry). Operators on multi-day jobs should pass `--ttl-hours 72`
+    // or higher explicitly.
+    let mut bootstrap_ttl_hours: u64 = 48;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -793,16 +801,21 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         )
     });
     // ─── Vast offer search ─────────────────────────────────────────
-    // Verified hosts only; CUDA ≥ 12.4 so the image's runtime matches.
-    // `direct_port_count>=2` ensures the pod will get a public host
-    // port for the worker daemon on :9742 (see EPHEMERAL_WORKER_PODS.md
-    // §"Provider connectivity audit").
+    // CUDA ≥ 12.4 so the image's runtime matches. `direct_port_count>=2`
+    // ensures the pod will get a public host port for the worker daemon
+    // on :9742 (see EPHEMERAL_WORKER_PODS.md §"Provider connectivity
+    // audit"). `reliability>=0.95` is the real quality filter — Vast's
+    // `verified=true` is a much narrower premium-host program (often
+    // zero offers in our price band when checked 2026-05-18). We rank
+    // verified higher inside `pick_offer`, so dropping the search-side
+    // gate just widens the candidate pool when verified hosts are
+    // unavailable.
     let num_gpus_clause = num_gpus
         .map(|n| format!(" num_gpus={n}"))
         .unwrap_or_default();
     let query = format!(
-        "gpu_name={gpu_name} verified=true rentable=true cuda_max_good>=12.4 \
-         direct_port_count>=2 dph_total<={max_price}{num_gpus_clause}"
+        "gpu_name={gpu_name} rentable=true cuda_max_good>=12.4 \
+         direct_port_count>=2 reliability>=0.95 dph_total<={max_price}{num_gpus_clause}"
     );
     let offers = match pod::search_offers(&query, 50) {
         Ok(v) => v,
@@ -956,6 +969,9 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
     // automatic inference routing to it until they re-run pod up
     // or write the file themselves.
     // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md §3.6.
+    // Capture token expiry before `blob` is moved into the snapshot —
+    // we re-print it at the end of this command for operator visibility.
+    let expires_unix = blob.expires_unix;
     if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
         let capabilities =
             capabilities_for_gpu(&instance.gpu_name);
@@ -991,6 +1007,23 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         );
     }
 
+    // Surface the token expiry prominently. The 2026-05-18 SEP-on-Vast
+    // run wedged silently when a 12h token expired mid-job — the operator
+    // had no signal that auth was about to break beyond a buried JSON
+    // field in `~/.sovereign/worker-pods/<id>.json`. Print the expiry
+    // time + remaining hours alongside the rest of the launch summary.
+    // `expires_unix` was captured above before `blob` was moved into
+    // the snapshot.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let ttl_remaining_h = expires_unix.saturating_sub(now) as f64 / 3600.0;
+    let expires_display = chrono::DateTime::<chrono::Utc>::from(
+        std::time::UNIX_EPOCH + std::time::Duration::from_secs(expires_unix),
+    )
+    .format("%Y-%m-%d %H:%M:%S UTC");
+
     println!();
     println!("worker pod ready:");
     println!("  vast id          {}", instance.instance_id);
@@ -1002,6 +1035,10 @@ async fn cmd_pod_up(args: &[String]) -> i32 {
         hex::encode(handle.pod_pubkey_thumbprint())
     );
     println!("  uploads          {}", spec.uploads.len());
+    println!(
+        "  token expires    {expires_display}  (in {ttl_remaining_h:.1}h — \
+         re-launch with --ttl-hours <N> if your job runs longer)"
+    );
     println!();
     println!("Pod is in 'uploads ready' state. Dispatch a job with the worker token:");
     println!("  (token printed once — keep it; future invocations will be `pipeline pod dispatch <vast-id>`)");
@@ -1216,7 +1253,15 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
     let mut uploads: Vec<std::path::PathBuf> = Vec::new();
     let mut upload_urls: Vec<(String, String, String)> = Vec::new();
     let mut upload_from_base: Option<String> = None;
-    let mut bootstrap_ttl_hours: u64 = 12;
+    // Token TTL covers the longest plausible owner-side workflow. SEP and
+    // wikipedia ingest runs commonly take 30-50h; the prior 12h default
+    // expired mid-run, after which every owner request to the pod 401'd
+    // with `token expired` while still billing for the GPU. 48h is the
+    // largest window that's still bounded for blast-radius purposes (the
+    // bootstrap blob is the credential — a leaked blob is good until
+    // expiry). Operators on multi-day jobs should pass `--ttl-hours 72`
+    // or higher explicitly.
+    let mut bootstrap_ttl_hours: u64 = 48;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -1348,9 +1393,11 @@ async fn cmd_pod_pool(args: &[String]) -> i32 {
     }
 
     // ─── Vast offer search — pick top N ─────────────────────────────
+    // See `cmd_pod_up` for rationale on dropping `verified=true` from
+    // the search query; `reliability>=0.95` is the real quality gate.
     let query = format!(
-        "gpu_name={gpu_name} verified=true rentable=true cuda_max_good>=12.4 \
-         direct_port_count>=2 dph_total<={max_price}"
+        "gpu_name={gpu_name} rentable=true cuda_max_good>=12.4 \
+         direct_port_count>=2 reliability>=0.95 dph_total<={max_price}"
     );
     let offers = match pod::search_offers(&query, (pod_count as u32).saturating_mul(3).max(50)) {
         Ok(v) => v,

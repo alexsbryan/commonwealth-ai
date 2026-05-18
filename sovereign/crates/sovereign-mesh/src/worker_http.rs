@@ -117,6 +117,23 @@ pub struct CompletedUnit {
 /// mechanism; the runner doesn't need to know about HTTP.
 pub trait WorkerRunner: Send + Sync + 'static {
     fn dispatch(&self, manifest: JobManifest, emit: EmitCompletedFn);
+
+    /// Eagerly start any subprocess/state the runner needs before its
+    /// first `dispatch`. Called once by [`WorkerState::spawn_disk_dump_watcher`]
+    /// after the model files have landed on disk and the child-daemon
+    /// config has been written.
+    ///
+    /// Default: no-op. The echo / instant runners don't need a warmup
+    /// step. [`crate::worker_subprocess_runner::SubprocessRunner`]
+    /// overrides this to spawn the child daemon immediately, which
+    /// unblocks the pinned-inference proxy's `child_ready` gate
+    /// without waiting for a job dispatch — matters for pinned-pod
+    /// inference where the local daemon's scheduler probes
+    /// `/v1/models` over the proxy before any unit has shipped.
+    /// Fire-and-forget: the implementation should `tokio::spawn` the
+    /// actual work so the disk-dump watcher's reporting path stays
+    /// snappy.
+    fn eager_spawn(&self) {}
 }
 
 /// Type alias for the runner's emission callback. Boxed so the
@@ -302,6 +319,18 @@ impl WorkerState {
                         .store(true, std::sync::atomic::Ordering::Release);
                     state.disk_dump_ready.notify_waiters();
                     tracing::info!("worker: disk dump complete; child-daemon spawn now unblocked");
+                    // Pinned-pod-as-inference-peer use case: the local
+                    // daemon's scheduler probes `/v1/models` over the
+                    // proxy to learn what models the pod hosts. The
+                    // proxy 503s while `child_ready` is false, so the
+                    // scheduler treats the pod as model-less and chat
+                    // completions fail with "no node advertises model
+                    // X". Trigger an eager subprocess spawn here so
+                    // the proxy goes ready without anyone first
+                    // shipping a job manifest. Default impl is a
+                    // no-op; SubprocessRunner overrides it to spawn
+                    // the child.
+                    state.runner.eager_spawn();
                     return;
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -477,10 +506,43 @@ pub fn write_child_daemon_config(
     Ok(())
 }
 
+/// Per-request timeouts for `fetch_and_validate`. Carved out so tests
+/// can pin tight values (sub-second) and exercise the timeout paths
+/// without sleeping a full minute.
+#[derive(Clone, Copy)]
+pub struct FetchTimeouts {
+    /// Cap on `request.send().await` (waiting for headers). R2 cold-start
+    /// is usually <1s; a stalled connection can otherwise keep an open
+    /// SYN-ACK for many minutes.
+    pub send: std::time::Duration,
+    /// Cap on the gap between consecutive body chunks. A stalled body
+    /// stream (TCP alive but no bytes flowing) converts to a chunk
+    /// error and unwinds into the retry-with-Range path.
+    pub chunk_idle: std::time::Duration,
+}
+
+impl Default for FetchTimeouts {
+    fn default() -> Self {
+        Self {
+            send: std::time::Duration::from_secs(120),
+            chunk_idle: std::time::Duration::from_secs(60),
+        }
+    }
+}
+
 async fn fetch_and_validate(
     client: &reqwest::Client,
     url: &str,
     expected_sha: &Sha256Digest,
+) -> std::result::Result<Vec<u8>, String> {
+    fetch_and_validate_with_timeouts(client, url, expected_sha, FetchTimeouts::default()).await
+}
+
+async fn fetch_and_validate_with_timeouts(
+    client: &reqwest::Client,
+    url: &str,
+    expected_sha: &Sha256Digest,
+    timeouts: FetchTimeouts,
 ) -> std::result::Result<Vec<u8>, String> {
     // Brief retry loop — covers four real-world failure modes that
     // shouldn't put the pod permanently in "uploads not ready":
@@ -516,6 +578,20 @@ async fn fetch_and_validate(
     use futures::StreamExt;
     use reqwest::StatusCode;
     const PROGRESS_INTERVAL: u64 = 256 * 1024 * 1024;
+    // **2026-05-18 incident**: a Finland host's outbound to R2 wedged
+    // mid-body after the embed file finished — the 30 GB Darwin fetch
+    // got 0 bytes for 15+ min before the operator noticed, then the
+    // controller's `/health` poll caught it. reqwest's body-stream
+    // `next().await` doesn't error on a stalled-but-not-RSTed TCP
+    // connection; it just hangs. The `chunk_idle` timeout caps the
+    // wait between chunks so a stall is converted into a chunk error
+    // that the existing retry loop can resume via Range. 60s default
+    // is generous — even a 1 Mbps R2 path delivers a chunk every
+    // ~5s — while still surfacing a hang in well under the time it
+    // takes for the controller-level `/health` poll to give up.
+    // The `send` timeout caps the initial-response wait too; R2
+    // cold-start is usually <1s, but unreachable origins can keep an
+    // open SYN-ACK for many minutes otherwise. See `FetchTimeouts`.
     let attempts = 6;
     let mut delay = std::time::Duration::from_millis(250);
     let mut last_err = String::new();
@@ -538,10 +614,18 @@ async fn fetch_and_validate(
         if let Some(r) = range_header.as_deref() {
             req = req.header("Range", r);
         }
-        let resp = match req.send().await {
-            Ok(r) => r,
-            Err(e) => {
+        let resp = match tokio::time::timeout(timeouts.send, req.send()).await {
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => {
                 last_err = format!("send: {e}");
+                if attempt < attempts {
+                    tokio::time::sleep(delay).await;
+                    delay = (delay * 2).min(std::time::Duration::from_secs(5));
+                }
+                continue;
+            }
+            Err(_) => {
+                last_err = format!("send: timed out after {}ms", timeouts.send.as_millis());
                 if attempt < attempts {
                     tokio::time::sleep(delay).await;
                     delay = (delay * 2).min(std::time::Duration::from_secs(5));
@@ -621,9 +705,26 @@ async fn fetch_and_validate(
         let mut next_progress_at: u64 =
             ((bytes.len() as u64) / PROGRESS_INTERVAL + 1) * PROGRESS_INTERVAL;
         let mut chunk_err: Option<String> = None;
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(c) => {
+        loop {
+            // Per-chunk idle timeout: a stalled body (TCP connection
+            // alive but no bytes flowing) converts to a chunk error and
+            // unwinds into the retry-with-Range path. Without this,
+            // reqwest's body stream just hangs forever on a wedged
+            // upstream. See 2026-05-18 incident note at top of fn.
+            let next = match tokio::time::timeout(timeouts.chunk_idle, stream.next()).await {
+                Ok(o) => o,
+                Err(_) => {
+                    chunk_err = Some(format!(
+                        "body: no chunk for {}ms (stalled stream after {} bytes on attempt {attempt})",
+                        timeouts.chunk_idle.as_millis(),
+                        bytes.len(),
+                    ));
+                    break;
+                }
+            };
+            match next {
+                None => break, // stream exhausted cleanly
+                Some(Ok(c)) => {
                     hasher.update(&c);
                     bytes.extend_from_slice(&c);
                     let total_received = bytes.len() as u64;
@@ -641,7 +742,7 @@ async fn fetch_and_validate(
                         next_progress_at = total_received.saturating_add(PROGRESS_INTERVAL);
                     }
                 }
-                Err(e) => {
+                Some(Err(e)) => {
                     chunk_err = Some(format!(
                         "body: {e} (after {} bytes on attempt {attempt})",
                         bytes.len()
@@ -1480,6 +1581,126 @@ mod tests {
         assert!(
             attempts >= 3,
             "expected at least 3 attempts (2 truncated + 1 good), got {attempts}"
+        );
+    }
+
+    /// Regression for the 2026-05-18 SEP-on-Vast incident: a Finland
+    /// host's outbound to R2 wedged mid-body — the 30 GB Darwin fetch
+    /// emitted zero progress lines for 15+ min before being torn down.
+    /// reqwest's body-stream `next().await` doesn't error on a
+    /// stalled-but-not-RSTed TCP connection; it just hangs. After the
+    /// idle-timeout fix, a stalled stream must:
+    ///   1. NOT hang `fetch_and_validate` indefinitely.
+    ///   2. Convert to a chunk error inside `chunk_idle`.
+    ///   3. Retry from the partial offset via Range when the upstream
+    ///      recovers.
+    ///
+    /// Mock: first attempt sends Content-Length declaring the full
+    /// payload, ships a few bytes, then holds the connection open
+    /// forever (an `async-stream` Stream that yields one chunk then
+    /// awaits a Notify that never fires). Second attempt serves the
+    /// full body. The fetcher must recover inside the 6-attempt
+    /// budget with no real-time hang.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fetch_and_validate_recovers_from_stalled_body() {
+        use axum::body::Body as AxumBody;
+        use axum::extract::State;
+        use axum::http::StatusCode;
+        use axum::response::Response as AxumResponse;
+        use axum::routing::get;
+        use axum::Router;
+        use bytes::Bytes;
+        use futures::stream::{self, StreamExt};
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use tokio::net::TcpListener;
+        use tokio::sync::oneshot;
+
+        let payload: Vec<u8> = (0..64 * 1024u32).map(|i| (i & 0xff) as u8).collect();
+        let mut hasher = Sha256::new();
+        hasher.update(&payload);
+        let mut expected = [0u8; 32];
+        expected.copy_from_slice(&hasher.finalize());
+
+        let attempts_counter = Arc::new(AtomicU32::new(0));
+        let state_payload = Arc::new(payload.clone());
+
+        #[derive(Clone)]
+        struct AppState {
+            attempts: Arc<AtomicU32>,
+            payload: Arc<Vec<u8>>,
+        }
+
+        async fn handler(State(state): State<AppState>) -> AxumResponse {
+            let n = state.attempts.fetch_add(1, Ordering::SeqCst);
+            if n == 0 {
+                // Stall: send first chunk, then a Stream that returns
+                // a future which never resolves. reqwest sees an open
+                // connection with no bytes arriving.
+                let first = Bytes::copy_from_slice(&state.payload[..1024]);
+                let stalled = stream::once(async move {
+                    Ok::<Bytes, std::io::Error>(first)
+                })
+                .chain(stream::pending());
+                AxumResponse::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Length", state.payload.len().to_string())
+                    .body(AxumBody::from_stream(stalled))
+                    .unwrap()
+            } else {
+                AxumResponse::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Length", state.payload.len().to_string())
+                    .body(AxumBody::from(state.payload.as_ref().clone()))
+                    .unwrap()
+            }
+        }
+
+        let app = Router::new()
+            .route("/blob", get(handler))
+            .with_state(AppState {
+                attempts: attempts_counter.clone(),
+                payload: state_payload,
+            });
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (tx, rx) = oneshot::channel::<()>();
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = rx.await;
+                })
+                .await
+                .ok();
+        });
+
+        let client = reqwest::Client::builder().build().unwrap();
+        let url = format!("http://{addr}/blob");
+        // Tight idle timeout so the test resolves in ~1s rather than
+        // ~60s. The retry/Range path is identical at any timeout.
+        let timeouts = FetchTimeouts {
+            send: std::time::Duration::from_secs(2),
+            chunk_idle: std::time::Duration::from_millis(300),
+        };
+
+        let started = std::time::Instant::now();
+        let result =
+            fetch_and_validate_with_timeouts(&client, &url, &expected, timeouts).await;
+        let elapsed = started.elapsed();
+        let _ = tx.send(());
+
+        let bytes = result.expect("retry loop must recover from a stalled body within budget");
+        assert_eq!(bytes.len(), payload.len());
+        assert_eq!(bytes, payload);
+        // 2 attempts × 300ms idle + retry backoff + good-attempt body ≪ 5s.
+        // Anything > 30s means the timeout didn't fire (regression).
+        assert!(
+            elapsed < std::time::Duration::from_secs(30),
+            "expected recovery in <30s, took {elapsed:?}"
+        );
+        let attempts = attempts_counter.load(Ordering::SeqCst);
+        assert!(
+            attempts >= 2,
+            "expected at least 2 attempts (1 stalled + 1 good), got {attempts}"
         );
     }
 
