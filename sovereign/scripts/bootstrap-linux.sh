@@ -20,6 +20,8 @@
 #   2. Detects the GPU backend from the toolbox (or honours --backend).
 #   3. Installs Rust (via rustup if no system toolchain, + rustfmt which
 #      llama-cpp-sys-2's bindgen needs), clang/libclang, cmake, binutils,
+#      mold (workspace .cargo/config.toml forces `-fuse-ld=mold` on Linux —
+#      clang errors with `invalid linker name` if mold isn't on PATH),
 #      protobuf, OpenSSL, the GTK/WebKit deps Tauri 2 needs for
 #      sovereign-desktop, and the backend-specific bits:
 #        ROCm  : rocm-hip-sdk7.2.1 (Fedora) / rocm-hip-sdk (Ubuntu)
@@ -213,9 +215,11 @@ ensure_rust() {
 install_fedora_common() {
     # binutils: provides ld (the kyuz0 vulkan-radv image ships the symlink
     # but not a working target; see preflight_image_quirks).
+    # mold: workspace .cargo/config.toml forces `-fuse-ld=mold` on Linux;
+    # clang fails with `invalid linker name` if the binary isn't on PATH.
     sudo dnf install -y \
         clang clang-devel \
-        cmake gcc gcc-c++ pkg-config binutils \
+        cmake gcc gcc-c++ pkg-config binutils mold \
         protobuf-compiler protobuf-devel \
         openssl-devel \
         webkit2gtk4.1-devel gtk3-devel libsoup3-devel librsvg2-devel \
@@ -238,10 +242,13 @@ install_fedora_vulkan() {
 install_ubuntu_common() {
     # binutils is pulled in by build-essential on Ubuntu, so no explicit
     # dep here — the kyuz0 Ubuntu images don't have the alternative issue.
+    # mold: workspace .cargo/config.toml forces `-fuse-ld=mold` on Linux;
+    # clang fails with `invalid linker name` if the binary isn't on PATH.
+    # Ubuntu 22.04+ / Debian 12+ ship it in the default repos.
     sudo apt-get update
     sudo apt-get install -y \
         clang libclang-dev \
-        cmake build-essential pkg-config \
+        cmake build-essential pkg-config mold \
         protobuf-compiler libprotobuf-dev \
         libssl-dev \
         libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev \
