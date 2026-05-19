@@ -10,9 +10,15 @@
 should_call_search = true
 expected_query_max_tokens = 6
 
+# Structural URL check (inline or [N] marker) covers the citation
+# axis. Semantic predicate focuses on the load-bearing failure
+# mode: model picks the historical figure from the encyclopedia
+# article and presents it as "current". ("Citing a source URL" was
+# dropped 2026-05-19 — judge interpreted it literally and rejected
+# valid [N]-marker citations.)
 must_cite_url_from_mock = 1
 must_not_cite_url_outside_mock = true
 
 final_message_satisfies = [
-  "The response provides NVIDIA's current stock price citing a source URL, and does not quote a historical price figure as if it were the current one.",
+  "The response presents NVIDIA's stock price as a recent/live figure (framed as 'today', 'recent close', 'right now', or with similar present-tense markers), rather than as a historical price quote from a fixed past date.",
 ]

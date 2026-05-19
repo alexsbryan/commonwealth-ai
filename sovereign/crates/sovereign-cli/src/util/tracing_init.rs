@@ -22,5 +22,15 @@ pub fn init_tracing(default_filter: &str) {
                 .unwrap_or_else(|_| default_filter.into()),
         )
         .with_target(false)
+        // `fmt()` defaults to stdout despite the historical docstring
+        // claiming stderr. That mismatch broke `sovereign search-gym
+        // run --json > out.json`: the JSON payload and tracing WARN
+        // lines interleaved on stdout, leaving the file unparseable.
+        // Force stderr so subcommands that emit machine-readable
+        // stdout (gym, eval, future bench tools) get a clean channel
+        // by default. Operators tailing logs see no change — they
+        // were already reading stderr in the typical "2>&1 | grep"
+        // shell shape.
+        .with_writer(std::io::stderr)
         .try_init();
 }

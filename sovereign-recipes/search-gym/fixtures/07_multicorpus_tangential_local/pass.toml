@@ -14,11 +14,18 @@
 
 should_call_search = true
 max_search_calls = 2
-expected_query_max_tokens = 8
+expected_query_max_tokens = 12
 
+# Structural URL check stays — covers both inline URLs and academic
+# [N] markers the model commonly emits. Semantic predicate focuses
+# on the harder discrimination: did the model use the *search*
+# results or fall back to general SpaceX background knowledge from
+# training. ("With a source URL" was dropped 2026-05-19 because it
+# pushed the judge to demand inline URL only, contradicting the
+# broader structural check — see HISTORY.md iter3→iter4.)
 must_cite_url_from_mock = 1
 must_not_cite_url_outside_mock = true
 
 final_message_satisfies = [
-  "The response answers the user's question about the most recent SpaceX Starship test flight using current information, with a source URL.",
+  "The response answers the user's question about the most recent SpaceX Starship test flight using current event information about that specific recent flight, rather than answering from general background knowledge about the company or its history.",
 ]

@@ -3,17 +3,17 @@
   "results": [
     {
       "title": "SpaceX Starship Flight 14 reaches orbital velocity, sticks first-stage catch",
-      "url": "https://example.com/spacex-starship-flight-14-recap",
+      "url": "https://spaceflight-now.io/launches/starship-flight-14-recap",
       "snippet": "SpaceX's Starship vehicle completed its 14th integrated flight test on Saturday, achieving orbital velocity for the first time and successfully catching the Super Heavy booster with the launch tower's chopstick arms."
     },
     {
       "title": "Live updates: SpaceX Starship Flight 14",
-      "url": "https://example.com/spacex-flight-14-live",
+      "url": "https://spaceflight-now.io/launches/starship-flight-14-live",
       "snippet": "Liftoff occurred at 7:21 AM CT from Starbase, Texas. Both stages performed nominally through MECO; booster catch confirmed by Elon Musk on X. Upper stage continued to planned splashdown in the Indian Ocean."
     },
     {
       "title": "Analysis: what Flight 14 means for Artemis and Mars cadence",
-      "url": "https://example.com/starship-flight-14-analysis",
+      "url": "https://spaceflight-now.io/launches/starship-flight-14-analysis",
       "snippet": "Successful booster reuse via tower catch shaves an estimated 12-18 months off Starship's reusability timeline. NASA's Artemis III HLS milestone now depends on tanker-flight cadence."
     }
   ]
