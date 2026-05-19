@@ -280,7 +280,8 @@ pub async fn score_facts_judge(
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                };
+        url_allowlist: None,
+        };
 
         match inference.complete(&request).await {
             Ok(resp) => match parse_judge(&resp.text) {
@@ -496,7 +497,8 @@ pub async fn score_sources_loose(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-        };
+    url_allowlist: None,
+    };
 
     let mut all_matched = rigid.matched.clone();
     let mut details: Vec<JudgeSourceDetail> = rigid
@@ -818,7 +820,8 @@ pub async fn score_essay_readiness(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-        };
+    url_allowlist: None,
+    };
 
     match inference.complete(&request).await {
         Ok(resp) => parse_essay_readiness(&resp.text).or_else(|| {

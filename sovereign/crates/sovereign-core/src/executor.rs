@@ -515,7 +515,8 @@ impl Executor {
                 sampling_mode: None,
                 assistant_prefix: None,
                 cmd_prefix: None,
-                                                };
+                url_allowlist: None,
+                };
 
                 // Best-of-N sampling or single completion.
                 let mut output = match &budget.sampling {
@@ -886,7 +887,8 @@ impl Executor {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                    };
+            url_allowlist: None,
+            };
 
             let response = self.inference.complete(&request).await?;
             let response_text = response.text.trim().to_string();
@@ -969,7 +971,8 @@ impl Executor {
                     sampling_mode: None,
                     assistant_prefix: None,
                     cmd_prefix: None,
-                                                            };
+                    url_allowlist: None,
+                    };
                     let final_response = self.inference.complete(&final_request).await?;
 
                     return Ok(StepOutput::ReasonWithToolsResult {

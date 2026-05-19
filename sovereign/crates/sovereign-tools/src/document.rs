@@ -68,7 +68,8 @@ impl DocumentTool {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        };
+            url_allowlist: None,
+            };
 
             let response = self.inference.complete(&request).await?;
             batch_summaries.push(response.text);
@@ -139,7 +140,8 @@ impl DocumentTool {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        };
+            url_allowlist: None,
+            };
 
             let response = self.inference.complete(&request).await?;
             return Ok(response.text);
@@ -342,7 +344,8 @@ impl DocumentTool {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        };
+            url_allowlist: None,
+            };
 
             let response = self.inference.complete(&request).await?;
             return Ok(StepOutput::Text(response.text));

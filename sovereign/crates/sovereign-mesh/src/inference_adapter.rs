@@ -340,6 +340,7 @@ impl SovereignInferenceAdapter {
         req.sampling_mode = request.sampling_mode;
         req.assistant_prefix = request.assistant_prefix.clone();
         req.cmd_prefix = request.cmd_prefix.clone();
+        req.url_allowlist = request.url_allowlist.clone();
         // Forward the Commonwealth `think_budget` extension. The
         // daemon's `format_prompt` reads `req.think_budget == Some(0)`
         // to inject `/no_think` for SystemPromptToken thinking
@@ -1266,7 +1267,8 @@ mod adapter_translation_tests {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                };
+        url_allowlist: None,
+        };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
         // Qwen3.5's template sees the model's own previous turn in a
@@ -1301,7 +1303,8 @@ mod adapter_translation_tests {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                };
+        url_allowlist: None,
+        };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
         assert_eq!(forwarded[0].name, "a");
@@ -1331,7 +1334,8 @@ mod adapter_translation_tests {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                };
+        url_allowlist: None,
+        };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
 
@@ -1386,7 +1390,8 @@ mod adapter_translation_tests {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                }
+        url_allowlist: None,
+        }
     }
 
     #[test]
@@ -1447,7 +1452,8 @@ mod adapter_translation_tests {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                }
+        url_allowlist: None,
+        }
     }
 
     #[test]

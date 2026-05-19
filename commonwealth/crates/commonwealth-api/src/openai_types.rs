@@ -107,6 +107,20 @@ pub struct ChatCompletionRequest {
     /// this to commit the model to a known-good action shape.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cmd_prefix: Option<String>,
+    /// Commonwealth extension: URL allowlist for grammar-constrained
+    /// URL emission. When non-empty, the inference sampler installs a
+    /// logit-mask constraint that prevents the model from emitting any
+    /// HTTP/HTTPS URL outside this list — byte-by-byte, via the
+    /// trie-walking state machine in
+    /// `sovereign_inference::url_constraint::UrlAllowlistConstraint`.
+    /// Used by tool-result rendering paths (search-gym runner,
+    /// production SearchTool) to make URL fabrication structurally
+    /// impossible: prose tokens pass through, URL-shaped tokens that
+    /// don't match the trie get clamped to `-INFINITY`. Wire path:
+    /// extracted here, threaded onto `CompletionRequest.url_allowlist`
+    /// by `build_completion_request`, consumed by `embedded::build_sampler`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url_allowlist: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

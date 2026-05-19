@@ -142,7 +142,8 @@ pub async fn identify_gap(
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                        })
+        url_allowlist: None,
+        })
         .await?;
 
     Ok(parse_gap_response(&response.text))

@@ -213,7 +213,8 @@ pub async fn compress_working_memory(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-            };
+    url_allowlist: None,
+    };
 
     let response = inference.complete(&request).await?;
     let result = parse_working_memory(&response.text, previous);
@@ -358,7 +359,8 @@ pub async fn extract_long_term_memories(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-            };
+    url_allowlist: None,
+    };
 
     let response = inference.complete(&request).await?;
     let result = parse_extracted_memories(&response.text);
@@ -760,7 +762,8 @@ pub async fn detect_contradictions(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-            };
+    url_allowlist: None,
+    };
 
     let response = inference.complete(&request).await?;
 

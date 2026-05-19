@@ -544,6 +544,8 @@ mod tests {
             tool_profile: None,
         sampling_mode: None,
         assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
         }
     }
 

@@ -100,7 +100,8 @@ pub async fn generate_title_from_messages(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-            };
+    url_allowlist: None,
+    };
 
     let response = inference.complete(&request).await?;
     let cleaned = sanitize_title(&response.text);

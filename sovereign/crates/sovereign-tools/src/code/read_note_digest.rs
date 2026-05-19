@@ -344,7 +344,8 @@ async fn summarize_via_fast_slot(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-        };
+    url_allowlist: None,
+    };
     let response = provider.complete(&request).await.map_err(|e| Error::Tool {
         tool_id: "read_note_digest".into(),
         message: e.to_string(),

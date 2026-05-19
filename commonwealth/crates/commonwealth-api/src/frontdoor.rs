@@ -2551,6 +2551,7 @@ pub(crate) async fn apply_distiller(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
+    url_allowlist: None,
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -3060,6 +3061,7 @@ async fn summarise_block(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
+    url_allowlist: None,
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();
@@ -3886,6 +3888,7 @@ mod tests {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
+        url_allowlist: None,
         }
     }
 
