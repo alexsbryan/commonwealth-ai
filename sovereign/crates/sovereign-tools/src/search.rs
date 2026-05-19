@@ -53,16 +53,23 @@ impl SearchTool {
     }
 }
 
+/// Canonical model-facing description of the `search` tool. Loaded
+/// from an asset file (data, not program — per ARCH_PRINCIPLES §6.2)
+/// so the gym harness can pin alignment via the same file. Edit the
+/// .md file when you want to change what the model sees; running
+/// the search-gym after any edit catches regressions in tool-call
+/// judiciousness or citation faithfulness before production users
+/// see drift.
+pub const SEARCH_TOOL_DESCRIPTION: &str =
+    include_str!("../assets/search_tool_description.md");
+
 #[async_trait]
 impl Tool for SearchTool {
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
             id: "search".to_string(),
             name: "Search".to_string(),
-            description: "Search across local knowledge bases (Wikipedia, scholarly abstracts, \
-                          encyclopedias, expert Q&A) and optionally the web. Local knowledge \
-                          bases are always available. Web search requires an API key."
-                .to_string(),
+            description: SEARCH_TOOL_DESCRIPTION.trim().to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -575,6 +582,33 @@ mod tests {
         assert!(needs_current_info("latest news about AI"));
         assert!(!needs_current_info("What is recursion?"));
         assert!(!needs_current_info("Explain photosynthesis"));
+    }
+
+    #[test]
+    fn search_tool_description_is_loaded_from_asset() {
+        // Pins the load-bearing prompt assertions we validated in
+        // the search-gym fixtures (Phase 2). If anyone changes the
+        // asset, this test still passes — but the search-gym's
+        // alignment test (in sovereign-cli) will catch drift between
+        // the asset and the fixtures' tool descriptions.
+        let desc = SEARCH_TOOL_DESCRIPTION;
+        // Cost-awareness — proven to reduce reflexive search in the
+        // multi-corpus archetype fixtures (06–10).
+        assert!(
+            desc.contains("budget") || desc.contains("monthly"),
+            "description should signal cost awareness"
+        );
+        // Shape-level guidance for "when to search" — validated
+        // against fixtures 01/02 (should search) and 03 (should
+        // skip).
+        assert!(desc.contains("current") || desc.contains("changes"));
+        assert!(desc.contains("stable") || desc.contains("definitions"));
+        // Verbatim-URL guidance — the URL-fabrication failure mode
+        // surfaced by fixture 02 isolated runs.
+        assert!(
+            desc.contains("verbatim") || desc.contains("exact"),
+            "description should require verbatim URL copy"
+        );
     }
 
     #[test]

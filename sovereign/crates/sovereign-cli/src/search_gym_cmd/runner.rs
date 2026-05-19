@@ -567,6 +567,102 @@ mod tests {
     }
 
     #[test]
+    fn fixture_search_tool_descriptions_match_production_asset() {
+        // Propagation discipline (Phase 2 productionization): the
+        // gym's fixtures and the production `SearchTool` must use
+        // the same model-facing tool description, so a change in
+        // the production prompt is automatically exercised by the
+        // gym (and vice versa: gym findings that tune the prompt
+        // immediately ship to production via the asset file).
+        //
+        // The asset lives at
+        // `sovereign/crates/sovereign-tools/assets/search_tool_description.md`
+        // and is exported as `sovereign_tools::search::SEARCH_TOOL_DESCRIPTION`.
+        //
+        // Fixtures that intentionally diverge (testing a prompt
+        // variant) should add their slug to the `INTENTIONAL_FORKS`
+        // list below with a comment naming the variant being tested.
+        let production_desc = sovereign_tools::search::SEARCH_TOOL_DESCRIPTION.trim();
+
+        const INTENTIONAL_FORKS: &[&str] = &[
+            // No forks today. Adding one means committing to maintain
+            // a divergent prompt indefinitely — prefer evolving the
+            // asset to match what the gym proves works.
+        ];
+
+        // Walk every fixture under sovereign-recipes/search-gym/fixtures/.
+        // Find the path the same way the gym does (workspace root +
+        // fixed offset) so tests run from any cwd.
+        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .canonicalize()
+            .expect("workspace root resolvable");
+        let fixtures_dir = workspace_root.join("sovereign-recipes/search-gym/fixtures");
+
+        let mut mismatches: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&fixtures_dir)
+            .expect("fixtures dir readable")
+            .flatten()
+        {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let slug = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+            if INTENTIONAL_FORKS.iter().any(|f| *f == slug) {
+                continue;
+            }
+            let input_path = path.join("input.json");
+            let body = match std::fs::read_to_string(&input_path) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+            let parsed: serde_json::Value = match serde_json::from_str(&body) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let tools = match parsed.get("tools").and_then(|v| v.as_array()) {
+                Some(a) => a,
+                None => continue,
+            };
+            for tool in tools {
+                let name = tool
+                    .pointer("/function/name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if name != "search" && name != "web_search" {
+                    continue;
+                }
+                let desc = tool
+                    .pointer("/function/description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if desc.trim() != production_desc {
+                    mismatches.push(format!(
+                        "{slug}: search tool description differs from production asset"
+                    ));
+                }
+            }
+        }
+
+        assert!(
+            mismatches.is_empty(),
+            "Fixture↔production tool-description drift:\n{}\n\n\
+             Fix: replace each fixture's `tools[search].function.description` \
+             with the contents of \
+             sovereign/crates/sovereign-tools/assets/search_tool_description.md \
+             (also exported as sovereign_tools::search::SEARCH_TOOL_DESCRIPTION). \
+             If the divergence is intentional, add the fixture slug to \
+             INTENTIONAL_FORKS in this test with a one-line rationale.",
+            mismatches.join("\n")
+        );
+    }
+
+    #[test]
     fn resolve_mock_subdir_maps_known_tools() {
         let root = std::path::Path::new("/mock");
         let (web, is_web) = resolve_mock_subdir("search", root).unwrap();
