@@ -66,7 +66,9 @@ impl Planner for LlmPlanner {
                             model_id: None,
                             enable_thinking: None,
             sampling_mode: None,
-            };
+            assistant_prefix: None,
+            cmd_prefix: None,
+                                    };
 
             let response = self.inference.complete(&request).await?;
 
@@ -147,7 +149,9 @@ impl Planner for LlmPlanner {
                         model_id: None,
                         enable_thinking: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                        };
 
         let response = self.inference.complete(&request).await?;
 

@@ -578,7 +578,9 @@ mod tests {
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                };
 
         let body = provider.build_request(&request);
         let messages = body["messages"].as_array().unwrap();
@@ -623,7 +625,9 @@ mod tests {
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                };
 
         let body = provider.build_request(&request);
         assert!(body.get("oicp").is_some());

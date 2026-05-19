@@ -823,7 +823,9 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
-            })
+            assistant_prefix: None,
+            cmd_prefix: None,
+                        })
             .await?;
 
         parse_route_response(&response.text, request)
@@ -983,7 +985,9 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
-            })
+            assistant_prefix: None,
+            cmd_prefix: None,
+                        })
             .await?;
 
         Ok(ExecutionOutput {
@@ -1141,7 +1145,9 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
-            })
+            assistant_prefix: None,
+            cmd_prefix: None,
+                        })
             .await?;
 
         // Swap the prompt-trimmed `content` on each citation back out for
@@ -1257,7 +1263,9 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
-            })
+            assistant_prefix: None,
+            cmd_prefix: None,
+                        })
             .await?;
 
         Ok(ExecutionOutput {
@@ -1320,7 +1328,9 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
-            })
+            assistant_prefix: None,
+            cmd_prefix: None,
+                        })
             .await?;
 
         // Transformations consume the whole document; we don't surface
@@ -1383,7 +1393,9 @@ async fn detect_document_type(
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
-        })
+        assistant_prefix: None,
+        cmd_prefix: None,
+                })
         .await;
 
     let detected = match response {
@@ -1484,7 +1496,9 @@ async fn build_skeleton(
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
-            })
+            assistant_prefix: None,
+            cmd_prefix: None,
+                        })
             .await;
 
         if let Ok(resp) = response {
@@ -1635,7 +1649,9 @@ async fn generate_overview(
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
-        })
+        assistant_prefix: None,
+        cmd_prefix: None,
+                })
         .await
         .map(|r| r.text)
         .unwrap_or_else(|_| "Overview not available.".to_string())

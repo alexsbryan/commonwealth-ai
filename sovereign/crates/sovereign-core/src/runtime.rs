@@ -2904,7 +2904,9 @@ pub(crate) async fn run_collaboration(
                     model_id: None,
                     enable_thinking: None,
     sampling_mode: None,
-    };
+    assistant_prefix: None,
+    cmd_prefix: None,
+            };
 
     match inference.complete(&refine_req).await {
         Ok(c) => {
@@ -4135,7 +4137,9 @@ impl Runtime {
             model_id: None,
             enable_thinking: None,
             sampling_mode: None,
-        };
+            assistant_prefix: None,
+            cmd_prefix: None,
+                                };
 
         let response = match self.inference.complete(&request).await {
             Ok(r) => r,
@@ -7731,7 +7735,9 @@ impl Runtime {
                             model_id: None,
                             enable_thinking: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                        };
 
         let search_method = kc.search_method;
         let sources = kc.sources;
@@ -9037,7 +9043,9 @@ impl Runtime {
                             model_id: None,
                             enable_thinking: final_enable_thinking,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                        };
 
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
@@ -9608,7 +9616,9 @@ impl Runtime {
                             model_id: None,
                             enable_thinking: None,
             sampling_mode: None,
-            };
+            assistant_prefix: None,
+            cmd_prefix: None,
+                                    };
             return KnowledgeQueryPlan {
                 request,
                 chunks: Vec::new(),
@@ -9867,7 +9877,9 @@ impl Runtime {
                                     model_id: None,
                                     enable_thinking: None,
                 sampling_mode: None,
-                }
+                assistant_prefix: None,
+                cmd_prefix: None,
+                                                }
             }
             SynthesisRoute::PrimarySynthesis => {
                 let base = if gap_note.is_empty() {
@@ -9892,7 +9904,9 @@ impl Runtime {
                                     model_id: None,
                                     enable_thinking: None,
                 sampling_mode: None,
-                }
+                assistant_prefix: None,
+                cmd_prefix: None,
+                                                }
             }
         };
 
@@ -10126,7 +10140,9 @@ impl Runtime {
             model_id: None,
             enable_thinking: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                        };
         let completion = self.inference.complete(&request).await?;
         let response_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
@@ -10478,7 +10494,9 @@ impl Runtime {
             model_id: None,
             enable_thinking,
             sampling_mode: None,
-        };
+            assistant_prefix: None,
+            cmd_prefix: None,
+                                };
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
         metrics.synthesis_ms = Some(synth_start.elapsed().as_millis() as u64);
@@ -10696,7 +10714,9 @@ impl Runtime {
             model_id: None,
             enable_thinking,
             sampling_mode: None,
-        };
+            assistant_prefix: None,
+            cmd_prefix: None,
+                                };
 
         let _synth_start = std::time::Instant::now();
         let (inner_stream, model_id) = self
@@ -11070,7 +11090,9 @@ impl Runtime {
             model_id: None,
             enable_thinking: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                        };
 
         let completion = self.inference.complete(&request).await?;
         let sources: Vec<String> = chunks
@@ -11356,7 +11378,9 @@ impl Runtime {
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                        };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
         let prompt_text = prompt_response.text.trim();
@@ -11653,7 +11677,9 @@ impl Runtime {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
-            })
+            assistant_prefix: None,
+            cmd_prefix: None,
+                                    })
             .await?;
 
         // 6. Update task status.

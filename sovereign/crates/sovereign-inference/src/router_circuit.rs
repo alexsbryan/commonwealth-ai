@@ -83,7 +83,9 @@ impl HealthCheckable for RouterCircuitChecker {
             model_id: None,
             enable_thinking: None,
                     sampling_mode: None,
-                    };
+                    assistant_prefix: None,
+                    cmd_prefix: None,
+                                        };
                     match self.inference.complete(&probe).await {
                         Ok(_) => {
                             self.tracker.reset_errors();

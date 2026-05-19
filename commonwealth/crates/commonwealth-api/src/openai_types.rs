@@ -83,6 +83,30 @@ pub struct ChatCompletionRequest {
     /// `sovereign_core::types::SamplingMode` via serde rename.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampling_mode: Option<sovereign_core::types::SamplingMode>,
+    /// Commonwealth extension: prefill text appended after the
+    /// rendered chat-template prompt, before the model's first
+    /// generation token. Used by frontdoor nudges (read-attractor,
+    /// failure-recovery) that need to *structurally* commit the model
+    /// to a known-good response prefix rather than nudge it via
+    /// instruction. Family-agnostic — every chat template ends with
+    /// a generation-position marker (`<|turn>model\n`,
+    /// `<|im_start|>assistant\n`, `<start_of_turn>model\n`, …) and
+    /// the prefix lands after that marker.
+    ///
+    /// Threaded into `sovereign_core::types::CompletionRequest`
+    /// via `inference_adapter::build_completion_request`; consumed
+    /// in `embedded::build_chat_prompt` after the chat template
+    /// renders.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assistant_prefix: Option<String>,
+    /// Commonwealth extension: structural cmd-prefix constraint (R2).
+    /// When set, the inference layer's tool-envelope schema injects a
+    /// `pattern: "^<literal-prefix>"` on the `cmd` parameter of any
+    /// `exec_command` tool so the grammar mask forces the literal
+    /// prefix as the start of the cmd string. Frontdoor nudges set
+    /// this to commit the model to a known-good action shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cmd_prefix: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

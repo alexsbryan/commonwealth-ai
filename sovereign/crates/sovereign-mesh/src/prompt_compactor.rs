@@ -309,7 +309,9 @@ mod tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
-        }
+        assistant_prefix: None,
+        cmd_prefix: None,
+                }
     }
 
     // ---- PromptSizeReport ----

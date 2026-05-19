@@ -588,8 +588,6 @@ pub fn canonicalize_apply_patch_heredoc(cmd: &str) -> Option<String> {
     let leading_ws_len = cmd.len() - trimmed_start.len();
     let leading = &cmd[..leading_ws_len];
 
-    // Opener: `apply_patch <<TAG` with optional quoting around TAG.
-    // Capture tag chars so we can use it as the closer marker.
     let after_apply = trimmed_start.strip_prefix("apply_patch")?;
     let after_lt = after_apply.trim_start().strip_prefix("<<")?;
     let (tag, after_tag) = parse_heredoc_tag(after_lt.trim_start())?;
@@ -1279,7 +1277,107 @@ pub fn apply_read_attractor_nudge_chat(
         tool_call_id: None,
         tool_calls: None,
     });
+
+    // Structural commit via grammar (R2): require `cmd` to start with
+    // the canonical apply_patch heredoc opener. The JSON-schema
+    // sampler in `inference_adapter::tool_envelope_schema_for` honours
+    // this hint by injecting a `pattern` on the `cmd` field, and the
+    // `JsonConstraint` walker masks any byte that wouldn't extend the
+    // literal prefix until the prefix is fully emitted. After that
+    // point the string body samples freely.
+    //
+    // R2.1 — path baking: when prior history names the target file
+    // (an Add File marker in a previous assistant emission, or a
+    // file-extension token like `.toml` / `.rs` in the user task),
+    // extend the prefix to commit the path AND the first body-line
+    // `+` marker. Doing so caps the post-prefix free-form region:
+    // the model can no longer fill the path slot with prose
+    // ("1. Cargo.toml in oicp-types/... (placeholder for actual
+    // content)") because the prefix already wrote the path and the
+    // next byte must extend a `+`-prefixed body line.
+    let target_path = extract_recent_add_file_path(messages)
+        .or_else(|| extract_first_path_hint(messages));
+    req.cmd_prefix = Some(match target_path {
+        Some(p) => format!("apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: {p}\n+"),
+        None => "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: ".to_string(),
+    });
 }
+
+/// Scan messages for the most recent `*** Add File: <path>` marker
+/// in an assistant tool_call. Returns the path (verbatim, trimmed)
+/// or `None` if no prior write was attempted. Used by the
+/// read-attractor / failure-recovery nudge to bake the target path
+/// into the cmd_prefix so the grammar walker commits the path
+/// structurally rather than letting the model invent one.
+fn extract_recent_add_file_path(
+    messages: &[crate::openai_types::ChatMessage],
+) -> Option<String> {
+    for msg in messages.iter().rev() {
+        if msg.role != "assistant" {
+            continue;
+        }
+        let tcs = msg.tool_calls.as_ref()?;
+        let Some(tc) = tcs.first() else { continue };
+        if tc.function.name != "exec_command" {
+            continue;
+        }
+        let args: serde_json::Value =
+            serde_json::from_str(&tc.function.arguments).ok()?;
+        let cmd = args.get("cmd").and_then(|c| c.as_str())?;
+        if let Some(p) = find_add_file_marker(cmd) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Match `*** Add File: <path>` (with optional leading `***`) in a
+/// cmd string. Returns the path with surrounding whitespace trimmed.
+fn find_add_file_marker(cmd: &str) -> Option<String> {
+    for line in cmd.lines() {
+        let stripped = line.trim_start_matches("*** ").trim_start();
+        if let Some(rest) = stripped.strip_prefix("Add File:") {
+            let path = rest.trim();
+            if !path.is_empty() {
+                return Some(path.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Fallback path extractor: scan user/tool messages for the first
+/// path-shaped token (`.<ext>` tail with a known build-tool extension).
+/// Used when no prior Add File marker exists — the user is asking for
+/// a fresh write and the path lives in the task text.
+fn extract_first_path_hint(
+    messages: &[crate::openai_types::ChatMessage],
+) -> Option<String> {
+    const EXTS: &[&str] = &[
+        ".rs", ".toml", ".md", ".json", ".yaml", ".yml", ".py", ".ts",
+        ".tsx", ".js", ".jsx", ".go", ".sh", ".txt", ".sql",
+    ];
+    for msg in messages {
+        if msg.role != "user" && msg.role != "tool" {
+            continue;
+        }
+        for token in msg.content.split(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | '(' | ')' | '`' | '"' | '\'')) {
+            let candidate = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | ':' | '!' | '?' | ';'));
+            if candidate.len() < 3 || candidate.len() > 120 {
+                continue;
+            }
+            if !EXTS.iter().any(|ext| candidate.ends_with(ext)) {
+                continue;
+            }
+            if candidate.contains("..") || candidate.starts_with('-') {
+                continue;
+            }
+            return Some(candidate.to_string());
+        }
+    }
+    None
+}
+
 
 /// Pull the task seed (what the user originally asked for) out of a
 /// frontdoor compressed-history user message.
@@ -2451,6 +2549,8 @@ pub(crate) async fn apply_distiller(
         think_budget: Some(0),
         tool_profile: None,
     sampling_mode: None,
+    assistant_prefix: None,
+    cmd_prefix: None,
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -2958,6 +3058,8 @@ async fn summarise_block(
         think_budget: Some(0),
         tool_profile: None,
     sampling_mode: None,
+    assistant_prefix: None,
+    cmd_prefix: None,
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();
@@ -3690,6 +3792,8 @@ mod tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
         }
     }
 
@@ -5133,4 +5237,5 @@ That's my answer."#;
         let b = sha256_hex(&canonical_source_blob(&mk()));
         assert_eq!(a, b);
     }
+
 }

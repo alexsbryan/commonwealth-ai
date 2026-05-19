@@ -98,7 +98,9 @@ pub async fn generate_title_from_messages(
                     model_id: None,
                     enable_thinking: None,
     sampling_mode: None,
-    };
+    assistant_prefix: None,
+    cmd_prefix: None,
+            };
 
     let response = inference.complete(&request).await?;
     let cleaned = sanitize_title(&response.text);

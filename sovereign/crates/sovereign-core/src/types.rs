@@ -161,6 +161,37 @@ pub struct CompletionRequest {
     /// in `build_sampler`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampling_mode: Option<SamplingMode>,
+
+    /// Prefill text to append after the rendered chat-template prompt,
+    /// before the model's first generation token. Used to "continue"
+    /// an assistant turn from a known-good prefix — e.g. when the
+    /// read-attractor nudge fires, the frontdoor sets this to the
+    /// canonical `<tool_call>{"name":"exec_command","arguments":{"cmd":"apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: "`
+    /// opener and the model has to sample continuations of a literal
+    /// known-good prefix rather than choosing between read-vs-write
+    /// from scratch.
+    ///
+    /// Structural lever over prompt-only nudging. Family-agnostic:
+    /// works for any backend whose chat-template path emits a
+    /// generation-position marker (`<|turn>model\n`, `<|im_start|>assistant\n`,
+    /// `<start_of_turn>model\n`, etc.) — we append after that marker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assistant_prefix: Option<String>,
+
+    /// Structural constraint on the `cmd` field of `exec_command` tool
+    /// calls (R2). When set, `inference_adapter::tool_envelope_schema_for`
+    /// decorates the `cmd` parameter schema with a `pattern: "^<literal-prefix>"`
+    /// and `JsonConstraint`'s string-body walker masks any byte that
+    /// wouldn't extend the literal prefix until it is fully emitted.
+    /// After the prefix point, normal string-body sampling resumes.
+    ///
+    /// Set by frontdoor's `apply_read_attractor_nudge_chat` when it
+    /// fires — the model's only legal continuation is the canonical
+    /// `apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: ` opener
+    /// followed by free-form body. Doesn't compose with
+    /// `assistant_prefix` — pick one mechanism per turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cmd_prefix: Option<String>,
 }
 
 /// Sampler-profile selector. Mirrored in the inference layer's
@@ -211,7 +242,9 @@ impl CompletionRequest {
             model_id: None,
             enable_thinking: None,
             sampling_mode: None,
-        }
+            assistant_prefix: None,
+            cmd_prefix: None,
+                                }
     }
 
     pub fn with_speed(mut self, speed: Speed) -> Self {
@@ -257,7 +290,9 @@ impl CompletionRequest {
             model_id: None,
             enable_thinking: None,
             sampling_mode: None,
-        }
+            assistant_prefix: None,
+            cmd_prefix: None,
+                                }
     }
 }
 
