@@ -1890,6 +1890,142 @@ pub fn apply_anti_repetition_chat(req: &mut crate::openai_types::ChatCompletionR
     });
 }
 
+/// Scan the conversation history for URLs that appeared in prior
+/// `role: tool` messages (typically search-tool results) and set
+/// them on `req.url_allowlist`. This is the server-side accumulator
+/// that the gym runner performs client-side at
+/// `sovereign-cli/src/search_gym_cmd/runner.rs:217-232` — by doing
+/// it here, every client that uses the standard OpenAI tool-call
+/// loop benefits without each one having to implement URL tracking.
+///
+/// The URL constraint in `sovereign-inference/src/url_constraint.rs`
+/// is what actually prevents fabrication at sampling time; this
+/// function just ensures the allowlist that drives it is populated
+/// from whatever the model has already seen in the conversation.
+///
+/// Idempotent: a caller-supplied `url_allowlist` is left untouched.
+/// Operators who know what they want to allow (the gym runner's
+/// explicit accumulation, or a power user with hard-coded allowed
+/// domains) win over this synthesis.
+///
+/// Privacy: tool-result content stays inside the conversation. We
+/// only extract bytes that were already part of the request the
+/// daemon received — no new information crosses any boundary.
+pub fn apply_url_allowlist_from_tool_results(
+    req: &mut crate::openai_types::ChatCompletionRequest,
+) {
+    if req.url_allowlist.is_some() {
+        // Caller supplied one; respect it.
+        return;
+    }
+    let mut urls: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    for msg in &req.messages {
+        if msg.role != "tool" {
+            continue;
+        }
+        for u in extract_urls_from_text(&msg.content) {
+            if seen.insert(u.clone()) {
+                urls.push(u);
+            }
+        }
+    }
+    if !urls.is_empty() {
+        tracing::debug!(
+            url_count = urls.len(),
+            "frontdoor: url_allowlist accumulated from tool results"
+        );
+        req.url_allowlist = Some(urls);
+    }
+}
+
+/// Pull HTTP/HTTPS URL substrings out of `text`. Conservative —
+/// terminates on the usual non-URL characters that would cause the
+/// URL constraint's `is_url_terminator` to fire (whitespace, common
+/// punctuation, brackets, quotes). Trailing punctuation is stripped
+/// so a URL at the end of a sentence doesn't include the period.
+pub fn extract_urls_from_text(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if has_url_marker_at(bytes, i) {
+            let start = i;
+            // Skip past the scheme + "://"
+            let scheme_end = if bytes[i..].starts_with(b"https://") {
+                i + 8
+            } else {
+                i + 7
+            };
+            let mut end = scheme_end;
+            while end < bytes.len() && !is_url_terminator_byte(bytes[end]) {
+                end += 1;
+            }
+            // Trim trailing punctuation that would have terminated
+            // a real URL anyway. Keep `/` (URLs can legitimately end
+            // in a trailing slash).
+            while end > scheme_end && is_trailing_strip(bytes[end - 1]) {
+                end -= 1;
+            }
+            if end > scheme_end {
+                // Safe: extract_urls_from_text only walks ASCII
+                // separators, so the byte boundary at `end` is
+                // valid UTF-8.
+                if let Ok(s) = std::str::from_utf8(&bytes[start..end]) {
+                    out.push(s.to_string());
+                }
+            }
+            i = end.max(start + 1);
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+fn has_url_marker_at(bytes: &[u8], i: usize) -> bool {
+    bytes[i..].starts_with(b"https://") || bytes[i..].starts_with(b"http://")
+}
+
+/// Mirrors `sovereign-inference/src/url_constraint.rs::is_url_terminator`.
+/// Kept in sync intentionally — the byte sets must agree or the
+/// extractor will find URLs the constraint cannot constrain (false
+/// allow) or stop short of URLs the constraint expects whole (false
+/// reject). Deviation here is a bug.
+fn is_url_terminator_byte(b: u8) -> bool {
+    matches!(
+        b,
+        b' ' | b'\t'
+            | b'\n'
+            | b'\r'
+            | b','
+            | b'<'
+            | b'>'
+            | b'('
+            | b')'
+            | b'['
+            | b']'
+            | b'"'
+            | b'\''
+            | b'?'
+            | b'!'
+            | b';'
+            | b':'
+    )
+}
+
+/// Trailing-punctuation strip for the extractor. Looser than
+/// `is_url_terminator_byte` — includes `.` because a sentence
+/// "see https://x.test/path." should yield `https://x.test/path`,
+/// not the trailing period. The constraint allows `.` inside URLs
+/// (it's part of the domain) but terminates on it at a terminal
+/// trie node, so this is the right asymmetry: extractor strips,
+/// constraint enforces.
+fn is_trailing_strip(b: u8) -> bool {
+    matches!(b, b'.' | b',' | b';' | b':' | b'!' | b'?')
+}
+
 /// Extract absolute-path-shaped substrings from `s`. A path is a
 /// `/`-rooted sequence of at least 2 components made of
 /// `[A-Za-z0-9_.-]`. Returns owned strings deduplicated.
@@ -5333,4 +5469,193 @@ That's my answer."#;
         assert_eq!(a, b);
     }
 
+    // ─── URL allowlist accumulator ──────────────────────────────
+
+    use crate::openai_types::{ChatCompletionRequest, ChatMessage};
+
+    fn req_with_messages(msgs: Vec<ChatMessage>) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: Some("test".into()),
+            messages: msgs,
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            oicp: None,
+            chat_template_kwargs: None,
+            think_budget: None,
+            tool_profile: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+        }
+    }
+
+    fn user_msg(content: &str) -> ChatMessage {
+        ChatMessage {
+            role: "user".into(),
+            content: content.into(),
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
+
+    fn tool_msg(content: &str) -> ChatMessage {
+        ChatMessage {
+            role: "tool".into(),
+            content: content.into(),
+            tool_call_id: Some("call-1".into()),
+            tool_calls: None,
+        }
+    }
+
+    #[test]
+    fn extract_urls_picks_up_simple_https() {
+        let urls = super::extract_urls_from_text(
+            "see https://example.test/path for more"
+        );
+        assert_eq!(urls, vec!["https://example.test/path"]);
+    }
+
+    #[test]
+    fn extract_urls_strips_trailing_sentence_punctuation() {
+        let urls = super::extract_urls_from_text(
+            "Read https://example.test/article. Then https://example.test/follow-up!"
+        );
+        assert_eq!(
+            urls,
+            vec![
+                "https://example.test/article",
+                "https://example.test/follow-up"
+            ]
+        );
+    }
+
+    #[test]
+    fn extract_urls_handles_markdown_link_form() {
+        let urls = super::extract_urls_from_text(
+            "[label](https://example.test/x) and [other](https://example.test/y)"
+        );
+        // The `)` terminates the URL — parentheses are URL terminators.
+        assert_eq!(
+            urls,
+            vec!["https://example.test/x", "https://example.test/y"]
+        );
+    }
+
+    #[test]
+    fn extract_urls_handles_numbered_list_form() {
+        // The gym runner + production WebSearchTool both use this shape.
+        let urls = super::extract_urls_from_text(
+            "[1] First — https://example.test/a\n[2] Second — https://example.test/b\n"
+        );
+        assert_eq!(
+            urls,
+            vec!["https://example.test/a", "https://example.test/b"]
+        );
+    }
+
+    #[test]
+    fn extract_urls_skips_bare_scheme_and_garbage() {
+        // No path → empty url, must not be emitted.
+        let urls = super::extract_urls_from_text("just text, no urls. https:// alone");
+        assert!(urls.is_empty(), "got unexpected urls: {urls:?}");
+    }
+
+    #[test]
+    fn extract_urls_handles_both_http_and_https() {
+        let urls = super::extract_urls_from_text(
+            "secure https://a.test/x and insecure http://b.test/y"
+        );
+        assert_eq!(urls, vec!["https://a.test/x", "http://b.test/y"]);
+    }
+
+    #[test]
+    fn accumulator_extracts_urls_from_single_tool_message() {
+        let mut req = req_with_messages(vec![
+            user_msg("question"),
+            tool_msg(
+                "[1] Title — https://example.test/result\n\
+                 [2] Other — https://example.test/result2"
+            ),
+        ]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        let urls = req.url_allowlist.expect("should be populated");
+        assert_eq!(
+            urls,
+            vec!["https://example.test/result", "https://example.test/result2"]
+        );
+    }
+
+    #[test]
+    fn accumulator_dedups_across_multiple_tool_messages() {
+        let mut req = req_with_messages(vec![
+            user_msg("question"),
+            tool_msg("[1] T — https://example.test/x"),
+            user_msg("follow-up"),
+            tool_msg("[1] T2 — https://example.test/x (same as before)"),
+            tool_msg("[2] T3 — https://example.test/y"),
+        ]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        let urls = req.url_allowlist.expect("should be populated");
+        assert_eq!(urls, vec!["https://example.test/x", "https://example.test/y"]);
+    }
+
+    #[test]
+    fn accumulator_ignores_urls_in_non_tool_messages() {
+        // Users / assistants may quote URLs in their messages but
+        // those shouldn't grant citation rights — the URL constraint
+        // is about preventing model fabrication, not about replaying
+        // arbitrary user input.
+        let mut req = req_with_messages(vec![
+            user_msg("I read https://example.test/x earlier"),
+            ChatMessage {
+                role: "assistant".into(),
+                content: "Yes I see https://example.test/y mentioned".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+        ]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        assert!(
+            req.url_allowlist.is_none(),
+            "user/assistant URLs must not populate the allowlist"
+        );
+    }
+
+    #[test]
+    fn accumulator_respects_caller_supplied_allowlist() {
+        // ARCH §7 layering: a caller that explicitly sets an
+        // allowlist knows what they want and wins. Especially
+        // important for the gym runner which does its own
+        // accumulation client-side and would be double-counted if
+        // we overwrote it here.
+        let mut req = req_with_messages(vec![tool_msg(
+            "[1] — https://from-tool.test/x",
+        )]);
+        req.url_allowlist = Some(vec!["https://caller-chosen.test/y".into()]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        let urls = req.url_allowlist.expect("preserved");
+        assert_eq!(urls, vec!["https://caller-chosen.test/y"]);
+    }
+
+    #[test]
+    fn accumulator_leaves_allowlist_unset_when_no_tool_urls() {
+        let mut req = req_with_messages(vec![
+            user_msg("hello"),
+            tool_msg("no urls in this result, just plain text"),
+        ]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        assert!(
+            req.url_allowlist.is_none(),
+            "should not set an empty allowlist (would block all URLs)"
+        );
+    }
 }

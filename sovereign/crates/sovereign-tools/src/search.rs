@@ -7,7 +7,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
 
-use crate::web::search::SearchBackend;
+use crate::web::search::{SearchBackend, SearchOrchestrator};
 use crate::web::WebSearchTool;
 
 // ─── Thresholds ──────────────────────────────────────────────
@@ -36,7 +36,9 @@ impl SearchTool {
         }
     }
 
-    /// Create a search tool with web fallback.
+    /// Create a search tool with web fallback (legacy direct-
+    /// backend constructor). Kept for the eight existing call
+    /// sites; new code should prefer `with_orchestrator()`.
     pub fn with_web(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
@@ -46,6 +48,26 @@ impl SearchTool {
             web: Some(WebSearchTool::with_backend(
                 Arc::clone(&inference),
                 backend,
+            )),
+            store,
+            inference,
+        }
+    }
+
+    /// Create a search tool with web fallback routed through the
+    /// trait-based orchestrator. Per the Phase 6 migration in
+    /// `sovereign/docs/PRODUCTION_SEARCH_INTEGRATION.md`, production
+    /// callers should reach for this constructor to pick up the
+    /// orchestrator's privacy + budget + fallback chain.
+    pub fn with_orchestrator(
+        store: Arc<dyn StateStore>,
+        inference: Arc<dyn InferenceProvider>,
+        orchestrator: Arc<SearchOrchestrator>,
+    ) -> Self {
+        Self {
+            web: Some(WebSearchTool::with_orchestrator(
+                Arc::clone(&inference),
+                orchestrator,
             )),
             store,
             inference,

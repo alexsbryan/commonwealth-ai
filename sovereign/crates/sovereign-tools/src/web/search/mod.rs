@@ -1,3 +1,29 @@
+//! Web-search dispatch — both the legacy enum surface (`SearchBackend`,
+//! `search()` — the eight existing call sites use these) and the new
+//! trait-based abstraction (`backend_trait::WebSearchBackend`,
+//! `WebSearchRegistry`) that Phase 2's orchestrator will consume.
+//!
+//! See `sovereign/docs/PRODUCTION_SEARCH_INTEGRATION.md` for the
+//! full migration plan. Phase 0 ships the trait + registry alongside
+//! the enum (additive — nothing breaks); subsequent phases migrate
+//! call sites and retire the legacy surface.
+
+pub mod assets;
+pub mod backend_trait;
+pub mod orchestrator;
+
+pub use assets::{
+    BackendsConfig, BudgetConfig, BudgetEntry, PrivacyConfig, SelectionConfig,
+    DEFAULT_BACKENDS_TOML, SYSTEM_PROMPT, TOOL_DESCRIPTION,
+};
+pub use backend_trait::{
+    BraveBackendImpl, DuckDuckGoBackendImpl, MockBackendImpl, SearchCost,
+    SearchPrivacy, TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
+};
+pub use orchestrator::{
+    BudgetView, OrchestratedSearch, SearchOrchestrator, SelectInputs,
+};
+
 use std::path::PathBuf;
 
 use serde::Deserialize;
