@@ -2906,7 +2906,8 @@ pub(crate) async fn run_collaboration(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-            };
+    url_allowlist: None,
+    };
 
     match inference.complete(&refine_req).await {
         Ok(c) => {
@@ -4139,7 +4140,8 @@ impl Runtime {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                };
+            url_allowlist: None,
+        };
 
         let response = match self.inference.complete(&request).await {
             Ok(r) => r,
@@ -7737,7 +7739,8 @@ impl Runtime {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                        };
+        url_allowlist: None,
+        };
 
         let search_method = kc.search_method;
         let sources = kc.sources;
@@ -9045,7 +9048,8 @@ impl Runtime {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                        };
+        url_allowlist: None,
+        };
 
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
@@ -9618,7 +9622,8 @@ impl Runtime {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                    };
+            url_allowlist: None,
+            };
             return KnowledgeQueryPlan {
                 request,
                 chunks: Vec::new(),
@@ -9879,7 +9884,8 @@ impl Runtime {
                 sampling_mode: None,
                 assistant_prefix: None,
                 cmd_prefix: None,
-                                                }
+                url_allowlist: None,
+                }
             }
             SynthesisRoute::PrimarySynthesis => {
                 let base = if gap_note.is_empty() {
@@ -9906,7 +9912,8 @@ impl Runtime {
                 sampling_mode: None,
                 assistant_prefix: None,
                 cmd_prefix: None,
-                                                }
+                url_allowlist: None,
+                }
             }
         };
 
@@ -10142,7 +10149,8 @@ impl Runtime {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                        };
+        url_allowlist: None,
+        };
         let completion = self.inference.complete(&request).await?;
         let response_msg = Message {
             id: uuid::Uuid::new_v4().to_string(),
@@ -10496,7 +10504,8 @@ impl Runtime {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                };
+            url_allowlist: None,
+        };
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
         metrics.synthesis_ms = Some(synth_start.elapsed().as_millis() as u64);
@@ -10716,7 +10725,8 @@ impl Runtime {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                };
+            url_allowlist: None,
+        };
 
         let _synth_start = std::time::Instant::now();
         let (inner_stream, model_id) = self
@@ -11092,7 +11102,8 @@ impl Runtime {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                        };
+        url_allowlist: None,
+        };
 
         let completion = self.inference.complete(&request).await?;
         let sources: Vec<String> = chunks
@@ -11380,7 +11391,8 @@ impl Runtime {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                        };
+        url_allowlist: None,
+        };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
         let prompt_text = prompt_response.text.trim();
@@ -11679,7 +11691,8 @@ impl Runtime {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                    })
+            url_allowlist: None,
+            })
             .await?;
 
         // 6. Update task status.

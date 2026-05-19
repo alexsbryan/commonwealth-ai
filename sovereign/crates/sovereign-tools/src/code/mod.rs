@@ -20,9 +20,13 @@
 //! [`ScipGraph`](corpus_engine::scip_graph::ScipGraph) SQLite database.
 //!
 //! None of these tools return results when no code corpora are indexed.
-//! Non-code corpora (Wikipedia, SEP, etc.) are implicitly filtered out by
-//! querying on the typed code columns — rows where `symbol_name IS NULL`
-//! don't match the predicates these tools build.
+//! Non-code corpora (Wikipedia, SEP, etc.) are skipped explicitly by the
+//! `info.kind == CorpusKind::Code` filter in [`query_all_code_indexes`]
+//! and the parallel loop in `code_search`. The earlier design relied on
+//! `symbol_name IS NULL` to implicitly filter prose rows, but that only
+//! works when the prose schema *has* a `symbol_name` column with NULLs;
+//! prose-only chunk tables don't include the typed code columns at all,
+//! and Lance errors at column resolution before the predicate can run.
 
 pub mod brief;
 pub mod code_search;
@@ -220,6 +224,7 @@ use arrow_array::{Array, Int32Array, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
+use corpus_engine::types::CorpusKind;
 use corpus_engine::{CorpusEngine, CorpusIndex, Error as CorpusError};
 
 /// A single code chunk row read from a LanceDB query via the typed code
@@ -253,15 +258,14 @@ pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
         && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '$')
 }
 
-/// Run a filter-pushdown query against every installed corpus and collect
-/// the matching rows into `CodeRow` values. Used by `SymbolLookupTool` and
-/// `RecentChangesTool` — both are exact predicates on typed columns, no
-/// vector search involved.
+/// Run a filter-pushdown query against every installed *code* corpus and
+/// collect the matching rows into `CodeRow` values. Used by
+/// `SymbolLookupTool` and `RecentChangesTool` — both are exact predicates
+/// on typed columns, no vector search involved.
 ///
-/// Corpora that don't have code data (Wikipedia, SEP, …) return zero rows
-/// because the filter references `symbol_name IS NOT NULL` implicitly:
-/// metadata rows have all code columns as Null, which don't match equality
-/// or range predicates on those columns.
+/// Non-code corpora (Wikipedia, SEP, …) are skipped before any Lance call
+/// because their chunk tables lack the typed code columns entirely; the
+/// query would error at column resolution rather than return zero rows.
 pub(crate) async fn query_all_code_indexes(
     engine: &Arc<CorpusEngine>,
     filter: &str,
@@ -273,6 +277,9 @@ pub(crate) async fn query_all_code_indexes(
     };
 
     for info in &indexes {
+        if info.kind != CorpusKind::Code {
+            continue;
+        }
         let Ok(index) = engine.open_index(&info.path).await else {
             continue;
         };

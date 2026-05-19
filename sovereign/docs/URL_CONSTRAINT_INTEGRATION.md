@@ -1,8 +1,30 @@
 # URL-allowlist constraint — integration plan
 
-**Status**: core constraint landed + tested (2026-05-19, search-gym Phase 3c).
-Integration into the inference path is the remaining work. This doc
-hands off the next session.
+**Status**: integration shipped 2026-05-19 (later same day as the
+constraint core). All six steps below executed and code-compiled
+against the workspace. Validation against the live daemon and the
+search-gym fixtures requires a daemon rebuild + restart inside the
+sovereign-vulkan toolbox — see "Validation" at the bottom.
+
+**Deltas from the original plan worth knowing:**
+
+- Step 1's "Update all `new()` / `Default` constructors (2 sites)"
+  under-counted. `CompletionRequest` is constructed with exhaustive
+  struct literals at ~30 sites across sovereign-core, sovereign-inference,
+  sovereign-tools, and sovereign-cli. Same fan-out for `ChatCompletionRequest`
+  on the wire side (8 sites in commonwealth-api + sovereign-mesh
+  tests). All mechanical: insert `url_allowlist: None,` after
+  `sampling_mode: None,`. Done via sed.
+- Step 5 also requires a sibling `url_allowlist` field on
+  `ChatCompletionRequest` in `openai_types.rs` — the doc described
+  raw-Value extraction in `routes_inference.rs` but the actual
+  wire-to-core translation goes through
+  `sovereign_mesh::inference_adapter::build_completion_request`, which
+  copies typed fields, not raw JSON. Typed field is cleaner.
+- Step 3's deadlock note: the URL constraint is now mutually exclusive
+  with `JsonConstraint` in `sample()` (via `else if`). Both `accept()`
+  paths still fire so cursors stay in sync. Documented in the
+  `url_constraint` field doc-comment in `ConstrainedSampler`.
 
 ## What this fixes
 

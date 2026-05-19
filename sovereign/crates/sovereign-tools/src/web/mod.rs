@@ -81,7 +81,8 @@ impl WebSearchTool {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                };
+        url_allowlist: None,
+        };
 
         match self.inference.complete(&request).await {
             Ok(response) => {
@@ -211,7 +212,8 @@ impl WebSearchTool {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                };
+        url_allowlist: None,
+        };
 
         let response = self.inference.complete(&request).await?;
 

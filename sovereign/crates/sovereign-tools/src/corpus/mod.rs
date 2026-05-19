@@ -107,7 +107,8 @@ pub fn inference_to_inference_fn(
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                };
+        url_allowlist: None,
+        };
         Box::pin(async move {
             let resp = inf
                 .complete(&request)

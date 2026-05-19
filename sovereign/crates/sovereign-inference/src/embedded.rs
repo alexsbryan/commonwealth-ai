@@ -7120,6 +7120,19 @@ pub struct ConstrainedSampler {
     inner_explore: LlamaSampler,
     inner_content: LlamaSampler,
     constraint: Option<crate::json_constraint::JsonConstraint>,
+    /// URL-allowlist constraint. When `Some`, every sampled token's
+    /// bytes are simulated against a byte-trie of allowed URLs; tokens
+    /// whose bytes would start or extend a URL outside the allowlist
+    /// get clamped to `-INFINITY`. Prose tokens (anything that doesn't
+    /// look like the start of an `http://` / `https://` sequence) pass
+    /// through unchanged.
+    ///
+    /// Skipped when the JSON-schema `constraint` above is also active:
+    /// tool-call argument URLs are validated by the schema instead,
+    /// and stacking the two state machines would deadlock the byte
+    /// stream (the JSON FSM emits braces and quotes that the URL FSM
+    /// would treat as URL terminators).
+    url_constraint: Option<crate::url_constraint::UrlAllowlistConstraint>,
     /// Vocab-sized bitmap of tokens whose rendered bytes contain a
     /// 3+ byte UTF-8 leading byte (CJK / Devanagari / Hangul / etc.).
     /// When `Some`, `sample()` clamps those tokens' logits to
@@ -7156,6 +7169,12 @@ impl ConstrainedSampler {
         };
         if let Some(c) = self.constraint.as_mut() {
             c.mask(&mut data);
+        } else if let Some(uc) = self.url_constraint.as_ref() {
+            // URL constraint is mutually exclusive with the JSON
+            // constraint — see field doc-comment for the deadlock
+            // rationale. Apply only when JSON isn't claiming the
+            // byte stream.
+            uc.mask(&mut data);
         }
         // Non-Latin denylist: independent of the JSON-schema mask, so
         // it covers free-form chat and non-`structured_output` paths
@@ -7192,6 +7211,14 @@ impl ConstrainedSampler {
         self.inner_content.accept(token);
         if let Some(c) = self.constraint.as_mut() {
             c.accept(token);
+        }
+        // Advance URL FSM unconditionally (even when JSON constraint
+        // is active and the URL mask was skipped) so the cursor stays
+        // synchronised with the actual emitted byte stream. The state
+        // machine only matters once an `http://` / `https://` marker
+        // appears in prose, and feeding it every token costs ~1 lookup.
+        if let Some(uc) = self.url_constraint.as_mut() {
+            uc.accept(token);
         }
     }
 
@@ -7257,6 +7284,15 @@ fn build_sampler(
                 None
             }
         }
+    });
+
+    // URL-allowlist constraint: built when the caller declares a
+    // non-empty allowlist on the request. Shares vocab_bytes storage
+    // with `JsonConstraint::new` via the per-model cache, so two
+    // constraints over the same model don't double-walk the vocab.
+    let url_constraint = request.url_allowlist.as_deref().and_then(|urls| {
+        let vocab_bytes = crate::json_constraint::vocab_bytes_for(model);
+        crate::url_constraint::UrlAllowlistConstraint::new(urls, vocab_bytes)
     });
 
     // Non-Latin token denylist: opt-in via env var. Built once per
@@ -7438,6 +7474,7 @@ fn build_sampler(
         inner_explore: build_chain(&explore, explore.temp),
         inner_content: build_chain(&content, content_temp),
         constraint,
+        url_constraint,
         non_latin_denylist,
     }
 }

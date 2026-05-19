@@ -384,7 +384,8 @@ mod tests {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                }
+        url_allowlist: None,
+        }
     }
 
     // ---- registry construction ----
@@ -555,7 +556,8 @@ allow_tools = ["write"]
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                };
+        url_allowlist: None,
+        };
         apply(&r, &mut req);
         assert!(req.tools.is_none());
     }

@@ -142,8 +142,13 @@ impl Tool for SymbolLookupTool {
 
         if rows.is_empty() {
             // Check if the code index is absent (vs. just missing this symbol).
+            // Knowledge / catalog corpora don't count — only code corpora
+            // would let this query succeed.
             let indexes = self.engine.installed_indexes().await.unwrap_or_default();
-            if indexes.is_empty() {
+            let has_code = indexes
+                .iter()
+                .any(|i| i.kind == corpus_engine::types::CorpusKind::Code);
+            if !has_code {
                 return Ok(StepOutput::Text(format!(
                     "No symbol named `{name}` found — no code indexes are installed.\n\n\
                      Try `code_search` with a description of what you're looking \

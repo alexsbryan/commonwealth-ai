@@ -113,7 +113,8 @@ async fn main() {
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-        };
+    url_allowlist: None,
+    };
 
     if args.stream {
         eprintln!("--- Streaming response ---");

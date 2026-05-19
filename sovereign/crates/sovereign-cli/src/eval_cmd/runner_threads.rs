@@ -479,7 +479,8 @@ async fn score_thread_coverage(
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-            };
+        url_allowlist: None,
+    };
 
     let resp = match session.inference.as_ref().complete(&request).await {
         Ok(r) => r,

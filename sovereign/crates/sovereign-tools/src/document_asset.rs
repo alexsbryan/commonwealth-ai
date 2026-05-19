@@ -825,7 +825,8 @@ impl DocumentAssetManager {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        })
+            url_allowlist: None,
+            })
             .await?;
 
         parse_route_response(&response.text, request)
@@ -987,7 +988,8 @@ impl DocumentAssetManager {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        })
+            url_allowlist: None,
+            })
             .await?;
 
         Ok(ExecutionOutput {
@@ -1147,7 +1149,8 @@ impl DocumentAssetManager {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        })
+            url_allowlist: None,
+            })
             .await?;
 
         // Swap the prompt-trimmed `content` on each citation back out for
@@ -1265,7 +1268,8 @@ impl DocumentAssetManager {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        })
+            url_allowlist: None,
+            })
             .await?;
 
         Ok(ExecutionOutput {
@@ -1330,7 +1334,8 @@ impl DocumentAssetManager {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        })
+            url_allowlist: None,
+            })
             .await?;
 
         // Transformations consume the whole document; we don't surface
@@ -1395,7 +1400,8 @@ async fn detect_document_type(
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                })
+        url_allowlist: None,
+        })
         .await;
 
     let detected = match response {
@@ -1498,7 +1504,8 @@ async fn build_skeleton(
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                        })
+            url_allowlist: None,
+            })
             .await;
 
         if let Ok(resp) = response {
@@ -1651,7 +1658,8 @@ async fn generate_overview(
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                })
+        url_allowlist: None,
+        })
         .await
         .map(|r| r.text)
         .unwrap_or_else(|_| "Overview not available.".to_string())

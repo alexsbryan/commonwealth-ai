@@ -68,7 +68,8 @@ impl Planner for LlmPlanner {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                    };
+            url_allowlist: None,
+            };
 
             let response = self.inference.complete(&request).await?;
 
@@ -151,7 +152,8 @@ impl Planner for LlmPlanner {
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                        };
+        url_allowlist: None,
+        };
 
         let response = self.inference.complete(&request).await?;
 

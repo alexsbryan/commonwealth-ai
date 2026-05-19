@@ -192,6 +192,30 @@ pub struct CompletionRequest {
     /// `assistant_prefix` — pick one mechanism per turn.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cmd_prefix: Option<String>,
+    /// URL allowlist for grammar-constrained URL emission. When
+    /// `Some`, the inference sampler installs a logit-mask constraint
+    /// that prevents the model from emitting any HTTP/HTTPS URL outside
+    /// this list — byte-by-byte, via the trie-walking state machine in
+    /// `sovereign_inference::url_constraint::UrlAllowlistConstraint`.
+    ///
+    /// Used by tool-call result-rendering paths (search_gym runner,
+    /// future production `SearchTool` integration) to make URL
+    /// fabrication structurally impossible: the model literally cannot
+    /// sample a token that would extend the cursor past a valid trie
+    /// edge. Prose tokens pass through; URL-shaped tokens that don't
+    /// match the trie get clamped to `-INFINITY`.
+    ///
+    /// `None` (default) leaves URL emission unconstrained. Empty list
+    /// is treated as "no URLs allowed" — useful for tool-result
+    /// renderings that contained zero URLs and where any URL emission
+    /// is automatically a fabrication.
+    ///
+    /// Wire path: extracted from the OpenAI request body's
+    /// `url_allowlist` field in `routes_inference.rs`; consumed by
+    /// `embedded::build_sampler` which constructs the constraint and
+    /// attaches it to `ConstrainedSampler`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url_allowlist: Option<Vec<String>>,
 }
 
 /// Sampler-profile selector. Mirrored in the inference layer's
@@ -244,7 +268,8 @@ impl CompletionRequest {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                }
+            url_allowlist: None,
+        }
     }
 
     pub fn with_speed(mut self, speed: Speed) -> Self {
@@ -292,7 +317,8 @@ impl CompletionRequest {
             sampling_mode: None,
             assistant_prefix: None,
             cmd_prefix: None,
-                                }
+            url_allowlist: None,
+        }
     }
 }
 

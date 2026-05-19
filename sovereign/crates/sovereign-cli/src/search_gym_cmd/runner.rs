@@ -186,6 +186,21 @@ pub async fn run_fixture(
     }
 
     for turn in 0..MAX_TURNS {
+        // Grammar-constrained URL emission: each turn's allowlist is
+        // the cumulative set of URLs the mocked tools have surfaced
+        // so far. Turn 0 ships with an empty list (no URLs known
+        // yet — model is making its first call); subsequent turns
+        // carry every URL the model has seen, making fabrication of
+        // sibling URLs (e.g. `/after-years` next to a real
+        // `/after-hours`) structurally impossible.
+        if !tx.mock_urls.is_empty() {
+            request["url_allowlist"] = Value::Array(
+                tx.mock_urls
+                    .iter()
+                    .map(|u| Value::String(u.clone()))
+                    .collect(),
+            );
+        }
         let started = Instant::now();
         let resp = match client
             .post(&endpoint)

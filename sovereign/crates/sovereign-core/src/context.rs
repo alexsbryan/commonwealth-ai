@@ -171,7 +171,8 @@ pub async fn summarize_dropped_history(
         sampling_mode: None,
         assistant_prefix: None,
         cmd_prefix: None,
-                    };
+        url_allowlist: None,
+    };
 
     let response = inference.complete(&request).await?;
     let raw = response.text.trim();
@@ -334,7 +335,8 @@ pub async fn update_topic_context(
     sampling_mode: None,
     assistant_prefix: None,
     cmd_prefix: None,
-            };
+    url_allowlist: None,
+    };
 
     let response = inference.complete(&request).await?;
     let raw = response.text.trim();

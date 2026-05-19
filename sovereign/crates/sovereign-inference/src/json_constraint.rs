@@ -2622,7 +2622,11 @@ fn vocab_cache() -> &'static Mutex<HashMap<usize, Arc<Vec<Vec<u8>>>>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
+/// Exposed for sibling constraint modules (e.g. `url_constraint`) that
+/// need the same per-model byte mapping the JSON constraint uses. The
+/// cache key is the `LlamaModel` pointer, so callers asking for the
+/// same model share storage with `JsonConstraint::new`.
+pub fn vocab_bytes_for(model: &LlamaModel) -> Arc<Vec<Vec<u8>>> {
     let key = model as *const LlamaModel as usize;
     {
         let guard = vocab_cache().lock().unwrap_or_else(|e| e.into_inner());
