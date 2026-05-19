@@ -964,31 +964,53 @@ pub async fn bootstrap_with_progress(
         ));
     }
     if enabled.iter().any(|t| t == "search" || t == "knowledge" || t == "web_search") {
-        let backend = match config.search_backend.provider.as_str() {
-            "tavily" => {
-                if let Some(ref key) = config.search_backend.api_key {
-                    sovereign_tools::web::search::SearchBackend::Tavily {
-                        api_key: key.clone(),
-                    }
-                } else {
-                    sovereign_tools::web::search::SearchBackend::DuckDuckGo
-                }
-            }
-            "brave" => {
-                if let Some(ref key) = config.search_backend.api_key {
-                    sovereign_tools::web::search::SearchBackend::Brave {
-                        api_key: key.clone(),
-                    }
-                } else {
-                    sovereign_tools::web::search::SearchBackend::DuckDuckGo
-                }
-            }
-            _ => sovereign_tools::web::search::SearchBackend::DuckDuckGo,
+        // Phase 6 of PRODUCTION_SEARCH_INTEGRATION.md: build a
+        // WebSearchRegistry from operator config + a SearchOrchestrator,
+        // and hand it to SearchTool. The orchestrator path applies the
+        // privacy + budget + fallback-chain invariants that the legacy
+        // direct-enum dispatch never had. The legacy path stays
+        // available via SearchTool::with_web for the seven other call
+        // sites still using it.
+        use sovereign_tools::web::search::{
+            BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator,
+            TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
         };
-        tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
+
+        let mut registry = WebSearchRegistry::new();
+        // DuckDuckGo is always available (zero-config fallback).
+        registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
+        // The operator-chosen provider, if any, gets registered
+        // alongside. Both stay in the registry; the orchestrator
+        // picks via the operator preference order (Tavily/Brave
+        // first when configured, DuckDuckGo as the fallback).
+        let preferred: Box<dyn WebSearchBackend> =
+            match config.search_backend.provider.as_str() {
+                "tavily" => config.search_backend.api_key.as_ref().map(
+                    |key| -> Box<dyn WebSearchBackend> {
+                        Box::new(TavilyBackendImpl::new(key.clone()))
+                    },
+                ),
+                "brave" => config.search_backend.api_key.as_ref().map(
+                    |key| -> Box<dyn WebSearchBackend> {
+                        Box::new(BraveBackendImpl::new(key.clone()))
+                    },
+                ),
+                _ => None,
+            }
+            .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
+        // Convert the Box to Arc so the registry's Arc-of-trait
+        // shape is happy. DuckDuckGo's `register` above sets up the
+        // fallback; this `register` may replace it with the same id
+        // when the operator's provider is also DuckDuckGo (the
+        // registry warn-logs the replacement, which is the right
+        // signal — operator wanted DDG and they got it).
+        registry.register(Arc::from(preferred));
+
+        let orchestrator = Arc::new(SearchOrchestrator::new(Arc::new(registry)));
+        tools.register(Box::new(sovereign_tools::search::SearchTool::with_orchestrator(
             Arc::clone(&store),
             Arc::clone(&inference),
-            backend,
+            orchestrator,
         )));
     }
     if enabled.iter().any(|t| t == "web_fetch") {

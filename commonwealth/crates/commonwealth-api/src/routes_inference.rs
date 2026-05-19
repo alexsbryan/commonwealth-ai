@@ -183,6 +183,14 @@ pub async fn chat_completions(
         crate::frontdoor::apply_failure_nudge_chat(&mut request);
         crate::frontdoor::apply_anti_repetition_chat(&mut request);
         crate::frontdoor::apply_read_attractor_nudge_chat(&mut request);
+        // URL-allowlist accumulator. Walks the conversation history
+        // for URLs in prior `role: tool` messages (search results,
+        // typically) and threads them into `request.url_allowlist`
+        // so the inference-layer URL constraint
+        // (`sovereign-inference/src/url_constraint.rs`) can prevent
+        // the model from fabricating sibling URLs during synthesis.
+        // Idempotent: a caller-supplied `url_allowlist` wins.
+        crate::frontdoor::apply_url_allowlist_from_tool_results(&mut request);
         let want_stream = request.stream.unwrap_or(false);
         info!(
             want_stream,

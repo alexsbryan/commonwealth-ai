@@ -11,7 +11,10 @@ use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::*;
 
 use self::extract::fetch_and_extract;
-use self::search::{SearchBackend, SearchResult};
+use self::search::{
+    BudgetView, SearchBackend, SearchOrchestrator, SearchPrivacy, SearchResult,
+    SelectInputs,
+};
 
 // ─── WebSearchTool ─────────────────────────────────────────────
 
@@ -20,33 +23,66 @@ use self::search::{SearchBackend, SearchResult};
 /// 2. Search execution → results
 /// 3. Content extraction (top URLs) → clean text
 /// 4. Synthesis (Primary slot) → cited answer
+///
+/// Two backend dispatch modes coexist for the Phase 0 → 6 migration
+/// (see `sovereign/docs/PRODUCTION_SEARCH_INTEGRATION.md`):
+///
+/// - **Legacy**: a single concrete `SearchBackend` enum value. Set by
+///   `new()` and `with_backend()`. The original API; eight call sites
+///   still use it.
+/// - **Orchestrated**: an `Arc<SearchOrchestrator>` that picks a
+///   backend per call from a registry, filtering by privacy and
+///   budget. Set by `with_orchestrator()`. New code (desktop's Phase 6
+///   migration, future integrations) should reach for this path.
+///
+/// When both are somehow set (e.g. a future builder bug), the
+/// orchestrator wins — it carries more invariants.
 pub struct WebSearchTool {
     inference: Arc<dyn InferenceProvider>,
     client: reqwest::Client,
-    backend: SearchBackend,
+    /// Legacy direct-backend dispatch. None when the orchestrator
+    /// path is in use.
+    backend: Option<SearchBackend>,
+    /// Trait+registry path. When `Some`, supersedes `backend`.
+    orchestrator: Option<Arc<SearchOrchestrator>>,
 }
 
 impl WebSearchTool {
-    /// Create with DuckDuckGo (free, zero-config default).
+    /// Create with DuckDuckGo (free, zero-config default). Legacy
+    /// path — new callers should prefer
+    /// `with_orchestrator()`.
     pub fn new(inference: Arc<dyn InferenceProvider>) -> Self {
         Self::with_backend(inference, SearchBackend::DuckDuckGo)
     }
 
-    /// Create with a specific search backend.
+    /// Create with a specific search backend. Legacy path; kept for
+    /// back-compat with the eight existing call sites that pass a
+    /// `SearchBackend` enum value.
     pub fn with_backend(
         inference: Arc<dyn InferenceProvider>,
         backend: SearchBackend,
     ) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(15))
-            .redirect(reqwest::redirect::Policy::limited(5))
-            .build()
-            .unwrap_or_default();
-
         Self {
             inference,
-            client,
-            backend,
+            client: default_client(),
+            backend: Some(backend),
+            orchestrator: None,
+        }
+    }
+
+    /// Create with the trait-based orchestrator. The orchestrator
+    /// holds the registry and applies privacy + budget filtering on
+    /// every selection. Per the Phase 6 migration, this is the
+    /// constructor production code should reach for.
+    pub fn with_orchestrator(
+        inference: Arc<dyn InferenceProvider>,
+        orchestrator: Arc<SearchOrchestrator>,
+    ) -> Self {
+        Self {
+            inference,
+            client: default_client(),
+            backend: None,
+            orchestrator: Some(orchestrator),
         }
     }
 
@@ -109,27 +145,68 @@ impl WebSearchTool {
         }
     }
 
-    /// Execute searches and collect results.
+    /// Execute searches and collect results. Routes through
+    /// `do_one_search` so both legacy and orchestrated paths share
+    /// the dedup + error-handling envelope.
     pub(crate) async fn execute_searches(&self, queries: &[String]) -> Vec<SearchResult> {
         let mut all_results = Vec::new();
         let mut seen_urls = std::collections::HashSet::new();
 
         for query in queries {
-            match search::search(&self.client, &self.backend, query, 5).await {
-                Ok(results) => {
-                    for r in results {
-                        if seen_urls.insert(r.url.clone()) {
-                            all_results.push(r);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("  [web] Search failed for \"{query}\": {e}");
+            let results = self.do_one_search(query, 5).await;
+            for r in results {
+                if seen_urls.insert(r.url.clone()) {
+                    all_results.push(r);
                 }
             }
         }
 
         all_results
+    }
+
+    /// Single-query dispatch. Orchestrator wins when present (it's
+    /// the future-state path); legacy backend is the back-compat
+    /// fallback. When neither is set (shouldn't happen — both
+    /// constructors set one) returns empty.
+    async fn do_one_search(&self, query: &str, max_results: usize) -> Vec<SearchResult> {
+        if let Some(orch) = &self.orchestrator {
+            let budget = BudgetView::new(); // Phase 6.5: thread real budget through
+            let out = orch
+                .search(
+                    &self.client,
+                    SelectInputs {
+                        query,
+                        max_results,
+                        // Default to External — the orchestrator will
+                        // narrow further based on its registry's
+                        // privacy postures. Future: receive the
+                        // request's OICP privacy and tighten this.
+                        max_privacy: SearchPrivacy::External { provider: "any" },
+                        budget: &budget,
+                        // Empty prefer: registry order. Operator
+                        // override comes through BackendsConfig in a
+                        // follow-up wiring step (currently the
+                        // orchestrator carries no operator config).
+                        prefer: &[],
+                    },
+                )
+                .await;
+            return out.results;
+        }
+        if let Some(backend) = &self.backend {
+            match search::search(&self.client, backend, query, max_results).await {
+                Ok(results) => return results,
+                Err(e) => {
+                    eprintln!("  [web] Search failed for \"{query}\": {e}");
+                    return Vec::new();
+                }
+            }
+        }
+        eprintln!(
+            "  [web] WebSearchTool has neither backend nor orchestrator — \
+             returning empty results"
+        );
+        Vec::new()
     }
 
     /// Fetch and extract content from top URLs.
@@ -294,11 +371,10 @@ impl Tool for WebSearchTool {
 
         if results.is_empty() {
             // Last resort: try searching with the raw query directly.
+            // Routes through `do_one_search` so the orchestrator
+            // (when configured) gets the same fallback chain.
             eprintln!("[web] Retrying with raw query");
-            let raw_results =
-                search::search(&self.client, &self.backend, query, 5)
-                    .await
-                    .unwrap_or_default();
+            let raw_results = self.do_one_search(query, 5).await;
             eprintln!("[web] Raw query found {} results", raw_results.len());
 
             if raw_results.is_empty() {
@@ -411,4 +487,17 @@ impl Tool for WebFetchTool {
         let text = fetch_and_extract(&self.client, url).await?;
         Ok(StepOutput::Text(text))
     }
+}
+
+/// Build the reqwest client both WebSearchTool constructors share.
+/// 15s timeout matches the per-call budget the search backends
+/// (DuckDuckGo's two endpoints, Tavily, Brave) expect; redirect
+/// limit of 5 catches typical 30x chains without letting a
+/// redirect loop hang the request.
+fn default_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .build()
+        .unwrap_or_default()
 }
