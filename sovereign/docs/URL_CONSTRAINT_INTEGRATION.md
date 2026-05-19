@@ -25,6 +25,33 @@ sovereign-vulkan toolbox — see "Validation" at the bottom.
   with `JsonConstraint` in `sample()` (via `else if`). Both `accept()`
   paths still fire so cursors stay in sync. Documented in the
   `url_constraint` field doc-comment in `ConstrainedSampler`.
+- **EOS bypass bug surfaced + fixed during validation.** First gym run
+  (v2) still showed `must_not_cite_url_outside_mock` failures
+  (8/10 across fixtures 07+08) despite tracing confirming the
+  constraint was being constructed on every request. Root cause: the
+  original `mask()` short-circuited empty-bytes tokens (EOS/EOG) with
+  the comment "upstream sampler chain handles EOS/EOG/etc." That holds
+  in prose / at terminal nodes, but mid-URL at a non-terminal node it
+  lets the model end generation with a truncated-prefix URL like
+  `/after-hour` when the trie has `/after-hours`. Fix in
+  `url_constraint.rs::mask` — pre-compute `force_continue` and clamp
+  empty-bytes tokens when set. Test `empty_bytes_token_masked_mid_url_non_terminal`
+  guards the regression. See [[project_url_constraint_eos_bypass]].
+
+## Validation results — 2026-05-19 evening
+
+Gym v3 (fixtures 07 + 08, 5 replays each, post-EOS-fix):
+
+| Fixture | URL fabrications | Notes |
+|---|---|---|
+| 07_multicorpus_tangential_local | **0 / 5** (was 5/5) | All citations resolve to `…/starship-flight-14-{recap,live,analysis}` — real allowlisted URLs. |
+| 08_multicorpus_stale_local | **0 / 5** (was 3/5) | All citations resolve to `…/quote/NVDA` or `…/quote/NVDA/after-hours`. |
+
+The remaining failures (5/5 on each) are `judge error on final_message_satisfies`
+— the judge calls `commonwealth/fast` which `/v1/models` advertises but
+no peer actually loads (project_v1_models_liveness — separate issue).
+Pass-rate aggregate stays 0/10 because of this, but the predicate the
+constraint targets is now clean across all 10 replays.
 
 ## What this fixes
 

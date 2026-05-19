@@ -200,6 +200,11 @@ pub async fn run_fixture(
                     .map(|u| Value::String(u.clone()))
                     .collect(),
             );
+            tracing::info!(
+                turn,
+                url_count = tx.mock_urls.len(),
+                "search-gym: url_allowlist injected"
+            );
         }
         let started = Instant::now();
         let resp = match client

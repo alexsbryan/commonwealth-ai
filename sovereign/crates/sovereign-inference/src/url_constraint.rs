@@ -152,6 +152,17 @@ impl UrlAllowlistConstraint {
     /// or staying in prose) are left untouched.
     pub fn mask(&self, data: &mut LlamaTokenDataArray) {
         let vocab = &self.vocab_bytes;
+        // Pre-compute "is the cursor mid-URL at a non-terminal trie
+        // node?" — if so, the URL is incomplete and EOS/EOG tokens
+        // (rendered as empty bytes) MUST be masked too, otherwise the
+        // model can terminate generation mid-URL and produce a
+        // truncated-prefix fabrication like `/after-hour` when the
+        // allowlist only carries `/after-hours`. Observed empirically
+        // in search-gym Phase 3c (2026-05-19, fixtures 07 + 08).
+        let force_continue = matches!(
+            &self.cursor,
+            CursorMode::InUrl(node_idx) if !self.nodes[*node_idx as usize].is_terminal,
+        );
         for c in data.data.iter_mut() {
             let id = c.id().0 as usize;
             if id >= vocab.len() {
@@ -159,8 +170,13 @@ impl UrlAllowlistConstraint {
             }
             let bytes = &vocab[id];
             if bytes.is_empty() {
-                // Unknown/special tokens — leave untouched, the upstream
-                // sampler chain handles EOS/EOG/etc.
+                // Special tokens (EOS / EOG / BOS / etc.) render as
+                // empty bytes when fetched via `token_to_piece`.
+                // Outside URL mode they're harmless; mid-URL at a
+                // non-terminal they truncate the citation.
+                if force_continue {
+                    c.set_logit(f32::NEG_INFINITY);
+                }
                 continue;
             }
             let mut sim = self.cursor.clone();
@@ -390,5 +406,78 @@ mod tests {
         for byte in "https://a.test/x".as_bytes() {
             assert!(feed_byte(&c.nodes, &mut c.cursor, *byte), "byte {:?} should be accepted", *byte as char);
         }
+    }
+
+    /// Regression: search-gym Phase 3c (2026-05-19) fixtures 07/08.
+    /// The model emitted a strict byte-prefix of an allowed URL
+    /// (`…/after-hour` when only `…/after-hours` was in the
+    /// allowlist), then terminated generation via EOS. The empty-
+    /// bytes EOS bypassed the mask, leaving a truncated URL in the
+    /// final message that the predicate `must_not_cite_url_outside_mock`
+    /// flagged as a fabrication. `mask()` must clamp empty-bytes
+    /// tokens when the cursor is mid-URL at a non-terminal node;
+    /// when the cursor IS at a terminal node, empty-bytes tokens
+    /// stay allowed because the URL is already complete.
+    #[test]
+    fn empty_bytes_token_masked_mid_url_non_terminal() {
+        // Construct a vocab where token 0 is an empty-bytes token
+        // (stand-in for EOS) and token 1 has the byte `s` (the byte
+        // that would extend `/after-hour` into `/after-hours`).
+        let vocab: Vec<Vec<u8>> = vec![Vec::new(), vec![b's']];
+        let urls = vec!["https://a.test/after-hours".to_string()];
+        let mut c =
+            UrlAllowlistConstraint::new(&urls, Arc::new(vocab.clone())).expect("non-empty");
+        // Walk cursor up to but NOT including the terminal `s`.
+        for byte in "https://a.test/after-hour".as_bytes() {
+            assert!(
+                feed_byte(&c.nodes, &mut c.cursor, *byte),
+                "prefix byte {:?} should be accepted",
+                *byte as char
+            );
+        }
+        assert!(c.in_url_mode(), "cursor should still be inside URL");
+
+        // Mid-URL at non-terminal: EOS (token 0, empty bytes) must
+        // get clamped, AND the byte-`s` token (token 1) must stay
+        // valid (it's the only legal continuation).
+        let mut data = LlamaTokenDataArray::from_iter(
+            vec![
+                crate::llama::cpp::token::data::LlamaTokenData::new(LlamaToken(0), 0.0, 0.0),
+                crate::llama::cpp::token::data::LlamaTokenData::new(LlamaToken(1), 0.0, 0.0),
+            ],
+            false,
+        );
+        c.mask(&mut data);
+        let eos_logit = data.data[0].logit();
+        let s_logit = data.data[1].logit();
+        assert_eq!(
+            eos_logit,
+            f32::NEG_INFINITY,
+            "EOS at non-terminal node must be masked"
+        );
+        assert_ne!(
+            s_logit,
+            f32::NEG_INFINITY,
+            "the byte that completes the URL must remain valid"
+        );
+
+        // Now walk the cursor to the terminal node by feeding the
+        // final `s`. EOS at terminal must STAY allowed (the URL is
+        // complete; the model can stop generation cleanly).
+        assert!(feed_byte(&c.nodes, &mut c.cursor, b's'));
+        let mut data = LlamaTokenDataArray::from_iter(
+            vec![crate::llama::cpp::token::data::LlamaTokenData::new(
+                LlamaToken(0),
+                0.0,
+                0.0,
+            )],
+            false,
+        );
+        c.mask(&mut data);
+        assert_ne!(
+            data.data[0].logit(),
+            f32::NEG_INFINITY,
+            "EOS at terminal node must remain allowed"
+        );
     }
 }
