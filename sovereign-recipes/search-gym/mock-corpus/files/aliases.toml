@@ -1,0 +1,11 @@
+# Files-corpus alias index — the user's personal notes / docs /
+# vault content. Same shape as the other corpora.
+
+[[entry]]
+file    = "home-decor-notes.json"
+aliases = [
+  "decorator",
+  "decorating",
+  "home decor",
+  "interior",
+]

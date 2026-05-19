@@ -1,0 +1,15 @@
+{
+  "query": "spacex",
+  "results": [
+    {
+      "title": "SpaceX — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/SpaceX",
+      "snippet": "Space Exploration Technologies Corp., commonly known as SpaceX, is an American aerospace company founded in 2002 by Elon Musk. The company designs, manufactures, and launches advanced rockets and spacecraft. SpaceX has developed the Falcon 9 and Falcon Heavy launch vehicles, the Dragon spacecraft for cargo and crew transport, and the Starship vehicle for deep-space missions. Reusability is a core design philosophy."
+    },
+    {
+      "title": "SpaceX Starship — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/SpaceX_Starship",
+      "snippet": "Starship is a fully reusable super heavy-lift launch vehicle under development by SpaceX. It is intended to replace the Falcon family and ultimately deliver crew and cargo to lunar and Martian destinations. The vehicle consists of two stages: the Super Heavy booster and the Starship upper stage. Multiple integrated flight tests have been conducted since 2023, with iterative improvements between flights."
+    }
+  ]
+}

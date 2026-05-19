@@ -1,0 +1,15 @@
+# 06_multicorpus_sufficient_local
+#
+# Stable scientific concept. Local knowledge corpus has a strong
+# article that fully answers the question. Model should consult
+# `knowledge` (or its own training) and NOT pay for web search.
+
+# Structural: no web search needed.
+should_call_search = false
+forbidden_tools = ["search", "web_search"]
+
+# Semantic: response should be substantive and on-topic, not a
+# refusal or a one-liner.
+final_message_satisfies = [
+  "The response explains the biological process of photosynthesis, including where it occurs in the plant and the basic inputs and outputs.",
+]

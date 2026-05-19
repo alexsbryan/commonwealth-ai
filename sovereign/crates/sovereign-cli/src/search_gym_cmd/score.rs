@@ -52,6 +52,9 @@ pub struct JudgeRecord {
     pub rationale: String,
 }
 
+/// Structural-only scoring. Pure, no judge. Use this for unit tests
+/// and for `--no-judge` runs. Semantic-predicate evaluation needs
+/// `score_with_judge`.
 pub fn score(slug: &str, predicate: &Predicate, tx: &Transcript) -> Scored {
     let mut reasons: Vec<String> = Vec::new();
 
@@ -109,52 +112,28 @@ pub fn score(slug: &str, predicate: &Predicate, tx: &Transcript) -> Scored {
         }
     }
 
-    // ─── Query shape ────────────────────────────────────────────
-    if let Some(first_search) = search_calls.first() {
-        let query = first_search
-            .arguments
-            .get("query")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_lowercase();
-
-        for needed in &predicate.expected_query_contains {
-            if !query.contains(&needed.to_lowercase()) {
-                reasons.push(format!(
-                    "expected_query_contains={needed:?} missing from query={:?}",
-                    first_search.arguments.get("query")
-                ));
-            }
-        }
-        for forbidden in &predicate.expected_query_not_contains {
-            if query.contains(&forbidden.to_lowercase()) {
-                reasons.push(format!(
-                    "expected_query_not_contains={forbidden:?} present in query={:?}",
-                    first_search.arguments.get("query")
-                ));
-            }
-        }
-        if let Some(cap) = predicate.expected_query_max_tokens {
+    // ─── Query shape (token count is structural) ────────────────
+    if let Some(cap) = predicate.expected_query_max_tokens {
+        if let Some(first_search) = search_calls.first() {
+            let query = first_search
+                .arguments
+                .get("query")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let token_count = query.split_whitespace().count();
             if token_count > cap {
                 reasons.push(format!(
-                    "expected_query_max_tokens={cap} but query has {token_count} tokens"
+                    "expected_query_max_tokens={cap} but query has {token_count} tokens ({query:?})"
                 ));
             }
-        }
-    } else if !predicate.expected_query_contains.is_empty()
-        || !predicate.expected_query_not_contains.is_empty()
-        || predicate.expected_query_max_tokens.is_some()
-    {
-        // Query-shape predicates require a search to have happened.
-        // Don't double-report — `should_call_search` already failed
-        // above if that's the actual mismatch.
-        if predicate.should_call_search != Some(false) {
-            reasons.push("query-shape predicates set but no search call observed".into());
+        } else if predicate.should_call_search != Some(false) {
+            reasons.push(
+                "expected_query_max_tokens set but no search call observed".into(),
+            );
         }
     }
 
-    // ─── Result handling ────────────────────────────────────────
+    // ─── Result handling (URL set membership) ───────────────────
     if let Some(min) = predicate.must_cite_url_from_mock {
         let cited = tx
             .mock_urls
@@ -182,65 +161,16 @@ pub fn score(slug: &str, predicate: &Predicate, tx: &Transcript) -> Scored {
         }
     }
 
-    for phrase in &predicate.contradiction_phrases {
-        if !tx
-            .final_message
-            .to_lowercase()
-            .contains(&phrase.to_lowercase())
-        {
-            reasons.push(format!(
-                "contradiction_phrases requires {phrase:?} in final message but absent"
-            ));
-        }
-    }
-
-    if predicate.zero_results_must_be_acknowledged == Some(true) {
-        let msg = tx.final_message.to_lowercase();
-        let acknowledged = ["no results", "zero results", "no relevant", "couldn't find", "could not find", "nothing found"]
-            .iter()
-            .any(|p| msg.contains(p));
-        if !acknowledged {
-            reasons.push("zero_results_must_be_acknowledged but final message doesn't say so".into());
-        }
-    }
-
-    // ─── Final-message content ──────────────────────────────────
-    let final_lc = tx.final_message.to_lowercase();
-    for needed in &predicate.final_message_contains {
-        if !final_lc.contains(&needed.to_lowercase()) {
-            reasons.push(format!(
-                "final_message_contains={needed:?} missing from final message"
-            ));
-        }
-    }
-    for forbidden in &predicate.final_message_not_contains {
-        if final_lc.contains(&forbidden.to_lowercase()) {
-            reasons.push(format!(
-                "final_message_not_contains={forbidden:?} present in final message"
-            ));
-        }
-    }
-
-    // ─── Refusal path ───────────────────────────────────────────
-    if predicate.must_decline_gracefully == Some(true) {
-        if !search_calls.is_empty() {
-            reasons.push("must_decline_gracefully but model attempted to search anyway".into());
-        }
-        let msg = tx.final_message.to_lowercase();
-        let declined = ["can't", "cannot", "unable", "not configured", "no api key", "search isn't available"]
-            .iter()
-            .any(|p| msg.contains(p));
-        if !declined {
-            reasons.push("must_decline_gracefully but no decline phrasing in final message".into());
-        }
-    }
-
+    // Surface that semantic predicates were set but unevaluated, so
+    // operators running `--no-judge` see the asymmetry instead of a
+    // misleading green pass. score_with_judge() clears this reason
+    // before evaluating the assertions itself.
     if !predicate.final_message_satisfies.is_empty()
         || !predicate.query_satisfies.is_empty()
     {
         reasons.push(format!(
             "semantic predicates set ({} on final_message, {} on query) but no judge \
-             provided — re-run with judge enabled or use score_with_judge",
+             provided — re-run without --no-judge to evaluate them",
             predicate.final_message_satisfies.len(),
             predicate.query_satisfies.len(),
         ));
@@ -278,14 +208,27 @@ pub async fn score_with_judge(
         return scored;
     }
 
-    // Drop the placeholder "no judge provided" reasons we added in
+    // Drop the placeholder "no judge provided" reason added by
     // score() — we ARE the judge path.
     scored
         .reasons
         .retain(|r| !r.contains("semantic predicates set"));
 
+    // For final_message_satisfies, pass the FULL conversation
+    // transcript rather than the bare final assistant message —
+    // assertions routinely reference earlier turns ("the user
+    // stated X earlier") which the judge can't verify from just
+    // the final reply. Falls back to final_message if the runner
+    // hasn't populated conversation_view (defensive — should
+    // always be set when runner_error is None).
+    let final_subject = if tx.conversation_view.is_empty() {
+        tx.final_message.as_str()
+    } else {
+        tx.conversation_view.as_str()
+    };
+
     for assertion in &predicate.final_message_satisfies {
-        match judge.judge(assertion, &tx.final_message).await {
+        match judge.judge(assertion, final_subject).await {
             Ok(v) => {
                 if !v.passes {
                     scored.reasons.push(format!(
@@ -310,7 +253,7 @@ pub async fn score_with_judge(
 
     // Query-satisfies assertions evaluate against the FIRST search
     // call's query string. Mirrors the structural query-shape
-    // predicates' policy from §3.3 of the v3 design.
+    // predicate's policy.
     let first_search_query: Option<String> = tx
         .tool_calls
         .iter()
@@ -359,8 +302,9 @@ pub async fn score_with_judge(
     scored
 }
 
-/// Discard the `Verdict` type from the public API — the scorer
-/// returns `JudgeRecord` which has the same shape but is gym-owned.
+/// Keep `Verdict` in scope so the file compiles even if no other
+/// code path references it directly (it does today, but cheap
+/// defence against accidental import removal during refactors).
 #[allow(dead_code)]
 fn _force_verdict_in_scope(_v: Verdict) {}
 
@@ -485,6 +429,7 @@ mod tests {
             mock_urls: Vec::new(),
             model_ms: 0,
             runner_error: None,
+            conversation_view: String::new(),
         }
     }
 
@@ -524,20 +469,20 @@ mod tests {
     }
 
     #[test]
-    fn expected_query_contains_is_case_insensitive() {
+    fn expected_query_max_tokens_caps_query_length() {
         let mut p = pred_default();
-        p.should_call_search = Some(true);
-        p.expected_query_contains = vec!["SpaceX".into(), "Starship".into()];
+        p.expected_query_max_tokens = Some(3);
         let tx = tx_with_calls(
             vec![ObservedToolCall {
                 name: "search".into(),
-                arguments: serde_json::json!({"query": "spacex starship flight 12"}),
+                arguments: serde_json::json!({"query": "one two three four five"}),
                 turn: 0,
             }],
             "",
         );
         let s = score("01", &p, &tx);
-        assert!(s.pass, "reasons={:?}", s.reasons);
+        assert!(!s.pass);
+        assert!(s.reasons[0].contains("expected_query_max_tokens=3"));
     }
 
     #[test]
@@ -574,7 +519,6 @@ mod tests {
     #[tokio::test]
     async fn score_with_judge_passes_when_judge_passes() {
         use super::super::judge::FixedVerdictJudge;
-        use super::super::judge::Verdict;
         let mut p = pred_default();
         p.final_message_satisfies = vec!["The text apologises".into()];
         let tx = tx_with_calls(vec![], "I'm sorry, I couldn't help with that.");
@@ -593,7 +537,6 @@ mod tests {
     #[tokio::test]
     async fn score_with_judge_records_failure_reasons_and_verdicts() {
         use super::super::judge::FixedVerdictJudge;
-        use super::super::judge::Verdict;
         let mut p = pred_default();
         p.final_message_satisfies = vec!["The text apologises".into()];
         let tx = tx_with_calls(vec![], "No, that's correct as-is.");
@@ -614,7 +557,6 @@ mod tests {
     #[tokio::test]
     async fn score_with_judge_routes_query_assertion_to_first_search() {
         use super::super::judge::ScriptedJudge;
-        use super::super::runner::ObservedToolCall;
         let mut p = pred_default();
         p.query_satisfies = vec!["The query names a company by ticker".into()];
         let tx = tx_with_calls(
@@ -636,7 +578,6 @@ mod tests {
     #[tokio::test]
     async fn score_with_judge_fails_query_assertion_when_no_search() {
         use super::super::judge::FixedVerdictJudge;
-        use super::super::judge::Verdict;
         let mut p = pred_default();
         p.query_satisfies = vec!["unreachable".into()];
         let tx = tx_with_calls(vec![], "no search happened");
@@ -654,7 +595,6 @@ mod tests {
     #[tokio::test]
     async fn score_with_judge_skips_judge_when_runner_errored() {
         use super::super::judge::FixedVerdictJudge;
-        use super::super::judge::Verdict;
         let mut p = pred_default();
         p.final_message_satisfies = vec!["unused".into()];
         let mut tx = tx_with_calls(vec![], "");
@@ -682,63 +622,5 @@ mod tests {
         let s = score("01", &p, &tx_with_calls(vec![], "hi"));
         assert!(!s.pass);
         assert!(s.reasons[0].contains("semantic predicates set"));
-    }
-
-    #[test]
-    fn final_message_contains_is_case_insensitive() {
-        let mut p = pred_default();
-        p.final_message_contains = vec!["96 GB".into(), "unified memory".into()];
-        let tx = tx_with_calls(vec![], "Your system has 96 gb of UNIFIED MEMORY, ample for 70B.");
-        let s = score("04", &p, &tx);
-        assert!(s.pass, "reasons={:?}", s.reasons);
-    }
-
-    #[test]
-    fn final_message_contains_catches_missing_phrase() {
-        let mut p = pred_default();
-        p.final_message_contains = vec!["96 GB".into()];
-        let tx = tx_with_calls(vec![], "You have plenty of memory.");
-        let s = score("04", &p, &tx);
-        assert!(!s.pass);
-        assert!(s.reasons[0].contains("96 GB"), "reasons={:?}", s.reasons);
-    }
-
-    #[test]
-    fn final_message_not_contains_catches_forbidden_phrase() {
-        let mut p = pred_default();
-        p.final_message_not_contains = vec!["I don't know".into()];
-        let tx = tx_with_calls(vec![], "Sorry, I don't know the answer.");
-        let s = score("04", &p, &tx);
-        assert!(!s.pass);
-        assert!(s.reasons[0].contains("I don't know"), "reasons={:?}", s.reasons);
-    }
-
-    #[test]
-    fn aggregate_computes_rate() {
-        let scored = vec![
-            Scored {
-                slug: "x".into(),
-                pass: true,
-                reasons: vec![],
-                runner_error: None,
-                model_ms: 100,
-                tool_calls_observed: 0,
-                judge_verdicts: vec![],
-            },
-            Scored {
-                slug: "x".into(),
-                pass: false,
-                reasons: vec!["nope".into()],
-                runner_error: None,
-                model_ms: 200,
-                tool_calls_observed: 0,
-                judge_verdicts: vec![],
-            },
-        ];
-        let agg = aggregate("x", &scored);
-        assert_eq!(agg.passes, 1);
-        assert_eq!(agg.replays, 2);
-        assert!((agg.rate - 0.5).abs() < 1e-6);
-        assert_eq!(agg.mean_model_ms, 150);
     }
 }

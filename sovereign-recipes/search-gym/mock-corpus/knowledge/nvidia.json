@@ -1,0 +1,15 @@
+{
+  "query": "nvidia",
+  "results": [
+    {
+      "title": "NVIDIA Corporation — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Nvidia",
+      "snippet": "NVIDIA Corporation is an American multinational technology company incorporated in Delaware and based in Santa Clara, California. It designs graphics processing units (GPUs) for the gaming and professional markets, as well as system on a chip units (SoCs) for the mobile computing and automotive market. NVIDIA stock trades on the NASDAQ under the ticker NVDA ($142 as of January 2024). The company was founded in 1993 by Jensen Huang, Chris Malachowsky, and Curtis Priem."
+    },
+    {
+      "title": "Jensen Huang — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Jensen_Huang",
+      "snippet": "Jen-Hsun \"Jensen\" Huang is a Taiwanese-American business executive, electrical engineer, and the co-founder, president, and CEO of NVIDIA Corporation. Huang has led NVIDIA since its founding in 1993."
+    }
+  ]
+}

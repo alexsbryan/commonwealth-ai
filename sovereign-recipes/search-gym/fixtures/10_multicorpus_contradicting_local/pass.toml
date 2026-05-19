@@ -1,0 +1,18 @@
+# 10_multicorpus_contradicting_local
+#
+# Local knowledge returns two articles that disagree: one says
+# "8 cups (~2L) daily" (popular guideline), the other says "no
+# single rule, depends on body weight and activity" (recent
+# medical consensus). The model should either:
+#   - acknowledge the conflict and present both viewpoints, OR
+#   - reach for web search to resolve it
+# A model that picks one source and presents it as the answer
+# without acknowledging the other has failed the discrimination
+# test.
+
+# Either path is acceptable — what's NOT acceptable is silently
+# picking a winner. Hence no should_call_search constraint.
+
+final_message_satisfies = [
+  "The response either presents multiple guidelines / acknowledges that recommendations differ between sources, or explicitly notes that there is no single agreed-upon figure.",
+]

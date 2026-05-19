@@ -94,11 +94,11 @@ const HELP: Help = Help {
                 "--no-judge",
                 "Skip judge-evaluated semantic predicates (e.g. final_message_satisfies). \
                  Faster; useful while iterating on structural predicates. Without --no-judge \
-                 the gym runs the FastInferenceJudge against commonwealth/primary.",
+                 the gym runs the FastInferenceJudge against commonwealth/fast.",
             ),
             (
                 "--judge-model NAME",
-                "Override the judge model id. Default: commonwealth/primary. Useful if you \
+                "Override the judge model id. Default: commonwealth/fast. Useful if you \
                  want to bench-compare judges against the calibration bank.",
             ),
             (
@@ -188,7 +188,7 @@ fn parse_run_args(args: &[String]) -> Result<RunOpts, String> {
         max_results: 5,
         mode: runner::Mode::Mock,
         use_judge: true,
-        judge_model: "commonwealth/primary".to_string(),
+        judge_model: "commonwealth/fast".to_string(),
         json: false,
     };
 
@@ -462,7 +462,7 @@ fn parse_calibrate_args(args: &[String]) -> Result<CalibrateOpts, String> {
     let workspace_root = workspace_root();
     let mut opts = CalibrateOpts {
         base_url: "http://localhost:9741".to_string(),
-        judge_model: "commonwealth/primary".to_string(),
+        judge_model: "commonwealth/fast".to_string(),
         cases_path: workspace_root
             .join("sovereign-recipes/search-gym/judge-calibration/cases.toml"),
         json: false,

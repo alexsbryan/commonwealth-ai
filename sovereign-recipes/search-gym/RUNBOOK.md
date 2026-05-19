@@ -44,27 +44,60 @@ fixtures/<NN_slug>/
 
 ## Mock-corpus layout
 
+The corpus is split by tool: each tool the model can call routes
+to its own subdir, with its own `aliases.toml` + per-fixture
+`.json` files. This lets a fixture build a realistic production
+scenario where the model picks between web search, local
+knowledge, and local files.
+
 ```
 mock-corpus/
-  aliases.toml              ← human-readable filename + alias index
-  <fixture-name>.json       ← named per alias entry
-  <sha256_of_normalized_query>.json   ← optional hash-keyed fallback
+  web/                      ← `search` / `web_search` tool
+    aliases.toml
+    spacex-starship-flight-14.json
+    nvda-stock-quote.json
+    freedonia-summit-empty.json
+  knowledge/                ← `knowledge` tool (Wikipedia, encyclopedias, scholarly refs)
+    aliases.toml
+    photosynthesis.json
+    spacex.json
+    nvidia.json
+    …
+  files/                    ← `files` tool (user notes / vault content)
+    aliases.toml
+    home-decor-notes.json
 ```
 
-Lookup is two-tier:
+Tool-name routing (see `runner::resolve_mock_subdir`):
+
+  - `search` / `web_search` → `mock-corpus/web/`
+  - `knowledge`             → `mock-corpus/knowledge/`
+  - `files`                 → `mock-corpus/files/`
+
+Each subdir's lookup is two-tier:
 
 1. **Alias hit.** The runner normalizes the query (lowercase, trim,
-   collapse whitespace) and looks for a matching alias in
-   `aliases.toml`. If found, loads the named file. This is the
-   default authoring pattern — multiple model phrasings → one
+   collapse whitespace) and looks for a matching alias in that
+   subdir's `aliases.toml`. If found, loads the named file. This is
+   the default authoring pattern — multiple model phrasings → one
    response file.
 2. **Hash fallback.** If no alias matches, the runner looks for
-   `<sha256(normalized_query)>.json`. This is the rarely-used path
-   for one-off responses or recordings imported wholesale from
-   `sovereign bench search-tavily` (Phase 4 — not yet landed).
+   `<sha256(normalized_query)>.json` in the same subdir. Rarely
+   used directly — mostly populated by `sovereign bench
+   search-tavily` (Phase 4 — not yet landed).
 
 A missing fixture in either mode is a **loud error** — the runner
 echoes the offending query and the path it tried.
+
+### URL-set tracking is web-only
+
+Only `web/` URLs accumulate into the URL-set predicates
+(`must_cite_url_from_mock`, `must_not_cite_url_outside_mock`).
+Knowledge URLs (`https://en.wikipedia.org/...`) and files URLs
+(`file:///...`) are returned to the model in tool results but
+aren't part of those checks — those URLs have different namespace
+semantics. Local-tool citations are auditable through the
+transcript view but not score-gated by URL membership.
 
 ### aliases.toml shape
 

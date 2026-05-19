@@ -1,0 +1,20 @@
+# 09_multicorpus_topical_mismatch
+#
+# Question is about Python programming decorators. Local knowledge
+# returns a Wikipedia article about "decorator" — but the meaning
+# in that corpus is the design pattern (Decorator pattern in OOP)
+# or the architectural feature. Lexical match, topical miss.
+# Files corpus returns interior-design-related notes for the same
+# reason.
+#
+# Right behavior: the model should answer from training directly
+# (Python decorators are stable, well-known) and NOT call search.
+# If it does call knowledge/files, it should recognize the topical
+# mismatch from the snippet content and ignore those results
+# rather than synthesise the wrong meaning.
+
+should_call_search = false
+
+final_message_satisfies = [
+  "The response explains Python function decorators (the @decorator syntax for wrapping functions), not interior design or the GoF Decorator design pattern in object-oriented programming.",
+]
