@@ -53,6 +53,32 @@ no peer actually loads (project_v1_models_liveness — separate issue).
 Pass-rate aggregate stays 0/10 because of this, but the predicate the
 constraint targets is now clean across all 10 replays.
 
+### Gym v4 — fast-alias fix lifts pass rate
+
+Root cause of the judge 503: `oicp_synthesis::build_self_manifest`
+advertised stable aliases (`commonwealth/primary`, `primary`) ONLY for
+the Slow slot. The Fast slot was advertised under its concrete GGUF
+id only. So even though the local slot-alias map at
+`sovereign-mesh/src/daemon.rs:1912` knows about `commonwealth/fast`,
+the mesh load-balancer rejected `commonwealth/fast` upfront because no
+node's *manifest* advertised it.
+
+Fix: symmetric `commonwealth/fast` + `fast` block in `build_self_manifest`,
+mirror of the existing primary-alias block. Captured as
+[[project_fast_slot_alias_advertisement]].
+
+| Run | URL fabrications | Pass rate |
+|---|---|---|
+| v2 (post-integration, pre-EOS-fix) | 8/10 | 0/10 (judge 503) |
+| v3 (EOS fix only)                  | 0/10 | 0/10 (judge 503) |
+| v4 (EOS fix + fast-alias fix)      | **0/10** | **6/10** |
+
+Remaining 4 failures are real judge verdicts on synthesis quality
+(fixture 07: model didn't sufficiently specify "Flight 14"; fixture 08:
+model framed the price as present-tense rather than as a historical
+quote) — these are model/prompt-tuning concerns, not infrastructure
+gaps. The URL constraint and slot-routing wiring are validated.
+
 ## What this fixes
 
 Empirical finding from search-gym Phase 3c iter5-10:
