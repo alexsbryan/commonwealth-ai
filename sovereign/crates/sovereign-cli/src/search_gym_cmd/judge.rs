@@ -187,7 +187,15 @@ a given assertion. The text was written by a different system; you are not its \
 author and not its respondent. Return a JSON object with `passes` (true/false) \
 and `rationale` (one sentence naming the specific phrase or absence in the text \
 that drove the decision). If the assertion is only partially satisfied or \
-ambiguous, return false.";
+ambiguous, return false.
+
+CRITICAL: Judge ONLY against the assertion's literal text. The text may \
+reference entities, events, or data your training cut off before — or that \
+came from a synthetic test fixture. Treat every factual claim in the text \
+as ground truth; your task is solely to check whether the text's shape, \
+framing, or structure matches what the assertion asks for. Do not use your \
+own world knowledge to declare a claim hallucinated, impossible, or \
+unverifiable — that lies outside what you are being asked to judge.";
 
 #[async_trait]
 impl Judge for FastInferenceJudge {
@@ -210,24 +218,31 @@ impl Judge for FastInferenceJudge {
             "Assertion: {assertion}\n\nText:\n{subject}"
         );
 
-        // Belt-and-suspenders classifier settings:
-        //   - `sampling_mode: "instruct"` picks the model family's
-        //     tuned classifier profile (Qwen3 instruct ≈ T=0.7).
-        //     Don't override temperature — iteration 3 set T=0.0 +
-        //     grammar constraint and the model degenerated to pure
-        //     whitespace output (every valid grammar continuation
-        //     had identical logits, sampler stuck on indent tokens).
+        // Classifier settings, restored to the deterministic profile
+        // the Judge trait's contract promises ("temperature pinned at
+        // 0, repeat calls should produce identical verdicts").
+        //
+        //   - `temperature: 0.0` is the headline change. The earlier
+        //     workaround used T=0.7 via `sampling_mode: instruct`
+        //     because T=0 + the old llguidance grammar got stuck on
+        //     whitespace tokens (every legal continuation had identical
+        //     logits at T=0). The in-house JSON constraint enforcer
+        //     [[project_grammar_in_house_enforcer]] (2026-04) bypasses
+        //     llama-grammar.cpp entirely with a mask-based sampler that
+        //     allows T=0 cleanly. Validated 2026-05-19: search-gym
+        //     fixture 07 was oscillating 2/5–5/5 across replays under
+        //     T=0.7; T=0 + multi-judge consensus removes the noise.
         //   - `enable_thinking: false` + `think_budget: 0` force-
-        //     suppress thinking even if the instruct profile would
-        //     ordinarily allow some. Iteration 2 saw the model
-        //     emit verbose discursive rationales — thinking wasn't
-        //     fully off.
+        //     suppress thinking even on instruct-trained families.
+        //     Iteration 2 saw the model emit verbose discursive
+        //     rationales when thinking wasn't fully off.
         let body = json!({
             "model": self.cfg.model,
             "messages": [
                 { "role": "system", "content": JUDGE_SYSTEM_PROMPT },
                 { "role": "user",   "content": user_msg }
             ],
+            "temperature": 0.0,
             "sampling_mode": "instruct",
             "chat_template_kwargs": { "enable_thinking": false },
             "think_budget": 0,

@@ -357,6 +357,34 @@ pub async fn run_fixture(
                             }
                             rendered
                         }
+                        Err(e) if e.contains("mock search fixture missing") => {
+                            // The fixture author didn't write a mock
+                            // for this query phrasing. Two legitimate
+                            // reasons: (a) `should_call_search=false`
+                            // fixtures don't need mocks because the
+                            // model shouldn't be searching at all —
+                            // the missing fixture IS the signal of
+                            // model misbehavior, not infrastructure
+                            // failure; (b) the fixture author missed
+                            // a phrasing variant the model emitted.
+                            // Either way, returning a synthetic 0-
+                            // results response lets the conversation
+                            // continue to the synthesis turn so the
+                            // structural predicates (`should_call_search`,
+                            // `must_cite_url_from_mock`) can fire
+                            // cleanly. Bailing with `runner_error`
+                            // here pollutes the score with what looks
+                            // like an infrastructure problem when the
+                            // real signal is in the predicate layer.
+                            tracing::warn!(
+                                tool = %name,
+                                "search-gym: mock fixture missing for query — \
+                                 returning synthetic 0 results so the conversation can \
+                                 continue. If this fixture has should_call_search=false \
+                                 the predicate scorer will flag the violation."
+                            );
+                            "Search returned 0 results.".to_string()
+                        }
                         Err(e) => {
                             tx.runner_error = Some(e);
                             return tx;
