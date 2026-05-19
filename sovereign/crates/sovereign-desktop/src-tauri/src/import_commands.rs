@@ -162,6 +162,41 @@ pub async fn import_anthropic_zip(
 
     let corpus_id = "conversations-anthropic".to_string();
 
+    // Early-return when the daemon is already ingesting this corpus.
+    // Two reasons:
+    //   1. The status poller's `install_progress` map carries any
+    //      in-flight phase the daemon has reported. If it's non-
+    //      terminal, posting `/internal/corpus/install` again is at
+    //      best a no-op (daemon logs "already active — not spawning
+    //      a second task") and at worst races our optimistic
+    //      `downloading 0%` event over the real phase the daemon
+    //      is in.
+    //   2. The user clicked Import after a prior session left the
+    //      daemon mid-ingest. The Auto-Resume path (see
+    //      `importsStore.hydrateFromDaemon`) covers the App-Start
+    //      case; this branch covers the still-Tab-Open case where
+    //      a stale picker UI led the user to click Import a second
+    //      time.
+    {
+        let map = state.install_progress.read().await;
+        if let Some(p) = map.get(&corpus_id) {
+            if p.phase != "complete" && p.phase != "failed" {
+                tracing::info!(
+                    target: "imports",
+                    corpus_id = %corpus_id,
+                    current_phase = %p.phase,
+                    "imports: install request short-circuited — daemon already ingesting"
+                );
+                return Ok(ImportStartResponse::Started {
+                    corpus_id: corpus_id.clone(),
+                    total_messages: total_messages as u64,
+                    estimated_minutes,
+                    canonical_path: extracted_bytes.canonical_path.display().to_string(),
+                });
+            }
+        }
+    }
+
     // Destructive-confirm flow. The conversation-anthropic chunker
     // fix (threaded_turns soft cap, 2026-05-18) means any
     // pre-existing partial index carries embeddings computed on
@@ -209,12 +244,31 @@ pub async fn import_anthropic_zip(
         }))
         .send()
         .await
-        .map_err(|e| format!("POST /internal/corpus/install: {e}"))?;
+        .map_err(|e| {
+            // Friendly copy for the common case (daemon not running
+            // / port unreachable / TLS handshake denied). Raw reqwest
+            // errors are noisy and intimidating in a settings tab.
+            tracing::warn!(
+                target: "imports",
+                error = %e,
+                "imports: POST /internal/corpus/install failed"
+            );
+            "Couldn't reach Sovereign. Make sure the daemon is running \
+             (try `sovereign daemon start`) and click Import again."
+                .to_string()
+        })?;
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
+        tracing::warn!(
+            target: "imports",
+            status = %status,
+            body = %body,
+            "imports: daemon /internal/corpus/install returned non-success"
+        );
         return Err(format!(
-            "daemon /internal/corpus/install returned {status}: {body}"
+            "Sovereign rejected the import (HTTP {status}). Check the \
+             daemon logs at ~/.sovereign/logs/daemon.out for details."
         ));
     }
 

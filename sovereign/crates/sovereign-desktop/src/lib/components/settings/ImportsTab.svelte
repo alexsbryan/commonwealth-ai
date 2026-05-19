@@ -18,6 +18,7 @@
   import {
     deriveEta,
     formatPreflightBand,
+    formatRefinedTotal,
   } from "../../util/etaFromProgress";
 
   // 1Hz tick so the live ETA + "last update" indicator refresh
@@ -38,6 +39,18 @@
   let importState = $derived<ImportState>(importsStore.state);
   let progress = $derived(importState.ingestProgress);
 
+  // Active stages collapse the picker UI in favour of the progress
+  // card so the user doesn't see a "Import Claude export" button
+  // dangling next to an ingest the daemon is already running. Only
+  // `idle` and `complete` / `failed` (terminal) bring the picker
+  // back — the latter as the recovery path when the user wants to
+  // retry a different export.
+  let pickerVisible = $derived(
+    importState.stage === "idle" ||
+      importState.stage === "complete" ||
+      importState.stage === "failed",
+  );
+
   let etaResult = $derived.by(() => {
     if (
       importState.stage !== "ingesting" ||
@@ -50,11 +63,24 @@
     return deriveEta(progress, importState.startedAtMs);
   });
 
-  let preflightBand = $derived(
-    importState.startResponse?.estimated_minutes
-      ? formatPreflightBand(importState.startResponse.estimated_minutes)
-      : "",
-  );
+  // Total-time display layers two sources:
+  //   - Refined total once live progress is past warmup (real
+  //     chunks/sec → real total).
+  //   - Baked pre-flight band before that.
+  // Refined wins because it's grounded in observed throughput; the
+  // band is a 0.4s/msg guess that's wrong on any non-default model
+  // or content shape.
+  let totalEstimate = $derived.by(() => {
+    if (importState.startedAtMs !== null) {
+      void _nowTick;
+      const refined = formatRefinedTotal(progress ?? undefined, importState.startedAtMs);
+      if (refined) return refined;
+    }
+    if (importState.startResponse?.estimated_minutes) {
+      return formatPreflightBand(importState.startResponse.estimated_minutes);
+    }
+    return "";
+  });
 
   // Phase labels for the ingest-side `corpus-progress` enum.
   const INGEST_PHASE_LABELS: Record<string, string> = {
@@ -209,7 +235,8 @@
 </script>
 
 <div class="imports-tab">
-  <div class="sources">
+  {#if pickerVisible}
+  <div class="sources" data-testid="imports-sources">
     <article class="source-card source-card--active">
       <header class="source-card-header">
         <div class="source-icon">💬</div>
@@ -261,6 +288,13 @@
       <span class="badge">Coming soon</span>
     </article>
   </div>
+  {/if}
+
+  {#if !pickerVisible && importState.stage !== "needs_reset_confirm"}
+    <p class="resume-banner" data-testid="imports-resume-banner">
+      Your Claude conversations import is already running. Progress below.
+    </p>
+  {/if}
 
   {#if importState.stage === "needs_reset_confirm" && importState.pendingReset}
     <section
@@ -307,8 +341,8 @@
           {#if importState.startResponse}
             <p class="progress-detail">
               {importState.startResponse.total_messages.toLocaleString()} messages
-              {#if preflightBand && importState.stage !== "complete" && importState.stage !== "failed"}
-                · {preflightBand}
+              {#if totalEstimate && importState.stage !== "complete" && importState.stage !== "failed"}
+                · {totalEstimate}
               {/if}
             </p>
           {/if}
@@ -592,6 +626,16 @@
     margin: 0;
     color: var(--danger, #c33);
     font-size: 0.84rem;
+  }
+
+  .resume-banner {
+    margin: 0;
+    padding: 10px 14px;
+    background: var(--bg-elevated, var(--bg-secondary));
+    border: 1px solid var(--border-mid, var(--border));
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
   }
 
   /* Destructive-reset confirmation banner. Visible only on the

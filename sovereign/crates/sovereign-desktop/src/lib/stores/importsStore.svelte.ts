@@ -25,8 +25,17 @@
 //      enrichment `complete` event.
 
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { enrichBuildAsync, type ImportStartResponse } from "../api";
+import {
+  enrichBuildAsync,
+  getCorpusProgress,
+  type ImportStartResponse,
+} from "../api";
 import type { CorpusProgressPayload, EnrichProgress, EnrichBuildStep } from "../types";
+
+/** localStorage key for the most recent pre-flight response. Lets a
+ *  desktop restart restore the message-count + estimated_minutes
+ *  display alongside the live progress card. */
+const LAST_START_RESPONSE_KEY = "imports.lastStartResponse.v1";
 
 export type ImportStage =
   | "idle"
@@ -200,6 +209,84 @@ async function ensureCorpusListener(): Promise<void> {
   );
 }
 
+/** Restore the most-recent pre-flight response from localStorage.
+ *  Returns `null` when absent or unparseable so the caller can
+ *  decide whether to display a stub or wait for the live event. */
+function restoreStartResponse(): ImportStartResponse | null {
+  try {
+    const raw = localStorage.getItem(LAST_START_RESPONSE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ImportStartResponse;
+  } catch {
+    return null;
+  }
+}
+
+function persistStartResponse(resp: ImportStartResponse): void {
+  try {
+    localStorage.setItem(LAST_START_RESPONSE_KEY, JSON.stringify(resp));
+  } catch {
+    // localStorage quota / disabled — best-effort persistence;
+    // import still works in-session.
+  }
+}
+
+function clearPersistedStartResponse(): void {
+  try {
+    localStorage.removeItem(LAST_START_RESPONSE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** On boot, check the daemon for an in-flight import we should
+ *  resume. Avoids the bug where the desktop process restarts mid-
+ *  ingest and the ImportsTab shows an "Import Claude export" button
+ *  even though the daemon is actively chewing through the user's
+ *  conversations.
+ *
+ *  The check has two sources:
+ *  1. `getCorpusProgress(corpus_id)` — synchronous Tauri call into
+ *     the AppState progress map. Returns whatever the status poller
+ *     observed most recently. May be `null` immediately after a
+ *     desktop start if the poller hasn't ticked yet.
+ *  2. The `corpus-progress` event listener — once `init()` returns,
+ *     any in-flight import emits within ~1s (poller cadence). The
+ *     listener's `applyCorpusProgress` handles it.
+ *
+ *  Source (1) closes the gap between "listener attached" and "first
+ *  event" so the tab doesn't briefly flash the idle/button state on
+ *  start. */
+async function hydrateFromDaemon(): Promise<void> {
+  let snapshot: CorpusProgressPayload | null = null;
+  try {
+    snapshot = await getCorpusProgress(TARGET_CORPUS_ID);
+  } catch {
+    // Daemon offline / IPC down — the listener path will catch up
+    // once the daemon comes back.
+    return;
+  }
+  if (!snapshot) return;
+  if (snapshot.phase === "complete" || snapshot.phase === "failed") {
+    // Stale terminal entry — don't surface it as in-progress.
+    return;
+  }
+
+  const persisted = restoreStartResponse();
+  // Detect "already in flight" by setting stage to ingesting and
+  // restoring the persisted pre-flight info when available. Without
+  // a saved startResponse the message-count + ETA band degrade but
+  // the live progress card still renders correctly.
+  _state = {
+    ...INITIAL,
+    stage: "ingesting",
+    startResponse: persisted,
+    startedAtMs: persisted ? performance.now() : performance.now(),
+    ingestProgress: snapshot,
+  };
+  applyCorpusProgress(snapshot);
+}
+
 export const importsStore = {
   /** Reactive snapshot of the import state machine. */
   get state(): ImportState {
@@ -212,13 +299,19 @@ export const importsStore = {
     return TARGET_CORPUS_ID;
   },
 
-  /** Idempotent listener attach. Safe to call from every consumer
-   *  mount — the module-level singleton state means the first caller
-   *  pays the listener cost; subsequent mounts read the existing
-   *  state and observe new events without re-subscribing. */
+  /** Idempotent listener attach + daemon-state hydrate. Safe to
+   *  call from every consumer mount — the module-level singleton
+   *  means the first caller pays the listener cost; subsequent
+   *  mounts read the existing state and observe new events without
+   *  re-subscribing. The hydrate step queries the daemon for any
+   *  in-flight import so a desktop restart mid-ingest restores the
+   *  progress card immediately instead of flashing the idle state. */
   async init(): Promise<void> {
     if (_initStarted) return _initStarted;
-    _initStarted = ensureCorpusListener();
+    _initStarted = (async () => {
+      await ensureCorpusListener();
+      await hydrateFromDaemon();
+    })();
     await _initStarted;
   },
 
@@ -237,7 +330,11 @@ export const importsStore = {
   /** Record the Tauri command's pre-flight response. Routes the
    *  state-machine on the response variant: `started` → keep the
    *  spinner up, wait for progress; `partial_index_exists` →
-   *  surface the confirmation banner. */
+   *  surface the confirmation banner.
+   *
+   *  Persists `started` responses to localStorage so a desktop
+   *  restart mid-import restores the message-count + estimate
+   *  display alongside the daemon-resumed progress card. */
   setStartResponse(resp: ImportStartResponse, zipPath: string): void {
     if (resp.kind === "partial_index_exists") {
       _state = {
@@ -253,6 +350,7 @@ export const importsStore = {
         },
       };
     } else {
+      persistStartResponse(resp);
       _state = {
         ..._state,
         startResponse: resp,
@@ -268,9 +366,11 @@ export const importsStore = {
   },
 
   /** Reset to idle. Called when the user dismisses a terminal
-   *  state (Retry button). */
+   *  state (Retry button). Also drops the persisted pre-flight so
+   *  a future desktop restart doesn't restore stale state. */
   reset(): void {
     detachEnrichListener();
+    clearPersistedStartResponse();
     _state = { ...INITIAL };
   },
 };

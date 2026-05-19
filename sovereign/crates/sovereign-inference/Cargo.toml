@@ -22,6 +22,13 @@ reqwest = { workspace = true, features = ["stream"] }
 # pays a per-candidate validator cost on every generated token;
 # running it serially on one core was the dominant Phase-1 latency.
 rayon = "1.10"
+# Jinja2 chat-template renderer. The llama-cpp-4 0.2.x binding
+# dropped `apply_chat_template_oaicompat` (the bundled minja path),
+# so models whose `tokenizer.chat_template` uses macros/sets
+# (Gemma 3/4, Qwen3.5-9B-vOP) used to fall through to plain-text
+# concat with hallucinated role markers + drifting stop tokens.
+# See `embedded::apply_chat_template_minijinja`.
+minijinja = { workspace = true }
 
 # llama.cpp's GPU backend is picked per-OS. Linux uses Vulkan because
 # ROCm crashes in `ggml_cpu_extra_work_size` during Qwen3-A3B MoE

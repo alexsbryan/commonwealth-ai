@@ -54,6 +54,12 @@ pub enum SkipReason {
     PausedAwaitingConfirmation,
     NotWatchedSourceType,
     NotRegistered,
+    /// The prior sweep transitioned the corpus into `Errored`. We
+    /// skip future sweeps until a user-initiated action (pause +
+    /// resume, or remove + re-add) clears the status. Prevents
+    /// the scheduler from looping on the same root cause every
+    /// tick.
+    Errored,
 }
 
 /// Outcome of one `run_once` invocation.
@@ -161,6 +167,22 @@ impl Worker {
                 }
                 _ => SkipReason::PausedManually,
             }));
+        }
+
+        // 3b. Errored check. Without this the scheduler would
+        // re-fire the same broken sweep every tick (default cadence
+        // ~120s), spamming logs with the same root cause. A user
+        // recovers from Errored by:
+        //   - Pause → fix the underlying problem → Resume
+        //   - Remove + re-add the folder (clears state + reingests)
+        // Both clear the Errored status; either way the scheduler
+        // gets a clean state the next tick.
+        if matches!(state.status, WatchedFolderStatus::Errored { .. }) {
+            self.emit(WatchedFolderEvent::SweepSkipped {
+                corpus_id: corpus_id.to_string(),
+                reason: "errored".into(),
+            });
+            return Ok(WorkerOutcome::Skipped(SkipReason::Errored));
         }
 
         let now_unix = now_unix();
@@ -370,6 +392,25 @@ impl Worker {
         } else {
             None
         };
+        // Precondition guard. `apply_update` opens the corpus's
+        // existing index — when the index dir was wiped out-of-band
+        // (manual `rm`, a prior aborted ingest that never wrote
+        // `_corpus_meta.json`, etc.) the call returns "Missing
+        // metadata" and we'd loop on every scheduler tick spamming
+        // the same error. Transition straight to Errored with a
+        // self-recovery hint instead of trying the apply.
+        let index_dir = self.index_dir_root.join(&corpus_id);
+        let meta_path = index_dir.join("_corpus_meta.json");
+        if !meta_path.is_file() {
+            return Err(Error::Execution(format!(
+                "watched_folder: index for '{corpus_id}' is missing \
+                 `_corpus_meta.json` at {} — initial ingest never \
+                 completed or the index was wiped out-of-band. \
+                 Re-register the folder (Settings → Local Knowledge \
+                 → remove + re-add) to rebuild from scratch.",
+                meta_path.display()
+            )));
+        }
         let started = std::time::Instant::now();
         apply_watched_diff(
             self.engine.clone(),

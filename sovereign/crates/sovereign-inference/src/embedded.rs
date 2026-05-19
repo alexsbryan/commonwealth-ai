@@ -6438,9 +6438,26 @@ fn format_prompt(
         tracing::debug!(
             model_id = %model_id,
             "chat template needs full Jinja2 (macros/sets/includes detected); \
-             0.2.x binding lacks the oaicompat path, so apply_chat_template \
-             likely returns FfiError and we'll fall through to plain-text concat."
+             routing through the Rust-side minijinja renderer instead of \
+             llama.cpp's limited-subset parser."
         );
+        match apply_chat_template_minijinja(
+            &template,
+            &system_with_thinking,
+            &request.prompt,
+            request.enable_thinking.unwrap_or(false),
+        ) {
+            Ok(rendered) => return Ok(rendered),
+            Err(e) => {
+                tracing::warn!(
+                    model_id = %model_id,
+                    error = %e,
+                    template_head = %template_head_for_log(&template),
+                    "minijinja render failed — falling back to llama.cpp \
+                     apply_chat_template, then plain-text concat."
+                );
+            }
+        }
     }
     if request.enable_thinking.unwrap_or(false) {
         tracing::warn!(
@@ -6481,6 +6498,79 @@ fn format_prompt(
 
     // Final fallback: plain-text concat.
     Ok(plain_text_prompt(&system_with_thinking, &request.prompt))
+}
+
+/// Render a `tokenizer.chat_template` (Jinja2 source) using the
+/// Rust-side `minijinja` engine. Handles macros, `set` blocks, and
+/// other constructs the llama.cpp built-in parser rejects.
+///
+/// Returns the formatted prompt the tokenizer feeds the model.
+/// `add_generation_prompt=true` matches what llama.cpp's
+/// `apply_chat_template` does — appends the assistant's turn-start
+/// marker so the model picks up where the template left off.
+///
+/// `enable_thinking` toggles the `/think` vs `/no_think` hint that
+/// Qwen3-family templates honour as a Jinja variable. Models that
+/// ignore the flag are unaffected.
+fn apply_chat_template_minijinja(
+    template: &str,
+    system: &str,
+    user: &str,
+    enable_thinking: bool,
+) -> Result<String> {
+    use minijinja::{context, Environment, Value};
+
+    // Build the messages list the template iterates over.
+    let mut messages: Vec<Value> = Vec::with_capacity(2);
+    if !system.is_empty() {
+        messages.push(Value::from_serialize(&serde_json::json!({
+            "role": "system",
+            "content": system,
+        })));
+    }
+    messages.push(Value::from_serialize(&serde_json::json!({
+        "role": "user",
+        "content": user,
+    })));
+
+    let mut env = Environment::new();
+    // Match Hugging Face's `Jinja2 Templates` behaviour: keep the
+    // raise_exception filter available — some templates call it
+    // (`{{ raise_exception("…") }}`) to halt on bad input.
+    env.add_function(
+        "raise_exception",
+        |msg: String| -> std::result::Result<String, minijinja::Error> {
+            Err(minijinja::Error::new(
+                minijinja::ErrorKind::InvalidOperation,
+                msg,
+            ))
+        },
+    );
+    env.add_template("chat", template).map_err(|e| {
+        Error::Inference(format!("minijinja: compile chat template: {e}"))
+    })?;
+    let tmpl = env
+        .get_template("chat")
+        .map_err(|e| Error::Inference(format!("minijinja: load chat template: {e}")))?;
+
+    // Variables every reasonable chat template touches. Most
+    // templates don't use every key — providing them all is safe
+    // (Jinja2 is forgiving of unused globals). Templates that
+    // reference unknown vars produce empty strings, which is the
+    // same behaviour as the llama.cpp path.
+    let ctx = context! {
+        messages => messages,
+        add_generation_prompt => true,
+        enable_thinking => enable_thinking,
+        bos_token => "",
+        eos_token => "",
+        // Qwen3-family hint surfaced via a context variable on some
+        // template revisions. Most templates inspect the system
+        // message text instead.
+        thinking_mode => if enable_thinking { "think" } else { "no_think" },
+    };
+    tmpl.render(ctx)
+        .map_err(|e| Error::Inference(format!("minijinja: render chat template: {e}")))
 }
 
 /// Cheap heuristic for whether a chat template requires the full
@@ -6601,6 +6691,110 @@ where
     match env_get("SOVEREIGN_JUMP_FWD_T2_DISABLE") {
         Some(v) => !(v == "1" || v.eq_ignore_ascii_case("true")),
         None => true,
+    }
+}
+
+#[cfg(test)]
+mod chat_template_minijinja_tests {
+    use super::apply_chat_template_minijinja;
+
+    /// Smoke test on a Qwen3-shape `{% for %}` template — the
+    /// built-in parser handles this too, so the minijinja path
+    /// must produce equivalent output (not byte-equivalent — we
+    /// only check the role markers + body land in the right slots).
+    #[test]
+    fn renders_simple_for_loop_template() {
+        let template = "\
+{%- for m in messages -%}\
+<|im_start|>{{ m.role }}\n{{ m.content }}<|im_end|>\n\
+{%- endfor -%}\
+{%- if add_generation_prompt -%}<|im_start|>assistant\n{%- endif -%}";
+        let out = apply_chat_template_minijinja(
+            template,
+            "you are a helpful assistant",
+            "hello",
+            false,
+        )
+        .expect("renders cleanly");
+        assert!(out.contains("<|im_start|>system"));
+        assert!(out.contains("you are a helpful assistant"));
+        assert!(out.contains("<|im_start|>user"));
+        assert!(out.contains("hello"));
+        assert!(out.contains("<|im_start|>assistant"));
+    }
+
+    /// Pinned regression: templates that declare a Jinja `{% macro %}`
+    /// were the exact construct llama.cpp's built-in parser
+    /// rejected (Gemma 3/4, Qwen3.5-9B-vOP). minijinja must handle
+    /// them.
+    #[test]
+    fn renders_template_with_macro() {
+        let template = "\
+{%- macro render(m) -%}\
+[{{ m.role }}] {{ m.content }}\n\
+{%- endmacro -%}\
+{%- for m in messages -%}{{ render(m) }}{%- endfor -%}\
+{%- if add_generation_prompt -%}[assistant]\n{%- endif -%}";
+        let out = apply_chat_template_minijinja(template, "sys", "ask", false).unwrap();
+        assert!(out.contains("[system] sys"));
+        assert!(out.contains("[user] ask"));
+        // Whitespace control (`{%- -%}`) strips the trailing `\n`
+        // inside the {%- if -%} block — match real Jinja2 behaviour.
+        assert!(out.trim_end().ends_with("[assistant]"));
+    }
+
+    /// Templates that use `{% set %}` blocks were the other
+    /// construct the built-in parser rejected.
+    #[test]
+    fn renders_template_with_set_block() {
+        let template = "\
+{%- set bos = '<bos>' -%}\
+{{ bos }}\
+{%- for m in messages -%}<{{ m.role }}>{{ m.content }}</{{ m.role }}>{%- endfor -%}";
+        let out = apply_chat_template_minijinja(template, "", "q", false).unwrap();
+        assert!(out.starts_with("<bos>"));
+        assert!(out.contains("<user>q</user>"));
+    }
+
+    /// `enable_thinking` is exposed to the template so Qwen3-family
+    /// templates can branch on it. Verify the variable is wired.
+    #[test]
+    fn renders_template_branching_on_enable_thinking() {
+        let template = "\
+{%- if enable_thinking -%}/think{%- else -%}/no_think{%- endif -%}";
+        assert_eq!(
+            apply_chat_template_minijinja(template, "", "", true).unwrap(),
+            "/think"
+        );
+        assert_eq!(
+            apply_chat_template_minijinja(template, "", "", false).unwrap(),
+            "/no_think"
+        );
+    }
+
+    /// `raise_exception` is the canonical Hugging Face escape hatch
+    /// for templates that want to halt on bad input. Forward it as a
+    /// minijinja error so the caller falls through to the
+    /// llama.cpp built-in tier rather than producing a malformed
+    /// prompt.
+    #[test]
+    fn raise_exception_is_propagated_as_error() {
+        let template = "{{ raise_exception('nope') }}";
+        let err = apply_chat_template_minijinja(template, "", "", false).unwrap_err();
+        assert!(format!("{err}").contains("nope"), "error chain: {err}");
+    }
+
+    /// Empty system message is dropped (template iterates only the
+    /// user message). Pinned because some real templates assume
+    /// every message has non-empty content.
+    #[test]
+    fn empty_system_dropped_from_messages() {
+        let template = "\
+{%- for m in messages -%}{{ m.role }}\n{%- endfor -%}";
+        let out = apply_chat_template_minijinja(template, "", "q", false).unwrap();
+        // Only user role present; no leading "system". `{%- endfor -%}`
+        // strips the trailing newline, so the body is just "user".
+        assert_eq!(out, "user");
     }
 }
 

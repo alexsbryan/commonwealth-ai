@@ -360,6 +360,113 @@ test.describe("Settings → Imports", () => {
     expect(callsCount).toBe(1);
   });
 
+  test("auto-resumes from daemon state on app start; hides picker", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await openSettings(page, chat);
+    // Stub the resume probe + seed localStorage BEFORE clicking
+    // the Imports tab. The store calls `get_corpus_progress` on
+    // init; a non-terminal payload should flip the stage straight
+    // to "ingesting" and suppress the picker. localStorage carries
+    // the prior pre-flight so the progress card renders the
+    // message count + estimate band even across a desktop restart.
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+      };
+      w.__sovereign_test__.setHandler(
+        "get_corpus_progress",
+        (args: unknown) => {
+          const a = args as { corpusId?: string };
+          if (a.corpusId !== "conversations-anthropic") return null;
+          return {
+            corpus_id: "conversations-anthropic",
+            phase: "embedding",
+            percent: 42,
+            chunks_processed: 4200,
+          };
+        },
+      );
+      localStorage.setItem(
+        "imports.lastStartResponse.v1",
+        JSON.stringify({
+          kind: "started",
+          corpus_id: "conversations-anthropic",
+          total_messages: 10_500,
+          estimated_minutes: 70,
+          canonical_path:
+            "/home/test/.sovereign/conversations/conversations.json",
+        }),
+      );
+    });
+    // Don't use `clickImportsTab` here — its `Claude (Anthropic)`
+    // text-wait depends on the picker, and the picker is the exact
+    // thing this test asserts is suppressed. Click + wait on the
+    // resume banner instead.
+    await page.getByRole("button", { name: "Imports" }).click();
+    await page.getByTestId("imports-resume-banner").waitFor();
+
+    // Picker is gone; resume banner + progress card are up.
+    await expect(page.getByTestId("imports-sources")).toHaveCount(0);
+    await expect(page.getByTestId("imports-resume-banner")).toBeVisible();
+    await expect(page.getByTestId("imports-progress-card")).toBeVisible();
+    await expect(page.getByText(/10,500 messages/)).toBeVisible();
+    await expect(page.getByTestId("imports-phase-label")).toContainText(
+      /Embedding chunks/,
+    );
+  });
+
+  test("auto-resume hidden when daemon reports no in-flight import", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await openSettings(page, chat);
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+      };
+      w.__sovereign_test__.setHandler("get_corpus_progress", () => null);
+      localStorage.removeItem("imports.lastStartResponse.v1");
+    });
+    await clickImportsTab(page);
+
+    // No in-flight import → picker visible, banner + progress card absent.
+    await expect(page.getByTestId("imports-sources")).toBeVisible();
+    await expect(page.getByTestId("imports-resume-banner")).toHaveCount(0);
+    await expect(page.getByTestId("imports-progress-card")).toHaveCount(0);
+  });
+
+  test("terminal phase from daemon does NOT trigger auto-resume", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await openSettings(page, chat);
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args: unknown) => unknown) => void;
+        };
+      };
+      // Stale terminal entry — should be ignored.
+      w.__sovereign_test__.setHandler("get_corpus_progress", () => ({
+        corpus_id: "conversations-anthropic",
+        phase: "complete",
+        percent: 100,
+        chunks_processed: 8000,
+      }));
+      localStorage.removeItem("imports.lastStartResponse.v1");
+    });
+    await clickImportsTab(page);
+
+    await expect(page.getByTestId("imports-sources")).toBeVisible();
+    await expect(page.getByTestId("imports-resume-banner")).toHaveCount(0);
+  });
+
   test("import_anthropic_zip rejection surfaces an inline error", async ({
     sovereignPage: page,
     chat,

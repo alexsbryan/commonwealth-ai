@@ -50,7 +50,7 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
-use super::{Chunker, TextChunk};
+use super::{floor_char_boundary, Chunker, TextChunk};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Attribution {
@@ -234,7 +234,6 @@ fn split_oversized(content: String, spans: Vec<TurnSpan>) -> Vec<SplitChunk> {
     }
     let mut out: Vec<SplitChunk> = Vec::new();
     let mut pos = 0usize;
-    let bytes = content.as_bytes();
     while pos < content.len() {
         let remaining = content.len() - pos;
         if remaining <= MAX_CHUNK_CHARS {
@@ -244,20 +243,39 @@ fn split_oversized(content: String, spans: Vec<TurnSpan>) -> Vec<SplitChunk> {
             break;
         }
         // Soft target: try to break on a blank line near MAX_CHUNK_CHARS.
-        let soft_target = pos + MAX_CHUNK_CHARS;
+        // Snap to a UTF-8 char boundary BEFORE any slicing — a naked
+        // `pos + MAX_CHUNK_CHARS` can land inside an em-dash (3-byte
+        // `—`) or any multi-byte glyph, and the subsequent `&content
+        // [..soft_target]` slice panics. Real-world repro on an
+        // anthropic export: byte 2979 fell inside `—` (2977..2980).
+        let raw_soft = pos + MAX_CHUNK_CHARS;
+        let soft_target = floor_char_boundary(&content, raw_soft);
         let mut end = next_soft_boundary(&content, soft_target)
-            .unwrap_or_else(|| hard_boundary(bytes, soft_target));
+            .unwrap_or_else(|| {
+                // Same boundary discipline on the hard fallback —
+                // both targets are derived from byte arithmetic.
+                let raw_hard = (soft_target + (MAX_HARD_CHARS - MAX_CHUNK_CHARS))
+                    .min(content.len());
+                floor_char_boundary(&content, raw_hard)
+            });
         // Don't loop forever if the splitter returned an end ≤ pos
         // (degenerate input — pos has no \n or boundary).
         if end <= pos {
-            end = hard_boundary(bytes, soft_target);
+            end = floor_char_boundary(
+                &content,
+                (soft_target + (MAX_HARD_CHARS - MAX_CHUNK_CHARS)).min(content.len()),
+            );
         }
         let sub_content = content[pos..end].to_string();
         let sub_spans = clip_spans(&spans, pos, end);
         out.push(SplitChunk { content: sub_content, spans: sub_spans });
         // Advance past the boundary, leaving a small overlap so a fact
         // straddling the cut survives in the next sub-chunk too.
-        let next_pos = end.saturating_sub(SPLIT_OVERLAP_CHARS);
+        // Snap the rewound `next_pos` to a char boundary too — the
+        // overlap is measured in bytes, so subtracting blindly can
+        // again land mid-char.
+        let raw_next = end.saturating_sub(SPLIT_OVERLAP_CHARS);
+        let next_pos = floor_char_boundary(&content, raw_next);
         if next_pos <= pos {
             // Overlap window pulled us back to or before pos — force
             // forward progress at the hard boundary.
@@ -273,8 +291,12 @@ fn split_oversized(content: String, spans: Vec<TurnSpan>) -> Vec<SplitChunk> {
 /// preferring (a) a `"\n\n"` paragraph boundary, (b) a single
 /// `'\n'`. Caps the search at `MAX_HARD_CHARS - SOFT` chars past
 /// `target` so we don't drag the soft cap arbitrarily far.
+///
+/// Callers must pass a `target` that is already on a UTF-8 char
+/// boundary; this function slices `&s[target..hard]` directly.
 fn next_soft_boundary(s: &str, target: usize) -> Option<usize> {
-    let hard = (target + (MAX_HARD_CHARS - MAX_CHUNK_CHARS)).min(s.len());
+    let raw_hard = (target + (MAX_HARD_CHARS - MAX_CHUNK_CHARS)).min(s.len());
+    let hard = floor_char_boundary(s, raw_hard);
     if target >= hard {
         return None;
     }
@@ -288,15 +310,6 @@ fn next_soft_boundary(s: &str, target: usize) -> Option<usize> {
     None
 }
 
-/// Force a break at a UTF-8 char boundary at or before `target`.
-/// Guarantees we never split a multi-byte char.
-fn hard_boundary(bytes: &[u8], target: usize) -> usize {
-    let mut end = target.min(bytes.len());
-    while end > 0 && (bytes[end] & 0b1100_0000) == 0b1000_0000 {
-        end -= 1;
-    }
-    end
-}
 
 /// Project the parent chunk's spans onto a sub-chunk's byte range.
 /// A span survives if it overlaps `[sub_start, sub_end)`; its byte
@@ -674,6 +687,66 @@ mod tests {
         assert!(chunks.len() > 1);
         for c in &chunks {
             assert!(c.content.len() <= MAX_HARD_CHARS);
+        }
+    }
+
+    /// Pinned regression: the first real anthropic-export ingest
+    /// panicked with `byte index 2979 is not a char boundary; it is
+    /// inside '—' (bytes 2977..2980)`. Root cause was
+    /// `pos + MAX_CHUNK_CHARS` landing inside the em-dash on the
+    /// second loop iteration, then a `&content[target..hard]` slice
+    /// panicking via `slice_error_fail`. Every position the splitter
+    /// derives from byte arithmetic must now snap to a UTF-8 char
+    /// boundary first (`floor_char_boundary`); this test enforces
+    /// that by stuffing the input with em-dashes so the soft target
+    /// + overlap rewind both stand a good chance of landing
+    /// mid-glyph.
+    #[test]
+    fn split_handles_multibyte_glyph_on_soft_target() {
+        // Body crafted so the byte position ~MAX_CHUNK_CHARS into
+        // each turn lands inside a multi-byte char.
+        let multibyte_run = "Let's dig in — there's an em-dash every line.\n".repeat(80);
+        let extra = "—".repeat(400); // pure 3-byte chars
+        let input = format!(
+            "### [2026-03-28 20:20] user\n\n{multibyte_run}{extra}\n\n### [2026-03-28 20:21] assistant\n\nReply with more — and more —.\n"
+        );
+        // Pre-fix this panicked with `slice_error_fail` inside the
+        // chunker; post-fix it must complete + every chunk must
+        // round-trip as valid UTF-8.
+        let chunks = ThreadedTurnsChunker::new().chunk(&input);
+        assert!(chunks.len() > 1, "input must split: got {} chunks", chunks.len());
+        for c in &chunks {
+            assert!(c.content.is_char_boundary(0));
+            assert!(c.content.is_char_boundary(c.content.len()));
+            assert!(
+                c.content.len() <= MAX_HARD_CHARS,
+                "chunk overshot hard cap: {} > {}",
+                c.content.len(),
+                MAX_HARD_CHARS
+            );
+            // is_char_boundary returns true on every valid UTF-8
+            // index — confirm by re-parsing the &str.
+            let _ = c.content.as_str();
+        }
+    }
+
+    /// Stronger fuzz: a wall of em-dashes with no newlines forces
+    /// the soft-boundary search to fail every time, exercising the
+    /// hard-boundary fallback in a path full of multi-byte chars.
+    #[test]
+    fn split_handles_pure_multibyte_blob() {
+        let blob = "—".repeat(3000); // 9000 bytes of 3-byte glyphs
+        let input = format!(
+            "### [2025-09-04 18:01] user\n\n{blob}\n\n### [2025-09-04 18:02] assistant\n\nack"
+        );
+        let chunks = ThreadedTurnsChunker::new().chunk(&input);
+        assert!(chunks.len() > 1);
+        for c in &chunks {
+            assert!(c.content.len() <= MAX_HARD_CHARS);
+            // All chars survived round-trip.
+            for ch in c.content.chars() {
+                let _ = ch;
+            }
         }
     }
 }
