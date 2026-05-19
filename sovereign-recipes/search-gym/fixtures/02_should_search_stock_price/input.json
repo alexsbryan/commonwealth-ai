@@ -17,7 +17,7 @@
       "type": "function",
       "function": {
         "name": "search",
-        "description": "Search the web for current or external information. Web search consumes a monthly budget \u2014 use it for questions about current events, recent prices, news, or facts that change over time. For stable concepts, definitions, or topics you already know with confidence, answer directly without searching. Use a concise query that extracts the key entities; do not paste the user's prompt verbatim.",
+        "description": "Search local knowledge corpora (installed Wikipedia, scholarly references, encyclopedias) and optionally the web. Use this tool for questions that depend on information that changes over time \u2014 current events, breaking news, recent prices or scores, today's weather, who currently holds a position, the latest release of a product. Skip this tool for questions about stable knowledge: definitions, historical events, mathematical or scientific facts that don't change, or things stated earlier in this conversation that you can recall directly. When you use information from a search result, cite the URL of that result inline next to the claim it supports \u2014 copy the URL verbatim from the result rather than rephrasing it. Web search consumes a monthly budget; prefer local knowledge when it can answer the question.",
         "parameters": {
           "type": "object",
           "properties": {

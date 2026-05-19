@@ -2144,6 +2144,115 @@ pub fn canonicalize_chat_response_tool_calls(
     fixed
 }
 
+/// Promote a model-emitted tool call from the `content` field into
+/// the structured `tool_calls` field.
+///
+/// Some chat templates (or models emitting JSON-mode output) place
+/// the tool call as a JSON object in the assistant message's content
+/// rather than in the structured `tool_calls` array. Recognised
+/// shapes:
+///   - `{"name": "<tool>", "parameters": {...}}`  — Qwen3 family
+///   - `{"name": "<tool>", "arguments": {...}}`   — native OpenAI
+///
+/// When recognised, the function rewrites `message.tool_calls` to
+/// contain the promoted call and clears `message.content`. Returns
+/// `true` if a promotion happened.
+///
+/// Without this, downstream consumers (frontdoor middleware,
+/// opencode clients, the search-gym test harness) see
+/// `tool_calls=[]` and report "model didn't call any tool" even
+/// though the model clearly intended to. Surfaced by the search-gym
+/// harness on Qwen3.5-9B fixtures during Phase 2 (May 2026); a
+/// parallel implementation lives in
+/// `sovereign-cli/src/search_gym_cmd/runner.rs::promote_content_tool_call`
+/// to catch the same shape in test-time runs.
+///
+/// No-ops if `message.tool_calls` already has entries — the model
+/// emitted in the structured channel, no promotion needed.
+pub fn promote_in_content_tool_call(
+    message: &mut crate::openai_types::ChatMessage,
+) -> bool {
+    // Don't touch already-structured tool calls. If the model used
+    // both channels (rare but possible), the structured one wins;
+    // we'd rather lose a duplicate than synthesise a competing one.
+    if message
+        .tool_calls
+        .as_ref()
+        .map(|t| !t.is_empty())
+        .unwrap_or(false)
+    {
+        return false;
+    }
+
+    let trimmed = strip_think_blocks(&message.content).trim().to_string();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let parsed: serde_json::Value = match serde_json::from_str(&trimmed) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let name = match parsed.get("name").and_then(|v| v.as_str()) {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => return false,
+    };
+    let args_value = match parsed.get("parameters").or_else(|| parsed.get("arguments")) {
+        Some(v) => v,
+        None => return false,
+    };
+    let arguments = match serde_json::to_string(args_value) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    // Synthesise a `tool_call_<short>` id so downstream id-based
+    // lookups (tool_call_id correlation on subsequent role:tool
+    // messages) have something to bind to. The id only needs to be
+    // distinct within this assistant turn; a hash of the args keeps
+    // it stable across retries.
+    let id = format!(
+        "promoted_{}_{:x}",
+        name,
+        // Cheap non-crypto hash so debugging output is readable.
+        // We don't need collision resistance — just distinctness
+        // within a turn (and we only synthesise one call here).
+        arguments.len() as u32 ^ (name.len() as u32).wrapping_mul(31)
+    );
+
+    message.tool_calls = Some(vec![crate::openai_types::ToolCall {
+        id,
+        kind: "function".to_string(),
+        function: crate::openai_types::FunctionCall {
+            name,
+            arguments,
+        },
+    }]);
+    message.content = String::new();
+    true
+}
+
+/// Strip `<think>…</think>` blocks from a string. Mirrors the
+/// implementation in the search-gym runner — kept in sync by
+/// convention (both are short, both target the same chat-template
+/// quirks). Unterminated `<think>` discards the rest of the input
+/// rather than emit partial thinking content.
+fn strip_think_blocks(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        rest = &rest[start..];
+        if let Some(end) = rest.find("</think>") {
+            rest = &rest[end + "</think>".len()..];
+        } else {
+            return out;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Which tool policy block to render in the distilled directive.
 /// Matches the `runs_synthetic_tools` decision: Opencode profile
 /// gets synthetic `write_file*` injection so its policy points

@@ -731,6 +731,17 @@ async fn serve_local_non_stream(
             //      No-op when emitted path is already canonical OR
             //      no similar path exists.
             for choice in resp.choices.iter_mut() {
+                // First pass: promote in-content tool calls into the
+                // structured `tool_calls` field. Some models (Qwen3
+                // family observed in the search-gym harness) emit
+                // tool calls as JSON objects in the message content
+                // rather than the structured channel. Without this
+                // promotion, downstream consumers see tool_calls=[]
+                // and the tool intent is silently lost.
+                if crate::frontdoor::promote_in_content_tool_call(&mut choice.message) {
+                    info!("promoted in-content tool call into structured tool_calls field");
+                }
+
                 if let Some(tcs) = choice.message.tool_calls.as_mut() {
                     let heredoc_fixed =
                         crate::frontdoor::canonicalize_chat_response_tool_calls(tcs);
