@@ -70,6 +70,66 @@
       return n > 0 ? [[t, n]] : [];
     });
   }
+
+  // Human-friendly section heading for a `display_category` value.
+  // Unknown categories fall back to a title-cased rendering so newly-
+  // added categories (declared in a recipe `[display]` block) light up
+  // without a frontend round-trip.
+  const CATEGORY_TITLE: Record<string, string> = {
+    conversation: "Conversations",
+    reference: "Reference",
+    argument: "Argument",
+    personal: "Personal",
+  };
+  const OTHER_GROUP = "__other__";
+
+  function categoryKey(s: AtlasCorpusSummary): string {
+    return s.display_category ?? OTHER_GROUP;
+  }
+
+  function categoryTitle(key: string): string {
+    if (key === OTHER_GROUP) return "Other";
+    return (
+      CATEGORY_TITLE[key] ??
+      key.charAt(0).toUpperCase() + key.slice(1).replace(/[-_]/g, " ")
+    );
+  }
+
+  // Stable order: known categories first in the order they appear in
+  // CATEGORY_TITLE (conversation comes first since it's the
+  // newest-feature surface), then any unknown categories alphabetically,
+  // then Other last so legacy / untagged corpora don't crowd the top.
+  const KNOWN_CATEGORY_ORDER = Object.keys(CATEGORY_TITLE);
+
+  let grouped = $derived.by(() => {
+    const buckets = new Map<string, AtlasCorpusSummary[]>();
+    for (const s of summaries) {
+      const key = categoryKey(s);
+      const list = buckets.get(key) ?? [];
+      list.push(s);
+      buckets.set(key, list);
+    }
+    const ordered: Array<{ key: string; title: string; rows: AtlasCorpusSummary[] }> = [];
+    for (const k of KNOWN_CATEGORY_ORDER) {
+      const rows = buckets.get(k);
+      if (rows && rows.length > 0) {
+        ordered.push({ key: k, title: categoryTitle(k), rows });
+        buckets.delete(k);
+      }
+    }
+    const remainingKnown = Array.from(buckets.keys())
+      .filter((k) => k !== OTHER_GROUP)
+      .sort();
+    for (const k of remainingKnown) {
+      ordered.push({ key: k, title: categoryTitle(k), rows: buckets.get(k)! });
+      buckets.delete(k);
+    }
+    const other = buckets.get(OTHER_GROUP);
+    if (other && other.length > 0) {
+      ordered.push({ key: OTHER_GROUP, title: categoryTitle(OTHER_GROUP), rows: other });
+    }
+    return ordered;
+  });
 </script>
 
 <div class="atlas-index">
@@ -97,37 +157,44 @@
       </p>
     </div>
   {:else}
-    <ul class="corpus-list">
-      {#each summaries as s (s.corpus_id)}
-        <li class="corpus-row" data-testid="atlas-corpus-row">
-          <button
-            class="row-button"
-            type="button"
-            disabled={!onSelect}
-            onclick={() => onSelect?.(s.corpus_id)}
-            aria-label={`Open ${s.display_name}`}
-          >
-            <div class="row-header">
-              <span class="corpus-id">{s.display_name}</span>
-              <span class="total">{s.total_atoms.toLocaleString()} atoms</span>
-            </div>
-            <div class="counts">
-              {#each nonZeroCounts(s) as [t, n] (t)}
-                <span class="count-chip" title={t}>
-                  <span class="count-label">{ATOM_TYPE_LABEL[t]}</span>
-                  <span class="count-n">{n.toLocaleString()}</span>
-                </span>
-              {/each}
-            </div>
-            {#if s.last_extracted_unix}
-              <div class="meta">
-                Last extracted: {formatTimestamp(s.last_extracted_unix)}
-              </div>
-            {/if}
-          </button>
-        </li>
+    <div class="category-stack">
+      {#each grouped as group (group.key)}
+        <section class="category-section" data-testid="atlas-category-section" data-category={group.key}>
+          <h2 class="category-heading">{group.title}</h2>
+          <ul class="corpus-list">
+            {#each group.rows as s (s.corpus_id)}
+              <li class="corpus-row" data-testid="atlas-corpus-row">
+                <button
+                  class="row-button"
+                  type="button"
+                  disabled={!onSelect}
+                  onclick={() => onSelect?.(s.corpus_id)}
+                  aria-label={`Open ${s.display_name}`}
+                >
+                  <div class="row-header">
+                    <span class="corpus-id">{s.display_name}</span>
+                    <span class="total">{s.total_atoms.toLocaleString()} atoms</span>
+                  </div>
+                  <div class="counts">
+                    {#each nonZeroCounts(s) as [t, n] (t)}
+                      <span class="count-chip" title={t}>
+                        <span class="count-label">{ATOM_TYPE_LABEL[t]}</span>
+                        <span class="count-n">{n.toLocaleString()}</span>
+                      </span>
+                    {/each}
+                  </div>
+                  {#if s.last_extracted_unix}
+                    <div class="meta">
+                      Last extracted: {formatTimestamp(s.last_extracted_unix)}
+                    </div>
+                  {/if}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </section>
       {/each}
-    </ul>
+    </div>
   {/if}
 </div>
 
@@ -178,6 +245,26 @@
     margin-left: auto;
     margin-right: auto;
     line-height: 1.5;
+  }
+
+  .category-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  /* `.category-section` has no own styling — the heading + nested
+     `.corpus-list` carry the visual weight. Comment retained so a
+     future maintainer doesn't add a background here without
+     reading why we didn't. */
+
+  .category-heading {
+    margin: 0 0 12px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
   }
 
   .corpus-list {

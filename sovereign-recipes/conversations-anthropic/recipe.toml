@@ -1,14 +1,17 @@
 [corpus]
-id = "conversations-personal"
-name = "Personal claude.ai conversations"
-description = "Local-only ingest of the user's claude.ai chat export. Conversation-history retrieval surface for the user's own past chats. NEVER share — third parties the user discussed have not consented to gossip."
+id = "conversations-anthropic"
+name = "Claude conversations"
+description = "Local-only ingest of the user's claude.ai chat export. Settings → Imports installs this recipe by unzipping the Anthropic export the user picks and dropping its `conversations.json` at the canonical path below. NEVER share — third parties the user discussed have not consented to gossip."
 license = "private"
 mesh_sharing = false
 size_compressed_gb = 0
 size_indexed_gb = 0
 
-# Convention: symlink the dump to a stable path so the recipe is not
-# tied to claude.ai's timestamp-suffixed download directory.
+# Canonical landing zone. The desktop's Settings → Imports tab
+# (`sovereign-desktop/src-tauri/src/import_commands.rs::import_anthropic_zip`)
+# extracts the `conversations.json` entry from the user-picked
+# Anthropic export zip and writes it here before kicking off the
+# install. CLI users may symlink manually:
 #
 #   ln -sf ~/Downloads/data-<uuid>-*/conversations.json \
 #          ~/.sovereign/conversations/conversations.json
@@ -40,3 +43,11 @@ vector = true
 enabled = true
 type = "atlas"
 domain = "conversational"
+
+# Atlas View rail groups corpora sharing this category under one
+# "Conversations" header so the user's Sovereign-internal chats
+# (`conversation-history`) and their imported Claude chats live
+# side by side regardless of source.
+[display]
+category = "conversation"
+icon = "chat-bubble"

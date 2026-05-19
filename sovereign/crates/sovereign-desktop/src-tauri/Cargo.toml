@@ -35,6 +35,11 @@ arc-swap = { workspace = true }
 futures = { workspace = true }
 walkdir = "2"
 dirs = "6"
+# Settings → Imports unzips Anthropic export archives into the
+# `conversations-anthropic` canonical landing path before triggering
+# install. Matches corpus-engine + sovereign-tools workspace pin —
+# deflate-only mirrors the shipping zip variant Anthropic produces.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 # Used by `recipe_commands::corpus_import_recipe` to record a
 # tamper-evident sha256 alongside each imported recipe in the
 # user's local registry.

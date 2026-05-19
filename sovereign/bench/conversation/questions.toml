@@ -5,7 +5,7 @@
 # see README.md for semantics.
 #
 # Every entity here is a role token, not a real name. See
-# sovereign-recipes/conversations-personal/README.md for the
+# sovereign-recipes/conversations-anthropic/README.md for the
 # pii::scrub_pii contract. The corresponding real-name mapping
 # lives at ~/.sovereign/conversations/entity-map.json (gitignored).
 #
@@ -14,8 +14,8 @@
 # before running --synth, otherwise scoring is meaningless.
 
 [bank]
-name = "conversations-personal-v0"
-corpus = "conversations-personal"
+name = "conversations-anthropic-v0"
+corpus = "conversations-anthropic"
 description = """
 Seed bench for conversation-history retrieval. ~12 items spanning the
 six archetypes (entity_recall, decision_trace, trend, cross_conv_synth,

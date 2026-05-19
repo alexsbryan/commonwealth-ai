@@ -86,6 +86,10 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
         filter_mode: Default::default(),
         parameters: Default::default(),
         resolved_parameters: Default::default(),
+        // No display.category — KnowledgeView's personal-knowledge
+        // view is a digest source, not a corpus the user browses in
+        // Atlas View.
+        display: None,
     }
 }
 
@@ -169,6 +173,9 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
         filter_mode: Default::default(),
         parameters: Default::default(),
         resolved_parameters: Default::default(),
+        // No display.category — institutional-notes is a digest
+        // source, not a corpus the user browses in Atlas View.
+        display: None,
     }
 }
 
@@ -199,11 +206,23 @@ pub fn conversation_history_recipe(
         )
     };
 
+    // Per-message content is emitted in the `### [YYYY-MM-DD HH:MM]
+    // <role>\n<body>` shape the `threaded_turns` chunker expects.
+    // Group-concat with a blank-line separator collapses one row per
+    // message into one document per conversation; the chunker then
+    // pairs user+assistant turns into retrieval units identical in
+    // shape to the units produced from the Anthropic-export ingest
+    // path, so the conversation_atlas pipeline runs against
+    // bit-compatible inputs from either source.
     let query = format!(
         "SELECT \
             c.id   AS conversation_id, \
             c.updated_at AS version, \
-            ('[' || m.role || '] ' || m.content) AS content \
+            ( \
+                '### [' || strftime('%Y-%m-%d %H:%M', m.created_at, 'unixepoch') || '] ' \
+                || m.role || char(10) \
+                || m.content \
+            ) AS content \
          FROM conversations c \
          JOIN messages m ON m.conversation_id = c.id \
          WHERE c.deleted_at IS NULL \
@@ -252,16 +271,24 @@ pub fn conversation_history_recipe(
             filter: None,
             decompress: None,
         },
-        chunk: ChunkerConfig::Paragraph {
-            max_chars: 1500,
-            overlap_chars: 100,
-        },
+        // Pair user + assistant turns into retrieval units. Same
+        // chunker the `conversations-anthropic` recipe uses — keeps
+        // the two corpora bit-compatible at the chunk layer so the
+        // shared `conversation_atlas` pipeline (and the meta-atlas
+        // Trace/Rolling bucket downstream) operates on uniform inputs.
+        chunk: ChunkerConfig::ThreadedTurns,
         index: IndexConfig::default(),
+        // v2 atlas enrichment via the `conversational` domain →
+        // `conversation_atlas` pipeline (see
+        // `corpus-engine/src/enrichment/pipeline/pipelines/conversation_atlas.rs`).
+        // Replaces the v1 `field_model` skeleton; KnowledgeView's
+        // splice path now reads the digest from `atlas/atoms.json`
+        // via `atlas_digest::render_atlas_digest`.
         enrichment: Some(EnrichmentConfig {
             enabled: true,
-            enrichment_type: "field_model".into(),
+            enrichment_type: "atlas".into(),
             domain: Some("conversational".into()),
-            prompt_version: Some("v1".into()),
+            prompt_version: Some("v2".into()),
             clustering: None,
             alignment: None,
             fault_lines: None,
@@ -276,6 +303,16 @@ pub fn conversation_history_recipe(
         filter_mode: Default::default(),
         parameters: Default::default(),
         resolved_parameters: Default::default(),
+        // Atlas View rail groups every corpus declaring
+        // `category = "conversation"` under one "Conversations"
+        // header — so this corpus (the user's Sovereign-internal
+        // chats) and `conversations-anthropic` (imported Claude
+        // chats) appear side by side, regardless of which one they
+        // originated from.
+        display: Some(corpus_engine::DisplayMeta {
+            category: Some("conversation".into()),
+            icon: Some("chat-bubble".into()),
+        }),
     }
 }
 
@@ -342,18 +379,31 @@ mod tests {
     }
 
     #[test]
-    fn conversation_recipe_uses_paragraph_chunker() {
+    fn conversation_recipe_uses_threaded_turns_chunker_post_v2_migration() {
+        // Conversation-history migrated from v1 paragraph chunker +
+        // `field_model` enrichment to v2 `threaded_turns` chunker +
+        // `atlas` enrichment alongside the conversation-imports
+        // landing (§4.14c). The chunker rename is load-bearing —
+        // it's what makes the user's Sovereign-internal chats
+        // produce atom shapes byte-compatible with imported Claude
+        // chats.
         let recipe = conversation_history_recipe(&PathBuf::from("/tmp/x.db"), &[]);
-        match recipe.chunk {
-            ChunkerConfig::Paragraph {
-                max_chars,
-                overlap_chars,
-            } => {
-                assert_eq!(max_chars, 1500);
-                assert_eq!(overlap_chars, 100);
-            }
-            other => panic!("expected Paragraph chunker, got {other:?}"),
-        }
+        assert!(
+            matches!(recipe.chunk, ChunkerConfig::ThreadedTurns),
+            "expected ThreadedTurns chunker post-migration, got {:?}",
+            recipe.chunk,
+        );
+        let enrichment = recipe
+            .enrichment
+            .as_ref()
+            .expect("conversation-history must declare enrichment");
+        assert_eq!(enrichment.enrichment_type, "atlas");
+        assert_eq!(enrichment.domain.as_deref(), Some("conversational"));
+        let display = recipe
+            .display
+            .as_ref()
+            .expect("conversation-history must declare [display]");
+        assert_eq!(display.category.as_deref(), Some("conversation"));
     }
 
     #[test]

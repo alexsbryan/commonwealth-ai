@@ -662,6 +662,37 @@ export async function corpusInstallWithParameters(
   });
 }
 
+// ─── Settings → Imports ─────────────────────────────────────
+
+/** Returned by `importAnthropicZip` once the canonical
+ *  `conversations.json` is in place and `/internal/corpus/install`
+ *  has accepted the request. Subscribe to
+ *  `corpusProgressStore.byId[corpus_id]` for the live progress
+ *  stream that drives the ImportsTab's progress card + ETA. */
+export interface ImportStartResponse {
+  corpus_id: string;
+  total_messages: number;
+  estimated_minutes: number;
+  /** Path the canonical `conversations.json` landed at. Surfaced for
+   *  glassbox UX — the ImportsTab can show the path if the user
+   *  wants to verify the move without trusting the toast. */
+  canonical_path: string;
+}
+
+/** Settings → Imports: unpack the Anthropic export `.zip` the user
+ *  picks, drop its `conversations.json` at the canonical landing
+ *  path the `conversations-anthropic` recipe reads from, and
+ *  trigger ingest. v1 ships Anthropic only — ChatGPT + Gemini
+ *  land as sibling commands once their extractors exist
+ *  (SYSTEM_OVERVIEW §10.1). */
+export async function importAnthropicZip(
+  zipPath: string,
+): Promise<ImportStartResponse> {
+  return invoke("import_anthropic_zip", {
+    request: { zip_path: zipPath },
+  });
+}
+
 // ─── Insights ──────────────────────────────────────────────
 
 export async function clipInsight(

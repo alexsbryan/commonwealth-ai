@@ -18,6 +18,7 @@
     StarterQuestion,
   } from "../types";
   import EnrichmentPanel from "./EnrichmentPanel.svelte";
+  import ImportsTab from "./settings/ImportsTab.svelte";
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
   import MeshSettings from "./MeshSettings.svelte";
@@ -38,6 +39,7 @@
   type Tab =
     | "models"
     | "knowledge"
+    | "imports"
     | "enrichment"
     | "local-knowledge"
     | "mesh"
@@ -328,6 +330,7 @@
   const ALL_TABS: { id: Tab; label: string; keywords: string[] }[] = [
     { id: "models",          label: "Models",          keywords: ["model", "creativity", "reasoning", "length", "context", "temperature", "token", "gguf"] },
     { id: "knowledge",       label: "Knowledge",        keywords: ["knowledge", "corpus", "storage", "budget", "ingest", "throttle", "disk", "knowledgeview"] },
+    { id: "imports",         label: "Imports",          keywords: ["import", "claude", "anthropic", "chatgpt", "gemini", "conversation", "export", "zip"] },
     { id: "enrichment",      label: "Enrichment",       keywords: ["atlas", "enrich", "graph", "entity", "knowledge graph"] },
     { id: "local-knowledge", label: "Local Knowledge",  keywords: ["local", "folder", "obsidian", "document", "file", "vault"] },
     { id: "mesh",            label: "Mesh",             keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
@@ -907,6 +910,15 @@
             </div>
           {/if}
 
+        </section>
+      {/if}
+
+      <!-- ──────────── IMPORTS ──────────── -->
+      {#if activeTab === "imports"}
+        <section class="doc-section">
+          <h2 class="doc-h2">Imports</h2>
+          <p class="doc-intro">Import your conversation history from Claude, ChatGPT, or Gemini. Sovereign builds an atlas you can traverse — see threads, people, and recurring topics in the Atlas tab.</p>
+          <ImportsTab />
         </section>
       {/if}
 

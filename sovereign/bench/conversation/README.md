@@ -3,9 +3,9 @@
 Bench coverage for the conversation-history retrieval surface — the use
 case where the user asks "what did I discuss with the CFO about runway
 in Q3", "how has my view on X shifted", "have I ever talked about Y".
-Corresponds to the `conversations-personal` recipe; questions are
+Corresponds to the `conversations-anthropic` recipe; questions are
 authored against the user's own claude.ai export (local-only, never
-published — see `sovereign-recipes/conversations-personal/README.md`).
+published — see `sovereign-recipes/conversations-anthropic/README.md`).
 
 ## Privacy contract
 
@@ -34,12 +34,12 @@ ln -sf ~/Downloads/data-*/conversations.json \
        ~/.sovereign/conversations/conversations.json
 
 # 2. Install + ingest (recipe has obsidian_atlas enrichment enabled)
-sovereign recipe install sovereign-recipes/conversations-personal
-sovereign corpus install conversations-personal
+sovereign recipe install sovereign-recipes/conversations-anthropic
+sovereign corpus install conversations-anthropic
 # Wait for enrichment to complete (LLM extraction over every conv).
 
 # 3. Surface classified Person/Org entities from atoms.json
-sovereign corpus scrub conversations-personal --min-salience 0.3
+sovereign corpus scrub conversations-anthropic --min-salience 0.3
 # → ~/.sovereign/conversations/entity-candidates.json
 # (Ranked by salience. The atlas pipeline already classified types.)
 

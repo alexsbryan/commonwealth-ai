@@ -33,7 +33,7 @@
 //! file.
 //!
 //! Pipeline runs via `sovereign enrich init <corpus> --pipeline
-//! conversation_atlas`. The recipe path (`conversations-personal`)
+//! conversation_atlas`. The recipe path (`conversations-anthropic`)
 //! also drives in-line entity extraction via the `conversational`
 //! domain; the two paths are complementary — in-line catches Person /
 //! Org / Initiative quickly during ingest, the atlas pipeline runs

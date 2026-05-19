@@ -193,7 +193,7 @@ pub async fn try_recover_stranded_partitions(
             // failure modes (corrupt JSON) are recoverable.
             let raw = std::fs::read_to_string(&meta_path).unwrap_or_default();
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
-                // Defense in depth against the conversations-personal
+                // Defense in depth against the conversations-anthropic
                 // race (auto_ingest.rs gates on active_ingests, but
                 // any future caller of this function — manual CLI
                 // merge, recovery from a different loop — gets the
@@ -636,7 +636,7 @@ mod tests {
     /// Regression: a partition with `ingestion_in_progress=true` is
     /// being actively written; auto_recover must refuse to merge it
     /// rather than racing the embed pipeline. Reproduced by the
-    /// conversations-personal install on 2026-05-17 — 180 chunks
+    /// conversations-anthropic install on 2026-05-17 — 180 chunks
     /// embedded but never landed because auto_recover ran mid-ingest
     /// and consumed the partition. The auto_ingest scheduler now
     /// gates on AppState.active_ingests, but this defense lives

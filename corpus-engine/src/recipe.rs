@@ -214,6 +214,39 @@ pub struct Recipe {
     /// file declares only the schema, not user values.
     #[serde(skip, default)]
     pub resolved_parameters: ResolvedParameters,
+
+    /// Presentation hints for UI surfaces (Atlas View rail grouping,
+    /// Settings → Knowledge tile icons, etc.). Pure UI metadata —
+    /// retrieval and ingest ignore this block. Drives the
+    /// "Conversations" group in the Atlas View when corpora declare
+    /// `category = "conversation"`.
+    ///
+    /// `#[serde(default)]` so recipes pre-dating this block still
+    /// parse — see the back-compat policy at the top of this module.
+    #[serde(default)]
+    pub display: Option<DisplayMeta>,
+}
+
+/// Presentation hints for a recipe. See [`Recipe::display`].
+///
+/// Pure UI metadata: the retrieval layer reads `category` to decide
+/// whether to render a chunk under "From your conversations" rather
+/// than the corpus_id slug (see `format_scored_chunks_with_kinds`),
+/// and the Atlas View rail groups corpora that share a category under
+/// one header. No semantic meaning is attached to category strings —
+/// add new ones as needed.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct DisplayMeta {
+    /// Logical group this corpus belongs to. Example values:
+    /// `"conversation"`, `"reference"`, `"argument"`, `"personal"`.
+    /// `None` means "ungrouped" — UI buckets these as "Other".
+    pub category: Option<String>,
+    /// Optional icon hint for desktop tiles. Free-form string; the
+    /// frontend maps known values (`"chat-bubble"`, `"book"`, …) onto
+    /// its icon set and falls back to a generic glyph for unknown
+    /// values.
+    pub icon: Option<String>,
 }
 
 /// Sidecar TOML table for [`Recipe::filter_mode`]. Splitting this from

@@ -2369,7 +2369,7 @@ fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&str>) -> &'a 
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// grouped by provenance tier (corpus vs web) and staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
-    format_scored_chunks_with_kinds(chunks, max_chars, None, None, None)
+    format_scored_chunks_with_kinds(chunks, max_chars, None, None, None, None)
 }
 
 /// Like [`format_scored_chunks`], but if a `kinds` map is supplied,
@@ -2397,6 +2397,13 @@ fn format_scored_chunks_with_kinds(
     kinds: Option<&std::collections::HashMap<String, corpus_engine::CorpusKind>>,
     contested: Option<&std::collections::HashSet<String>>,
     folder_metadata: Option<&std::collections::HashMap<String, crate::traits::FolderMetadata>>,
+    // corpus_id → `display.category` lookup. When a chunk's corpus
+    // declares `category = "conversation"`, that chunk peels off the
+    // generic trace bucket and renders under a dedicated
+    // "## From your conversations" section. Other categories are
+    // ignored today — the section rename is the only category-aware
+    // synthesis hook in v1 of the conversation-imports landing.
+    display_categories: Option<&std::collections::HashMap<String, String>>,
 ) -> String {
     // Move 5 — sub-bucket the corpus bucket by the meta-atlas
     // articulation axis when chunks carry the `articulation`
@@ -2404,9 +2411,19 @@ fn format_scored_chunks_with_kinds(
     // existing "From knowledge base" catch-all so the synthesis
     // model sees the structural-map / articulated-claim /
     // lived-practice distinction.
+    //
+    // Conversation-imports landing — chunks from corpora declaring
+    // `[display] category = "conversation"` are split out of the
+    // generic trace bucket into a dedicated `conversation_parts`
+    // section. Renamed prompt heading ("From your conversations")
+    // signals to the synthesis model that the two conversation
+    // corpora (`conversations-anthropic`, `conversation-history`)
+    // belong to one logical pool regardless of which one served
+    // each chunk.
     let mut corpus_inventory = Vec::new();
     let mut corpus_argument = Vec::new();
     let mut corpus_trace = Vec::new();
+    let mut conversation_parts = Vec::new();
     let mut corpus_parts = Vec::new();
     let mut folder_parts = Vec::new();
     let mut web_parts = Vec::new();
@@ -2419,6 +2436,10 @@ fn format_scored_chunks_with_kinds(
             Some(corpus_engine::CorpusKind::Catalog)
         );
         let folder_meta = folder_metadata.and_then(|m| m.get(&c.corpus_id));
+        let is_conversation = display_categories
+            .and_then(|m| m.get(&c.corpus_id))
+            .map(|cat| cat == "conversation")
+            .unwrap_or(false);
         let body = strip_leading_title_duplicate(&c.content, c.title.as_deref());
         let content = truncate_chunk_content(body);
         let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
@@ -2440,7 +2461,18 @@ fn format_scored_chunks_with_kinds(
             None => String::new(),
         };
 
-        let (label, bucket) = if let Some(meta) = folder_meta {
+        let (label, bucket) = if is_conversation && !is_catalog && c.url.is_none() {
+            // Both conversation corpora — imported Claude chats AND
+            // the user's Sovereign-internal chats — surface under
+            // one synthesis-prompt section so the model treats them
+            // as one logical "your conversations" pool. The
+            // corpus_id is dropped from the label since the user
+            // perceives them as one source.
+            (
+                format!("[Your conversations — {title}{contested_suffix}]"),
+                &mut conversation_parts,
+            )
+        } else if let Some(meta) = folder_meta {
             // Folder corpora win precedence over Catalog/Web/articulation
             // — a folder is by definition the user's own material and
             // the synthesis register changes accordingly.
@@ -2486,6 +2518,12 @@ fn format_scored_chunks_with_kinds(
     }
 
     let mut sections = Vec::new();
+    if !conversation_parts.is_empty() {
+        sections.push(format!(
+            "## From your conversations\n\n{}",
+            conversation_parts.join("\n\n---\n\n")
+        ));
+    }
     if !folder_parts.is_empty() {
         sections.push(format!(
             "## From your folders\n\n{}",
@@ -2562,12 +2600,36 @@ fn build_provenance_components(
     source_map: &std::collections::HashMap<String, usize>,
     peer_attribution: &std::collections::HashMap<String, String>,
     folder_meta: &std::collections::HashMap<String, crate::traits::FolderMetadata>,
+    // corpus_id → `display.category` lookup so the source's chat-UI
+    // chip can render "your conversations" instead of a per-corpus
+    // slug when the underlying corpus is a conversation source. None
+    // (or empty) preserves the prior behaviour.
+    display_categories: Option<&std::collections::HashMap<String, String>>,
 ) -> (Vec<SourceSummary>, Option<crate::types::CoverageNote>) {
     let mut sources: Vec<SourceSummary> = source_map
         .iter()
         .map(|(origin, &count)| {
             let from_peer = peer_attribution.get(origin).cloned();
-            let display_name = folder_meta.get(origin).map(|m| m.display_name.clone());
+            // Display label precedence:
+            //   1. Folder-corpus user-typed display name (folder-ingest v1 §6.3)
+            //   2. "Your conversations" for any corpus declaring
+            //      `[display] category = "conversation"` — collapses
+            //      the two conversation corpora into one label.
+            //   3. None — chat UI falls back to corpus_id slug.
+            let display_name = folder_meta
+                .get(origin)
+                .map(|m| m.display_name.clone())
+                .or_else(|| {
+                    display_categories
+                        .and_then(|m| m.get(origin))
+                        .and_then(|cat| {
+                            if cat == "conversation" {
+                                Some("Your conversations".to_string())
+                            } else {
+                                None
+                            }
+                        })
+                });
             SourceSummary {
                 origin: origin.clone(),
                 count,
@@ -5823,10 +5885,41 @@ impl Runtime {
             }
         }
         let folder_meta_for_ctx = self.folder_metadata_snapshot().await;
+        // Build the corpus-kind + display-category lookups before
+        // the provenance components so the SourceSummary
+        // `display_name` can render "Your conversations" for any
+        // corpus declaring `[display] category = "conversation"`.
+        // Catalog routing + Wikipedia editors' POV markers —
+        // best-effort: `installed_indexes()` errors fall through to
+        // defaults, so no callsite gates on the engine being
+        // configured.
+        let (kinds, display_categories): (
+            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, String>,
+        ) = if let Some(engine) = &self.corpus_engine {
+            let mut kinds_map = std::collections::HashMap::new();
+            let mut display_map = std::collections::HashMap::new();
+            for info in engine.installed_indexes().await.unwrap_or_default() {
+                if let Some(d) = &info.display {
+                    if let Some(cat) = &d.category {
+                        display_map.insert(info.corpus_id.clone(), cat.clone());
+                    }
+                }
+                kinds_map.insert(info.corpus_id, info.kind);
+            }
+            (kinds_map, display_map)
+        } else {
+            Default::default()
+        };
         let (sources, coverage) = build_provenance_components(
             &source_map,
             &peer_attribution,
             &folder_meta_for_ctx,
+            if display_categories.is_empty() {
+                None
+            } else {
+                Some(&display_categories)
+            },
         );
 
         // 5. Build prompt with knowledge context.
@@ -5840,22 +5933,6 @@ impl Runtime {
         // exact failure mode v6 surfaced empirically (chunks_fact_score
         // climbed but answer-fact-score didn't, because the model
         // never saw the depth chunks).
-        // Build the corpus-kind map and contested-titles set for
-        // formatting. Catalog routing + Wikipedia editors' POV
-        // markers — both no-ops when the supporting metadata isn't
-        // available, so safe to compute unconditionally.
-        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
-            if let Some(engine) = &self.corpus_engine {
-                engine
-                    .installed_indexes()
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|info| (info.corpus_id, info.kind))
-                    .collect()
-            } else {
-                Default::default()
-            };
         let contested_titles: std::collections::HashSet<String> =
             self.contested_titles_for_chunks(&all_chunks).await;
         let folder_meta = self.folder_metadata_snapshot().await;
@@ -5875,6 +5952,11 @@ impl Runtime {
                     None
                 } else {
                     Some(&folder_meta)
+                },
+                if display_categories.is_empty() {
+                    None
+                } else {
+                    Some(&display_categories)
                 },
             );
             if history.is_empty() {
@@ -7457,6 +7539,14 @@ impl Runtime {
                     &source_map,
                     &std::collections::HashMap::new(),
                     &folder_meta,
+                    // KnowledgeQueryPlan doesn't carry the
+                    // display-category lookup; the chip-label rename
+                    // for conversation corpora only fires on the
+                    // DeepQuery path (see `prepare_knowledge_context`).
+                    // Threading the lookup through the plan is a
+                    // follow-up if we want the KQ streaming surface
+                    // to render "Your conversations" as well.
+                    None,
                 );
                 let provenance = ResponseProvenance {
                     intent: "KnowledgeQuery".to_string(),
@@ -9683,18 +9773,24 @@ impl Runtime {
         // (`KNOWLEDGE_SYNTHESIS_SYSTEM`) has dedicated guidance for
         // them. Best-effort: if `installed_indexes()` errors we fall
         // back to no-kinds formatting (pre-catalog behaviour).
-        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
-            if let Some(engine) = &self.corpus_engine {
-                engine
-                    .installed_indexes()
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|info| (info.corpus_id, info.kind))
-                    .collect()
-            } else {
-                Default::default()
-            };
+        let (kinds, display_categories): (
+            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, String>,
+        ) = if let Some(engine) = &self.corpus_engine {
+            let mut kinds_map = std::collections::HashMap::new();
+            let mut display_map = std::collections::HashMap::new();
+            for info in engine.installed_indexes().await.unwrap_or_default() {
+                if let Some(d) = &info.display {
+                    if let Some(cat) = &d.category {
+                        display_map.insert(info.corpus_id.clone(), cat.clone());
+                    }
+                }
+                kinds_map.insert(info.corpus_id, info.kind);
+            }
+            (kinds_map, display_map)
+        } else {
+            Default::default()
+        };
         // Surface Wikipedia editors' POV/controversy flags as
         // `(contested)` markers on the source label. Best-effort:
         // graph absent → empty set → no markers, behaviour
@@ -9715,6 +9811,11 @@ impl Runtime {
                 None
             } else {
                 Some(&folder_meta)
+            },
+            if display_categories.is_empty() {
+                None
+            } else {
+                Some(&display_categories)
             },
         );
         let corpus_display = context.installed_corpora_display();
@@ -10908,18 +11009,24 @@ impl Runtime {
         // Build the synthesis prompt — emphasise that the answer
         // describes how the located source uses the term, and that
         // citations should attribute claims to the source.
-        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
-            if let Some(engine) = &self.corpus_engine {
-                engine
-                    .installed_indexes()
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|info| (info.corpus_id, info.kind))
-                    .collect()
-            } else {
-                Default::default()
-            };
+        let (kinds, display_categories): (
+            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, String>,
+        ) = if let Some(engine) = &self.corpus_engine {
+            let mut kinds_map = std::collections::HashMap::new();
+            let mut display_map = std::collections::HashMap::new();
+            for info in engine.installed_indexes().await.unwrap_or_default() {
+                if let Some(d) = &info.display {
+                    if let Some(cat) = &d.category {
+                        display_map.insert(info.corpus_id.clone(), cat.clone());
+                    }
+                }
+                kinds_map.insert(info.corpus_id, info.kind);
+            }
+            (kinds_map, display_map)
+        } else {
+            Default::default()
+        };
         let folder_meta = self.folder_metadata_snapshot().await;
         let doc_context = format_scored_chunks_with_kinds(
             &chunks,
@@ -10930,6 +11037,11 @@ impl Runtime {
                 None
             } else {
                 Some(&folder_meta)
+            },
+            if display_categories.is_empty() {
+                None
+            } else {
+                Some(&display_categories)
             },
         );
         let prompt = format!(
@@ -11056,6 +11168,11 @@ impl Runtime {
             &plan.source_map,
             &std::collections::HashMap::new(),
             &plan.folder_meta,
+            // KnowledgeQueryPlan doesn't yet carry a display-category
+            // lookup. See the matching note in the streaming path
+            // above — DeepQuery is where the conversation-label
+            // rename fires for v1.
+            None,
         );
         let provenance = ResponseProvenance {
             intent: "KnowledgeQuery".to_string(),
@@ -12289,7 +12406,7 @@ mod folder_attribution_tests {
         folder_meta.insert("folder_abc".into(), folder("Case Files", 0, 0, &[]));
 
         let (sources, coverage) =
-            build_provenance_components(&source_map, &HashMap::new(), &folder_meta);
+            build_provenance_components(&source_map, &HashMap::new(), &folder_meta, None);
         let folder_src = sources
             .iter()
             .find(|s| s.origin == "folder_abc")
@@ -12316,7 +12433,7 @@ mod folder_attribution_tests {
         );
 
         let (_sources, coverage) =
-            build_provenance_components(&source_map, &HashMap::new(), &folder_meta);
+            build_provenance_components(&source_map, &HashMap::new(), &folder_meta, None);
         let cov = coverage.expect("thin folder must produce a CoverageNote");
         assert_eq!(cov.kind, "thin");
         assert_eq!(cov.thin_folders.len(), 1);
@@ -12334,6 +12451,7 @@ mod folder_attribution_tests {
             &source_map,
             &HashMap::new(),
             &HashMap::new(),
+            None,
         );
         assert!(
             coverage.is_none(),
@@ -12525,7 +12643,7 @@ mod formatter_stream_section_tests {
                 Some("rolling"),
             ),
         ];
-        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## Broad map (inventory)"));
         assert!(out.contains("## Articulated claims (arguments)"));
         assert!(out.contains("## Lived practice (traces)"));
@@ -12546,7 +12664,7 @@ mod formatter_stream_section_tests {
             None,
             None,
         )];
-        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## From knowledge base"));
         assert!(!out.contains("## Broad map"));
     }
@@ -12557,7 +12675,7 @@ mod formatter_stream_section_tests {
             chunk("wiki", "Tagged", "x", Some("inventory"), Some("frozen")),
             chunk("wiki", "Untagged", "y", None, None),
         ];
-        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## Broad map (inventory)"));
         assert!(out.contains("## From knowledge base"));
     }

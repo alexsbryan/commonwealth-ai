@@ -117,8 +117,8 @@ pub use progress::{
     SourceFileManifest, SourceFileRecord, SourceFileStatus,
 };
 pub use recipe::{
-    Comparison, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig, HttpMethod,
-    PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl,
+    Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig,
+    HttpMethod, PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl,
     PrebuiltConfig, Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters,
 };
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
