@@ -98,6 +98,40 @@ pub struct AttributedChunk {
 
 pub struct ThreadedTurnsChunker;
 
+/// Soft cap on the byte length of a single chunk emitted by this
+/// chunker. Mirrors the default paragraph-chunker cap (1500 chars
+/// ≈ ~400 tokens at English-prose densities) so paired-turn output
+/// lands inside the embed slot's `max_input_tokens = 1024` budget
+/// even when a user has pasted a large code block or document into
+/// one turn.
+///
+/// Without this cap, oversized chunks throttled batch embedding to
+/// 1.2 seqs/sec (vs. 29-33 seqs/sec on wikipedia paragraphs) during
+/// the first end-to-end import of a real claude.ai export.
+/// `_BAK-2026-05-18` in `~/.sovereign/conversations/` is the
+/// reproducer; the conversations-anthropic ingest moved at
+/// ~4 chunks/sec until this cap landed.
+///
+/// 1500 chars is a soft target — the splitter tries to break on a
+/// blank line first (preserves paragraph shape), then any newline,
+/// then falls back to a raw char boundary. The 1.4× safety margin
+/// (`MAX_HARD_CHARS`) catches the rare case where no whitespace
+/// exists in the chunk's tail (e.g. a base64 blob), keeping the
+/// embed slot from truncating mid-multibyte.
+const MAX_CHUNK_CHARS: usize = 1500;
+
+/// Absolute ceiling — when the splitter can't find a soft boundary
+/// inside the [MAX_CHUNK_CHARS, MAX_HARD_CHARS] window, it forces a
+/// break at a UTF-8 char boundary at `MAX_HARD_CHARS`.
+const MAX_HARD_CHARS: usize = 2100;
+
+/// Inter-chunk overlap (in chars) for split sub-chunks. Bridges a
+/// fact that straddled the soft boundary — the same posture
+/// `ParagraphChunker` takes with its 100-char default. Sub-chunks
+/// derived from one turn pair carry the same `Attribution` spans,
+/// clipped to each sub-chunk's byte range.
+const SPLIT_OVERLAP_CHARS: usize = 80;
+
 impl ThreadedTurnsChunker {
     pub fn new() -> Self {
         Self
@@ -165,16 +199,125 @@ impl ThreadedTurnsChunker {
                 step = 1;
             }
 
-            chunks.push(AttributedChunk {
-                content,
-                index: idx,
-                spans,
-            });
-            idx += 1;
+            // Size cap: oversized chunks (e.g. user pasted a 30K-byte
+            // code dump as one turn) throttle the embed pipeline
+            // because the slot tokenises the whole input before
+            // truncating at `max_input_tokens`. Split into sub-chunks
+            // bounded by `MAX_CHUNK_CHARS`, preserving per-span
+            // attribution by clipping each sub-chunk's spans to its
+            // byte range.
+            for sub in split_oversized(content, spans) {
+                chunks.push(AttributedChunk {
+                    content: sub.content,
+                    index: idx,
+                    spans: sub.spans,
+                });
+                idx += 1;
+            }
             i += step;
         }
         chunks
     }
+}
+
+/// Helper: split a paired-turn chunk into one-or-more chunks each
+/// ≤ `MAX_CHUNK_CHARS` (soft) / `MAX_HARD_CHARS` (hard). Returns the
+/// content unchanged when the input is already small enough.
+struct SplitChunk {
+    content: String,
+    spans: Vec<TurnSpan>,
+}
+
+fn split_oversized(content: String, spans: Vec<TurnSpan>) -> Vec<SplitChunk> {
+    if content.len() <= MAX_CHUNK_CHARS {
+        return vec![SplitChunk { content, spans }];
+    }
+    let mut out: Vec<SplitChunk> = Vec::new();
+    let mut pos = 0usize;
+    let bytes = content.as_bytes();
+    while pos < content.len() {
+        let remaining = content.len() - pos;
+        if remaining <= MAX_CHUNK_CHARS {
+            let sub_content = content[pos..].to_string();
+            let sub_spans = clip_spans(&spans, pos, content.len());
+            out.push(SplitChunk { content: sub_content, spans: sub_spans });
+            break;
+        }
+        // Soft target: try to break on a blank line near MAX_CHUNK_CHARS.
+        let soft_target = pos + MAX_CHUNK_CHARS;
+        let mut end = next_soft_boundary(&content, soft_target)
+            .unwrap_or_else(|| hard_boundary(bytes, soft_target));
+        // Don't loop forever if the splitter returned an end ≤ pos
+        // (degenerate input — pos has no \n or boundary).
+        if end <= pos {
+            end = hard_boundary(bytes, soft_target);
+        }
+        let sub_content = content[pos..end].to_string();
+        let sub_spans = clip_spans(&spans, pos, end);
+        out.push(SplitChunk { content: sub_content, spans: sub_spans });
+        // Advance past the boundary, leaving a small overlap so a fact
+        // straddling the cut survives in the next sub-chunk too.
+        let next_pos = end.saturating_sub(SPLIT_OVERLAP_CHARS);
+        if next_pos <= pos {
+            // Overlap window pulled us back to or before pos — force
+            // forward progress at the hard boundary.
+            pos = end;
+        } else {
+            pos = next_pos;
+        }
+    }
+    out
+}
+
+/// Locate the next preferred break point at or after `target`,
+/// preferring (a) a `"\n\n"` paragraph boundary, (b) a single
+/// `'\n'`. Caps the search at `MAX_HARD_CHARS - SOFT` chars past
+/// `target` so we don't drag the soft cap arbitrarily far.
+fn next_soft_boundary(s: &str, target: usize) -> Option<usize> {
+    let hard = (target + (MAX_HARD_CHARS - MAX_CHUNK_CHARS)).min(s.len());
+    if target >= hard {
+        return None;
+    }
+    let slice = &s[target..hard];
+    if let Some(rel) = slice.find("\n\n") {
+        return Some(target + rel + 2);
+    }
+    if let Some(rel) = slice.find('\n') {
+        return Some(target + rel + 1);
+    }
+    None
+}
+
+/// Force a break at a UTF-8 char boundary at or before `target`.
+/// Guarantees we never split a multi-byte char.
+fn hard_boundary(bytes: &[u8], target: usize) -> usize {
+    let mut end = target.min(bytes.len());
+    while end > 0 && (bytes[end] & 0b1100_0000) == 0b1000_0000 {
+        end -= 1;
+    }
+    end
+}
+
+/// Project the parent chunk's spans onto a sub-chunk's byte range.
+/// A span survives if it overlaps `[sub_start, sub_end)`; its byte
+/// range is clipped to the overlap and rebased to sub-chunk
+/// coordinates (`0..sub_end-sub_start`).
+fn clip_spans(parent_spans: &[TurnSpan], sub_start: usize, sub_end: usize) -> Vec<TurnSpan> {
+    let mut out: Vec<TurnSpan> = Vec::new();
+    for s in parent_spans {
+        let (a, b) = s.byte_range;
+        let lo = a.max(sub_start);
+        let hi = b.min(sub_end);
+        if lo >= hi {
+            continue;
+        }
+        out.push(TurnSpan {
+            attribution: s.attribution,
+            timestamp: s.timestamp.clone(),
+            byte_range: (lo - sub_start, hi - sub_start),
+        });
+    }
+    out
 }
 
 impl Default for ThreadedTurnsChunker {
@@ -430,6 +573,107 @@ mod tests {
             assert_eq!(chunk.spans[1].attribution, Attribution::Assistant);
             assert!(chunk.spans[0].timestamp.is_some());
             assert!(chunk.spans[1].timestamp.is_some());
+        }
+    }
+
+    // ─── Size-cap tests ───────────────────────────────────────────
+    //
+    // Pin the throughput-protecting cap. Pre-cap, a real claude.ai
+    // export with one ~30K-byte user paste throttled embed batches
+    // to 1.2 seqs/sec because every chunk was tokenised fully
+    // before the slot truncated it. These tests guard the cap and
+    // its attribution-preserving span clipping.
+
+    #[test]
+    fn oversized_paired_turn_splits_into_multiple_chunks() {
+        // ~5 KB user prose + ~5 KB assistant prose forces a paired
+        // chunk well past the 1500-char soft cap.
+        let user_body = "A line of conversation. ".repeat(220);
+        let assistant_body = "A line of reply. ".repeat(300);
+        let input = format!(
+            "### [2025-09-04 18:01] user\n\n{user_body}\n\n### [2025-09-04 18:02] assistant\n\n{assistant_body}"
+        );
+        let chunks = ThreadedTurnsChunker::new().chunk(&input);
+        assert!(
+            chunks.len() > 1,
+            "oversized paired turn must split into multiple chunks (got {})",
+            chunks.len()
+        );
+        for c in &chunks {
+            assert!(
+                c.content.len() <= MAX_HARD_CHARS,
+                "split chunk overshot hard cap ({} > {}): {:?}",
+                c.content.len(),
+                MAX_HARD_CHARS,
+                &c.content[..c.content.len().min(120)],
+            );
+        }
+    }
+
+    #[test]
+    fn small_paired_turn_is_not_split() {
+        // SAMPLE is well under the cap — splitter must be a no-op.
+        let chunks = ThreadedTurnsChunker::new().chunk(SAMPLE);
+        assert_eq!(chunks.len(), 2, "small pairs should not split");
+    }
+
+    #[test]
+    fn split_subchunks_preserve_attribution_spans() {
+        let user_body = "User says: ".to_string() + &"foo bar baz ".repeat(200);
+        let assistant_body = "Reply: ".to_string() + &"qux quux corge ".repeat(200);
+        let input = format!(
+            "### [2025-09-04 18:01] user\n\n{user_body}\n\n### [2025-09-04 18:02] assistant\n\n{assistant_body}"
+        );
+        let chunks = ThreadedTurnsChunker::new().chunk_attributed(&input);
+        assert!(chunks.len() > 1);
+        for chunk in &chunks {
+            // Each sub-chunk must carry at least one span — span
+            // clipping is the load-bearing detail that keeps
+            // attribution coherent across the split.
+            assert!(
+                !chunk.spans.is_empty(),
+                "sub-chunk lost all attribution spans: {:?}",
+                &chunk.content[..chunk.content.len().min(120)]
+            );
+            // Every span's byte range must be in-bounds of the
+            // sub-chunk's content.
+            for s in &chunk.spans {
+                let (a, b) = s.byte_range;
+                assert!(a <= b, "span byte_range inverted: {a:?}..{b:?}");
+                assert!(
+                    b <= chunk.content.len(),
+                    "span byte_range overshoots sub-chunk content (end {} > len {})",
+                    b,
+                    chunk.content.len(),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn split_indices_remain_sequential() {
+        let big = "lorem ipsum dolor sit amet ".repeat(400);
+        let input = format!(
+            "### [2025-09-04 18:01] user\n\n{big}\n\n### [2025-09-04 18:02] assistant\n\nshort reply"
+        );
+        let chunks = ThreadedTurnsChunker::new().chunk(&input);
+        for (i, c) in chunks.iter().enumerate() {
+            assert_eq!(c.index, i);
+        }
+    }
+
+    #[test]
+    fn split_handles_oversize_without_newlines() {
+        // A blob with no newlines (worst case for the soft boundary
+        // pass) must still split cleanly via the hard char-boundary.
+        let blob = "x".repeat(6000);
+        let input = format!(
+            "### [2025-09-04 18:01] user\n\n{blob}\n\n### [2025-09-04 18:02] assistant\n\ny"
+        );
+        let chunks = ThreadedTurnsChunker::new().chunk(&input);
+        assert!(chunks.len() > 1);
+        for c in &chunks {
+            assert!(c.content.len() <= MAX_HARD_CHARS);
         }
     }
 }

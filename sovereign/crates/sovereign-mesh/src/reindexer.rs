@@ -31,7 +31,7 @@ use arc_swap::ArcSwap;
 use corpus_engine::ScipGraph;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
-use tokio::sync::{mpsc, watch, RwLock};
+use tokio::sync::{mpsc, watch, RwLock, Semaphore};
 
 use tokio::sync::oneshot;
 
@@ -147,6 +147,18 @@ pub struct Reindexer {
     /// — production daemons configure it; minimal test setups
     /// don't have to.
     commit_harvester: Option<Arc<corpus_engine::NoteStore>>,
+    /// Global serializer for `rust-analyzer scip` invocations across
+    /// every registered project. SCIP export is an
+    /// O(workspace-size) cargo + rust-analyzer pass — running four
+    /// of them in parallel (one per registered project) saturated
+    /// 4 cores at daemon startup, blocked anything else trying to
+    /// use the build cache, and kept the user staring at idle UIs.
+    /// One permit means at most one project rebuilds at a time;
+    /// the others queue on the semaphore. Cross-project parallelism
+    /// gave zero throughput because they all hit the same cargo
+    /// target dir anyway. Shared via Arc so it can be cloned into
+    /// every `WorkerCtx` without leaking the Reindexer Arc.
+    rebuild_permits: Arc<Semaphore>,
 }
 
 impl Reindexer {
@@ -161,6 +173,7 @@ impl Reindexer {
             projects: RwLock::new(HashMap::new()),
             merged,
             commit_harvester: None,
+            rebuild_permits: Arc::new(Semaphore::new(1)),
         })
     }
 
@@ -237,6 +250,7 @@ impl Reindexer {
             indexes_dir: self.indexes_dir.clone(),
             shutdown_rx,
             commit_harvester: self.commit_harvester.clone(),
+            rebuild_permits: Arc::clone(&self.rebuild_permits),
         };
 
         let worker = tokio::spawn(run_worker(ctx));
@@ -312,6 +326,8 @@ struct WorkerCtx {
     /// git-HEAD poll calls into [`crate::commit_harvest`] for the
     /// `old_head..new_head` range alongside the SCIP rebuild.
     commit_harvester: Option<Arc<corpus_engine::NoteStore>>,
+    /// Cross-project rebuild serializer. See [`Reindexer::rebuild_permits`].
+    rebuild_permits: Arc<Semaphore>,
 }
 
 /// Per-rebuild context. Separated from [`WorkerCtx`] because the
@@ -325,6 +341,10 @@ struct RebuildCtx {
     graph: ScipGraphHandle,
     merged: ScipGraphHandle,
     indexes_dir: PathBuf,
+    /// Acquired around the rust-analyzer scip subprocess inside
+    /// `run_one_rebuild` so cross-project rebuilds serialize. See
+    /// [`Reindexer::rebuild_permits`].
+    rebuild_permits: Arc<Semaphore>,
 }
 
 async fn run_worker(ctx: WorkerCtx) {
@@ -339,6 +359,7 @@ async fn run_worker(ctx: WorkerCtx) {
         indexes_dir,
         shutdown_rx,
         commit_harvester,
+        rebuild_permits,
     } = ctx;
 
     state.set(WatcherKind::Scip, WatcherStatus::Idle).await;
@@ -350,6 +371,7 @@ async fn run_worker(ctx: WorkerCtx) {
         graph: Arc::clone(&graph),
         merged,
         indexes_dir,
+        rebuild_permits,
     };
 
     // Filesystem watcher. Held for the lifetime of the task so
@@ -494,6 +516,27 @@ async fn run_one_rebuild(ctx: &RebuildCtx, req: RebuildRequest) {
 
     ctx.state.set(WatcherKind::Scip, WatcherStatus::Active).await;
     let start = Instant::now();
+    // Cross-project semaphore — at most one project rebuilds at a
+    // time, monorepo-wide. SCIP export is a full cargo + rust-
+    // analyzer pass; running four in parallel saturates the
+    // machine and gives zero speed-up because they all share one
+    // target dir. Permit acquire is async and cancellable; on
+    // shutdown the worker tasks abort cleanly without leaking the
+    // permit (the SemaphorePermit RAII guard drops with the
+    // future). Errors here mean the semaphore was closed —
+    // impossible in normal flow, but we degrade to "rebuild
+    // without serialization" rather than skip the rebuild
+    // entirely.
+    let _permit = match ctx.rebuild_permits.acquire().await {
+        Ok(p) => Some(p),
+        Err(_) => {
+            tracing::warn!(
+                corpus = %ctx.entry.corpus_id,
+                "rebuild_permits closed; falling back to unserialized rebuild"
+            );
+            None
+        }
+    };
     let outcome = execute_rebuild(ctx, &req).await;
     match &outcome {
         Ok(summary) => {

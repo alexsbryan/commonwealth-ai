@@ -664,32 +664,46 @@ export async function corpusInstallWithParameters(
 
 // ─── Settings → Imports ─────────────────────────────────────
 
-/** Returned by `importAnthropicZip` once the canonical
- *  `conversations.json` is in place and `/internal/corpus/install`
- *  has accepted the request. Subscribe to
- *  `corpusProgressStore.byId[corpus_id]` for the live progress
- *  stream that drives the ImportsTab's progress card + ETA. */
-export interface ImportStartResponse {
-  corpus_id: string;
-  total_messages: number;
-  estimated_minutes: number;
-  /** Path the canonical `conversations.json` landed at. Surfaced for
-   *  glassbox UX — the ImportsTab can show the path if the user
-   *  wants to verify the move without trusting the toast. */
-  canonical_path: string;
-}
+/** Outcome of `importAnthropicZip`. Tagged on `kind` — `started`
+ *  means the install POST was accepted (subscribe to
+ *  `corpusProgressStore.byId[corpus_id]` from here);
+ *  `partial_index_exists` means the user must confirm a destructive
+ *  reset before proceeding (re-invoke with `resetPartial: true`). */
+export type ImportStartResponse =
+  | {
+      kind: "started";
+      corpus_id: string;
+      total_messages: number;
+      estimated_minutes: number;
+      canonical_path: string;
+    }
+  | {
+      kind: "partial_index_exists";
+      corpus_id: string;
+      index_path: string;
+      total_messages: number;
+      estimated_minutes: number;
+      canonical_path: string;
+    };
 
 /** Settings → Imports: unpack the Anthropic export `.zip` the user
  *  picks, drop its `conversations.json` at the canonical landing
  *  path the `conversations-anthropic` recipe reads from, and
  *  trigger ingest. v1 ships Anthropic only — ChatGPT + Gemini
  *  land as sibling commands once their extractors exist
- *  (SYSTEM_OVERVIEW §10.1). */
+ *  (SYSTEM_OVERVIEW §10.1).
+ *
+ *  Pass `resetPartial: true` after the user confirms the
+ *  destructive-reset prompt. Without it, an existing partial
+ *  `conversations-anthropic` index dir blocks the install and the
+ *  response carries `kind: "partial_index_exists"` so the UI can
+ *  show the confirmation banner. */
 export async function importAnthropicZip(
   zipPath: string,
+  resetPartial = false,
 ): Promise<ImportStartResponse> {
   return invoke("import_anthropic_zip", {
-    request: { zip_path: zipPath },
+    request: { zip_path: zipPath, reset_partial: resetPartial },
   });
 }
 
