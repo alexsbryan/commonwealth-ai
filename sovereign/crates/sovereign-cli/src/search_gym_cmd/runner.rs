@@ -83,6 +83,13 @@ pub struct Transcript {
     /// a query the model genuinely needed). Distinct from predicate
     /// failures, which the scorer reports.
     pub runner_error: Option<String>,
+    /// Full conversation transcript as a single rendered string
+    /// (`User: …\nAssistant: …\n…\nAssistant (final): …`). Used as
+    /// the subject for `final_message_satisfies` so the judge can
+    /// verify assertions that reference earlier turns ("the user
+    /// stated 96 GB earlier"). Empty until run_fixture sets it.
+    #[serde(default)]
+    pub conversation_view: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -129,6 +136,20 @@ impl Mode {
 pub struct RunnerCfg {
     pub mode: Mode,
     pub base_url: String,
+    /// Mock corpus root containing per-tool subdirs (`web/`,
+    /// `knowledge/`, `files/`). Each subdir has its own
+    /// `aliases.toml` + per-fixture `.json` files in the standard
+    /// `{query, results: [{title, url, snippet}]}` shape. The
+    /// runner routes a tool call's `name` to the matching subdir:
+    ///
+    ///   - `search` / `web_search` → `<mock_corpus>/web/`
+    ///   - `knowledge`             → `<mock_corpus>/knowledge/`
+    ///   - `files`                 → `<mock_corpus>/files/`
+    ///
+    /// All three tools share the same fixture-replay backend; only
+    /// the subdir differs. This lets a fixture build a realistic
+    /// production scenario where the model has to choose between
+    /// local knowledge, local files, and web search.
     pub mock_corpus: PathBuf,
     pub max_search_results: usize,
 }
@@ -151,23 +172,18 @@ pub async fn run_fixture(
     request["stream"] = Value::Bool(false);
 
     let endpoint = format!("{}/v1/chat/completions", cfg.base_url.trim_end_matches('/'));
-    let backend = match cfg.mode {
-        Mode::Mock => SearchBackend::Mock {
-            corpus_path: cfg.mock_corpus.clone(),
-        },
-        Mode::Synth => {
-            // 2g-pending bouncer: the live-backend wiring (read
-            // daemon config / construct real Tavily/Brave backend,
-            // budget gate, synth-only predicate paths) lands in the
-            // next sprint. The flag exists today so callers compile
-            // against the final API.
-            tx.runner_error = Some(
-                "search-gym: --synth mode not yet wired (Phase 2g). Use --mock for now."
-                    .to_string(),
-            );
-            return tx;
-        }
-    };
+    if cfg.mode == Mode::Synth {
+        // 2g-pending bouncer: the live-backend wiring (read daemon
+        // config / construct real Tavily/Brave backend, budget
+        // gate, synth-only predicate paths) lands in the next
+        // sprint. The flag exists today so callers compile against
+        // the final API.
+        tx.runner_error = Some(
+            "search-gym: --synth mode not yet wired (Phase 2g). Use --mock for now."
+                .to_string(),
+        );
+        return tx;
+    }
 
     for turn in 0..MAX_TURNS {
         let started = Instant::now();
@@ -225,11 +241,27 @@ pub async fn run_fixture(
         };
 
         // Capture tool_calls (if any) into the transcript.
-        let tool_calls = message
+        let mut tool_calls = message
             .get("tool_calls")
             .and_then(|v| v.as_array())
             .cloned()
             .unwrap_or_default();
+
+        // Fallback: some models emit tool calls as JSON in the
+        // content field rather than in the structured `tool_calls`
+        // array (chat-template + JSON-mode interaction). The daemon's
+        // production canonicalizer only fixes argument shapes, not
+        // wire location, so we promote here. Recognises the common
+        // `{"name": "<tool>", "parameters": {...}}` shape and rebuilds
+        // the proper tool_call entry. Without this, fixtures see
+        // `tool_calls=[]` and falsely report "model didn't search".
+        if tool_calls.is_empty() {
+            if let Some(content) = message.get("content").and_then(|v| v.as_str()) {
+                if let Some(promoted) = promote_content_tool_call(content) {
+                    tool_calls.push(promoted);
+                }
+            }
+        }
 
         for tc in &tool_calls {
             let name = tc
@@ -262,13 +294,26 @@ pub async fn run_fixture(
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
+            // Snapshot the full conversation so the judge can
+            // evaluate assertions that reference earlier turns
+            // (e.g. "the user said 96 GB earlier"). Builds from
+            // the request's messages array (which includes every
+            // turn up through the last assistant-with-tool_calls)
+            // plus the final assistant content we just captured.
+            tx.conversation_view = render_conversation(&request, &tx.final_message);
             return tx;
         }
 
         // Execute every tool call the model emitted on this turn.
-        // For tools we don't know how to mock (anything other than
-        // `search`), return a stub error result so the model can
-        // recover — the runner is not the test target for those.
+        // Each known tool name resolves to a mock-corpus subdir:
+        //   - search / web_search → mock_corpus/web/
+        //   - knowledge           → mock_corpus/knowledge/
+        //   - files               → mock_corpus/files/
+        // Only `web` URLs accumulate into tx.mock_urls (the URL-set
+        // predicates score against the web search result set
+        // specifically — citations from knowledge/files are
+        // separately auditable through the conversation_view but
+        // don't enter the citation-fabrication check today).
         let mut tool_results: Vec<Value> = Vec::with_capacity(tool_calls.len());
         for tc in &tool_calls {
             let id = tc.get("id").cloned().unwrap_or(Value::Null);
@@ -282,22 +327,26 @@ pub async fn run_fixture(
                 .and_then(|v| v.as_str())
                 .unwrap_or("{}");
 
-            let content = if name == "search" || name == "web_search" {
-                match exec_mock_search(client, &backend, raw_args, cfg.max_search_results).await {
-                    Ok((rendered, urls)) => {
-                        tx.mock_urls.extend(urls);
-                        rendered
-                    }
-                    Err(e) => {
-                        tx.runner_error = Some(e);
-                        return tx;
+            let content = match resolve_mock_subdir(&name, &cfg.mock_corpus) {
+                Some((subdir, is_web)) => {
+                    let backend = SearchBackend::Mock { corpus_path: subdir };
+                    match exec_mock_search(client, &backend, raw_args, cfg.max_search_results).await {
+                        Ok((rendered, urls)) => {
+                            if is_web {
+                                tx.mock_urls.extend(urls);
+                            }
+                            rendered
+                        }
+                        Err(e) => {
+                            tx.runner_error = Some(e);
+                            return tx;
+                        }
                     }
                 }
-            } else {
-                format!(
+                None => format!(
                     "error: tool '{name}' is not mocked by the search-gym runner; \
                      this fixture should not depend on it"
-                )
+                ),
             };
 
             tool_results.push(serde_json::json!({
@@ -332,6 +381,115 @@ pub async fn run_fixture(
         "exceeded MAX_TURNS={MAX_TURNS} — model looped on tool calls"
     ));
     tx
+}
+
+/// Map a model-emitted tool name to its mock-corpus subdir.
+/// Returns `(subdir, is_web)`. `is_web=true` for the web-search
+/// tools so the URL-set tracking in `mock_urls` only counts
+/// citations against the web result set (knowledge/files have
+/// URLs too but they're file://, wikipedia URLs, etc — a
+/// different namespace than the URL-fabrication predicate is
+/// designed to catch).
+fn resolve_mock_subdir(
+    tool_name: &str,
+    mock_corpus_root: &std::path::Path,
+) -> Option<(PathBuf, bool)> {
+    match tool_name {
+        "search" | "web_search" => Some((mock_corpus_root.join("web"), true)),
+        "knowledge" => Some((mock_corpus_root.join("knowledge"), false)),
+        "files" => Some((mock_corpus_root.join("files"), false)),
+        _ => None,
+    }
+}
+
+/// Recognise an in-content tool call and rebuild it in the
+/// OpenAI-structured shape the rest of the runner expects.
+///
+/// Two shapes observed in practice:
+///   1. `{"name":"<tool>","parameters":{...}}`  ← Qwen3 family JSON-mode
+///   2. `{"name":"<tool>","arguments":{...}}`   ← native OpenAI naming
+///
+/// Both get rebuilt as `{"id": "synth_...", "type":"function",
+/// "function": {"name":"<tool>","arguments":"<json-stringified>"}}`
+/// which matches the wire format the structured `tool_calls` field
+/// uses. Returns `None` if no recognisable shape is found.
+fn promote_content_tool_call(content: &str) -> Option<Value> {
+    // Strip leading `<think>...</think>` blocks and surrounding
+    // whitespace — those don't affect parsing but they mean a naive
+    // `from_str(content)` won't work.
+    let trimmed = strip_think_blocks(content).trim().to_string();
+    let parsed: Value = serde_json::from_str(&trimmed).ok()?;
+    let name = parsed.get("name")?.as_str()?.to_string();
+    if name.is_empty() {
+        return None;
+    }
+    let args_value = parsed
+        .get("parameters")
+        .or_else(|| parsed.get("arguments"))?;
+    let args_string = serde_json::to_string(args_value).ok()?;
+    Some(serde_json::json!({
+        "id": format!("synth_{}", &name),
+        "type": "function",
+        "function": {
+            "name": name,
+            "arguments": args_string,
+        }
+    }))
+}
+
+fn strip_think_blocks(s: &str) -> String {
+    // Cheap state machine — handles single or multiple think blocks
+    // anywhere in the string. Doesn't try to be clever about nested
+    // or malformed tags; the inputs we see are simple.
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        rest = &rest[start..];
+        if let Some(end) = rest.find("</think>") {
+            rest = &rest[end + "</think>".len()..];
+        } else {
+            // Unterminated `<think>` block — discard the rest. The
+            // alternative (emit the unterminated body) would feed
+            // partial thinking content into the JSON parser, which
+            // never benefits a tool-call detection.
+            return out;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Render the conversation for the judge: every user / assistant
+/// turn through the tool-calling phase, followed by the final
+/// assistant message. System messages are omitted (they're
+/// instructions the model received, not content for the judge to
+/// evaluate). Tool-result messages are also omitted — they're
+/// implementation detail; the judge cares about what the user
+/// said and what the model said back.
+fn render_conversation(request: &Value, final_message: &str) -> String {
+    let mut out = String::new();
+    if let Some(arr) = request.get("messages").and_then(|v| v.as_array()) {
+        for msg in arr {
+            let role = msg.get("role").and_then(|v| v.as_str()).unwrap_or("");
+            let content = msg.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            match role {
+                "user" => {
+                    if !content.is_empty() {
+                        out.push_str(&format!("User: {content}\n"));
+                    }
+                }
+                "assistant" => {
+                    if !content.is_empty() {
+                        out.push_str(&format!("Assistant: {content}\n"));
+                    }
+                }
+                _ => {} // system, tool — skip
+            }
+        }
+    }
+    out.push_str(&format!("Assistant (final): {final_message}\n"));
+    out
 }
 
 /// Execute a single mock-search call and render the result list as
@@ -406,6 +564,59 @@ mod tests {
         let f = Fixture::load(&dir).unwrap();
         assert_eq!(f.slug, "01_test");
         assert_eq!(f.predicate.should_call_search, Some(false));
+    }
+
+    #[test]
+    fn resolve_mock_subdir_maps_known_tools() {
+        let root = std::path::Path::new("/mock");
+        let (web, is_web) = resolve_mock_subdir("search", root).unwrap();
+        assert_eq!(web, std::path::PathBuf::from("/mock/web"));
+        assert!(is_web);
+        let (web2, _) = resolve_mock_subdir("web_search", root).unwrap();
+        assert_eq!(web2, std::path::PathBuf::from("/mock/web"));
+        let (k, is_w_k) = resolve_mock_subdir("knowledge", root).unwrap();
+        assert_eq!(k, std::path::PathBuf::from("/mock/knowledge"));
+        assert!(!is_w_k);
+        let (f, is_w_f) = resolve_mock_subdir("files", root).unwrap();
+        assert_eq!(f, std::path::PathBuf::from("/mock/files"));
+        assert!(!is_w_f);
+        assert!(resolve_mock_subdir("calendar", root).is_none());
+        assert!(resolve_mock_subdir("", root).is_none());
+    }
+
+    #[test]
+    fn promote_content_tool_call_recognises_parameters_shape() {
+        let content = r#"<think></think>
+
+{"name":"search","parameters":{"query":"NVDA current stock price"}}"#;
+        let v = promote_content_tool_call(content).expect("should promote");
+        assert_eq!(v.pointer("/function/name").unwrap().as_str().unwrap(), "search");
+        let args: Value = serde_json::from_str(
+            v.pointer("/function/arguments").unwrap().as_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(args.get("query").unwrap().as_str().unwrap(), "NVDA current stock price");
+    }
+
+    #[test]
+    fn promote_content_tool_call_recognises_arguments_shape() {
+        let content = r#"{"name":"search","arguments":{"query":"x"}}"#;
+        let v = promote_content_tool_call(content).expect("should promote");
+        assert_eq!(v.pointer("/function/name").unwrap().as_str().unwrap(), "search");
+    }
+
+    #[test]
+    fn promote_content_tool_call_rejects_non_tool_content() {
+        assert!(promote_content_tool_call("Hello, how can I help?").is_none());
+        assert!(promote_content_tool_call("{\"unrelated\": true}").is_none());
+        assert!(promote_content_tool_call("").is_none());
+    }
+
+    #[test]
+    fn strip_think_blocks_handles_multiple() {
+        assert_eq!(strip_think_blocks("<think>a</think>x<think>b</think>y"), "xy");
+        assert_eq!(strip_think_blocks("plain"), "plain");
+        assert_eq!(strip_think_blocks("<think>unclosed and..."), "");
     }
 
     #[test]

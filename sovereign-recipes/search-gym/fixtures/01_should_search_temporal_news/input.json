@@ -3,7 +3,7 @@
   "messages": [
     {
       "role": "system",
-      "content": "You are a helpful assistant with access to a web search tool. Use search for questions about current events, recent prices, or facts that change over time. Skip search for stable concepts or information you already know with confidence.\n\nWhen you use information from a search result, include the result's URL verbatim in your response — copy the exact characters, do not paraphrase or modify the URL. Place each URL inline next to the claim it supports."
+      "content": "You are a helpful assistant. You have a web search tool available. Use search for questions that depend on information that changes over time \u2014 current events, breaking news, recent prices or scores, today's weather, who currently holds a position, the latest release of a product. Skip search for questions about stable knowledge: definitions, historical events, mathematical or scientific facts that don't change, or things stated earlier in this conversation that you can recall directly. When you use information from a search result, cite the URL of that result inline next to the claim it supports \u2014 copy the URL verbatim from the result rather than rephrasing it."
     },
     {
       "role": "user",
@@ -17,16 +17,18 @@
       "type": "function",
       "function": {
         "name": "search",
-        "description": "Search the web for current or external information. Web search consumes a monthly budget — use it for questions about current events, recent prices, news, or facts that change over time. For stable concepts, definitions, or topics you already know with confidence, answer directly without searching. Use a concise query that extracts the key entities; do not paste the user's prompt verbatim.",
+        "description": "Search the web for current or external information. Web search consumes a monthly budget \u2014 use it for questions about current events, recent prices, news, or facts that change over time. For stable concepts, definitions, or topics you already know with confidence, answer directly without searching. Use a concise query that extracts the key entities; do not paste the user's prompt verbatim.",
         "parameters": {
           "type": "object",
           "properties": {
             "query": {
               "type": "string",
-              "description": "Concise search query — key entities only, not a full sentence."
+              "description": "Concise search query \u2014 key entities only, not a full sentence."
             }
           },
-          "required": ["query"]
+          "required": [
+            "query"
+          ]
         }
       }
     }

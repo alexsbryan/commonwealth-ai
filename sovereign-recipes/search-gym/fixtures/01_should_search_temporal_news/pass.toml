@@ -1,29 +1,22 @@
 # 01_should_search_temporal_news
 #
-# Temporal news question — model should reach for search. Tight
-# query-shape constraints catch the two main failure modes:
-#   - Not searching at all (treats this as a training-data question)
-#   - Verbatim-echoing the user prompt as the query
+# Temporal news question — model should reach for search with a
+# concise entity-focused query, then cite at least one source URL
+# from the mock response without fabricating any others.
 
+# Structural: decision axis.
 should_call_search = true
 expected_first_tool = "search"
 max_search_calls = 1
-
-# The model should extract entities; "spacex" and "starship" must both
-# show up somewhere in the query.
-expected_query_contains = ["spacex", "starship"]
-
-# Anti-verbatim — the user prompt's literal phrasing must not be
-# echoed back. If the model emits "what happened with the latest" it
-# has not reformulated.
-expected_query_not_contains = ["what happened with"]
-
-# Cap on query length. Short queries beat paragraphs for search APIs.
 expected_query_max_tokens = 8
 
-# After search, the synthesis turn must cite at least one URL from
-# the mock response.
+# Structural: URL set membership.
 must_cite_url_from_mock = 1
-
-# And it must not fabricate URLs.
 must_not_cite_url_outside_mock = true
+
+# Semantic: the query should be a search query, not a verbatim
+# echo of the user's full sentence. The judge evaluates phrasing
+# without us hardcoding any entity name from the bank.
+query_satisfies = [
+  "The text reads like a short keyword search query, not a full sentence question. It contains no question words ('what', 'how', 'why', 'was', 'did') and no conversational openers ('could you', 'please tell me').",
+]

@@ -1,0 +1,54 @@
+{
+  "model": "primary",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant. You have a web search tool available. Use search for questions that depend on information that changes over time — current events, breaking news, recent prices or scores, today's weather, who currently holds a position, the latest release of a product. Skip search for questions about stable knowledge: definitions, historical events, mathematical or scientific facts that don't change, or things stated earlier in this conversation that you can recall directly. When you use information from a search result, cite the URL of that result inline next to the claim it supports — copy the URL verbatim from the result rather than rephrasing it."
+    },
+    {
+      "role": "user",
+      "content": "Explain photosynthesis at a high level — what happens and where."
+    }
+  ],
+  "temperature": 0.4,
+  "max_tokens": 700,
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "search",
+        "description": "Search the web. Returns titles, URLs, and snippets from external sources. Covers current events, breaking news, recent prices, and other facts that change frequently. Web search consumes a monthly budget — prefer local tools when they can answer the question.",
+        "parameters": {
+          "type": "object",
+          "properties": {"query": {"type": "string"}},
+          "required": ["query"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "knowledge",
+        "description": "Search local knowledge corpora installed on this machine (Wikipedia, encyclopedias, scholarly references). Returns text snippets from articles in the user's installed corpora. Fast and free. Use for questions about stable concepts, historical topics, and well-trodden reference knowledge. Will not have data on events from after each corpus was last updated.",
+        "parameters": {
+          "type": "object",
+          "properties": {"query": {"type": "string"}},
+          "required": ["query"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "files",
+        "description": "Search the user's personal notes, documents, and files (markdown notes, PDFs, code, vaults). Use for questions that might reference content the user has written or saved locally.",
+        "parameters": {
+          "type": "object",
+          "properties": {"query": {"type": "string"}},
+          "required": ["query"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto"
+}

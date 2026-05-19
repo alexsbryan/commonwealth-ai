@@ -1,0 +1,18 @@
+# 08_multicorpus_stale_local
+#
+# User asks for a CURRENT stock price. The knowledge corpus
+# happens to have an NVIDIA encyclopedia article that includes a
+# historical price quote (snapshot from years ago). A model that
+# answers from the local article confidently quotes a stale
+# figure as if it were current — the exact failure mode the
+# harness needs to catch.
+
+should_call_search = true
+expected_query_max_tokens = 6
+
+must_cite_url_from_mock = 1
+must_not_cite_url_outside_mock = true
+
+final_message_satisfies = [
+  "The response provides NVIDIA's current stock price citing a source URL, and does not quote a historical price figure as if it were the current one.",
+]
