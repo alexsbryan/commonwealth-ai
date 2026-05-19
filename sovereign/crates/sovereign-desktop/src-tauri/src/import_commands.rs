@@ -41,26 +41,59 @@ const CANONICAL_FILE: &str = "conversations.json";
 /// of warmup — the band gives us slack for that.
 const SECONDS_PER_MESSAGE: f64 = 0.4;
 
-/// Returned by [`import_anthropic_zip`] once the canonical file is
-/// in place and `/internal/corpus/install` has accepted the
-/// request. The ImportsTab subscribes to
-/// `corpusProgressStore.byId[corpus_id]` after receiving this and
-/// drives the progress UI from the existing `corpus-progress` event
-/// stream.
+/// Outcome of [`import_anthropic_zip`]. The two-variant tagged
+/// shape lets the UI distinguish "install dispatched, watch the
+/// progress channel" from "a partial corpus exists, confirm a
+/// reset before we proceed."
+///
+/// Partial state shows up after a daemon crash mid-ingest or after
+/// a chunker fix lands while an old import was in flight (the
+/// concrete trigger for the destructive-confirm flow: the
+/// pre-1500-char-cap import left rows whose embeddings are
+/// truncated; resuming would interleave them with new-shape rows
+/// that the new chunker emits). The UI surfaces a banner with a
+/// "Reset and re-import" button that re-invokes this command with
+/// `reset_partial = true`.
 #[derive(Debug, Clone, Serialize)]
-pub struct ImportStartResponse {
-    pub corpus_id: String,
-    pub total_messages: u64,
-    pub estimated_minutes: f64,
-    /// Where the canonical `conversations.json` landed. Surfaced for
-    /// glassbox UX — the ImportsTab can show the path if the user
-    /// wants to verify the move without trusting the toast.
-    pub canonical_path: String,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ImportStartResponse {
+    /// Install POST accepted; the ImportsTab subscribes to
+    /// `corpusProgressStore.byId[corpus_id]` from here.
+    Started {
+        corpus_id: String,
+        total_messages: u64,
+        estimated_minutes: f64,
+        /// Where the canonical `conversations.json` landed. Surfaced
+        /// for glassbox UX so an operator can verify the move
+        /// without trusting the toast.
+        canonical_path: String,
+    },
+    /// An existing partial index was detected; install was NOT
+    /// dispatched. The user must explicitly confirm a reset (re-
+    /// invoke with `reset_partial: true`) or cancel.
+    PartialIndexExists {
+        corpus_id: String,
+        index_path: String,
+        /// Total messages parsed from the freshly-extracted
+        /// `conversations.json`. Forwarded so the UI can render the
+        /// pre-flight estimate alongside the confirmation banner —
+        /// the user sees "you'll re-embed N messages" before
+        /// clicking through.
+        total_messages: u64,
+        estimated_minutes: f64,
+        canonical_path: String,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ImportAnthropicZipRequest {
     pub zip_path: PathBuf,
+    /// `true` ⇒ wipe any existing
+    /// `~/.sovereign/indexes/conversations-anthropic/` directory
+    /// before posting the install. The UI sends this on the second
+    /// invocation after the user confirms the destructive prompt.
+    #[serde(default)]
+    pub reset_partial: bool,
 }
 
 /// Tauri command: unpack the Anthropic export the user picked,
@@ -129,6 +162,40 @@ pub async fn import_anthropic_zip(
 
     let corpus_id = "conversations-anthropic".to_string();
 
+    // Destructive-confirm flow. The conversation-anthropic chunker
+    // fix (threaded_turns soft cap, 2026-05-18) means any
+    // pre-existing partial index carries embeddings computed on
+    // oversized truncated chunks. Resuming would interleave them
+    // with new-shape rows; the only way to a clean result is to
+    // wipe the partial dir. We require an explicit confirmation
+    // to do that — `reset_partial: true` on the request.
+    let index_dir = conversations_anthropic_index_dir()?;
+    if index_dir.exists() && index_has_content(&index_dir) {
+        if !request.reset_partial {
+            return Ok(ImportStartResponse::PartialIndexExists {
+                corpus_id,
+                index_path: index_dir.display().to_string(),
+                total_messages: total_messages as u64,
+                estimated_minutes,
+                canonical_path: extracted_bytes.canonical_path.display().to_string(),
+            });
+        }
+        // Confirmed reset. Wipe the dir; surface a tracing event so
+        // a forensic look later can correlate the destructive op
+        // with the user's confirmation click.
+        tracing::warn!(
+            target: "imports",
+            index_dir = %index_dir.display(),
+            "imports: removing partial index on user-confirmed reset"
+        );
+        if let Err(e) = std::fs::remove_dir_all(&index_dir) {
+            return Err(format!(
+                "could not reset partial index at {}: {e}",
+                index_dir.display()
+            ));
+        }
+    }
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
@@ -177,12 +244,50 @@ pub async fn import_anthropic_zip(
         "imports: install dispatched"
     );
 
-    Ok(ImportStartResponse {
+    Ok(ImportStartResponse::Started {
         corpus_id,
         total_messages: total_messages as u64,
         estimated_minutes,
         canonical_path: extracted_bytes.canonical_path.display().to_string(),
     })
+}
+
+/// Resolve the canonical on-disk index dir for the
+/// `conversations-anthropic` corpus. Mirrors the path
+/// `~/.sovereign/indexes/<corpus_id>` the daemon's `CorpusEngine`
+/// uses by convention (see `state.rs::build_app_state`).
+fn conversations_anthropic_index_dir() -> Result<PathBuf, String> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| "HOME is not set; cannot resolve index dir".to_string())?;
+    Ok(home
+        .join(".sovereign")
+        .join("indexes")
+        .join("conversations-anthropic"))
+}
+
+/// `true` ⇔ `dir` looks like a real partial-or-complete index (has
+/// a meta file or any LanceDB artifact). Empty placeholder dirs
+/// don't count — the daemon sometimes creates parent dirs ahead of
+/// the first write and we don't want to trip the destructive-confirm
+/// banner on an empty shell.
+fn index_has_content(dir: &Path) -> bool {
+    if dir.join("_corpus_meta.json").exists() {
+        return true;
+    }
+    if dir.join("chunks.lance").exists() {
+        return true;
+    }
+    // Fallback — any visible child indicates state worth confirming.
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for entry in rd.flatten() {
+            let name = entry.file_name();
+            let s = name.to_string_lossy();
+            if !s.starts_with('.') {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // ---------------------------------------------------------------------------
@@ -446,5 +551,39 @@ mod tests {
         ]"#;
         fs::write(&path, payload).unwrap();
         assert_eq!(count_messages_in_file(&path).unwrap(), 3);
+    }
+
+    #[test]
+    fn index_has_content_recognises_meta_file() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("conversations-anthropic");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("_corpus_meta.json"), b"{\"corpus_id\":\"x\"}").unwrap();
+        assert!(index_has_content(&dir));
+    }
+
+    #[test]
+    fn index_has_content_recognises_lancedb_dir() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("conversations-anthropic");
+        fs::create_dir_all(dir.join("chunks.lance")).unwrap();
+        assert!(index_has_content(&dir));
+    }
+
+    #[test]
+    fn index_has_content_rejects_empty_dir() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("conversations-anthropic");
+        fs::create_dir_all(&dir).unwrap();
+        assert!(!index_has_content(&dir));
+    }
+
+    #[test]
+    fn index_has_content_rejects_hidden_files_only() {
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("conversations-anthropic");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(".DS_Store"), b"junk").unwrap();
+        assert!(!index_has_content(&dir));
     }
 }
