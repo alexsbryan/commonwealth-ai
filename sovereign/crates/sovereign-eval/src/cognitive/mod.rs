@@ -114,6 +114,8 @@ pub fn run_suite(opts: SuiteOpts<'_>) -> Result<Report> {
                     response_raw: String::new(),
                     elapsed_ms: 0,
                     model: opts.model.to_string(),
+                    prompt_tokens: None,
+                    completion_tokens: None,
                 });
             }
         }

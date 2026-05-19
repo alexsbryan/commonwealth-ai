@@ -152,13 +152,43 @@ impl<'a> LlamaContextExt<'a> for cpp::context::LlamaContext<'a> {
 /// 0.1.x `model.chat_template(None) -> Result<LlamaChatTemplate, _>`.
 ///
 /// 0.2.x retired `LlamaChatTemplate` and exposes a string-returning
-/// `get_chat_template(buf_size)`. Returns `None` when the model gguf
-/// lacks `tokenizer.chat_template` metadata. `buf_size=8192` covers
-/// every Jinja-style template we ship (Qwen, Gemma, Darwin all
-/// 2-4 KiB encoded).
+/// `get_chat_template(buf_size)`. Returns `None` only when the gguf
+/// truly lacks `tokenizer.chat_template` metadata (`MissingTemplate`).
+/// On `BuffSizeError(needed)` we retry once with the size the binding
+/// asked for — Gemma 4's tool-call template is ~12 KiB, well past the
+/// 8 KiB the upstream wrapper docs as the "longest known". Without the
+/// retry the lookup silently failed and the daemon fell through to
+/// plain-text concat (no role markers, no `<|tool>` declarations) —
+/// observed 2026-05-19 with `gemma-4-E4B-it-Q6_K`: the model generated
+/// 14k tokens of role-play and tripped the inference deadline.
 pub fn chat_template(model: &cpp::model::LlamaModel) -> Option<String> {
-    const BUF_SIZE: usize = 8 * 1024;
-    model.get_chat_template(BUF_SIZE).ok()
+    use cpp::ChatTemplateError;
+    const INITIAL_BUF: usize = 8 * 1024;
+    const MAX_BUF: usize = 256 * 1024;
+    match model.get_chat_template(INITIAL_BUF) {
+        Ok(t) => Some(t),
+        Err(ChatTemplateError::BuffSizeError(needed)) => {
+            let retry = needed.min(MAX_BUF);
+            match model.get_chat_template(retry) {
+                Ok(t) => Some(t),
+                Err(e) => {
+                    tracing::warn!(
+                        needed,
+                        retry,
+                        error = %e,
+                        "chat_template lookup retry failed after BuffSizeError; \
+                         falling back to plain-text concat"
+                    );
+                    None
+                }
+            }
+        }
+        Err(ChatTemplateError::MissingTemplate(_)) => None,
+        Err(e) => {
+            tracing::warn!(error = %e, "chat_template lookup failed");
+            None
+        }
+    }
 }
 
 /// Stand-in for 0.1.x's `list_llama_ggml_backend_devices()`.

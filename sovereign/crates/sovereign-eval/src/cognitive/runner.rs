@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use crate::cognitive::item::{Item, render};
+use crate::cognitive::item::{Item, Scoring, render};
 
 /// Same temperature/seed convention as `judge.rs:JUDGE_TEMPERATURE` /
 /// `JUDGE_SEED`. The cognitive bank is meant to be reproducible.
@@ -52,6 +52,15 @@ pub struct ItemResult {
     /// string. Transport failures land in `error`.
     pub transport_ok: bool,
     pub error: Option<String>,
+    /// Prompt-token count from the daemon's `usage` envelope, when
+    /// present. `None` for transport failures or providers that
+    /// don't report usage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<u32>,
+    /// Completion-token count from the daemon's `usage` envelope.
+    /// Throughput is derived as `completion_tokens / (elapsed_ms / 1000)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u32>,
 }
 
 pub fn run_item(item: &Item, opts: &RunOpts<'_>) -> Result<ItemResult> {
@@ -61,13 +70,14 @@ pub fn run_item(item: &Item, opts: &RunOpts<'_>) -> Result<ItemResult> {
         .system
         .as_deref()
         .unwrap_or(FALLBACK_SYSTEM_PROMPT);
+    let response_format = response_format_for(&item.scoring);
     let started = Instant::now();
-    let (transport_ok, response_raw, error) =
-        match call_chat_completions(opts, system, &rendered.user) {
-            Ok(content) => (true, content, None),
-            Err(e) => (false, String::new(), Some(e.to_string())),
-        };
+    let outcome = call_chat_completions(opts, system, &rendered.user, response_format.as_ref());
     let elapsed = started.elapsed();
+    let (transport_ok, response_raw, prompt_tokens, completion_tokens, error) = match outcome {
+        Ok(call) => (true, call.content, call.prompt_tokens, call.completion_tokens, None),
+        Err(e) => (false, String::new(), None, None, Some(e.to_string())),
+    };
     Ok(ItemResult {
         item_id: item.item.id.clone(),
         category: item.item.category.as_str().to_string(),
@@ -78,15 +88,97 @@ pub fn run_item(item: &Item, opts: &RunOpts<'_>) -> Result<ItemResult> {
         response_raw,
         transport_ok,
         error,
+        prompt_tokens,
+        completion_tokens,
     })
 }
 
-fn call_chat_completions(opts: &RunOpts<'_>, system: &str, user: &str) -> Result<String> {
+/// Single call's parsed outputs. Lets `run_item` return the content
+/// alongside the daemon's `usage` envelope (tokens for throughput).
+struct CallOutcome {
+    content: String,
+    prompt_tokens: Option<u32>,
+    completion_tokens: Option<u32>,
+}
+
+/// Build an OpenAI `response_format` JSON-schema for items whose
+/// scoring kind expects a structured JSON object. The shape mirrors
+/// what the scorer reads (choice_field / confidence_field) so the
+/// model is constrained to produce parseable output regardless of
+/// its instruction-following bias.
+///
+/// `ExactMatch` and `ToolUse` items skip the constraint — exact-match
+/// expects free text; tool-use uses the tool_calls envelope (a
+/// separate grammar surface).
+///
+/// This is a generic eval-runner feature: any model the bank runs
+/// against benefits. Models that already comply with the system-prompt
+/// JSON instruction lose nothing; models that don't are pulled into
+/// the schema. Same fairness contract as installing a grammar in any
+/// other OpenAI-compatible runner.
+pub(crate) fn response_format_for(scoring: &Scoring) -> Option<serde_json::Value> {
+    match scoring {
+        Scoring::MultiChoice {
+            choice_field, ..
+        } => Some(serde_json::json!({
+            "type": "json_schema",
+            "json_schema": {
+                "name": "choice_with_rationale",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        // Multi-choice prompts in this bank use
+                        // single-letter labels (A/B/C/D). Constraining
+                        // to that alphabet rejects prose tokens like
+                        // "Pick" or "Approach B" before they corrupt
+                        // the choice field. Same fairness contract as
+                        // the wider response_format wrapper — any
+                        // backend that complies with the prompt's
+                        // declared shape (also single-letter) is
+                        // unaffected.
+                        choice_field: {
+                            "type": "string",
+                            "enum": ["A", "B", "C", "D", "E"]
+                        },
+                        "rationale": { "type": "string", "maxLength": 500 }
+                    },
+                    "required": [choice_field, "rationale"],
+                    "additionalProperties": false
+                }
+            }
+        })),
+        Scoring::Calibration {
+            confidence_field, ..
+        } => Some(serde_json::json!({
+            "type": "json_schema",
+            "json_schema": {
+                "name": "claim_with_confidence",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        confidence_field: { "type": "integer" },
+                        "rationale": { "type": "string", "maxLength": 500 }
+                    },
+                    "required": [confidence_field, "rationale"],
+                    "additionalProperties": false
+                }
+            }
+        })),
+        Scoring::ExactMatch { .. } | Scoring::ToolUse { .. } => None,
+    }
+}
+
+fn call_chat_completions(
+    opts: &RunOpts<'_>,
+    system: &str,
+    user: &str,
+    response_format: Option<&serde_json::Value>,
+) -> Result<CallOutcome> {
     let url = format!(
         "{}/v1/chat/completions",
         opts.daemon_url.trim_end_matches('/')
     );
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "model": opts.model,
         "temperature": opts.temperature,
         "top_p": 1.0,
@@ -97,6 +189,9 @@ fn call_chat_completions(opts: &RunOpts<'_>, system: &str, user: &str) -> Result
             {"role": "user", "content": user},
         ],
     });
+    if let Some(rf) = response_format {
+        body["response_format"] = rf.clone();
+    }
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
         .build()
@@ -121,5 +216,21 @@ fn call_chat_completions(opts: &RunOpts<'_>, system: &str, user: &str) -> Result
     if content.is_empty() {
         bail!("daemon returned empty content");
     }
-    Ok(content)
+    // Throughput accounting: pull `usage.prompt_tokens` and
+    // `usage.completion_tokens` from the response envelope.
+    // OpenAI-compatible providers all emit this; missing values
+    // simply degrade the throughput aggregate to None.
+    let prompt_tokens = v
+        .pointer("/usage/prompt_tokens")
+        .and_then(serde_json::Value::as_u64)
+        .map(|n| n as u32);
+    let completion_tokens = v
+        .pointer("/usage/completion_tokens")
+        .and_then(serde_json::Value::as_u64)
+        .map(|n| n as u32);
+    Ok(CallOutcome {
+        content,
+        prompt_tokens,
+        completion_tokens,
+    })
 }

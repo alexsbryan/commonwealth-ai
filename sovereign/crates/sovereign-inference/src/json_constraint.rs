@@ -106,12 +106,84 @@ pub enum Schema {
         /// where the model occasionally drifts into non-Latin tokens
         /// (e.g. Chinese characters in English atom extraction).
         ascii_extended: bool,
+        /// Optional literal prefix the string body MUST start with.
+        /// While `prefix_pos < prefix.len()`, the only accepted body
+        /// byte is `prefix[prefix_pos]` — every other byte is
+        /// `Invalid`, so the mask sampler forces the prefix into the
+        /// emission one byte at a time. Once `prefix_pos == prefix.len()`,
+        /// the field behaves like a normal `StringAny`.
+        ///
+        /// Sourced from JSON Schema `pattern` when the pattern is the
+        /// literal-prefix subset `^<literal>` (no regex metacharacters
+        /// other than the `^` anchor — compile_schema rejects richer
+        /// patterns rather than silently misinterpreting them).
+        ///
+        /// Wire path: `CompletionRequest.cmd_prefix` →
+        /// `tool_envelope_schema_for_with_env_and_cmd_prefix` →
+        /// `pattern: "^<literal>"` on the `cmd` field → here.
+        prefix: Option<Arc<Vec<u8>>>,
     },
     Integer,
     Number,
     Boolean,
     Null,
     AnyOf(Arc<Vec<Schema>>),
+}
+
+/// Parse a JSON Schema `pattern` keyword as a literal prefix.
+///
+/// Accepted subset: the pattern must start with `^` and the remainder
+/// must contain only literal characters or backslash-escaped regex
+/// metacharacters (`\\`, `\^`, `\$`, `\.`, `\|`, `\?`, `\*`, `\+`,
+/// `\(`, `\)`, `\[`, `\]`, `\{`, `\}`). Anything richer (`.`, `*`,
+/// alternation, classes) is rejected loudly — silently misinterpreting
+/// a regex as a literal would let the model sample bytes the schema
+/// author intended to forbid.
+///
+/// Returns the literal prefix as bytes, ready to be matched
+/// position-by-position by the string-body walker.
+fn parse_literal_prefix_pattern(p: &str, pointer: &str) -> Result<Arc<Vec<u8>>, ConstraintError> {
+    let body = p.strip_prefix('^').ok_or_else(|| ConstraintError::Unsupported {
+        feature: format!("pattern `{p}` (only literal-prefix subset `^<literal>` is supported)"),
+        pointer: pointer.into(),
+    })?;
+    let mut out: Vec<u8> = Vec::with_capacity(body.len());
+    let mut chars = body.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => {
+                let escaped = chars.next().ok_or_else(|| ConstraintError::Malformed {
+                    pointer: pointer.into(),
+                    detail: "trailing backslash in pattern".into(),
+                })?;
+                if !matches!(
+                    escaped,
+                    '\\' | '^' | '$' | '.' | '|' | '?' | '*' | '+' | '(' | ')' | '[' | ']' | '{' | '}'
+                ) {
+                    return Err(ConstraintError::Unsupported {
+                        feature: format!("escape `\\{escaped}` in pattern (not a regex metacharacter)"),
+                        pointer: pointer.into(),
+                    });
+                }
+                let mut buf = [0u8; 4];
+                out.extend_from_slice(escaped.encode_utf8(&mut buf).as_bytes());
+            }
+            c if matches!(c, '.' | '|' | '?' | '*' | '+' | '(' | ')' | '[' | ']' | '{' | '}' | '^' | '$') => {
+                return Err(ConstraintError::Unsupported {
+                    feature: format!(
+                        "regex metacharacter `{c}` in pattern (only literal-prefix subset \
+                         supported; escape it as `\\{c}` if literal)"
+                    ),
+                    pointer: pointer.into(),
+                });
+            }
+            c => {
+                let mut buf = [0u8; 4];
+                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            }
+        }
+    }
+    Ok(Arc::new(out))
 }
 
 /// Compile a JSON Schema into our internal representation.
@@ -210,9 +282,19 @@ impl CompileCtx {
                         .get("x-asciiExtended")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
+                    // `pattern` — accept ONLY the literal-prefix
+                    // subset: must start with `^` and contain no
+                    // regex metacharacters past the anchor. Anything
+                    // richer is rejected to avoid silently
+                    // misinterpreting a regex as a literal.
+                    let prefix = match obj.get("pattern").and_then(|v| v.as_str()) {
+                        Some(p) => Some(parse_literal_prefix_pattern(p, pointer)?),
+                        None => None,
+                    };
                     Ok(Schema::StringAny {
                         max_length,
                         ascii_extended,
+                        prefix,
                     })
                 }
             }
@@ -423,7 +505,13 @@ fn parse_value(p: &mut Cursor, schema: &Schema) -> ParseStatus {
         Schema::StringAny {
             max_length,
             ascii_extended,
-        } => parse_string_any(p, *max_length, *ascii_extended),
+            prefix,
+        } => parse_string_any(
+            p,
+            *max_length,
+            *ascii_extended,
+            prefix.as_ref().map(|p| p.as_slice()),
+        ),
         Schema::Integer => parse_number(p, false),
         Schema::Number => parse_number(p, true),
         Schema::Boolean => parse_keyword_alt(p, &["true", "false"]),
@@ -821,6 +909,7 @@ fn parse_string_any(
     p: &mut Cursor,
     max_length: Option<usize>,
     ascii_extended: bool,
+    prefix: Option<&[u8]>,
 ) -> ParseStatus {
     if p.peek() != Some(b'"') {
         return ParseStatus::Invalid;
@@ -828,13 +917,38 @@ fn parse_string_any(
     p.advance();
     let mut consecutive_escapes = 0usize;
     let mut char_count = 0usize;
+    let prefix_bytes: &[u8] = prefix.unwrap_or(&[]);
+    let mut prefix_pos = 0usize;
     loop {
         let at_cap = matches!(max_length, Some(m) if char_count >= m);
+        let in_prefix = prefix_pos < prefix_bytes.len();
         match p.peek() {
             None => return ParseStatus::Incomplete,
             Some(b'"') => {
+                if in_prefix {
+                    // Closing quote inside the literal prefix is a
+                    // structural error — the prefix must be fully
+                    // emitted before the string can close.
+                    return ParseStatus::Invalid;
+                }
                 p.advance();
                 return ParseStatus::Complete;
+            }
+            Some(b) if in_prefix => {
+                // Inside the literal-prefix segment: the only legal
+                // next byte is the next prefix byte. Reject anything
+                // else (`\\` escapes, control chars, divergent bytes).
+                if b != prefix_bytes[prefix_pos] {
+                    return ParseStatus::Invalid;
+                }
+                p.advance();
+                prefix_pos += 1;
+                // Update char_count for UTF-8 start bytes only, to
+                // stay in sync with the cap accounting.
+                if (b & 0xC0) != 0x80 {
+                    char_count = char_count.saturating_add(1);
+                }
+                consecutive_escapes = 0;
             }
             Some(b'\\') => {
                 if at_cap {
@@ -1055,7 +1169,7 @@ fn parse_value_any(p: &mut Cursor) -> ParseStatus {
         None => ParseStatus::Incomplete,
         Some(b'{') => parse_object(p, &[], 0, true),
         Some(b'[') => parse_array(p, &Schema::AnyOf(Arc::new(any_value_alts())), None),
-        Some(b'"') => parse_string_any(p, None, false),
+        Some(b'"') => parse_string_any(p, None, false, None),
         Some(b't') | Some(b'f') => parse_keyword_alt(p, &["true", "false"]),
         Some(b'n') => parse_keyword(p, "null"),
         Some(b'-') | Some(b'0'..=b'9') => parse_number(p, true),
@@ -1073,6 +1187,7 @@ fn any_value_alts() -> Vec<Schema> {
         Schema::StringAny {
             max_length: None,
             ascii_extended: false,
+            prefix: None,
         },
         Schema::Number,
         Schema::Boolean,
@@ -1147,6 +1262,11 @@ enum Frame {
         /// validator rejects UTF-8 leading bytes `>= 0xE0` (3+ byte
         /// sequences) and `\uXXXX` escapes with `XXXX >= 0800`.
         ascii_extended: bool,
+        /// Literal-prefix constraint inherited from the schema. While
+        /// `prefix_pos < prefix.len()`, the step function masks any
+        /// byte that doesn't extend the prefix exactly.
+        prefix: Option<Arc<Vec<u8>>>,
+        prefix_pos: usize,
     },
 
     /// Inside a JSON number. `allow_fraction` distinguishes Number from
@@ -1515,10 +1635,17 @@ fn schema_fingerprint<H: std::hash::Hasher>(schema: &Schema, h: &mut H) {
         Schema::StringAny {
             max_length,
             ascii_extended,
+            prefix,
         } => {
             3u8.hash(h);
             max_length.hash(h);
             ascii_extended.hash(h);
+            // Pointer identity is enough — same prefix Arc means
+            // structurally equivalent constraint. Two distinct Arcs
+            // with the same bytes would hash differently here, but
+            // they should never occur in practice (one compile per
+            // schema instance).
+            prefix.as_ref().map(|p| Arc::as_ptr(p) as usize).hash(h);
         }
         Schema::Integer => { 4u8.hash(h); }
         Schema::Number => { 5u8.hash(h); }
@@ -1655,10 +1782,14 @@ impl Frame {
                 char_count,
                 max_length,
                 ascii_extended,
+                prefix,
+                prefix_pos,
             } => {
                 4u8.hash(h);
                 consecutive_escapes.hash(h);
                 std::mem::discriminant(sub).hash(h);
+                prefix.as_ref().map(|p| Arc::as_ptr(p) as usize).hash(h);
+                prefix_pos.hash(h);
                 if let StringSub::InUnicode { remaining } = sub {
                     remaining.hash(h);
                 }
@@ -1767,12 +1898,16 @@ impl Frame {
                 char_count,
                 max_length,
                 ascii_extended,
+                prefix,
+                prefix_pos,
             } => Self::step_string_any(
                 consecutive_escapes,
                 sub,
                 char_count,
                 *max_length,
                 *ascii_extended,
+                prefix.as_ref().map(|p| p.as_slice()),
+                prefix_pos,
                 byte,
             ),
             Frame::Number {
@@ -1838,6 +1973,7 @@ impl Frame {
             Schema::StringAny {
                 max_length,
                 ascii_extended,
+                prefix,
             } => {
                 if byte != b'"' {
                     return StepResult::Invalid;
@@ -1848,6 +1984,8 @@ impl Frame {
                     char_count: 0,
                     max_length: *max_length,
                     ascii_extended: *ascii_extended,
+                    prefix: prefix.clone(),
+                    prefix_pos: 0,
                 })
             }
             Schema::Integer => {
@@ -2141,6 +2279,8 @@ impl Frame {
         char_count: &mut usize,
         max_length: Option<usize>,
         ascii_extended: bool,
+        prefix: Option<&[u8]>,
+        prefix_pos: &mut usize,
         byte: u8,
     ) -> StepResult {
         // Hard cap: once we've emitted `max_length` code points, the
@@ -2151,6 +2291,33 @@ impl Frame {
         // close-quote (same pattern the array-cap uses for `]` once
         // `maxItems` is hit).
         let at_cap = matches!(max_length, Some(m) if *char_count >= m);
+        // Literal-prefix enforcement (R2). While in the prefix
+        // segment, the ONLY legal next byte is the next prefix byte —
+        // not escapes, not close-quote, not continuation bytes. The
+        // mask sampler forces the prefix byte at every position until
+        // the prefix is exhausted. After exhaustion this code path
+        // is inert and the string body resumes normal walking.
+        let in_prefix = matches!(prefix, Some(p) if *prefix_pos < p.len());
+        if in_prefix {
+            if let StringSub::InBody = sub {
+                let p = prefix.unwrap();
+                let expected = p[*prefix_pos];
+                if byte != expected {
+                    return StepResult::Invalid;
+                }
+                *prefix_pos += 1;
+                if (byte & 0xC0) != 0x80 {
+                    *char_count = char_count.saturating_add(1);
+                }
+                *consecutive_escapes = 0;
+                return StepResult::Consumed;
+            }
+            // We're in an escape sub-state but still owe prefix bytes
+            // — the prefix shouldn't contain escapes (caller produced
+            // a literal prefix). Anything other than InBody here is
+            // a bug in the caller.
+            return StepResult::Invalid;
+        }
         match sub {
             StringSub::InBody => match byte {
                 b'"' => StepResult::PopConsumed,
@@ -3429,6 +3596,89 @@ impl Drop for JsonConstraint {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn pattern_literal_prefix_compiles_to_prefix_field() {
+        // R2: `pattern: "^apply_patch "` compiles into a literal
+        // prefix on Schema::StringAny.
+        let s = compile_schema(&json!({
+            "type": "string",
+            "pattern": "^apply_patch "
+        }))
+        .unwrap();
+        match s {
+            Schema::StringAny { prefix, .. } => {
+                let bytes = prefix.expect("prefix populated").as_slice().to_vec();
+                assert_eq!(bytes, b"apply_patch ".to_vec());
+            }
+            other => panic!("expected StringAny, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pattern_with_metacharacter_rejected() {
+        let err = compile_schema(&json!({
+            "type": "string",
+            "pattern": "^apply.*"
+        }))
+        .unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("metacharacter"),
+            "should reject regex metacharacter; got {msg}"
+        );
+    }
+
+    #[test]
+    fn pattern_without_caret_anchor_rejected() {
+        let err = compile_schema(&json!({
+            "type": "string",
+            "pattern": "apply_patch"
+        }))
+        .unwrap_err();
+        let msg = format!("{err:?}");
+        assert!(
+            msg.contains("literal-prefix subset"),
+            "should reject non-anchored pattern; got {msg}"
+        );
+    }
+
+    #[test]
+    fn string_with_prefix_only_accepts_matching_prefix_bytes() {
+        // Walk a small string-only schema with prefix "ab"; the body
+        // walker must reject any first byte other than 'a' and any
+        // second byte other than 'b'. Uses `advance` which feeds bytes
+        // through the runtime stack machine.
+        let schema = compile_schema(&json!({
+            "type": "string",
+            "pattern": "^ab"
+        }))
+        .unwrap();
+        let mut state = ValidatorState::new(schema.clone());
+        // Open quote allowed.
+        assert!(!matches!(state.advance(b'"'), ParseStatus::Invalid));
+        // Wrong first byte must be rejected.
+        let mut state2 = state.clone();
+        assert_eq!(state2.advance(b'x'), ParseStatus::Invalid);
+        // Correct first byte advances.
+        assert!(!matches!(state.advance(b'a'), ParseStatus::Invalid));
+        // Wrong second byte still rejected.
+        let mut state3 = state.clone();
+        assert_eq!(state3.advance(b'z'), ParseStatus::Invalid);
+        // Closing quote inside prefix is rejected (must finish prefix first).
+        let mut state4 = state.clone();
+        assert_eq!(state4.advance(b'"'), ParseStatus::Invalid);
+        // Correct second byte completes the prefix.
+        assert!(!matches!(state.advance(b'b'), ParseStatus::Invalid));
+        // After the prefix, free-form body: any non-control byte OK.
+        assert!(!matches!(state.advance(b'c'), ParseStatus::Invalid));
+        // Closing quote now allowed (no max_length).
+        let result = state.advance(b'"');
+        assert!(
+            !matches!(result, ParseStatus::Invalid),
+            "expected string to close cleanly, got {result:?}"
+        );
+    }
 
     // ─── State-fingerprint cache-key tests ──────────────────────
     //
@@ -4905,6 +5155,7 @@ mod tests {
             &Schema::StringAny {
                 max_length: None,
                 ascii_extended: false,
+                prefix: None,
             },
             &mut h1,
         );
@@ -4912,6 +5163,7 @@ mod tests {
         super::schema_fingerprint(
             &Schema::StringAny {
                 max_length: None,
+                prefix: None,
                 ascii_extended: true,
             },
             &mut h2,

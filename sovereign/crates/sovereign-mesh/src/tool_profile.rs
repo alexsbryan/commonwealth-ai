@@ -382,7 +382,9 @@ mod tests {
             think_budget: None,
             tool_profile: profile.map(String::from),
         sampling_mode: None,
-        }
+        assistant_prefix: None,
+        cmd_prefix: None,
+                }
     }
 
     // ---- registry construction ----
@@ -551,7 +553,9 @@ allow_tools = ["write"]
             think_budget: None,
             tool_profile: Some("rust-edit".into()),
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                };
         apply(&r, &mut req);
         assert!(req.tools.is_none());
     }

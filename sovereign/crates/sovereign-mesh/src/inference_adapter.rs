@@ -338,6 +338,8 @@ impl SovereignInferenceAdapter {
         req.temperature = request.temperature;
         req.top_p = request.top_p;
         req.sampling_mode = request.sampling_mode;
+        req.assistant_prefix = request.assistant_prefix.clone();
+        req.cmd_prefix = request.cmd_prefix.clone();
         // Forward the Commonwealth `think_budget` extension. The
         // daemon's `format_prompt` reads `req.think_budget == Some(0)`
         // to inject `/no_think` for SystemPromptToken thinking
@@ -392,8 +394,20 @@ impl SovereignInferenceAdapter {
         // so downstream tooling (chat-template selection,
         // tools-on-fast-slot guard, telemetry) sees what the caller
         // actually sent.
-        if req.structured_output.is_none() {
-            if let Some(envelope) = tool_envelope_schema_for_with_env(request) {
+        if req.structured_output.is_none() && request.assistant_prefix.is_none() {
+            // R1 (assistant_prefix) and envelope-schema don't compose:
+            // the prefill places the model mid-JSON while the grammar
+            // mask starts fresh on the first generated token expecting
+            // a JSON-object opener. When R1 fires, the prefix IS the
+            // structural commitment.
+            //
+            // R2 (cmd_prefix) DOES compose: the grammar walks from
+            // token 0 normally and the prefix appears as a `pattern`
+            // on the cmd field, enforced by the existing string-body
+            // walker. So we only suppress envelope install for R1.
+            if let Some(envelope) =
+                tool_envelope_schema_for_with_env_and_cmd_prefix(request, request.cmd_prefix.as_deref())
+            {
                 req.structured_output = Some(envelope);
             }
         }
@@ -488,30 +502,99 @@ fn force_tool_calls_env() -> bool {
 pub(crate) fn tool_envelope_schema_for_with_env(
     request: &ChatCompletionRequest,
 ) -> Option<serde_json::Value> {
-    if let Some(s) = tool_envelope_schema_for(request) {
-        return Some(s);
+    tool_envelope_schema_for_with_env_and_cmd_prefix(request, None)
+}
+
+/// Same as `tool_envelope_schema_for_with_env`, but also decorates the
+/// `cmd` parameter of `exec_command` tools with a `pattern` that pins
+/// the literal prefix. `JsonConstraint` consumes `pattern` (prefix
+/// subset only — see `compile_schema`) and masks any byte that
+/// wouldn't extend the prefix until the prefix is fully emitted.
+/// Family-agnostic; called from `build_completion_request` when
+/// `request.cmd_prefix.is_some()`.
+pub(crate) fn tool_envelope_schema_for_with_env_and_cmd_prefix(
+    request: &ChatCompletionRequest,
+    cmd_prefix: Option<&str>,
+) -> Option<serde_json::Value> {
+    let mut envelope = tool_envelope_schema_for(request).or_else(|| {
+        // Replicate the env-var fallback below for the prefix-using path.
+        if force_tool_calls_env() {
+            let tc = request.tool_choice.as_ref().map(|v| v.as_str()).flatten();
+            if tc == Some("none") {
+                return None;
+            }
+            let mut overridden = request.clone();
+            overridden.tool_choice = Some(serde_json::json!("required"));
+            tool_envelope_schema_for(&overridden)
+        } else {
+            None
+        }
+    })?;
+    if let Some(prefix) = cmd_prefix.filter(|s| !s.is_empty()) {
+        inject_cmd_pattern(&mut envelope, prefix);
     }
-    if !force_tool_calls_env() {
-        return None;
+    Some(envelope)
+}
+
+/// Walk an envelope schema, find any `exec_command` variant in `oneOf`,
+/// and inject a `pattern` on its `arguments.cmd` string field. The
+/// pattern is the literal prefix anchored at start (`^literal...`).
+/// `JsonConstraint`'s string-body walker recognises this subset and
+/// enforces it as a forced-prefix on the cmd field.
+fn inject_cmd_pattern(schema: &mut serde_json::Value, prefix: &str) {
+    let Some(variants) = schema.get_mut("oneOf").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    let pattern = format!("^{}", regex_escape_literal(prefix));
+    for variant in variants {
+        // Variants are `{type:"object", properties:{name:{enum:["X"]}, arguments:{...}}}`.
+        let name_const = variant
+            .get("properties")
+            .and_then(|p| p.get("name"))
+            .and_then(|n| n.get("enum"))
+            .and_then(|e| e.as_array())
+            .and_then(|a| a.first())
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        if name_const.as_deref() != Some("exec_command") {
+            continue;
+        }
+        let Some(args) = variant
+            .get_mut("properties")
+            .and_then(|p| p.get_mut("arguments"))
+        else {
+            continue;
+        };
+        let Some(cmd) = args.get_mut("properties").and_then(|p| p.get_mut("cmd")) else {
+            continue;
+        };
+        let Some(cmd_obj) = cmd.as_object_mut() else {
+            continue;
+        };
+        cmd_obj.insert(
+            "pattern".to_string(),
+            serde_json::Value::String(pattern.clone()),
+        );
     }
-    // The env-var path is opt-in by the daemon operator. We treat
-    // it as "every tools-using request gets the envelope grammar"
-    // and override the caller's `tool_choice` *unless* they
-    // explicitly said `"none"` (semantically: model must NOT call
-    // a tool — overriding that would be hostile). opencode and
-    // similar clients default to `"auto"`, which we DO override —
-    // the env var is the operator's signal that this daemon is
-    // dedicated to tool-driven autonomous loops where text-only
-    // turns kill the iteration.
-    if request.tool_choice.as_ref().and_then(|v| v.as_str()) == Some("none") {
-        return None;
+}
+
+/// Escape regex metacharacters in `s` so it matches as a literal.
+/// JsonConstraint's pattern parser only accepts the literal-prefix
+/// subset (see `compile_schema`), so this escapes both standard
+/// metacharacters and the chars the parser would refuse to treat as
+/// literal. Idempotent.
+fn regex_escape_literal(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 2);
+    for ch in s.chars() {
+        if matches!(
+            ch,
+            '\\' | '^' | '$' | '.' | '|' | '?' | '*' | '+' | '(' | ')' | '[' | ']' | '{' | '}'
+        ) {
+            out.push('\\');
+        }
+        out.push(ch);
     }
-    if request.tools.as_ref().is_none_or(|t| t.is_empty()) {
-        return None;
-    }
-    let mut overridden = request.clone();
-    overridden.tool_choice = Some(serde_json::json!("required"));
-    tool_envelope_schema_for(&overridden)
+    out
 }
 
 /// When the request has `tool_choice = "required"` (OpenAI semantics
@@ -814,9 +897,25 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                 "inference_adapter:tool_parse_mode"
             );
         }
+        // When the request set an `assistant_prefix`, the inference
+        // layer appended it to the rendered prompt — but it lives in
+        // the prompt's KV cache, not in `resp.text` (which is just
+        // the model's *generated* continuation). Stitch the prefix
+        // back on for tool-call parsing so the `<tool_call>{...}`
+        // opener encoded into the prefix lines up with the
+        // `</tool_call>` closer in the generated tail.
+        let text_for_parsing: String = match req.assistant_prefix.as_deref() {
+            Some(p) if !p.is_empty() => {
+                let mut joined = String::with_capacity(p.len() + resp.text.len());
+                joined.push_str(p);
+                joined.push_str(&resp.text);
+                joined
+            }
+            _ => resp.text.clone(),
+        };
         let (parsed_calls, parse_errors) = if tools_present {
             if grammar_constrained {
-                let direct = parse_tool_envelope_direct(&resp.text);
+                let direct = parse_tool_envelope_direct(&text_for_parsing);
                 if !direct.is_empty() {
                     tracing::debug!(
                         tool_call_count = direct.len(),
@@ -827,10 +926,10 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                     tracing::debug!(
                         "inference_adapter:tool_parse_grammar_direct_empty_falling_back_to_marker"
                     );
-                    sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
+                    sovereign_inference::embedded::parse_tool_calls_with_errors(&text_for_parsing)
                 }
             } else {
-                sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
+                sovereign_inference::embedded::parse_tool_calls_with_errors(&text_for_parsing)
             }
         } else {
             (Vec::new(), Vec::new())
@@ -1165,7 +1264,9 @@ mod adapter_translation_tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
         // Qwen3.5's template sees the model's own previous turn in a
@@ -1198,7 +1299,9 @@ mod adapter_translation_tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
         assert_eq!(forwarded[0].name, "a");
@@ -1226,7 +1329,9 @@ mod adapter_translation_tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
-        };
+        assistant_prefix: None,
+        cmd_prefix: None,
+                };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
 
@@ -1279,7 +1384,9 @@ mod adapter_translation_tests {
             think_budget,
             tool_profile: None,
         sampling_mode: None,
-        }
+        assistant_prefix: None,
+        cmd_prefix: None,
+                }
     }
 
     #[test]
@@ -1338,7 +1445,9 @@ mod adapter_translation_tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
-        }
+        assistant_prefix: None,
+        cmd_prefix: None,
+                }
     }
 
     #[test]

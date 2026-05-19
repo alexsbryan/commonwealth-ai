@@ -6313,6 +6313,49 @@ fn format_prompt(
     request: &CompletionRequest,
     quirks: &ModelQuirks,
 ) -> Result<String> {
+    // Compute the rendered prompt via the inner tier dispatch, then
+    // append `request.assistant_prefix` if present. The prefix lands
+    // *after* the chat template's generation-position marker
+    // (`<|turn>model\n`, `<|im_start|>assistant\n`, `<start_of_turn>model\n`,
+    // …) and *before* the model's first generated token — letting
+    // upstream nudges (frontdoor's read-attractor, failure-recovery)
+    // commit the model to a known-good response prefix structurally
+    // rather than via instruction. Family-agnostic: every chat
+    // template the inner dispatch handles ends at the generation
+    // marker, so the append point is consistent.
+    let rendered = format_prompt_inner(model, model_id, request, quirks)?;
+    Ok(append_assistant_prefix(rendered, request.assistant_prefix.as_deref()))
+}
+
+/// Append a non-empty `assistant_prefix` to the rendered prompt.
+/// Empty / None prefixes pass through unchanged so the historical
+/// behaviour (no prefill) is preserved for callers that don't set
+/// the field.
+fn append_assistant_prefix(mut prompt: String, prefix: Option<&str>) -> String {
+    if let Some(p) = prefix {
+        if !p.is_empty() {
+            // The rendered prompt always ends at the generation
+            // marker with no trailing whitespace contract — append
+            // directly. If a future template renders trailing
+            // whitespace, the prefix still composes; the model's
+            // tokenizer absorbs the whitespace into the prefix's
+            // first token.
+            prompt.push_str(p);
+            tracing::debug!(
+                prefix_len = p.len(),
+                "format_prompt: assistant_prefix appended"
+            );
+        }
+    }
+    prompt
+}
+
+fn format_prompt_inner(
+    model: &LlamaModel,
+    model_id: &str,
+    request: &CompletionRequest,
+    quirks: &ModelQuirks,
+) -> Result<String> {
     // Inject thinking-mode token into the system message based on family quirks.
     // `think_budget == Some(0)` signals the caller wants thinking suppressed.
     // For SystemPromptToken families (Qwen3, Qwen3.5, SmolLM3): append /think or /no_think.
@@ -6546,6 +6589,86 @@ fn apply_chat_template_minijinja(
             ))
         },
     );
+    // Python-compat method shim. HF templates routinely call
+    // `.get(key)`, `.get(key, default)`, `.split(sep)`,
+    // `.startswith(prefix)`, `.endswith(suffix)`, `.upper()`,
+    // `.lower()`, `.strip()` — methods that exist on Python's
+    // `dict`/`str`/`list` but aren't in stock minijinja. Without
+    // this shim, Gemma 4's template (which calls
+    // `message.get('reasoning')`, `message.get('tool_calls')`,
+    // `value['type'] | upper`, `part.split('<|channel>')`, …) fails
+    // at the first unknown method and we fall through to plain-text
+    // concat. The pycompat surface in `minijinja-contrib` would
+    // also do this, but pulling in another workspace dep for a
+    // half-dozen methods is excessive — handle them inline.
+    env.set_unknown_method_callback(|_state, value, method, args| {
+        use minijinja::value::{from_args, ValueKind};
+        use minijinja::{Error, ErrorKind, Value};
+        match method {
+            "get" => {
+                // dict.get(key) or dict.get(key, default)
+                if value.kind() != ValueKind::Map {
+                    return Err(Error::from(ErrorKind::UnknownMethod));
+                }
+                let (key, default): (Value, Option<Value>) = from_args(args)?;
+                let key_str: String = key
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| key.to_string());
+                match value.get_attr(&key_str) {
+                    Ok(v) if !v.is_undefined() => Ok(v),
+                    _ => Ok(default.unwrap_or(Value::from(())))
+                }
+            }
+            "split" => {
+                // str.split(sep) — sep is required in HF templates we've
+                // seen (no zero-arg whitespace split path needed yet).
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "split on non-string")
+                })?;
+                let (sep,): (String,) = from_args(args)?;
+                let parts: Vec<Value> =
+                    s.split(&sep).map(|p| Value::from(p.to_string())).collect();
+                Ok(Value::from(parts))
+            }
+            "startswith" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "startswith on non-string")
+                })?;
+                let (prefix,): (String,) = from_args(args)?;
+                Ok(Value::from(s.starts_with(&prefix)))
+            }
+            "endswith" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "endswith on non-string")
+                })?;
+                let (suffix,): (String,) = from_args(args)?;
+                Ok(Value::from(s.ends_with(&suffix)))
+            }
+            "upper" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "upper on non-string")
+                })?;
+                let _: () = from_args(args)?;
+                Ok(Value::from(s.to_uppercase()))
+            }
+            "lower" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "lower on non-string")
+                })?;
+                let _: () = from_args(args)?;
+                Ok(Value::from(s.to_lowercase()))
+            }
+            "strip" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "strip on non-string")
+                })?;
+                let _: () = from_args(args)?;
+                Ok(Value::from(s.trim().to_string()))
+            }
+            _ => Err(Error::from(ErrorKind::UnknownMethod)),
+        }
+    });
     env.add_template("chat", template).map_err(|e| {
         Error::Inference(format!("minijinja: compile chat template: {e}"))
     })?;

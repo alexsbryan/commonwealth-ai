@@ -477,7 +477,9 @@ async fn score_thread_coverage(
         model_id: None,
         enable_thinking: Some(false),
         sampling_mode: None,
-    };
+        assistant_prefix: None,
+        cmd_prefix: None,
+            };
 
     let resp = match session.inference.as_ref().complete(&request).await {
         Ok(r) => r,

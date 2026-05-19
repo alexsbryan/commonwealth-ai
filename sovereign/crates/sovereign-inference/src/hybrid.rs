@@ -72,7 +72,9 @@ impl HybridProvider {
                                 model_id: None,
                                 enable_thinking: None,
                     sampling_mode: None,
-                    };
+                    assistant_prefix: None,
+                    cmd_prefix: None,
+                                        };
 
                     match provider.complete(&probe).await {
                         Ok(resp) => entry.health.record_success(resp.latency_ms),

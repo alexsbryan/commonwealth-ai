@@ -27,6 +27,13 @@ pub struct Outcome {
     pub response_raw: String,
     pub elapsed_ms: u64,
     pub model: String,
+    /// Throughput inputs — forwarded from the daemon's `usage`
+    /// envelope so the aggregator can compute tok/s without re-walking
+    /// the run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens: Option<u32>,
 }
 
 pub fn score(item: &Item, result: &ItemResult) -> Outcome {
@@ -36,6 +43,8 @@ pub fn score(item: &Item, result: &ItemResult) -> Outcome {
         response_raw: result.response_raw.clone(),
         elapsed_ms: result.elapsed_ms,
         model: result.model.clone(),
+        prompt_tokens: result.prompt_tokens,
+        completion_tokens: result.completion_tokens,
     };
     if !result.transport_ok {
         return finish(
@@ -93,6 +102,8 @@ struct OutcomeBase {
     response_raw: String,
     elapsed_ms: u64,
     model: String,
+    prompt_tokens: Option<u32>,
+    completion_tokens: Option<u32>,
 }
 
 fn finish(base: OutcomeBase, passed: bool, reason: String) -> Outcome {
@@ -104,6 +115,8 @@ fn finish(base: OutcomeBase, passed: bool, reason: String) -> Outcome {
         response_raw: base.response_raw,
         elapsed_ms: base.elapsed_ms,
         model: base.model,
+        prompt_tokens: base.prompt_tokens,
+        completion_tokens: base.completion_tokens,
     }
 }
 
@@ -387,6 +400,8 @@ mod tests {
             response_raw: String::new(),
             elapsed_ms: 0,
             model: "m".into(),
+            prompt_tokens: None,
+            completion_tokens: None,
         }
     }
 

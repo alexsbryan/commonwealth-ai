@@ -111,7 +111,9 @@ async fn main() {
             model_id: None,
             enable_thinking: None,
     sampling_mode: None,
-    };
+    assistant_prefix: None,
+    cmd_prefix: None,
+        };
 
     if args.stream {
         eprintln!("--- Streaming response ---");
