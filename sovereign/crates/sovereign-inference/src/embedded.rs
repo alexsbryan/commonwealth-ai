@@ -7292,7 +7292,13 @@ fn build_sampler(
     // constraints over the same model don't double-walk the vocab.
     let url_constraint = request.url_allowlist.as_deref().and_then(|urls| {
         let vocab_bytes = crate::json_constraint::vocab_bytes_for(model);
-        crate::url_constraint::UrlAllowlistConstraint::new(urls, vocab_bytes)
+        let constraint = crate::url_constraint::UrlAllowlistConstraint::new(urls, vocab_bytes);
+        tracing::info!(
+            url_count = urls.len(),
+            constructed = constraint.is_some(),
+            "url_allowlist constraint constructed"
+        );
+        constraint
     });
 
     // Non-Latin token denylist: opt-in via env var. Built once per
