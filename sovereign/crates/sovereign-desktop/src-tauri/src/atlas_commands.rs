@@ -184,6 +184,7 @@ mod tests {
             affiliation: None,
             role: None,
             participants: vec![],
+            concept_kind: None,
         })
     }
 

@@ -5,6 +5,7 @@ mod commands;
 mod crash_bundle;
 mod enrich_commands;
 mod friendly_names;
+mod import_commands;
 mod insight_commands;
 mod local_corpus_commands;
 mod watched_folder_commands;
@@ -400,6 +401,7 @@ fn main() -> ExitCode {
             recipe_commands::corpus_import_recipe,
             recipe_commands::corpus_get_recipe_parameters,
             recipe_commands::corpus_install_with_parameters,
+            import_commands::import_anthropic_zip,
             recipe_author_commands::recipe_author_list_projects,
             recipe_author_commands::recipe_author_new_project,
             recipe_author_commands::recipe_author_dashboard_state,

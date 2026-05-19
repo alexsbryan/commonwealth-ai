@@ -1624,6 +1624,16 @@ export interface AtlasCorpusSummary {
   /** atoms.json mtime in unix seconds. Closest proxy for "last
    *  extracted at" until provenance metadata lands on the atom. */
   last_extracted_unix?: number;
+  /** Logical UI category from the recipe's `[display]` block.
+   *  Drives Atlas View rail grouping — corpora that share a category
+   *  render under one header (e.g. `"conversation"` groups every
+   *  conversation-source corpus together). `undefined` on legacy
+   *  indexes pre-dating the field; the UI buckets those into
+   *  "Other". */
+  display_category?: string;
+  /** Icon hint from the recipe's `[display]` block. Free-form
+   *  string; the frontend maps known values onto its icon set. */
+  display_icon?: string;
 }
 
 /** Server-side filter for `atlas_list_atoms`. All fields are

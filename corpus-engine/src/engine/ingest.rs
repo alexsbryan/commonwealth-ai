@@ -657,6 +657,26 @@ impl CorpusEngine {
             );
         }
 
+        // Stamp the `[display]` block from the recipe so the Atlas
+        // View rail can group corpora that share a category (e.g.
+        // both `conversations-anthropic` and `conversation-history`
+        // surface under one "Conversations" header) and so the
+        // synthesis prompt's chunk-section renamer (see
+        // `format_scored_chunks_with_kinds`) reads category-aware
+        // labels off `IndexInfo.display` without re-resolving the
+        // recipe. Pure UI metadata — non-fatal on write failure.
+        if recipe.display.is_some() {
+            if let Err(e) = index.set_display(recipe.display.clone()) {
+                tracing::warn!(
+                    corpus = %recipe.corpus.id,
+                    path = %index_path.display(),
+                    error = %e,
+                    "ingest_inner: failed to stamp [display] block — \
+                     Atlas View will fall back to ungrouped layout"
+                );
+            }
+        }
+
         // Stamp the mutable-merge policy from the recipe so future
         // merges of this index against peer partitions take the
         // chosen reconciliation rule. None preserves classic

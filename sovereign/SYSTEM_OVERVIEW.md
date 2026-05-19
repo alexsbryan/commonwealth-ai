@@ -688,6 +688,18 @@ reader + a regression-fixture suite:
 each schema boundary and asserts they all parse. Adding a fixture there is
 the standard cost of a schema change.
 
+**`[display]` block** (`recipe.rs::DisplayMeta`) is a pure UI metadata
+table — `category` + `icon` — carried on the recipe and stamped onto
+`_corpus_meta.json` so retrieval-time code can read it off `IndexInfo`
+without re-resolving the recipe. Drives Atlas View rail grouping
+(`category = "conversation"` collapses every conversation source under
+one header), and `format_scored_chunks_with_kinds` substitutes
+`"From your conversations"` for the per-corpus slug when the source's
+category is `"conversation"`. Pure additive: every pre-existing recipe
+loads unchanged via `#[serde(default)]`. See §4.14c for the user-facing
+surface that drives this; the conversation-imports landing is the
+first consumer.
+
 **Publish nudge**
 (`sovereign-cli/src/project_cmd.rs::compose_publish_recipe_nudge`)
 
@@ -1181,6 +1193,17 @@ Three layers:
   <corpus> [--type] [--query]`, `sovereign atlas show-atom <corpus>
   <atom_id>`. Same `FileAtlasReader`; `--format=json` for `jq`.
 
+**Rail grouping by recipe `[display] category`.** The corpus picker
+groups rows under category headers — every corpus declaring
+`category = "conversation"` lands under a single "Conversations"
+header (so the user's `conversation-history` and any imported
+`conversations-anthropic` live side by side), category-less corpora
+bucket into "Other." `AtlasCorpusSummary` carries `display_category`
++ `display_icon` over the wire; the frontend (`AtlasIndex.svelte`)
+maps known categories onto labels and falls back to a title-cased
+rendering for unknown values so a recipe that adds a new category
+lights up without a frontend round-trip.
+
 Read-only today. Phase 2 (curation overlay) is scoped in NoteStore
 todo "Atlas inspector Phase 2 — curation overlay" and §10.1 below.
 Forward-compat `curation_status` / `overlay_supports` / `stable_key`
@@ -1238,18 +1261,35 @@ keyword-match.
 Splices short structured summaries of the user's own world into the system
 prompt before each turn. Three views:
 
-| View                   | Source (StateStore)                                  | Domain (enrichment) |
-|------------------------|------------------------------------------------------|---------------------|
-| `personal-knowledge`   | `memories` (confidence > 0.2, not deleted)           | `personal`          |
-| `conversation-history` | `conversations + messages`, 180-day window, excludes `local_only` skills | `conversational` |
-| `institutional-notes`  | `notes` (decisions, invariants, todos, redteam findings — not reflections) | `institutional` |
+| View                   | Source (StateStore)                                  | Enrichment |
+|------------------------|------------------------------------------------------|------------|
+| `personal-knowledge`   | `memories` (confidence > 0.2, not deleted)           | v1 `field_model` (`personal` domain) |
+| `conversation-history` | `conversations + messages`, 180-day window, excludes `local_only` skills | v2 atlas — `conversation_atlas` pipeline + `threaded_turns` chunker |
+| `institutional-notes`  | `notes` (decisions, invariants, todos, redteam findings — not reflections) | v1 `field_model` (`institutional` domain) |
 
-Each view runs the v1 enrichment pipeline and writes `field_skeleton.json`
-to `~/.sovereign/indexes/<view>/`. Before each message,
-`LandscapeDigestProvider::splice_landscape_digests` formats per-view
-markdown blocks within token budgets (300 / 200 / 100), computes cross-view
-**resonance** (cosine ≥ 0.75, ≤5 matches per digest, phrased tentatively),
-and splices the result into `ConversationContext`.
+The `conversation-history` view migrated to v2 atlas in the
+conversation-imports landing (§4.14c) so the user's Sovereign-internal
+chats produce the same `atoms.json` shape as imported Claude exports —
+both surfaces in Atlas View, both groupable under the shared
+"Conversations" rail header. The SQL acquirer emits per-message rows in
+the `### [YYYY-MM-DD HH:MM] <role>\n<body>` shape `threaded_turns`
+expects, so the chunker pairs user+assistant turns into retrieval units
+byte-identical to the Anthropic-export path. Personal-knowledge and
+institutional-notes keep the v1 skeleton path.
+
+Per-view digest source:
+- v1 views read `field_skeleton.json` → `digest::format_landscape`.
+- v2 atlas view reads `atlas/atoms.json` →
+  `atlas_digest::render_atlas_digest`, which ranks Entity / Claim /
+  Question atoms by salience and emits the same three-section
+  markdown shape (`People & topics`, `Recurring threads`,
+  `Open questions`) so the existing token budget + cross-view
+  resonance code is unchanged.
+
+Before each message, `LandscapeDigestProvider::splice_landscape_digests`
+formats per-view markdown blocks within token budgets (300 / 200 / 100),
+computes cross-view **resonance** (cosine ≥ 0.75, ≤5 matches per digest,
+phrased tentatively), and splices the result into `ConversationContext`.
 
 **Structural privacy invariants** (enforced in code):
 
@@ -1469,6 +1509,53 @@ corpus configured for OCR on a daemon that can't honour it.
   pause/resume/confirm/remove actions; `WatchedFolderBanner` surfaces
   guard-tripped or errored corpora prominently above the source list
   (5-second polling refresh while the section is mounted).
+
+### 4.14c Conversation imports — Settings → Imports
+
+A desktop tab (`sovereign-desktop` Settings → Imports) that turns the
+user's exported conversation history from third-party assistants into
+a browsable corpus alongside their Sovereign-internal chats. v1 ships
+the Anthropic path; ChatGPT + Gemini land in follow-up PRs (§10.1).
+
+```
+[Settings → Imports]
+  user picks data-<uuid>-batch-0000.zip
+    → import_anthropic_zip (Tauri cmd)
+        unzip → ~/.sovereign/conversations/conversations.json
+        count `chat_messages` for pre-flight ETA
+        POST /internal/corpus/install { corpus_id: "conversations-anthropic" }
+    → existing `corpus-progress` Tauri event stream drives the
+      progress card; ETA is derived client-side from
+      `elapsed * (100 − percent) / percent` after a 60s warmup.
+    → phase: complete → "Open in Atlas" calls
+      atlasNavigation.requestAtom(corpus_id, firstAtomId).
+```
+
+| Layer | Where |
+|---|---|
+| Recipe | `sovereign-recipes/conversations-anthropic/recipe.toml` (mirror at `corpus-engine/recipes/conversations-anthropic/recipe.toml` for the bundled-fallback path). Single canonical landing zone `~/.sovereign/conversations/conversations.json`; recipe carries `[display] category = "conversation"` so the Atlas View rail groups it with `conversation-history`. |
+| Tauri command | `sovereign-desktop/src-tauri/src/import_commands.rs::import_anthropic_zip` — validates `.zip`, locates `conversations.json` (root or one-level-nested), streams it to `<canonical>.tmp` → atomic rename, archives any prior file to `conversations.json.bak-<ts>`. |
+| Pre-flight ETA | `total_messages * SECONDS_PER_MESSAGE` (baked from one calibration run on the user's own export; ±30% band rendered in the UI). |
+| Live ETA | `sovereign-desktop/src/lib/util/etaFromProgress.ts` — pure helper, vitest-covered (15 cases). Suppresses output before 60s warmup OR percent < 5%; hides on terminal phases. |
+| UI | `sovereign-desktop/src/lib/components/settings/ImportsTab.svelte`. Anthropic row enabled; ChatGPT + Gemini rows show "Coming soon" pills so the product surface is legible without being functional. |
+| Provenance label | When the source corpus carries `[display] category = "conversation"`, `runtime.rs::build_provenance_components` substitutes `display_name = "Your conversations"` for the per-corpus slug — citation chips render as one logical pool. |
+| Synth prompt | `runtime.rs::format_scored_chunks_with_kinds` peels chunks from category=conversation corpora into a dedicated `## From your conversations` section; collapses both conversation corpora into one prompt bucket. |
+
+The `[display]` block (`corpus-engine/src/recipe.rs::DisplayMeta`)
+flows through `_corpus_meta.json` and surfaces on `IndexInfo` so
+retrieval-time code reads category off the index summary instead of
+re-resolving the recipe. See §3.7 for the schema back-compat
+contract; the existing recipe-back-compat fixture pins the
+display-less shape.
+
+Pinned by `recipe_back_compat::recipe_without_display_block_still_parses`,
+`recipe_back_compat::recipe_with_display_block_round_trips`,
+`atlas_view::reader::display_block_in_corpus_meta_is_read_when_present`,
+`atlas_digest::three_section_shape_renders_when_all_atom_types_present`,
+`import_commands::unpack_finds_nested_conversations_json`,
+`import_commands::unpack_rotates_existing_canonical_file`,
+`import_commands::count_messages_counts_sender_markers`, and
+`etaFromProgress.spec.ts` (15 vitest cases).
 
 ### 4.14b Newsworthy — Wikipedia freshness layer
 
@@ -2341,6 +2428,8 @@ file or gap with an entry is sequenced work.
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration: partition planning, peer recruitment, handoff state machine, gossip integration. Lifecycle states (`Planning → Handoff → Active → Complete`) cohere as one state machine; splitting before the cloud-peer flavour settles would re-merge. |
 | `MemberRecord.client_port` wire-protocol field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` candidate-URL builder | The local-side port plumbing landed 2026-05-13: `EmbeddedDaemon` honors `SetupConfig.daemon.{client_port,internal_port}` for its own bind/announce decisions (`resolved_ports` helper, threaded through `create_mesh` / `join_mesh` / `start_daemon` / mDNS / auto-collaborate spawn). What remains is the **peer-uniformity assumption**: `peer_inference_endpoints` rewrites every peer's URL with `this daemon's client_port`, and `auto_ingest`'s candidate-URL builder pins port `9742` regardless of what gossip reported. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` (and a matching `client_port` slot in the join handshake's wire shape) so peers advertise their *own* client port rather than counting on uniformity. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` (Phase 1 shipped 2026-05-12) | Phase 1 ships read-only inspection (§4.10c). Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash, not the volatile sequential `AtomId`) so user edits and approval state survive re-extraction. Overlay-merging branches go inside the existing `FileAtlasReader` — no new trait. The forward-compat `curation_status` / `overlay_supports` fields are already on every DTO; flipping them lights up `<CurationStatusBadge>` and `<EditAffordances>` slots already present in `AtomDetail.svelte`. Design notes: NoteStore decision "Atlas inspector: stable_key by content hash" + todo "Atlas inspector Phase 2 — curation overlay". |
+| Imports tab — ChatGPT + Gemini extractors | `corpus-engine/src/extractors/` + `sovereign-recipes/conversations-{chatgpt,gemini}/` | v1 of Settings → Imports (§4.14c) ships the Anthropic path only — extractor + recipe + Tauri command wired end-to-end against the user's own `conversations.json`. ChatGPT (OpenAI export zip) and Gemini (Google Takeout) follow once their schema work lands. Plumbing is source-agnostic: the import command, progress stream, Atlas-View grouping, and `[display] category = "conversation"` synth-prompt rename all light up once a new `<source>_export` extractor + recipe register themselves. |
+| Imports tab — KQ chip label for conversation corpora | `sovereign-core/src/runtime.rs` `KnowledgeQueryPlan` | The DeepQuery path threads `display_categories` through `build_provenance_components` so the citation chip renders "Your conversations" instead of a corpus_id slug. The streaming KQ path (`handle_knowledge_query_stream`) and the metalingual locator path pass `None` today — they'd need to thread the lookup through `KnowledgeQueryPlan`. Sub-page UX polish; the synth-prompt section split (§4.14c) is the load-bearing change. |
 
 (`atos_cmd.rs` and `local.rs` were the prior tenants of this list; both
 were split into folders in the spring 2026 refactor pass.)

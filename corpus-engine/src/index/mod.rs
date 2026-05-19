@@ -462,6 +462,14 @@ struct IndexMeta {
     /// meta-atlas anchors, not here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     stream: Option<crate::stream_axes::StreamAxes>,
+
+    /// Presentation hints from the recipe's `[display]` block —
+    /// `category` + `icon`. Pure UI metadata; the retrieval layer
+    /// reads `category` when rendering "From your conversations"
+    /// labels and the Atlas View rail groups by it.
+    /// `None` on legacy indexes ingested before the field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    display: Option<crate::recipe::DisplayMeta>,
 }
 
 /// Provenance of an on-disk index. See the `IndexMeta::provenance`
@@ -745,6 +753,7 @@ impl CorpusIndex {
             processed_shards: meta.processed_shards,
             mutable_merge: meta.mutable_merge,
             stream: meta.stream,
+            display: meta.display,
         })
     }
 
@@ -884,6 +893,17 @@ impl CorpusIndex {
     pub fn stream(&self) -> Option<crate::stream_axes::StreamAxes> {
         let index_dir = Path::new(self.db.uri());
         read_meta(index_dir).ok().and_then(|m| m.stream)
+    }
+
+    /// Stamp the recipe's `[display]` block onto this index's
+    /// `_corpus_meta.json`. Pure UI metadata — drives Atlas View
+    /// rail grouping and "From your conversations" prompt labels.
+    /// `None` clears any previously-stamped value.
+    pub fn set_display(&self, display: Option<crate::recipe::DisplayMeta>) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.display = display;
+        write_meta(index_dir, &meta)
     }
 
     /// The corpus ID this index belongs to.

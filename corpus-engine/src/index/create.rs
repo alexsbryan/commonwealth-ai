@@ -238,6 +238,9 @@ impl CorpusIndex {
             // recipe is resolved post-ingest. Move 5 Stage 2 wires
             // this; v1 leaves the create path untouched.
             stream: None,
+            // Stamped by `set_display` from the ingest path right
+            // after create when the recipe carries a `[display]` block.
+            display: None,
         };
         write_meta(path, &meta)?;
 

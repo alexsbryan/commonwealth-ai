@@ -1,6 +1,10 @@
-# conversations-personal
+# conversations-anthropic
 
 Local-only corpus binding for the user's claude.ai chat-export dump.
+Drives the Settings → Imports tab in `sovereign-desktop` and pairs
+with `conversation-history` (the user's Sovereign-internal chats) under
+the Atlas View "Conversations" rail group via the shared
+`[display] category = "conversation"` field.
 
 ## Why
 
@@ -11,7 +15,15 @@ ever talked about Y". This corpus is the canonical local fixture for
 bench iteration on that surface. See
 `sovereign/bench/conversation/README.md`.
 
-## Setup
+## Setup (desktop)
+
+Settings → Imports → "Import Claude export" → pick the
+`data-<uuid>-…batch-0000.zip` Anthropic shipped from Settings → Privacy
+→ Export data. The desktop unzips `conversations.json` into
+`~/.sovereign/conversations/conversations.json` and triggers the
+install automatically.
+
+## Setup (CLI)
 
 1. Download your data from claude.ai → Settings → Privacy → Export
    data. The zip will land in `~/Downloads/data-<uuid>-…/`.
@@ -23,8 +35,8 @@ bench iteration on that surface. See
    ```
 3. Install + ingest:
    ```bash
-   sovereign recipe install sovereign-recipes/conversations-personal
-   sovereign corpus ingest conversations-personal
+   sovereign recipe install sovereign-recipes/conversations-anthropic
+   sovereign corpus ingest conversations-anthropic
    ```
 
 ## Privacy contract

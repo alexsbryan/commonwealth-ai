@@ -384,6 +384,15 @@ pub struct IndexInfo {
     /// corpus stream-axes` backfills lazily.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stream: Option<crate::stream_axes::StreamAxes>,
+    /// Presentation hints from the recipe's `[display]` block —
+    /// `category` + `icon`. Pure UI metadata; the retrieval layer
+    /// reads `category == "conversation"` to label chunks "From your
+    /// conversations" rather than emitting the corpus_id slug, and
+    /// the Atlas View groups corpora that share a category under one
+    /// rail header. `None` on legacy indexes ingested before the
+    /// `[display]` block existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display: Option<crate::recipe::DisplayMeta>,
 }
 
 // ─── Scored Chunk (search result) ───────────────────────

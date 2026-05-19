@@ -42,6 +42,11 @@ pub enum RecipeId {
     UsCode,
     OlcOpinions,
     ScotusOpinions,
+    /// Local-only ingest of the user's claude.ai chat export. Driven
+    /// by the desktop Settings → Imports tab. Private corpus —
+    /// `mesh_sharing = false`. See
+    /// `sovereign-recipes/conversations-anthropic/README.md`.
+    ConversationsAnthropic,
 }
 
 impl RecipeId {
@@ -69,6 +74,7 @@ impl RecipeId {
             Self::UsCode => "us-code",
             Self::OlcOpinions => "olc-opinions",
             Self::ScotusOpinions => "scotus-opinions",
+            Self::ConversationsAnthropic => "conversations-anthropic",
         }
     }
 
@@ -93,6 +99,7 @@ impl RecipeId {
             "us-code" => Some(Self::UsCode),
             "olc-opinions" => Some(Self::OlcOpinions),
             "scotus-opinions" => Some(Self::ScotusOpinions),
+            "conversations-anthropic" => Some(Self::ConversationsAnthropic),
             _ => None,
         }
     }
@@ -126,6 +133,9 @@ impl RecipeId {
             Self::ScotusOpinions => {
                 include_str!("../recipes/scotus-opinions/recipe.toml")
             }
+            Self::ConversationsAnthropic => {
+                include_str!("../recipes/conversations-anthropic/recipe.toml")
+            }
         }
     }
 
@@ -150,6 +160,7 @@ impl RecipeId {
         Self::UsCode,
         Self::OlcOpinions,
         Self::ScotusOpinions,
+        Self::ConversationsAnthropic,
     ];
 }
 
