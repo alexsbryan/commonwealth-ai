@@ -534,6 +534,18 @@ async fn exec_mock_search(
         ));
         urls.push(r.url.clone());
     }
+    // Explicit allowlist trailer. Models routinely fabricate URLs by
+    // pattern-extrapolation when they cite (`flight-14-recap` →
+    // `flight-8-live`). Pre-committing the allowed-URL set as plain
+    // text gives the model an in-context allowlist to draw against,
+    // which is much closer to how it processes instructions than
+    // hoping it'll reconstruct URLs from the numbered list above.
+    // Production search results should render the same trailer when
+    // citation-faithfulness matters.
+    rendered.push_str("\n--- ALLOWED URLS (use ONLY these verbatim in citations; do not invent or modify) ---\n");
+    for u in &urls {
+        rendered.push_str(&format!("  {u}\n"));
+    }
     Ok((rendered, urls))
 }
 
@@ -658,6 +670,87 @@ mod tests {
              (also exported as sovereign_tools::search::SEARCH_TOOL_DESCRIPTION). \
              If the divergence is intentional, add the fixture slug to \
              INTENTIONAL_FORKS in this test with a one-line rationale.",
+            mismatches.join("\n")
+        );
+    }
+
+    #[test]
+    fn fixture_system_prompts_match_production_asset() {
+        // Same propagation discipline as the tool-description test:
+        // the gym's fixture system messages and production-side
+        // search-enabled chats must use the same SEARCH_SYSTEM_PROMPT
+        // asset. Without this, the gym tunes one surface (tool
+        // description) and production runs on a stale system prompt
+        // — observed 2026-05-19 Phase 3c iter1, where the asset
+        // tightening lifted only the zero-results fixture because
+        // the model was anchoring on the old (looser) rules in the
+        // system message.
+        let production_sys = sovereign_tools::search::SEARCH_SYSTEM_PROMPT.trim();
+
+        const INTENTIONAL_FORKS: &[&str] = &[];
+
+        let workspace_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../..")
+            .canonicalize()
+            .expect("workspace root resolvable");
+        let fixtures_dir = workspace_root.join("sovereign-recipes/search-gym/fixtures");
+
+        let mut mismatches: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&fixtures_dir)
+            .expect("fixtures dir readable")
+            .flatten()
+        {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let slug = path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
+            if INTENTIONAL_FORKS.iter().any(|f| *f == slug) {
+                continue;
+            }
+            let input_path = path.join("input.json");
+            let body = match std::fs::read_to_string(&input_path) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+            let parsed: serde_json::Value = match serde_json::from_str(&body) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let messages = match parsed.get("messages").and_then(|v| v.as_array()) {
+                Some(a) => a,
+                None => continue,
+            };
+            // Find the FIRST system message; that's where the
+            // search rules live. Fixture-specific user/assistant
+            // context lives in later messages and is not gated.
+            for msg in messages {
+                if msg.get("role").and_then(|v| v.as_str()) != Some("system") {
+                    continue;
+                }
+                let sys = msg
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if sys.trim() != production_sys {
+                    mismatches.push(format!(
+                        "{slug}: system message differs from SEARCH_SYSTEM_PROMPT"
+                    ));
+                }
+                break;
+            }
+        }
+
+        assert!(
+            mismatches.is_empty(),
+            "Fixture↔production system-prompt drift:\n{}\n\n\
+             Fix: replace each fixture's first `system` message content with the \
+             contents of sovereign/crates/sovereign-tools/assets/search_system_prompt.md \
+             (also exported as sovereign_tools::search::SEARCH_SYSTEM_PROMPT).",
             mismatches.join("\n")
         );
     }

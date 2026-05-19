@@ -56,22 +56,27 @@ struct SlotContext {
     /// fall through to the single-token decode path on the target
     /// context, identical to non-MTP loads.
     draft_ctx: Option<crate::llama::cpp::context::LlamaContext<'static>>,
-    /// **Persistent MTP session** — built ONCE at slot load via
-    /// `MtpSession::new(&target, &draft, ...)`, reused across every
-    /// request. The session's constructor calls upstream's
-    /// `common_speculative_init`, which installs
-    /// `set_embeddings_pre_norm(true)` on BOTH contexts so subsequent
-    /// decodes compute the pre-norm hidden state that the MTP draft
-    /// side needs. Creating the session AFTER the first decode of a
-    /// request causes the prefill to run without those hooks and the
-    /// next `session.process(batch)` reads garbage / dies silently.
-    /// Upstream's `examples/mtp/main.rs` creates the session at
-    /// startup for the same reason.
+    /// **MTP session** — built at slot load via
+    /// `MtpSession::new(&target, &draft, ...)` and **rebuilt at every
+    /// request boundary** by `generate_sync_mtp`. The session's
+    /// constructor calls upstream's `common_speculative_init`, which
+    /// installs `set_embeddings_pre_norm(true)` on BOTH contexts so
+    /// subsequent decodes compute the pre-norm hidden state that the
+    /// MTP draft side needs. Creating the session AFTER the first
+    /// decode of a request causes the prefill to run without those
+    /// hooks and the next `session.process(batch)` reads garbage / dies
+    /// silently. Upstream's `examples/mtp/main.rs` creates the session
+    /// at startup for the same reason — but it's a one-shot script,
+    /// not a long-running daemon. We rebuild per request because the
+    /// session's internal draft-scheduler state persists across calls
+    /// and pollutes subsequent generations (see generate_sync_mtp
+    /// header comment); `mtp_session_new` is cheap (no allocation, no
+    /// model touch) so paying it per request is the right trade.
     ///
     /// `Some` iff `draft_ctx` is also `Some` — the two are built
-    /// together in `ModelSlot::load`. Per-request, only
-    /// `session.begin(seq_id, &tokens)` is called to reset per-seq
-    /// pending-h state.
+    /// together in `ModelSlot::load`. Per-request,
+    /// `session.begin(seq_id, &tokens)` still resets per-seq pending-h
+    /// state on the rebuilt session.
     mtp_session: Option<MtpSession>,
     _model: Arc<LlamaModel>,
     /// **Prefix-cache bookkeeping.** The full token sequence
@@ -709,6 +714,34 @@ impl ModelSlot {
             return Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks);
         }
 
+        // Capability gate: the prefix-cache partial-keep path
+        // (clear_kv_cache_seq(lcp, None) + tail-prefill) does not
+        // work on hybrid Mamba/SSM models. `clear_kv_cache_seq`
+        // succeeds against the attention layers but doesn't rewind
+        // the recurrent layers' position-by-position hidden state,
+        // so the subsequent tail decode is rejected upstream
+        // (llama_decode returns -1; the Rust binding statically
+        // labels this "n_tokens == 0" even though the batch has
+        // tokens — verified 2026-05-19 with batch_n_tokens=1 and
+        // batch_n_tokens=50 both failing identically). The bug is
+        // general to any partial-keep on this model class, not an
+        // edge case of small tails.
+        //
+        // Detector: a successfully-built MtpSession on the slot.
+        // MTP requires `with_n_rs_seq > 1`, which means the model
+        // has recurrent layers; the inverse is also true in our
+        // build (mtp_session is Some iff the slot was constructed
+        // with the MTP gguf and the speculative init succeeded).
+        // Pure-attention slots (mtp_session is None) keep the
+        // partial-keep path — they were the original target of the
+        // 2026-05-17 SEP-pipeline tuning and the bug doesn't affect
+        // them.
+        //
+        // TODO: this gate misses NON-MTP hybrids (e.g. Darwin
+        // family — Mamba+MoE, no MTP heads). Tracked separately for
+        // a metadata-driven detector (gguf arch == "mamba" / similar).
+        let prefix_cache_safe = slot_ctx.mtp_session.is_none();
+
         // Split-borrow the SlotContext's disjoint fields. The
         // function body uses both `ctx` (the LlamaContext) and
         // `cached_tokens` (the prefix-cache bookkeeping) as mutable
@@ -748,7 +781,8 @@ impl ModelSlot {
         //
         // 2026-05-17 SEP-pipeline tuning. See SlotContext.cached_tokens
         // for the workload justification.
-        let lcp = cached_tokens
+        let cached_len_at_entry = cached_tokens.len();
+        let raw_lcp = cached_tokens
             .iter()
             .zip(tokens.iter())
             // Reserve the last position for fresh decode — the model
@@ -759,6 +793,10 @@ impl ModelSlot {
             .take(tokens.len().saturating_sub(1))
             .take_while(|(a, b)| a == b)
             .count();
+        // Apply the capability gate (see prefix_cache_safe rationale
+        // at top of generate_sync). Hybrid recurrent models force
+        // full prefill; pure-attention slots use the raw LCP.
+        let lcp = if prefix_cache_safe { raw_lcp } else { 0 };
         // Clear cached_tokens before any cache mutation — restored on
         // success path below. If we crash between here and the
         // post-decode update, next call sees cached_tokens=[] and
@@ -791,15 +829,33 @@ impl ModelSlot {
                 .add(token, absolute_pos, &[0], j == last_idx)
                 .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
         }
-        tracing::debug!(
+        // **TEMPORARY instrumentation (Phase 3c, 2026-05-19).**
+        // Promoted to info so we can correlate prefix-cache state
+        // with the n_tokens==0 decode failures observed in the gym.
+        // Revert to debug-level once root cause is identified.
+        tracing::info!(
             cache_hit_tokens = lcp,
+            raw_lcp,
             new_prefill_tokens = tail.len(),
             new_prompt_len = tokens.len(),
+            cached_len_at_entry,
+            batch_n_tokens = batch.n_tokens(),
             "prefix_cache: prefill scope"
         );
 
-        ctx.decode(&mut batch)
-            .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
+        if let Err(e) = ctx.decode(&mut batch) {
+            tracing::warn!(
+                error = %e,
+                cache_hit_tokens = lcp,
+                raw_lcp,
+                new_prefill_tokens = tail.len(),
+                new_prompt_len = tokens.len(),
+                cached_len_at_entry,
+                batch_n_tokens = batch.n_tokens(),
+                "prefix_cache: decode failed — state at failure"
+            );
+            return Err(Error::Inference(format!("Prompt decode failed: {e}")));
+        }
         // Decode succeeded — record the new cached sequence so the
         // next call can compute its LCP against this one. The decode
         // loop below mutates `ctx` (KV grows by `n_generated` after
@@ -1256,7 +1312,31 @@ impl ModelSlot {
             }
         }
 
-        ctx.clear_kv_cache();
+        // Intentionally do NOT clear KV here. The prefix-cache
+        // machinery at the top of generate_sync (cached_tokens +
+        // LCP partial-clear, ~line 756) is designed to preserve KV
+        // across requests so the next prompt's shared prefix re-uses
+        // the current generation's KV positions. Clearing here was an
+        // uncommented copy-paste survivor that silently defeated the
+        // cache — and worse, desynchronised it: cached_tokens (set
+        // ~line 814 below) kept tracking the prompt while KV was
+        // zeroed, so the next request computed LCP > 0 against an
+        // empty KV, partial-cleared a no-op, prefilled only the
+        // one-token tail at position lcp, and the model generated
+        // from missing-context state. Observable symptom in the
+        // search-gym 2026-05-19: replay 1 of every fixture produced
+        // a coherent reply (LCP=0 path); replays 2-5 produced
+        // raw-corpus-like gibberish unrelated to the prompt.
+        //
+        // TODO: generate_stream_sync still has an end-of-fn unconditional
+        // clear at ~line 2381. Streaming-only sequences are
+        // self-consistent because that path doesn't touch
+        // cached_tokens, but a streaming→non-streaming sequence on
+        // the same slot will re-introduce the desync (cached_tokens
+        // stale from the last non-streaming call, KV empty from the
+        // streaming clear). The fix is to have streaming take
+        // &mut SlotContext and clear cached_tokens at start. Tracking
+        // separately; the gym is non-streaming so this fix unblocks it.
 
         // Sampler-role summary: emitted once per generation so the
         // operator can spot when Content (greedy) didn't engage.
@@ -1370,26 +1450,74 @@ impl ModelSlot {
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize, usize)> {
+        // Validate dispatcher contract first (draft_ctx + mtp_session
+        // must be Some) and snapshot `n_draft_max` from the existing
+        // session — we'll rebuild the session below and need to pass
+        // the same shape back in.
+        if slot_ctx.draft_ctx.is_none() {
+            return Err(Error::Inference(
+                "generate_sync_mtp: draft_ctx is None — dispatcher contract violated".into(),
+            ));
+        }
+        let n_draft_max = slot_ctx
+            .mtp_session
+            .as_ref()
+            .ok_or_else(|| {
+                Error::Inference(
+                    "generate_sync_mtp: mtp_session is None — dispatcher contract violated".into(),
+                )
+            })?
+            .n_draft_max();
+
+        // **Rebuild the MTP session at the request boundary.** The
+        // session that ModelSlot::load constructed is reused across
+        // every request; KV cache clear (below) resets the contexts'
+        // token state but does NOT touch the session's internal
+        // draft-scheduler state. After 1-2 sequential requests that
+        // residual state desynchronises with the fresh prompt and the
+        // draft head proposes tokens from stale branches — observed
+        // as garbage output ("Python sorting algorithm" responses to
+        // unrelated questions) once the search-gym started running
+        // --replays > 1.
+        //
+        // mtp_session_new is cheap: it calls common_speculative_init
+        // which only re-installs `set_embeddings_pre_norm(true)` hooks
+        // and registers the speculative callback. No allocation, no
+        // model touch. Drop the old session first (assign None) so we
+        // never hold two sessions referencing the same contexts —
+        // upstream documents that as UB inside common_speculative_*.
+        slot_ctx.mtp_session = None;
+        let rebuilt = {
+            let draft_ref = slot_ctx
+                .draft_ctx
+                .as_ref()
+                .expect("draft_ctx checked Some above");
+            MtpSession::new(&slot_ctx.ctx, draft_ref, 1, n_draft_max).map_err(|e| {
+                Error::Inference(format!("MTP session rebuild failed: {e:?}"))
+            })?
+        };
+        slot_ctx.mtp_session = Some(rebuilt);
+        tracing::debug!(
+            model_id = %model_id,
+            n_draft_max,
+            "mtp: rebuilt session at request boundary"
+        );
+
         // Split-borrow the SlotContext's fields. Holds &mut to both
-        // ctxs simultaneously; the persistent MtpSession holds raw
-        // pointers internally and is not tracked by the borrow checker
-        // — that's what lets all three coexist as &muts on the same
+        // ctxs simultaneously; the MtpSession holds raw pointers
+        // internally and is not tracked by the borrow checker —
+        // that's what lets all three coexist as &muts on the same
         // SlotContext.
         let target_ctx = &mut slot_ctx.ctx;
         let draft_ctx = slot_ctx
             .draft_ctx
             .as_mut()
-            .ok_or_else(|| Error::Inference(
-                "generate_sync_mtp: draft_ctx is None — dispatcher contract violated".into(),
-            ))?;
+            .expect("draft_ctx checked Some above");
         let session = slot_ctx
             .mtp_session
             .as_mut()
-            .ok_or_else(|| Error::Inference(
-                "generate_sync_mtp: mtp_session is None — dispatcher contract violated".into(),
-            ))?;
+            .expect("mtp_session was just rebuilt to Some");
         let cached_tokens = &mut slot_ctx.cached_tokens;
-        let n_draft_max = session.n_draft_max();
 
         // Phase A clears both KVs and starts fresh — no prefix cache
         // integration on this path yet. The non-MTP path keeps

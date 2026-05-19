@@ -40,6 +40,11 @@ aliases = [
   "nvidia nvda stock price",
   "nvidia nvda current stock price",
   "current nvda stock price",
+  "nvda stock price today",
+  "nvda current stock price",
+  "nvidia stock price today",
+  "nvidia current stock price",
+  "nvidia stock price right now",
 ]
 
 [[entry]]
@@ -49,4 +54,22 @@ aliases = [
   "freedonia ai summit 2026",
   "freedonia ai summit",
   "freedonia 2026 keynote",
+]
+
+[[entry]]
+# Fixture 10 (multicorpus_contradicting_local). The knowledge corpus
+# returns two articles that disagree; we want the SAME contradiction
+# to appear in web results so the model sees the conflict regardless
+# of which tool path it picks. The predicate scores whether the
+# response acknowledges multiple guidelines / lack of single figure.
+file    = "water-intake-conflicting.json"
+aliases = [
+  "recommended daily water intake for adults",
+  "recommended daily water intake",
+  "daily water intake adults",
+  "daily water intake",
+  "how much water should i drink",
+  "how much water should adults drink",
+  "water intake recommendation",
+  "water consumption adults",
 ]

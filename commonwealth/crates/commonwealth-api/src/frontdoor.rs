@@ -3248,6 +3248,98 @@ mod tests {
         assert!(tool_keeplist_contains("web_search"));
     }
 
+    // ─── promote_in_content_tool_call — Phase 2 productionization ────
+    //
+    // Pins the model-content → structured-tool_calls promotion the
+    // search-gym harness surfaced as a real daemon-side gap on Qwen3
+    // family models. Without these, every chat user whose model
+    // emits tool calls in the content channel sees their tool calls
+    // silently dropped.
+
+    fn msg(role: &str, content: &str) -> crate::openai_types::ChatMessage {
+        crate::openai_types::ChatMessage {
+            role: role.to_string(),
+            content: content.to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
+
+    #[test]
+    fn promote_in_content_recognises_parameters_shape() {
+        let mut m = msg(
+            "assistant",
+            r#"<think></think>
+
+{"name":"search","parameters":{"query":"NVDA current stock price"}}"#,
+        );
+        assert!(promote_in_content_tool_call(&mut m));
+        assert_eq!(m.content, "");
+        let tcs = m.tool_calls.expect("promoted");
+        assert_eq!(tcs.len(), 1);
+        assert_eq!(tcs[0].function.name, "search");
+        let args: serde_json::Value = serde_json::from_str(&tcs[0].function.arguments).unwrap();
+        assert_eq!(
+            args.get("query").and_then(|v| v.as_str()).unwrap(),
+            "NVDA current stock price"
+        );
+    }
+
+    #[test]
+    fn promote_in_content_recognises_arguments_shape() {
+        let mut m = msg("assistant", r#"{"name":"search","arguments":{"q":"x"}}"#);
+        assert!(promote_in_content_tool_call(&mut m));
+        assert_eq!(m.tool_calls.unwrap()[0].function.name, "search");
+    }
+
+    #[test]
+    fn promote_in_content_noop_when_tool_calls_already_set() {
+        // Model used the structured channel — leave it alone.
+        let mut m = crate::openai_types::ChatMessage {
+            role: "assistant".to_string(),
+            content: r#"{"name":"other","parameters":{}}"#.to_string(),
+            tool_call_id: None,
+            tool_calls: Some(vec![crate::openai_types::ToolCall {
+                id: "existing".to_string(),
+                kind: "function".to_string(),
+                function: crate::openai_types::FunctionCall {
+                    name: "real_call".to_string(),
+                    arguments: "{}".to_string(),
+                },
+            }]),
+        };
+        assert!(!promote_in_content_tool_call(&mut m));
+        // Existing tool call preserved; content not cleared.
+        let tcs = m.tool_calls.as_ref().unwrap();
+        assert_eq!(tcs[0].function.name, "real_call");
+        assert!(m.content.contains("other"));
+    }
+
+    #[test]
+    fn promote_in_content_rejects_non_tool_content() {
+        let mut m = msg("assistant", "Hello, how can I help?");
+        assert!(!promote_in_content_tool_call(&mut m));
+        assert!(m.tool_calls.is_none());
+    }
+
+    #[test]
+    fn promote_in_content_rejects_unrelated_json() {
+        // Valid JSON, but neither `name` nor `parameters/arguments`
+        // — must NOT be promoted (would synthesise a garbage tool
+        // call from arbitrary structured content).
+        let mut m = msg("assistant", r#"{"answer": 42, "confidence": "high"}"#);
+        assert!(!promote_in_content_tool_call(&mut m));
+        assert!(m.tool_calls.is_none());
+    }
+
+    #[test]
+    fn promote_in_content_handles_unterminated_think() {
+        // Unterminated `<think>` discards everything past it, so
+        // there's no JSON to parse. No promotion.
+        let mut m = msg("assistant", "<think>still thinking...");
+        assert!(!promote_in_content_tool_call(&mut m));
+    }
+
     #[test]
     fn harness_per_profile_pass_pipeline_is_what_we_expect() {
         // Codex (final Inv #17 outcome, 2026-05-13): catalog filter +

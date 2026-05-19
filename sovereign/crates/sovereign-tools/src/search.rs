@@ -63,6 +63,15 @@ impl SearchTool {
 pub const SEARCH_TOOL_DESCRIPTION: &str =
     include_str!("../assets/search_tool_description.md");
 
+/// Canonical system prompt for chats where the search tool is
+/// enabled. Mirrors SEARCH_TOOL_DESCRIPTION's rules but framed as a
+/// direct instruction to the model rather than a tool description.
+/// Models anchor more heavily on the system message than on tool
+/// metadata, so the same shape rules need to appear in both — kept
+/// in lockstep via the gym's alignment test.
+pub const SEARCH_SYSTEM_PROMPT: &str =
+    include_str!("../assets/search_system_prompt.md");
+
 #[async_trait]
 impl Tool for SearchTool {
     fn descriptor(&self) -> ToolDescriptor {

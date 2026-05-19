@@ -8,6 +8,7 @@ pub mod hybrid;
 pub mod json_constraint;
 pub mod json_grammar;
 pub mod llama;
+pub mod url_constraint;
 pub mod remote;
 pub mod reranker_standalone;
 pub mod router_circuit;
