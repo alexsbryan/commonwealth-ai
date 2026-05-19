@@ -192,6 +192,61 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         }
     }
 
+    // Mirror of the primary-alias block above for the Fast slot.
+    // Symmetric `commonwealth/fast` + bare `fast` advertisement
+    // makes the Fast slot routable by alias across the mesh, the
+    // same way the Slow slot is via `commonwealth/primary`. Without
+    // this, a caller asking for `commonwealth/fast` hits "no node
+    // advertises model 'commonwealth/fast'" because the Fast slot
+    // only advertised its concrete GGUF id (e.g.
+    // `Qwen3.5-9B-UD-MTP-Q6_K_XL`). Observed 2026-05-19: search-gym
+    // judge calls and any other Fast-aliased traffic returned 503
+    // until this block landed.
+    //
+    // Skipped if there's no Fast slot loaded, mirroring the primary
+    // block's gate.
+    let fast_model_name = provider.model_id_for(Speed::Fast);
+    if !fast_model_name.is_empty() && fast_model_name != "unknown" {
+        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .info_for_file(&fast_model_name);
+        let (capabilities, size_gb) = match info {
+            Some(slot) => (slot.capabilities, slot.size_gb),
+            None => {
+                let mut caps = std::collections::HashMap::new();
+                caps.insert(Capability::General, 2u8);
+                caps.insert(Capability::Analysis, 2u8);
+                (caps, None)
+            }
+        };
+        for alias_id in ["commonwealth/fast", "fast"] {
+            if !seen_ids.insert(alias_id.to_string()) {
+                continue;
+            }
+            let claims = synthesize_slot_claims(Speed::Fast, alias_id, &capabilities);
+            tracing::info!(
+                alias = %alias_id,
+                target = %fast_model_name,
+                caps = ?capabilities,
+                "build_self_manifest: advertised fast alias"
+            );
+            models.push(ProviderModel {
+                id: alias_id.to_string(),
+                base_model: None,
+                quantization: None,
+                context_tokens: 32_768,
+                status: ModelStatus {
+                    available: true,
+                    loaded: true,
+                    estimated_tokens_per_sec: None,
+                    estimated_ttft_ms: None,
+                    estimated_load_time_sec: None,
+                },
+                size_gb,
+                claims,
+            });
+        }
+    }
+
     // PR-E2: Code specialist. Separate ProviderModel entry so peer
     // schedulers can see the `code` hint claim without having to
     // first elicit a hot-swap. Only emitted when the provider
