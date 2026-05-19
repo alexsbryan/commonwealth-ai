@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   deriveEta,
   formatPreflightBand,
+  formatRefinedTotal,
   formatRemaining,
 } from "./etaFromProgress";
 import type { CorpusProgressPayload } from "../types";
@@ -91,6 +92,36 @@ describe("formatRemaining — granularity", () => {
   test("zero or negative produces empty string", () => {
     expect(formatRemaining(0)).toBe("");
     expect(formatRemaining(-1)).toBe("");
+  });
+});
+
+describe("formatRefinedTotal", () => {
+  test("returns empty during warmup so caller falls back to band", () => {
+    const out = formatRefinedTotal(payload("extracting", 1), 0, () => 1_000);
+    expect(out).toBe("");
+  });
+
+  test("renders integer-minute total once live ETA is active", () => {
+    // 120s elapsed, 20% done → remaining = 120 * (80/20) = 480s.
+    // total = 120 + 480 = 600s = 10 min.
+    const out = formatRefinedTotal(payload("extracting", 20), 0, () => 120_000);
+    expect(out).toContain("10 min");
+    expect(out).toContain("Estimated total time");
+  });
+
+  test("refined total shrinks as observed rate improves", () => {
+    // Two snapshots with the same wall clock; the second saw more
+    // percent → its projected total is lower.
+    const early = formatRefinedTotal(payload("extracting", 5), 0, () => 60_000);
+    const later = formatRefinedTotal(payload("extracting", 50), 0, () => 60_000);
+    const earlyMin = parseInt(early.match(/(\d+)/)?.[1] ?? "0", 10);
+    const laterMin = parseInt(later.match(/(\d+)/)?.[1] ?? "0", 10);
+    expect(laterMin).toBeLessThan(earlyMin);
+  });
+
+  test("hides on terminal phases", () => {
+    expect(formatRefinedTotal(payload("complete", 100), 0, () => 1_000_000)).toBe("");
+    expect(formatRefinedTotal(payload("failed", 50), 0, () => 1_000_000)).toBe("");
   });
 });
 

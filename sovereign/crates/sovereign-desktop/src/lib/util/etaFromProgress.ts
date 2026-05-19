@@ -118,3 +118,33 @@ export function formatPreflightBand(estimatedMinutes: number): string {
   }
   return `Estimated total time: ~${low.toFixed(1)}–${high.toFixed(1)} min`;
 }
+
+/** Refined total-time estimate derived from observed progress rate.
+ *
+ *  Once `deriveEta` has cleared its warmup gate, the live remaining
+ *  is grounded in real chunks/sec rather than the baked
+ *  `SECONDS_PER_MESSAGE` constant. The total is then just
+ *  `elapsed + remaining` — a single number, no band, no guesses.
+ *
+ *  Returns `""` while still in warmup so the caller can fall back to
+ *  `formatPreflightBand`. The two surfaces are mutually exclusive:
+ *  during warmup the user sees the baked band; once live data
+ *  arrives, the refined total takes over.
+ */
+export function formatRefinedTotal(
+  payload: CorpusProgressPayload | undefined,
+  startedAtMs: number,
+  now: () => number = () => performance.now(),
+): string {
+  const live = deriveEta(payload, startedAtMs, now);
+  if (live.secondsRemaining === null) {
+    return "";
+  }
+  const elapsedSeconds = Math.max(0, (now() - startedAtMs) / 1000);
+  const totalSeconds = elapsedSeconds + live.secondsRemaining;
+  const totalMinutes = totalSeconds / 60;
+  if (totalMinutes < 1) {
+    return `Estimated total time: ~${Math.max(0.5, totalMinutes).toFixed(1)} min`;
+  }
+  return `Estimated total time: ~${Math.round(totalMinutes)} min`;
+}

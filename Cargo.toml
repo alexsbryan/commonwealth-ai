@@ -87,6 +87,17 @@ axum = { version = "0.8", features = ["ws", "macros"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
 
+# Chat-template rendering (Gemma 3/4 macros, Qwen3.5-9B macros/sets/
+# includes). The llama-cpp-4 0.2.x binding dropped the
+# `apply_chat_template_oaicompat` path that previously routed full-
+# Jinja2 templates through llama.cpp's bundled minja renderer. We
+# re-implement that path in Rust with minijinja so models whose
+# `tokenizer.chat_template` uses macros/sets/includes don't fall
+# through to plain-text concat (lossy: role markers hallucinate,
+# stop tokens drift). Lean — no GIL, no JSON serialisation step
+# between Rust and the renderer.
+minijinja = { version = "2", features = ["loader"] }
+
 # CLI
 clap = { version = "4", features = ["derive"] }
 
