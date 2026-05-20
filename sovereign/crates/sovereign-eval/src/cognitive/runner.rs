@@ -34,6 +34,13 @@ pub struct RunOpts<'a> {
     pub seed: u64,
     pub max_tokens: u32,
     pub workspace_root: &'a Path,
+    /// When `true`, omit `temperature` and `top_p` from the request
+    /// body so the daemon's `ModelQuirks` per-family defaults apply
+    /// (Qwen 3.5 = T=0.7/top_p=0.95/top_k=20, Gemma 4 = T=1.0/top_p=0.95/top_k=64,
+    /// etc.). Use this for cross-family benchmarks where forcing a
+    /// single T across all models penalises ones whose distribution
+    /// is mis-tuned at T=0.
+    pub family_defaults: bool,
 }
 
 /// One per-item result; the report aggregates these.
@@ -123,26 +130,32 @@ pub(crate) fn response_format_for(scoring: &Scoring) -> Option<serde_json::Value
         } => Some(serde_json::json!({
             "type": "json_schema",
             "json_schema": {
-                "name": "choice_with_rationale",
+                "name": "rationale_then_choice",
                 "schema": {
                     "type": "object",
+                    // Field declaration order is load-bearing: the
+                    // JsonConstraint walker accepts required props
+                    // in declaration order. Forcing `rationale`
+                    // first means the model writes its reasoning
+                    // before the choice token — so the choice
+                    // sampler conditions on the model's own
+                    // argument rather than on a positional prior.
+                    //
+                    // Observed 2026-05-19 on Gemma 4 26B-A4B-it
+                    // (Q6_K_XL): with `choice` first, the model
+                    // emitted "A" on 7/7 failed hard-DQ items at
+                    // T=0.0 AND T=1.0 with on-topic but
+                    // wrong-conclusion rationale. The MoE quant has
+                    // a positional bias at the first letter-choice
+                    // token that argument-shaped context overrides.
                     "properties": {
-                        // Multi-choice prompts in this bank use
-                        // single-letter labels (A/B/C/D). Constraining
-                        // to that alphabet rejects prose tokens like
-                        // "Pick" or "Approach B" before they corrupt
-                        // the choice field. Same fairness contract as
-                        // the wider response_format wrapper — any
-                        // backend that complies with the prompt's
-                        // declared shape (also single-letter) is
-                        // unaffected.
+                        "rationale": { "type": "string", "maxLength": 500 },
                         choice_field: {
                             "type": "string",
                             "enum": ["A", "B", "C", "D", "E"]
-                        },
-                        "rationale": { "type": "string", "maxLength": 500 }
+                        }
                     },
-                    "required": [choice_field, "rationale"],
+                    "required": ["rationale", choice_field],
                     "additionalProperties": false
                 }
             }
@@ -152,14 +165,45 @@ pub(crate) fn response_format_for(scoring: &Scoring) -> Option<serde_json::Value
         } => Some(serde_json::json!({
             "type": "json_schema",
             "json_schema": {
-                "name": "claim_with_confidence",
+                "name": "rationale_claim_is_true_confidence",
                 "schema": {
                     "type": "object",
+                    // Three-field shape, declaration order is load-bearing.
+                    //
+                    // 1. `rationale` — the model's argument. Forces the
+                    //    decode to commit to a chain of reasoning before
+                    //    naming a position (cf. MultiChoice).
+                    // 2. `claim_is_true` — boolean. The judgment carrier.
+                    //    Field name spells out the semantics so the
+                    //    model can't interpret it as "I assert my
+                    //    rationale" instead of "is the user's claim
+                    //    true". Observed 2026-05-20 on Qwen3.6-35B-A3B:
+                    //    a `verdict: bool` field flipped inverted on
+                    //    items where the rationale correctly named the
+                    //    claim as false — the model treated `verdict`
+                    //    as a self-endorsement signal. Renaming +
+                    //    description makes the field's referent
+                    //    unambiguous across model families.
+                    // 3. `confidence` — 1-5 enum (constrained, not bare
+                    //    integer). Auxiliary calibration signal, not
+                    //    the pass/fail axis.
                     "properties": {
-                        confidence_field: { "type": "integer" },
-                        "rationale": { "type": "string", "maxLength": 500 }
+                        "rationale": {
+                            "type": "string",
+                            "maxLength": 500,
+                            "description": "One sentence explaining whether the claim from the user is true or false and why."
+                        },
+                        "claim_is_true": {
+                            "type": "boolean",
+                            "description": "Set this to true if the claim in the user message is true, and false if it is false. This is the answer to the user's question, not a self-endorsement of your rationale."
+                        },
+                        confidence_field: {
+                            "type": "integer",
+                            "enum": [1, 2, 3, 4, 5],
+                            "description": "How confident you are in the claim_is_true value, on a 1-5 scale (1 = very unsure, 5 = very sure). This is auxiliary calibration data; it does not determine the answer."
+                        }
                     },
-                    "required": [confidence_field, "rationale"],
+                    "required": ["rationale", "claim_is_true", confidence_field],
                     "additionalProperties": false
                 }
             }
@@ -178,17 +222,31 @@ fn call_chat_completions(
         "{}/v1/chat/completions",
         opts.daemon_url.trim_end_matches('/')
     );
-    let mut body = serde_json::json!({
-        "model": opts.model,
-        "temperature": opts.temperature,
-        "top_p": 1.0,
-        "max_tokens": opts.max_tokens,
-        "seed": opts.seed,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-    });
+    let mut body = if opts.family_defaults {
+        // Omit temperature + top_p so the daemon falls back to the
+        // model's `ModelQuirks` defaults. Keep seed for reproducibility.
+        serde_json::json!({
+            "model": opts.model,
+            "max_tokens": opts.max_tokens,
+            "seed": opts.seed,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        })
+    } else {
+        serde_json::json!({
+            "model": opts.model,
+            "temperature": opts.temperature,
+            "top_p": 1.0,
+            "max_tokens": opts.max_tokens,
+            "seed": opts.seed,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        })
+    };
     if let Some(rf) = response_format {
         body["response_format"] = rf.clone();
     }

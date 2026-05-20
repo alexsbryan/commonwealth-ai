@@ -1860,6 +1860,32 @@ impl InferenceProvider for MeshInferenceProvider {
     fn capabilities(&self) -> ProviderCapabilities {
         self.local.capabilities()
     }
+
+    // Runtime slot management delegates to the wrapped local provider.
+    // Without this override the trait's default-impl returns the
+    // generic "this inference provider does not support runtime slot
+    // load — only the embedded llama.cpp provider does" error even
+    // when `local` is a real EmbeddedLlamaCpp. The bug surfaced
+    // 2026-05-20 when `POST /internal/models/load` could not hot-load
+    // Gemma into a daemon whose primary slot was Qwen3.6 — the load
+    // adapter calls `self.provider.load_extra_slot`, which on the
+    // MeshInferenceProvider path always hit the default.
+    fn load_extra_slot(
+        &self,
+        slot_name: String,
+        path: std::path::PathBuf,
+        context_size: u32,
+    ) -> Result<String> {
+        self.local.load_extra_slot(slot_name, path, context_size)
+    }
+
+    fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>> {
+        self.local.unload_extra_slot(slot_name)
+    }
+
+    fn extras_inventory(&self) -> Vec<(String, String)> {
+        self.local.extras_inventory()
+    }
 }
 
 /// Stream wrapper that holds a [`LocalInflightGuard`] for its

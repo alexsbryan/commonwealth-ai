@@ -186,3 +186,56 @@ printed JSON indentation while rejecting the runaway.
 
 Same fix benefits any backend that hits an internal whitespace
 stall — generic constraint primitive.
+
+### Root cause of 26B-A4B underperformance: positional bias
+
+Re-ran 26B at T=1.0 (Gemma model card's recommendation; eval default
+is T=0.0 for determinism). Lift was marginal: 25→26 / 80 on full
+bank, 4→5 / 20 on hard subset. Inspecting failed emissions:
+
+```json
+dq_hard_007_optimistic_locking:
+{
+  "choice" : "A",
+  "rationale" : "Approach A (Pessimistic Locking) is designed to
+                 prevent conflicts by locking resources upfront…"
+}
+```
+
+The reasoning text is **on-topic and competent**. The choice value is
+just systematically wrong. Across the failed DQ-hard items at T=0.0
+all picked "A". At T=1.0, 7 of 7 failed-DQ-hard still picked "A".
+A single-fixture probe at T=1.0 hit "B" once (correctly), confirming
+the model's distribution leaks some "B" mass but the dominant pick
+remains "A".
+
+This is **positional bias in the letter-choice token distribution**,
+not a knowledge gap, hallucination, or chat-template artifact. Either
+the Q6_K_XL quantisation of the A4B MoE routes letter-position
+queries to an expert with strong A-prior, or the training mix biased
+the model toward "first option" at letter-choice positions.
+
+E4B (dense, same family) doesn't show the bias — picks correctly on
+the same hard items at T=0.0.
+
+### What our system contributed
+
+Two design choices made 26B look worse than it really is:
+
+- **`cognitive::runner::DEFAULT_TEMPERATURE = 0.0`** for
+  reproducibility. Gemma model cards (E4B and 26B both) recommend
+  T=1.0 universally. Eval default should respect family quirks —
+  consult `ModelQuirks::default_temperature` rather than hard-coding
+  0.0. ARCH §6: data, not program.
+
+- **Enum-constrained choice field** without label permutation. The
+  schema accepts `["A", "B", "C", "D", "E"]` but the prompts are
+  always presented in the same A-first order. A model with positional
+  bias never gets its bias measured-out. Standard mitigation:
+  shuffle the choice labels per fixture (so dq_hard_006's correct
+  answer might be labeled "B" in run 1 and "D" in run 2). The
+  fixture's `expected_choice` then tracks the post-shuffle mapping.
+  Reveals positional bias as a distinct measurable category.
+
+Neither change was scoped this session. Both are eval-design
+improvements that any backend benefits from.

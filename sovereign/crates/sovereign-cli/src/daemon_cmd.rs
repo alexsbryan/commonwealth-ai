@@ -2122,6 +2122,36 @@ async fn start_daemon() -> i32 {
         return 0;
     }
 
+    // Bind-collision detector (added 2026-05-20).
+    //
+    // Failure mode this prevents: a stale process holds 127.0.0.1:9741
+    // but doesn't answer our readiness probe (wrong build, half-shut
+    // state, debug binary from an earlier session). `wait_for_ready`
+    // returns false, we then spawn a fresh daemon which successfully
+    // binds *:9741 — but the kernel routes loopback traffic to the
+    // address-specific listener (the orphan), and every localhost
+    // call silently goes to the dead listener. Confirmed 2026-05-20
+    // with a stale `sovereign-cli serve` (debug build) holding
+    // 127.0.0.1:9741 while a fresh `daemon start` bound *:9741. The
+    // operator saw nothing in the new daemon's log because the new
+    // daemon wasn't getting any traffic.
+    //
+    // Detect by asking lsof / ss who owns the port. If it's NOT our
+    // pidfile owner, refuse loudly with a kill-the-orphan hint rather
+    // than start a second listener.
+    if let Some(holder_pid) = find_daemon_pid_by_port(9741) {
+        let our_pid = read_daemon_pid();
+        if our_pid != Some(holder_pid) {
+            eprintln!(
+                "✗ :9741 is held by pid {holder_pid} but the readiness probe failed.\n  \
+                 something else owns the port (stale debug build, half-shut daemon, foreign process).\n  \
+                 Stop it first: `kill {holder_pid}` (or `sovereign daemon stop` if it's a managed sovereign),\n  \
+                 then re-run `sovereign daemon start`."
+            );
+            return 1;
+        }
+    }
+
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
@@ -2735,27 +2765,43 @@ impl ProviderFactory for LlamaCppFactory {
 /// Wait for SIGINT (Ctrl-C) or SIGTERM (systemd/launchd shutdown).
 /// Returns when either arrives so the caller can run teardown.
 async fn wait_for_shutdown() {
+    // Glassbox: shutdown forensics. A 2026-05-20 incident left the
+    // daemon abort-crashing in ggml-metal's `__cxa_finalize_ranges`
+    // path with no breadcrumb naming the trigger — was it SIGINT
+    // from a stray Ctrl-C, SIGTERM from a peer `sovereign daemon
+    // stop`, launchd OOM, or something else? Without a log, the
+    // post-mortem stalls. Emit the signal source here so the next
+    // incident points at the trigger immediately.
     #[cfg(unix)]
     {
         let mut sigterm = match tokio::signal::unix::signal(
             tokio::signal::unix::SignalKind::terminate(),
         ) {
             Ok(s) => s,
-            Err(_) => {
-                // If we can't listen for SIGTERM, fall back to just SIGINT.
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "sigterm handler install failed — falling back to SIGINT-only"
+                );
                 let _ = tokio::signal::ctrl_c().await;
+                tracing::info!(signal = "SIGINT", path = "fallback", "daemon: shutdown signal received");
                 return;
             }
         };
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => {}
-            _ = sigterm.recv() => {}
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!(signal = "SIGINT", "daemon: shutdown signal received");
+            }
+            _ = sigterm.recv() => {
+                tracing::info!(signal = "SIGTERM", "daemon: shutdown signal received");
+            }
         }
     }
 
     #[cfg(not(unix))]
     {
         let _ = tokio::signal::ctrl_c().await;
+        tracing::info!(signal = "ctrl_c", "daemon: shutdown signal received");
     }
 }
 

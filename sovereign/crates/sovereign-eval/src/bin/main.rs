@@ -123,6 +123,14 @@ struct CognitiveArgs {
     /// Max tokens per item response.
     #[arg(long, default_value_t = cognitive::runner::DEFAULT_MAX_TOKENS)]
     max_tokens: u32,
+
+    /// Use the daemon's per-family sampling defaults (T/top_p/top_k
+    /// from `ModelQuirks`) instead of `--temperature` / hardcoded
+    /// `top_p=1.0`. Right for cross-family benchmarks where each
+    /// model deserves its model-card recommended sampling. `--seed`
+    /// still applies for reproducibility.
+    #[arg(long)]
+    family_defaults: bool,
 }
 
 fn main() -> Result<()> {
@@ -189,6 +197,7 @@ fn cmd_cognitive(data_dir: &Path, args: CognitiveArgs) -> Result<()> {
         temperature: args.temperature,
         seed: args.seed,
         max_tokens: args.max_tokens,
+        family_defaults: args.family_defaults,
     })?;
 
     let out_path = args.out.unwrap_or_else(|| {
