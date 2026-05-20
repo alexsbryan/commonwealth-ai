@@ -21,8 +21,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
 use serde::Serialize;
 use sovereign_tools::enrich::{
-    fire_cancellation, new_cancellation_flag, run_enrich_build, CancellationFlag,
-    EnrichBuildConfig, EnrichProgressFn,
+    fire_cancellation, new_cancellation_flag, resolve_sovereign_cli, run_enrich_build,
+    CancellationFlag, EnrichBuildConfig, EnrichProgressFn,
 };
 use tauri::{AppHandle, Emitter};
 
@@ -293,8 +293,14 @@ pub async fn enrich_errors(
     /// hang.
     const ERRORS_TIMEOUT: Duration = Duration::from_secs(10);
 
+    let bin = resolve_sovereign_cli().ok_or_else(|| {
+        "sovereign-cli not found on PATH or alongside the desktop binary. \
+         Build via `cargo build --release -p sovereign-cli` and put it on \
+         $PATH, or set SOVEREIGN_CLI=/abs/path/to/sovereign-cli."
+            .to_string()
+    })?;
     let fut = async {
-        Command::new("sovereign-cli")
+        Command::new(&bin)
             .arg("enrich")
             .arg("errors")
             .arg(&corpus_id)
@@ -370,7 +376,13 @@ pub async fn enrich_sep_ingest(
 
     const SEP_INGEST_TIMEOUT: Duration = Duration::from_secs(60);
 
-    let mut cmd = Command::new("sovereign-cli");
+    let bin = resolve_sovereign_cli().ok_or_else(|| {
+        "sovereign-cli not found on PATH or alongside the desktop binary. \
+         Build via `cargo build --release -p sovereign-cli` and put it on \
+         $PATH, or set SOVEREIGN_CLI=/abs/path/to/sovereign-cli."
+            .to_string()
+    })?;
+    let mut cmd = Command::new(&bin);
     cmd.arg("enrich").arg("sep-ingest").arg(&slug);
     if let Some(n) = paragraphs_per_section {
         cmd.arg("--paragraphs-per-section").arg(n.to_string());
@@ -609,8 +621,14 @@ pub async fn enrich_init_for_local_corpus(
     // pipeline id differs from what's on disk (the idempotency guard
     // above already handled the matching-pipeline case).
     const INIT_TIMEOUT: Duration = Duration::from_secs(30);
+    let bin = resolve_sovereign_cli().ok_or_else(|| {
+        "sovereign-cli not found on PATH or alongside the desktop binary. \
+         Build via `cargo build --release -p sovereign-cli` and put it on \
+         $PATH, or set SOVEREIGN_CLI=/abs/path/to/sovereign-cli."
+            .to_string()
+    })?;
     let fut = async {
-        Command::new("sovereign-cli")
+        Command::new(&bin)
             .arg("enrich")
             .arg("init")
             .arg(&corpus_id)
