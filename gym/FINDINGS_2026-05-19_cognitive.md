@@ -140,7 +140,49 @@ case the session-started state needs to be recovered.
 
 ## Reports on disk
 
-- `/tmp/cog_gemma_hard.json` — Gemma raw (0/20)
-- `/tmp/cog_gemma_hard_grammar.json` — Gemma + grammar only (8/20 v1 schema; 10/20 v2 enum)
-- `/tmp/cog_gemma_hard_v3.json` — Gemma + grammar + WS cap (**13/20**)
+- `/tmp/cog_gemma_hard.json` — Gemma 4 E4B raw (0/20)
+- `/tmp/cog_gemma_hard_grammar.json` — Gemma 4 E4B + grammar only (8/20 v1 schema; 10/20 v2 enum)
+- `/tmp/cog_gemma_hard_v3.json` — Gemma 4 E4B + grammar + WS cap (**13/20**)
 - `/tmp/cog_qwen_hard.json` — Qwen3.5-9B (**20/20**)
+- `/tmp/cog_gemma26b_full.json` — Gemma 4 26B-A4B without workspace_root, partial-leading-WS cap (19/80)
+- `/tmp/cog_gemma26b_v2.json` — Gemma 4 26B-A4B with workspace_root, partial cap (19/80, tool_use unblocked but model still fails)
+- `/tmp/cog_gemma26b_v3.json` — Gemma 4 26B-A4B with global MAX_CONSECUTIVE_WS=16 cap (**25/80**)
+
+## Late add: Gemma 4 26B-A4B vs E4B
+
+Re-ran full bank against `gemma-4-26B-A4B-it-UD-Q6_K_XL.gguf` (MoE,
+26B total params with 4B active). Surprising outcome:
+
+| Subset | Gemma 4 E4B-it (4B dense Q6) | Gemma 4 26B-A4B-it (MoE Q6_K_XL) |
+|---|---|---|
+| Hard 20 | **13/20 (65%)** | 4/20 (20%) |
+| Full 80 | (not run, projected ~50-60% based on hard) | 25/80 (31.2%) |
+
+The 26B-A4B MoE underperforms the dense 4B variant by a wide margin
+on the hard subset (-45 pts). Possible causes (not investigated this
+session):
+
+- Q6_K_XL quant may be more lossy on MoE routing decisions than on
+  dense weights. T=0.0 makes brittle routing deterministically wrong.
+- A4B's expert-routing decisions interact poorly with the json-schema
+  grammar — routing tokens that the dense model selects naturally for
+  "answer the question" may be masked out by the constraint.
+- 26B's chat template renders differently through our minijinja shim
+  than E4B's (worth verifying — different tokenizer.chat_template
+  in the gguf).
+
+Throughput: 26B-A4B at ~18 tok/s vs E4B's ~9 tok/s with grammar —
+the MoE is 2× faster despite more parameters (sparse activations).
+
+### Global WS cap (MAX_CONSECUTIVE_WS=16)
+
+Originally the WS cap fired only at root AwaitValue (depth==1). The
+26B revealed a second whitespace-runaway shape: after emitting
+`{"choice": "A"`, the model emitted ~1000 whitespace tokens awaiting
+the next key. Generalised the cap to fire at any state boundary
+(track `consecutive_ws_count` globally; reset on non-ws). Lifted
+26B from 19/80 → 25/80. Bound at 16 bytes accommodates pretty-
+printed JSON indentation while rejecting the runaway.
+
+Same fix benefits any backend that hits an internal whitespace
+stall — generic constraint primitive.
