@@ -44,7 +44,39 @@
     onNextStep,
   }: Props = $props();
 
-  let blocks = $derived(parseAssistantContent(content));
+  // rAF-coalesce parse work. `parseAssistantContent` is O(n) over
+  // the full growing message string and is read transitively by
+  // `blocks`, `thinkBlocks`, `proseText` and `proseHtml`. At fast
+  // token rates several chunks can land in distinct microtasks
+  // within a single frame; only the latest one matters for the
+  // pixel that will be painted. We mirror `content` into
+  // `renderContent` on the next animation frame so the parse runs
+  // at most once per frame regardless of inbound chunk cadence.
+  //
+  // Streaming-complete safety: when `isStreaming` flips false the
+  // effect bypasses the coalesce and assigns synchronously so the
+  // formatted markdown branch reads the FINAL text in the same
+  // frame as the {#if isStreaming} swap above — otherwise the
+  // formatted prose would pop in one frame late.
+  let renderContent: string = $state("");
+  let coalesceScheduled = false;
+  // $effect.pre runs synchronously before DOM updates, so the first
+  // mount paints with `renderContent === content` (not the empty
+  // initial). Subsequent re-runs track `content` reactively.
+  $effect.pre(() => {
+    const next = content;
+    if (!isStreaming) {
+      renderContent = next;
+      return;
+    }
+    if (coalesceScheduled) return;
+    coalesceScheduled = true;
+    requestAnimationFrame(() => {
+      renderContent = content;
+      coalesceScheduled = false;
+    });
+  });
+  let blocks = $derived(parseAssistantContent(renderContent));
 
   // Separate think blocks from prose content. Prose blocks are merged
   // and rendered as a single markdown document so headings, lists, and
@@ -317,11 +349,24 @@
       class:prose-refining={refining}
       onclick={handleProseClick}
     >
-      {#key content}
-        <div class="prose-content-fade">
-          {@html proseHtml}
-        </div>
-      {/key}
+      {#if isStreaming}
+        <!-- During streaming we render plain text into a stable div so
+             the prose subtree is not torn down and re-mounted per word.
+             That tear-down + the `transform: translateY` fade animation
+             below were the cause of the streaming jank: every word
+             flipped the text into a GPU compositor layer, disabling
+             subpixel antialiasing and re-running marked.parse over the
+             full growing message. Plain text during the stream → the
+             formatted markdown swaps in once on completion via the
+             {#key content} block below. -->
+        <div class="prose-streaming">{proseText}</div>
+      {:else}
+        {#key content}
+          <div class="prose-content-fade">
+            {@html proseHtml}
+          </div>
+        {/key}
+      {/if}
     </div>
   {/if}
 
@@ -447,9 +492,22 @@
   }
 
   /* Fade-in for refined content — fires every time {#key content}
-     remounts the inner div, including the post-refine swap. */
+     remounts the inner div, including the post-refine swap. Only
+     reached on the non-streaming branch in the template above, so
+     the translateY transform never engages mid-stream (which is
+     what was disabling subpixel antialiasing per word). */
   .prose-content-fade {
     animation: refine-fade-in 0.45s ease-out;
+  }
+
+  /* Streaming branch — no animation, no transform, stable subtree.
+     Text content is updated in place via Svelte's reactive update
+     so the WebView keeps the layer on the document plane (subpixel
+     AA preserved) instead of promoting it to a GPU compositor
+     layer per word. Inherits typography from `.sv-prose`. */
+  .prose-streaming {
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
 
   @keyframes refine-fade-in {

@@ -1219,6 +1219,10 @@
     padding: 24px 32px 16px;
     display: flex;
     flex-direction: column;
+    /* Isolate from the input row below — typing into the textarea
+       must not trigger a paint cycle over the entire message
+       column. */
+    contain: layout paint style;
   }
 
   /* ── Empty state ── */
@@ -1330,12 +1334,22 @@
     padding: 12px 20px 16px;
     border-top: 1px solid var(--border-mid);
     background: var(--bg-secondary);
+    /* Paint containment — tells the browser this subtree's
+       layout/style/paint cannot affect the messages column above
+       and vice versa. Without it WebKitGTK invalidates a much
+       larger area on every keystroke than it needs to. The
+       contain spec excludes `size` so the row still flexes its
+       parent to fit growing content. */
+    contain: layout paint style;
   }
 
   .input-row {
     display: flex;
     gap: 8px;
     align-items: flex-end;
+    /* Same reasoning — keystrokes only invalidate this row, not
+       the surrounding banners or hints. */
+    contain: layout paint style;
   }
 
   .attach-btn {
@@ -1406,7 +1420,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    /* Specific transitions only — `transition: all` causes WebKitGTK
+       to track every animatable property and ran a paint cycle for
+       this button (and its siblings) on every keystroke in the
+       adjacent textarea, even though no property was actually
+       changing. The `disabled` flip just snaps now. */
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
   }
 
   .search-btn:hover:not(:disabled) {
@@ -1432,7 +1451,8 @@
     gap: 4px;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s;
+    /* See .search-btn — specific transitions only. */
+    transition: background 0.2s, border-color 0.2s;
     position: relative;
   }
 
