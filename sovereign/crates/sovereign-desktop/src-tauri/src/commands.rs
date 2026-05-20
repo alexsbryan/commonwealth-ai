@@ -1049,11 +1049,48 @@ pub async fn submit_information_response(
         .await)
 }
 
+/// Per-source provenance row returned to the desktop when the search
+/// affordance succeeds. The frontend stashes the list on the message
+/// that's about to be refined so the post-refine bubble can render
+/// "Augmented via web search: <query> (N sources)" with each URL
+/// clickable. Mirrors `SearchResult` minus the snippet, which the
+/// model already absorbs through the formatted-results paste.
+#[derive(Serialize, Clone)]
+pub struct SearchAugmentationSource {
+    pub title: String,
+    pub url: String,
+}
+
+/// What `submit_information_search` returns when the search succeeds
+/// AND the runtime accepts the resolution. The frontend correlates
+/// this with the next `message-refined` event for the same
+/// conversation to attach search provenance to the refined bubble.
+#[derive(Serialize, Clone)]
+pub struct SearchAugmentation {
+    pub query: String,
+    pub backend_id: String,
+    pub sources: Vec<SearchAugmentationSource>,
+    /// Whether the runtime accepted the resolution. `false` here
+    /// means the channel was already resolved between the
+    /// `has_pending_information` probe and the resolve call (rare
+    /// race — the frontend should ignore the augmentation in that
+    /// case rather than render orphaned provenance).
+    pub accepted: bool,
+}
+
 /// Resolve a pending information-request by running a web search and
 /// feeding the formatted results back as if the user had pasted them.
 /// Powers the InformationRequest "Search the web" affordance — the
 /// user is operator-vouching that the search itself is acceptable
 /// evidence for re-synthesis, mirroring the paste flow's contract.
+///
+/// Returns `SearchAugmentation` on success so the frontend can render
+/// the search provenance on the refined bubble; the runtime itself
+/// still sees an `Option<String>` (the formatted paste-shaped block)
+/// and runs the existing post-stream refinement path. Splitting the
+/// metadata out as a Tauri return value avoids changing the
+/// `ApprovalChannel` trait or the runtime's refinement contract
+/// just to surface "this refine was search-sourced" in the UI.
 ///
 /// Builds a fresh `SearchOrchestrator` per call from the persisted
 /// `config.search_backend`. This mirrors `state.rs` build-tools
@@ -1072,7 +1109,7 @@ pub async fn submit_information_search(
     state: State<'_, Arc<AppState>>,
     key: String,
     query: String,
-) -> Result<bool, String> {
+) -> Result<SearchAugmentation, String> {
     use sovereign_tools::web::search::{
         BraveBackendImpl, BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator,
         SearchPrivacy, SelectInputs, TavilyBackendImpl, WebSearchBackend,
@@ -1087,7 +1124,7 @@ pub async fn submit_information_search(
     if !state.approval.has_pending_information(&key).await {
         // Stale submission — the request was already resolved
         // (paste / skip / timed out). Don't spend a search budget.
-        return Ok(false);
+        return Err("no pending information request for this key".to_string());
     }
 
     let config_snapshot = state.config.read().await.clone();
@@ -1168,10 +1205,24 @@ pub async fn submit_information_search(
         formatted.push('\n');
     }
 
-    Ok(state
+    let sources: Vec<SearchAugmentationSource> = out
+        .results
+        .iter()
+        .map(|r| SearchAugmentationSource {
+            title: r.title.clone(),
+            url: r.url.clone(),
+        })
+        .collect();
+    let accepted = state
         .approval
         .submit_information_response(&key, Some(formatted))
-        .await)
+        .await;
+    Ok(SearchAugmentation {
+        query: query.to_string(),
+        backend_id: out.backend_id,
+        sources,
+        accepted,
+    })
 }
 
 /// Trigger memory extraction on a finished inner-work conversation.

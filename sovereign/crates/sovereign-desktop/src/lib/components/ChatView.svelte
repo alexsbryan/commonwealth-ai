@@ -503,7 +503,14 @@
           messageId: p.message_id,
           newContent: p.new_content,
         });
-        scrollToBottom();
+        // Targeted scroll: the refined message may not be at the
+        // bottom of the conversation (the user could be reviewing a
+        // multi-turn chat and have triggered search-now on an
+        // earlier turn). `scrollToBottom` would skip past the
+        // updated bubble in that case. `scrollToMessage` falls
+        // through to `scrollToBottom` when the element isn't
+        // findable (just-deleted, hydration race, etc.).
+        scrollToMessage(p.message_id);
       },
     );
   });
@@ -932,6 +939,31 @@
       }
     });
   }
+
+  /// Scroll a specific assistant bubble into view by its message id.
+  /// Used after MESSAGE_REFINED so the user sees the updated content
+  /// even when the refined message isn't the last one in the chat
+  /// (e.g. they triggered search-now on an earlier turn after
+  /// scrolling up). Two rAFs deep: the first waits for Svelte to
+  /// re-render the new content (the {#key content} block in
+  /// AssistantMessage tears down + remounts the prose subtree on
+  /// content swap), the second runs after the new DOM has laid out
+  /// so scrollIntoView lands on the final position.
+  ///
+  /// Falls through to `scrollToBottom` when the element isn't in
+  /// the DOM (just-deleted, conversation switch race, etc.).
+  function scrollToMessage(id: string) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-message-id="${id}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          scrollToBottom();
+        }
+      });
+    });
+  }
 </script>
 
 <div class="chat-view">
@@ -983,6 +1015,8 @@
           messageId={msg.id}
           conversationId={activeConversationId ?? ""}
           isStreaming={msg.id === streamingMessageId}
+          refining={msg.refining}
+          searchAugmentation={msg.searchAugmentation}
           onNextStep={handleNextStep}
         />
       {/each}
@@ -994,6 +1028,34 @@
       <InformationRequestCard
         request={pendingInfoRequest}
         onHandled={() => send({ type: "CLEAR_INFO" })}
+        onRefiningStarted={() => {
+          // The to-be-refined message is the most recent COMPLETED
+          // assistant bubble. Skip any in-flight streaming bubble
+          // (refinement is a post-stream concept) — the same
+          // discipline MESSAGE_REFINED's guard enforces.
+          const target = [...messages]
+            .reverse()
+            .find(
+              (m) =>
+                m.role === "assistant" && m.id !== streamingMessageId,
+            );
+          if (target) send({ type: "MESSAGE_REFINING", messageId: target.id });
+        }}
+        onSearchAugmented={(augmentation) => {
+          const target = [...messages]
+            .reverse()
+            .find(
+              (m) =>
+                m.role === "assistant" && m.id !== streamingMessageId,
+            );
+          if (target) {
+            send({
+              type: "SEARCH_AUGMENTED",
+              messageId: target.id,
+              augmentation,
+            });
+          }
+        }}
       />
 
       <!-- Antifragile-routing UI. All three read from `routingStore`
