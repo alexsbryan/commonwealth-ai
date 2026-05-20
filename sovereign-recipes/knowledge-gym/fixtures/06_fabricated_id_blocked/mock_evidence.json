@@ -1,0 +1,24 @@
+{
+  "query": "evidence enumeration test",
+  "evidence": [
+    {
+      "id": "ev-T0-0000",
+      "source_kind": "corpus",
+      "source_id": "test-corpus::row-a",
+      "title": "First evidence row",
+      "content": "This is the first of two evidence rows the tool returned. The model should cite this row by [ev-T0-0000] when referring to it.",
+      "confidence": 0.92,
+      "retrieval_context": "corpus chunk (score 0.92)"
+    },
+    {
+      "id": "ev-T0-0001",
+      "source_kind": "corpus",
+      "source_id": "test-corpus::row-b",
+      "title": "Second evidence row",
+      "content": "This is the second and final evidence row. The model should cite this row by [ev-T0-0001] when referring to it. Any other ev-Tn-NNNN id the model emits is fabrication.",
+      "confidence": 0.88,
+      "retrieval_context": "corpus chunk (score 0.88)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 2, "memory": 0, "note": 0 }
+}
