@@ -2196,6 +2196,29 @@ fn ingest_progress_to_payload(
                 pretty_count(*current_chunks)
             )),
         },
+        IngestProgress::Enriching {
+            phase,
+            detail,
+            fraction,
+        } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            // Prefix with `enriching_` so frontend selectors can
+            // distinguish enrichment sub-phases from the embed/index
+            // phases above. The full sub-phase token (e.g.
+            // `skeleton-extraction`, `clustering`,
+            // `cluster-labeling-complete`) is carried verbatim so
+            // the UI can render specific copy without parsing
+            // `detail`.
+            phase: format!("enriching_{phase}"),
+            // Fraction lands on the bar when the underlying phase
+            // reports it (Phase 1b batch progress, clustering
+            // milestones). Otherwise 0% — the UI is expected to
+            // show a spinner-mode rendering when phase is
+            // `enriching_*`.
+            percent: fraction.map(|f| (f * 100.0).clamp(0.0, 100.0)).unwrap_or(0.0),
+            chunks_processed: 0,
+            message: Some(detail.clone()),
+        },
         IngestProgress::Complete {
             total_chunks,
             duration_secs,
@@ -3507,6 +3530,11 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
             "complete".to_string(),
             *total_chunks,
             Some(format!("Done in {duration_secs}s")),
+        ),
+        Some(P::Enriching { phase, detail, .. }) => (
+            format!("enriching_{phase}"),
+            0,
+            Some(detail.clone()),
         ),
         None => {
             // No IngestProgress event yet this session — this is the

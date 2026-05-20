@@ -1815,9 +1815,15 @@ impl CorpusEngine {
     /// single-shard rename.
     pub fn finalise_solo_ingest(&self, corpus_id: &str) -> Result<bool> {
         let canonical = self.index_dir.join(corpus_id);
-        if canonical.exists() {
-            // Canonical already present (previous solo finalise, or
-            // merge leader already finished). Nothing to do.
+        // The "canonical Lance is already finalized" marker is the
+        // `_corpus_meta.json` sidecar that ingest writes on
+        // completion, not directory existence — the SCIP reindexer
+        // creates `<corpus>/scip_graph.db` early in its lifecycle, so
+        // the parent dir is typically present long before Lance has
+        // landed. Checking directory existence here used to make
+        // every solo ingest into a SCIP-pre-populated dir return
+        // `Ok(false)` and silently strand the partition.
+        if canonical.join("_corpus_meta.json").exists() {
             return Ok(false);
         }
 

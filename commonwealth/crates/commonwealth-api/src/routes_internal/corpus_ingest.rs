@@ -436,6 +436,12 @@ fn progress_fraction(progress: &corpus_engine::IngestProgress) -> Option<f32> {
         // doesn't snap from full back to empty between Indexing and
         // Complete during an expansion.
         P::OptimizingIndex { .. } => Some(0.5),
+        // Enrichment phase events surface a sub-fraction when the
+        // underlying phase reports one (Phase 1b batches, clustering
+        // milestone). Otherwise we leave it None — the desktop falls
+        // back to the per-phase label rather than rendering a static
+        // bar position.
+        P::Enriching { fraction, .. } => *fraction,
         P::Complete { .. } => Some(1.0),
         _ => None,
     }

@@ -2874,6 +2874,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     let mut tools = sovereign_core::ToolRegistry::new();
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&engine),
+        Arc::clone(&merged_graph),
     )));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&engine)),

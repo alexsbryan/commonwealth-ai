@@ -1486,6 +1486,28 @@ fn ingest_progress_to_local(
             phase_label: "Optimizing search index".into(),
             current_file: None,
         },
+        Enriching { detail, fraction, .. } => {
+            // Post-embed enrichment phases (entity extraction,
+            // clustering, atlas build). `detail` carries the
+            // human-readable phase label the daemon already emits to
+            // stderr; we surface it verbatim so the UI's local-corpus
+            // surface tells the same story as the daemon log.
+            //
+            // Done/total are pulled from the optional fraction when
+            // the underlying phase reports one. Otherwise we set
+            // total=0 so the UI falls back to spinner-mode rather
+            // than rendering a 0% progress bar.
+            let (done, total) = match fraction {
+                Some(f) => ((f * 100.0).round() as u64, 100u64),
+                None => (0, 0),
+            };
+            LocalCorpusProgress::Ingesting {
+                done,
+                total,
+                phase_label: detail,
+                current_file: None,
+            }
+        }
         Complete {
             total_chunks,
             duration_secs,

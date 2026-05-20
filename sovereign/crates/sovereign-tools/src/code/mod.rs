@@ -383,27 +383,6 @@ fn extract_code_rows(batch: &RecordBatch, corpus_id: &str, out: &mut Vec<CodeRow
     }
 }
 
-/// Format a set of `CodeRow` values as fenced code blocks with a header
-/// comment per block. Shared by `SymbolLookupTool` and `CodeSearchTool` so
-/// the output shape is consistent across the two tools.
-pub(crate) fn format_code_rows(rows: &[CodeRow]) -> String {
-    rows.iter()
-        .map(|r| {
-            format!(
-                "```{lang}\n// {file}:{start}-{end}  [{kind}]  ({corpus})\n{content}\n```",
-                lang = r.language,
-                file = r.file_path,
-                start = r.line_start + 1, // 1-indexed display
-                end = r.line_end + 1,
-                kind = r.symbol_kind,
-                corpus = r.corpus_id,
-                content = r.content,
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n")
-}
-
 /// Group code rows by `file_path` preserving insertion order. Used by
 /// `RecentChangesTool` to print `file → symbols` buckets.
 pub(crate) fn group_by_file(rows: &[CodeRow]) -> Vec<(String, Vec<&CodeRow>)> {

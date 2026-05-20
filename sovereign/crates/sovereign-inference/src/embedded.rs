@@ -754,7 +754,59 @@ impl ModelSlot {
             && slot_ctx.mtp_session.is_some()
             && request.tools.as_ref().is_none_or(|t| t.is_empty())
         {
-            return Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks);
+            // Try MTP. On prefill-decode failure, quarantine MTP for
+            // this slot's lifetime and fall through to single-token
+            // decode. The fallback is self-healing without bench-side
+            // intervention: chat traffic auto-recovers, batched
+            // workloads (entity_extraction, atlas Phase 1b) finish
+            // their run on the non-MTP path.
+            //
+            // Failure mode this catches: observed 2026-05-20 on
+            // conversations-anthropic ingest, the Qwopus3.5-9B-MTP
+            // slot failed every Phase 1b batch after the first with
+            // `MTP prefill decode failed: Decode Error -3: unknown`.
+            // First call succeeded; all subsequent calls failed at
+            // prefill. The MtpSession rebuild + common_speculative_init
+            // cycle isn't idempotent across reused contexts under
+            // repeated short-prompt calls — upstream-side bug we
+            // can't reach from Rust. Quarantining the slot's MTP
+            // turns the 99.96% loss into a non-issue (single-token
+            // decode is ~10% slower than MTP, still serves traffic).
+            //
+            // The quarantine is per-slot, per-process: operator
+            // restart restores MTP. Add the env var
+            // `SOVEREIGN_MTP_QUARANTINE_DISABLE=1` to opt out
+            // (debugging MTP-stability work).
+            match Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks) {
+                Ok(r) => return Ok(r),
+                Err(e) => {
+                    let msg = e.to_string();
+                    let is_prefill_error = msg.contains("MTP prefill decode failed")
+                        || msg.contains("MTP prefill batch add failed");
+                    let quarantine_disabled = std::env::var("SOVEREIGN_MTP_QUARANTINE_DISABLE")
+                        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false);
+                    if is_prefill_error && !quarantine_disabled {
+                        tracing::warn!(
+                            model_id = %model_id,
+                            error = %msg,
+                            "MTP prefill failed — quarantining MTP on this slot and \
+                             falling through to single-token decode. Restart the daemon \
+                             to re-enable; set SOVEREIGN_MTP_QUARANTINE_DISABLE=1 to \
+                             surface the error instead."
+                        );
+                        // Drop the MTP session — generate_sync's
+                        // re-entrant call below now skips the MTP
+                        // branch above (mtp_session is None). The
+                        // draft_ctx stays resident; harmless, just
+                        // unused for the rest of this slot's life.
+                        slot_ctx.mtp_session = None;
+                        // Fall through to the non-MTP path below.
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
         }
 
         // Capability gate: the prefix-cache partial-keep path

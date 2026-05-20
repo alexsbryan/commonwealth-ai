@@ -951,8 +951,22 @@ async fn async_main() {
     // Code Intelligence tools — active as soon as any code corpus is
     // indexed via `sovereign code index`. They always register; with no
     // code corpora they return "no results" honestly rather than failing.
+    // SymbolLookupTool now reads SCIP directly, so build an empty
+    // in-memory graph here — projects/daemon callers attach a real
+    // merged handle via the dedicated `project serve` / `daemon`
+    // entry points. The CLI's `chat` path is a thin shell, not a
+    // long-running daemon, so a stubbed graph is honest: callers
+    // that need real SCIP go through `sovereign chat` /
+    // `sovereign daemon`, which wire it up properly.
+    let symbols_graph: sovereign_tools::ScipGraphHandle = Arc::new(
+        arc_swap::ArcSwap::from_pointee(
+            corpus_engine::ScipGraph::open_in_memory("cli-stub")
+                .expect("in-memory ScipGraph for CLI"),
+        ),
+    );
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
+        Arc::clone(&symbols_graph),
     )));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))

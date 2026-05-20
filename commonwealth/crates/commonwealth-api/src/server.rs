@@ -226,6 +226,14 @@ pub fn internal_router(state: AppState) -> Router {
             "/internal/contribution/recent",
             get(routes_internal::contribution_recent),
         )
+        // Dimensional per-node ledger view (Mesh Health Members panel).
+        // Read-only aggregation over the default 30-day window. Attach-
+        // mode desktops hit this so they can render Members without an
+        // in-process AppState.
+        .route(
+            "/internal/contribution/view",
+            get(routes_internal::contribution_view),
+        )
         // Foreground-yield introspection — read-only snapshot of the
         // atomics that decide whether ingest workers are pausing for
         // chat. No POST: the window is configured at startup via

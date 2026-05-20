@@ -1342,3 +1342,98 @@ pub async fn contribution_recent(
     events.truncate(limit);
     Ok(Json(RecentContributionsResponse { events }))
 }
+
+// ── Dimensional per-node contributions (Mesh Health Members panel) ──
+//
+// Mirror of the Tauri-side `NodeContributionsDto` the desktop's
+// `mesh_get_contributions` returns in Local mode. Field names are
+// frozen — the desktop deserializes against this exact shape in
+// Attach mode, so renaming a field here without updating the
+// desktop side blanks the Members ledger.
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CorpusHostingView {
+    pub corpus_id: String,
+    pub corpus_name: String,
+    pub size_gb: f64,
+    pub queries_served: u64,
+    pub is_sole_host: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NodeContributionsView {
+    pub node_id: String,
+    pub window_days: u32,
+    pub inference_served_requests: u64,
+    pub inference_served_tokens: u64,
+    pub inference_served_wall_seconds: f64,
+    pub inference_consumed_requests: u64,
+    pub inference_consumed_tokens: u64,
+    pub corpora_hosted: Vec<CorpusHostingView>,
+    pub bytes_served: u64,
+    pub bytes_received: u64,
+}
+
+/// `GET /internal/contribution/view` — aggregated per-node contributions
+/// over the default 30-day window, one entry per peer the local
+/// MeshStore has ledger events about. Powers the Mesh → Members
+/// section of the desktop Settings panel in Attach mode, where the
+/// Tauri shell can't reach the daemon's in-process `AppState`
+/// directly.
+pub async fn contribution_view(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<NodeContributionsView>>, (StatusCode, String)> {
+    let caps_map: std::collections::HashMap<
+        NodeId,
+        commonwealth_core::capabilities::NodeCapabilities,
+    > = {
+        let mesh_view = state.inner.mesh.read().await;
+        mesh_view
+            .members
+            .iter()
+            .map(|(id, member)| (id.clone(), member.capabilities.clone()))
+            .collect()
+    };
+    let map = commonwealth_state::current_contributions(
+        &state.inner.mesh_store,
+        &caps_map,
+        commonwealth_core::contributions::DEFAULT_WINDOW_DAYS,
+    )
+    .map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("contribution_view: aggregate failed: {e}"),
+        )
+    })?;
+    let mut out: Vec<NodeContributionsView> = map
+        .into_iter()
+        .map(|(node_id, c)| NodeContributionsView {
+            node_id: node_id
+                .as_bytes()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect(),
+            window_days: c.window_days,
+            inference_served_requests: c.inference_served.requests,
+            inference_served_tokens: c.inference_served.total_tokens_generated,
+            inference_served_wall_seconds: c.inference_served.wall_seconds,
+            inference_consumed_requests: c.inference_consumed.requests,
+            inference_consumed_tokens: c.inference_consumed.total_tokens_generated,
+            corpora_hosted: c
+                .corpora_hosted
+                .into_iter()
+                .map(|h| CorpusHostingView {
+                    corpus_id: h.corpus_id,
+                    corpus_name: h.corpus_name,
+                    size_gb: h.size_gb,
+                    queries_served: h.queries_served,
+                    is_sole_host: h.is_sole_host,
+                })
+                .collect(),
+            bytes_served: c.bytes_served,
+            bytes_received: c.bytes_received,
+        })
+        .collect();
+    out.sort_by(|a, b| a.node_id.cmp(&b.node_id));
+    Ok(Json(out))
+}

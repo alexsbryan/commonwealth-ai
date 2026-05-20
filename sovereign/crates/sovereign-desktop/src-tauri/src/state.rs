@@ -1358,17 +1358,11 @@ pub async fn bootstrap_with_progress(
             Ok(notes_store) => {
                 let notes = Arc::new(notes_store);
                 let mut mcp_tools = ToolRegistry::new();
-                // Code-intel tools — reuse the already-loaded CorpusEngine.
-                mcp_tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-                    Arc::clone(&corpus_engine),
-                )));
-                mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(
-                    Arc::clone(&corpus_engine),
-                )));
-                mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-                    Arc::clone(&corpus_engine),
-                )));
                 // Call-graph tools with initial merged SCIP state.
+                // Built before the code-intel tools below so
+                // `SymbolLookupTool` can share the same handle —
+                // exact-name lookup now reads from SCIP rather than
+                // the Lance chunk projection.
                 let initial_graph = corpus_engine::ScipGraph::open_in_memory("merged")
                     .expect("in-memory ScipGraph for MCP call-graph tools");
                 if let Ok(rd) = std::fs::read_dir(&indexes_dir) {
@@ -1384,6 +1378,17 @@ pub async fn bootstrap_with_progress(
                 }
                 let graph_handle: sovereign_mesh::reindexer::ScipGraphHandle =
                     Arc::new(arc_swap::ArcSwap::from_pointee(initial_graph));
+                // Code-intel tools — reuse the already-loaded CorpusEngine.
+                mcp_tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+                    Arc::clone(&corpus_engine),
+                    Arc::clone(&graph_handle),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(
+                    Arc::clone(&corpus_engine),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
+                    Arc::clone(&corpus_engine),
+                )));
                 let hc = Arc::new(sovereign_tools::IndexHealthChecker::new(
                     Arc::clone(&graph_handle),
                 ));
@@ -1652,9 +1657,33 @@ pub async fn bootstrap_with_progress(
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
-    // Code Intelligence tools.
+    // Code Intelligence tools. Build the merged SCIP handle first so
+    // SymbolLookupTool can share it — exact-name lookup now reads
+    // SCIP directly (Lance kept only embeddings/content/mtime).
+    // `indexes_dir` was moved into `CorpusEngine::new` above; we have
+    // to re-derive the path from `home` rather than reuse the binding.
+    let indexes_dir_for_scip = home.join(".sovereign").join("indexes");
+    let symbols_graph = {
+        let merged = corpus_engine::ScipGraph::open_in_memory("merged")
+            .expect("in-memory ScipGraph for symbols lookup");
+        if let Ok(rd) = std::fs::read_dir(&indexes_dir_for_scip) {
+            for de in rd.flatten() {
+                if !de.path().is_dir() {
+                    continue;
+                }
+                let scip_path = de.path().join("scip_graph.db");
+                if scip_path.exists() {
+                    let _ = merged.import_from_path(&scip_path).await;
+                }
+            }
+        }
+        let handle: sovereign_mesh::reindexer::ScipGraphHandle =
+            Arc::new(arc_swap::ArcSwap::from_pointee(merged));
+        handle
+    };
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
+        Arc::clone(&symbols_graph),
     )));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))

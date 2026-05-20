@@ -1706,25 +1706,29 @@ async fn build_tool_registry(
 
     let mut tools = ToolRegistry::new();
 
+    // Call-graph tools. Merge every `scip_graph.db` under the indexes
+    // directory into a single in-memory graph, then register
+    // find_callers / find_callees / blast_radius. Without this step
+    // agents can't trace references through the daemon — project_serve
+    // had these, the daemon didn't.
+    //
+    // The graph also backs `symbols`/exact-name lookup, so build it
+    // BEFORE registering the code-intel tools below.
+    let merged_graph = build_merged_scip_graph(&indexes_dir).await;
+    let graph_handle: sovereign_tools::ScipGraphHandle =
+        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(merged_graph));
+
     // Code intelligence — scoped to discovered corpora under indexes_dir.
-    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(Arc::clone(
-        &engine,
-    ))));
+    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+        Arc::clone(&engine),
+        Arc::clone(&graph_handle),
+    )));
     tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
         &engine,
     ))));
     tools.register(Box::new(sovereign_tools::RecentChangesTool::new(Arc::clone(
         &engine,
     ))));
-
-    // Call-graph tools. Merge every `scip_graph.db` under the indexes
-    // directory into a single in-memory graph, then register
-    // find_callers / find_callees / blast_radius. Without this step
-    // agents can't trace references through the daemon — project_serve
-    // had these, the daemon didn't.
-    let merged_graph = build_merged_scip_graph(&indexes_dir).await;
-    let graph_handle: sovereign_tools::ScipGraphHandle =
-        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(merged_graph));
     let health_checker = Arc::new(
         sovereign_tools::IndexHealthChecker::new(Arc::clone(&graph_handle)),
     );

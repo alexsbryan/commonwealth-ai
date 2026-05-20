@@ -432,6 +432,7 @@ mod tests {
         let mut registry = ToolRegistry::new();
         registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
             Arc::clone(&engine),
+            Arc::clone(&graph),
         )));
         registry.register(Box::new(sovereign_tools::CodeSearchTool::new(
             Arc::clone(&engine),
