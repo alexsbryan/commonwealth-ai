@@ -1499,7 +1499,13 @@ async fn mirror_to_setup_config(
         watched_folders: Default::default(),
     });
 
+    let cli_primary_before = cli.models.primary.clone();
+    let cli_fast_before = cli.models.fast.clone();
+    let cli_embed_before = cli.models.embed.clone();
+    let cli_data_before = cli.data.dir.clone();
+
     let mut changed = false;
+    let mut changed_fields: Vec<&'static str> = Vec::new();
     // Desktop's `model_path` is the operator's chosen fast slot; if it
     // differs from what we have, write it back as an explicit fast.
     // Comparing against fast_path() handles the subsumed case
@@ -1514,27 +1520,68 @@ async fn mirror_to_setup_config(
             Some(desktop.model_path.clone())
         };
         changed = true;
+        changed_fields.push("fast");
     }
     if let Some(p) = &desktop.primary_model_path {
         if &cli.models.primary != p {
             cli.models.primary = p.clone();
             changed = true;
+            changed_fields.push("primary");
         }
     }
     if let Some(e) = &desktop.embed_model_path {
         if &cli.models.embed != e {
             cli.models.embed = e.clone();
             changed = true;
+            changed_fields.push("embed");
         }
     }
     if cli.data.dir != desktop.data_dir {
         cli.data.dir = desktop.data_dir.clone();
         changed = true;
+        changed_fields.push("data_dir");
     }
 
     if changed {
-        cli.save()?;
-        tracing::info!("save_config: mirrored shared fields into SetupConfig");
+        tracing::info!(
+            fields = ?changed_fields,
+            new_primary = %cli.models.primary.display(),
+            new_fast = ?cli.models.fast.as_ref().map(|p| p.display().to_string()),
+            new_embed = %cli.models.embed.display(),
+            new_data_dir = %cli.data.dir.display(),
+            "save_config: mirroring DesktopConfig → SetupConfig"
+        );
+        match cli.save() {
+            Ok(path) => {
+                tracing::info!(
+                    target = %path.display(),
+                    "save_config: SetupConfig written to disk"
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "save_config: SetupConfig write FAILED — the desktop model \
+                     pick will not propagate to the daemon on next start"
+                );
+                return Err(e);
+            }
+        }
+    } else {
+        // Surface the no-op decision too — if the user reports
+        // "setting didn't sync" but mirror logs no-op, the bug is
+        // upstream (Settings UI didn't push the new field).
+        tracing::info!(
+            cli_primary = %cli_primary_before.display(),
+            cli_fast = ?cli_fast_before.as_ref().map(|p| p.display().to_string()),
+            cli_embed = %cli_embed_before.display(),
+            cli_data_dir = %cli_data_before.display(),
+            desktop_primary = ?desktop.primary_model_path.as_ref().map(|p| p.display().to_string()),
+            desktop_fast = %desktop.model_path.display(),
+            desktop_embed = ?desktop.embed_model_path.as_ref().map(|p| p.display().to_string()),
+            desktop_data_dir = %desktop.data_dir.display(),
+            "save_config: mirror no-op — all shared fields already match SetupConfig"
+        );
     }
     Ok(())
 }
@@ -1716,7 +1763,19 @@ pub async fn complete_setup(
     config.setup_complete = true;
 
     config.save()?;
+    // Mirror into `~/.sovereign/config.toml` so the CLI-side daemon
+    // sees the wizard's model picks. Without this, the wizard could
+    // complete but the daemon at next start would read stale paths
+    // (or the bare defaults `sovereign setup` last wrote). Same
+    // best-effort + warn-log pattern as `save_config`.
+    let config_for_mirror = config.clone();
     drop(config);
+    if let Err(e) = mirror_to_setup_config(&config_for_mirror).await {
+        tracing::warn!("complete_setup: could not mirror to SetupConfig: {e}");
+    }
+    if let Err(e) = request_daemon_reload().await {
+        tracing::warn!("complete_setup: admin/reload failed: {e}");
+    }
 
     state::bootstrap(&state).await?;
 

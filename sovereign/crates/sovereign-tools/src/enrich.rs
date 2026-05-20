@@ -90,12 +90,94 @@ pub struct EnrichBuildOutcome {
     pub cancelled: bool,
 }
 
+/// Resolve the path to the `sovereign-cli` binary the runner should
+/// spawn. Honours `$SOVEREIGN_CLI` first (for ops who installed it
+/// somewhere non-standard), then walks a deterministic ladder of
+/// candidates so the desktop app works whether launched from a
+/// terminal (full `$PATH`) or from Finder (minimal `$PATH`):
+///
+/// 1. `$SOVEREIGN_CLI` env var (explicit override).
+/// 2. Sibling of the current executable — covers a packaged install
+///    where `sovereign-desktop` and `sovereign-cli` ship in the same
+///    bin dir.
+/// 3. `which sovereign-cli` (canonical PATH lookup).
+/// 4. `which sovereign` (the `~/.local/bin/sovereign` symlink the
+///    `sovereign-cli` README installs).
+/// 5. Workspace-relative `target/release/sovereign-cli` /
+///    `target/debug/sovereign-cli` ascended from `current_exe()` —
+///    dev-mode fallback when the desktop was `cargo run`'d from the
+///    workspace.
+///
+/// Returns `None` only when every candidate is missing; callers
+/// surface that as a clear "sovereign-cli not installed" error with
+/// remediation steps rather than the kernel's bare `ENOENT`.
+pub fn resolve_sovereign_cli() -> Option<PathBuf> {
+    if let Ok(v) = std::env::var("SOVEREIGN_CLI") {
+        let p = PathBuf::from(v);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            for name in ["sovereign-cli", "sovereign"] {
+                let sibling = parent.join(name);
+                if sibling.is_file() {
+                    return Some(sibling);
+                }
+            }
+            // Dev mode: `cargo run -p sovereign-desktop` puts the
+            // exe at `target/debug/sovereign-desktop`; ascend to the
+            // workspace root and look for `target/{release,debug}/
+            // sovereign-cli`.
+            let mut anc = parent;
+            for _ in 0..6 {
+                for profile in ["release", "debug"] {
+                    let cand = anc.join("target").join(profile).join("sovereign-cli");
+                    if cand.is_file() {
+                        return Some(cand);
+                    }
+                }
+                match anc.parent() {
+                    Some(up) => anc = up,
+                    None => break,
+                }
+            }
+        }
+    }
+    for name in ["sovereign-cli", "sovereign"] {
+        if let Ok(p) = which_on_path(name) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Minimal `which`-style lookup against `$PATH`. Returns the first
+/// executable file matching `name`. Hand-rolled rather than pulling
+/// the `which` crate just for two call sites — the loop is six lines.
+fn which_on_path(name: &str) -> std::io::Result<PathBuf> {
+    let path = std::env::var_os("PATH").ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "PATH unset")
+    })?;
+    for dir in std::env::split_paths(&path) {
+        let cand = dir.join(name);
+        if cand.is_file() {
+            return Ok(cand);
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("{name} not on PATH"),
+    ))
+}
+
 /// Configuration for a build invocation.
 ///
-/// `cli_path` overrides the default binary lookup (which
-/// searches `$PATH` for `sovereign-cli`). Tests point it at a
-/// fixture binary; the desktop passes `None` to use the
-/// installed CLI.
+/// `cli_path` overrides the default binary lookup (which uses
+/// [`resolve_sovereign_cli`]). Tests point it at a fixture binary;
+/// the desktop passes `None` to let the resolver walk its candidate
+/// ladder.
 #[derive(Debug, Clone, Default)]
 pub struct EnrichBuildConfig {
     pub cli_path: Option<PathBuf>,
@@ -125,10 +207,19 @@ pub async fn run_enrich_build(
     config: EnrichBuildConfig,
     progress: Option<EnrichProgressFn>,
 ) -> std::io::Result<EnrichBuildOutcome> {
-    let bin = config
-        .cli_path
-        .clone()
-        .unwrap_or_else(|| PathBuf::from("sovereign-cli"));
+    let bin = match config.cli_path.clone() {
+        Some(p) => p,
+        None => resolve_sovereign_cli().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "sovereign-cli not found. Tried $SOVEREIGN_CLI, the desktop's \
+                 sibling-binary dir, $PATH (`sovereign-cli` and `sovereign`), \
+                 and the workspace `target/{release,debug}/` paths. Build via \
+                 `cargo build --release -p sovereign-cli` and symlink it onto \
+                 $PATH, or set `SOVEREIGN_CLI=/abs/path/to/sovereign-cli`.",
+            )
+        })?,
+    };
 
     let mut cmd = Command::new(&bin);
     cmd.arg("enrich")
