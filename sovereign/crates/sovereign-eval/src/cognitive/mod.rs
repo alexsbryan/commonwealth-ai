@@ -37,6 +37,7 @@ pub struct SuiteOpts<'a> {
     pub temperature: f32,
     pub seed: u64,
     pub max_tokens: u32,
+    pub family_defaults: bool,
 }
 
 /// Run every item under `bank_root` (optionally filtered) and return
@@ -81,6 +82,7 @@ pub fn run_suite(opts: SuiteOpts<'_>) -> Result<Report> {
         seed: opts.seed,
         max_tokens: opts.max_tokens,
         workspace_root: opts.workspace_root,
+        family_defaults: opts.family_defaults,
     };
 
     let mut outcomes = Vec::with_capacity(filtered.len());

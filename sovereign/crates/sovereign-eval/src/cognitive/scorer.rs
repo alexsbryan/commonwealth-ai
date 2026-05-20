@@ -176,6 +176,36 @@ fn score_calibration(
         Ok(v) => v,
         Err(e) => return finish(base, false, format!("JSON parse failed: {e}")),
     };
+    // Boolean-judgment scoring (post-2026-05-20). The runner's
+    // response_format constrains Calibration emissions to carry an
+    // explicit boolean ahead of `confidence`. The boolean is the
+    // judgment carrier; confidence is auxiliary calibration signal.
+    //
+    // Two field-name eras kept side by side:
+    // - `claim_is_true` — current name (2026-05-20+). The
+    //   self-describing label avoids the conflation observed on
+    //   Qwen3.6, which interpreted `verdict: true` as "I assert my
+    //   rationale" rather than "the user's claim is true".
+    // - `verdict` — earlier name; kept as a fallback so prior
+    //   reports re-score correctly.
+    //
+    // The legacy Likert-threshold path below is the third fallback
+    // for reports that predate the boolean entirely.
+    let boolean_judgment = parsed
+        .get("claim_is_true")
+        .and_then(serde_json::Value::as_bool)
+        .or_else(|| parsed.get("verdict").and_then(serde_json::Value::as_bool));
+    if let Some(v) = boolean_judgment {
+        let hit = v == expected_truth;
+        let conf_str = match parsed.get(field) {
+            Some(serde_json::Value::Number(n)) => format!(" (confidence={n})"),
+            _ => String::new(),
+        };
+        let reason = format!(
+            "claim_is_true={v} expected={expected_truth}{conf_str}"
+        );
+        return finish(base, hit, reason);
+    }
     let conf = match parsed.get(field) {
         Some(serde_json::Value::Number(n)) => match n.as_u64() {
             Some(x) => x as u32,
@@ -461,6 +491,39 @@ mod tests {
     fn calibration_out_of_range_fails() {
         let r = score_calibration(base(), r#"{"confidence": 7}"#, true, "confidence", 4, 2);
         assert!(!r.passed);
+    }
+
+    #[test]
+    fn calibration_claim_is_true_overrides_confidence_for_judgment() {
+        // The 2026-05-20 Likert-conflation failure: rationale identifies
+        // the claim as false, but confidence=5 (model treats 5 as
+        // strength-of-conviction not likelihood-of-truth). With a
+        // boolean judgment field present, that field carries the
+        // judgment; confidence becomes auxiliary metadata.
+        let response = r#"{
+            "rationale": "claim is false; RSA cipher suites lack forward secrecy",
+            "claim_is_true": false,
+            "confidence": 5
+        }"#;
+        let r = score_calibration(base(), response, false, "confidence", 4, 2);
+        assert!(r.passed, "claim_is_true=false matches expected_truth=false, must pass despite high confidence");
+    }
+
+    #[test]
+    fn calibration_claim_is_true_mismatch_fails() {
+        let response = r#"{"rationale": "x", "claim_is_true": true, "confidence": 5}"#;
+        let r = score_calibration(base(), response, false, "confidence", 4, 2);
+        assert!(!r.passed);
+    }
+
+    #[test]
+    fn calibration_legacy_verdict_field_still_works() {
+        // Backward-compat: reports written before the rename
+        // (2026-05-20) used `verdict`. Scoring must still respect
+        // that label so old reports re-score correctly.
+        let response = r#"{"rationale": "x", "verdict": false, "confidence": 5}"#;
+        let r = score_calibration(base(), response, false, "confidence", 4, 2);
+        assert!(r.passed);
     }
 
     #[test]

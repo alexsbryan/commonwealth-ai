@@ -737,10 +737,23 @@ impl ModelSlot {
         // 2026-05-17 SEP-pipeline tuning and the bug doesn't affect
         // them.
         //
-        // TODO: this gate misses NON-MTP hybrids (e.g. Darwin
-        // family — Mamba+MoE, no MTP heads). Tracked separately for
-        // a metadata-driven detector (gguf arch == "mamba" / similar).
-        let prefix_cache_safe = slot_ctx.mtp_session.is_none();
+        // Non-MTP hybrid families (Qwen3.5/3.6 Gated DeltaNet,
+        // Mamba+MoE variants without MTP draft heads) hit the same
+        // recurrent-state bug — their gguf has recurrent layers but
+        // the slot was constructed without an MTP draft, so the MTP
+        // dispatch above doesn't catch them. We detect by model_id
+        // pattern (stopgap until the slot carries a gguf-arch field
+        // forwarded from llama.cpp's metadata). Confirmed 2026-05-20
+        // on Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX:
+        // every 2nd request failed `Decode Error -1: n_tokens == 0`
+        // at the post-cache tail decode; disabling partial-keep
+        // restored throughput.
+        //
+        // TODO (fix-queue): replace `is_recurrent_arch_by_name`
+        // with a gguf-metadata read at slot construction time, so
+        // the gate is data-driven (ARCH §6) instead of name-pattern.
+        let prefix_cache_safe = slot_ctx.mtp_session.is_none()
+            && !is_recurrent_arch_by_name(model_id);
 
         // Split-borrow the SlotContext's disjoint fields. The
         // function body uses both `ctx` (the LlamaContext) and
@@ -6404,6 +6417,67 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 ///
 /// Errors only when the prompt itself doesn't fit. That's a real
 /// "your input is too big" — no clamping can recover.
+/// Heuristic: is the gguf file stem from an architecture that has
+/// recurrent layers (Mamba / Gated DeltaNet / RWKV / hybrid SSM+MoE)?
+///
+/// Used by `generate_sync` to gate out the partial-keep prefix-cache
+/// path on these families — `clear_kv_cache_seq` doesn't rewind their
+/// recurrent state, so the subsequent tail-decode is rejected upstream
+/// with `Decode Error -1: n_tokens == 0`.
+///
+/// Name patterns are a stopgap — the real detector wants the gguf
+/// `general.architecture` field forwarded onto the slot at construction
+/// time. Tracked in the fix-queue ARCH §6 (data, not program) cleanup.
+pub(crate) fn is_recurrent_arch_by_name(model_id: &str) -> bool {
+    let lower = model_id.to_lowercase();
+    // Qwen 3.5 / 3.6 use Gated DeltaNet (recurrent component in the
+    // attention path). Empirically broken on partial-keep —
+    // 2026-05-20, Qwen3.6-35B-A3B every 2nd request failed.
+    if lower.contains("qwen3.5") || lower.contains("qwen3.6") {
+        return true;
+    }
+    // Explicit arch tokens in the gguf file name.
+    for marker in ["mamba", "deltanet", "rwkv", "ssm"] {
+        if lower.contains(marker) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod recurrent_arch_tests {
+    use super::is_recurrent_arch_by_name;
+
+    #[test]
+    fn flags_qwen36_a3b() {
+        assert!(is_recurrent_arch_by_name(
+            "Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX-I-Compact"
+        ));
+    }
+
+    #[test]
+    fn flags_qwen35_variants() {
+        assert!(is_recurrent_arch_by_name("Qwopus3.5-9B-Coder-MTP-Q6_K"));
+        assert!(is_recurrent_arch_by_name("Qwen3.5-base-Q6_K"));
+    }
+
+    #[test]
+    fn does_not_flag_pure_attention_families() {
+        assert!(!is_recurrent_arch_by_name("gemma-4-26B-A4B-it-UD-Q6_K_XL"));
+        assert!(!is_recurrent_arch_by_name("qwen-embedding-0.6b"));
+        assert!(!is_recurrent_arch_by_name("Llama-3.1-70B"));
+        assert!(!is_recurrent_arch_by_name("Qwen3-32B"));
+    }
+
+    #[test]
+    fn flags_explicit_arch_markers() {
+        assert!(is_recurrent_arch_by_name("any-Mamba-7B-fp16"));
+        assert!(is_recurrent_arch_by_name("RWKV-6.5-Q4_K"));
+        assert!(is_recurrent_arch_by_name("hybrid-SSM-MoE"));
+    }
+}
+
 pub(crate) fn clamp_max_tokens(
     requested: Option<usize>,
     prompt_tokens: usize,

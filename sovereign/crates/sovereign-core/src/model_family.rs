@@ -319,23 +319,41 @@ impl ModelFamily {
             // tuning didn't change between 3 and 4).
             ModelFamily::Gemma4 => ModelQuirks {
                 thinking: ThinkingControl::None,
+                // Default profile uses the model card's universal
+                // recommendation (T=1.0, top_p=0.95, top_k=64).
                 default_temperature:      1.0,
                 default_top_k:            Some(64),
                 default_top_p:            0.95,
                 default_presence_penalty: 0.0,
-                // llama-cpp tradition defaults for sampler-stage
-                // params not on this family's card.
                 default_min_p:              0.05,
                 default_repetition_penalty: 1.15,
                 default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
-                instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
-                code_presence_penalty: None,
+                // Per-mode tuning beyond the card. The card publishes
+                // one universal T=1.0 but in practice constrained
+                // tool / instruct work benefits from a tighter
+                // distribution. Observed 2026-05-19 on gemma-4-26B-A4B-it
+                // at the cognitive bank: T=1.0 left positional bias
+                // dominant on multi-choice and let whitespace tokens
+                // win on calibration. Tighter T trades distribution
+                // breadth for adherence to the schema/argument.
+                //
+                // Instruct = non-thinking general work (the cognitive
+                // bank's mode). Tighten T enough that the model's
+                // argument-content beats positional bias, but stay
+                // higher than greedy so multi-modal choices have
+                // sampling latitude.
+                instruct_temperature:      Some(0.7),
+                instruct_top_k:            Some(50),
+                instruct_top_p:            Some(0.95),
+                instruct_presence_penalty: Some(0.0),
+                // Code = composing structured emission. Tightest T —
+                // schema-constrained output benefits from low T to
+                // avoid sampling drift inside string bodies, JSON
+                // escape sequences, and TOML body lines.
+                code_temperature:      Some(0.4),
+                code_top_k:            Some(40),
+                code_top_p:            Some(0.95),
+                code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
             },
