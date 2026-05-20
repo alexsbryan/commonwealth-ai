@@ -2540,6 +2540,7 @@ mod tests {
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
             compacted_history: None,
+            tool_dossier: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -2576,6 +2577,7 @@ mod tests {
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
             compacted_history: None,
+            tool_dossier: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);

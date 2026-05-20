@@ -58,6 +58,12 @@ mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;
 mod rough_edges_cmd;
+// Shared gym-judge surface (FastInferenceJudge + Verdict +
+// calibration types). Extracted out of search_gym_cmd in the
+// Tool-Mastery framework Phase 4 so the knowledge-gym runner and
+// the wikipedia-learn per-thread judge can share one implementation.
+mod gym_judge;
+mod knowledge_gym_cmd;
 mod search_gym_cmd;
 mod serve_cmd;
 mod service_install;
@@ -210,6 +216,7 @@ const HELP: Help = Help {
             ("pipeline", "Generic ingestion driver — durable worklist + retry + pause-resume"),
             ("bench",   "Throughput + correctness benchmarks for enrichment LLM tasks"),
             ("search-gym", "Correctness harness for web-search-during-inference (mock-replay)"),
+            ("knowledge-gym", "Correctness harness for the unified knowledge_lookup tool (mock-replay)"),
             ("atlas",   "Atlas-style structural enrichment (Wikipedia link graph today)"),
             ("eval",    "Run a question bank against a corpus; measure retrieval quality"),
             ("tools",   "Invoke code-intelligence tools from the CLI (list / describe / call)"),
@@ -669,6 +676,11 @@ async fn async_main() {
             "search-gym" => {
                 util::tracing_init::init_tracing("sovereign_cli=info");
                 let code = search_gym_cmd::run_search_gym(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "knowledge-gym" => {
+                util::tracing_init::init_tracing("sovereign_cli=info");
+                let code = knowledge_gym_cmd::run_knowledge_gym(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "chat" => {

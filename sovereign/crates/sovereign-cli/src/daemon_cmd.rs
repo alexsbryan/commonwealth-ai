@@ -1838,6 +1838,14 @@ async fn build_tool_registry(
         )));
     }
 
+    // NOTE: knowledge_lookup (Tool-Mastery Phase 5) is wired in
+    // chat_cmd/bootstrap.rs where the `inference` + `store`
+    // handles are available. The daemon's MCP-only tool registry
+    // intentionally does not expose it — the unified knowledge
+    // envelope only makes sense inside an active chat
+    // conversation (the consumer is the model's synthesis path,
+    // not arbitrary MCP clients).
+
     // Notes tools work regardless of indexing state.
     tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
         &notes,

@@ -217,6 +217,7 @@ mod tests {
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
             compacted_history: None,
+            tool_dossier: None,
         };
 
         client.splice_landscape_digests(&mut ctx, None).await;
@@ -257,6 +258,7 @@ mod tests {
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
             compacted_history: None,
+            tool_dossier: None,
         };
 
         client.splice_landscape_digests(&mut ctx, None).await;

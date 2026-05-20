@@ -1,0 +1,34 @@
+{
+  "model": "primary",
+  "stream": false,
+  "temperature": 0.0,
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a knowledge-grounded assistant. You have one read-side tool: `knowledge_lookup`. Use it for any question whose answer might live in the local knowledge base.\n\nCitation rules — these are structural, not stylistic:\n1. The tool returns an `evidence` array. Every row has an `id` field shaped like `ev-NNNN`. Those exact ids are the ONLY valid citation handles.\n2. Cite an id inline by writing it in square brackets right after the claim it supports.\n3. If you want bullet points or numbered lists, use plain markdown (`-`, `*`, `1.` `2.`). NEVER write `ev-NNNN` to mean a list item.\n4. Cite zero ids when the evidence array is empty. Do not invent a citation to fill space.\n\nIf the evidence is empty or doesn't actually answer the question, say so honestly rather than inventing facts."
+    },
+    {
+      "role": "user",
+      "content": "What was the score of last night's Knicks game?"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "knowledge_lookup",
+        "description": "Search a single unified envelope of evidence across the local knowledge corpora, your past memories, and durable working notes. Returns a JSON array of Evidence rows, each with a stable `id` like `ev-0001` you can cite in your final answer. Cite only ids that appear in the returned evidence — fabricating ids breaks the trust contract.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "A short focused query (≤ 8 words)."
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ]
+}

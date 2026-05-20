@@ -989,6 +989,69 @@ pub struct ConversationContext {
     /// without a compacted anchor.
     #[serde(default)]
     pub compacted_history: Option<String>,
+    /// Tool-Mastery framework dossier: ambient context block listing
+    /// the tools narrowed for the active skill on this turn, the
+    /// recent tool-decision outcomes scoped to this conversation,
+    /// and (placeholder) workspace freshness signals. Populated by
+    /// `dossier::compute_tool_dossier` as a Fast-slot pre-pass and
+    /// spliced into the system message by `build_system_message`.
+    /// `None` on relational skills (inner-work) and when the active
+    /// skill hasn't been resolved (CLI / test harness paths).
+    #[serde(default)]
+    pub tool_dossier: Option<ToolDossier>,
+}
+
+/// Tool-Mastery dossier. Three sections per the Phase 3 plan:
+/// 1. Tools available this turn (from the narrowed catalog).
+/// 2. Outcome history this conversation (from `tool_decision` notes).
+/// 3. Ambient workspace state (lint/test freshness; placeholder for now).
+///
+/// Stored on `ConversationContext` so multiple call sites
+/// (`build_system_message` + the routing-footer renderer) can
+/// consume the same computed value without re-running the
+/// NoteStore read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDossier {
+    /// Resolved id of the active skill at the time the dossier was
+    /// computed — drives the per-skill "narrowed by" label in the
+    /// routing footer. `None` when no skill was active.
+    pub active_skill_id: Option<String>,
+    /// One entry per tool the model can call this turn. Carries the
+    /// canonical id + descriptor.description (no new asset — the
+    /// descriptors are the source of truth per ARCH §6.2).
+    pub tools_available: Vec<ToolDossierEntry>,
+    /// Recent tool-decision outcomes (`useful` / `stale` /
+    /// `wrong-tool` / `no-results`) scoped to this conversation.
+    /// Capped at `MAX_DOSSIER_OUTCOMES` (see `dossier.rs`).
+    pub outcome_history: Vec<ToolDossierOutcome>,
+    /// Ambient-workspace freshness signals. Phase-3 plan punt — left
+    /// as `None`; future PRs splice `lint_status` / `test_status`
+    /// here without touching this struct.
+    #[serde(default)]
+    pub ambient_state: Option<String>,
+}
+
+/// One row of `ToolDossier.tools_available`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDossierEntry {
+    pub tool_id: String,
+    pub description: String,
+}
+
+/// One row of `ToolDossier.outcome_history` — a frozen view of a
+/// past `ToolDecisionPayload` keyed to this conversation. Separate
+/// from the payload type so the splice format is stable even if the
+/// stored payload schema grows fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDossierOutcome {
+    pub tool_id: String,
+    /// Canonical wire-form: `"useful"` / `"stale"` / `"wrong-tool"`
+    /// / `"no-results"`. String here (not the enum) so this type
+    /// stays Serde-friendly without pulling the
+    /// `ToolDecisionOutcome` enum into the public types module.
+    pub outcome: String,
+    pub reasoning: String,
+    pub applied_at_unix: i64,
 }
 
 /// A pairwise tension between a prior memory the user expressed
@@ -2537,6 +2600,7 @@ mod knowledge_view_digest_tests {
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
             compacted_history: None,
+            tool_dossier: None,
         }
     }
 

@@ -1,0 +1,34 @@
+{
+  "model": "primary",
+  "stream": false,
+  "temperature": 0.0,
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a knowledge-grounded assistant. You have one read-side tool: `knowledge_lookup`.\n\nCitation rules — structural, not stylistic:\n1. The tool returns an `evidence` array. Each row has an `id` shaped `ev-NNNN`. Those exact ids are the ONLY valid citation handles.\n2. Cite by writing the id in square brackets right after the claim it supports.\n3. The number of evidence rows returned is exactly the number of unique handles you may cite. If the tool returns 2 rows, you have 2 unique handles to choose from — period.\n4. Reusing an id is fine when multiple claims rest on the same row. Inventing a new id to match your bullet count is fabrication.\n5. Example — evidence returned: `[{id: ev-0000}, {id: ev-0001}]`. Valid: `[ev-0000]`, `[ev-0001]`, `[ev-0000][ev-0001]`. INVALID: `[ev-0002]`, `[ev-0003]`, anything beyond the two returned ids.\n6. If the evidence array is empty, cite zero ids."
+    },
+    {
+      "role": "user",
+      "content": "What does the project mean by a 'situated agent'?"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "knowledge_lookup",
+        "description": "Search a single unified envelope of evidence across the local knowledge corpora, your past memories, and durable working notes. Returns a JSON array of Evidence rows, each with a stable `id` like `ev-0001` you can cite in your final answer. Cite only ids that appear in the returned evidence — fabricating ids breaks the trust contract.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "A short focused query (≤ 8 words)."
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ]
+}

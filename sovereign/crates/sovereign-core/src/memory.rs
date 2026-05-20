@@ -1,6 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::error::Result;
+use corpus_engine::{NoteScope, NoteSource, NoteStore};
+use serde::{Deserialize, Serialize};
+
+use crate::error::{Error, Result};
 use crate::skills::{MergedMemoryConfig, SkillRegister};
 use crate::traits::{InferenceProvider, MemoryScope, StateStore};
 use crate::types::*;
@@ -981,6 +984,141 @@ pub async fn save_with_contradiction_check(
     store.save_memory(&new_memory).await
 }
 
+// ─── Tool-decision memory (Tool-Mastery framework, Layer 3) ────
+
+/// Closed set of outcomes recorded when an agent's tool invocation
+/// resolves. Serialised via Serde's `kebab-case` rename so the
+/// on-disk JSON reads as `"useful"` / `"stale"` / `"wrong-tool"` /
+/// `"no-results"` — the same labels the dossier renders to the
+/// model. Closed-set discipline per ARCH §2.1 — no stringly-typed
+/// outcome elsewhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ToolDecisionOutcome {
+    /// Tool returned evidence the model used in its final answer.
+    Useful,
+    /// Tool returned evidence whose recency or coverage didn't fit
+    /// the question (e.g. corpus snapshot predates the asked-about
+    /// event). Drives the gap-check + INFORMATION REQUEST surface.
+    Stale,
+    /// Tool returned no usable evidence and the model picked the
+    /// wrong tool for the question shape. The dossier surfaces this
+    /// so the next turn's narrowed catalog can read past the
+    /// previous misfire.
+    WrongTool,
+    /// Tool returned an empty result set entirely. Distinct from
+    /// `Stale` — there's nothing in the index, not "the index is
+    /// behind the world."
+    NoResults,
+}
+
+impl ToolDecisionOutcome {
+    /// Canonical wire-form string. Stable across versions because the
+    /// dossier and any FTS lookups grep against these literal labels.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Useful => "useful",
+            Self::Stale => "stale",
+            Self::WrongTool => "wrong-tool",
+            Self::NoResults => "no-results",
+        }
+    }
+}
+
+/// Structured payload stored on every `tool_decision` note. The
+/// Layer 2 dossier deserialises a tail of these to render the
+/// "outcome history this conversation" section. `conversation_id`
+/// is optional so we can record decisions made outside a
+/// conversation (e.g. cron-driven enrichment runs); the dossier
+/// filters on it when present.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDecisionPayload {
+    pub tool_id: String,
+    pub outcome: ToolDecisionOutcome,
+    pub reasoning: String,
+    pub applied_at_unix: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
+}
+
+/// Persist a tool-decision outcome into the NoteStore. Returns the
+/// new note's id. `content` is a one-line human-readable summary so
+/// `sovereign tools call notes --kinds=tool_decision` is readable
+/// without parsing JSON; structured fields ride in `payload_json`
+/// so the dossier reader doesn't have to re-parse free text.
+pub async fn write_tool_decision(
+    notes: &NoteStore,
+    session_id: &str,
+    conversation_id: Option<&str>,
+    tool_id: &str,
+    outcome: ToolDecisionOutcome,
+    reasoning: &str,
+) -> Result<String> {
+    let payload = ToolDecisionPayload {
+        tool_id: tool_id.to_string(),
+        outcome,
+        reasoning: reasoning.to_string(),
+        applied_at_unix: now(),
+        conversation_id: conversation_id.map(str::to_string),
+    };
+    let payload_json = serde_json::to_string(&payload)?;
+    let content = format!("{tool_id} → {} — {reasoning}", outcome.as_str());
+    notes
+        .write_note_full(
+            "tool_decision",
+            &content,
+            vec![tool_id.to_string()],
+            vec![],
+            session_id,
+            NoteScope::Global,
+            None,
+            None,
+            NoteSource::Agent,
+            None,
+            Some(&payload_json),
+        )
+        .await
+        .map_err(|e| Error::Storage(e.to_string()))
+}
+
+/// Read recent tool-decision payloads. When `conversation_id` is
+/// `Some`, returns only decisions tagged with that conversation;
+/// `None` returns the global tail. Capped at `limit` items
+/// post-filter. Over-fetches by 4× when filtering by conversation
+/// so a sparse conversation still has a chance of returning
+/// `limit` matches without paging.
+pub async fn read_recent_tool_decisions(
+    notes: &NoteStore,
+    conversation_id: Option<&str>,
+    limit: usize,
+) -> Result<Vec<ToolDecisionPayload>> {
+    let fetch_cap = if conversation_id.is_some() {
+        limit.saturating_mul(4).max(limit).min(100)
+    } else {
+        limit.min(100)
+    };
+    let rows = notes
+        .read_notes(None, &[], &[], &["tool_decision".to_string()], fetch_cap, false)
+        .await
+        .map_err(|e| Error::Storage(e.to_string()))?;
+
+    let mut decisions: Vec<ToolDecisionPayload> = rows
+        .into_iter()
+        .filter_map(|row| {
+            row.payload_json
+                .as_deref()
+                .and_then(|p| serde_json::from_str::<ToolDecisionPayload>(p).ok())
+        })
+        .collect();
+
+    if let Some(cid) = conversation_id {
+        decisions.retain(|d| d.conversation_id.as_deref() == Some(cid));
+    }
+
+    decisions.truncate(limit);
+    Ok(decisions)
+}
+
 // ─── Tests ────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1514,5 +1652,152 @@ mod tests {
         let out = detect_temporal_tensions(&infer, "current", &mems).await.unwrap();
         // At most MAX_TENSION_CANDIDATES (5), regardless of memories supplied.
         assert!(out.len() <= MAX_TENSION_CANDIDATES);
+    }
+
+    // ─── tool_decision memory ─────────────────────────────────
+
+    async fn fresh_note_store() -> NoteStore {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("notes.db");
+        let store = NoteStore::open(&path).unwrap();
+        // Leak the tempdir so it outlives the store handle (each test
+        // builds its own; this isn't a daemon). Without this the
+        // tempdir drops at scope-exit and the underlying SQLite file
+        // is removed mid-test.
+        std::mem::forget(dir);
+        store
+    }
+
+    #[test]
+    fn tool_decision_outcome_serde_round_trip_matches_kebab_labels() {
+        for (variant, label) in [
+            (ToolDecisionOutcome::Useful, "useful"),
+            (ToolDecisionOutcome::Stale, "stale"),
+            (ToolDecisionOutcome::WrongTool, "wrong-tool"),
+            (ToolDecisionOutcome::NoResults, "no-results"),
+        ] {
+            let serialised = serde_json::to_string(&variant).unwrap();
+            assert_eq!(serialised, format!("\"{label}\""));
+            let deserialised: ToolDecisionOutcome = serde_json::from_str(&serialised).unwrap();
+            assert_eq!(deserialised, variant);
+            assert_eq!(variant.as_str(), label);
+        }
+    }
+
+    #[tokio::test]
+    async fn write_then_read_tool_decision_round_trips_payload() {
+        let store = fresh_note_store().await;
+
+        let id = write_tool_decision(
+            &store,
+            "sess-mem-1",
+            Some("conv-A"),
+            "knowledge_lookup",
+            ToolDecisionOutcome::NoResults,
+            "corpus has no entry for M5 Mac Studio",
+        )
+        .await
+        .unwrap();
+        assert!(!id.is_empty());
+
+        let recent = read_recent_tool_decisions(&store, Some("conv-A"), 10)
+            .await
+            .unwrap();
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].tool_id, "knowledge_lookup");
+        assert_eq!(recent[0].outcome, ToolDecisionOutcome::NoResults);
+        assert_eq!(recent[0].reasoning, "corpus has no entry for M5 Mac Studio");
+        assert_eq!(recent[0].conversation_id.as_deref(), Some("conv-A"));
+    }
+
+    #[tokio::test]
+    async fn read_recent_filters_by_conversation_id() {
+        let store = fresh_note_store().await;
+
+        write_tool_decision(
+            &store,
+            "sess-mem-2",
+            Some("conv-A"),
+            "knowledge_lookup",
+            ToolDecisionOutcome::Useful,
+            "found it in the wiki corpus",
+        )
+        .await
+        .unwrap();
+        write_tool_decision(
+            &store,
+            "sess-mem-2",
+            Some("conv-B"),
+            "search",
+            ToolDecisionOutcome::Stale,
+            "results pre-dated the asked-about announcement",
+        )
+        .await
+        .unwrap();
+        write_tool_decision(
+            &store,
+            "sess-mem-2",
+            None,
+            "search",
+            ToolDecisionOutcome::WrongTool,
+            "should have used knowledge_lookup",
+        )
+        .await
+        .unwrap();
+
+        let a = read_recent_tool_decisions(&store, Some("conv-A"), 10)
+            .await
+            .unwrap();
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0].tool_id, "knowledge_lookup");
+
+        let b = read_recent_tool_decisions(&store, Some("conv-B"), 10)
+            .await
+            .unwrap();
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].outcome, ToolDecisionOutcome::Stale);
+
+        let global = read_recent_tool_decisions(&store, None, 10).await.unwrap();
+        assert_eq!(global.len(), 3, "no conversation filter returns the tail");
+    }
+
+    #[tokio::test]
+    async fn read_recent_respects_limit() {
+        let store = fresh_note_store().await;
+        for i in 0..5 {
+            write_tool_decision(
+                &store,
+                "sess-mem-3",
+                Some("conv-X"),
+                "knowledge_lookup",
+                ToolDecisionOutcome::Useful,
+                &format!("decision {i}"),
+            )
+            .await
+            .unwrap();
+        }
+        let two = read_recent_tool_decisions(&store, Some("conv-X"), 2)
+            .await
+            .unwrap();
+        assert_eq!(two.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn read_recent_returns_empty_for_unknown_conversation() {
+        let store = fresh_note_store().await;
+        write_tool_decision(
+            &store,
+            "sess-mem-4",
+            Some("conv-real"),
+            "search",
+            ToolDecisionOutcome::Useful,
+            "found in corpus",
+        )
+        .await
+        .unwrap();
+        let none = read_recent_tool_decisions(&store, Some("conv-missing"), 10)
+            .await
+            .unwrap();
+        assert!(none.is_empty());
     }
 }

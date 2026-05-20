@@ -17,7 +17,7 @@
 
 use serde::Serialize;
 
-use super::judge::{Judge, Verdict};
+use crate::gym_judge::{Judge, Verdict};
 use super::predicate::Predicate;
 use super::runner::Transcript;
 
@@ -976,7 +976,7 @@ mod tests {
 
     #[tokio::test]
     async fn score_with_judge_passes_when_judge_passes() {
-        use super::super::judge::FixedVerdictJudge;
+        use crate::gym_judge::FixedVerdictJudge;
         let mut p = pred_default();
         p.final_message_satisfies = vec!["The text apologises".into()];
         let tx = tx_with_calls(vec![], "I'm sorry, I couldn't help with that.");
@@ -994,7 +994,7 @@ mod tests {
 
     #[tokio::test]
     async fn score_with_judge_records_failure_reasons_and_verdicts() {
-        use super::super::judge::FixedVerdictJudge;
+        use crate::gym_judge::FixedVerdictJudge;
         let mut p = pred_default();
         p.final_message_satisfies = vec!["The text apologises".into()];
         let tx = tx_with_calls(vec![], "No, that's correct as-is.");
@@ -1014,7 +1014,7 @@ mod tests {
 
     #[tokio::test]
     async fn score_with_judge_routes_query_assertion_to_first_search() {
-        use super::super::judge::ScriptedJudge;
+        use crate::gym_judge::ScriptedJudge;
         let mut p = pred_default();
         p.query_satisfies = vec!["The query names a company by ticker".into()];
         let tx = tx_with_calls(
@@ -1035,7 +1035,7 @@ mod tests {
 
     #[tokio::test]
     async fn score_with_judge_fails_query_assertion_when_no_search() {
-        use super::super::judge::FixedVerdictJudge;
+        use crate::gym_judge::FixedVerdictJudge;
         let mut p = pred_default();
         p.query_satisfies = vec!["unreachable".into()];
         let tx = tx_with_calls(vec![], "no search happened");
@@ -1052,7 +1052,7 @@ mod tests {
 
     #[tokio::test]
     async fn score_with_judge_skips_judge_when_runner_errored() {
-        use super::super::judge::FixedVerdictJudge;
+        use crate::gym_judge::FixedVerdictJudge;
         let mut p = pred_default();
         p.final_message_satisfies = vec!["unused".into()];
         let mut tx = tx_with_calls(vec![], "");

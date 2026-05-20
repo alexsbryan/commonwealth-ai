@@ -1,0 +1,18 @@
+# Knowledge-gym fixture: corpus-definitional.
+#
+# Shape: ask a definitional question whose answer is in the local
+# corpus. The right behaviour is exactly one knowledge_lookup call
+# with a short query, then an answer that cites the returned
+# evidence ids without fabricating any.
+
+# Structural — the model must reach for the tool, ONCE, with a
+# focused query.
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+max_query_tokens = 8
+
+# Attribution invariants — only ev-* handles that actually came
+# back from the tool may appear in the final answer.
+must_cite_at_least_one_evidence_id = true
+must_not_cite_evidence_id_outside_returned = true

@@ -39,7 +39,7 @@ use tokio::sync::Mutex;
 use crate::error::{Error, Result};
 use crate::notes_schema::{
     MIGRATION_V1, MIGRATION_V2, MIGRATION_V3, MIGRATION_V4, MIGRATION_V5, MIGRATION_V6,
-    MIGRATION_V7, SCHEMA_NEW,
+    MIGRATION_V7, MIGRATION_V8, SCHEMA_NEW,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -352,6 +352,19 @@ impl NoteStore {
         if version < 7 {
             conn.execute_batch(MIGRATION_V7).map_err(|e| {
                 Error::Io(std::io::Error::other(format!("NoteStore migrate v7: {e}")))
+            })?;
+        }
+
+        // v7 → v8: Tool-Mastery framework adds the `tool_decision`
+        // kind (no new columns; piggybacks on v7's `payload_json`).
+        // Same rename-recreate dance because the CHECK constraint
+        // changes.
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap_or(0);
+        if version < 8 {
+            conn.execute_batch(MIGRATION_V8).map_err(|e| {
+                Error::Io(std::io::Error::other(format!("NoteStore migrate v8: {e}")))
             })?;
         }
 
@@ -2453,12 +2466,17 @@ mod tests {
         assert_eq!(row.kind, "decision");
         assert_eq!(row.payload_json, None, "pre-v7 rows default payload to NULL");
 
-        // user_version is now 7.
+        // user_version advances to the latest schema. The migration
+        // ladder always runs every pending step, so once V8 lands
+        // this test sees v8 (not v7) after opening a v6 DB. The
+        // *behaviour* it actually pins — that v6→v7 preserves rows
+        // and admits the recipe-author kinds — still holds; the
+        // version number just reflects the full ladder.
         let conn = Connection::open(&db_path).unwrap();
         let v: i64 = conn
             .query_row("PRAGMA user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(v, 7);
+        assert!(v >= 7, "user_version must be at least 7 after v6 DB upgrade");
 
         // The new kinds are admitted by the rebuilt CHECK. Round-trip
         // a `research_finding` write through `write_note_full` to
@@ -2488,6 +2506,187 @@ mod tests {
             .expect("research_finding row should round-trip");
         assert_eq!(written.kind, "research_finding");
         assert_eq!(written.payload_json.as_deref(), Some(payload));
+    }
+
+    // ── v7 → v8 migration (tool_decision kind) ────────────────────────────
+
+    /// Round-trip a `tool_decision` write through a fresh DB. Fresh
+    /// installs run `SCHEMA_NEW` (not the migration ladder), so this
+    /// test guards both the migration AND the new-DB path admitting
+    /// the new kind. Payload is stored verbatim via `payload_json`.
+    #[tokio::test]
+    async fn fresh_db_admits_tool_decision_kind() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = NoteStore::open(&dir.path().join("notes.db")).unwrap();
+
+        let payload =
+            r#"{"tool_id":"knowledge_lookup","outcome":"no-results","reasoning":"corpus thin"}"#;
+        let id = store
+            .write_note_full(
+                "tool_decision",
+                "knowledge_lookup → no-results (corpus thin)",
+                vec!["knowledge_lookup".into()],
+                vec![],
+                "sess-td-1",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+                Some(payload),
+            )
+            .await
+            .unwrap();
+
+        let row = store
+            .read_note_by_id(&id)
+            .await
+            .unwrap()
+            .expect("tool_decision row should round-trip");
+        assert_eq!(row.kind, "tool_decision");
+        assert_eq!(row.payload_json.as_deref(), Some(payload));
+
+        // Discoverable via the public `kinds` filter.
+        let recent = store
+            .read_notes(None, &[], &[], &["tool_decision".to_string()], 10, false)
+            .await
+            .unwrap();
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].id, id);
+    }
+
+    /// Build a v7 database by hand and confirm the v8 migration:
+    /// 1. Admits the new `tool_decision` kind through the rebuilt
+    ///    CHECK constraint.
+    /// 2. Preserves every pre-v8 row (including its v7 `payload_json`).
+    /// 3. Bumps `PRAGMA user_version` to 8.
+    #[tokio::test]
+    async fn migrates_v7_to_v8_preserving_existing_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("notes.db");
+
+        // Build a v7 database manually with one pre-existing
+        // research_finding row that carries a payload.
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            conn.execute_batch(
+                "BEGIN;
+                 CREATE TABLE notes (
+                     id            TEXT    PRIMARY KEY,
+                     kind          TEXT    NOT NULL CHECK(kind IN (
+                         'decision','attempt','invariant','todo','reflection',
+                         'uncertainty','postmortem_pointer','redteam_finding',
+                         'deviation','commitment','follow_up','goal',
+                         'research_finding','capability_request','recipe_issue',
+                         'checkpoint','checkpoint_restored','deferred_question'
+                     )),
+                     content       TEXT    NOT NULL,
+                     symbols       TEXT    NOT NULL DEFAULT '[]',
+                     files         TEXT    NOT NULL DEFAULT '[]',
+                     session_id    TEXT    NOT NULL,
+                     created_at    INTEGER NOT NULL,
+                     updated_at    INTEGER NOT NULL,
+                     tool_name     TEXT,
+                     retired_at    INTEGER,
+                     retired_by    TEXT,
+                     scope         TEXT    NOT NULL DEFAULT 'global'
+                                   CHECK(scope IN ('global','feature','session')),
+                     feature_id    TEXT,
+                     promoted_from TEXT,
+                     related_entity TEXT,
+                     source        TEXT    NOT NULL DEFAULT 'agent',
+                     supersedes    TEXT,
+                     payload_json  TEXT
+                 );
+                 CREATE VIRTUAL TABLE notes_fts USING fts5(
+                     content, kind, content='notes', content_rowid='rowid'
+                 );
+                 CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+                     INSERT INTO notes_fts(rowid, content, kind)
+                         VALUES (new.rowid, new.content, new.kind);
+                 END;
+                 CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+                     INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+                         VALUES ('delete', old.rowid, old.content, old.kind);
+                 END;
+                 CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+                     INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+                         VALUES ('delete', old.rowid, old.content, old.kind);
+                     INSERT INTO notes_fts(rowid, content, kind)
+                         VALUES (new.rowid, new.content, new.kind);
+                 END;
+                 CREATE TABLE meta_counters (key TEXT PRIMARY KEY, val INTEGER NOT NULL);
+                 INSERT INTO meta_counters(key, val) VALUES ('notes_version', 0);
+                 CREATE TABLE note_digest_cache (
+                     scope_hash    TEXT    PRIMARY KEY,
+                     digest_text   TEXT    NOT NULL,
+                     notes_version INTEGER NOT NULL,
+                     created_at    INTEGER NOT NULL
+                 );
+                 CREATE TABLE tool_call_log (
+                     id         TEXT    PRIMARY KEY,
+                     session_id TEXT    NOT NULL,
+                     tool_name  TEXT    NOT NULL,
+                     outcome    TEXT    NOT NULL,
+                     called_at  INTEGER NOT NULL
+                 );
+                 INSERT INTO notes (
+                     id, kind, content, session_id, created_at, updated_at,
+                     scope, source, payload_json
+                 ) VALUES (
+                     'pre-v8-row', 'research_finding',
+                     'recipe-author finding from v7',
+                     'sess-old', 1000, 1000, 'global', 'agent',
+                     '{\"authority\":\"authoritative\"}'
+                 );
+                 PRAGMA user_version = 7;
+                 COMMIT;",
+            )
+            .unwrap();
+        }
+
+        // Open through NoteStore — should run V8 and rebuild the table.
+        let store = NoteStore::open(&db_path).unwrap();
+
+        // Pre-existing v7 row preserved with payload intact.
+        let row = store
+            .read_note_by_id("pre-v8-row")
+            .await
+            .unwrap()
+            .expect("row preserved across v7→v8 migration");
+        assert_eq!(row.kind, "research_finding");
+        assert_eq!(
+            row.payload_json.as_deref(),
+            Some("{\"authority\":\"authoritative\"}"),
+            "payload_json must survive the v7→v8 rename-recreate"
+        );
+
+        // user_version is now 8.
+        let conn = Connection::open(&db_path).unwrap();
+        let v: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 8);
+
+        // The new kind is admitted by the rebuilt CHECK.
+        let id = store
+            .write_note_full(
+                "tool_decision",
+                "first tool_decision post-migration",
+                vec![],
+                vec![],
+                "sess-td-2",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+                Some(r#"{"tool_id":"search","outcome":"useful"}"#),
+            )
+            .await
+            .unwrap();
+        let written = store.read_note_by_id(&id).await.unwrap().unwrap();
+        assert_eq!(written.kind, "tool_decision");
     }
 
     /// New writes via `write_note_with_source` carry their explicit

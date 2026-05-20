@@ -17,7 +17,11 @@
 //! Design + phasing: `sovereign-recipes/search-gym/RUNBOOK.md`.
 //! Predicate vocabulary: `sovereign-recipes/search-gym/PASS_SCHEMA.md`.
 
-mod judge;
+// Phase-4 of the Tool-Mastery framework moved the judge surface to
+// `crate::gym_judge`. We re-import under the local name `judge` so
+// the rest of this module reads as before without per-call-site
+// churn — see main.rs for the shared declaration.
+use crate::gym_judge as judge;
 mod judge_calibration;
 mod predicate;
 mod runner;

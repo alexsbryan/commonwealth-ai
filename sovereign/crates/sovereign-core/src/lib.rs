@@ -1,5 +1,6 @@
 pub mod atlas_context;
 pub mod context;
+pub mod dossier;
 pub mod error;
 pub mod executor;
 pub mod health;

@@ -1,0 +1,15 @@
+{
+  "query": "favorite coffee roaster",
+  "evidence": [
+    {
+      "id": "ev-0000",
+      "source_kind": "memory",
+      "source_id": "mem-7a3f",
+      "title": "favorite coffee roaster preference",
+      "content": "User said: 'my favorite roaster is Verve Coffee in Santa Cruz, they have this Streetlevel blend I drink most mornings.' Captured during a Saturday morning conversation about pour-over routine.",
+      "confidence": 0.82,
+      "retrieval_context": "user memory (confidence 0.82)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 0, "memory": 1, "note": 0 }
+}

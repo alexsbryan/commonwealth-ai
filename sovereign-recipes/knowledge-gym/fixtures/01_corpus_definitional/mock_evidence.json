@@ -1,0 +1,24 @@
+{
+  "query": "situated agent",
+  "evidence": [
+    {
+      "id": "ev-0000",
+      "source_kind": "corpus",
+      "source_id": "project-docs::situated_agent_principle",
+      "title": "Situated Agent design principle",
+      "content": "A situated agent is one whose engineering effort goes into context assembly rather than raw reasoning. A well-situated 27B beats a poorly-situated frontier model on personal or contextual work because the per-turn prompt carries the user's history, the relevant memories, the active goal, and the right tool surface. The principle drives all routing and handler design across sovereign + commonwealth.",
+      "confidence": 0.93,
+      "retrieval_context": "corpus chunk (score 0.93)"
+    },
+    {
+      "id": "ev-0001",
+      "source_kind": "note",
+      "source_id": "note-9a3f",
+      "title": "decision note",
+      "content": "Selected the situated-agent framing over a 'reasoning-first' framing because the former scales with curation effort (which is bounded) while the latter scales with model size (which we don't control on a personal node).",
+      "confidence": 0.78,
+      "retrieval_context": "note (kind=decision)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 1, "memory": 0, "note": 1 }
+}
