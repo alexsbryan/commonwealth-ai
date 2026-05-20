@@ -1381,7 +1381,29 @@ struct ValidatorState {
     /// Latched once the root value completes — subsequent advance()
     /// calls only accept whitespace (Complete) or reject (Invalid).
     root_complete: bool,
+    /// Count of consecutive whitespace bytes accepted at the head of
+    /// the root value. JSON allows leading whitespace before any
+    /// value, and the constraint walker historically permitted it
+    /// without bound. That opens a runaway: a greedy sampler at
+    /// T=0.0 picks the highest-prob whitespace token at every step
+    /// and never advances to the structural opener (`{`, `[`, `"`).
+    /// Observed 2026-05-19 on Gemma 4 E4B-it against a calibration
+    /// schema — the model emitted 1024 whitespace tokens, hit
+    /// max_tokens, returned no JSON.
+    ///
+    /// Cap at `MAX_LEADING_WS` to force the structural commitment
+    /// once the model has had a few tokens of "thinking room". Reset
+    /// the moment we leave `AwaitValue` (i.e. once any non-ws is
+    /// accepted) so non-root AwaitValue frames inside objects/arrays
+    /// don't accumulate.
+    leading_ws_count: usize,
 }
+
+/// Upper bound on consecutive whitespace bytes accepted before the
+/// root value's structural opener. Two newline+indent pairs is
+/// enough to absorb a model's "let me think" preamble without
+/// allowing an indefinite stall. See `ValidatorState::leading_ws_count`.
+const MAX_LEADING_WS: usize = 8;
 
 /// One-byte step result. A frame's `step` returns a `StepResult` that
 /// the driver loop interprets to update the stack and decide whether
@@ -1417,6 +1439,7 @@ impl ValidatorState {
         Self {
             stack: vec![Frame::AwaitValue(schema)],
             root_complete: false,
+            leading_ws_count: 0,
         }
     }
 
@@ -1441,6 +1464,22 @@ impl ValidatorState {
             } else {
                 ParseStatus::Invalid
             };
+        }
+
+        // Leading-whitespace cap on the root value. The byte walker
+        // permits whitespace before the structural opener, but an
+        // unbounded run lets a greedy sampler stall forever before
+        // committing. Track consecutive ws at the root and reject
+        // past `MAX_LEADING_WS`. See `ValidatorState::leading_ws_count`.
+        if matches!(self.stack.last(), Some(Frame::AwaitValue(_))) && self.stack.len() == 1 {
+            if is_ws(byte) {
+                if self.leading_ws_count >= MAX_LEADING_WS {
+                    return ParseStatus::Invalid;
+                }
+                self.leading_ws_count += 1;
+            } else {
+                self.leading_ws_count = 0;
+            }
         }
 
         let mut byte_consumed = false;
