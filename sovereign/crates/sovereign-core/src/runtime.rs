@@ -3613,14 +3613,6 @@ pub struct Runtime {
     /// path needs the same surface later, mirror the capture in
     /// `handle_expressive_query`.
     pub turn_provenance: Arc<std::sync::RwLock<HashMap<String, TurnProvenance>>>,
-    /// Optional static-text embedder used by the routing / scoping /
-    /// intent layer in place of `inference.embed_query` for short
-    /// queries. Populated by the daemon bootstrap when
-    /// `~/.sovereign/static-embed/active/` carries a distilled
-    /// artifact. `None` preserves the pre-static GPU-embed path
-    /// exactly. See `sovereign-static-embed` for the artifact format
-    /// + distillation tool.
-    pub short_embed: Option<Arc<dyn sovereign_static_embed::ShortQueryEmbedder>>,
 }
 
 impl Runtime {
@@ -3658,20 +3650,7 @@ impl Runtime {
             rerank_config: corpus_engine::RerankConfig::default(),
             meta_atlas: None,
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
-            short_embed: None,
         }
-    }
-
-    /// Install a static-embed backend the routing/scoping layer
-    /// consults in place of the GPU embed slot. Builder-style so the
-    /// daemon's bootstrap can chain it after the rerank/atlas
-    /// installers.
-    pub fn with_short_embed(
-        mut self,
-        embedder: Arc<dyn sovereign_static_embed::ShortQueryEmbedder>,
-    ) -> Self {
-        self.short_embed = Some(embedder);
-        self
     }
 
     /// Install a cross-encoder reranker. Pure-additive: when enabled,

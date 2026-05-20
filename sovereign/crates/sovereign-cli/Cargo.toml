@@ -12,13 +12,6 @@ sovereign-mesh = { workspace = true }
 sovereign-atos = { workspace = true }
 sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }
-sovereign-static-embed = { path = "../sovereign-static-embed" }
-# Distillation tool uses safetensors/ndarray directly for the
-# matrix-write side; the llama-cpp-4 binding comes via
-# `sovereign_inference::llama::cpp` so the version stays pinned to
-# the rest of the workspace's vendored patch.
-safetensors = { workspace = true }
-ndarray = { workspace = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
 corpus-engine = { workspace = true, features = ["treesitter"] }

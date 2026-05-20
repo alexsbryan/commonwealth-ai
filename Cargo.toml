@@ -21,7 +21,6 @@ members = [
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-pipeline",
     "sovereign/crates/sovereign-work-atlas",
-    "sovereign/crates/sovereign-static-embed",
 
     # Commonwealth — symmetric mesh daemon.
     "commonwealth/crates/commonwealth-core",
@@ -136,15 +135,6 @@ lancedb = "0.27"
 
 # Markdown (sovereign-atos charter parsing)
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
-
-# Static text embeddings (`sovereign-static-embed`) — Model2Vec-style
-# distillation from a teacher gguf into a vocab×dim matrix that the
-# routing/scoping layer mean-pools per-query without paying a GPU
-# forward. Hoisted so the runtime crate and the CLI distill
-# subcommand share one version of each.
-tokenizers = { version = "0.20", default-features = false, features = ["onig"] }
-safetensors = "0.4"
-ndarray = "0.16"
 
 # ── Build profile ────────────────────────────────────────────────────────
 # Skip debug symbols on dev builds — biggest single speedup for `cargo
