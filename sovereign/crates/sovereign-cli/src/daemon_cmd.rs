@@ -1628,7 +1628,54 @@ async fn run_daemon(args: &[String]) -> i32 {
     }
 
     eprintln!("sovereign daemon stopped");
-    0
+
+    // macOS-specific: bypass C++ static destructors at process exit
+    // to dodge a known `ggml-metal-device.m:618 GGML_ASSERT` firing
+    // inside `__cxa_finalize_ranges → ggml_metal_device_free`. The
+    // assertion checks Metal resource-set drain; our llama contexts
+    // are owned by `Arc<EmbeddedLlamaCpp>` references scattered
+    // across AppState, MeshInferenceProvider, the inference adapter,
+    // and several background tasks. Drop ordering is non-trivial,
+    // and even one straggling reference (e.g., a slot guard held
+    // briefly by a closing in-flight request) leaves a non-empty
+    // resource set when `exit()` walks the destructor table —
+    // SIGABRT, misleading "daemon crashed" log.
+    //
+    // We've already run the graceful shutdown path:
+    //   - `daemon.shutdown().await` persisted mesh.json
+    //   - axum::serve drained in-flight requests
+    //   - the pidfile is removed
+    //   - tracing-subscriber writes line-buffered to stderr
+    //
+    // Everything else (Metal devices, KV caches, mmap'd ggufs) is
+    // reclaimed by the kernel on `_exit`. Confirmed 2026-05-20: this
+    // is the same shutdown shape `llama-server` uses (`_Exit` from
+    // its signal handler) and matches the pattern from
+    // <https://github.com/ggml-org/llama.cpp/issues/...>.
+    //
+    // Linux + other targets keep the standard return path — Metal is
+    // macOS-only, so the assertion only fires on darwin.
+    #[cfg(target_os = "macos")]
+    unsafe {
+        fast_exit_skip_destructors(0);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        0
+    }
+}
+
+/// macOS shutdown helper — see `run_daemon` for rationale. Calls
+/// `_exit(2)` to skip libc's `__cxa_finalize_ranges` chain so the
+/// ggml-metal device sweeper never gets a chance to assert on
+/// still-resident llama-context resources.
+#[cfg(target_os = "macos")]
+unsafe fn fast_exit_skip_destructors(code: i32) -> ! {
+    extern "C" {
+        #[link_name = "_exit"]
+        fn libc_exit_no_finalize(status: i32) -> !;
+    }
+    libc_exit_no_finalize(code)
 }
 
 /// Build the tool registry that serves `/mcp/*`. Mirrors the subset of

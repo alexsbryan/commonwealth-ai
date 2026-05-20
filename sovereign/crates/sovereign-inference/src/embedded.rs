@@ -99,6 +99,14 @@ struct SlotContext {
     /// Prefix-keep saves the prefill cost on every call after the
     /// first in each phase.
     cached_tokens: Vec<crate::llama::cpp::token::LlamaToken>,
+    /// Architecture string from the gguf's `general.architecture`
+    /// metadata key, read once at slot construction. Drives the
+    /// `prefix_cache_safe` gate in `generate_sync` — recurrent-layer
+    /// architectures cannot use the partial-keep prefix cache because
+    /// `clear_kv_cache_seq` doesn't rewind their recurrent state.
+    /// Empty string when metadata read failed (defensive — treat as
+    /// "unknown" and fall back to the name-pattern heuristic).
+    arch: String,
 }
 
 unsafe impl Send for SlotContext {}
@@ -545,6 +553,7 @@ impl ModelSlot {
             file_size
         };
 
+        let arch = read_gguf_arch(&model);
         Ok(Self {
             model: model.clone(),
             context: Mutex::new(SlotContext {
@@ -553,6 +562,7 @@ impl ModelSlot {
                 mtp_session,
                 _model: model,
                 cached_tokens: Vec::new(),
+                arch,
             }),
             model_id,
             size_bytes,
@@ -655,6 +665,7 @@ impl ModelSlot {
             "FastShort slot ready — continuous-batched short-call companion to Fast"
         );
 
+        let arch = read_gguf_arch(&model);
         Ok(Self {
             model: Arc::clone(&model),
             context: Mutex::new(SlotContext {
@@ -668,6 +679,7 @@ impl ModelSlot {
                 mtp_session: None,
                 _model: model,
                 cached_tokens: Vec::new(),
+                arch,
             }),
             model_id,
             size_bytes,
@@ -737,23 +749,36 @@ impl ModelSlot {
         // 2026-05-17 SEP-pipeline tuning and the bug doesn't affect
         // them.
         //
-        // Non-MTP hybrid families (Qwen3.5/3.6 Gated DeltaNet,
+        // Non-MTP hybrid families (Qwen3-MoE Gated DeltaNet,
         // Mamba+MoE variants without MTP draft heads) hit the same
         // recurrent-state bug — their gguf has recurrent layers but
         // the slot was constructed without an MTP draft, so the MTP
-        // dispatch above doesn't catch them. We detect by model_id
-        // pattern (stopgap until the slot carries a gguf-arch field
-        // forwarded from llama.cpp's metadata). Confirmed 2026-05-20
-        // on Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX:
+        // dispatch above doesn't catch them. Confirmed 2026-05-20 on
+        // Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX:
         // every 2nd request failed `Decode Error -1: n_tokens == 0`
         // at the post-cache tail decode; disabling partial-keep
         // restored throughput.
         //
-        // TODO (fix-queue): replace `is_recurrent_arch_by_name`
-        // with a gguf-metadata read at slot construction time, so
-        // the gate is data-driven (ARCH §6) instead of name-pattern.
+        // Detection ladder (data first, ARCH §6):
+        // 1. The slot's gguf `general.architecture` metadata, read
+        //    once at construction and stored on `SlotContext.arch`.
+        // 2. Name-pattern fallback when metadata is missing (older
+        //    gguf releases, exporter strips the field, etc.).
+        let arch_says_recurrent = is_recurrent_arch(&slot_ctx.arch);
+        let name_says_recurrent =
+            slot_ctx.arch.is_empty() && is_recurrent_arch_by_name(model_id);
         let prefix_cache_safe = slot_ctx.mtp_session.is_none()
-            && !is_recurrent_arch_by_name(model_id);
+            && !arch_says_recurrent
+            && !name_says_recurrent;
+        tracing::debug!(
+            model = %model_id,
+            arch = %slot_ctx.arch,
+            arch_says_recurrent,
+            name_says_recurrent,
+            mtp_session = slot_ctx.mtp_session.is_some(),
+            prefix_cache_safe,
+            "prefix_cache: gate decision"
+        );
 
         // Split-borrow the SlotContext's disjoint fields. The
         // function body uses both `ctx` (the LlamaContext) and
@@ -6417,6 +6442,62 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 ///
 /// Errors only when the prompt itself doesn't fit. That's a real
 /// "your input is too big" — no clamping can recover.
+/// Read the `general.architecture` metadata field from a loaded gguf.
+/// Returns the raw arch string ("qwen3", "qwen3_moe", "mamba",
+/// "deltanet", "gemma3", etc.) or an empty string when the metadata
+/// read fails. The caller treats empty as "unknown" and falls back
+/// to the name-pattern heuristic.
+///
+/// Cheap: a single `llama_model_meta_val_str(model, "general.architecture", buf, 256)`
+/// call. Done once at slot construction; the result lives on
+/// `SlotContext.arch` for the lifetime of the slot.
+fn read_gguf_arch(model: &LlamaModel) -> String {
+    match model.meta_val_str("general.architecture", 256) {
+        Ok(s) => {
+            tracing::info!(arch = %s, "gguf arch: read from general.architecture");
+            s
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "gguf arch read failed — falling back to name-pattern heuristic"
+            );
+            String::new()
+        }
+    }
+}
+
+/// Is a gguf architecture string known to have recurrent layers
+/// (Mamba / Gated DeltaNet / RWKV / hybrid SSM+MoE)?
+///
+/// Source of truth for the `prefix_cache_safe` gate when the slot
+/// carries arch metadata. Empty string is "unknown" — caller falls
+/// back to `is_recurrent_arch_by_name(model_id)`.
+pub(crate) fn is_recurrent_arch(arch: &str) -> bool {
+    if arch.is_empty() {
+        return false;
+    }
+    let lower = arch.to_lowercase();
+    // Qwen MoE families (Qwen3-MoE, Qwen3.5-MoE, Qwen3.6-MoE) carry
+    // Gated DeltaNet layers in the gguf attention stack. Same
+    // recurrent-state hazard as Mamba — partial-keep prefix-cache
+    // returns -1 on tail decode. Observed gguf arch values include
+    // `qwen3moe`, `qwen35moe`, `qwen3_moe`, `qwen36moe`. The shape
+    // is "qwen<version>moe", so we substring-match `moe` after a
+    // qwen prefix.
+    if lower.starts_with("qwen") && lower.contains("moe") {
+        return true;
+    }
+    // Explicit recurrent architectures published in gguf metadata.
+    // Substring match catches version suffixes (mamba2, rwkv6, etc.).
+    for marker in ["mamba", "rwkv", "deltanet", "ssm"] {
+        if lower.contains(marker) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Heuristic: is the gguf file stem from an architecture that has
 /// recurrent layers (Mamba / Gated DeltaNet / RWKV / hybrid SSM+MoE)?
 ///

@@ -299,13 +299,23 @@ impl PeerEndpointSource for EmbeddedDaemon {
 pub struct MeshInferenceProvider {
     local: Arc<dyn InferenceProvider>,
     mesh: Arc<dyn PeerEndpointSource>,
-    /// Our own manifest, built once at construction. The wrapper
-    /// doesn't recompute it — Sovereign's loaded model set is
-    /// effectively static within a process lifetime, and the
-    /// `SovereignInferenceAdapter` on the server side uses the
-    /// same `build_self_manifest` helper so peer-fetched and
-    /// local-scored views of us are identical.
-    self_manifest: ProviderManifest,
+    /// Our own manifest. Built at construction and refreshed on
+    /// runtime slot mutation (`load_extra_slot` / `unload_extra_slot`)
+    /// via `refresh_self_manifest`.
+    ///
+    /// `ArcSwap` so readers (`locate_named_model`, the local scorer)
+    /// take a cheap load-and-deref without ever blocking the writer.
+    /// Writer is the runtime-extras handler: when an operator hot-
+    /// loads a slot the new model id has to become visible to mesh
+    /// routing immediately, otherwise `locate_named_model` returns
+    /// Unknown and `/v1/chat/completions` 503s on the very slot we
+    /// just installed.
+    ///
+    /// Confirmed 2026-05-20: a bench could hot-load Gemma into a
+    /// daemon whose primary slot was Qwen3.6, but every chat call
+    /// against gemma-* came back "no node in this mesh advertises
+    /// model". Pre-refresh self_manifest was the source.
+    self_manifest: arc_swap::ArcSwap<ProviderManifest>,
     /// Per-peer manifest cache keyed by peer `node_id` (as string
     /// — `NodeId` doesn't impl `Hash` across crate boundaries
     /// cleanly in all our versions, and the string form is stable).
@@ -418,6 +428,20 @@ impl MeshInferenceProvider {
         Self::with_peer_source(local, mesh as Arc<dyn PeerEndpointSource>)
     }
 
+    /// Rebuild `self_manifest` against the current state of the local
+    /// provider. Called after a runtime slot mutation — `load_extra_slot`
+    /// / `unload_extra_slot` — so `locate_named_model` and the local
+    /// scorer immediately see the new lineup. Cheap: the manifest is a
+    /// flat list pulled from `EmbeddedLlamaCpp::loaded_models`; no I/O.
+    pub fn refresh_self_manifest(&self) {
+        let new_manifest = build_self_manifest(self.local.as_ref());
+        tracing::info!(
+            models = new_manifest.models.len(),
+            "mesh-inference: self_manifest refreshed (post slot mutation)"
+        );
+        self.self_manifest.store(Arc::new(new_manifest));
+    }
+
     /// Constructor exposed for tests and alternative wirings: pass
     /// any `PeerEndpointSource` (typically a stub that returns a
     /// fixed peer list pointing at a local mock server). Keeps the
@@ -447,7 +471,7 @@ impl MeshInferenceProvider {
         Self {
             local,
             mesh,
-            self_manifest,
+            self_manifest: arc_swap::ArcSwap::from_pointee(self_manifest),
             peer_cache: Arc::new(RwLock::new(std::collections::HashMap::new())),
             http,
             peer_observations: Arc::new(RwLock::new(
@@ -896,7 +920,8 @@ impl MeshInferenceProvider {
         }
         let local_obs = self.local_observations.read().await.clone();
         let local_bench = self.local_benchmark.read().await.clone();
-        let local_cand = score_manifest_for_request(&self.self_manifest, req_oicp)
+        let self_manifest = self.self_manifest.load();
+        let local_cand = score_manifest_for_request(&self_manifest, req_oicp)
             .map(|c| {
                 adjust_for_observations(
                     c,
@@ -906,7 +931,7 @@ impl MeshInferenceProvider {
                 )
             });
         tracing::info!(
-            local_models = self.self_manifest.models.len(),
+            local_models = self_manifest.models.len(),
             local_scores = local_cand.is_some(),
             local_score = local_cand.as_ref().map(|c| c.score).unwrap_or(f32::NEG_INFINITY),
             local_pick = local_cand.as_ref().map(|c| c.model_id.as_str()).unwrap_or("<none>"),
@@ -1119,6 +1144,7 @@ impl MeshInferenceProvider {
     async fn locate_named_model(&self, model_id: &str) -> NamedModelLocation {
         let local_has = self
             .self_manifest
+            .load()
             .models
             .iter()
             .any(|m| m.id == model_id);
@@ -1870,17 +1896,32 @@ impl InferenceProvider for MeshInferenceProvider {
     // Gemma into a daemon whose primary slot was Qwen3.6 — the load
     // adapter calls `self.provider.load_extra_slot`, which on the
     // MeshInferenceProvider path always hit the default.
+    //
+    // After a successful mutation we ALSO rebuild `self_manifest` so
+    // mesh routing (`locate_named_model`) sees the new slot
+    // immediately. Without the refresh, a hot-loaded slot serves chat
+    // completions on a routing-by-model-id call only when the caller
+    // bypasses MeshInferenceProvider's locator — which is not the
+    // case for `/v1/chat/completions`. Confirmed 2026-05-20: bench
+    // could load gemma-* into a Qwen-primary daemon but every
+    // request 503'd with "no node in this mesh advertises model".
     fn load_extra_slot(
         &self,
         slot_name: String,
         path: std::path::PathBuf,
         context_size: u32,
     ) -> Result<String> {
-        self.local.load_extra_slot(slot_name, path, context_size)
+        let model_id = self.local.load_extra_slot(slot_name, path, context_size)?;
+        self.refresh_self_manifest();
+        Ok(model_id)
     }
 
     fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>> {
-        self.local.unload_extra_slot(slot_name)
+        let result = self.local.unload_extra_slot(slot_name)?;
+        if result.is_some() {
+            self.refresh_self_manifest();
+        }
+        Ok(result)
     }
 
     fn extras_inventory(&self) -> Vec<(String, String)> {
