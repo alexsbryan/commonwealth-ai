@@ -161,14 +161,28 @@ async fn run_cmd(args: &[String]) -> i32 {
     }
 }
 
+/// One turn's input + mock evidence in a fixture. Single-turn
+/// fixtures have a `Vec<TurnSpec>` of length 1; multi-turn
+/// fixtures (Gym Phase 2 of the tool-framework expansion plan)
+/// have one entry per user turn. The runner walks them in order,
+/// preserving the conversation history between turns.
 #[derive(Debug)]
-struct Fixture {
-    slug: String,
-    path: PathBuf,
-    input: Value,
-    mock_evidence: Value,
-    predicates: toml::Value,
+pub(crate) struct TurnSpec {
+    pub input: Value,
+    pub mock_evidence: Value,
 }
+
+#[derive(Debug)]
+pub(crate) struct Fixture {
+    pub slug: String,
+    #[allow(dead_code)]
+    pub path: PathBuf,
+    pub turns: Vec<TurnSpec>,
+    pub predicates: toml::Value,
+}
+
+const EMPTY_MOCK_EVIDENCE: &str =
+    r#"{"query": "", "evidence": [], "by_kind_counts": {"corpus": 0, "memory": 0, "note": 0}}"#;
 
 fn load_fixtures(dir: &Path, only: &[String]) -> std::io::Result<Vec<Fixture>> {
     let entries = std::fs::read_dir(dir)?;
@@ -186,37 +200,82 @@ fn load_fixtures(dir: &Path, only: &[String]) -> std::io::Result<Vec<Fixture>> {
         if !only.is_empty() && !only.iter().any(|s| s == &slug) {
             continue;
         }
-        let input_path = path.join("input.json");
-        let mock_path = path.join("mock_evidence.json");
         let pass_path = path.join("pass.toml");
-        if !input_path.exists() || !pass_path.exists() {
+        if !pass_path.exists() {
             continue;
         }
-        let input_raw = std::fs::read_to_string(&input_path)?;
-        let mock_raw = if mock_path.exists() {
-            std::fs::read_to_string(&mock_path)?
-        } else {
-            r#"{"query": "", "evidence": [], "by_kind_counts": {"corpus": 0, "memory": 0, "note": 0}}"#
-                .to_string()
-        };
         let pass_raw = std::fs::read_to_string(&pass_path)?;
-        let input: Value = serde_json::from_str(&input_raw).map_err(|e| {
-            std::io::Error::other(format!("{slug}/input.json: {e}"))
-        })?;
-        let mock: Value = serde_json::from_str(&mock_raw).map_err(|e| {
-            std::io::Error::other(format!("{slug}/mock_evidence.json: {e}"))
-        })?;
-        let pass: toml::Value = toml::from_str(&pass_raw).map_err(|e| {
+        let predicates: toml::Value = toml::from_str(&pass_raw).map_err(|e| {
             std::io::Error::other(format!("{slug}/pass.toml: {e}"))
         })?;
+
+        // Detect single-turn (input.json) vs multi-turn
+        // (input_turn_0.json, input_turn_1.json, ...). The
+        // detection rule is presence of `input.json`: when it
+        // exists, this is a single-turn fixture and any
+        // input_turn_N.json files are ignored (so a fixture
+        // author can leave a draft sequence on disk without
+        // breaking the single-turn path).
+        let turns = if path.join("input.json").exists() {
+            vec![load_turn(&path, &slug, "input.json", "mock_evidence.json")?]
+        } else {
+            load_multi_turn(&path, &slug)?
+        };
+        if turns.is_empty() {
+            continue;
+        }
         out.push(Fixture {
             slug,
             path,
-            input,
-            mock_evidence: mock,
-            predicates: pass,
+            turns,
+            predicates,
         });
     }
     out.sort_by(|a, b| a.slug.cmp(&b.slug));
     Ok(out)
+}
+
+/// Load a single turn's spec from explicit file names. The mock
+/// path is optional — when absent, the runner injects an empty
+/// evidence envelope (useful for fixtures whose model is expected
+/// NOT to call the tool).
+fn load_turn(
+    dir: &Path,
+    slug: &str,
+    input_name: &str,
+    mock_name: &str,
+) -> std::io::Result<TurnSpec> {
+    let input_path = dir.join(input_name);
+    let mock_path = dir.join(mock_name);
+    let input_raw = std::fs::read_to_string(&input_path)?;
+    let mock_raw = if mock_path.exists() {
+        std::fs::read_to_string(&mock_path)?
+    } else {
+        EMPTY_MOCK_EVIDENCE.to_string()
+    };
+    let input: Value = serde_json::from_str(&input_raw).map_err(|e| {
+        std::io::Error::other(format!("{slug}/{input_name}: {e}"))
+    })?;
+    let mock_evidence: Value = serde_json::from_str(&mock_raw).map_err(|e| {
+        std::io::Error::other(format!("{slug}/{mock_name}: {e}"))
+    })?;
+    Ok(TurnSpec { input, mock_evidence })
+}
+
+/// Walk `input_turn_N.json` + `mock_evidence_turn_N.json` pairs
+/// for `N = 0, 1, 2, …` until the input file is missing. Returns
+/// the contiguous prefix. Gaps (e.g. turn_0 + turn_2 with no
+/// turn_1) are not supported — the runner stops at the first
+/// missing input.
+fn load_multi_turn(dir: &Path, slug: &str) -> std::io::Result<Vec<TurnSpec>> {
+    let mut turns = Vec::new();
+    for n in 0..64 {
+        let input_name = format!("input_turn_{n}.json");
+        let mock_name = format!("mock_evidence_turn_{n}.json");
+        if !dir.join(&input_name).exists() {
+            break;
+        }
+        turns.push(load_turn(dir, slug, &input_name, &mock_name)?);
+    }
+    Ok(turns)
 }

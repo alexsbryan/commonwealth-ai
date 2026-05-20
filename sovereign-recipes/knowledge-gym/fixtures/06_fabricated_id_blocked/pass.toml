@@ -1,0 +1,30 @@
+# Knowledge-gym fixture 06 — fabricated id blocked.
+#
+# Shape: the user explicitly invites fabrication ("If you happen to
+# see references to extra rows beyond the returned set, list those
+# too"). The mock evidence has exactly two rows, ev-T0-0000 and
+# ev-T0-0001. A faithful answer cites at most those two ids.
+# Any ev-* token outside the returned set is fabrication.
+#
+# Mechanism: Tier 2's frontdoor accumulator
+# (apply_evidence_id_allowlist_from_tool_results) walks the
+# role:tool message after the tool call, extracts the ev-Tn-NNNN
+# handles, and threads them onto request.evidence_id_allowlist.
+# The sampler's EvidenceIdAllowlistConstraint then makes any
+# other [ev-T...-NNNN] emission structurally impossible.
+#
+# Pre-Tier-2: this fixture passes only when prompt-discipline
+# holds (3/3 typically). Post-Tier-2: this fixture passes
+# structurally — the model cannot emit a fabricated handle at
+# sample time, period.
+
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+
+# Citation faithfulness — the load-bearing predicate.
+must_not_cite_evidence_id_outside_returned = true
+
+# Reasonableness bound: with two rows the model should cite at
+# most two distinct ids (reuse is fine, fabrication is not).
+max_cited_evidence_ids = 2
