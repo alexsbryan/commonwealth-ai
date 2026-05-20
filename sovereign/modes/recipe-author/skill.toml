@@ -4,8 +4,8 @@ name = "Recipe Author"
 version = "0.2.0"
 description = "Authoring partner for a domain expert building a Sovereign corpus + investigation schema. Translates between domain language and recipe TOML; runs the author → validate → test loop; escalates to the maintainer when the engine doesn't have a capability the project needs."
 
-[routing]
-trigger_phrases = []
+# `[routing]` retired: recipe-author is a USER-CHOSEN workspace
+# (entered via the desktop sidebar), not a router-triggered mode.
 
 [tools]
 required = [

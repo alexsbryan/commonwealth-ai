@@ -85,6 +85,7 @@ pub async fn build_context(
         // after the conversation grows past the visible window.
         compacted_history: None,
         tool_dossier: None,
+        intent_policy: None,
     })
 }
 

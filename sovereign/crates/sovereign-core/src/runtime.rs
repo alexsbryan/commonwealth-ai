@@ -3249,34 +3249,11 @@ pub struct ContradictionProv {
 /// Intents preserved: `ExpressiveQuery`, `DeepQuery`,
 /// `Continuation` (continuation context overrides skill register).
 /// Everything else gets rewritten to `ExpressiveQuery`.
-fn override_intent_for_relational_register(
-    intent: Intent,
-    register: SkillRegister,
-) -> Intent {
-    if register != SkillRegister::Relational {
-        return intent;
-    }
-    match intent {
-        // Already on the witness path — leave alone.
-        Intent::ExpressiveQuery | Intent::DeepQuery => intent,
-        // Continuation has its own routing semantics that depend on
-        // the rebound classification of the prior turn — overriding
-        // here would mask whatever the user is actually continuing.
-        Intent::Continuation { .. } => intent,
-        // Everything else: the classifier read paragraph-shape
-        // personal prose as something else (KnowledgeQuery,
-        // MetalingualQuery, ComparisonQuery, …). The active
-        // relational skill is the authoritative signal — route to
-        // the witness handler.
-        other => {
-            tracing::info!(
-                original_intent = ?other,
-                "router: forcing ExpressiveQuery — relational register active"
-            );
-            Intent::ExpressiveQuery
-        }
-    }
-}
+// Retired: this fn moved to
+// `crate::intent_policy::apply_witness_intent_override` and is
+// now applied inside `intent_policy::policy_for` so dispatch
+// sites can't forget to call it. Pinned tests in the test mod
+// below now exercise the new home directly.
 
 /// Intent-implied OICP defaults (v0.3). The classified intent
 /// carries a latency signal — "DeepQuery" wants extended thinking
@@ -6277,7 +6254,7 @@ impl Runtime {
         // relational skills get three confidence-banded sections so
         // the model can render its three epistemic registers
         // (history / inference / guess) when surfacing user history.
-        let register = self.skills.primary_skill_register();
+        let register = context.turn_register();
         if let Some(mem_section) =
             memory::format_memories_for_prompt(&context.memories, register)
         {
@@ -6404,6 +6381,10 @@ impl Runtime {
     /// [`Self::narrow_tools_for_intent`] instead — that picks up the
     /// intent-derived narrowing too.
     fn narrow_tools_pre_classification(&self) -> Vec<ToolDescriptor> {
+        // Policy-builder site — read register directly from the
+        // mode declaration since context's `intent_policy` field
+        // isn't populated yet (pre-classification, the policy IS
+        // what we're building).
         let policy = crate::intent_policy::policy_for_mode_only(
             self.skills.primary_skill_register(),
             self.skills.primary_skill_id_for_conversation().as_deref(),
@@ -6418,6 +6399,10 @@ impl Runtime {
     /// `intent_policy::policy_for` so mode + register + intent
     /// each get their say.
     fn narrow_tools_for_intent(&self, intent: &Intent) -> Vec<ToolDescriptor> {
+        // Same policy-builder discipline as
+        // `narrow_tools_pre_classification`: read register
+        // directly from the mode rather than from a context that
+        // may or may not have the policy stashed yet.
         let policy = crate::intent_policy::policy_for(
             intent,
             self.skills.primary_skill_register(),
@@ -6476,7 +6461,7 @@ impl Runtime {
         context: &mut ConversationContext,
         user_message: &str,
     ) {
-        if self.skills.primary_skill_register() != SkillRegister::Relational {
+        if context.turn_register() != SkillRegister::Relational {
             return;
         }
         // Skip when there's nothing to compare against — common case
@@ -6520,7 +6505,7 @@ impl Runtime {
     /// skills, and sessions with no active skill, keep the prior
     /// factual contract — non-relational behavior is unchanged.
     fn build_primary_system_message(&self, base: &str, context: &ConversationContext) -> String {
-        let contract = epistemic_contract_for(self.skills.primary_skill_register());
+        let contract = epistemic_contract_for(context.turn_register());
         self.build_system_message(
             &format!("{contract}\n\n{base}"),
             context,
@@ -7120,7 +7105,7 @@ impl Runtime {
         // skill_id so an inner-work conversation only surfaces
         // inner-work memories, and a general conversation never sees
         // them. See `MemoryScope` for the invariant.
-        if self.skills.primary_skill_register() == SkillRegister::Relational {
+        if context.turn_register() == SkillRegister::Relational {
             let scope = crate::traits::MemoryScope::from_conversation_skill(
                 context.conversation.skill_id.as_deref(),
             );
@@ -7269,11 +7254,27 @@ impl Runtime {
         // diagnostics into downstream handlers. Preserving these
         // names keeps the handle_knowledge_query / handle_simple call
         // sites untouched so PR1 stays behaviour-preserving.
+        //
+        // Build the per-turn IntentPolicy and stash it on context
+        // so downstream consumers read register/effective_intent
+        // from one source of truth rather than re-querying
+        // `SkillRegistry::primary_skill_register()` at ~16 sites.
+        // The witness-intent override is now folded into
+        // `intent_policy::policy_for`; the effective intent we
+        // dispatch on is `policy.effective_intent`.
         let raw_intent = classification.primary.intent.clone();
-        let intent = override_intent_for_relational_register(
-            raw_intent,
-            self.skills.primary_skill_register(),
+        let active_mode = self.skills.primary_skill_id_for_conversation();
+        let declared_register = self.skills.primary_skill_register();
+        let intent_policy = crate::intent_policy::policy_for(
+            &raw_intent,
+            declared_register,
+            active_mode.as_deref(),
         );
+        let intent = intent_policy
+            .effective_intent
+            .clone()
+            .unwrap_or_else(|| raw_intent.clone());
+        context.intent_policy = Some(intent_policy);
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
         let scope = classification.scope.clone();
@@ -7376,7 +7377,7 @@ impl Runtime {
             let candidates = self
                 .retrieve_candidates(message, &context, &intent)
                 .await;
-            let register = self.skills.primary_skill_register();
+            let register = context.turn_register();
             let witness_grounding = build_witness_grounding(&context, register);
             let inputs = crate::pipeline::TeamPipelineInputs {
                 provider: Arc::clone(&self.inference),
@@ -7420,7 +7421,7 @@ impl Runtime {
         if matches!(intent, Intent::ExpressiveQuery) {
             tracing::info!(
                 intent = ?intent,
-                register = ?self.skills.primary_skill_register(),
+                register = ?context.turn_register(),
                 "runtime: dispatching ExpressiveQuery to streaming witness"
             );
             return self
@@ -8086,7 +8087,7 @@ impl Runtime {
         // shape — id + content + created_at is what the echo overlay
         // displays; the rest of the Memory record stays internal.
         let recalled_memories_for_metadata: Option<serde_json::Value> =
-            if self.skills.primary_skill_register() == SkillRegister::Relational
+            if context.turn_register() == SkillRegister::Relational
                 && !context.memories.is_empty()
             {
                 Some(serde_json::Value::Array(
@@ -8368,7 +8369,7 @@ impl Runtime {
         // *"I left my last job because the team was burning out"*).
         // Re-rank/replace `context.memories` via cosine over batched
         // embeddings. Falls back to the FTS list on any error.
-        if self.skills.primary_skill_register() == SkillRegister::Relational {
+        if context.turn_register() == SkillRegister::Relational {
             let recall_start = std::time::Instant::now();
             let scope = crate::traits::MemoryScope::from_conversation_skill(
                 context.conversation.skill_id.as_deref(),
@@ -8468,11 +8469,24 @@ impl Runtime {
             policy.clone(),
         );
 
+        // Build the per-turn IntentPolicy on the non-streaming path
+        // too, with the same shape as the streaming dispatch. See
+        // that block for the contract; this stays symmetric so a
+        // turn classified the same way sees the same policy on
+        // either dispatch surface.
         let raw_intent = classification.primary.intent.clone();
-        let intent = override_intent_for_relational_register(
-            raw_intent,
-            self.skills.primary_skill_register(),
+        let active_mode = self.skills.primary_skill_id_for_conversation();
+        let declared_register = self.skills.primary_skill_register();
+        let intent_policy = crate::intent_policy::policy_for(
+            &raw_intent,
+            declared_register,
+            active_mode.as_deref(),
         );
+        let intent = intent_policy
+            .effective_intent
+            .clone()
+            .unwrap_or_else(|| raw_intent.clone());
+        context.intent_policy = Some(intent_policy);
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
         let scope = classification.scope.clone();
@@ -8599,7 +8613,7 @@ impl Runtime {
             let candidates = self
                 .retrieve_candidates(message, &context, &intent)
                 .await;
-            let register = self.skills.primary_skill_register();
+            let register = context.turn_register();
             let witness_grounding = build_witness_grounding(&context, register);
             let inputs = crate::pipeline::TeamPipelineInputs {
                 provider: Arc::clone(&self.inference),
@@ -9267,7 +9281,7 @@ impl Runtime {
         // (`SimpleQuery`) and continuations are deliberately
         // untouched — their existing prompt is already brief and
         // doesn't need the witness scaffolding.
-        let register = self.skills.primary_skill_register();
+        let register = context.turn_register();
         let want_witness_path = register == SkillRegister::Relational
             && matches!(intent, Intent::DeepQuery);
         let mut metrics = RuntimeMetrics::default();
@@ -10681,7 +10695,7 @@ impl Runtime {
         // witness contract is the only voice in play; situated
         // context goes in as a brief observation block, not a rule
         // set the model is asked to evaluate.
-        let register = self.skills.primary_skill_register();
+        let register = context.turn_register();
         let mut metrics = RuntimeMetrics::default();
         let system = if register == SkillRegister::Relational {
             // Multi-shot Pass A: structured contradiction check. Soft-
@@ -10922,7 +10936,7 @@ impl Runtime {
             .as_deref()
             .unwrap_or("no prior turn in this conversation");
 
-        let register = self.skills.primary_skill_register();
+        let register = context.turn_register();
 
         // Capture the recalled memories the witness drew on so the
         // metadata trail mirrors the non-streaming path. Inner-work's
@@ -12894,13 +12908,14 @@ mod relational_intent_override_tests {
     #[test]
     fn non_relational_register_is_passthrough() {
         let intent = Intent::MetalingualQuery;
-        let out = override_intent_for_relational_register(intent.clone(), SkillRegister::Factual);
+        let out = crate::intent_policy::apply_witness_intent_override(&intent, SkillRegister::Factual);
         assert!(matches!(out, Intent::MetalingualQuery));
     }
 
     #[test]
     fn relational_overrides_metalingual_to_expressive() {
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::MetalingualQuery,
             SkillRegister::Relational,
         );
@@ -12909,7 +12924,8 @@ mod relational_intent_override_tests {
 
     #[test]
     fn relational_overrides_knowledge_to_expressive() {
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::KnowledgeQuery,
             SkillRegister::Relational,
         );
@@ -12918,7 +12934,8 @@ mod relational_intent_override_tests {
 
     #[test]
     fn relational_overrides_complex_task_to_expressive() {
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::ComplexTask,
             SkillRegister::Relational,
         );
@@ -12927,7 +12944,8 @@ mod relational_intent_override_tests {
 
     #[test]
     fn relational_preserves_expressive() {
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::ExpressiveQuery,
             SkillRegister::Relational,
         );
@@ -12938,7 +12956,8 @@ mod relational_intent_override_tests {
     fn relational_preserves_deep_query() {
         // DeepQuery + Relational rides handle_simple's witness branch
         // and benefits from extended-thinking budget; don't downgrade.
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::DeepQuery,
             SkillRegister::Relational,
         );
@@ -12949,7 +12968,8 @@ mod relational_intent_override_tests {
     fn relational_preserves_continuation() {
         // Continuation routes from the prior turn's rebound intent;
         // overriding here would mask the actual continuation context.
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::Continuation { task_id: "t-1".into() },
             SkillRegister::Relational,
         );

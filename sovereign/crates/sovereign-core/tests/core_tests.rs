@@ -306,17 +306,15 @@ fn tool_registry_register_and_get() {
 
 // ─── SkillRegistry Tests ──────────────────────────────────────
 
-fn make_skill(id: &str, trigger: &str, synthesis: Option<&str>) -> Skill {
+fn make_skill(id: &str, _trigger: &str, synthesis: Option<&str>) -> Skill {
+    // `_trigger` retained as a positional arg for call-site
+    // compatibility but no longer threads into the Skill struct —
+    // routing was retired alongside the trigger-phrase splice.
     Skill {
         id: id.to_string(),
         name: id.to_string(),
         version: "0.1.0".to_string(),
         description: String::new(),
-        routing: RoutingHints {
-            trigger_phrases: vec![trigger.to_string()],
-            default_intent: Some("ComplexTask".to_string()),
-            min_confidence: Some(0.8),
-        },
         planner_templates: vec![PlanTemplate {
             name: "test".to_string(),
             trigger: "test trigger".to_string(),
@@ -331,7 +329,6 @@ fn make_skill(id: &str, trigger: &str, synthesis: Option<&str>) -> Skill {
             confidence_decay_per_month: None,
             prune_threshold: None,
         },
-        evaluation_prompts: std::collections::HashMap::new(),
         inference: SkillInferenceConfig::default(),
         signature: None,
         signed_by: None,
@@ -344,7 +341,6 @@ fn skill_registry_empty() {
     let reg = SkillRegistry::new();
     assert!(reg.list().is_empty());
     assert!(reg.active_skills().is_empty());
-    assert!(reg.routing_hints().trigger_phrases.is_empty());
     assert!(reg.prompt_overrides(&Intent::SimpleQuery).is_none());
     assert!(reg.memory_rules().extraction_addenda.is_empty());
 }
@@ -369,18 +365,8 @@ fn skill_registry_activate_deactivate() {
     assert_eq!(reg.active_skills()[0].id, "coding");
 }
 
-#[test]
-fn skill_registry_merge_routing_hints() {
-    let mut reg = SkillRegistry::new();
-    reg.register(make_skill("a", "alpha", None));
-    reg.register(make_skill("b", "beta", None));
-    reg.activate("a");
-    reg.activate("b");
-
-    let hints = reg.routing_hints();
-    assert_eq!(hints.trigger_phrases.len(), 2);
-    assert_eq!(hints.min_confidence, Some(0.8));
-}
+// `skill_registry_merge_routing_hints` retired alongside
+// `routing_hints()` itself — see skills.rs for the migration note.
 
 #[test]
 fn skill_registry_merge_prompts() {
@@ -463,6 +449,7 @@ fn format_history_empty() {
         temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
     };
     assert_eq!(format_history_as_prompt(&ctx, 10), "");
 }
@@ -508,6 +495,7 @@ fn format_history_multi_turn() {
         temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 10);
@@ -549,6 +537,7 @@ fn format_history_truncates_to_max() {
         temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 3);
@@ -583,6 +572,7 @@ async fn passthrough_router_always_simple_query() {
         temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
     };
 
     let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
@@ -612,6 +602,7 @@ async fn noop_planner_returns_not_implemented() {
         temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
     };
 
     let result = planner.plan("do something", &ctx, &[]).await;
@@ -1029,6 +1020,7 @@ async fn planner_generates_valid_plan() {
         temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
     };
 
     let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
@@ -1065,6 +1057,7 @@ async fn planner_fallback_on_garbage() {
         temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
     };
 
     // Should succeed with fallback plan (single step).
