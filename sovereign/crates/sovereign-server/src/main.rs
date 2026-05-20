@@ -291,8 +291,13 @@ async fn main() {
         None
     };
 
-    // Register tools.
-    let mut tools = ToolRegistry::new();
+    // Register tools. Tier 4 — shared tool-result cache so the
+    // sovereign-server (standalone HTTP daemon) gets the same
+    // per-conversation cache the CLI / desktop bootstrap wire.
+    let tool_cache = Arc::new(
+        sovereign_core::tool_result_cache::ToolResultCache::new(),
+    );
+    let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
         Arc::clone(&store),

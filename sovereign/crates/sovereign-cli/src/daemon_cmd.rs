@@ -1779,7 +1779,15 @@ async fn build_tool_registry(
 ) -> ToolRegistry {
     let indexes_dir = data_dir.join("indexes");
 
-    let mut tools = ToolRegistry::new();
+    // Tier 4 — shared tool-result cache. The daemon's registry
+    // serves both HTTP API requests AND in-process Runtime calls;
+    // per-conversation scoping in `CacheKey` keeps the slices
+    // isolated even when two clients hit different conversations
+    // simultaneously.
+    let tool_cache = std::sync::Arc::new(
+        sovereign_core::tool_result_cache::ToolResultCache::new(),
+    );
+    let mut tools = ToolRegistry::new().with_cache(std::sync::Arc::clone(&tool_cache));
 
     // Call-graph tools. Merge every `scip_graph.db` under the indexes
     // directory into a single in-memory graph, then register
