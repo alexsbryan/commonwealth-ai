@@ -284,6 +284,11 @@ pub struct LlmRouter {
     /// scope to restrict to user-owned corpora when the classifier
     /// fires `Some("personal")`.
     scope_classifier: Option<Arc<crate::scope_classifier::PersonalScopeClassifier>>,
+    /// Optional static-embed backend the scope classifier consults
+    /// in place of the GPU embed slot. When `Some`, the router calls
+    /// `classify_static` (zero GPU forward); when `None`, falls back
+    /// to the GPU embed slot path via `inference.embed_query`.
+    short_embed: Option<Arc<dyn sovereign_static_embed::ShortQueryEmbedder>>,
 }
 
 impl LlmRouter {
@@ -298,6 +303,7 @@ impl LlmRouter {
             skills,
             embed_router: None,
             scope_classifier: None,
+            short_embed: None,
         }
     }
 
@@ -317,6 +323,22 @@ impl LlmRouter {
         classifier: Arc<crate::scope_classifier::PersonalScopeClassifier>,
     ) -> Self {
         self.scope_classifier = Some(classifier);
+        self
+    }
+
+    /// Wire a static-text embedder for the scope classifier path.
+    /// When set, both call sites in `classify_query` (the embed-
+    /// router cache hit and the pure-text fallback) use the static
+    /// embedder instead of the GPU embed slot. The artifact must be
+    /// dim-compatible with the centroids on the installed classifier
+    /// — bootstrap should construct the classifier via
+    /// `PersonalScopeClassifier::load_with_short_embed` so the
+    /// centroids share the same metric space as the runtime queries.
+    pub fn with_short_embed(
+        mut self,
+        embedder: Arc<dyn sovereign_static_embed::ShortQueryEmbedder>,
+    ) -> Self {
+        self.short_embed = Some(embedder);
         self
     }
 
@@ -1841,8 +1863,13 @@ impl Router for LlmRouter {
             // Compute scope hint via the classifier (needs a fresh
             // embedding — the embed router didn't run, so no shared
             // vector to reuse). Skipped if no classifier installed.
+            // Prefer the static-embed path when an artifact is
+            // wired; falls back to the GPU embed slot otherwise.
             let scope = match self.scope_classifier.as_ref() {
-                Some(cls) => cls.classify(message, &*self.inference).await.ok().flatten(),
+                Some(cls) => match self.short_embed.as_ref() {
+                    Some(emb) => cls.classify_static(message, &**emb),
+                    None => cls.classify(message, &*self.inference).await.ok().flatten(),
+                },
                 None => None,
             };
             eprintln!(
@@ -1994,13 +2021,19 @@ impl Router for LlmRouter {
         } else if let Some(scope_cls) = self.scope_classifier.as_ref() {
             // No embed router installed — pay the scope embed call on
             // its own. Rare path; production always installs both.
-            match scope_cls.classify(message, &*self.inference).await {
-                Ok(s) => scope_hint = s,
-                Err(e) => tracing::warn!(
-                    target: "router.scope",
-                    error = %e,
-                    "scope classifier failed; treating as None"
-                ),
+            // Static-embed short-circuit when wired.
+            match self.short_embed.as_ref() {
+                Some(emb) => {
+                    scope_hint = scope_cls.classify_static(message, &**emb);
+                }
+                None => match scope_cls.classify(message, &*self.inference).await {
+                    Ok(s) => scope_hint = s,
+                    Err(e) => tracing::warn!(
+                        target: "router.scope",
+                        error = %e,
+                        "scope classifier failed; treating as None"
+                    ),
+                },
             }
         }
 

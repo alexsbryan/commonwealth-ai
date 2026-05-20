@@ -1,0 +1,32 @@
+[package]
+name = "sovereign-static-embed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# Tokenisation: HF `tokenizers` crate reads the same tokenizer.json
+# format EmbeddingGemma ships, so the distillation tool and the
+# runtime parse inputs identically.
+tokenizers.workspace = true
+
+# Matrix arithmetic. Mean-pool is one `axis_mean` call; cosine is a
+# dot product. `ndarray-rand` not needed — distillation produces the
+# matrix offline; runtime reads it.
+ndarray.workspace = true
+
+# On-disk artifact format. Matrix lives as a single `f32` tensor;
+# the header carries `{teacher_id, dim, vocab_path}` metadata.
+safetensors.workspace = true
+
+# Errors + tracing. tracing pulled in via dependents already, but
+# pinning here is explicit so the artifact-load path can emit
+# observability without depending on a higher-up crate.
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
