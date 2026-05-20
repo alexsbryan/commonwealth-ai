@@ -102,6 +102,13 @@ pub struct SetupConfig {
     /// than silently defaulting to `false`.
     #[serde(default)]
     pub enable_recipe_authoring: Option<bool>,
+    /// Tier 3 of tool-framework expansion — opt-in for the
+    /// `knowledge_lookup` tool's automatic web-escalation path.
+    /// Same `None`-preserves-existing semantics as
+    /// `enable_recipe_authoring`. See the field of the same name
+    /// on `state::DesktopConfig` for behaviour details.
+    #[serde(default)]
+    pub auto_escalate_to_web: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -1156,6 +1163,12 @@ pub async fn submit_information_search(
             sovereign_core::memory::ToolDecisionOutcome::NoResults,
             "user clicked Search-the-web on the INFORMATION REQUEST card \
              — prior in-conversation lookup did not satisfy",
+            // Tier 1: no summary/evidence_ids/turn_index — this
+            // write fires from a USER click, not a tool-result
+            // post-stream hook. The originating turn's baseline
+            // write (from the runtime's KQ dispatch) already
+            // carries those fields; this is an audit overlay.
+            sovereign_core::memory::ToolDecisionExtras::none(),
         )
         .await;
     }
@@ -1697,6 +1710,9 @@ pub async fn complete_setup(
     if let Some(flag) = setup.enable_recipe_authoring {
         config.enable_recipe_authoring = flag;
     }
+    if let Some(flag) = setup.auto_escalate_to_web {
+        config.auto_escalate_to_web = flag;
+    }
     config.setup_complete = true;
 
     config.save()?;
@@ -1761,6 +1777,7 @@ pub async fn search_web(
         working_directory: None,
         in_reasoning_loop: false,
         agent_session_token: None,
+        turn_index: 0,
     };
 
     let output = tool

@@ -174,6 +174,7 @@ pub async fn summarize_dropped_history(
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -338,6 +339,7 @@ pub async fn update_topic_context(
     assistant_prefix: None,
     cmd_prefix: None,
     url_allowlist: None,
+    evidence_id_allowlist: None,
     };
 
     let response = inference.complete(&request).await?;

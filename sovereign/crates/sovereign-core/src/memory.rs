@@ -217,6 +217,7 @@ pub async fn compress_working_memory(
     assistant_prefix: None,
     cmd_prefix: None,
     url_allowlist: None,
+    evidence_id_allowlist: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -363,6 +364,7 @@ pub async fn extract_long_term_memories(
     assistant_prefix: None,
     cmd_prefix: None,
     url_allowlist: None,
+    evidence_id_allowlist: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -766,6 +768,7 @@ pub async fn detect_contradictions(
     assistant_prefix: None,
     cmd_prefix: None,
     url_allowlist: None,
+    evidence_id_allowlist: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -1051,6 +1054,15 @@ impl ToolDecisionOutcome {
 /// is optional so we can record decisions made outside a
 /// conversation (e.g. cron-driven enrichment runs); the dossier
 /// filters on it when present.
+///
+/// Tier 1 of the tool-framework expansion (2026) adds three
+/// fields that turn the outcome history from a status log into
+/// addressable memory: `summary` (one-line "what came back"),
+/// `evidence_ids` (per-call ev-Tn-NNNN handles the model may
+/// cite cross-turn), and `turn_index` (lets the dossier render
+/// "[ev-T2-0001]" references that uniquely identify the source
+/// turn). All three default to empty/None so pre-Tier-1 notes
+/// continue to deserialise cleanly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDecisionPayload {
     pub tool_id: String,
@@ -1059,6 +1071,48 @@ pub struct ToolDecisionPayload {
     pub applied_at_unix: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
+    /// One-line summary of what came back (Tier 1). For
+    /// knowledge_lookup, the top-1 evidence title; for code-intel
+    /// tools, the first symbol/file. Renders in the dossier as
+    /// `→ outcome — "summary"`. `None` for pre-Tier-1 payloads.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Per-call ev-Tn-NNNN handles returned by this tool invocation
+    /// (Tier 1). The dossier renders them so a later turn can cite
+    /// `[ev-T2-0001]` and the runtime can dereference without
+    /// re-calling the tool. Empty when the tool doesn't return
+    /// citation-shaped evidence (e.g. shell, file).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_ids: Vec<String>,
+    /// Zero-based turn index this outcome was recorded against
+    /// (Tier 1). Lets the dossier renderer build T-prefixed
+    /// handles and lets the cross-turn citation validator know
+    /// which prior turn an `ev-Tn-NNNN` reference points at.
+    /// Defaults to 0 for pre-Tier-1 payloads — the dossier
+    /// renders those without T prefixes for back-compat.
+    #[serde(default)]
+    pub turn_index: usize,
+}
+
+/// Optional extras for `write_tool_decision` / `record_tool_outcome`.
+/// Bundled in a single struct so the named-args API stays readable
+/// while still admitting the Tier-1 cross-turn fields. Use
+/// `ToolDecisionExtras::none()` from sites that don't have the
+/// data — the dossier renders a degraded but well-formed entry.
+#[derive(Debug, Clone, Default)]
+pub struct ToolDecisionExtras {
+    pub summary: Option<String>,
+    pub evidence_ids: Vec<String>,
+    pub turn_index: usize,
+}
+
+impl ToolDecisionExtras {
+    /// Empty extras — degraded-but-valid for call sites that
+    /// don't have summary/evidence/turn data (e.g. tests, legacy
+    /// non-knowledge_lookup tools).
+    pub fn none() -> Self {
+        Self::default()
+    }
 }
 
 /// Persist a tool-decision outcome into the NoteStore. Returns the
@@ -1073,6 +1127,7 @@ pub async fn write_tool_decision(
     tool_id: &str,
     outcome: ToolDecisionOutcome,
     reasoning: &str,
+    extras: ToolDecisionExtras,
 ) -> Result<String> {
     let payload = ToolDecisionPayload {
         tool_id: tool_id.to_string(),
@@ -1080,6 +1135,9 @@ pub async fn write_tool_decision(
         reasoning: reasoning.to_string(),
         applied_at_unix: now(),
         conversation_id: conversation_id.map(str::to_string),
+        summary: extras.summary,
+        evidence_ids: extras.evidence_ids,
+        turn_index: extras.turn_index,
     };
     let payload_json = serde_json::to_string(&payload)?;
     let content = format!("{tool_id} → {} — {reasoning}", outcome.as_str());
@@ -1715,6 +1773,7 @@ mod tests {
             "knowledge_lookup",
             ToolDecisionOutcome::NoResults,
             "corpus has no entry for M5 Mac Studio",
+            ToolDecisionExtras::none(),
         )
         .await
         .unwrap();
@@ -1741,6 +1800,7 @@ mod tests {
             "knowledge_lookup",
             ToolDecisionOutcome::Useful,
             "found it in the wiki corpus",
+            ToolDecisionExtras::none(),
         )
         .await
         .unwrap();
@@ -1751,6 +1811,7 @@ mod tests {
             "search",
             ToolDecisionOutcome::Stale,
             "results pre-dated the asked-about announcement",
+            ToolDecisionExtras::none(),
         )
         .await
         .unwrap();
@@ -1761,6 +1822,7 @@ mod tests {
             "search",
             ToolDecisionOutcome::WrongTool,
             "should have used knowledge_lookup",
+                    ToolDecisionExtras::none(),
         )
         .await
         .unwrap();
@@ -1792,6 +1854,7 @@ mod tests {
                 "knowledge_lookup",
                 ToolDecisionOutcome::Useful,
                 &format!("decision {i}"),
+                ToolDecisionExtras::none(),
             )
             .await
             .unwrap();
@@ -1812,6 +1875,7 @@ mod tests {
             "search",
             ToolDecisionOutcome::Useful,
             "found in corpus",
+            ToolDecisionExtras::none(),
         )
         .await
         .unwrap();

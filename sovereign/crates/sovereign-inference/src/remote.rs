@@ -581,6 +581,7 @@ mod tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
 
         let body = provider.build_request(&request);
@@ -629,6 +630,7 @@ mod tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
 
         let body = provider.build_request(&request);

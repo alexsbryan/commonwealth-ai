@@ -121,6 +121,18 @@ pub struct ChatCompletionRequest {
     /// by `build_completion_request`, consumed by `embedded::build_sampler`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url_allowlist: Option<Vec<String>>,
+    /// Commonwealth extension (Tier 2 of tool-framework expansion):
+    /// evidence-id allowlist for sampler-side citation faithfulness.
+    /// Same architecture as `url_allowlist` applied to `ev-Tn-NNNN`
+    /// handles. When non-empty, tokens that would extend `[ev-T…`
+    /// into an id not in the list are clamped to `-INFINITY`. Wire
+    /// path: extracted here, threaded onto
+    /// `CompletionRequest.evidence_id_allowlist` by
+    /// `build_completion_request`, consumed by
+    /// `embedded::build_sampler`. Populated upstream by
+    /// `apply_evidence_id_allowlist_from_tool_results` (frontdoor).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_id_allowlist: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -48,8 +48,22 @@ pub struct EvidenceId(pub String);
 
 impl EvidenceId {
     /// Build a deterministic id from a 0-based row index.
+    /// Back-compat wrapper around [`Self::from_index_with_turn`]
+    /// for fixtures and tests that don't carry turn context —
+    /// renders as `ev-T0-NNNN` so the cross-turn renderer doesn't
+    /// have to special-case the turnless shape.
     pub fn from_index(idx: usize) -> Self {
-        Self(format!("ev-{:04}", idx))
+        Self::from_index_with_turn(idx, 0)
+    }
+
+    /// Build a turn-prefixed id from `(idx, turn)` (Tier 1
+    /// result-memory). Renders as `ev-Tn-NNNN`. The dossier's
+    /// outcome-history renderer surfaces these so the model can
+    /// reference `[ev-T2-0001]` in turn N+1 and the runtime can
+    /// dereference without re-calling the tool. `turn` is the
+    /// 0-based count of prior user turns in the conversation.
+    pub fn from_index_with_turn(idx: usize, turn: usize) -> Self {
+        Self(format!("ev-T{turn}-{idx:04}"))
     }
 
     pub fn as_str(&self) -> &str {
@@ -58,7 +72,7 @@ impl EvidenceId {
 }
 
 /// Which evidence channel this row came from. Closed set per ARCH
-/// §2.1 — adding a fourth channel (e.g. `Catalog` for unindexed
+/// §2.1 — adding a fifth channel (e.g. `Catalog` for unindexed
 /// recipe metadata) is one variant + one render arm, not a new
 /// string convention.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +87,14 @@ pub enum EvidenceKind {
     /// A working note (decision, invariant, todo) written via the
     /// `note` tool or harvested from commits.
     Note,
+    /// A web search result (Tier 3 of tool-framework expansion).
+    /// Only present when the tool was constructed with
+    /// `with_auto_escalate(true)` AND a `SearchOrchestrator` AND
+    /// the local channels returned thin/empty results. The
+    /// `source_id` for these rows is the URL; the
+    /// `retrieval_context` notes the backend that served the
+    /// result.
+    Web,
 }
 
 /// One row of evidence returned to the model. `source_id` is the
@@ -110,6 +132,11 @@ pub struct KindCounts {
     pub corpus: usize,
     pub memory: usize,
     pub note: usize,
+    /// Tier 3 web-escalation row count. Stays 0 when the tool is
+    /// not configured for auto-escalation OR when local channels
+    /// returned satisfactory results.
+    #[serde(default)]
+    pub web: usize,
 }
 
 // ─── Asset descriptors ─────────────────────────────────────────
@@ -131,6 +158,12 @@ pub struct KnowledgeLookupTool {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
     notes: Option<Arc<NoteStore>>,
+    /// Tier 3: optional web-search orchestrator. When `Some` AND
+    /// `auto_escalate_to_web` is true AND the local channels return
+    /// thin/empty results, the tool internally calls web search and
+    /// merges the results in as `EvidenceKind::Web` rows.
+    web: Option<Arc<crate::web::search::orchestrator::SearchOrchestrator>>,
+    auto_escalate_to_web: bool,
 }
 
 impl KnowledgeLookupTool {
@@ -142,7 +175,34 @@ impl KnowledgeLookupTool {
             store,
             inference,
             notes: None,
+            web: None,
+            auto_escalate_to_web: false,
         }
+    }
+
+    /// Wire the web-escalation channel (Tier 3). Pass an
+    /// already-constructed `SearchOrchestrator` (typically the same
+    /// instance the desktop's `submit_information_search` uses).
+    /// Escalation only fires when `with_auto_escalate(true)` is
+    /// ALSO set — having an orchestrator wired but the setting
+    /// off keeps the user-in-loop card path as the only web
+    /// surface.
+    pub fn with_web_orchestrator(
+        mut self,
+        orchestrator: Arc<crate::web::search::orchestrator::SearchOrchestrator>,
+    ) -> Self {
+        self.web = Some(orchestrator);
+        self
+    }
+
+    /// Toggle the operator setting (Tier 3). True ⇒ thin local
+    /// results trigger an internal web search. False (default) ⇒
+    /// the tool returns whatever local channels produced; the user
+    /// can still escalate to web manually via the INFORMATION
+    /// REQUEST card.
+    pub fn with_auto_escalate(mut self, enabled: bool) -> Self {
+        self.auto_escalate_to_web = enabled;
+        self
     }
 
     /// Add a `NoteStore` so the third evidence channel (notes) is
@@ -243,6 +303,61 @@ impl KnowledgeLookupTool {
             })
             .collect()
     }
+
+    /// Tier 3 web-escalation helper. Called from `execute()` when
+    /// the operator setting is on AND local channels returned
+    /// thin/empty results. Failures fall through to an empty Vec
+    /// — the model sees the local channels and an empty web row
+    /// set; that's a degraded but valid response (Tier 1 prompt
+    /// discipline still keeps the model honest about the absence).
+    async fn web_search_evidence(
+        &self,
+        orchestrator: &crate::web::search::orchestrator::SearchOrchestrator,
+        query: &str,
+    ) -> Vec<Evidence> {
+        use crate::web::search::backend_trait::SearchPrivacy;
+        use crate::web::search::orchestrator::{BudgetView, SelectInputs};
+        let client = reqwest::Client::new();
+        let budget = BudgetView::default();
+        let prefer: Vec<&str> = Vec::new();
+        let inputs = SelectInputs {
+            query,
+            max_results: 5,
+            // External: the operator opted in, so escalation may
+            // reach public-API backends (DDG, Brave, Tavily). The
+            // orchestrator's per-backend filter still applies; if
+            // only Local backends are configured this falls back
+            // to an empty result set.
+            max_privacy: SearchPrivacy::External { provider: "any" },
+            budget: &budget,
+            prefer: &prefer,
+        };
+        let result = orchestrator.search(&client, inputs).await;
+        let backend_id = result.backend_id;
+        result
+            .results
+            .into_iter()
+            .map(|sr| Evidence {
+                // id reassigned post-merge — placeholder here.
+                id: EvidenceId::from_index(0),
+                source_kind: EvidenceKind::Web,
+                source_id: sr.url.clone(),
+                title: sr.title,
+                content: {
+                    let mut c = sr.snippet;
+                    c.truncate(800);
+                    c
+                },
+                // Synthetic confidence below the corpus floor so
+                // genuine local matches still rank above web hits
+                // when both are present.
+                confidence: 0.55,
+                retrieval_context: format!(
+                    "web search (operator-enabled escalation, backend={backend_id})"
+                ),
+            })
+            .collect()
+    }
 }
 
 #[async_trait]
@@ -330,7 +445,7 @@ impl Tool for KnowledgeLookupTool {
     async fn execute(
         &self,
         params: &serde_json::Value,
-        _ctx: &ToolContext,
+        ctx: &ToolContext,
     ) -> Result<StepOutput> {
         let query = params
             .get("query")
@@ -385,11 +500,14 @@ impl Tool for KnowledgeLookupTool {
             }
         );
 
-        let counts = KindCounts {
-            corpus: corpus.len(),
-            memory: memories.len(),
-            note: note_rows.len(),
-        };
+        // Capture channel counts before consuming the vecs into
+        // the merge — needed for the `KindCounts` aggregate below
+        // (and for the Tier 3 thinness gate, which inspects
+        // confidence rather than count but uses counts for
+        // logging when escalation fires).
+        let corpus_count = corpus.len();
+        let memory_count = memories.len();
+        let note_count = note_rows.len();
 
         // Merge by confidence, descending. Stable sort so
         // within-channel ordering (which is already best-first
@@ -404,14 +522,56 @@ impl Tool for KnowledgeLookupTool {
                 .partial_cmp(&a.confidence)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        // Tier 3: web-escalation branch. Fires only when:
+        //   - operator opted in (`auto_escalate_to_web = true`),
+        //   - an orchestrator is wired (`web.is_some()`),
+        //   - AND the local channels returned thin/empty results.
+        // The thinness gate uses the same shape as the existing
+        // EvidenceShape::is_off_target predicate (top-3 confidence
+        // all below 0.4 or no rows at all). When the gate trips,
+        // we call web search with the same query, format each
+        // result as an `EvidenceKind::Web` row at a synthetic
+        // confidence (0.55, below the corpus floor so genuine
+        // corpus matches still rank above web), and re-sort.
+        let mut web_count = 0usize;
+        if self.auto_escalate_to_web {
+            if let Some(orchestrator) = self.web.as_ref() {
+                let local_thin = merged.is_empty()
+                    || merged.iter().take(3).all(|e| e.confidence < 0.4);
+                if local_thin {
+                    let web_evidence =
+                        self.web_search_evidence(orchestrator, &query).await;
+                    web_count = web_evidence.len();
+                    merged.extend(web_evidence);
+                    merged.sort_by(|a, b| {
+                        b.confidence
+                            .partial_cmp(&a.confidence)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                }
+            }
+        }
+
         merged.truncate(MAX_EVIDENCE_RETURNED);
+
+        let counts = KindCounts {
+            corpus: corpus_count,
+            memory: memory_count,
+            note: note_count,
+            web: web_count,
+        };
 
         // Assign stable per-call ids in final post-merge order
         // (NOT pre-merge channel order). This is the id the model
-        // sees and cites; ev-0001 is the top-ranked evidence
-        // across all channels, not channel-0-row-0.
+        // sees and cites; ev-T<turn>-0001 is the top-ranked
+        // evidence across all channels for THIS turn.
+        // Tier 1: ids carry the turn index so cross-turn
+        // citation handles disambiguate when two turns return
+        // the same evidence array.
+        let turn_index = ctx.turn_index;
         for (idx, ev) in merged.iter_mut().enumerate() {
-            ev.id = EvidenceId::from_index(idx);
+            ev.id = EvidenceId::from_index_with_turn(idx, turn_index);
         }
 
         let response = KnowledgeLookupResponse {
@@ -502,9 +662,15 @@ mod tests {
 
     #[test]
     fn evidence_id_zero_pad() {
-        assert_eq!(EvidenceId::from_index(0).as_str(), "ev-0000");
-        assert_eq!(EvidenceId::from_index(7).as_str(), "ev-0007");
-        assert_eq!(EvidenceId::from_index(123).as_str(), "ev-0123");
+        // Post-Tier-1: ids carry a turn prefix. `from_index(n)` is
+        // a thin wrapper that defaults to turn 0 — the rendered
+        // shape is `ev-T0-NNNN` even on the back-compat path.
+        assert_eq!(EvidenceId::from_index(0).as_str(), "ev-T0-0000");
+        assert_eq!(EvidenceId::from_index(7).as_str(), "ev-T0-0007");
+        assert_eq!(EvidenceId::from_index(123).as_str(), "ev-T0-0123");
+        // Turn-aware constructor uses an explicit turn index.
+        assert_eq!(EvidenceId::from_index_with_turn(1, 2).as_str(), "ev-T2-0001");
+        assert_eq!(EvidenceId::from_index_with_turn(0, 22).as_str(), "ev-T22-0000");
     }
 
     #[test]
@@ -515,10 +681,17 @@ mod tests {
         assert!(desc.description.len() > 50, "tool description must come from asset");
         // The descriptor should warn against fabrication — load-
         // bearing for the "no ev-xxx fabrication" structural
-        // predicate in the knowledge-gym.
+        // predicate in the knowledge-gym. The vocabulary may
+        // shift between asset revisions; we accept either the
+        // "NEVER cite" / "fabricat" wording or the
+        // "did not come back" / "invent" shape from the
+        // small-first rewrite (Tier 1b).
+        let d = &desc.description;
         assert!(
-            desc.description.contains("fabricat")
-                || desc.description.contains("NEVER cite"),
+            d.contains("fabricat")
+                || d.contains("NEVER cite")
+                || d.contains("did not come back")
+                || d.contains("invent"),
             "descriptor must include no-fabrication guidance"
         );
     }
@@ -561,6 +734,7 @@ mod tests {
                     working_directory: None,
                     in_reasoning_loop: false,
                     agent_session_token: None,
+                    turn_index: 0,
                 },
             )
             .await

@@ -385,6 +385,7 @@ mod tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         }
     }
 
@@ -557,6 +558,7 @@ allow_tools = ["write"]
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
         apply(&r, &mut req);
         assert!(req.tools.is_none());

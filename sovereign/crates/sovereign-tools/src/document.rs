@@ -69,6 +69,7 @@ impl DocumentTool {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -141,6 +142,7 @@ impl DocumentTool {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -345,6 +347,7 @@ impl DocumentTool {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             };
 
             let response = self.inference.complete(&request).await?;

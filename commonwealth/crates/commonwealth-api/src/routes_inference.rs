@@ -191,6 +191,13 @@ pub async fn chat_completions(
         // the model from fabricating sibling URLs during synthesis.
         // Idempotent: a caller-supplied `url_allowlist` wins.
         crate::frontdoor::apply_url_allowlist_from_tool_results(&mut request);
+        // Evidence-id allowlist accumulator (Tier 2 of tool-framework
+        // expansion). Same shape as the URL accumulator above but
+        // for `ev-Tn-NNNN` citation handles. Threaded onto
+        // `request.evidence_id_allowlist` so the sampler's
+        // `EvidenceIdAllowlistConstraint` can prevent the model from
+        // fabricating sibling ids during synthesis. Idempotent.
+        crate::frontdoor::apply_evidence_id_allowlist_from_tool_results(&mut request);
         let want_stream = request.stream.unwrap_or(false);
         info!(
             want_stream,

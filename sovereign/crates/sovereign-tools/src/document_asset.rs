@@ -826,6 +826,7 @@ impl DocumentAssetManager {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             })
             .await?;
 
@@ -989,6 +990,7 @@ impl DocumentAssetManager {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             })
             .await?;
 
@@ -1150,6 +1152,7 @@ impl DocumentAssetManager {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             })
             .await?;
 
@@ -1269,6 +1272,7 @@ impl DocumentAssetManager {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             })
             .await?;
 
@@ -1335,6 +1339,7 @@ impl DocumentAssetManager {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             })
             .await?;
 
@@ -1401,6 +1406,7 @@ async fn detect_document_type(
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         })
         .await;
 
@@ -1505,6 +1511,7 @@ async fn build_skeleton(
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             })
             .await;
 
@@ -1659,6 +1666,7 @@ async fn generate_overview(
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         })
         .await
         .map(|r| r.text)

@@ -7408,6 +7408,20 @@ pub struct ConstrainedSampler {
     /// stream (the JSON FSM emits braces and quotes that the URL FSM
     /// would treat as URL terminators).
     url_constraint: Option<crate::url_constraint::UrlAllowlistConstraint>,
+    /// Evidence-id allowlist constraint (Tier 2 of the tool-framework
+    /// expansion). When `Some`, every sampled token's bytes are
+    /// simulated against a byte-trie of allowed `ev-Tn-NNNN` handles;
+    /// tokens that would extend `[ev-T…` into a non-existent id get
+    /// clamped to `-INFINITY`. Prose tokens (anything that doesn't
+    /// look like the start of an `[ev-T` citation) pass through
+    /// unchanged.
+    ///
+    /// Skipped when the JSON-schema `constraint` above is also
+    /// active — same byte-stream-deadlock rationale as the URL
+    /// constraint (JSON FSM emits `]` which the citation FSM would
+    /// treat as a terminator).
+    evidence_id_constraint:
+        Option<crate::evidence_id_constraint::EvidenceIdAllowlistConstraint>,
     /// Vocab-sized bitmap of tokens whose rendered bytes contain a
     /// 3+ byte UTF-8 leading byte (CJK / Devanagari / Hangul / etc.).
     /// When `Some`, `sample()` clamps those tokens' logits to
@@ -7444,12 +7458,19 @@ impl ConstrainedSampler {
         };
         if let Some(c) = self.constraint.as_mut() {
             c.mask(&mut data);
-        } else if let Some(uc) = self.url_constraint.as_ref() {
-            // URL constraint is mutually exclusive with the JSON
-            // constraint — see field doc-comment for the deadlock
-            // rationale. Apply only when JSON isn't claiming the
-            // byte stream.
-            uc.mask(&mut data);
+        } else {
+            // URL + evidence-id constraints are mutually exclusive
+            // with the JSON constraint (deadlock rationale per the
+            // field doc-comments) but compose freely with each
+            // other — URLs and citations live in disjoint byte
+            // patterns (`http(s)://` vs `[ev-T`). Apply both when
+            // JSON isn't claiming the byte stream.
+            if let Some(uc) = self.url_constraint.as_ref() {
+                uc.mask(&mut data);
+            }
+            if let Some(eic) = self.evidence_id_constraint.as_ref() {
+                eic.mask(&mut data);
+            }
         }
         // Non-Latin denylist: independent of the JSON-schema mask, so
         // it covers free-form chat and non-`structured_output` paths
@@ -7494,6 +7515,11 @@ impl ConstrainedSampler {
         // appears in prose, and feeding it every token costs ~1 lookup.
         if let Some(uc) = self.url_constraint.as_mut() {
             uc.accept(token);
+        }
+        // Same synchronisation discipline for the evidence-id FSM —
+        // cursor must track every emitted token, masked or not.
+        if let Some(eic) = self.evidence_id_constraint.as_mut() {
+            eic.accept(token);
         }
     }
 
@@ -7575,6 +7601,25 @@ fn build_sampler(
         );
         constraint
     });
+
+    // Evidence-id allowlist constraint (Tier 2 of tool-framework
+    // expansion). Same per-request shape as the URL constraint —
+    // built when `CompletionRequest.evidence_id_allowlist` is
+    // non-empty. Shares the per-model vocab_bytes cache.
+    let evidence_id_constraint =
+        request.evidence_id_allowlist.as_deref().and_then(|ids| {
+            let vocab_bytes = crate::json_constraint::vocab_bytes_for(model);
+            let constraint =
+                crate::evidence_id_constraint::EvidenceIdAllowlistConstraint::new(
+                    ids, vocab_bytes,
+                );
+            tracing::info!(
+                ev_id_count = ids.len(),
+                constructed = constraint.is_some(),
+                "evidence_id_allowlist constraint constructed"
+            );
+            constraint
+        });
 
     // Non-Latin token denylist: opt-in via env var. Built once per
     // model and cached for the daemon's lifetime. Applies on every
@@ -7756,6 +7801,7 @@ fn build_sampler(
         inner_content: build_chain(&content, content_temp),
         constraint,
         url_constraint,
+        evidence_id_constraint,
         non_latin_denylist,
     }
 }

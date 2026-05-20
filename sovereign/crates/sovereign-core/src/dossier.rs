@@ -105,6 +105,9 @@ pub async fn compute_tool_dossier(
                         outcome: p.outcome.as_str().to_string(),
                         reasoning: p.reasoning,
                         applied_at_unix: p.applied_at_unix,
+                        summary: p.summary,
+                        evidence_ids: p.evidence_ids,
+                        turn_index: p.turn_index,
                     })
                     .collect(),
                 Err(e) => {
@@ -174,17 +177,54 @@ pub fn render_tool_dossier(dossier: &ToolDossier, now_unix: i64) -> String {
         for outcome in &dossier.outcome_history {
             let age = format_age_since(now_unix, outcome.applied_at_unix);
             let reasoning = outcome.reasoning.trim();
-            if reasoning.is_empty() {
-                history_block.push_str(&format!(
-                    "\n- {} → {} ({age})",
-                    outcome.tool_id, outcome.outcome
-                ));
+            // Tier 1 result-memory rendering: when the outcome
+            // carries a summary, render `→ outcome — "summary"`
+            // so the model sees what came back at a glance. When
+            // it also carries evidence_ids, append `[ev-Tn-...]`
+            // so cross-turn citation is structurally addressable.
+            let summary_part = outcome
+                .summary
+                .as_deref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| format!(" — \"{s}\""))
+                .unwrap_or_default();
+            let evidence_part = if outcome.evidence_ids.is_empty() {
+                String::new()
             } else {
-                history_block.push_str(&format!(
-                    "\n- {} → {} ({age}) — {reasoning}",
-                    outcome.tool_id, outcome.outcome
-                ));
-            }
+                format!(" {}", format_evidence_id_range(&outcome.evidence_ids))
+            };
+            let reasoning_part = if reasoning.is_empty() || !summary_part.is_empty() {
+                // Reasoning is redundant once we have the summary
+                // (both describe the same outcome) — skip to keep
+                // the line scannable.
+                String::new()
+            } else {
+                format!(" — {reasoning}")
+            };
+            history_block.push_str(&format!(
+                "\n- {} → {} ({age}){summary_part}{evidence_part}{reasoning_part}",
+                outcome.tool_id, outcome.outcome
+            ));
+        }
+        // Tier 1 cross-turn citation guidance — only emitted when
+        // at least one outcome in the history carries citable
+        // evidence_ids. The model SHOULD reference past handles
+        // rather than re-calling the tool for evidence it already
+        // saw. This guidance is SHAPE-level (not bank vocabulary).
+        let has_citable_history = dossier
+            .outcome_history
+            .iter()
+            .any(|o| !o.evidence_ids.is_empty());
+        if has_citable_history {
+            history_block.push_str(
+                "\n\nCross-turn citation: any [ev-Tn-NNNN] handle above \
+                 is still addressable this turn — cite it directly in \
+                 your answer the same way you'd cite an id from a tool \
+                 call made on THIS turn. The runtime dereferences the \
+                 handle to the original evidence row without you having \
+                 to re-call the tool.",
+            );
         }
         // SHAPE-level usage discipline. The dossier is most
         // valuable when the model SURFACES prior attempts to the
@@ -239,6 +279,7 @@ pub async fn record_tool_outcome(
     tool_id: &str,
     outcome: ToolDecisionOutcome,
     reasoning: &str,
+    extras: crate::memory::ToolDecisionExtras,
 ) {
     let Some(store) = notes else {
         tracing::info!(
@@ -255,6 +296,7 @@ pub async fn record_tool_outcome(
         tool_id,
         outcome,
         reasoning,
+        extras,
     )
     .await
     {
@@ -298,10 +340,104 @@ fn format_age_since(now_unix: i64, past_unix: i64) -> String {
     format!("{days} days ago")
 }
 
+/// Render a list of `ev-Tn-NNNN` ids as a compact range when
+/// contiguous (`[ev-T2-0000..0003]`), or a comma-separated list
+/// when sparse (`[ev-T2-0001, ev-T2-0004]`). Empty input returns
+/// empty string. Used by the outcome-history renderer to keep
+/// per-row evidence inventory scannable.
+///
+/// Range detection requires all ids in the input to share the same
+/// `Tn-` turn prefix and have monotonically-increasing zero-padded
+/// indices. Mixed-turn input always renders as a flat list (no
+/// cross-turn ranges).
+fn format_evidence_id_range(ids: &[String]) -> String {
+    if ids.is_empty() {
+        return String::new();
+    }
+    if ids.len() == 1 {
+        return format!("[{}]", ids[0]);
+    }
+    // Try contiguous-range rendering: same Tn prefix + consecutive
+    // numeric suffix in input order.
+    let parse = |id: &str| -> Option<(String, u32)> {
+        // ev-T2-0001 → ("ev-T2-", 1)
+        let last_dash = id.rfind('-')?;
+        let prefix = &id[..=last_dash];
+        let num = id[last_dash + 1..].parse::<u32>().ok()?;
+        Some((prefix.to_string(), num))
+    };
+    let parsed: Option<Vec<(String, u32)>> = ids.iter().map(|s| parse(s)).collect();
+    if let Some(parsed) = parsed {
+        let first_prefix = &parsed[0].0;
+        let same_prefix = parsed.iter().all(|(p, _)| p == first_prefix);
+        let monotonic = parsed.windows(2).all(|w| w[1].1 == w[0].1 + 1);
+        if same_prefix && monotonic {
+            return format!(
+                "[{}..{:04}]",
+                ids.first().unwrap(),
+                parsed.last().unwrap().1
+            );
+        }
+    }
+    // Fall back to flat comma-separated list.
+    format!("[{}]", ids.join(", "))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::ToolDossier;
+
+    #[test]
+    fn evidence_id_range_empty_returns_empty_string() {
+        assert_eq!(format_evidence_id_range(&[]), "");
+    }
+
+    #[test]
+    fn evidence_id_range_single_returns_bracketed() {
+        assert_eq!(
+            format_evidence_id_range(&["ev-T2-0001".to_string()]),
+            "[ev-T2-0001]"
+        );
+    }
+
+    #[test]
+    fn evidence_id_range_contiguous_renders_as_range() {
+        let ids = vec![
+            "ev-T2-0000".to_string(),
+            "ev-T2-0001".to_string(),
+            "ev-T2-0002".to_string(),
+            "ev-T2-0003".to_string(),
+        ];
+        assert_eq!(format_evidence_id_range(&ids), "[ev-T2-0000..0003]");
+    }
+
+    #[test]
+    fn evidence_id_range_sparse_renders_as_list() {
+        let ids = vec![
+            "ev-T2-0001".to_string(),
+            "ev-T2-0004".to_string(),
+        ];
+        assert_eq!(
+            format_evidence_id_range(&ids),
+            "[ev-T2-0001, ev-T2-0004]"
+        );
+    }
+
+    #[test]
+    fn evidence_id_range_mixed_turn_renders_as_list() {
+        // Cross-turn ids never collapse to a range — the Tn prefix
+        // disagreement is load-bearing for the reader.
+        let ids = vec![
+            "ev-T2-0001".to_string(),
+            "ev-T2-0002".to_string(),
+            "ev-T3-0000".to_string(),
+        ];
+        assert_eq!(
+            format_evidence_id_range(&ids),
+            "[ev-T2-0001, ev-T2-0002, ev-T3-0000]"
+        );
+    }
 
     fn fake_dossier(
         skill: Option<&str>,
@@ -324,6 +460,9 @@ mod tests {
                     outcome: (*outcome).into(),
                     reasoning: (*reasoning).into(),
                     applied_at_unix: *t,
+                    summary: None,
+                    evidence_ids: Vec::new(),
+                    turn_index: 0,
                 })
                 .collect(),
             ambient_state: None,
