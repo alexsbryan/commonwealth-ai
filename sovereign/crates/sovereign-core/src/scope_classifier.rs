@@ -56,6 +56,7 @@ use serde::Deserialize;
 
 use crate::error::{Error, Result};
 use crate::traits::InferenceProvider;
+use sovereign_static_embed::ShortQueryEmbedder;
 
 const DEFAULT_MIN_MARGIN: f32 = 0.02;
 const DEFAULT_MIN_PERSONAL_SIM: f32 = 0.45;
@@ -203,6 +204,107 @@ impl PersonalScopeClassifier {
         normalize(&mut q);
         Ok(self.classify_from_embedding(&q))
     }
+
+    /// Variant of [`Self::classify`] backed by a static `ShortQueryEmbedder`
+    /// — used when the daemon's bootstrap loaded a distilled artifact at
+    /// `~/.sovereign/static-embed/active/`. Skips the GPU embed slot
+    /// entirely; the centroid + query both come from the static path
+    /// so cosine math stays in the same metric space.
+    ///
+    /// Construct via [`Self::load_with_short_embed`] so the centroids
+    /// themselves use the same embedder; mixing GPU-embedded centroids
+    /// with a static query embedding would compare vectors in
+    /// different spaces and yield nonsense.
+    pub fn classify_static(
+        &self,
+        query: &str,
+        embedder: &dyn ShortQueryEmbedder,
+    ) -> Option<String> {
+        let q = embedder.embed_normalized(query);
+        self.classify_from_embedding(&q)
+    }
+
+    /// Load the example file and compute centroids using a static
+    /// embedder rather than the GPU embed slot. Same toml format as
+    /// [`Self::load`]; the dimension is whatever the static
+    /// embedder reports.
+    pub fn load_with_short_embed(
+        path: &Path,
+        embedder: &dyn ShortQueryEmbedder,
+    ) -> Result<Self> {
+        let raw = std::fs::read_to_string(path).map_err(|e| {
+            Error::InvalidInput(format!("read scope examples {}: {e}", path.display()))
+        })?;
+        let parsed: ScopeExamplesFile = toml::from_str(&raw).map_err(|e| {
+            Error::InvalidInput(format!("parse scope examples {}: {e}", path.display()))
+        })?;
+        if parsed.personal.examples.is_empty() || parsed.external.examples.is_empty() {
+            return Err(Error::InvalidInput(
+                "scope_examples.toml needs non-empty [personal].examples and [external].examples"
+                    .into(),
+            ));
+        }
+        let centroid_personal =
+            compute_centroid_static(&parsed.personal.examples, embedder)?;
+        let centroid_external =
+            compute_centroid_static(&parsed.external.examples, embedder)?;
+        if centroid_personal.len() != centroid_external.len() {
+            return Err(Error::InvalidInput(format!(
+                "scope centroid dim mismatch: personal={} external={}",
+                centroid_personal.len(),
+                centroid_external.len()
+            )));
+        }
+        let n_personal = parsed.personal.examples.len();
+        let n_external = parsed.external.examples.len();
+        tracing::info!(
+            target: "router.scope",
+            n_personal,
+            n_external,
+            dims = centroid_personal.len(),
+            teacher = embedder.teacher_id(),
+            path = %path.display(),
+            "personal-scope classifier loaded (static-embed)"
+        );
+        Ok(Self {
+            centroid_personal,
+            centroid_external,
+            n_personal,
+            n_external,
+            min_margin: DEFAULT_MIN_MARGIN,
+            min_personal_sim: DEFAULT_MIN_PERSONAL_SIM,
+        })
+    }
+}
+
+fn compute_centroid_static(
+    examples: &[String],
+    embedder: &dyn ShortQueryEmbedder,
+) -> Result<Vec<f32>> {
+    let mut sum: Option<Vec<f32>> = None;
+    for ex in examples {
+        let emb = embedder.embed_normalized(ex);
+        match sum.as_mut() {
+            Some(s) => {
+                if s.len() != emb.len() {
+                    return Err(Error::InvalidInput(format!(
+                        "centroid embeddings dim mismatch (static): {} vs {}",
+                        s.len(),
+                        emb.len()
+                    )));
+                }
+                for (i, v) in emb.into_iter().enumerate() {
+                    s[i] += v;
+                }
+            }
+            None => sum = Some(emb),
+        }
+    }
+    let mut c = sum.ok_or_else(|| {
+        Error::InvalidInput("compute_centroid_static: empty example set".into())
+    })?;
+    normalize(&mut c);
+    Ok(c)
 }
 
 async fn compute_centroid(
