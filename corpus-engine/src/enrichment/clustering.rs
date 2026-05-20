@@ -420,6 +420,23 @@ pub enum EnrichmentProgress {
         batches_done: usize,
         batches_total: usize,
     },
+    /// Per-cluster progress during Phase 2b labeling. Emitted after
+    /// each cluster's inference call (success or failure) so the
+    /// daemon can surface "X of Y labelled, Z stuck" to the operator
+    /// rather than waiting for `Phase2bComplete` at the end of the
+    /// whole phase. `last_error` carries the most-recent inference
+    /// error message when non-empty — UI surfaces the cluster that
+    /// failed, the count of consecutive failures, and the underlying
+    /// error so the operator can decide whether to keep waiting,
+    /// restart the daemon (clears MTP quarantine), or abandon the
+    /// run.
+    Phase2bProgress {
+        clusters_done: usize,
+        clusters_total: usize,
+        clusters_failed: usize,
+        consecutive_failures: usize,
+        last_error: Option<String>,
+    },
     Phase2bComplete {
         labeled_count: usize,
     },

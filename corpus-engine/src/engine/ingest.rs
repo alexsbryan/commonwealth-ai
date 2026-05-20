@@ -1591,6 +1591,20 @@ impl CorpusEngine {
                                     eprintln!("[{id}] Clustering complete: {cluster_count} clusters, {noise_chunks} noise"),
                                 EP::Phase1Progress { batches_done, batches_total } =>
                                     eprintln!("[{id}] Skeleton extraction: {batches_done}/{batches_total} batches"),
+                                EP::Phase2bProgress { clusters_done, clusters_total, clusters_failed, consecutive_failures, last_error } => {
+                                    if *consecutive_failures >= 4 {
+                                        eprintln!(
+                                            "[{id}] Cluster labeling: {clusters_done}/{clusters_total} — {consecutive_failures} consecutive failures (last: {})",
+                                            last_error.as_deref().unwrap_or("?"),
+                                        );
+                                    } else if *clusters_done == *clusters_total
+                                        || clusters_done % 16 == 0
+                                    {
+                                        eprintln!(
+                                            "[{id}] Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed)"
+                                        );
+                                    }
+                                }
                                 EP::Phase2bComplete { labeled_count } =>
                                     eprintln!("[{id}] Cluster labeling complete: {labeled_count} clusters labeled"),
                             }
@@ -1651,6 +1665,26 @@ impl CorpusEngine {
                                         Some(IngestProgress::Enriching {
                                             phase: "skeleton-extraction".into(),
                                             detail: format!("Skeleton extraction: {batches_done}/{batches_total} batches"),
+                                            fraction: frac,
+                                        })
+                                    }
+                                    EP::Phase2bProgress { clusters_done, clusters_total, clusters_failed, consecutive_failures, last_error } => {
+                                        let frac = if *clusters_total > 0 {
+                                            Some(*clusters_done as f32 / *clusters_total as f32)
+                                        } else {
+                                            None
+                                        };
+                                        let detail = if *consecutive_failures >= 4 {
+                                            format!(
+                                                "Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed, {consecutive_failures} consecutive — last: {})",
+                                                last_error.as_deref().unwrap_or("?"),
+                                            )
+                                        } else {
+                                            format!("Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed)")
+                                        };
+                                        Some(IngestProgress::Enriching {
+                                            phase: "cluster-labeling".into(),
+                                            detail,
                                             fraction: frac,
                                         })
                                     }

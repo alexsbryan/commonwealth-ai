@@ -781,8 +781,21 @@ impl ModelSlot {
                 Ok(r) => return Ok(r),
                 Err(e) => {
                     let msg = e.to_string();
+                    // The three error sites that signal "MTP draft side
+                    // is broken on this slot, single-token decode still
+                    // works": target prefill decode, prefill batch add,
+                    // and `session.process(&prefill)` (the post-prefill
+                    // hook into the draft side). The original two were
+                    // caught here on 2026-05-17; `process(prefill)` was
+                    // missed and caused the 2026-05-20 conversations-
+                    // anthropic Phase 2b cluster-labeling cascade —
+                    // every cluster failed, the loop logged + retried
+                    // every 2-3s for hours, no surfacing to the
+                    // operator. Add it to the set so the slot
+                    // quarantines on the first failure instead.
                     let is_prefill_error = msg.contains("MTP prefill decode failed")
-                        || msg.contains("MTP prefill batch add failed");
+                        || msg.contains("MTP prefill batch add failed")
+                        || msg.contains("MTP process(prefill) failed");
                     let quarantine_disabled = std::env::var("SOVEREIGN_MTP_QUARANTINE_DISABLE")
                         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
                         .unwrap_or(false);
