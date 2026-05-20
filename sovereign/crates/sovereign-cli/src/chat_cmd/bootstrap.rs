@@ -656,36 +656,6 @@ pub async fn build_session_with_skills(
         }
     }
 
-    // Static-embed: opt-in via `~/.sovereign/static-embed/active/`.
-    // When the artifact directory exists, wire it onto the runtime
-    // so the scope classifier + embed-router intent path use it
-    // instead of the GPU embed slot. Absent artifact = baseline
-    // behaviour preserved exactly.
-    match sovereign_static_embed::load_default_artifact() {
-        Ok(Some(short_embed)) => {
-            eprintln!(
-                "Static-embed: artifact loaded (teacher={}, dim={}) — \
-                 routing/scoping bypasses GPU embed slot",
-                short_embed.teacher_id(),
-                short_embed.dim()
-            );
-            runtime = runtime.with_short_embed(short_embed);
-        }
-        Ok(None) => {
-            // No artifact configured. Silent — distillation is
-            // opt-in and most users won't have run it.
-        }
-        Err(e) => {
-            // anyhow context-chain surfaces the underlying io /
-            // safetensors / tokenizer error so the operator can fix
-            // the artifact rather than just see "failed".
-            eprintln!(
-                "warning: static-embed artifact present but load failed: {e:#} — \
-                 routing falls back to GPU embed slot"
-            );
-        }
-    }
-
     Ok(ChatSession {
         runtime: Arc::new(runtime),
         store,

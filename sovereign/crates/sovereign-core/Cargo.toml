@@ -27,10 +27,6 @@ dirs = "5"
 # to derive the cache key. Workspace-version pin keeps lock-file
 # coherent with the 9+ other crates that already use sha2.
 sha2 = { workspace = true }
-# Static-embed runtime: scope classifier + router intent + atlas
-# short-query sniffs consult `ShortQueryEmbedder` when an artifact
-# is configured, avoiding the GPU embed slot on routing calls.
-sovereign-static-embed = { path = "../sovereign-static-embed" }
 
 [dev-dependencies]
 tokio = { workspace = true }

@@ -22,7 +22,6 @@ mod drift_cmd;
 mod drift_cmd_orchestrator;
 mod git_archaeology_cmd;
 mod enrich_cmd;
-mod static_embed_cmd;
 mod eval_cmd;
 mod corpus_catalog_cmd;
 mod corpus_scrub_cmd;
@@ -655,18 +654,6 @@ async fn async_main() {
                      corpus_engine=info",
                 );
                 let code = enrich_cmd::run_enrich(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "static-embed" => {
-                // Distillation streams a 256K-vocab loop to stderr
-                // with a per-50-batch progress line; surface
-                // sovereign_cli + sovereign_inference (the embed
-                // ctx-setup path) so anything that goes wrong inside
-                // the gguf load isn't dropped on the floor.
-                util::tracing_init::init_tracing(
-                    "sovereign_cli=info,sovereign_inference=info",
-                );
-                let code = static_embed_cmd::run_static_embed(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "atlas" => {
