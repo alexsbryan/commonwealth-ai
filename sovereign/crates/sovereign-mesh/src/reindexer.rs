@@ -255,12 +255,26 @@ impl Reindexer {
 
         let worker = tokio::spawn(run_worker(ctx));
 
-        // Kick the startup catch-up signal so the worker performs
-        // its first rebuild before any tool call arrives.
-        let _ = rebuild_tx.send(Some(RebuildRequest {
-            reason: RebuildReason::Startup,
-            enqueued_at: Instant::now(),
-        }));
+        // Kick the startup catch-up signal — but only if the on-disk
+        // graph isn't already current. Cold-starting four corpora and
+        // rebuilding all of them OOM'd the box once: the daemon
+        // restart for a model swap fired Startup on every project
+        // even though nothing had changed since the last rebuild
+        // five minutes earlier. The git_poll loop already does the
+        // right freshness check (HEAD drift + working-tree state);
+        // mirror that decision here so the startup catch-up only
+        // fires when there's something to catch up on.
+        if needs_startup_rebuild(&entry, &graph.load()).await {
+            let _ = rebuild_tx.send(Some(RebuildRequest {
+                reason: RebuildReason::Startup,
+                enqueued_at: Instant::now(),
+            }));
+        } else {
+            tracing::info!(
+                corpus = %corpus_id,
+                "startup rebuild skipped — graph fresh at HEAD with clean working tree"
+            );
+        }
 
         let handle = Arc::new(ProjectHandle {
             entry,
@@ -809,6 +823,69 @@ fn build_ignore_filter(root: &Path) -> IgnoreFilter {
     IgnoreFilter { matcher }
 }
 
+/// Decide whether the startup catch-up rebuild should fire for
+/// `entry`. Returns `true` (must rebuild) whenever any freshness
+/// signal is missing or stale; returns `false` only when we have
+/// positive evidence the on-disk graph already reflects the current
+/// source tree.
+///
+/// Conservative on purpose: any uncertainty (no git, no recorded
+/// HEAD, can't run `git status`) returns `true` so a misconfigured
+/// project still gets indexed once on startup. The win is the
+/// common case — daemon restart for an inference-side change with
+/// nothing touched in the source tree — which used to fan out N
+/// full SCIP rebuilds and OOM the box.
+async fn needs_startup_rebuild(
+    entry: &ProjectEntry,
+    graph: &ScipGraph,
+) -> bool {
+    // 1. The on-disk graph must have a recorded HEAD. Placeholder
+    //    in-memory graphs (from a corrupt-DB recovery path) and
+    //    legacy DBs without the `last_indexed_head` row return
+    //    `None` here → always rebuild.
+    let Some(indexed_head) = graph.last_indexed_head().await else {
+        return true;
+    };
+    if indexed_head.is_empty() {
+        return true;
+    }
+    // 2. Current HEAD must match what was indexed.
+    let Some(current_head) = read_git_head(&entry.root) else {
+        // No git — we have no cheap freshness primitive. Rebuild
+        // to stay safe; non-git projects are rare on this daemon.
+        return true;
+    };
+    if current_head != indexed_head {
+        return true;
+    }
+    // 3. Working tree must be clean. The git_poll signal only
+    //    catches HEAD drift, so without this check uncommitted
+    //    edits made while the daemon was down would never trigger
+    //    a startup rebuild. `git status --porcelain` is cheap (a
+    //    single git invocation, no diff content) and reports both
+    //    modified-tracked and untracked files.
+    if working_tree_dirty(&entry.root) {
+        return true;
+    }
+    false
+}
+
+/// `true` iff `git status --porcelain` produces any output.
+/// Failure to spawn or non-zero exit returns `true` (treat as
+/// dirty) so a broken git invocation doesn't silently skip a
+/// rebuild we needed to do.
+fn working_tree_dirty(root: &Path) -> bool {
+    let out = std::process::Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(root)
+        .output();
+    match out {
+        Ok(o) if o.status.success() => !o.stdout.is_empty(),
+        _ => true,
+    }
+}
+
 /// Read the current `HEAD` SHA of the repository at `root`.
 /// `None` when `root` isn't a git repository or `git` isn't on
 /// PATH (in which case the git-poll signal becomes a no-op and
@@ -891,6 +968,83 @@ mod tests {
     fn read_git_head_returns_none_for_non_repo() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(read_git_head(tmp.path()).is_none());
+    }
+
+    /// Initialise a git repo with one commit; return (entry, current_head).
+    /// Used by the `needs_startup_rebuild` cases below.
+    fn init_repo_with_commit(corpus_id: &str) -> (tempfile::TempDir, ProjectEntry, String) {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let run = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .expect("git invocation");
+            assert!(status.success(), "git {:?} failed", args);
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "test"]);
+        std::fs::write(root.join("src.rs"), "fn main() {}\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-q", "-m", "initial"]);
+        let head = read_git_head(root).expect("HEAD after commit");
+        let entry = sample_entry(corpus_id, root.to_path_buf());
+        (tmp, entry, head)
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_true_when_graph_has_no_recorded_head() {
+        let (_tmp, entry, _head) = init_repo_with_commit("no-head");
+        // Fresh in-memory graph — never had `record_rebuild` called,
+        // so `last_indexed_head()` returns None.
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        assert!(needs_startup_rebuild(&entry, &graph).await);
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_true_when_root_is_not_a_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let entry = sample_entry("no-git", tmp.path().to_path_buf());
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        // Pretend the graph was indexed at some prior HEAD, but the
+        // directory isn't a git repo — we can't verify freshness.
+        graph
+            .record_rebuild("startup", Some("deadbeef"), None)
+            .await;
+        assert!(needs_startup_rebuild(&entry, &graph).await);
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_true_when_head_drifted() {
+        let (_tmp, entry, _head) = init_repo_with_commit("drift");
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        graph
+            .record_rebuild("startup", Some("0000000000000000000000000000000000000000"), None)
+            .await;
+        assert!(needs_startup_rebuild(&entry, &graph).await);
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_true_when_working_tree_dirty() {
+        let (tmp, entry, head) = init_repo_with_commit("dirty");
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        graph.record_rebuild("startup", Some(&head), None).await;
+        // Touch a tracked file so `git status --porcelain` is non-empty.
+        std::fs::write(tmp.path().join("src.rs"), "fn main() { let _ = (); }\n").unwrap();
+        assert!(needs_startup_rebuild(&entry, &graph).await);
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_false_when_head_matches_and_tree_clean() {
+        let (_tmp, entry, head) = init_repo_with_commit("fresh");
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        graph.record_rebuild("startup", Some(&head), None).await;
+        assert!(
+            !needs_startup_rebuild(&entry, &graph).await,
+            "graph indexed at current HEAD with clean tree must not trigger a rebuild"
+        );
     }
 
     #[tokio::test]
