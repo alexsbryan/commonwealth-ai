@@ -763,14 +763,6 @@ Reply with JSON only:
         ];
         let has_temporal = temporal_keywords.iter().any(|kw| lower.contains(kw));
 
-        // Future-orientation markers — paired with a fresh-info signal
-        // these mean "events that haven't happened yet", which the
-        // corpus can't answer regardless of depth. Landed 2026-05-19
-        // after `future_timeline_v1` eval surfaced "When is the next
-        // X expected to come out?" being force-lookup'd into
-        // KnowledgeQuery and necessarily failing.
-        let has_future_orientation = Self::has_future_orientation_shape(&lower);
-
         // Search-imperative phrases.
         let search_keywords = [
             "search for",
@@ -782,63 +774,9 @@ Reply with JSON only:
         ];
         let has_search_request = search_keywords.iter().any(|kw| lower.contains(kw));
 
-        has_recent_year || has_temporal || has_future_orientation || has_search_request
+        has_recent_year || has_temporal || has_search_request
     }
 
-    /// Linguistic shape detector: does this message carry a
-    /// future-orientation? Used as both a positive signal in
-    /// `needs_current_info` (these need fresh info, route to action)
-    /// and as an exclusion in `looks_like_factual_lookup` (these are
-    /// not corpus-answerable, don't shortcut to knowledge-query).
-    ///
-    /// Two shape families:
-    ///   1. Direct future-tense keywords ("upcoming", "scheduled",
-    ///      "release date", "come out") that mark the question as
-    ///      about an event that hasn't happened.
-    ///   2. The "when … next/upcoming/new" pattern — a time-opener
-    ///      paired with a next-in-sequence marker, which by
-    ///      definition is not yet in any corpus.
-    ///
-    /// All markers are SHAPES per `feedback_no_teaching_to_test.md`
-    /// — they describe linguistic future-orientation, not specific
-    /// products or events from any eval bank.
-    ///
-    /// Expects `lower` to already be lowercase.
-    fn has_future_orientation_shape(lower: &str) -> bool {
-        const DIRECT_FUTURE_KEYWORDS: &[&str] = &[
-            "upcoming",
-            "scheduled",
-            "expected to",
-            "expected at",
-            "come out",
-            "coming out",
-            "will be released",
-            "will launch",
-            "release date",
-            "launch date",
-        ];
-        if DIRECT_FUTURE_KEYWORDS.iter().any(|kw| lower.contains(kw)) {
-            return true;
-        }
-
-        // Structural: a when-opener combined with a next-in-sequence
-        // marker. "When does the next iPhone launch?" — the verb
-        // "launch" isn't itself a future keyword, but "when … next"
-        // is unambiguously asking about a future occurrence.
-        let has_when_opener = lower.starts_with("when ")
-            || lower.contains(" when ")
-            || lower.starts_with("what's ")
-            || lower.starts_with("what is ");
-        if has_when_opener
-            && (lower.contains(" next ")
-                || lower.contains(" upcoming ")
-                || lower.contains(" the new "))
-        {
-            return true;
-        }
-
-        false
-    }
 
     /// Heuristic check: is this message a metalingual query — asking
     /// about how a *specific source* uses a term, rather than asking
@@ -1238,16 +1176,6 @@ Reply with JSON only:
             " arguments for ", " arguments against ",
         ];
         if ANALYTICAL_EXCLUSIONS.iter().any(|m| lower.contains(m)) {
-            return false;
-        }
-
-        // Future-orientation exclusion. The shape detector handles
-        // both direct future keywords ("come out", "upcoming",
-        // "scheduled") and the "when … next" structural pattern.
-        // These can't be answered from a static corpus, so don't
-        // force-lookup — let `needs_current_info` route to action,
-        // or fall through to the LLM classifier.
-        if Self::has_future_orientation_shape(&lower) {
             return false;
         }
 
@@ -2668,52 +2596,6 @@ mod tests {
         assert!(LlmRouter::needs_current_info("Who won the game today?"));
         assert!(LlmRouter::needs_current_info("What's the weather like?"));
         assert!(LlmRouter::needs_current_info("Who won the election?"));
-    }
-
-    #[test]
-    fn looks_like_factual_lookup_excludes_future_orientation() {
-        // Defensive belt-and-braces test pinning the
-        // FUTURE_ORIENTATION_EXCLUSIONS list. Even if
-        // `needs_current_info` misses a phrasing,
-        // `looks_like_factual_lookup` must not steal these for the
-        // knowledge-query corpus path — let them fall through to the
-        // LLM classifier.
-        assert!(!LlmRouter::looks_like_factual_lookup(
-            "When is the next generation of Mac Studio expected to come out?"
-        ));
-        assert!(!LlmRouter::looks_like_factual_lookup(
-            "When does the next iPhone launch?"
-        ));
-        assert!(!LlmRouter::looks_like_factual_lookup(
-            "When is the next Fed meeting?"
-        ));
-        // Counter-example: surface-similar but truly historical —
-        // must STILL hit the lookup shortcut (no future markers).
-        assert!(LlmRouter::looks_like_factual_lookup(
-            "When was the Berlin Wall built?"
-        ));
-        assert!(LlmRouter::looks_like_factual_lookup(
-            "Who is the prime minister of Japan?"
-        ));
-    }
-
-    #[test]
-    fn needs_current_info_future_orientation_markers() {
-        // 2026-05-19 future_timeline_v1 eval: these were force_lookup'd
-        // into KnowledgeQuery and necessarily failed (no corpus
-        // contains future events). Future-orientation markers are
-        // present/past markers' temporal mirror — both belong here.
-        assert!(LlmRouter::needs_current_info(
-            "When is the next generation of Mac Studio expected to come out?"
-        ));
-        assert!(LlmRouter::needs_current_info("When does the next iPhone launch?"));
-        assert!(LlmRouter::needs_current_info(
-            "When is the next SpaceX launch scheduled?"
-        ));
-        assert!(LlmRouter::needs_current_info(
-            "What's expected at the upcoming WWDC?"
-        ));
-        assert!(LlmRouter::needs_current_info("When does GPT-5 come out?"));
     }
 
     #[test]

@@ -3,14 +3,34 @@
     submitInformationResponse,
     submitInformationSearch,
   } from "../api";
-  import type { InformationRequestPayload } from "../types";
+  import type {
+    InformationRequestPayload,
+    SearchAugmentation,
+  } from "../types";
 
   interface Props {
     request: InformationRequestPayload | null;
     onHandled: () => void;
+    /** Fired the moment the user kicks off a refinement (paste-submit
+     *  or search-submit). ChatView uses this to mark the targeted
+     *  assistant bubble as `refining: true` so AssistantMessage can
+     *  render a "Refining…" overlay until the corresponding
+     *  MESSAGE_REFINED event arrives. Optional — leaving it unset
+     *  preserves the original no-indicator behaviour. */
+    onRefiningStarted?: () => void;
+    /** Fired after a successful `submitInformationSearch` so the
+     *  ChatView can stash the search provenance on the targeted
+     *  message. The post-refine bubble then renders the
+     *  "Augmented via web search" footer. */
+    onSearchAugmented?: (augmentation: SearchAugmentation) => void;
   }
 
-  let { request, onHandled }: Props = $props();
+  let {
+    request,
+    onHandled,
+    onRefiningStarted,
+    onSearchAugmented,
+  }: Props = $props();
 
   let pasteValue = $state("");
   let submitting = $state(false);
@@ -26,6 +46,12 @@
   async function handleSubmit() {
     if (!request || submitting || !pasteValue.trim()) return;
     submitting = true;
+    // Mark the targeted bubble as refining BEFORE the Tauri call so
+    // the UI swaps to the "Refining…" state immediately rather than
+    // after the round-trip. The runtime's post-stream refinement
+    // fires once the channel resolves, so the indicator covers the
+    // entire wait.
+    onRefiningStarted?.();
     try {
       await submitInformationResponse(request.key, pasteValue.trim());
     } catch (e) {
@@ -55,12 +81,25 @@
   /// new wire path for the search result. On failure (zero results
   /// from a bot-blocked DDG fallback, or a backend error), surface
   /// the message inline and leave the card live.
+  ///
+  /// The returned `SearchAugmentation` is forwarded to ChatView so
+  /// the post-refine bubble can render an "Augmented via web search:
+  /// <query> (N sources)" footer with the source URLs clickable.
   async function handleSearch() {
     if (!request || submitting || searching) return;
     searchError = "";
     searching = true;
+    // Same pre-call indicator-on as `handleSubmit` — the bubble
+    // shows "Refining…" the moment the user commits to the action.
+    onRefiningStarted?.();
     try {
-      await submitInformationSearch(request.key, request.gap);
+      const augmentation = await submitInformationSearch(
+        request.key,
+        request.gap,
+      );
+      if (augmentation.accepted) {
+        onSearchAugmented?.(augmentation);
+      }
       // Daemon resolved the pending channel; tear down the card.
       onHandled();
     } catch (e) {

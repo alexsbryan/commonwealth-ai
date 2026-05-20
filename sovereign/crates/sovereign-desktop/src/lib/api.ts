@@ -181,6 +181,21 @@ export async function submitInformationResponse(
   return invoke("submit_information_response", { key, content });
 }
 
+/** Returned by `submit_information_search` so the frontend can stash
+ *  the search provenance and attach it to the matching refined
+ *  bubble when the post-stream refinement completes. Mirrors the
+ *  Rust-side `SearchAugmentation` struct in `commands.rs`. */
+export interface SearchAugmentation {
+  query: string;
+  backend_id: string;
+  sources: Array<{ title: string; url: string }>;
+  /** `false` iff the runtime had already resolved the pending
+   *  request between the existence-probe and the resolve call.
+   *  The UI should ignore the augmentation in that case rather
+   *  than render orphaned provenance. */
+  accepted: boolean;
+}
+
 /** Resolve a pending information-request by running a web search and
  *  feeding the formatted results back as if the user had pasted them.
  *  Errors when the search returns zero results (DDG bot-block etc.)
@@ -189,7 +204,7 @@ export async function submitInformationResponse(
 export async function submitInformationSearch(
   key: string,
   query: string,
-): Promise<boolean> {
+): Promise<SearchAugmentation> {
   return invoke("submit_information_search", { key, query });
 }
 

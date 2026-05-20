@@ -35,6 +35,25 @@ export interface MessageEntry {
   content: string;
   created_at: number;
   metadata?: Record<string, unknown>;
+  /** True between the moment the user clicks "Search the web" / submits
+   *  paste content on the InformationRequestCard and the moment
+   *  MESSAGE_REFINED arrives. AssistantMessage uses this to render a
+   *  "Refining…" indicator on the bubble so the in-place rewrite is
+   *  not a surprise. Cleared by MESSAGE_REFINED (success) or a
+   *  refinement-error event. */
+  refining?: boolean;
+  /** Set on the refined bubble when the refinement was sourced from
+   *  the search-now affordance. Drives the "Augmented via web
+   *  search: <query> (N sources)" footer note. Persisted into
+   *  `metadata.search_augmentation` so it survives hydration. */
+  searchAugmentation?: SearchAugmentation;
+}
+
+/** Mirrors `SearchAugmentation` in `commands.rs` / `api.ts`. */
+export interface SearchAugmentation {
+  query: string;
+  backend_id: string;
+  sources: Array<{ title: string; url: string }>;
 }
 
 export interface CreateConversationResponse {

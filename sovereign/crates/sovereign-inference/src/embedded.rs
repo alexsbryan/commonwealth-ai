@@ -3875,6 +3875,24 @@ pub(crate) const FAST_SHORT_N_SEQ_MAX: u32 = 8;
 pub(crate) const FAST_SHORT_N_CTX: u32 = 16_384;
 pub(crate) const FAST_SHORT_N_UBATCH: u32 = 2_048;
 
+/// Conservative chars→tokens estimate the slot picker uses before
+/// tokenization is available. The FastShort per-sequence KV budget
+/// is `FAST_SHORT_N_CTX / FAST_SHORT_N_SEQ_MAX = 2048` tokens; any
+/// request whose tokenized prompt exceeds that overflows the slot
+/// and fails with `NoKvCacheSlot` at decode time. 4 chars/token is
+/// conservative for Llama-family BPE vocabularies (real ratio is
+/// typically 3.5–4 for English, lower for code-dense prompts) so a
+/// 1500-token budget maps to ~6000 chars. Headroom for output cap
+/// (≤512 tokens) is the remaining 500 tokens of slot budget. A
+/// prompt above this threshold falls through to the Fast slot
+/// (n_seq_max=1, full n_ctx) where it has the whole window. See
+/// `pick_slot` for the gate. Forensic 2026-05-19 trace surfaced
+/// `prompt_chars=9272, max_tokens=16` (a small-output Fast call
+/// with a large conversation-context prompt) routing here and
+/// blowing up — title/scope classifiers see full conversation
+/// context even when they emit ~16 tokens.
+pub(crate) const FAST_SHORT_MAX_INPUT_CHARS: usize = 6_000;
+
 /// Time the coalescer waits between accepting the first request and
 /// firing the batched decode. Concurrent enrichment-phase callers
 /// (Phase 1b/3/5/6 dispatched via `buffer_unordered` or `try_join_all`)
@@ -4273,20 +4291,39 @@ fn pick_slot(
 
     // FastShort routing: when the FastShort companion slot is built
     // and the request fits its envelope (small output budget, fast
-    // latency), route there. The OICP scheduler at the daemon edge
-    // already does the analogous selection between FastShort /
-    // FastLong claims; this is the local-dispatch mirror so a
-    // sovereign daemon serving its own request can also benefit
-    // without the round-trip through the mesh router.
+    // latency, prompt fits the per-seq KV slice), route there. The
+    // OICP scheduler at the daemon edge already does the analogous
+    // selection between FastShort / FastLong claims; this is the
+    // local-dispatch mirror so a sovereign daemon serving its own
+    // request can also benefit without the round-trip through the
+    // mesh router.
     //
-    // Threshold is the FastShort claim's `max_output` (512 — see
-    // `synthesize_slot_claims`). Phase 1b/3/5/6 composers set their
-    // `max_output_tokens` to ≤512 (some at 256 / 1024 — note: 1024
-    // would overflow this gate and fall through to Fast, which is
-    // correct: those phases prefer per-call window over batching).
+    // Three gates, all required:
+    //   1. `max_tokens ≤ 512` — matches the FastShort claim's
+    //      `max_output` (see `synthesize_slot_claims`). Phase 1b/3/5/6
+    //      composers set ≤512 (some at 256/1024; 1024 falls through to
+    //      Fast, which is correct: those phases prefer per-call
+    //      window over batching).
+    //   2. `preferred_speed == Fast` — the slot exists to soak up
+    //      Fast traffic concurrently; Medium/Slow want the Primary
+    //      pool.
+    //   3. `prompt_chars ≤ FAST_SHORT_MAX_INPUT_CHARS` — each
+    //      FastShort sequence's KV slice is `n_ctx/n_seq_max = 2048`
+    //      tokens, so a large prompt overflows even when the output
+    //      cap is tiny. Title/scope/coarse classifiers issue Fast +
+    //      `max_tokens=16` calls but see full conversation context
+    //      in the prompt (~9k chars at session-restoration time).
+    //      Without this gate they land on FastShort and decode fails
+    //      with `NoKvCacheSlot` mid-prefill. Forensic 2026-05-19.
     let max_out = request.max_tokens.unwrap_or(usize::MAX);
+    let prompt_chars = request.prompt.chars().count()
+        + request
+            .system_message
+            .as_ref()
+            .map_or(0, |s| s.chars().count());
     let fits_fast_short = max_out <= 512
-        && request.preferred_speed == Speed::Fast;
+        && request.preferred_speed == Speed::Fast
+        && prompt_chars <= FAST_SHORT_MAX_INPUT_CHARS;
     if has_fast_short && fits_fast_short {
         return SlotTarget::FastShort;
     }
@@ -8280,7 +8317,7 @@ mod pick_slot_tests {
     //! with fast, GPU-free table tests so a regression in routing
     //! is caught by `cargo test` long before it reaches a live
     //! llama.cpp load.
-    use super::{pick_slot, SlotTarget};
+    use super::{pick_slot, SlotTarget, FAST_SHORT_MAX_INPUT_CHARS};
     use sovereign_core::oicp::{CapabilityHint, InferenceRequirements};
     use sovereign_core::types::{CompletionRequest, Speed};
 
@@ -8345,6 +8382,40 @@ mod pick_slot_tests {
         assert_eq!(
             pick_slot(&r, true, false, true, None),
             SlotTarget::Fast
+        );
+    }
+
+    #[test]
+    fn fast_short_skipped_when_prompt_exceeds_per_seq_budget() {
+        // 2026-05-19 desktop trace: a Fast+max_tokens=16 call from
+        // (likely) the title/scope classifier carried a 9272-char
+        // conversation-context prompt; pick_slot routed it to
+        // FastShort whose per-seq KV slice is only 2048 tokens, and
+        // decode failed with `NoKvCacheSlot (batch_n_tokens=2328,
+        // n_requests=1)`. The fix gates FastShort on prompt size in
+        // addition to output budget.
+        let mut r = req(Speed::Fast, None);
+        r.max_tokens = Some(16);
+        r.prompt = "x".repeat(FAST_SHORT_MAX_INPUT_CHARS + 1);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::Fast,
+            "oversized prompt must fall through to Fast even when max_tokens is tiny"
+        );
+        // Right at the boundary — still allowed.
+        r.prompt = "x".repeat(FAST_SHORT_MAX_INPUT_CHARS);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::FastShort
+        );
+        // system_message counts too — a long system + tiny user
+        // prompt should also fall through.
+        r.prompt = "x".repeat(100);
+        r.system_message = Some("y".repeat(FAST_SHORT_MAX_INPUT_CHARS));
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::Fast,
+            "system+prompt combined must respect the FastShort input budget"
         );
     }
 

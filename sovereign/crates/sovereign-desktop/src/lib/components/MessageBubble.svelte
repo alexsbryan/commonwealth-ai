@@ -1,6 +1,6 @@
 <script lang="ts">
   import AssistantMessage from "./AssistantMessage.svelte";
-  import type { NextStepOffer } from "../types";
+  import type { NextStepOffer, SearchAugmentation } from "../types";
 
   interface Props {
     role: string;
@@ -9,6 +9,10 @@
     conversationId: string;
     metadata?: Record<string, unknown>;
     isStreaming?: boolean;
+    /** Forwarded to AssistantMessage — see its Props for the
+     *  refining / searchAugmentation contract. */
+    refining?: boolean;
+    searchAugmentation?: SearchAugmentation;
     /** PR3 — callback fired when the user clicks a next-step chip
      *  rendered under the assistant message. ChatView supplies the
      *  orchestrator that routes via `resumeSession` or
@@ -23,6 +27,8 @@
     conversationId,
     metadata,
     isStreaming,
+    refining,
+    searchAugmentation,
     onNextStep,
   }: Props = $props();
 </script>
@@ -39,6 +45,8 @@
     {conversationId}
     {metadata}
     {isStreaming}
+    {refining}
+    {searchAugmentation}
     {onNextStep}
   />
 {/if}

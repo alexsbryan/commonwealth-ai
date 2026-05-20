@@ -9,7 +9,16 @@ import type { InformationRequestPayload } from "../types";
 
 vi.mock("../api", () => ({
   submitInformationResponse: vi.fn(async () => undefined),
-  submitInformationSearch: vi.fn(async () => undefined),
+  // Returns a SearchAugmentation by default (matches the real Tauri
+  // command's return shape). Individual tests override via
+  // mockResolvedValueOnce / mockRejectedValueOnce when they need to
+  // simulate the no-results / network-error / channel-race paths.
+  submitInformationSearch: vi.fn(async () => ({
+    query: "mock query",
+    backend_id: "duckduckgo",
+    sources: [{ title: "Mock", url: "https://example.test/x" }],
+    accepted: true,
+  })),
 }));
 
 const api = await import("../api");

@@ -929,6 +929,34 @@ const CONV_HISTORY_COMPACT_MIN_DROPPED: usize = 2;
 /// that resolves coreference and topic continuity today. See
 /// `sovereign/bench/wikipedia_learn/README.md` for the motivating
 /// bench.
+/// Today's-date anchor + recency-reasoning discipline for the system
+/// message. Without this the model has no "now" to compare
+/// retrieved-source dates against — it trusts a 2025 article's
+/// prediction of an early-2026 event as if it were future-looking even
+/// when today is May 2026. Surfaced 2026-05-19 M5-Mac-Studio session:
+/// model presented 2024-era rumors as current forecasts because the
+/// prompt never told it what year it was.
+///
+/// Discipline is SHAPE-level per `feedback_no_teaching_to_test.md` —
+/// no bank-derived examples, just general date-reasoning guidance:
+/// compare source dates to today, flag stale predictions, don't
+/// present them as still future-looking.
+///
+/// Split out as a free function so it can be unit-tested without
+/// constructing a full `Runtime` (which needs InferenceProvider +
+/// StateStore + half the dependency graph).
+fn today_anchor_block(today_iso: &str) -> String {
+    format!(
+        "Current date: {today_iso}. When evaluating retrieved or \
+         user-provided sources, compare their publication date or \
+         context to today's date. If a source predicts an event for a \
+         date that has already passed, do NOT present that prediction \
+         as still future-looking — either the event happened (look \
+         for more recent confirming sources before asserting it) or \
+         the prediction was wrong (say so)."
+    )
+}
+
 fn format_conversation_history(
     messages: &[Message],
     max_turns: usize,
@@ -2879,18 +2907,41 @@ pub(crate) async fn run_collaboration(
     // 4. Refinement synthesis — integrate the user's source. The prompt
     //    asks the model to distinguish corpus-derived content from
     //    user-provided content so provenance stays visible.
+    //
+    // The system message anchors today's date and instructs the model
+    // to compare source-dates to "now" — critical because user-supplied
+    // sources (especially web-search results) frequently include older
+    // articles that PREDICT events the model would otherwise present as
+    // still future. Surfaced 2026-05-19 M5-Mac-Studio session: model
+    // refined with 2024-era rumor articles predicting "early 2026"
+    // launches and presented those predictions as forecasts even
+    // though it was already May 2026. Date-reasoning discipline is
+    // shape-level per `feedback_no_teaching_to_test.md`.
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let refine_system = format!(
+        "Current date: {today}. When integrating user-provided \
+         sources, compare their publication date or context to \
+         today's date. If a source predicts an event for a date \
+         that has already passed, do NOT present the prediction as \
+         still future — either the event happened (look for more \
+         recent confirming evidence before asserting it) or the \
+         prediction was wrong (say so). Sources that are silent on \
+         dates may still be stale; flag uncertainty when the answer \
+         depends on time-sensitive facts."
+    );
     let refine_prompt = format!(
         "The user asked: {question}\n\n\
          Your initial answer (drawn from the local corpus):\n{response}\n\n\
          Additional source the user provided:\n{content}\n\n\
          Refine the answer to integrate the user's source. Be explicit \
          about what came from the corpus vs. what came from the user's \
-         source. Mark anything that remains uncertain."
+         source. Mark anything that remains uncertain — especially \
+         claims that hinge on dates that may now be in the past."
     );
 
     let refine_req = CompletionRequest {
         prompt: refine_prompt,
-        system_message: None,
+        system_message: Some(refine_system),
         preferred_speed: Speed::Slow,
         max_tokens: Some(inference_config.max_tokens),
         temperature: Some(inference_config.temperature),
@@ -6187,6 +6238,10 @@ impl Runtime {
 
         let mut parts = vec![base.to_string()];
 
+        parts.push(today_anchor_block(
+            &chrono::Utc::now().format("%Y-%m-%d").to_string(),
+        ));
+
         // Conversation history. CompletionRequest is a single
         // user-turn prompt+system shape — prior assistant/user turns
         // aren't natively threaded by the inference adapter. We
@@ -7604,8 +7659,22 @@ impl Runtime {
                 }
 
                 if gap_check_enabled {
+                    // Per the humility principle (see
+                    // `prepare_knowledge_query_plan` for the long
+                    // form): always run the gap check on KQ paths.
+                    // The retrieval-shape route (FastFocused vs
+                    // PrimarySynthesis) decides synthesis style; it
+                    // does NOT decide whether the answer is actually
+                    // grounded. The gap check is the LLM-based
+                    // judge of "did the model answer the question?"
+                    // and has to fire regardless of how concentrated
+                    // the retrieval looked. Top-source label is
+                    // included in the log so a grep on
+                    // `gap_check_scheduled` reconstructs which
+                    // retrieval-shape paths reach the check.
                     tracing::debug!(
                         route = ?route_for_log,
+                        top_source = %top_source_label,
                         "KnowledgeQuery stream: scheduling post-stream gap check"
                     );
                     let collab_inference = Arc::clone(&inference);
@@ -7642,12 +7711,6 @@ impl Runtime {
                         )
                         .await;
                     });
-                } else {
-                    tracing::info!(
-                        route = ?route_for_log,
-                        top_source = %top_source_label,
-                        "KnowledgeQuery stream: skipping gap check (concentrated single-source)"
-                    );
                 }
 
                 // Auto-title after first exchange — same post-stream
@@ -9954,10 +10017,26 @@ impl Runtime {
             *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
         }
 
-        // Gap check gating: only on multi-source / weak-evidence
-        // synthesis, where the Fast path's "skip gap check" would hide
-        // a genuine hole in the answer.
-        let gap_check_enabled = matches!(route, SynthesisRoute::PrimarySynthesis);
+        // Gap check ALWAYS fires on the KnowledgeQuery path.
+        //
+        // Humility principle: the corpus is the source of truth and
+        // we have to query it before deciding whether external
+        // lookup is warranted — but we also have to honestly check
+        // whether the answer we synthesised actually addresses the
+        // question. Retrieval shape (FastFocused vs PrimarySynthesis)
+        // is a SYNTHESIS-routing decision, not an answer-quality
+        // signal. The 2026-05-19 M5-Mac-Studio failure pinned this:
+        // 12 chunks clustered tightly on `wikipedia::Mac (computer)`
+        // because of title overlap with "Mac Studio", route was
+        // FastFocused, gap check was skipped — and the model
+        // produced "no reliable info" with no INFORMATION REQUEST
+        // surfaced. The gap check is the LLM-based judge of "is
+        // this answer grounded in the evidence?"; it has to run
+        // regardless of how concentrated the evidence looked.
+        //
+        // Cost: one small-LLM call (~1s) per FastFocused turn,
+        // post-stream so user-visible latency is unaffected.
+        let gap_check_enabled = true;
 
         let result_quality = if expansion_fired {
             "focused"
@@ -11190,9 +11269,15 @@ impl Runtime {
         let completion = self.inference.complete(&plan.request).await?;
 
         let final_content = if plan.gap_check_enabled {
+            // Humility principle: always run the gap check on KQ
+            // paths. The retrieval-shape route is a synthesis-
+            // routing decision, not an answer-quality signal. See
+            // the matching block in the streaming KQ path + the
+            // long-form note at `prepare_knowledge_query_plan`.
             tracing::debug!(
                 route = ?plan.route,
-                "KnowledgeQuery: running gap check (multi-source or weak evidence)"
+                top_source = %plan.shape.top_source_label,
+                "KnowledgeQuery: running gap check"
             );
             self.maybe_collaborate(
                 conversation_id,
@@ -11202,11 +11287,6 @@ impl Runtime {
             )
             .await
         } else {
-            tracing::info!(
-                route = ?plan.route,
-                top_source = %plan.shape.top_source_label,
-                "KnowledgeQuery: skipping gap check (concentrated single-source)"
-            );
             completion.text.clone()
         };
 
@@ -12733,6 +12813,41 @@ mod formatter_stream_section_tests {
         let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## Broad map (inventory)"));
         assert!(out.contains("## From knowledge base"));
+    }
+
+    /// Today-anchor unit tests. Pins the contract that the system
+    /// message + refine prompt both surface a current-date line plus
+    /// shape-level recency-reasoning discipline.
+    mod today_anchor_tests {
+        use super::super::today_anchor_block;
+
+        #[test]
+        fn renders_the_supplied_iso_date_verbatim() {
+            let out = today_anchor_block("2026-05-19");
+            assert!(
+                out.contains("Current date: 2026-05-19."),
+                "expected anchor line, got: {out}"
+            );
+        }
+
+        #[test]
+        fn includes_recency_reasoning_discipline() {
+            // SHAPE-level guidance only — these phrases are about
+            // "compare to today, flag stale" patterns, not specific
+            // products or events. Per `feedback_no_teaching_to_test`
+            // the discipline lives in the prompt; bank vocabulary
+            // does not.
+            let out = today_anchor_block("2026-05-19");
+            assert!(out.contains("compare"), "missing compare-instruction");
+            assert!(
+                out.contains("date that has already passed"),
+                "missing stale-prediction handling"
+            );
+            assert!(
+                out.contains("event happened") || out.contains("prediction was wrong"),
+                "missing the two-paths instruction"
+            );
+        }
     }
 }
 
