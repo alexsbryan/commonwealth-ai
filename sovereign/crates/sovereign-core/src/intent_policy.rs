@@ -107,6 +107,18 @@ pub struct IntentPolicy {
     pub synthesis_addendum: Option<&'static str>,
     pub register: SkillRegister,
     pub source: PolicySource,
+    /// The router-classified intent after the relational-register
+    /// override is applied. `Some(intent)` when the policy was
+    /// built via [`policy_for`] (post-classification path);
+    /// `None` when built via [`policy_for_mode_only`] (the
+    /// pre-classification router-input path — intent isn't known
+    /// yet, no override can apply).
+    ///
+    /// Consumers that dispatch on intent should read this rather
+    /// than the router's raw `classification.primary.intent` so
+    /// the inner-work mode's force-to-Expressive override fires
+    /// uniformly — see the `apply_witness_intent_override` helper.
+    pub effective_intent: Option<crate::types::Intent>,
 }
 
 // ─── Compute ───────────────────────────────────────────────────
@@ -129,18 +141,39 @@ pub fn policy_for(
     register: SkillRegister,
     active_mode: Option<&str>,
 ) -> IntentPolicy {
+    // Resolve effective register first — inner-work mode pins
+    // Relational regardless of what the caller passed. (Today this
+    // is also what `skill.inference.register` declares on the
+    // inner-work TOML; the mode-arm here keeps the invariant
+    // structural even if the TOML drifts.)
+    let effective_register = match active_mode {
+        Some(MODE_INNER_WORK) => SkillRegister::Relational,
+        _ => register,
+    };
+
+    // Apply the relational-register intent override BEFORE the
+    // tool-filter and source decisions. The override only fires for
+    // Relational register, so default-chat + recipe-author flows
+    // pass through unchanged. The override is structural (was
+    // previously a separate `override_intent_for_relational_register`
+    // call site that every dispatch site had to remember to invoke);
+    // folding it into `policy_for` makes it impossible to forget.
+    let effective_intent = apply_witness_intent_override(intent, effective_register);
+
     match active_mode {
         Some(MODE_INNER_WORK) => IntentPolicy {
             tool_filter: ToolFilter::none(),
             synthesis_addendum: None,
             register: SkillRegister::Relational,
             source: PolicySource::InnerWorkMode,
+            effective_intent: Some(effective_intent),
         },
         Some(MODE_RECIPE_AUTHOR) => IntentPolicy {
             tool_filter: ToolFilter::allow(recipe_author_tools()),
             synthesis_addendum: None,
-            register,
+            register: effective_register,
             source: PolicySource::RecipeAuthorMode,
+            effective_intent: Some(effective_intent),
         },
         Some(other) => {
             // Unknown mode — warn and fall through. Forward-compat:
@@ -151,9 +184,39 @@ pub fn policy_for(
                 "intent_policy: unknown active mode — falling back to \
                  intent-derived policy"
             );
-            intent_derived(intent, register)
+            intent_derived(&effective_intent, effective_register)
         }
-        None => intent_derived(intent, register),
+        None => intent_derived(&effective_intent, effective_register),
+    }
+}
+
+/// Apply the relational-register intent override. Used internally
+/// by `policy_for`; exposed for the legacy test mod in `runtime.rs`
+/// that pins the override-behavior invariants. New code should
+/// consume `policy.effective_intent` instead of calling this
+/// directly.
+///
+/// Behavior pinned by the routing benches:
+/// - Non-Relational register: returns intent unchanged.
+/// - Relational + ExpressiveQuery / DeepQuery / Continuation:
+///   returns intent unchanged (already on the witness path).
+/// - Relational + anything else (KnowledgeQuery, MetalingualQuery,
+///   ComparisonQuery, …): forces ExpressiveQuery so the witness
+///   handler takes over.
+pub fn apply_witness_intent_override(intent: &Intent, register: SkillRegister) -> Intent {
+    if register != SkillRegister::Relational {
+        return intent.clone();
+    }
+    match intent {
+        Intent::ExpressiveQuery | Intent::DeepQuery => intent.clone(),
+        Intent::Continuation { .. } => intent.clone(),
+        other => {
+            tracing::info!(
+                original_intent = ?other,
+                "intent_policy: forcing ExpressiveQuery — relational register active"
+            );
+            Intent::ExpressiveQuery
+        }
     }
 }
 
@@ -163,6 +226,7 @@ fn intent_derived(intent: &Intent, register: SkillRegister) -> IntentPolicy {
         synthesis_addendum: None,
         register,
         source: PolicySource::IntentDerived,
+        effective_intent: Some(intent.clone()),
     }
 }
 
@@ -184,18 +248,21 @@ pub fn policy_for_mode_only(
             synthesis_addendum: None,
             register: SkillRegister::Relational,
             source: PolicySource::InnerWorkMode,
+            effective_intent: None,
         },
         Some(MODE_RECIPE_AUTHOR) => IntentPolicy {
             tool_filter: ToolFilter::allow(recipe_author_tools()),
             synthesis_addendum: None,
             register,
             source: PolicySource::RecipeAuthorMode,
+            effective_intent: None,
         },
         _ => IntentPolicy {
             tool_filter: ToolFilter::Unrestricted,
             synthesis_addendum: None,
             register,
             source: PolicySource::Unsituated,
+            effective_intent: None,
         },
     }
 }
@@ -511,6 +578,7 @@ mod tests {
             synthesis_addendum: None,
             register: SkillRegister::Factual,
             source: PolicySource::IntentDerived,
+            effective_intent: None,
         };
         let narrowed = narrow_tools(&full_catalog(), &policy);
         // Catalog order for these four: symbol_lookup, code_search,
@@ -530,6 +598,7 @@ mod tests {
             synthesis_addendum: None,
             register: SkillRegister::Factual,
             source: PolicySource::Unsituated,
+            effective_intent: None,
         };
         let narrowed = narrow_tools(&catalog, &policy);
         assert_eq!(narrowed.len(), catalog.len());
@@ -542,6 +611,7 @@ mod tests {
             synthesis_addendum: None,
             register: SkillRegister::Factual,
             source: PolicySource::IntentDerived,
+            effective_intent: None,
         };
         let narrowed = narrow_tools(&full_catalog(), &policy);
         let ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();

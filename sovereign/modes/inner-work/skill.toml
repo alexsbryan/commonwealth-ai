@@ -4,19 +4,15 @@ name = "Inner Work"
 version = "0.1.0"
 description = "Reflective companion for personal psychological work. Socratic, parts-aware, pattern-oriented."
 
-# ─── Router Hints ────────────────────────────────────────────
-[routing]
-trigger_phrases = [
-    "therapy", "session", "therapist",
-    "I'm feeling", "I noticed a pattern",
-    "this keeps coming up", "I'm struggling with",
-    "my relationship with", "I had a dream",
-    "a part of me", "inner critic",
-    "shadow", "attachment", "defense",
-    "journaling", "processing"
-]
-default_intent = "DeepQuery"
-min_confidence = 0.80
+# `[routing]` retired: inner-work is a USER-CHOSEN surface
+# (entered via the desktop rail), not a router-triggered mode.
+# The trigger phrases that used to live here are no longer
+# read; the situated witness path activates because the user
+# explicitly entered the inner-work mode, not because any
+# specific phrase appeared. Personal-recall router exemplars
+# (sovereign/router/exemplars.toml) already cover the in-default-
+# chat detection of relational-shape messages for the corpus
+# memory recall path.
 
 # ─── Planner Templates ──────────────────────────────────────
 [[planner.templates]]

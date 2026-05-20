@@ -18,14 +18,17 @@ pub struct Skill {
     pub version: String,
     #[serde(default)]
     pub description: String,
-    pub routing: RoutingHints,
+    /// Plan templates the planner injects as a hint when this skill
+    /// is active and the user's goal matches a template's trigger.
+    /// Consumed by `planner.rs::plan` for ComplexTask flows.
     pub planner_templates: Vec<PlanTemplate>,
     pub tool_config: ToolPreferences,
+    /// Synthesis prompt overrides — concatenated by
+    /// `SkillRegistry::prompt_overrides()` and prepended to the
+    /// executor's ReasonWithTools / reasoning step system message
+    /// for ComplexTask flows. Read at `executor.rs:461,1020`.
     pub prompts: PromptOverrides,
     pub memory_rules: MemoryConfig,
-    /// Named evaluation prompts (e.g., "synthesis" → eval prompt).
-    #[serde(default)]
-    pub evaluation_prompts: HashMap<String, String>,
     /// OICP inference requirements for this skill.
     #[serde(default)]
     pub inference: SkillInferenceConfig,
@@ -102,12 +105,15 @@ pub enum SkillRegister {
     Relational,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RoutingHints {
-    pub trigger_phrases: Vec<String>,
-    pub default_intent: Option<String>,
-    pub min_confidence: Option<f64>,
-}
+// `RoutingHints` retired — skill-keyed router hints were the
+// load-bearing input to the Pass 1 prompt's "Active skill hints"
+// splice block; that splice was removed when the skills-as-menu
+// UI retired. The wisdom in the retired skills' `trigger_phrases`
+// lists migrated into the router's embed-exemplar bank
+// (`sovereign/router/exemplars.toml`); see the migration commit
+// for the audit. The surviving modes (inner-work, recipe-author)
+// do not need router hints because the user explicitly enters
+// their surfaces.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanTemplate {
@@ -140,11 +146,9 @@ pub struct MemoryConfig {
 
 // ─── Merged Results ────────────────────────────────────────────
 
-#[derive(Debug, Clone, Default)]
-pub struct MergedRoutingHints {
-    pub trigger_phrases: Vec<(String, String)>, // (phrase, skill_id)
-    pub min_confidence: Option<f64>,
-}
+// `MergedRoutingHints` retired alongside `RoutingHints` + the
+// trigger-phrase splice in router.rs. No production consumers
+// remain.
 
 #[derive(Debug, Clone, Default)]
 pub struct MergedMemoryConfig {
@@ -159,11 +163,14 @@ pub struct MergedMemoryConfig {
 
 /// TOML structure for skill.toml files.
 /// Maps the TOML layout to our internal Skill struct.
+///
+/// Serde does NOT `deny_unknown_fields`, so legacy mode TOMLs that
+/// still carry `[routing]` or `[evaluation]` blocks load cleanly
+/// (the blocks are silently ignored). New mode TOMLs should omit
+/// those sections.
 #[derive(Debug, Deserialize)]
 struct SkillToml {
     skill: SkillMeta,
-    #[serde(default)]
-    routing: RoutingToml,
     #[serde(default)]
     planner: PlannerToml,
     #[serde(default)]
@@ -174,8 +181,6 @@ struct SkillToml {
     memory: MemoryToml,
     #[serde(default)]
     inference: InferenceToml,
-    #[serde(default)]
-    evaluation: EvaluationToml,
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,14 +194,6 @@ struct SkillMeta {
     signature: Option<String>,
     #[serde(default)]
     signed_by: Option<String>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct RoutingToml {
-    #[serde(default)]
-    trigger_phrases: Vec<String>,
-    default_intent: Option<String>,
-    min_confidence: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -226,14 +223,6 @@ struct ToolsToml {
 #[derive(Debug, Default, Deserialize)]
 struct PromptsToml {
     synthesis: Option<String>,
-}
-
-/// Named evaluation prompts for step-level quality checking.
-/// Keys are eval names (e.g., "synthesis"), values are eval prompts.
-#[derive(Debug, Default, Deserialize)]
-struct EvaluationToml {
-    #[serde(flatten)]
-    prompts: HashMap<String, String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -289,11 +278,6 @@ impl SkillToml {
             name: self.skill.name,
             version: self.skill.version,
             description: self.skill.description,
-            routing: RoutingHints {
-                trigger_phrases: self.routing.trigger_phrases,
-                default_intent: self.routing.default_intent,
-                min_confidence: self.routing.min_confidence,
-            },
             planner_templates: self
                 .planner
                 .templates
@@ -317,7 +301,6 @@ impl SkillToml {
                 confidence_decay_per_month: self.memory.confidence_decay_per_month,
                 prune_threshold: self.memory.prune_threshold,
             },
-            evaluation_prompts: self.evaluation.prompts,
             inference: SkillInferenceConfig {
                 capability_hint: self.inference.capability_hint,
                 latency_class: self.inference.latency_class,
@@ -521,24 +504,11 @@ impl SkillRegistry {
             .unwrap_or_default()
     }
 
-    pub fn routing_hints(&self) -> MergedRoutingHints {
-        let mut merged = MergedRoutingHints::default();
-        for skill in self.active_skills() {
-            for phrase in &skill.routing.trigger_phrases {
-                merged
-                    .trigger_phrases
-                    .push((phrase.clone(), skill.id.clone()));
-            }
-            if let Some(conf) = skill.routing.min_confidence {
-                merged.min_confidence = Some(
-                    merged
-                        .min_confidence
-                        .map_or(conf, |existing: f64| existing.max(conf)),
-                );
-            }
-        }
-        merged
-    }
+    // `routing_hints()` retired alongside `MergedRoutingHints` +
+    // `RoutingHints`. The skill-keyed trigger-phrase splice in the
+    // router's Pass 1 prompt was removed when the skills-as-menu UI
+    // was retired; the trigger-phrase wisdom migrated to the embed-
+    // exemplar bank.
 
     pub fn planner_templates(&self, _intent: &Intent) -> Vec<&PlanTemplate> {
         self.active_skills()
@@ -733,8 +703,10 @@ extract_prompt_addendum = "Extract topics researched."
         let skill = parse_skill_toml(toml).unwrap();
         assert_eq!(skill.id, "research-analyst");
         assert_eq!(skill.name, "Research & Analysis");
-        assert_eq!(skill.routing.trigger_phrases.len(), 2);
-        assert_eq!(skill.routing.min_confidence, Some(0.75));
+        // Note: the input TOML still carries a `[routing]` block —
+        // Serde silently ignores it now that the field is retired
+        // (see SkillToml docstring). The test exercises that
+        // back-compat path.
         assert_eq!(skill.planner_templates.len(), 1);
         assert_eq!(skill.planner_templates[0].name, "multi_source_research");
         assert_eq!(skill.tool_config.required, vec!["web_search"]);
@@ -753,7 +725,6 @@ version = "0.1.0"
 
         let skill = parse_skill_toml(toml).unwrap();
         assert_eq!(skill.id, "minimal");
-        assert!(skill.routing.trigger_phrases.is_empty());
         assert!(skill.planner_templates.is_empty());
         assert!(skill.prompts.synthesis.is_none());
     }

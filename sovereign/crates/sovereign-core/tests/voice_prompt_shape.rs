@@ -368,17 +368,18 @@ fn memory_format_relational_register_does_not_emit_factual_heading() {
 // ─── End-to-end pin ──────────────────────────────────────────
 
 #[test]
-fn bundled_inner_work_skill_resolves_to_relational_register_via_registry() {
-    // This test pins the full chain from skill.toml file → registry
+fn bundled_inner_work_mode_resolves_to_relational_register_via_registry() {
+    // This test pins the full chain from mode TOML file → registry
     // → contract selection. If anyone removes or mistypes
-    // `register = "relational"` in inner-work/skill.toml, this
-    // test fails — and the relational voice silently disappears
-    // from the production session that activates inner-work.
+    // `register = "relational"` in modes/inner-work/skill.toml,
+    // this test fails — and the relational voice silently
+    // disappears from the production session that enters the
+    // inner-work surface.
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let path = std::path::Path::new(&manifest_dir)
         .join("..")
         .join("..")
-        .join("skills")
+        .join("modes")
         .join("inner-work")
         .join("skill.toml");
     let content = std::fs::read_to_string(&path).unwrap();
@@ -564,23 +565,7 @@ fn voice_judge_preset_default_is_default_variant() {
     }
 }
 
-#[test]
-fn bundled_personal_assistant_skill_resolves_to_relational_register_via_registry() {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let path = std::path::Path::new(&manifest_dir)
-        .join("..")
-        .join("..")
-        .join("skills")
-        .join("personal-assistant")
-        .join("skill.toml");
-    let content = std::fs::read_to_string(&path).unwrap();
-    let skill = parse_skill_toml(&content).unwrap();
-    let mut reg = SkillRegistry::new();
-    reg.register(skill);
-    reg.activate("personal-assistant");
-
-    let register = reg.primary_skill_register();
-    let contract = __voice_test_epistemic_contract_for(register);
-    assert_eq!(register, SkillRegister::Relational);
-    assert_eq!(contract, __voice_test_relational_base_prompt());
-}
+// `bundled_personal_assistant_skill_resolves_to_relational_register_via_registry`
+// retired alongside the personal-assistant skill (skills-as-menu
+// cleanup). Inner-work is the sole surviving Relational mode; the
+// pin lives in the test above.

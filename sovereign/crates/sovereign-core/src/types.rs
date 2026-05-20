@@ -999,6 +999,44 @@ pub struct ConversationContext {
     /// skill hasn't been resolved (CLI / test harness paths).
     #[serde(default)]
     pub tool_dossier: Option<ToolDossier>,
+    /// Per-turn IntentPolicy computed at dispatch time from
+    /// (intent, register, active_mode). Carries the effective
+    /// register and the post-override effective intent so every
+    /// downstream consumer reads from a single source of truth
+    /// rather than re-querying `SkillRegistry::primary_skill_register()`
+    /// independently at ~16 sites.
+    ///
+    /// `#[serde(skip)]` because the policy is rebuilt from
+    /// in-memory state at every dispatch; never persisted, never
+    /// restored. Legacy callers that construct a context without
+    /// going through dispatch see `None` and fall back to factual
+    /// defaults via [`Self::turn_register`].
+    #[serde(skip)]
+    pub intent_policy: Option<crate::intent_policy::IntentPolicy>,
+}
+
+impl ConversationContext {
+    /// Return the per-turn voice register, falling back to
+    /// `Factual` when no policy has been computed yet (test
+    /// harnesses, headless boot, or any code path that built a
+    /// context outside `handle_message_stream` / `handle_turn`).
+    /// Replaces scattered `SkillRegistry::primary_skill_register()`
+    /// queries throughout `runtime.rs`.
+    pub fn turn_register(&self) -> crate::skills::SkillRegister {
+        self.intent_policy
+            .as_ref()
+            .map(|p| p.register)
+            .unwrap_or(crate::skills::SkillRegister::Factual)
+    }
+
+    /// Return the policy's `effective_intent` if available. Useful
+    /// at dispatch-time when the caller has just bound the policy
+    /// and wants the post-override intent for the handler call.
+    pub fn turn_effective_intent(&self) -> Option<&crate::types::Intent> {
+        self.intent_policy
+            .as_ref()
+            .and_then(|p| p.effective_intent.as_ref())
+    }
 }
 
 /// Tool-Mastery dossier. Three sections per the Phase 3 plan:
@@ -2601,6 +2639,7 @@ mod knowledge_view_digest_tests {
             temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
         }
     }
 

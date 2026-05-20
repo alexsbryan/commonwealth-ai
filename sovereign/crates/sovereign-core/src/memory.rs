@@ -796,6 +796,26 @@ pub async fn detect_contradictions(
 /// Exposed so the Runtime's prune path can construct an explicit
 /// `prune_decayed_memories_with_config` call when it has an entity
 /// inventory available.
+///
+/// **Tuning history (2026)**: three of the retired research-shaped
+/// skills (research-analyst, epistemic-research, collaborative-
+/// research) declared `confidence_decay_per_month = 0.05` and
+/// `prune_threshold = 0.1` — half the default decay rate, half the
+/// default prune floor. The rationale was that research
+/// conversations reference long-lived material (months/years of
+/// context) and benefit from slower decay. When those skills were
+/// retired in favour of intent-keyed policy, their values were NOT
+/// promoted to defaults because (a) every conversation would slow
+/// down its decay 2×, including ephemeral chitchat, and (b) the
+/// values were one author's tuning, not bench-validated.
+///
+/// **Future work**: if telemetry shows users losing relevant
+/// long-lived context too fast, consider either lowering the
+/// global defaults toward 0.05/0.1 or letting mode TOMLs override
+/// (inner-work in particular is a long-lived-context surface that
+/// might benefit). The Skill struct still carries
+/// `memory_rules.confidence_decay_per_month` and `prune_threshold`
+/// fields for that case.
 pub const DEFAULT_DECAY_RATE: f64 = 0.10;
 /// Confidence floor below which a memory is dropped during prune.
 pub const DEFAULT_PRUNE_THRESHOLD: f64 = 0.2;

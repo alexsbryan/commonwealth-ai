@@ -2528,6 +2528,7 @@ mod tests {
             temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);
@@ -2565,6 +2566,7 @@ mod tests {
             temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
         };
 
         let summary = LlmRouter::format_context_summary(&ctx);

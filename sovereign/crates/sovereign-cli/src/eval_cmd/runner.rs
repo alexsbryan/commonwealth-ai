@@ -351,6 +351,7 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
         temporal_tensions: Vec::new(),
             compacted_history: None,
             tool_dossier: None,
+            intent_policy: None,
     };
 
     // Expose a `web_search` tool descriptor so the router's
