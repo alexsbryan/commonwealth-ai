@@ -252,7 +252,15 @@ pub async fn build_session_with_skills(
     //    the retrieval + tool-use path exercised here matches what
     //    the user sees in the GUI. Notably: `SearchTool::with_web`
     //    drives the "Searched ... web" sources in provenance.
-    let mut tools = ToolRegistry::new();
+    // Tier 4 — shared tool-result cache. Same shape as the
+    // desktop bootstrap: per-conversation cache slices, 5-turn
+    // TTL. Idempotent tools (knowledge_lookup, code-intel reads)
+    // hit the cache when the model re-calls with the same args
+    // within the window.
+    let tool_cache = Arc::new(
+        sovereign_core::tool_result_cache::ToolResultCache::new(),
+    );
+    let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
         Arc::clone(&store),

@@ -966,8 +966,17 @@ pub async fn bootstrap_with_progress(
     // Planner.
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
-    // Tools.
-    let mut tools = ToolRegistry::new();
+    // Tools. Tier 4 of tool-framework expansion: wire a shared
+    // ToolResultCache so idempotent tool calls (knowledge_lookup,
+    // future code-intel reads) hit a per-conversation cache
+    // instead of re-doing the corpus + memory + note fan-out on
+    // every follow-up. Cache TTL defaults to 5 turns (configurable
+    // via `with_max_age`); per-conversation scoping walls
+    // inner-work / default-chat slices apart by `conversation_id`.
+    let tool_cache = Arc::new(
+        sovereign_core::tool_result_cache::ToolResultCache::new(),
+    );
+    let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     let enabled = &config.enabled_tools;
 
     if enabled.iter().any(|t| t == "shell") {
