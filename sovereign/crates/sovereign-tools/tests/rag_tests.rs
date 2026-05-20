@@ -212,6 +212,7 @@ async fn document_tool_summarize_small() {
                 working_directory: None,
                 in_reasoning_loop: false,
                 agent_session_token: None,
+                turn_index: 0,
             },
         )
         .await
@@ -256,6 +257,7 @@ async fn document_tool_summarize_large() {
                 working_directory: None,
                 in_reasoning_loop: false,
                 agent_session_token: None,
+                turn_index: 0,
             },
         )
         .await
@@ -285,6 +287,7 @@ async fn document_tool_source_not_found() {
                 working_directory: None,
                 in_reasoning_loop: false,
                 agent_session_token: None,
+                turn_index: 0,
             },
         )
         .await

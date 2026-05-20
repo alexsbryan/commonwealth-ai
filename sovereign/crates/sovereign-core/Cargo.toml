@@ -23,6 +23,10 @@ tracing = { workspace = true }
 # `default_path()` lives at `~/.sovereign/config.toml`; `legacy_default_path()`
 # is the pre-consolidation XDG location used for one-shot migration.
 dirs = "5"
+# Tier 4 — tool-result cache hashes canonical args via SHA-256
+# to derive the cache key. Workspace-version pin keeps lock-file
+# coherent with the 9+ other crates that already use sha2.
+sha2 = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

@@ -158,6 +158,7 @@ vector = false
             working_directory: None,
             in_reasoning_loop: false,
             agent_session_token: None,
+            turn_index: 0,
         }
     }
 
@@ -753,6 +754,7 @@ vector = false
             working_directory: None,
             in_reasoning_loop: false,
             agent_session_token: None,
+            turn_index: 0,
         }
     }
 
@@ -1399,6 +1401,7 @@ embedding_dimensions = 8
         working_directory: None,
         in_reasoning_loop: false,
         agent_session_token: None,
+        turn_index: 0,
     };
 
     let sym_out = text(

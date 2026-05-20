@@ -2958,6 +2958,7 @@ pub(crate) async fn run_collaboration(
     assistant_prefix: None,
     cmd_prefix: None,
     url_allowlist: None,
+    evidence_id_allowlist: None,
     };
 
     match inference.complete(&refine_req).await {
@@ -4169,6 +4170,7 @@ impl Runtime {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
         };
 
         let response = match self.inference.complete(&request).await {
@@ -6411,6 +6413,45 @@ impl Runtime {
         crate::intent_policy::narrow_tools(&self.tools.descriptors(), &policy)
     }
 
+    /// Gather the union of `ev-Tn-NNNN` handles emitted by prior
+    /// `tool_decision` writes on this conversation, for sampler-side
+    /// citation constraint (Tier 2 of tool-framework expansion).
+    /// Returns `None` when the NoteStore isn't wired (CLI / test
+    /// paths) or no prior decisions carried evidence ids — the
+    /// caller's CompletionRequest stays unconstrained on the
+    /// citation axis (Tier 1 prompt discipline is the only safety
+    /// net on those turns).
+    async fn gather_evidence_id_allowlist(
+        &self,
+        conversation_id: &str,
+    ) -> Option<Vec<String>> {
+        let notes = self.note_store.as_ref()?;
+        let payloads =
+            crate::memory::read_recent_tool_decisions(notes, Some(conversation_id), 32)
+                .await
+                .ok()?;
+        let mut ids: Vec<String> = Vec::new();
+        let mut seen: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for p in payloads {
+            for id in p.evidence_ids {
+                if seen.insert(id.clone()) {
+                    ids.push(id);
+                }
+            }
+        }
+        if ids.is_empty() {
+            None
+        } else {
+            tracing::debug!(
+                conversation_id,
+                ev_id_count = ids.len(),
+                "runtime: gathered evidence_id_allowlist from tool_decisions"
+            );
+            Some(ids)
+        }
+    }
+
     /// Tool-Mastery Layer 2 pre-pass. Computes the tool dossier
     /// (tools available + outcome history + ambient state) and
     /// stashes it on `context.tool_dossier` so
@@ -7886,6 +7927,35 @@ impl Runtime {
                     } else {
                         format!("synthesised over {documents_found} chunks")
                     };
+                    // Tier 1 (result memory): populate summary +
+                    // turn_index so the next turn's dossier can
+                    // render addressable references. `evidence_ids`
+                    // stays empty here because the legacy KQ path
+                    // doesn't route through knowledge_lookup tool —
+                    // when it does (follow-up PR), this site will
+                    // also pass the per-call ev-Tn-NNNN handles.
+                    let summary = if shape.top_source_label.is_empty() {
+                        None
+                    } else {
+                        Some(shape.top_source_label.clone())
+                    };
+                    // Turn index: count of prior user messages
+                    // (zero-based). The current in-flight user
+                    // message is already pushed onto
+                    // conversation.messages by the time we reach
+                    // this site, so subtract 1.
+                    let turn_index_for_outcome = context
+                        .conversation
+                        .messages
+                        .iter()
+                        .filter(|m| matches!(m.role, Role::User))
+                        .count()
+                        .saturating_sub(1);
+                    let baseline_extras = crate::memory::ToolDecisionExtras {
+                        summary: summary.clone(),
+                        evidence_ids: Vec::new(),
+                        turn_index: turn_index_for_outcome,
+                    };
                     crate::dossier::record_tool_outcome(
                         notes_for_outcome.as_deref(),
                         collab_sid_for_outcome.as_deref().unwrap_or(""),
@@ -7893,11 +7963,17 @@ impl Runtime {
                         "knowledge_lookup",
                         baseline_outcome,
                         &baseline_reasoning,
+                        baseline_extras,
                     )
                     .await;
 
                     let outcome_notes = collab_notes_for_outcome.clone();
                     let outcome_notes_present = outcome_notes.is_some();
+                    // Capture Tier-1 extras for the stale-write
+                    // path inside the spawn (closure can't reach
+                    // back to the dispatch-frame locals).
+                    let stale_summary_for_capture = summary.clone();
+                    let turn_index_for_capture = turn_index_for_outcome;
                     tokio::spawn(async move {
                         tracing::info!(
                             conversation_id = %collab_cid,
@@ -7921,6 +7997,16 @@ impl Runtime {
                         )
                         .await;
                         if refined.is_some() {
+                            // Stale write supersedes the baseline
+                            // entry from above. Preserve summary +
+                            // turn_index so the dossier history
+                            // stays addressable; flag the outcome
+                            // change via the new reasoning.
+                            let stale_extras = crate::memory::ToolDecisionExtras {
+                                summary: stale_summary_for_capture.clone(),
+                                evidence_ids: Vec::new(),
+                                turn_index: turn_index_for_capture,
+                            };
                             crate::dossier::record_tool_outcome(
                                 outcome_notes.as_deref(),
                                 collab_sid_for_outcome.as_deref().unwrap_or(""),
@@ -7928,6 +8014,7 @@ impl Runtime {
                                 "knowledge_lookup",
                                 crate::memory::ToolDecisionOutcome::Stale,
                                 "gap-check refined the post-stream answer",
+                                stale_extras,
                             )
                             .await;
                         }
@@ -8007,6 +8094,16 @@ impl Runtime {
         // `model_id_for` here would miss peer attribution (the
         // mesh wrapper can only report "I routed to peer X" after
         // its async `select_peer` pass has run).
+        //
+        // Tier 2: populate evidence_id_allowlist from the
+        // conversation's prior tool_decision payloads so the
+        // sampler's EvidenceIdAllowlistConstraint can block
+        // fabrications of `[ev-Tn-NNNN]` ids the model hasn't
+        // actually been given. Soft-fails to None when no prior
+        // ids exist (Tier 1 prompt discipline is then the only
+        // safety net — same posture as today).
+        let evidence_id_allowlist =
+            self.gather_evidence_id_allowlist(conversation_id).await;
         let request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
@@ -8026,6 +8123,7 @@ impl Runtime {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist,
         };
 
         let search_method = kc.search_method;
@@ -9349,6 +9447,11 @@ impl Runtime {
             self.build_oicp(&intent)
         };
 
+        // Tier 2: same evidence_id_allowlist gather as the
+        // streaming KQ path — see the comment block at the
+        // streaming dispatch site for the rationale.
+        let evidence_id_allowlist =
+            self.gather_evidence_id_allowlist(conversation_id).await;
         let request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
@@ -9368,6 +9471,7 @@ impl Runtime {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist,
         };
 
         let synth_start = std::time::Instant::now();
@@ -9943,6 +10047,7 @@ impl Runtime {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             };
             return KnowledgeQueryPlan {
                 request,
@@ -10205,6 +10310,7 @@ impl Runtime {
                 assistant_prefix: None,
                 cmd_prefix: None,
                 url_allowlist: None,
+                evidence_id_allowlist: None,
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -10233,6 +10339,7 @@ impl Runtime {
                 assistant_prefix: None,
                 cmd_prefix: None,
                 url_allowlist: None,
+                evidence_id_allowlist: None,
                 }
             }
         };
@@ -10486,6 +10593,7 @@ impl Runtime {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
         let completion = self.inference.complete(&request).await?;
         let response_msg = Message {
@@ -10841,6 +10949,7 @@ impl Runtime {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
         };
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
@@ -11062,6 +11171,7 @@ impl Runtime {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
         };
 
         let _synth_start = std::time::Instant::now();
@@ -11439,6 +11549,7 @@ impl Runtime {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -11737,6 +11848,7 @@ impl Runtime {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
@@ -11824,6 +11936,7 @@ impl Runtime {
             working_directory: None,
             in_reasoning_loop: false,
             agent_session_token: None,
+            turn_index: 0,
         };
 
         let result = tool.execute(&params, &tool_ctx).await?;
@@ -12038,6 +12151,7 @@ impl Runtime {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             })
             .await?;
 

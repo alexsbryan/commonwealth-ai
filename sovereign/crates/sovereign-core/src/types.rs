@@ -216,6 +216,26 @@ pub struct CompletionRequest {
     /// attaches it to `ConstrainedSampler`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url_allowlist: Option<Vec<String>>,
+    /// Evidence-id allowlist for sampler-side citation faithfulness
+    /// (Tier 2 of tool-framework expansion). Same architecture as
+    /// `url_allowlist` — a byte-trie of valid `ev-Tn-NNNN` handles
+    /// gets attached to the sampler; tokens that would extend
+    /// `[ev-T…` into a non-existent id get clamped to `-INFINITY`.
+    /// Prose tokens pass through. Combined with Tier 1's payload
+    /// memory, this makes cross-turn citation fabrication
+    /// structurally impossible, not just discouraged by prompt.
+    ///
+    /// `None` leaves citation emission unconstrained. Empty list
+    /// is treated as "no citations allowed" — useful for synthesis
+    /// turns where no prior tool returned evidence and any
+    /// `[ev-T…` emission would be a fabrication.
+    ///
+    /// Wire path: extracted from the OpenAI request body's
+    /// `evidence_id_allowlist` field in `routes_inference.rs`
+    /// (populated by `apply_evidence_id_allowlist_from_tool_results`
+    /// in `frontdoor.rs`); consumed by `embedded::build_sampler`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_id_allowlist: Option<Vec<String>>,
 }
 
 /// Sampler-profile selector. Mirrored in the inference layer's
@@ -269,6 +289,7 @@ impl CompletionRequest {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
         }
     }
 
@@ -318,6 +339,7 @@ impl CompletionRequest {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
         }
     }
 }
@@ -650,6 +672,15 @@ pub struct ToolContext {
     /// contexts decode cleanly.
     #[serde(default)]
     pub agent_session_token: Option<String>,
+    /// Zero-based count of prior user turns in this conversation
+    /// (Tier 1 result memory). Tools that return citation-shaped
+    /// evidence call `EvidenceId::from_index_with_turn(idx,
+    /// turn_index)` so the resulting handles are unique across
+    /// the conversation's history. `#[serde(default)]` means
+    /// pre-Tier-1 serialized contexts decode as turn 0 — degraded
+    /// but valid (handles render as `ev-T0-NNNN`).
+    #[serde(default)]
+    pub turn_index: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1090,6 +1121,25 @@ pub struct ToolDossierOutcome {
     pub outcome: String,
     pub reasoning: String,
     pub applied_at_unix: i64,
+    /// Tier 1 result memory — one-line summary of what the tool
+    /// actually returned (top-1 evidence title for knowledge_lookup,
+    /// first matched symbol for code-intel, etc.). `None` for
+    /// pre-Tier-1 payloads or sites that don't have the data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Tier 1 result memory — per-call ev-Tn-NNNN handles the
+    /// model may cite cross-turn. Empty when the underlying tool
+    /// doesn't return citation-shaped evidence (or when the call
+    /// pre-dates Tier 1). The renderer surfaces these as
+    /// `[ev-T2-0000..0003]` ranges so the model can address past
+    /// evidence without re-fetching.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_ids: Vec<String>,
+    /// Tier 1 result memory — zero-based turn index this outcome
+    /// was recorded against. Lets the renderer disambiguate when
+    /// two outcomes are from the same tool: `T2` vs `T4` ids.
+    #[serde(default)]
+    pub turn_index: usize,
 }
 
 /// A pairwise tension between a prior memory the user expressed

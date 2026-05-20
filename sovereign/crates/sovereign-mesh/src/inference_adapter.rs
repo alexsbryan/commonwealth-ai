@@ -341,6 +341,7 @@ impl SovereignInferenceAdapter {
         req.assistant_prefix = request.assistant_prefix.clone();
         req.cmd_prefix = request.cmd_prefix.clone();
         req.url_allowlist = request.url_allowlist.clone();
+        req.evidence_id_allowlist = request.evidence_id_allowlist.clone();
         // Forward the Commonwealth `think_budget` extension. The
         // daemon's `format_prompt` reads `req.think_budget == Some(0)`
         // to inject `/no_think` for SystemPromptToken thinking
@@ -1268,6 +1269,7 @@ mod adapter_translation_tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -1304,6 +1306,7 @@ mod adapter_translation_tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -1335,6 +1338,7 @@ mod adapter_translation_tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
@@ -1391,6 +1395,7 @@ mod adapter_translation_tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         }
     }
 
@@ -1453,6 +1458,7 @@ mod adapter_translation_tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         }
     }
 

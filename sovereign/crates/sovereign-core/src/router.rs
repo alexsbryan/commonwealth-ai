@@ -1381,6 +1381,7 @@ Reply with JSON only:
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify raw output: {:?}", response.text);
@@ -1446,6 +1447,7 @@ Reply with JSON only:
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] classify_json raw output: {:?}", response.text);
@@ -1491,6 +1493,7 @@ Reply with JSON only:
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
         let response = self.inference.complete(&request).await?;
         eprintln!("[router] tool_select raw output: {:?}", response.text);

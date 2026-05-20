@@ -114,6 +114,7 @@ async fn main() {
     assistant_prefix: None,
     cmd_prefix: None,
     url_allowlist: None,
+    evidence_id_allowlist: None,
     };
 
     if args.stream {

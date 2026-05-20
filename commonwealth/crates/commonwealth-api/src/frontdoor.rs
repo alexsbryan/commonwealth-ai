@@ -1988,6 +1988,95 @@ fn has_url_marker_at(bytes: &[u8], i: usize) -> bool {
     bytes[i..].starts_with(b"https://") || bytes[i..].starts_with(b"http://")
 }
 
+/// Accumulator companion to `apply_url_allowlist_from_tool_results`.
+/// Walks the chat history for `role: tool` messages, pulls
+/// `ev-Tn-NNNN` evidence handles out of each (matching both the
+/// JSON `"id": "ev-T2-0001"` field shape and any inline mentions
+/// inside evidence content), unions them, and threads the result
+/// onto `req.evidence_id_allowlist`. The inference sampler then
+/// constrains every emitted `[ev-T…` citation to this set, making
+/// fabrication structurally impossible at sample time.
+///
+/// Idempotent: a caller-supplied `evidence_id_allowlist` wins
+/// (we never overwrite an explicit allowlist). Empty result =
+/// leave `None`, which means citations stay unconstrained — Tier 1
+/// prompt discipline is the only safety net on turns with no prior
+/// evidence (the constraint is most valuable from turn 2 onward
+/// when there ARE prior ids to defend).
+///
+/// Privacy: tool-result content stays inside the conversation. We
+/// only extract bytes that were already part of the request the
+/// daemon received — no new information crosses any boundary.
+pub fn apply_evidence_id_allowlist_from_tool_results(
+    req: &mut crate::openai_types::ChatCompletionRequest,
+) {
+    if req.evidence_id_allowlist.is_some() {
+        return;
+    }
+    let mut ids: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    for msg in &req.messages {
+        if msg.role != "tool" {
+            continue;
+        }
+        for id in extract_evidence_ids_from_text(&msg.content) {
+            if seen.insert(id.clone()) {
+                ids.push(id);
+            }
+        }
+    }
+    if !ids.is_empty() {
+        tracing::debug!(
+            ev_id_count = ids.len(),
+            "frontdoor: evidence_id_allowlist accumulated from tool results"
+        );
+        req.evidence_id_allowlist = Some(ids);
+    }
+}
+
+/// Pull `ev-Tn-NNNN` substrings out of `text`. Shape is
+/// `ev-T<digits>-<digits>` — turn index then evidence index. Both
+/// numeric segments are flexible-length (turn can be one or many
+/// digits, index is typically 4-padded but not required). Output
+/// is the bare id (no surrounding brackets), suitable for direct
+/// insertion into `evidence_id_allowlist`.
+pub fn extract_evidence_ids_from_text(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i + 4 < bytes.len() {
+        if &bytes[i..i + 4] == b"ev-T" {
+            let start = i;
+            let mut p = i + 4;
+            let turn_start = p;
+            while p < bytes.len() && bytes[p].is_ascii_digit() {
+                p += 1;
+            }
+            if p == turn_start || p >= bytes.len() || bytes[p] != b'-' {
+                i += 1;
+                continue;
+            }
+            p += 1;
+            let idx_start = p;
+            while p < bytes.len() && bytes[p].is_ascii_digit() {
+                p += 1;
+            }
+            if p == idx_start {
+                i += 1;
+                continue;
+            }
+            if let Ok(s) = std::str::from_utf8(&bytes[start..p]) {
+                out.push(s.to_string());
+            }
+            i = p;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
 /// Mirrors `sovereign-inference/src/url_constraint.rs::is_url_terminator`.
 /// Kept in sync intentionally — the byte sets must agree or the
 /// extractor will find URLs the constraint cannot constrain (false
@@ -2688,6 +2777,7 @@ pub(crate) async fn apply_distiller(
     assistant_prefix: None,
     cmd_prefix: None,
     url_allowlist: None,
+    evidence_id_allowlist: None,
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -3198,6 +3288,7 @@ async fn summarise_block(
     assistant_prefix: None,
     cmd_prefix: None,
     url_allowlist: None,
+    evidence_id_allowlist: None,
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();
@@ -4025,6 +4116,7 @@ mod tests {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         }
     }
 
@@ -5495,6 +5587,7 @@ That's my answer."#;
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
         }
     }
 

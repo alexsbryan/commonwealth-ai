@@ -162,6 +162,7 @@ impl DocumentOperationTool {
                     assistant_prefix: None,
                     cmd_prefix: None,
                     url_allowlist: None,
+                    evidence_id_allowlist: None,
                     }
                 })
                 .collect();
@@ -312,6 +313,7 @@ impl DocumentOperationTool {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -355,6 +357,7 @@ impl DocumentOperationTool {
         assistant_prefix: None,
         cmd_prefix: None,
         url_allowlist: None,
+        evidence_id_allowlist: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -602,6 +605,7 @@ impl DocumentOperationTool {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             };
 
             self.inference.complete(&request).await?.text

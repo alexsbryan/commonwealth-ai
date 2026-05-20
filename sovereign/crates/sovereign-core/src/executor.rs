@@ -516,6 +516,7 @@ impl Executor {
                 assistant_prefix: None,
                 cmd_prefix: None,
                 url_allowlist: None,
+                evidence_id_allowlist: None,
                 };
 
                 // Best-of-N sampling or single completion.
@@ -636,6 +637,7 @@ impl Executor {
                     working_directory: None,
                     in_reasoning_loop: false,
                     agent_session_token: None,
+                    turn_index: 0,
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();
@@ -888,6 +890,7 @@ impl Executor {
             assistant_prefix: None,
             cmd_prefix: None,
             url_allowlist: None,
+            evidence_id_allowlist: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -905,6 +908,7 @@ impl Executor {
                             working_directory: None,
                             in_reasoning_loop: true,
                             agent_session_token: None,
+                            turn_index: 0,
                         };
                         match tool.execute(&params, &ctx).await {
                             Ok(output) => match output {
@@ -972,6 +976,7 @@ impl Executor {
                     assistant_prefix: None,
                     cmd_prefix: None,
                     url_allowlist: None,
+                    evidence_id_allowlist: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;
 
@@ -1166,6 +1171,7 @@ When ready to answer (without a <tool_call>):
                     working_directory: None,
                     in_reasoning_loop: false,
                     agent_session_token: None,
+                    turn_index: 0,
                 };
                 for candidate in candidates {
                     let params = serde_json::json!({"input": candidate});

@@ -82,6 +82,20 @@ pub struct DesktopConfig {
     /// later without restarting through the wizard.
     #[serde(default)]
     pub enable_recipe_authoring: bool,
+    /// When `true`, the `knowledge_lookup` tool auto-escalates to
+    /// web search when the local envelope returns thin or empty
+    /// results. The escalation is internal to the tool — the
+    /// model sees one unified Evidence envelope with
+    /// `source_kind: web` rows alongside any corpus / memory /
+    /// note results. The INFORMATION REQUEST card path stays
+    /// available regardless — this setting only controls whether
+    /// the tool can ALSO go to the web without asking the user.
+    ///
+    /// Default `false`: users explicitly approve every web call
+    /// via the card. Set `true` for hands-off operation when the
+    /// user has explicitly chosen to delegate that judgement.
+    #[serde(default)]
+    pub auto_escalate_to_web: bool,
 
     // ── Advanced Tuning ─────────────────────────────────────────
     /// Generation temperature (0.0–1.0). Higher = more creative, lower = more focused.
@@ -347,6 +361,7 @@ impl Default for DesktopConfig {
             knowledge_view_enabled: default_knowledge_view_enabled(),
             storage_budget_bytes: None,
             enable_recipe_authoring: false,
+            auto_escalate_to_web: false,
             first_mesh_consent: None,
         }
     }
@@ -1040,6 +1055,46 @@ pub async fn bootstrap_with_progress(
         );
         if let Some(ref ns) = *state.notes.read().await {
             tool = tool.with_notes(Arc::clone(ns));
+        }
+        // Tier 3 web escalation. Wired only when the operator
+        // opted in via `DesktopConfig.auto_escalate_to_web`.
+        // Builds a dedicated SearchOrchestrator mirroring the
+        // `search` tool's construction (DDG always-on + the
+        // operator-preferred backend). Costs one extra registry
+        // instance vs. sharing — kept duplicate for scope-locality
+        // (the search-tool block above is its own gated branch).
+        if config.auto_escalate_to_web {
+            use sovereign_tools::web::search::{
+                BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator,
+                TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
+            };
+            let mut registry = WebSearchRegistry::new();
+            registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
+            let preferred: Box<dyn WebSearchBackend> =
+                match config.search_backend.provider.as_str() {
+                    "tavily" => config.search_backend.api_key.as_ref().map(
+                        |key| -> Box<dyn WebSearchBackend> {
+                            Box::new(TavilyBackendImpl::new(key.clone()))
+                        },
+                    ),
+                    "brave" => config.search_backend.api_key.as_ref().map(
+                        |key| -> Box<dyn WebSearchBackend> {
+                            Box::new(BraveBackendImpl::new(key.clone()))
+                        },
+                    ),
+                    _ => None,
+                }
+                .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
+            registry.register(Arc::from(preferred));
+            let orchestrator =
+                Arc::new(SearchOrchestrator::new(Arc::new(registry)));
+            tool = tool
+                .with_web_orchestrator(orchestrator)
+                .with_auto_escalate(true);
+            tracing::info!(
+                "knowledge_lookup: auto_escalate_to_web ENABLED — \
+                 thin local results will fall back to web search"
+            );
         }
         tools.register(Box::new(tool));
     }
