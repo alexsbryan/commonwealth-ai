@@ -1116,11 +1116,14 @@ mod tests {
     /// the OS reaps the child; `wait_for_child_ready` short-circuits
     /// with `ChildExitedEarly` carrying the exit reason.
     ///
-    /// We exercise this by pointing the runner at `/bin/false` (Unix)
-    /// so spawn succeeds but the process exits immediately with code
-    /// 1. The probe loop should surface `ChildExitedEarly("exit_code=1")`
-    /// within ~1 s, NOT after `child_ready_timeout` (3 s in test config
-    /// but the assertion is < 2 s to be safe).
+    /// We exercise this by pointing the runner at a binary that
+    /// spawns successfully but exits immediately with code 1. macOS
+    /// ships `false` only at `/usr/bin/false` (no `/bin/false`);
+    /// Linux has it at both. Probe `/bin/false` first for backwards
+    /// compatibility, fall back to `/usr/bin/false`. The probe loop
+    /// should surface `ChildExitedEarly("exit_code=1")` within ~1 s,
+    /// NOT after `child_ready_timeout` (3 s in test config but the
+    /// assertion is < 2 s to be safe).
     #[cfg(unix)]
     #[tokio::test]
     async fn ensure_child_ready_surfaces_exit_before_timeout() {
@@ -1136,13 +1139,18 @@ mod tests {
         ));
         // Write a non-empty file so the `config_path.exists()` gate
         // in `ensure_child_ready` lets us through to spawn. Content
-        // doesn't matter — `/bin/false` ignores it.
+        // doesn't matter — the `false` binary ignores it.
         std::fs::write(&config_path, "# stub\n").unwrap();
+        let false_bin = if PathBuf::from("/bin/false").exists() {
+            PathBuf::from("/bin/false")
+        } else {
+            PathBuf::from("/usr/bin/false")
+        };
         let (complete, ready) = pre_fired_dump_signals();
         let runner = SubprocessRunner::new(
             SubprocessRunnerConfig {
                 config_path: config_path.clone(),
-                binary: Some(PathBuf::from("/bin/false")),
+                binary: Some(false_bin),
                 child_client_port: port,
                 disk_dump_timeout: Duration::from_secs(2),
                 // Generous: if the short-circuit fails, the test should

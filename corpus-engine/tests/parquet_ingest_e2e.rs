@@ -417,6 +417,7 @@ async fn ingest_progress_callback_fires_for_completion() {
             corpus_engine::IngestProgress::Embedding { .. } => "embedding",
             corpus_engine::IngestProgress::Indexing { .. } => "indexing",
             corpus_engine::IngestProgress::OptimizingIndex { .. } => "optimizing_index",
+            corpus_engine::IngestProgress::Enriching { .. } => "enriching",
             corpus_engine::IngestProgress::Complete { .. } => "complete",
         };
         phases_inner.lock().unwrap().push(label);

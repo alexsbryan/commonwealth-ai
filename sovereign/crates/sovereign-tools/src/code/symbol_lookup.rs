@@ -157,7 +157,10 @@ impl Tool for SymbolLookupTool {
                      The graph builds from `rust-analyzer scip` exports. \
                      If this repo has never been indexed, run \
                      `sovereign project init` or `sovereign project refresh` \
-                     to populate it."
+                     to populate it. While the graph populates, fall back \
+                     to `code_search` with a description of what you're \
+                     looking for — semantic search runs against the chunk \
+                     index and doesn't depend on SCIP."
                 )));
             }
             return Ok(StepOutput::Text(format!(

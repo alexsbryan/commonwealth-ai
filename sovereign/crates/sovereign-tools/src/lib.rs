@@ -35,7 +35,9 @@ pub mod search;
 pub mod shell;
 pub mod web;
 
-pub use code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
+pub use code::{CodeSearchTool, RecentChangesTool};
+#[cfg(feature = "treesitter")]
+pub use code::SymbolLookupTool;
 pub use knowledge_lookup::{
     Evidence, EvidenceId, EvidenceKind, KindCounts, KnowledgeLookupResponse,
     KnowledgeLookupTool, SYSTEM_PROMPT as KNOWLEDGE_LOOKUP_SYSTEM_PROMPT,

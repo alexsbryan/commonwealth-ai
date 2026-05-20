@@ -33,57 +33,90 @@ use crate::hardware::HardwareProfile;
 
 // ─── ModelSlot ─────────────────────────────────────────────────
 
-struct SlotContext {
-    ctx: crate::llama::cpp::context::LlamaContext<'static>,
-    /// **MTP draft context** — `Some` only when the loaded gguf
-    /// carries MTP heads (detected by `MTP` substring in the gguf
-    /// filename and confirmed by a successful
-    /// `LlamaContextType::Mtp` context build at slot load time).
+/// Per-slot inference mode. A sum type so the illegal hybrid state
+/// the daemon hit on 2026-05-20 (`mtp_session = None` while the target
+/// ctx still carries the `set_embeddings_pre_norm(true)` hook from a
+/// prior `common_speculative_init`) is **structurally impossible**.
+///
+/// `MtpSession::new` mutates the target context — there is no
+/// `common_speculative_uninit` upstream — so we cannot demote a
+/// `Speculative` slot by nulling the session field; the target must be
+/// rebuilt from scratch. Carrying that "must rebuild" invariant in the
+/// type system means future maintainers can't reintroduce the half-
+/// quarantined state. See [[invariant_mtp_demote_rebuilds_target]] and
+/// `SlotContext::demote_to_single_token`.
+///
+/// Crate-private — exposed neither to other crates nor as a field on
+/// `ModelSlot`. External callers continue to interact with `ModelSlot`
+/// via `complete()` / `complete_stream()`.
+enum SlotInferenceMode {
+    /// Plain attention-only context. The default; used by every slot
+    /// the daemon serves except for MTP-bearing ggufs that pass the
+    /// upgrade probe.
+    SingleToken {
+        ctx: crate::llama::cpp::context::LlamaContext<'static>,
+    },
+    /// **MTP speculative decoding.** Two contexts (target + draft)
+    /// backed by the same `Arc<LlamaModel>` plus a live `MtpSession`.
     ///
     /// Both contexts borrow from the same `LlamaModel` (the MTP gguf
     /// packs base layers + MTP-head tensors into one file) and both
     /// require `with_n_rs_seq(>= n_draft_max)` so partial KV rollback
     /// after rejected drafts succeeds — without it the target's
     /// recurrent layers refuse `seq_rm` and the next verify batch
-    /// fails. See `generate_sync_mtp` for the loop, and the
-    /// project_mtp_invariants memory for the precise sequence of API
+    /// fails. See `generate_sync_mtp` for the loop, and
+    /// [[project_mtp_invariants]] for the precise sequence of API
     /// calls the loop must make.
     ///
-    /// `generate_sync` dispatches to `generate_sync_mtp` only when
-    /// this is `Some` AND the request has no `structured_output` and
-    /// no `tools` — JsonConstraint + tool-call JSON tracking on the
-    /// MTP path are deferred to Phase B. Requests that don't qualify
-    /// fall through to the single-token decode path on the target
-    /// context, identical to non-MTP loads.
-    draft_ctx: Option<crate::llama::cpp::context::LlamaContext<'static>>,
-    /// **MTP session** — built at slot load via
-    /// `MtpSession::new(&target, &draft, ...)` and **rebuilt at every
-    /// request boundary** by `generate_sync_mtp`. The session's
-    /// constructor calls upstream's `common_speculative_init`, which
-    /// installs `set_embeddings_pre_norm(true)` on BOTH contexts so
-    /// subsequent decodes compute the pre-norm hidden state that the
-    /// MTP draft side needs. Creating the session AFTER the first
-    /// decode of a request causes the prefill to run without those
-    /// hooks and the next `session.process(batch)` reads garbage / dies
-    /// silently. Upstream's `examples/mtp/main.rs` creates the session
-    /// at startup for the same reason — but it's a one-shot script,
-    /// not a long-running daemon. We rebuild per request because the
-    /// session's internal draft-scheduler state persists across calls
-    /// and pollutes subsequent generations (see generate_sync_mtp
-    /// header comment); `mtp_session_new` is cheap (no allocation, no
-    /// model touch) so paying it per request is the right trade.
-    ///
-    /// `Some` iff `draft_ctx` is also `Some` — the two are built
-    /// together in `ModelSlot::load`. Per-request,
-    /// `session.begin(seq_id, &tokens)` still resets per-seq pending-h
-    /// state on the rebuilt session.
-    mtp_session: Option<MtpSession>,
+    /// **`session` invariant:** built at slot load via
+    /// `MtpSession::new(&target, &draft, ...)`, which calls upstream's
+    /// `common_speculative_init`. The constructor installs
+    /// `set_embeddings_pre_norm(true)` on BOTH contexts so subsequent
+    /// decodes compute the pre-norm hidden state that the draft side
+    /// reads in `session.process(batch)`. Per-request,
+    /// `generate_sync_mtp` rebuilds the session in place (see
+    /// `rebuild_session_in_place`) because the session's internal
+    /// draft-scheduler state persists across calls and pollutes
+    /// subsequent generations — but the contexts are reused.
+    Speculative {
+        target_ctx: crate::llama::cpp::context::LlamaContext<'static>,
+        draft_ctx: crate::llama::cpp::context::LlamaContext<'static>,
+        session: MtpSession,
+        n_draft_max: i32,
+    },
+}
+
+/// Scalars + handles needed to rebuild a target context after a
+/// speculative-mode failure. Stored on `SlotContext` so
+/// `demote_to_single_token` can reconstruct the target without
+/// re-plumbing them from the caller.
+struct MtpRebuildParams {
+    backend: Arc<LlamaBackend>,
+    context_size: u32,
+    n_threads: i32,
+    n_batch: u32,
+    n_ubatch: u32,
+    /// Set iff the gguf is genuinely recurrent. The `with_n_rs_seq`
+    /// call has to stay on the target ctx after demotion — recurrent
+    /// architectures need it regardless of whether speculative
+    /// decoding is active — or `seq_rm` on the recurrent layers fails
+    /// at decode time.
+    n_rs_seq: Option<u32>,
+    /// Was the original target built on GPU? Preserved so a rebuild
+    /// after demotion stays on the same backend; mismatching here
+    /// would force a CPU↔GPU transition mid-life and almost certainly
+    /// confuse the operator (silent perf cliff).
+    used_gpu: bool,
+}
+
+struct SlotContext {
+    mode: SlotInferenceMode,
     _model: Arc<LlamaModel>,
     /// **Prefix-cache bookkeeping.** The full token sequence
-    /// currently resident in `ctx`'s KV cache (positions 0..len).
-    /// Used by `generate_sync` to compute the longest common prefix
-    /// with each new request's tokenized prompt — when the prefix
-    /// matches, we keep that portion of the KV cache and only
+    /// currently resident in the target context's KV cache (positions
+    /// 0..len). Used by `generate_sync` to compute the longest common
+    /// prefix with each new request's tokenized prompt — when the
+    /// prefix matches, we keep that portion of the KV cache and only
     /// decode the new tail (positions `lcp..new_len`).
     ///
     /// Empty when the cache is known to be clean (post-clear), or
@@ -91,6 +124,11 @@ struct SlotContext {
     /// a successful prompt decode so a mid-decode failure rewinds to
     /// "cache state unknown → clear next time" rather than leaving a
     /// stale fingerprint.
+    ///
+    /// Hoisted out of the mode-specific variants because both
+    /// `SingleToken` and a future-prefix-cached `Speculative` path
+    /// would use it identically, and a mode transition (demote)
+    /// clears it unconditionally — single ownership for that reset.
     ///
     /// 2026-05-17 SEP-pipeline tuning: Phase 3 (cluster naming) has
     /// 4-7 calls per article sharing ~100% of a 4500-token prompt,
@@ -107,10 +145,290 @@ struct SlotContext {
     /// Empty string when metadata read failed (defensive — treat as
     /// "unknown" and fall back to the name-pattern heuristic).
     arch: String,
+    /// Params used to rebuild the target ctx on demote. `Some` iff
+    /// the slot was originally constructed as an MTP candidate (the
+    /// only case where demote is possible); `None` on plain slots
+    /// built via `from_existing_model` (FastShort) — those start in
+    /// SingleToken and never transition.
+    mtp_rebuild: Option<MtpRebuildParams>,
 }
 
 unsafe impl Send for SlotContext {}
 unsafe impl Sync for SlotContext {}
+
+impl SlotContext {
+    /// Mutable handle to the target context — the one every decode
+    /// (single-token or MTP-verify) runs against. The single
+    /// accessor replaces direct `slot_ctx.ctx` field access that the
+    /// pre-2026-05-20 code used.
+    fn ctx_mut(&mut self) -> &mut crate::llama::cpp::context::LlamaContext<'static> {
+        match &mut self.mode {
+            SlotInferenceMode::SingleToken { ctx } => ctx,
+            SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
+        }
+    }
+
+    /// True iff this slot was built (and probed) as speculative and
+    /// is still in that mode. Replaces `mtp_session.is_some()` checks
+    /// in dispatch.
+    fn is_speculative(&self) -> bool {
+        matches!(self.mode, SlotInferenceMode::Speculative { .. })
+    }
+
+    /// Rebuild the `MtpSession` in place on a `Speculative` slot.
+    /// Used by `generate_sync_mtp` at every request boundary —
+    /// `mtp_session_new` is cheap (no allocation, no model touch)
+    /// and re-running `common_speculative_init` resets the session's
+    /// internal draft-scheduler state, which otherwise desynchronises
+    /// with the fresh prompt after ~1-2 sequential requests (observed
+    /// 2026-05-17 as "Python sorting algorithm" responses to unrelated
+    /// questions once the search-gym ran with `--replays > 1`).
+    ///
+    /// No-op + Err when called on `SingleToken` (dispatcher contract
+    /// violation).
+    fn rebuild_session_in_place(&mut self, model_id: &str) -> Result<()> {
+        let SlotInferenceMode::Speculative {
+            target_ctx,
+            draft_ctx,
+            session,
+            n_draft_max,
+        } = &mut self.mode
+        else {
+            return Err(Error::Inference(
+                "rebuild_session_in_place: slot is in SingleToken mode — dispatcher contract violated"
+                    .into(),
+            ));
+        };
+        let rebuilt = MtpSession::new(&*target_ctx, &*draft_ctx, 1, *n_draft_max).map_err(|e| {
+            Error::Inference(format!("MTP session rebuild failed: {e:?}"))
+        })?;
+        // Drop the old session *after* the rebuild succeeds. Holding
+        // two sessions pointing at the same contexts simultaneously
+        // would be UB inside `common_speculative_*`, so we use
+        // `std::mem::replace` to swap atomically rather than `=
+        // None; = Some(rebuilt)`.
+        let _old = std::mem::replace(session, rebuilt);
+        drop(_old);
+        tracing::debug!(
+            model_id = %model_id,
+            n_draft_max = %*n_draft_max,
+            "mtp: rebuilt session at request boundary"
+        );
+        Ok(())
+    }
+
+    /// **Demote a Speculative slot to SingleToken mode.** Replaces
+    /// the pre-2026-05-20 `slot_ctx.mtp_session = None` quarantine
+    /// path, which left the target context's
+    /// `set_embeddings_pre_norm(true)` hook installed but disconnected
+    /// from any draft-side consumer — every subsequent `ctx.decode`
+    /// returned `Decode Error -3: unknown` for the rest of the
+    /// slot's lifetime.
+    ///
+    /// Because `common_speculative_init` has no upstream inverse, the
+    /// only safe demotion is to **drop both contexts and the session,
+    /// then rebuild the target from scratch** using the params
+    /// captured at slot construction. Cached prefix tokens are
+    /// invalidated — the new ctx has an empty KV cache, so the next
+    /// request pays one cold prefill (acceptable; recovery completes
+    /// in under a second on any reasonable hardware).
+    ///
+    /// No-op + Err when invoked on `SingleToken` (defensive — the
+    /// quarantine substring match in `generate_sync` only fires for
+    /// MTP-side failures, so this branch shouldn't reach a non-MTP
+    /// slot).
+    fn demote_to_single_token(&mut self, model_id: &str) -> Result<()> {
+        let rebuild = self
+            .mtp_rebuild
+            .as_ref()
+            .ok_or_else(|| {
+                Error::Inference(
+                    "demote_to_single_token: slot has no MtpRebuildParams (was it ever built \
+                     as speculative?)"
+                        .into(),
+                )
+            })?;
+        // Materialise the new target FIRST so a rebuild failure
+        // surfaces before we discard the old (mutated, but still
+        // serving) state. If `build_target_ctx_for_slot` fails the
+        // slot is wedged anyway, but at least the error is loud and
+        // diagnosable rather than silent.
+        let new_target = build_target_ctx_for_slot(&self._model, rebuild)
+            .map_err(|e| {
+                Error::Inference(format!(
+                    "demote_to_single_token: failed to rebuild target ctx: {e}"
+                ))
+            })?;
+        // Replace the mode in one step. Dropping the old
+        // `Speculative` variant runs the destructors for
+        // `target_ctx`, `draft_ctx`, and `session` in declaration
+        // order — session first (releases its C++-side hooks on the
+        // target/draft), then draft, then target. That order matches
+        // upstream's `mtp_session_free` contract: free the session
+        // before its referenced contexts.
+        let old_mode = std::mem::replace(
+            &mut self.mode,
+            SlotInferenceMode::SingleToken { ctx: new_target },
+        );
+        drop(old_mode);
+        // Prefix cache is invalid — different ctx, different KV.
+        self.cached_tokens.clear();
+        tracing::warn!(
+            model_id = %model_id,
+            "slot demoted: Speculative → SingleToken (target ctx rebuilt). \
+             Subsequent requests served via single-token decode for the rest \
+             of this slot's lifetime; restart the daemon to retry MTP."
+        );
+        Ok(())
+    }
+}
+
+/// Build a target `LlamaContext<'static>` for a slot given the
+/// rebuild params captured at construction. Used both at initial
+/// load AND by `demote_to_single_token` to replace a target whose
+/// `set_embeddings_pre_norm` hook is poisoned after a failed
+/// speculative upgrade.
+///
+/// SAFETY: the returned context borrows from `model` via a transmute
+/// to `'static`. The caller MUST keep `model` alive (in practice via
+/// the `_model: Arc<LlamaModel>` field on `SlotContext`) for the
+/// lifetime of the returned context.
+fn build_target_ctx_for_slot(
+    model: &Arc<LlamaModel>,
+    params: &MtpRebuildParams,
+) -> Result<crate::llama::cpp::context::LlamaContext<'static>> {
+    let mut ctx_params = LlamaContextParams::default()
+        .with_n_ctx(NonZeroU32::new(params.context_size))
+        .with_n_batch(params.n_batch)
+        .with_n_ubatch(params.n_ubatch)
+        .with_n_threads(params.n_threads)
+        .with_n_threads_batch(params.n_threads)
+        .with_offload_kqv(params.used_gpu);
+    if let Some(n_rs_seq) = params.n_rs_seq {
+        ctx_params = ctx_params.with_n_rs_seq(n_rs_seq);
+    }
+    unsafe {
+        let model_ref: &'static LlamaModel =
+            &*(Arc::as_ptr(model) as *const LlamaModel);
+        model_ref
+            .new_context(&params.backend, ctx_params)
+            .map_err(|e| Error::Inference(format!("Failed to create target context: {e}")))
+    }
+}
+
+/// Probe the speculative path with a 1-token synthetic prefill.
+/// Catches the failure mode where `MtpSession::new` succeeded (so the
+/// gguf appeared MTP-shaped at the C++ level) but the first real
+/// `target.decode → session.process` round-trip fails — most often
+/// because the gguf was MTP-named but lacks the actual head tensors,
+/// or because an upstream `common_speculative_init` partially mutates
+/// the target before erroring.
+///
+/// Without this probe (the pre-2026-05-20 behaviour), the failure
+/// would only manifest on the first real request, at which point the
+/// quarantine path would already have to deal with a mutated target.
+/// Running the probe at construction shifts that failure to a
+/// recoverable moment (caller drops the bad target + rebuilds fresh).
+///
+/// ~10-50ms cost on a warm slot. Acceptable; the alternative is a
+/// silently-broken slot serving traffic.
+///
+/// Leaves both KV caches empty on success so the first real request
+/// starts from a clean state.
+fn probe_mtp_roundtrip(
+    target_ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
+    draft_ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
+    session: &mut MtpSession,
+    model: &LlamaModel,
+) -> std::result::Result<(), String> {
+    target_ctx.clear_kv_cache();
+    draft_ctx.clear_kv_cache();
+    let bos = model.token_bos();
+    let prompt = [bos];
+    let mut batch = LlamaBatch::new(1, 1);
+    batch
+        .add(bos, 0, &[0], true)
+        .map_err(|e| format!("probe: batch add failed: {e}"))?;
+    target_ctx
+        .decode(&mut batch)
+        .map_err(|e| format!("probe: target decode failed: {e}"))?;
+    session
+        .process(&batch)
+        .map_err(|e| format!("probe: session.process failed: {e:?}"))?;
+    session
+        .begin(0, &prompt)
+        .map_err(|e| format!("probe: session.begin failed: {e:?}"))?;
+    target_ctx.clear_kv_cache();
+    draft_ctx.clear_kv_cache();
+    Ok(())
+}
+
+/// Attempt to upgrade a freshly-built target context into a
+/// `Speculative` slot mode. On failure, hand the (now-mutated) target
+/// back to the caller alongside the failure cause — the type signature
+/// encodes the "target is no longer reusable as a SingleToken ctx"
+/// invariant.
+///
+/// Contract: caller MUST drop the returned target on the `Err` path
+/// and rebuild a fresh one for `SingleToken`. The pre-2026-05-20 code
+/// silently reused the mutated target after nulling the session +
+/// draft fields, which left the `set_embeddings_pre_norm(true)` hook
+/// installed and orphaned — every subsequent decode returned -3.
+fn try_upgrade_to_speculative(
+    target: crate::llama::cpp::context::LlamaContext<'static>,
+    model: &Arc<LlamaModel>,
+    backend: &LlamaBackend,
+    draft_params: LlamaContextParams,
+    n_draft_max: i32,
+) -> std::result::Result<
+    SlotInferenceMode,
+    (
+        crate::llama::cpp::context::LlamaContext<'static>,
+        Error,
+    ),
+> {
+    let mut target_ctx = target;
+    let draft_ctx_res = unsafe {
+        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model) as *const LlamaModel);
+        model_ref.new_context(backend, draft_params)
+    };
+    let mut draft_ctx = match draft_ctx_res {
+        Ok(c) => c,
+        Err(e) => {
+            // Draft never built → target was never passed into
+            // `common_speculative_init`, so it's still pristine. But
+            // the contract says we hand it back regardless; callers
+            // are expected to drop and rebuild on Err for safety.
+            return Err((
+                target_ctx,
+                Error::Inference(format!("MTP draft context build failed: {e}")),
+            ));
+        }
+    };
+    let mut session = match MtpSession::new(&target_ctx, &draft_ctx, 1, n_draft_max) {
+        Ok(s) => s,
+        Err(e) => {
+            return Err((
+                target_ctx,
+                Error::Inference(format!("MtpSession::new failed: {e:?}")),
+            ));
+        }
+    };
+    if let Err(probe_err) =
+        probe_mtp_roundtrip(&mut target_ctx, &mut draft_ctx, &mut session, model)
+    {
+        return Err((
+            target_ctx,
+            Error::Inference(format!("MTP probe roundtrip failed: {probe_err}")),
+        ));
+    }
+    Ok(SlotInferenceMode::Speculative {
+        target_ctx,
+        draft_ctx,
+        session,
+        n_draft_max,
+    })
+}
 
 struct ModelSlot {
     model: Arc<LlamaModel>,
@@ -363,12 +681,28 @@ impl ModelSlot {
         let slot_arch = read_gguf_arch(&model);
         let mtp_by_name = model_id.to_lowercase().contains("mtp");
         let mtp_by_arch = is_recurrent_arch(&slot_arch);
-        let is_mtp_model = mtp_by_name || mtp_by_arch;
+        // `SOVEREIGN_MTP_DISABLE=1` short-circuits MTP at slot
+        // construction (not just at dispatch). The runtime check at
+        // `generate_sync` lower down also reads the same env var, but
+        // skipping it here too means `common_speculative_init` never
+        // runs — i.e. the `set_embeddings_pre_norm(true)` hook
+        // doesn't get installed on the target ctx in the first place.
+        // Pre-2026-05-20 the env var was dispatch-only, which left
+        // arch-mis-detected slots stuck with the hook on the target
+        // and dispatch routing around the (still-broken) draft path —
+        // result: every target decode failed `rc=-3` because the
+        // pre-norm consumer the hook expects was never wired up.
+        // Slot-time gate is the correct boundary.
+        let mtp_disabled_at_load = std::env::var("SOVEREIGN_MTP_DISABLE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let is_mtp_model = !mtp_disabled_at_load && (mtp_by_name || mtp_by_arch);
         tracing::info!(
             model_id = %model_id,
             arch = %slot_arch,
             mtp_by_name,
             mtp_by_arch,
+            mtp_disabled_at_load,
             is_mtp_candidate = is_mtp_model,
             "MTP candidacy decided — draft-ctx build will confirm or fall back"
         );
@@ -464,14 +798,48 @@ impl ModelSlot {
             embed_compute_backend_label()
         };
 
-        // **MTP draft context.** Built only when the model name signals
-        // MTP. We try once on GPU (same offload policy as target). If
-        // the gguf actually lacks MTP heads — i.e. the name matched but
-        // the file doesn't carry the draft tensors — the binding returns
-        // an error here; log + leave `draft_ctx = None` and the slot
-        // falls back to single-token decode for every request. Don't
-        // fail the slot load over a missed name heuristic.
-        let draft_ctx = if is_mtp_model {
+        // **Speculative-mode upgrade — probed at construction.**
+        //
+        // For an MTP-candidate slot, we try to upgrade the freshly-
+        // built target into a `Speculative` mode by attaching a draft
+        // context + `MtpSession` AND verifying the path actually
+        // round-trips end-to-end. The probe (a 1-token synthetic
+        // prefill through `target.decode → session.process →
+        // session.begin`) is what catches "gguf is MTP-named but
+        // lacks head tensors" — pre-2026-05-20 that case slipped
+        // through `MtpSession::new` and only blew up at first real
+        // request, leaving the target ctx with an orphaned
+        // `set_embeddings_pre_norm(true)` hook and `Decode Error -3`
+        // for the rest of the slot's life.
+        //
+        // On any Err path inside `try_upgrade_to_speculative`, the
+        // contract is: the (now-possibly-mutated) target ctx is
+        // returned via the Err payload, the caller drops it, and we
+        // rebuild a fresh target for `SingleToken` mode. That's the
+        // structural fix for the "no upstream
+        // `common_speculative_uninit`" problem — we never reuse a
+        // ctx that may have been touched by a failed
+        // `common_speculative_init`.
+        //
+        // n_draft_max = 3 matches upstream's Qwen3.6-A3B-MTP sweet
+        // spot. Overridable via `SOVEREIGN_MTP_DRAFT_MAX` for
+        // measurement passes; n_rs_seq=4 on both contexts gives one
+        // slot of headroom for partial KV rollback.
+        let n_draft_max: i32 = std::env::var("SOVEREIGN_MTP_DRAFT_MAX")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|n: &i32| *n >= 1 && *n < (mtp_n_rs_seq as i32))
+            .unwrap_or(3);
+        let rebuild_params = MtpRebuildParams {
+            backend: Arc::clone(backend),
+            context_size,
+            n_threads: n_threads as i32,
+            n_batch: context_size,
+            n_ubatch: 512,
+            n_rs_seq: if is_mtp_model { Some(mtp_n_rs_seq) } else { None },
+            used_gpu,
+        };
+        let mode: SlotInferenceMode = if is_mtp_model {
             let draft_params = LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
                 .with_ctx_type(LlamaContextType::Mtp)
@@ -481,79 +849,49 @@ impl ModelSlot {
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(used_gpu);
-            unsafe {
-                let model_ref: &'static LlamaModel =
-                    &*(Arc::as_ptr(&model) as *const LlamaModel);
-                match model_ref.new_context(backend, draft_params) {
-                    Ok(c) => {
-                        tracing::info!(
-                            model_id = %model_id,
-                            n_rs_seq = mtp_n_rs_seq,
-                            "MTP draft context built — speculative-decoding path active for \
-                             requests without structured_output or tools"
-                        );
-                        Some(c)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            model_id = %model_id,
-                            error = ?e,
-                            "MTP draft context build failed — name heuristic matched but the \
-                             gguf likely lacks MTP heads. Falling back to single-token decode \
-                             for this slot."
-                        );
-                        None
-                    }
+            match try_upgrade_to_speculative(
+                ctx,
+                &model,
+                backend,
+                draft_params,
+                n_draft_max,
+            ) {
+                Ok(mode) => {
+                    tracing::info!(
+                        model_id = %model_id,
+                        n_rs_seq = mtp_n_rs_seq,
+                        n_draft_max,
+                        "MTP speculative mode active — draft ctx + session built and probe \
+                         round-trip succeeded"
+                    );
+                    mode
+                }
+                Err((bad_target, e)) => {
+                    // Drop the (possibly mutated) target. The
+                    // type-system contract on `try_upgrade_to_speculative`
+                    // is what makes this branch the only safe place
+                    // to do so — the bad target cannot leak into a
+                    // SingleToken slot.
+                    drop(bad_target);
+                    tracing::warn!(
+                        model_id = %model_id,
+                        error = %e,
+                        "MTP upgrade probe failed — rebuilding a fresh target ctx and \
+                         falling back to single-token decode for this slot. (gguf likely \
+                         lacks MTP heads, or upstream rejected the pairing at \
+                         common_speculative_init.)"
+                    );
+                    let fresh = build_target_ctx_for_slot(&model, &rebuild_params)
+                        .map_err(|e| {
+                            Error::Inference(format!(
+                                "Failed to rebuild target ctx after MTP upgrade failure: {e}"
+                            ))
+                        })?;
+                    SlotInferenceMode::SingleToken { ctx: fresh }
                 }
             }
         } else {
-            None
-        };
-
-        // **MTP session — built ONCE here, reused across requests.**
-        // `MtpSession::new` calls upstream's `common_speculative_init`,
-        // which installs `set_embeddings_pre_norm(true)` on BOTH
-        // contexts. The hooks have to be in place BEFORE the first
-        // decode on the target — otherwise the prefill runs without
-        // computing pre-norm hidden states, and the subsequent
-        // `session.process(batch)` reads garbage and the C side dies.
-        // Upstream `examples/mtp/main.rs` builds the session at
-        // startup for the same reason.
-        //
-        // n_draft_max = 3 matches upstream's Qwen3.6-A3B-MTP sweet
-        // spot. Overridable via SOVEREIGN_MTP_DRAFT_MAX for
-        // measurement passes; n_rs_seq=4 on both contexts (set above)
-        // gives one slot of headroom for partial KV rollback.
-        let mtp_session = match (is_mtp_model, &draft_ctx) {
-            (true, Some(draft)) => {
-                let n_draft_max: i32 = std::env::var("SOVEREIGN_MTP_DRAFT_MAX")
-                    .ok()
-                    .and_then(|s| s.parse().ok())
-                    .filter(|n: &i32| *n >= 1 && *n < (mtp_n_rs_seq as i32))
-                    .unwrap_or(3);
-                match MtpSession::new(&ctx, draft, 1, n_draft_max) {
-                    Ok(s) => {
-                        tracing::info!(
-                            model_id = %model_id,
-                            n_draft_max,
-                            need_embd = s.need_embd(),
-                            "MtpSession created — pre-norm embedding hooks installed on both ctxs"
-                        );
-                        Some(s)
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            model_id = %model_id,
-                            error = ?e,
-                            "MtpSession::new failed — falling back to single-token decode for \
-                             this slot. (draft_ctx was built; this means upstream rejected the \
-                             pairing at common_speculative_init.)"
-                        );
-                        None
-                    }
-                }
-            }
-            _ => None,
+            SlotInferenceMode::SingleToken { ctx }
         };
 
         tracing::info!(
@@ -563,7 +901,7 @@ impl ModelSlot {
             size_mb = model.size() / (1024 * 1024),
             n_threads,
             compute_backend,
-            mtp = mtp_session.is_some(),
+            mtp = matches!(&mode, SlotInferenceMode::Speculative { .. }),
             "ModelSlot::load — slot ready"
         );
 
@@ -588,12 +926,15 @@ impl ModelSlot {
         Ok(Self {
             model: model.clone(),
             context: Mutex::new(SlotContext {
-                ctx,
-                draft_ctx,
-                mtp_session,
+                mode,
                 _model: model,
                 cached_tokens: Vec::new(),
                 arch: slot_arch,
+                mtp_rebuild: if is_mtp_model {
+                    Some(rebuild_params)
+                } else {
+                    None
+                },
             }),
             model_id,
             size_bytes,
@@ -700,17 +1041,19 @@ impl ModelSlot {
         Ok(Self {
             model: Arc::clone(&model),
             context: Mutex::new(SlotContext {
-                ctx,
                 // Sibling slots (FastShort) are built off the primary
                 // model with different `n_seq_max`/`n_ubatch` for
                 // continuous-batched short calls. MTP is gguf-specific
                 // and only meaningful for serial decode on the primary
-                // slot, so the sibling stays vanilla.
-                draft_ctx: None,
-                mtp_session: None,
+                // slot, so the sibling stays vanilla — fixed at
+                // `SingleToken` for life, no `mtp_rebuild` params
+                // captured because demotion can never fire on this
+                // shape.
+                mode: SlotInferenceMode::SingleToken { ctx },
                 _model: model,
                 cached_tokens: Vec::new(),
                 arch,
+                mtp_rebuild: None,
             }),
             model_id,
             size_bytes,
@@ -751,7 +1094,7 @@ impl ModelSlot {
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
         if !mtp_disabled
-            && slot_ctx.mtp_session.is_some()
+            && slot_ctx.is_speculative()
             && request.tools.as_ref().is_none_or(|t| t.is_empty())
         {
             // Try MTP. On prefill-decode failure, quarantine MTP for
@@ -808,12 +1151,21 @@ impl ModelSlot {
                              to re-enable; set SOVEREIGN_MTP_QUARANTINE_DISABLE=1 to \
                              surface the error instead."
                         );
-                        // Drop the MTP session — generate_sync's
-                        // re-entrant call below now skips the MTP
-                        // branch above (mtp_session is None). The
-                        // draft_ctx stays resident; harmless, just
-                        // unused for the rest of this slot's life.
-                        slot_ctx.mtp_session = None;
+                        // Demote structurally: drop session + draft +
+                        // mutated-target and rebuild a fresh target
+                        // for SingleToken mode. The pre-2026-05-20
+                        // path just did `mtp_session = None` and left
+                        // the target ctx in place — but
+                        // `common_speculative_init` had already
+                        // installed `set_embeddings_pre_norm(true)`
+                        // on it, with no upstream uninit, so every
+                        // subsequent decode returned `Decode Error -3`
+                        // for the rest of the slot's lifetime.
+                        // `demote_to_single_token` is the only safe
+                        // transition. Defence-in-depth: probe at
+                        // construction catches most cases, this
+                        // catches the surprise mid-life ones.
+                        slot_ctx.demote_to_single_token(model_id)?;
                         // Fall through to the non-MTP path below.
                     } else {
                         return Err(e);
@@ -858,33 +1210,50 @@ impl ModelSlot {
         // Detection ladder (data first, ARCH §6):
         // 1. The slot's gguf `general.architecture` metadata, read
         //    once at construction and stored on `SlotContext.arch`.
-        // 2. Name-pattern fallback when metadata is missing (older
-        //    gguf releases, exporter strips the field, etc.).
+        // 2. `ModelQuirks::has_recurrent_layers` — the per-family
+        //    declaration in `model_family.rs`. Used when arch
+        //    metadata is empty (older gguf exports strip the field,
+        //    etc). Replaced the pre-2026-05-20 name-substring
+        //    heuristic that pattern-matched "qwen3.5" / "qwen3.6" /
+        //    "qwopus" — those decisions are now declared once on the
+        //    family, not re-derived from filenames at every dispatch.
         let arch_says_recurrent = is_recurrent_arch(&slot_ctx.arch);
-        let name_says_recurrent =
-            slot_ctx.arch.is_empty() && is_recurrent_arch_by_name(model_id);
-        let prefix_cache_safe = slot_ctx.mtp_session.is_none()
-            && !arch_says_recurrent
-            && !name_says_recurrent;
+        let quirks_say_recurrent =
+            slot_ctx.arch.is_empty() && quirks.has_recurrent_layers;
+        let speculative_active = slot_ctx.is_speculative();
+        let prefix_cache_safe =
+            !speculative_active && !arch_says_recurrent && !quirks_say_recurrent;
         tracing::debug!(
             model = %model_id,
             arch = %slot_ctx.arch,
             arch_says_recurrent,
-            name_says_recurrent,
-            mtp_session = slot_ctx.mtp_session.is_some(),
+            quirks_say_recurrent,
+            mtp_session = speculative_active,
             prefix_cache_safe,
             "prefix_cache: gate decision"
         );
 
-        // Split-borrow the SlotContext's disjoint fields. The
-        // function body uses both `ctx` (the LlamaContext) and
-        // `cached_tokens` (the prefix-cache bookkeeping) as mutable
-        // references, which Rust's split-borrow rules permit on
-        // direct field access but NOT through a closure capture —
-        // hence taking `&mut SlotContext` here rather than two
-        // separate parameters at the call site.
-        let ctx = &mut slot_ctx.ctx;
-        let cached_tokens = &mut slot_ctx.cached_tokens;
+        // Split-borrow `ctx_mut()` + `cached_tokens` via an inline
+        // destructuring match on `&mut slot_ctx.mode`. The function
+        // body uses both as `&mut` simultaneously, which Rust's
+        // split-borrow rules permit on direct field access but NOT
+        // through method calls (which take `&mut self` on the whole
+        // SlotContext). We do the split here so the rest of the
+        // body can keep its prior shape.
+        //
+        // For mode = Speculative we still surface only the target
+        // context — the draft is unused on this path (the dispatcher
+        // gate above already routed any Speculative-eligible request
+        // out to `generate_sync_mtp`).
+        let SlotContext {
+            mode,
+            cached_tokens,
+            ..
+        } = slot_ctx;
+        let ctx = match mode {
+            SlotInferenceMode::SingleToken { ctx } => ctx,
+            SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
+        };
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
 
         let tokens = model
@@ -1584,25 +1953,6 @@ impl ModelSlot {
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize, usize)> {
-        // Validate dispatcher contract first (draft_ctx + mtp_session
-        // must be Some) and snapshot `n_draft_max` from the existing
-        // session — we'll rebuild the session below and need to pass
-        // the same shape back in.
-        if slot_ctx.draft_ctx.is_none() {
-            return Err(Error::Inference(
-                "generate_sync_mtp: draft_ctx is None — dispatcher contract violated".into(),
-            ));
-        }
-        let n_draft_max = slot_ctx
-            .mtp_session
-            .as_ref()
-            .ok_or_else(|| {
-                Error::Inference(
-                    "generate_sync_mtp: mtp_session is None — dispatcher contract violated".into(),
-                )
-            })?
-            .n_draft_max();
-
         // **Rebuild the MTP session at the request boundary.** The
         // session that ModelSlot::load constructed is reused across
         // every request; KV cache clear (below) resets the contexts'
@@ -1614,44 +1964,46 @@ impl ModelSlot {
         // unrelated questions) once the search-gym started running
         // --replays > 1.
         //
-        // mtp_session_new is cheap: it calls common_speculative_init
-        // which only re-installs `set_embeddings_pre_norm(true)` hooks
-        // and registers the speculative callback. No allocation, no
-        // model touch. Drop the old session first (assign None) so we
-        // never hold two sessions referencing the same contexts —
-        // upstream documents that as UB inside common_speculative_*.
-        slot_ctx.mtp_session = None;
-        let rebuilt = {
-            let draft_ref = slot_ctx
-                .draft_ctx
-                .as_ref()
-                .expect("draft_ctx checked Some above");
-            MtpSession::new(&slot_ctx.ctx, draft_ref, 1, n_draft_max).map_err(|e| {
-                Error::Inference(format!("MTP session rebuild failed: {e:?}"))
-            })?
-        };
-        slot_ctx.mtp_session = Some(rebuilt);
-        tracing::debug!(
-            model_id = %model_id,
-            n_draft_max,
-            "mtp: rebuilt session at request boundary"
-        );
+        // `rebuild_session_in_place` enforces the dispatcher contract
+        // (slot must be `Speculative`) and uses `mem::replace` so we
+        // never hold two sessions referencing the same contexts
+        // simultaneously — upstream documents that as UB inside
+        // `common_speculative_*`. Errors here (rare; would indicate
+        // the session re-init refused for some new reason) propagate
+        // up and the outer quarantine logic in `generate_sync` can
+        // demote the slot to SingleToken.
+        slot_ctx.rebuild_session_in_place(model_id)?;
 
-        // Split-borrow the SlotContext's fields. Holds &mut to both
-        // ctxs simultaneously; the MtpSession holds raw pointers
-        // internally and is not tracked by the borrow checker —
-        // that's what lets all three coexist as &muts on the same
-        // SlotContext.
-        let target_ctx = &mut slot_ctx.ctx;
-        let draft_ctx = slot_ctx
-            .draft_ctx
-            .as_mut()
-            .expect("draft_ctx checked Some above");
-        let session = slot_ctx
-            .mtp_session
-            .as_mut()
-            .expect("mtp_session was just rebuilt to Some");
-        let cached_tokens = &mut slot_ctx.cached_tokens;
+        // Split-borrow target + draft + session via the
+        // `speculative_mut` accessor. The MtpSession holds raw
+        // pointers internally and is not tracked by the borrow
+        // checker; the accessor returns three disjoint mutable
+        // references into the enum variant, which together with
+        // `cached_tokens` cover everything this function needs.
+        //
+        // The accessor's `None` branch is a panic-grade contract
+        // violation (dispatcher gate routed us here even though the
+        // slot isn't speculative). Convert to a proper error rather
+        // than panicking so the caller can fall back gracefully.
+        let SlotContext {
+            mode,
+            cached_tokens,
+            ..
+        } = slot_ctx;
+        let (target_ctx, draft_ctx, session, n_draft_max) = match mode {
+            SlotInferenceMode::Speculative {
+                target_ctx,
+                draft_ctx,
+                session,
+                n_draft_max,
+            } => (target_ctx, draft_ctx, session, *n_draft_max),
+            SlotInferenceMode::SingleToken { .. } => {
+                return Err(Error::Inference(
+                    "generate_sync_mtp: slot is in SingleToken mode — dispatcher contract violated"
+                        .into(),
+                ));
+            }
+        };
 
         // Phase A clears both KVs and starts fresh — no prefix cache
         // integration on this path yet. The non-MTP path keeps
@@ -4017,7 +4369,7 @@ impl FastShortCoalescer {
                 ModelSlot::generate_sync_batched(
                     &slot.model,
                     &model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &requests_refs,
                     &quirks,
                 )
@@ -5913,7 +6265,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) = ModelSlot::generate_stream_sync(
                     &slot.model,
                     &slot.model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &request,
                     &tx,
                     &quirks,
@@ -6014,7 +6366,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
+                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, ctx_lock.ctx_mut(), &request, &tx, &quirks, None)
                 {
                     tracing::warn!(slot = slot_label, error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
@@ -6041,7 +6393,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
+                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, ctx_lock.ctx_mut(), &request, &tx, &quirks, None)
                 {
                     tracing::warn!(slot = "fast", error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
@@ -6111,7 +6463,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
                     &slot.model,
                     &slot.model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &request,
                     &tx,
                     &quirks,
@@ -6212,7 +6564,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
                     &slot.model,
                     &slot.model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &request,
                     &tx,
                     &quirks,
@@ -6247,7 +6599,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
                     &slot.model,
                     &slot.model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &request,
                     &tx,
                     &quirks,
@@ -6605,7 +6957,8 @@ fn read_gguf_arch(model: &LlamaModel) -> String {
 ///
 /// Source of truth for the `prefix_cache_safe` gate when the slot
 /// carries arch metadata. Empty string is "unknown" — caller falls
-/// back to `is_recurrent_arch_by_name(model_id)`.
+/// back to `ModelQuirks::has_recurrent_layers` declared per-family
+/// in `model_family.rs`.
 pub(crate) fn is_recurrent_arch(arch: &str) -> bool {
     if arch.is_empty() {
         return false;
@@ -6631,66 +6984,6 @@ pub(crate) fn is_recurrent_arch(arch: &str) -> bool {
     false
 }
 
-/// Heuristic: is the gguf file stem from an architecture that has
-/// recurrent layers (Mamba / Gated DeltaNet / RWKV / hybrid SSM+MoE)?
-///
-/// Used by `generate_sync` to gate out the partial-keep prefix-cache
-/// path on these families — `clear_kv_cache_seq` doesn't rewind their
-/// recurrent state, so the subsequent tail-decode is rejected upstream
-/// with `Decode Error -1: n_tokens == 0`.
-///
-/// Name patterns are a stopgap — the real detector wants the gguf
-/// `general.architecture` field forwarded onto the slot at construction
-/// time. Tracked in the fix-queue ARCH §6 (data, not program) cleanup.
-pub(crate) fn is_recurrent_arch_by_name(model_id: &str) -> bool {
-    let lower = model_id.to_lowercase();
-    // Qwen 3.5 / 3.6 use Gated DeltaNet (recurrent component in the
-    // attention path). Empirically broken on partial-keep —
-    // 2026-05-20, Qwen3.6-35B-A3B every 2nd request failed.
-    if lower.contains("qwen3.5") || lower.contains("qwen3.6") {
-        return true;
-    }
-    // Explicit arch tokens in the gguf file name.
-    for marker in ["mamba", "deltanet", "rwkv", "ssm"] {
-        if lower.contains(marker) {
-            return true;
-        }
-    }
-    false
-}
-
-#[cfg(test)]
-mod recurrent_arch_tests {
-    use super::is_recurrent_arch_by_name;
-
-    #[test]
-    fn flags_qwen36_a3b() {
-        assert!(is_recurrent_arch_by_name(
-            "Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX-I-Compact"
-        ));
-    }
-
-    #[test]
-    fn flags_qwen35_variants() {
-        assert!(is_recurrent_arch_by_name("Qwopus3.5-9B-Coder-MTP-Q6_K"));
-        assert!(is_recurrent_arch_by_name("Qwen3.5-base-Q6_K"));
-    }
-
-    #[test]
-    fn does_not_flag_pure_attention_families() {
-        assert!(!is_recurrent_arch_by_name("gemma-4-26B-A4B-it-UD-Q6_K_XL"));
-        assert!(!is_recurrent_arch_by_name("qwen-embedding-0.6b"));
-        assert!(!is_recurrent_arch_by_name("Llama-3.1-70B"));
-        assert!(!is_recurrent_arch_by_name("Qwen3-32B"));
-    }
-
-    #[test]
-    fn flags_explicit_arch_markers() {
-        assert!(is_recurrent_arch_by_name("any-Mamba-7B-fp16"));
-        assert!(is_recurrent_arch_by_name("RWKV-6.5-Q4_K"));
-        assert!(is_recurrent_arch_by_name("hybrid-SSM-MoE"));
-    }
-}
 
 pub(crate) fn clamp_max_tokens(
     requested: Option<usize>,

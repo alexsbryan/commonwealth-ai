@@ -825,6 +825,29 @@ compose is a tracked todo. Telemetry: per-request
 `jump_fwd_runs` / `jump_fwd_bytes_n` so an operator can decompose
 throughput by which path produced which tokens.
 
+**`SlotContext` is a sum type — `SingleToken` or `Speculative`
+(2026-05-20).** The slot's inference mode is encoded as
+`SlotInferenceMode { SingleToken { ctx }, Speculative { target_ctx,
+draft_ctx, session, n_draft_max } }`. Pre-2026-05-20 the slot carried
+`ctx + Option<draft_ctx> + Option<mtp_session>` as parallel fields and
+quarantined via `mtp_session = None`, which left the target ctx with
+an orphaned `set_embeddings_pre_norm(true)` hook installed by
+`common_speculative_init` (upstream has no `..._uninit`) — every
+subsequent decode returned `Decode Error -3` for the rest of the
+slot's life. Demotion is now structural via
+`SlotContext::demote_to_single_token` — drops session + draft +
+mutated-target, rebuilds the target from the `MtpRebuildParams`
+captured at load time. ARCH §7 "structural invariants" applied:
+illegal hybrid state is unrepresentable. The new
+`try_upgrade_to_speculative` runs `probe_mtp_roundtrip` at
+construction (1-token synthetic `target.decode → session.process →
+session.begin`) so MTP-named ggufs that lack real head tensors
+degrade to `SingleToken` at load with one warn line instead of
+producing a 4-hour cascade at first request. See
+`sovereign-inference/src/embedded.rs::SlotInferenceMode` for the type
++ accessors, and the `SOVEREIGN_MTP_DISABLE=1` env var for an
+operator-side bypass at slot construction.
+
 `model_family.rs` encodes per-family quirks: `ThinkingControl`, sampling
 defaults, `EmbedQuirks` (`PoolingStrategy`, `NormalizationStrategy`,
 `query_instruction` for asymmetric retrieval).

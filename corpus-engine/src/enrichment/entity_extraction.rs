@@ -418,6 +418,15 @@ async fn run_entity_extraction_raw(
     let mut parsed: Vec<(usize, EntityExtractionResponse)> = Vec::new();
     let mut failures: Vec<EntityExtractionFailure> = Vec::new();
     let mut batches_done: usize = 0;
+    // Stuck detection. Pre-2026-05-20 this loop logged every failure
+    // at `warn!` and continued indefinitely; one persistently failing
+    // inference path (e.g. an MTP-slot whose target ctx has a stale
+    // pre-norm hook after partial quarantine) silently ate every
+    // batch in turn for thousands of attempts. Bail on inference
+    // failures specifically — parse failures stay non-fatal because
+    // they reflect model output quirks rather than a broken slot.
+    const STUCK_THRESHOLD: usize = 32;
+    let mut consecutive_inference_failures: usize = 0;
 
     while let Some((batch_idx, result)) = in_flight.next().await {
         if let Some((next_idx, next_p)) = iter.next() {
@@ -427,20 +436,44 @@ async fn run_entity_extraction_raw(
 
         match result {
             Err(e) => {
+                let err_msg = e.to_string();
                 tracing::warn!(
                     batch = batch_idx,
-                    error = %e,
+                    error = %err_msg,
                     "entity_extraction: inference failed"
                 );
                 failures.push(EntityExtractionFailure {
                     batch_index: batch_idx,
                     kind: FailureKind::InferenceError,
-                    reason: e.to_string(),
+                    reason: err_msg.clone(),
                 });
+                consecutive_inference_failures += 1;
+                if consecutive_inference_failures >= STUCK_THRESHOLD {
+                    tracing::error!(
+                        batch = batch_idx,
+                        consecutive_inference_failures,
+                        threshold = STUCK_THRESHOLD,
+                        last_error = %err_msg,
+                        "entity_extraction: bailing — {STUCK_THRESHOLD} consecutive \
+                         inference failures. Likely upstream inference issue \
+                         (e.g. broken chat slot — set SOVEREIGN_MTP_DISABLE=1 + \
+                         restart the daemon if this is the MTP-pre-norm hook bug). \
+                         Already-persisted batches are kept; next run resumes."
+                    );
+                    return Err(crate::error::Error::Embed(format!(
+                        "entity_extraction stuck: {consecutive_inference_failures} \
+                         consecutive inference failures (last: {err_msg}). Resolve \
+                         the upstream inference issue and resume enrichment — the \
+                         {} batches already persisted on disk will be skipped on \
+                         the next run.",
+                        parsed.len()
+                    )));
+                }
                 continue;
             }
             Ok(response) => match parse_response(&response) {
                 Ok(mut extracted) => {
+                    consecutive_inference_failures = 0;
                     // Rewrite mention labels (e.g. "1", "Memory 1",
                     // "Conversation 2") into the actual chunk_id
                     // strings so the merge step joins on a stable

@@ -605,8 +605,14 @@ mod self_manifest_tests {
             "manifest leaked a code claim even without a code slot: {:#?}",
             manifest.models
         );
-        // Fast + primary GGUF + 2 primary aliases (commonwealth/primary, primary).
-        assert_eq!(manifest.models.len(), 4, "expected fast + primary + 2 aliases: {:#?}", manifest.models);
+        // Fast slot + primary GGUF + 2 primary aliases (commonwealth/primary, primary)
+        // + 2 fast aliases (commonwealth/fast, fast) = 6 entries.
+        assert_eq!(
+            manifest.models.len(),
+            6,
+            "expected fast + primary + 2 primary aliases + 2 fast aliases: {:#?}",
+            manifest.models
+        );
     }
 
     #[test]
@@ -657,11 +663,11 @@ mod self_manifest_tests {
             code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
         };
         let manifest = build_self_manifest(&stub);
-        // fast + primary GGUF + 2 primary aliases + code.
+        // fast + primary GGUF + 2 primary aliases + 2 fast aliases + code = 7.
         assert_eq!(
             manifest.models.len(),
-            5,
-            "expected fast + primary + 2 aliases + code: {:#?}",
+            7,
+            "expected fast + primary + 2 primary aliases + 2 fast aliases + code: {:#?}",
             manifest.models
         );
         let code_model = manifest
