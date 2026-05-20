@@ -339,7 +339,39 @@ impl ModelSlot {
         // batch hits an M-RoPE position assert. n_draft_max=3 is the
         // sweet spot per upstream; we set n_rs_seq=4 (one slot of
         // headroom) on both contexts.
-        let is_mtp_model = model_id.to_lowercase().contains("mtp");
+        // MTP candidacy combines two signals:
+        //
+        // 1. Filename substring "MTP" — community naming convention
+        //    for Unsloth + similar ggufs that pack draft heads into
+        //    the file. Stable across architectures, no metadata
+        //    required, but misses MTP-bearing ggufs the operator
+        //    renamed or sourced from a vendor that doesn't follow
+        //    the convention.
+        //
+        // 2. Architecture signal — `general.architecture` set to a
+        //    recurrent-bearing family (qwen*moe / mamba / deltanet /
+        //    rwkv / ssm). These are the families that ship with MTP
+        //    draft heads in practice. Reading the arch metadata is
+        //    cheap (one llama_model_meta_val_str call); the result
+        //    also feeds `SlotContext.arch` for the prefix-cache gate.
+        //
+        // Either signal qualifies the slot as an MTP candidate. The
+        // draft-context build below is the definitive probe: it
+        // succeeds only if the model genuinely has MTP heads. False
+        // positives are graceful (logged + fall back to single-token
+        // decode), so we err on the side of attempting.
+        let slot_arch = read_gguf_arch(&model);
+        let mtp_by_name = model_id.to_lowercase().contains("mtp");
+        let mtp_by_arch = is_recurrent_arch(&slot_arch);
+        let is_mtp_model = mtp_by_name || mtp_by_arch;
+        tracing::info!(
+            model_id = %model_id,
+            arch = %slot_arch,
+            mtp_by_name,
+            mtp_by_arch,
+            is_mtp_candidate = is_mtp_model,
+            "MTP candidacy decided — draft-ctx build will confirm or fall back"
+        );
         let mtp_n_rs_seq: u32 = 4;
         let build_ctx_params = |gpu: bool| {
             let mut p = LlamaContextParams::default()
@@ -553,7 +585,6 @@ impl ModelSlot {
             file_size
         };
 
-        let arch = read_gguf_arch(&model);
         Ok(Self {
             model: model.clone(),
             context: Mutex::new(SlotContext {
@@ -562,7 +593,7 @@ impl ModelSlot {
                 mtp_session,
                 _model: model,
                 cached_tokens: Vec::new(),
-                arch,
+                arch: slot_arch,
             }),
             model_id,
             size_bytes,
