@@ -24,6 +24,7 @@ pub use orchestrator::{
     BudgetView, OrchestratedSearch, SearchOrchestrator, SelectInputs,
 };
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -346,6 +347,10 @@ async fn search_duckduckgo(
 
 fn parse_ddg_results(html: &str, max_results: usize) -> Vec<SearchResult> {
     let mut results = Vec::new();
+    // DDG HTML routinely lists the same canonical URL twice (zero-click
+    // info box + organic row). Dedup at the parser so callers don't see
+    // duplicates leak into the URL allowlist or waste model context.
+    let mut seen: HashSet<String> = HashSet::new();
     let mut pos = 0;
 
     while results.len() < max_results {
@@ -405,7 +410,7 @@ fn parse_ddg_results(html: &str, max_results: usize) -> Vec<SearchResult> {
             String::new()
         };
 
-        if !url.is_empty() && !title.is_empty() {
+        if !url.is_empty() && !title.is_empty() && seen.insert(url.clone()) {
             results.push(SearchResult {
                 title: html_decode(&title),
                 url,
@@ -424,6 +429,7 @@ fn parse_ddg_results(html: &str, max_results: usize) -> Vec<SearchResult> {
 /// and class "result-snippet" for the snippet text.
 fn parse_ddg_lite_results(html: &str, max_results: usize) -> Vec<SearchResult> {
     let mut results = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
     let mut pos = 0;
 
     // DDG Lite wraps each result link in: <a rel="nofollow" href="URL" class="result-link">TITLE</a>
@@ -490,7 +496,11 @@ fn parse_ddg_lite_results(html: &str, max_results: usize) -> Vec<SearchResult> {
             String::new()
         };
 
-        if !url.is_empty() && !title.is_empty() && url.starts_with("http") {
+        if !url.is_empty()
+            && !title.is_empty()
+            && url.starts_with("http")
+            && seen.insert(url.clone())
+        {
             results.push(SearchResult {
                 title: html_decode(&title),
                 url,

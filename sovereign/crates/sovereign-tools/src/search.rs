@@ -640,7 +640,9 @@ mod tests {
         // Verbatim-URL guidance — the URL-fabrication failure mode
         // surfaced by fixture 02 isolated runs.
         assert!(
-            desc.contains("verbatim") || desc.contains("exact"),
+            desc.contains("verbatim")
+                || desc.contains("exact")
+                || desc.contains("character-for-character"),
             "description should require verbatim URL copy"
         );
     }

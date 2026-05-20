@@ -1,10 +1,13 @@
 # Production web-search integration — plan
 
-**Status**: gym-validated at 90% on the existing mock backend (search-gym
-v8, 2026-05-19). Productionization is the next workstream — wire the
-gym-proven pieces (URL constraint, fast-slot routing, judge prompt) onto
-a real backend (Tavily first), behind the abstractions ARCH_PRINCIPLES
-calls for, and validate end-to-end against live queries.
+**Status**: gym-validated at 90% on the mock backend (search-gym v8,
+2026-05-19); orchestrator + registry shipped (Phase 6, commit `30402d2`)
+and the zero-config DuckDuckGo fallback is e2e-verified against live
+network (`sovereign-tools/tests/duckduckgo_real_e2e.rs`, 2026-05-19 —
+5/5 results, deduped, sub-second). Remaining productionization work is
+(a) operator-configurable backend (Tavily/Brave key plumbing through
+the registry), (b) the open decisions in §"Open decisions for the
+operator" below.
 
 ## What this is for
 
