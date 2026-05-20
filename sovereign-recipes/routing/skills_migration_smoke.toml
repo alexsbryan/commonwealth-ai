@@ -1,0 +1,123 @@
+# Routing smoke — validates that queries which used to trigger one of
+# the 7 retired skills are now correctly classified by the router on
+# its own (heuristics + embed-exemplar bank + LLM Pass 1). Each
+# question shape comes from a retired skill's `routing.trigger_phrases`
+# list; the expected_intent is what the system should detect WITHOUT
+# the trigger-phrase splice.
+#
+# Pass gate: ≥ 9/10 correctly classified. The threshold accounts for
+# Pass 1 LLM variance; a hard regression (< 8/10) means specific
+# exemplars need more entries in `sovereign/router/exemplars.toml`.
+#
+# This bank was authored when the skills-as-menu was retired in
+# favour of intent-keyed policy. Per `feedback_no_teaching_to_test`,
+# no question copies a literal trigger phrase verbatim — each query
+# is a representative shape a user might naturally type.
+
+[bank]
+name = "skills-migration-smoke"
+corpus = "wikipedia"
+description = """
+Validates that queries which used to require activating one of the
+retired skills (research-analyst, epistemic-research, codebase-
+navigator, code-review, document-analyst, collaborative-research,
+personal-assistant) are now classified correctly by the router
+without the trigger-phrase splice. Sister to `cells_v1` — same
+routing-only mode, but the scope is the migration cliff, not
+the framework grid.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 5000
+max_per_question_ms = 15000
+
+# ── codebase-navigator → metalingual_query ──
+# "in this codebase" / "in our code" — the metalingual locator.
+
+[[questions]]
+id = "nav_who_calls"
+category = "metalingual"
+expected_intent = "metalingual_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "Who calls the SearchTool::execute method in our code?"
+
+[[questions]]
+id = "nav_find_where"
+category = "metalingual"
+expected_intent = "metalingual_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "Where in this codebase is the URL allowlist constraint implemented?"
+
+[[questions]]
+id = "nav_what_changed"
+category = "metalingual"
+expected_intent = "metalingual_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "What changed in the router classification pipeline recently?"
+
+# ── research-analyst / collaborative-research → deep_query ──
+
+[[questions]]
+id = "research_survey"
+category = "multi_article_synthesis"
+expected_intent = "deep_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "Survey what's been published on situated agents for open-weight models — what are the major positions?"
+
+[[questions]]
+id = "research_collab"
+category = "multi_article_synthesis"
+expected_intent = "deep_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "Let's dig into how the M-series Apple Silicon roadmap has evolved — start with the original M1 announcement."
+
+# ── epistemic-research → deep_query (contested-shape) ──
+
+[[questions]]
+id = "epi_consensus"
+category = "multi_article_synthesis"
+expected_intent = "deep_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "What's the scholarly consensus on whether large language models actually reason?"
+
+[[questions]]
+id = "epi_contested"
+category = "multi_article_synthesis"
+expected_intent = "deep_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "Where do philosophers disagree about consciousness and which positions have the strongest support?"
+
+# ── personal-assistant → commissive_query / conation_query ──
+
+[[questions]]
+id = "pa_remind"
+category = "commissive"
+expected_intent = "commissive_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "Remind me to follow up with the design team on Thursday afternoon."
+
+[[questions]]
+id = "pa_schedule"
+category = "conation"
+expected_intent = "conation_query"
+expected_facts = ["stub"]
+expected_sources = []
+question = "Schedule a focused work block for tomorrow morning."
+
+# ── code-review / document-analyst → complex_task ──
+
+[[questions]]
+id = "review_code"
+category = "multi_step"
+expected_intent = "complex_task"
+expected_facts = ["stub"]
+expected_sources = []
+question = "Review this function for correctness and find bugs that aren't obvious from the diff."

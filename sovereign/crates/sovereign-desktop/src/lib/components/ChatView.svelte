@@ -1027,6 +1027,7 @@
 
       <InformationRequestCard
         request={pendingInfoRequest}
+        conversationId={activeConversationId}
         onHandled={() => send({ type: "CLEAR_INFO" })}
         onRefiningStarted={() => {
           // The to-be-refined message is the most recent COMPLETED

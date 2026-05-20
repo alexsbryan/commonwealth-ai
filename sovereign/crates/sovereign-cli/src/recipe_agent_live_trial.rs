@@ -247,15 +247,21 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
     let charter_path = charter.ok_or("missing --charter <FILE>")?;
     let script_path = script.ok_or("missing --script <FILE>")?;
     let skills_dir = skills_dir.unwrap_or_else(|| {
+        // Prefer the new `modes/` directory; fall back to legacy
+        // `skills/` so checkouts mid-migration still resolve.
         let cwd = std::env::current_dir().unwrap_or_default();
-        let candidate = cwd.join("sovereign").join("skills");
-        if candidate.exists() {
-            return candidate;
+        for sub in ["modes", "skills"] {
+            let candidate = cwd.join("sovereign").join(sub);
+            if candidate.exists() {
+                return candidate;
+            }
+            let candidate2 = cwd.join(sub);
+            if candidate2.exists() {
+                return candidate2;
+            }
         }
-        let candidate2 = cwd.join("skills");
-        if candidate2.exists() {
-            return candidate2;
-        }
+        // User-overlay path (~/.sovereign/skills) keeps its name
+        // for back-compat with existing custom skills on disk.
         dirs::home_dir()
             .unwrap_or_default()
             .join(".sovereign")

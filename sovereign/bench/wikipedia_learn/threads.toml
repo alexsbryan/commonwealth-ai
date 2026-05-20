@@ -678,3 +678,80 @@ question = "Why are monuments to him still controversial today?"
 expected_facts = ["removal", "Indigenous Peoples' Day", "protest", "memorialization"]
 expected_sources = ["List of monuments and memorials to Christopher Columbus", "Indigenous Peoples' Day"]
 notes = "Contemporary debate. Tests retrieval on the modern political dimension."
+
+
+# ── Thread 14 ────────────────────────────────────────────────────────
+# Tool-Mastery Phase 5 — gap-acknowledgement across turns.
+#
+# T0 is a clean corpus hit (Marie Curie's physics work) → the
+# Tool-Mastery write site fires `outcome = useful` against
+# `knowledge_lookup`. T1 chains on a coref ('her') to a fact that
+# wikipedia does NOT cover (Curie's great-granddaughter's PhD
+# thesis). The gap check should fire on T1 and rewrite the answer
+# from a fabricated thesis to an honest acknowledgement, which
+# also flips the tool_decision write to `outcome = stale`.
+#
+# Headline assertion: T1 cannot quietly invent biographical
+# detail about a relative the corpus doesn't carry. The bench
+# scores via the thread-judge predicates listed on T1.
+
+[[threads]]
+id = "outdated_corpus_gap_triggers_request"
+category = "tool_mastery_gap"
+description = "Tool-Mastery Phase 5: T0 in-corpus succeeds, T1 outside-corpus triggers gap acknowledgement"
+
+[[threads.turns]]
+question = "What was Marie Curie known for in physics?"
+expected_facts = ["radioactivity", "Nobel", "polonium", "radium"]
+expected_sources = ["Marie Curie"]
+notes = "T0 — standard corpus hit. Tool-decision write fires outcome=useful, populating the dossier the next turn reads."
+
+[[threads.turns]]
+question = "What was her great-granddaughter's PhD thesis about?"
+expected_facts = [
+    "the model does not invent a thesis topic",
+    "the answer acknowledges the corpus does not carry this biographical detail"
+]
+expected_sources = []
+notes = "T1 — wikipedia does not document the dissertation topics of Curie's descendants. The honest answer surfaces the gap; an invented thesis is a fabrication regression. Coref 'her' chains back to Curie (T0). Predicates are judge-scored — substring fact_recall would teach to the test."
+
+
+# ── Thread 15 ────────────────────────────────────────────────────────
+# Tool-Mastery Phase 5 — cross-turn dossier surface.
+#
+# T0 reaches into a region the corpus cannot answer (a date
+# beyond the snapshot's horizon) → `outcome = no-results` lands
+# in the tool-decision NoteStore for this conversation.
+# T1 chains a coref-only follow-up ("the year before that") that
+# is adjacent in time and likely also outside the snapshot. The
+# dossier pre-pass on T1 should surface the prior `no-results`
+# attempt, and the tutor's answer should reference that prior
+# failure rather than silently retrying or fabricating.
+#
+# Headline assertion: the dossier is load-bearing — without it,
+# the model has no per-conversation memory of failed lookups and
+# either re-fabricates or treats each turn as fresh. With it,
+# the tutor's T1 answer surfaces the prior attempt explicitly.
+
+[[threads]]
+id = "dossier_surfaces_prior_no_results"
+category = "tool_mastery_dossier"
+description = "Tool-Mastery Phase 5: T0 empty retrieval → T1 dossier surfaces the prior no-results"
+
+[[threads.turns]]
+question = "What were the major storylines at the 2027 Tour de France?"
+expected_facts = [
+    "the answer acknowledges that the event is past the corpus snapshot",
+    "the answer does not invent stage winners or jersey holders"
+]
+expected_sources = []
+notes = "T0 — date is beyond any plausible Wikipedia snapshot. Tool-decision write fires outcome=no-results."
+
+[[threads.turns]]
+question = "What about the year before that?"
+expected_facts = [
+    "the answer acknowledges the prior unsuccessful lookup",
+    "the answer is cautious about adjacent unknowns rather than confidently filling in 2026"
+]
+expected_sources = []
+notes = "T1 — relative coreference; 'the year before that' = 2026. The dossier should surface T0's no-results note, and the tutor should reason from that prior attempt rather than silently retrying or fabricating 2026 results. Predicates are judge-scored."

@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::sync::{LazyLock, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +7,7 @@ use crate::oicp::{
     Capability, CapabilityHint, InferenceRequirements, LatencyClass,
     ProficiencyLevel, ShardingPrivacy,
 };
-use crate::types::{Intent, ToolDescriptor, TrustLevel, compute_trust_level};
+use crate::types::{Intent, TrustLevel, compute_trust_level};
 
 // ─── Skill Definition ──────────────────────────────────────────
 
@@ -683,74 +682,13 @@ impl Default for SkillRegistry {
     }
 }
 
-// ─── Skill-aware tool narrowing ────────────────────────────────
-
-/// One-shot warn-tracker for `narrow_tools_for_skill`'s audit-gap
-/// path. The plan calls for a `warn!` when a skill declares neither
-/// `required` nor `optional`, but a long-running daemon would emit
-/// that warning on every turn for the same skill — making the signal
-/// indistinguishable from noise. Tracking which skill ids have
-/// already warned gives operators one clear line per affected skill,
-/// keyed by id so re-loaded skills (dev overlay, hot-reload) still
-/// surface once after each restart but not per-turn.
-static AUDIT_GAP_WARNED: LazyLock<Mutex<HashSet<String>>> =
-    LazyLock::new(|| Mutex::new(HashSet::new()));
-
-/// Narrow a full tool catalog to the tools an active skill has
-/// declared. Returns `required ∪ optional` from the skill's
-/// `ToolPreferences`, preserving the input ordering of `all`. Tool
-/// ids that the skill declares but the catalog doesn't contain are
-/// silently dropped — the catalog is authoritative for what's
-/// actually callable.
-///
-/// **Audit gap.** When a skill declares neither `required` nor
-/// `optional`, this function returns the full catalog unchanged and
-/// emits a one-shot `warn!` (deduplicated by skill id) so the
-/// operator notices the gap. The framework's load-bearing assumption
-/// is that every skill narrows; a skill that doesn't is the smell,
-/// not the failure (ARCH §9.2 — warn on recoverable degradation).
-pub fn narrow_tools_for_skill(
-    all: &[ToolDescriptor],
-    skill: &Skill,
-) -> Vec<ToolDescriptor> {
-    let prefs = &skill.tool_config;
-    if prefs.required.is_empty() && prefs.optional.is_empty() {
-        let mut warned = AUDIT_GAP_WARNED.lock().unwrap_or_else(|e| e.into_inner());
-        if warned.insert(skill.id.clone()) {
-            tracing::warn!(
-                skill = %skill.id,
-                full_catalog_size = all.len(),
-                "skills:narrow_tools — skill declares neither required nor optional; \
-                 returning full catalog (audit gap)"
-            );
-        }
-        return all.to_vec();
-    }
-
-    let allowed: HashSet<&str> = prefs
-        .required
-        .iter()
-        .chain(prefs.optional.iter())
-        .map(String::as_str)
-        .collect();
-
-    let narrowed: Vec<ToolDescriptor> = all
-        .iter()
-        .filter(|d| allowed.contains(d.id.as_str()))
-        .cloned()
-        .collect();
-
-    tracing::debug!(
-        skill = %skill.id,
-        required = prefs.required.len(),
-        optional = prefs.optional.len(),
-        full_catalog_size = all.len(),
-        narrowed_size = narrowed.len(),
-        "skills:narrow_tools"
-    );
-
-    narrowed
-}
+// Skill-keyed tool narrowing retired — see `crate::intent_policy`
+// for the replacement. The narrow-by-skill function and its
+// audit-gap warn tracker were Phase 1 of the Tool-Mastery framework;
+// the retire-skills-menu plan moves the keying axis to intent +
+// mode. Per-skill TOOL declarations on the surviving modes
+// (inner-work, recipe-author) are now consumed by
+// `intent_policy::policy_for` instead.
 
 // ─── Tests ────────────────────────────────────────────────────
 
@@ -997,266 +935,78 @@ register = "relational"
         assert_eq!(reg.primary_skill_register(), SkillRegister::Relational);
     }
 
-    /// The bundled inner-work and personal-assistant skill files
-    /// are the production opt-ins to the relational voice contract.
-    /// If either fails to parse, or either silently slips back to
-    /// the factual register, the contract isn't being applied —
-    /// pin both shape and register here.
+    /// `inner-work` is now the sole surviving relational mode.
+    /// (`personal-assistant` was retired in the skills-menu cleanup.)
+    /// Pin that the file parses and the register hasn't drifted —
+    /// the relational voice contract at the ~14 register-keyed
+    /// runtime sites depends on this declaration.
     #[test]
-    fn bundled_relational_skill_files_parse_with_relational_register() {
+    fn inner_work_mode_parses_with_relational_register() {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
             .expect("CARGO_MANIFEST_DIR should be set for tests");
-        let skills_dir = std::path::Path::new(&manifest_dir)
+        let modes_dir = std::path::Path::new(&manifest_dir)
             .join("..")
             .join("..")
-            .join("skills");
+            .join("modes");
 
-        for skill_id in ["inner-work", "personal-assistant"] {
-            let path = skills_dir.join(skill_id).join("skill.toml");
-            let content = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-            let skill = parse_skill_toml(&content)
-                .unwrap_or_else(|| panic!("parse {}", path.display()));
-            assert_eq!(skill.id, skill_id);
-            assert_eq!(
-                skill.inference.register,
-                SkillRegister::Relational,
-                "{skill_id} should declare register=\"relational\""
-            );
-        }
-    }
-
-    // ─── narrow_tools_for_skill ────────────────────────────────
-
-    use crate::types::{Effect, Idempotency, Latency, Scope, ToolDescriptor};
-
-    fn fake_descriptor(id: &str) -> ToolDescriptor {
-        ToolDescriptor {
-            id: id.to_string(),
-            name: id.to_string(),
-            description: format!("fake {id}"),
-            parameters: serde_json::json!({}),
-            examples: Vec::new(),
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
-    }
-
-    fn full_catalog() -> Vec<ToolDescriptor> {
-        // The union of every tool id mentioned across the bundled
-        // skills (codebase-navigator + research-analyst + epistemic-
-        // research + personal-assistant + code-review + document-
-        // analyst + collaborative-research + recipe-author), plus a
-        // few extras so "narrowed < full" is non-trivial.
-        [
-            "search", "knowledge", "shell",
-            "symbol_lookup", "code_search", "recent_changes",
-            "find_callers", "find_callees", "file", "file_write",
-            "document", "document_operation", "claim_search",
-            "epistemic_landscape", "web_search", "web_fetch",
-            "registry_browse", "recipe_read", "recipe_write",
-            "recipe_write_structured", "recipe_validate",
-            "recipe_test", "checkpoint", "decision_log",
-            "capability_request", "note", "run_tests",
-        ]
-        .iter()
-        .map(|id| fake_descriptor(id))
-        .collect()
-    }
-
-    fn skill_with_tools(id: &str, required: &[&str], optional: &[&str]) -> Skill {
-        Skill {
-            id: id.into(),
-            name: id.into(),
-            version: "0.1.0".into(),
-            description: String::new(),
-            routing: RoutingHints::default(),
-            planner_templates: Vec::new(),
-            tool_config: ToolPreferences {
-                required: required.iter().map(|s| s.to_string()).collect(),
-                optional: optional.iter().map(|s| s.to_string()).collect(),
-                tool_settings: HashMap::new(),
-            },
-            prompts: PromptOverrides::default(),
-            memory_rules: MemoryConfig::default(),
-            evaluation_prompts: HashMap::new(),
-            inference: SkillInferenceConfig::default(),
-            signature: None,
-            signed_by: None,
-            trust_level: TrustLevel::Unsigned,
-        }
-    }
-
-    #[test]
-    fn narrow_returns_required_plus_optional_when_both_declared() {
-        let catalog = full_catalog();
-        let skill = skill_with_tools(
-            "narrow-both",
-            &["symbol_lookup", "code_search"],
-            &["shell"],
-        );
-        let narrowed = narrow_tools_for_skill(&catalog, &skill);
-        let ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
-        assert_eq!(ids.len(), 3);
-        assert!(ids.contains(&"symbol_lookup"));
-        assert!(ids.contains(&"code_search"));
-        assert!(ids.contains(&"shell"));
-        assert!(narrowed.len() < catalog.len(), "narrowed must be strictly smaller");
-    }
-
-    #[test]
-    fn narrow_returns_only_required_when_optional_empty() {
-        let catalog = full_catalog();
-        let skill = skill_with_tools(
-            "narrow-required-only",
-            &["search", "claim_search", "epistemic_landscape"],
-            &[],
-        );
-        let narrowed = narrow_tools_for_skill(&catalog, &skill);
-        assert_eq!(narrowed.len(), 3);
-        let ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
-        assert!(ids.contains(&"search"));
-        assert!(ids.contains(&"claim_search"));
-        assert!(ids.contains(&"epistemic_landscape"));
-    }
-
-    #[test]
-    fn narrow_returns_only_optional_when_required_empty() {
-        // personal-assistant's shape today: optional-only.
-        let catalog = full_catalog();
-        let skill = skill_with_tools("narrow-optional-only", &[], &["shell", "knowledge"]);
-        let narrowed = narrow_tools_for_skill(&catalog, &skill);
-        assert_eq!(narrowed.len(), 2);
-        let ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
-        assert!(ids.contains(&"shell"));
-        assert!(ids.contains(&"knowledge"));
-    }
-
-    #[test]
-    fn narrow_returns_full_catalog_when_both_empty() {
-        // The audit-gap path: skill declared neither field, so narrow
-        // falls back to the full catalog (preserving today's
-        // behaviour) and emits a one-shot warn off the hot path.
-        let catalog = full_catalog();
-        // Use a unique id so the warn-once dedup doesn't collide with
-        // other tests in the same process.
-        let skill = skill_with_tools("narrow-audit-gap-unique-id", &[], &[]);
-        let narrowed = narrow_tools_for_skill(&catalog, &skill);
-        assert_eq!(narrowed.len(), catalog.len());
-        let narrowed_ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
-        let catalog_ids: Vec<&str> = catalog.iter().map(|d| d.id.as_str()).collect();
-        assert_eq!(narrowed_ids, catalog_ids, "must preserve catalog ordering");
-    }
-
-    #[test]
-    fn narrow_silently_drops_declared_ids_not_in_catalog() {
-        // The catalog is authoritative for what's actually callable.
-        // A skill that requires a tool nobody registered shouldn't
-        // hallucinate a descriptor — it just doesn't see that id.
-        let catalog = full_catalog();
-        let skill = skill_with_tools(
-            "narrow-unknown-id",
-            &["symbol_lookup", "nonexistent_tool"],
-            &["another_phantom"],
-        );
-        let narrowed = narrow_tools_for_skill(&catalog, &skill);
-        assert_eq!(narrowed.len(), 1);
-        assert_eq!(narrowed[0].id, "symbol_lookup");
-    }
-
-    #[test]
-    fn narrow_preserves_catalog_ordering() {
-        // The planner's prompt assembly may depend on stable ordering
-        // (e.g. for prompt cache hits across turns). Pin it.
-        let catalog = full_catalog();
-        // Declare in reversed order — narrow should still return the
-        // catalog order, not the skill's declaration order.
-        let skill = skill_with_tools(
-            "narrow-ordering",
-            &["find_callees", "find_callers", "code_search", "symbol_lookup"],
-            &[],
-        );
-        let narrowed = narrow_tools_for_skill(&catalog, &skill);
-        let narrowed_ids: Vec<&str> = narrowed.iter().map(|d| d.id.as_str()).collect();
-        // Catalog order for these four: symbol_lookup, code_search,
-        // find_callers, find_callees (see full_catalog).
+        let path = modes_dir.join("inner-work").join("skill.toml");
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let skill = parse_skill_toml(&content)
+            .unwrap_or_else(|| panic!("parse {}", path.display()));
+        assert_eq!(skill.id, "inner-work");
         assert_eq!(
-            narrowed_ids,
-            vec!["symbol_lookup", "code_search", "find_callers", "find_callees"]
+            skill.inference.register,
+            SkillRegister::Relational,
+            "inner-work must declare register=\"relational\""
         );
     }
 
-    /// For each bundled skill, parse the skill.toml and narrow against
-    /// a synthesized full catalog. Asserts the framework's invariant:
-    /// a skill that declares any tool gets a strictly smaller
-    /// catalog; a skill that declares nothing gets the full catalog
-    /// (the audit-gap fallback). The list is hand-maintained here so
-    /// adding a new bundled skill forces a deliberate decision about
-    /// its tool surface — not a silent inclusion that defaults to
-    /// the audit-gap path.
+    // ─── Surviving-modes declarations ──────────────────────────
+
+    /// After the skill-retirement work, only two TOMLs live under
+    /// `sovereign/modes/`. This test pins their shape so a future
+    /// edit doesn't accidentally widen inner-work's tool surface or
+    /// rename recipe-author's required tools without updating the
+    /// `intent_policy::policy_for` mode arms. Each assertion comes
+    /// from the principled design, not from an audited count.
     #[test]
-    fn bundled_skills_narrow_per_their_declarations() {
+    fn surviving_modes_declare_expected_tool_shape() {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
             .expect("CARGO_MANIFEST_DIR should be set for tests");
-        let skills_dir = std::path::Path::new(&manifest_dir)
+        let modes_dir = std::path::Path::new(&manifest_dir)
             .join("..")
             .join("..")
-            .join("skills");
+            .join("modes");
 
-        let catalog = full_catalog();
+        let inner_work_toml = std::fs::read_to_string(modes_dir.join("inner-work/skill.toml"))
+            .expect("read modes/inner-work/skill.toml");
+        let inner_work = parse_skill_toml(&inner_work_toml)
+            .expect("parse modes/inner-work/skill.toml");
+        assert_eq!(inner_work.id, "inner-work");
+        assert_eq!(inner_work.inference.register, SkillRegister::Relational);
+        assert!(
+            inner_work.tool_config.required.is_empty()
+                && inner_work.tool_config.optional.is_empty(),
+            "inner-work declares no tools by design — reflective work \
+             is not tool-mediated"
+        );
 
-        // (skill_id, must_contain, expects_audit_gap_fallback)
-        let cases: &[(&str, &[&str], bool)] = &[
-            ("codebase-navigator", &["symbol_lookup", "code_search"], false),
-            ("research-analyst", &["search"], false),
-            ("epistemic-research", &["search", "claim_search", "epistemic_landscape"], false),
-            ("personal-assistant", &["shell", "knowledge"], false),
-            ("code-review", &["shell"], false),
-            ("document-analyst", &["file", "document_operation"], false),
-            ("collaborative-research", &["search", "claim_search"], false),
-            ("recipe-author", &["recipe_validate", "web_search"], false),
-            // inner-work intentionally has no tools — currently
-            // structurally indistinguishable from "skill author
-            // forgot to declare," so it hits the audit-gap fallback.
-            // Tracked as Phase-1 follow-up: distinguish intentional-
-            // empty from absent.
-            ("inner-work", &[], true),
-        ];
-
-        for (skill_id, must_contain, expects_audit_gap) in cases {
-            let path = skills_dir.join(skill_id).join("skill.toml");
-            let content = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-            let skill = parse_skill_toml(&content)
-                .unwrap_or_else(|| panic!("parse {}", path.display()));
-            let narrowed = narrow_tools_for_skill(&catalog, &skill);
-            let narrowed_ids: HashSet<&str> =
-                narrowed.iter().map(|d| d.id.as_str()).collect();
-
-            if *expects_audit_gap {
-                assert_eq!(
-                    narrowed.len(),
-                    catalog.len(),
-                    "{skill_id} should fall through to full catalog (audit-gap path)"
-                );
-            } else {
-                assert!(
-                    narrowed.len() < catalog.len(),
-                    "{skill_id} should narrow to a strict subset of the catalog \
-                     (narrowed={}, catalog={})",
-                    narrowed.len(),
-                    catalog.len()
-                );
-                for needed in must_contain.iter() {
-                    assert!(
-                        narrowed_ids.contains(needed),
-                        "{skill_id} narrowed catalog must contain '{needed}'"
-                    );
-                }
-            }
+        let recipe_author_toml =
+            std::fs::read_to_string(modes_dir.join("recipe-author/skill.toml"))
+                .expect("read modes/recipe-author/skill.toml");
+        let recipe_author = parse_skill_toml(&recipe_author_toml)
+            .expect("parse modes/recipe-author/skill.toml");
+        assert_eq!(recipe_author.id, "recipe-author");
+        // Spot-check the must-have recipe tools (matches the
+        // intent_policy::recipe_author_tools() table).
+        let required: HashSet<&str> =
+            recipe_author.tool_config.required.iter().map(String::as_str).collect();
+        for needed in ["recipe_validate", "recipe_test", "decision_log"] {
+            assert!(
+                required.contains(needed),
+                "recipe-author must require '{needed}' (intent_policy table depends on it)"
+            );
         }
     }
 }

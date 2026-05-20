@@ -295,10 +295,16 @@ pub async fn build_session_with_skills(
     )));
     // Unified knowledge-lookup front door (Tool-Mastery framework
     // Phase 5). Returns a single Evidence envelope across corpus
-    // + memory channels (notes channel disabled here — no
-    // NoteStore handle on this bootstrap). The plan migrates
-    // skills onto this tool as a follow-up PR; for now it
-    // coexists with `search` / `knowledge` / `claim_search`.
+    // + memory + note channels. The plan migrates skills onto
+    // this tool as a follow-up PR; for now it coexists with
+    // `search` / `knowledge` / `claim_search`. Note: the
+    // NoteStore handle is wired later (after Runtime build); we
+    // register the tool here and re-register with notes once we
+    // have the store. For now, register without notes — the
+    // single-turn knowledge-gym mocks the tool client-side so
+    // production daemon-side notes channel isn't load-bearing
+    // for the gym, and the threads bench doesn't drive
+    // knowledge_lookup directly anyway.
     tools.register(Box::new(sovereign_tools::KnowledgeLookupTool::new(
         Arc::clone(&store),
         Arc::clone(&inference),
@@ -407,6 +413,24 @@ pub async fn build_session_with_skills(
         inference_config.max_tokens = n;
         eprintln!("Max tokens: {n} (override)");
     }
+    // Tool-Mastery Layer 3 — NoteStore for the per-conversation
+    // tool_decision write hook (runtime.rs handle_message_stream's
+    // post-gap-check spawn). Same path the daemon uses
+    // (`daemon_cmd.rs::build_tool_registry` → `data_dir.join("notes.db")`)
+    // so the chat REPL and bench surfaces share one outcome log.
+    let notes_path = globals.data_dir.join("notes.db");
+    let notes_store = match corpus_engine::NoteStore::open(&notes_path) {
+        Ok(s) => Some(Arc::new(s)),
+        Err(e) => {
+            eprintln!(
+                "warn: NoteStore open failed at {} ({e}); tool-decision \
+                 writes will no-op this session",
+                notes_path.display()
+            );
+            None
+        }
+    };
+
     let mut runtime = Runtime::new(
         Arc::clone(&inference),
         router,
@@ -418,6 +442,9 @@ pub async fn build_session_with_skills(
         inference_config,
     )
     .with_corpus_engine(Arc::clone(&corpus_engine));
+    if let Some(ns) = notes_store.as_ref() {
+        runtime = runtime.with_note_store(Arc::clone(ns));
+    }
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
     }
