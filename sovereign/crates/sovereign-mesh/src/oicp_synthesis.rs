@@ -305,6 +305,61 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             });
         }
     }
+    // Operator-loaded extras slots (`/internal/models/load`,
+    // `[models.extra]`). Without this block, a hot-loaded slot lands
+    // in the inference store but `locate_named_model` returns
+    // Unknown — so `/v1/chat/completions` with the slot's GGUF id
+    // 503s with "no node in this mesh advertises model". Confirmed
+    // 2026-05-20: a bench could hot-load Qwen3.6 into a Gemma-primary
+    // daemon, but the first chat request bounced.
+    //
+    // Extras are advertised as Slow-tier (full context, full output
+    // budget). We accept whatever the operator chose to load — the
+    // routing layer reads `id` literally, so coexistence with Fast
+    // and Slow primary names is fine as long as ids don't collide
+    // (the `seen_ids` set covers that).
+    for (_slot_name, extras_model_id) in provider.extras_inventory() {
+        if extras_model_id.is_empty()
+            || extras_model_id == "unknown"
+            || !seen_ids.insert(extras_model_id.clone())
+        {
+            continue;
+        }
+        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .info_for_file(&extras_model_id);
+        let (capabilities, size_gb) = match info {
+            Some(slot) => (slot.capabilities, slot.size_gb),
+            None => {
+                let mut caps = std::collections::HashMap::new();
+                caps.insert(Capability::General, 2u8);
+                caps.insert(Capability::Analysis, 2u8);
+                (caps, None)
+            }
+        };
+        tracing::info!(
+            model = %extras_model_id,
+            caps = ?capabilities,
+            size_gb = ?size_gb,
+            "build_self_manifest: advertised extras slot"
+        );
+        let claims = synthesize_slot_claims(Speed::Slow, &extras_model_id, &capabilities);
+        models.push(ProviderModel {
+            id: extras_model_id,
+            base_model: None,
+            quantization: None,
+            context_tokens: 32_768,
+            status: ModelStatus {
+                available: true,
+                loaded: true,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+            size_gb,
+            claims,
+        });
+    }
+
     // Provider name reflects the configured chat primary — that's
     // the name response attribution uses ("qwen3.5-27b @ peer
     // BeefyMac"). Ask the provider directly for its Slow slot
