@@ -31,13 +31,18 @@
 pub mod brief;
 pub mod code_search;
 pub mod recent_changes;
-pub mod symbol_lookup;
 pub mod working_set;
 
 #[cfg(feature = "treesitter")]
 pub mod callees;
 #[cfg(feature = "treesitter")]
 pub mod callers;
+// `symbol_lookup` reads `ScipGraphHandle` from `callees`, so it shares
+// the same `treesitter` gate. Without the gate the import target
+// doesn't exist and the crate fails to build for non-treesitter
+// consumers (sovereign-core dev-deps among them).
+#[cfg(feature = "treesitter")]
+pub mod symbol_lookup;
 
 // Test watcher MCP tools (require treesitter for SQLite types).
 #[cfg(feature = "treesitter")]
@@ -151,12 +156,13 @@ pub mod design_signals_extract;
 
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
-pub use symbol_lookup::SymbolLookupTool;
 
 #[cfg(feature = "treesitter")]
 pub use callees::{FindCalleesTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]
 pub use callers::FindCallersTool;
+#[cfg(feature = "treesitter")]
+pub use symbol_lookup::SymbolLookupTool;
 
 #[cfg(feature = "treesitter")]
 pub use test_status::TestStatusTool;
