@@ -20,6 +20,7 @@ pub mod epistemic;
 pub mod file;
 pub mod index_validator;
 pub mod knowledge;
+pub mod knowledge_lookup;
 pub mod knowledge_view;
 pub mod local_corpus;
 #[cfg(feature = "treesitter")]
@@ -35,6 +36,11 @@ pub mod shell;
 pub mod web;
 
 pub use code::{CodeSearchTool, RecentChangesTool, SymbolLookupTool};
+pub use knowledge_lookup::{
+    Evidence, EvidenceId, EvidenceKind, KindCounts, KnowledgeLookupResponse,
+    KnowledgeLookupTool, SYSTEM_PROMPT as KNOWLEDGE_LOOKUP_SYSTEM_PROMPT,
+    TOOL_DESCRIPTION as KNOWLEDGE_LOOKUP_TOOL_DESCRIPTION,
+};
 #[cfg(feature = "treesitter")]
 pub use code::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]

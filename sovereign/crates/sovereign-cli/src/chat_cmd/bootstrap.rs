@@ -293,6 +293,16 @@ pub async fn build_session_with_skills(
         // fallback in main.rs for parity with the legacy REPL.
         sovereign_tools::web::search::SearchBackend::DuckDuckGo,
     )));
+    // Unified knowledge-lookup front door (Tool-Mastery framework
+    // Phase 5). Returns a single Evidence envelope across corpus
+    // + memory channels (notes channel disabled here — no
+    // NoteStore handle on this bootstrap). The plan migrates
+    // skills onto this tool as a follow-up PR; for now it
+    // coexists with `search` / `knowledge` / `claim_search`.
+    tools.register(Box::new(sovereign_tools::KnowledgeLookupTool::new(
+        Arc::clone(&store),
+        Arc::clone(&inference),
+    )));
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
         Arc::clone(&corpus_engine),

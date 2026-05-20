@@ -11,7 +11,7 @@ use crate::executor::{Executor, TaskContext};
 use crate::memory;
 use crate::query_session::{SessionStore, SharedSessionStore};
 use crate::registry::ToolRegistry;
-use crate::skills::{SkillRegister, SkillRegistry};
+use crate::skills::{SkillRegister, SkillRegistry, narrow_tools_for_skill};
 use crate::traits::{
     ApprovalChannel, InferenceProvider, NoOpRoutingEventSink, Planner, Router,
     RoutingEventSink, StateStore,
@@ -6238,9 +6238,19 @@ impl Runtime {
 
         let mut parts = vec![base.to_string()];
 
-        parts.push(today_anchor_block(
-            &chrono::Utc::now().format("%Y-%m-%d").to_string(),
-        ));
+        let now_utc = chrono::Utc::now();
+        parts.push(today_anchor_block(&now_utc.format("%Y-%m-%d").to_string()));
+
+        // Tool-Mastery Layer 2 — tool dossier ambient context.
+        // Computed by `maybe_compute_tool_dossier` in the pre-pass
+        // chain. `None` on relational skills, on the no-NoteStore
+        // path, and on legacy call sites that build a context
+        // outside `handle_message_stream` / `handle_turn` — all of
+        // those keep today's behaviour because the splice simply
+        // skips when the field is unset.
+        if let Some(dossier) = &context.tool_dossier {
+            parts.push(crate::dossier::render_tool_dossier(dossier, now_utc.timestamp()));
+        }
 
         // Conversation history. CompletionRequest is a single
         // user-turn prompt+system shape — prior assistant/user turns
@@ -6373,6 +6383,55 @@ impl Runtime {
     /// inference error, or a transport hiccup must never block a
     /// turn. The model just doesn't get the tension-surfacing cue
     /// for this turn and continues normally.
+    /// Build the per-turn tool catalog narrowed to the active
+    /// skill's declared `required ∪ optional`. Returns the full
+    /// catalog when no skill is active (preserving the historical
+    /// behaviour for headless / CLI callers that haven't activated
+    /// a skill) and when the active skill declares neither field
+    /// (audit-gap path; [`narrow_tools_for_skill`] emits a one-shot
+    /// `warn!`). Called once per turn at each of the three top-level
+    /// dispatch sites in this file.
+    fn narrow_tools_for_active_skill(&self) -> Vec<ToolDescriptor> {
+        let all = self.tools.descriptors();
+        match self.skills.primary_skill_id_for_conversation() {
+            Some(skill_id) => match self.skills.skill_by_id(&skill_id) {
+                Some(skill) => narrow_tools_for_skill(&all, skill),
+                None => all,
+            },
+            None => all,
+        }
+    }
+
+    /// Tool-Mastery Layer 2 pre-pass. Computes the tool dossier
+    /// (tools available + outcome history + ambient state) and
+    /// stashes it on `context.tool_dossier` so
+    /// `build_system_message` can splice it. Soft-fails: on any
+    /// error or a relational skill the field stays `None` and the
+    /// splice is a no-op — preserving today's behaviour for
+    /// inner-work and for CLI/test harnesses that don't wire a
+    /// NoteStore.
+    async fn maybe_compute_tool_dossier(
+        &self,
+        context: &mut ConversationContext,
+        conversation_id: &str,
+    ) {
+        let active_skill_id = self.skills.primary_skill_id_for_conversation();
+        let active_skill = active_skill_id
+            .as_deref()
+            .and_then(|id| self.skills.skill_by_id(id))
+            .cloned();
+        if let Some(dossier) = crate::dossier::compute_tool_dossier(
+            &self.tools,
+            self.note_store.as_deref(),
+            active_skill.as_ref(),
+            Some(conversation_id),
+        )
+        .await
+        {
+            context.tool_dossier = Some(dossier);
+        }
+    }
+
     async fn maybe_splice_temporal_tensions(
         &self,
         context: &mut ConversationContext,
@@ -7122,7 +7181,7 @@ impl Runtime {
         // intent via `ClarificationCard` or `NextStepButtons`, and
         // re-classifying the same message would waste a Fast-slot
         // call and risk drifting from the user's explicit choice.
-        let tool_descriptors = self.tools.descriptors();
+        let tool_descriptors = self.narrow_tools_for_active_skill();
         let classification = if let Some(preset) = preset {
             preset
         } else {
@@ -7375,6 +7434,12 @@ impl Runtime {
         // R3 — temporal tension pre-pass. Active for relational
         // skills only; zero-cost no-op for factual skills.
         self.maybe_splice_temporal_tensions(&mut context, message).await;
+
+        // Tool-Mastery Layer 2 — compute the tool dossier so
+        // `build_system_message` can splice it. No-op on relational
+        // skills (the helper short-circuits) and when no NoteStore
+        // is wired.
+        self.maybe_compute_tool_dossier(&mut context, conversation_id).await;
 
         // KnowledgeQuery: real streaming path. Prepare the synthesis
         // plan synchronously (retrieval + evidence-shape routing +
@@ -8209,7 +8274,7 @@ impl Runtime {
         context.topic_context = topic_context;
 
         // 2. Route.
-        let tool_descriptors = self.tools.descriptors();
+        let tool_descriptors = self.narrow_tools_for_active_skill();
         let routing_start = std::time::Instant::now();
         let classification = self
             .router
@@ -8316,6 +8381,11 @@ impl Runtime {
         let tensions_start = std::time::Instant::now();
         self.maybe_splice_temporal_tensions(&mut context, message).await;
         upstream_metrics.tensions_ms = Some(tensions_start.elapsed().as_millis() as u64);
+
+        // 2d. Tool-Mastery Layer 2 — compute the dossier. Same
+        // pattern as the streaming path: pre-pass populates the
+        // field, `build_system_message` splices it.
+        self.maybe_compute_tool_dossier(&mut context, conversation_id).await;
 
         // When a legacy [Document attached: ...] prefix is used, bypass the
         // planner entirely and route to the map-reduce document_operation path.
@@ -11249,7 +11319,7 @@ impl Runtime {
                 .latest_for_conversation(conversation_id)
                 .map(|s| s.id)
                 .unwrap_or_default();
-            let tool_descriptors = self.tools.descriptors();
+            let tool_descriptors = self.narrow_tools_for_active_skill();
             tracing::info!(
                 distinct_sources = plan.shape.distinct_sources,
                 retrieval_count = plan.shape.count,

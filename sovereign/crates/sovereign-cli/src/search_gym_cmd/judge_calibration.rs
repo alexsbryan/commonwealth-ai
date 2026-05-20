@@ -38,7 +38,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use super::judge::{CalibrationProof, Judge};
+use crate::gym_judge::{CalibrationProof, Judge};
 
 /// Per-category agreement threshold. Below this the calibration
 /// fails. The ≥95% bar is chosen because below ~90% the judge is
@@ -322,7 +322,7 @@ pub fn render_report(r: &CalibrationResult) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::search_gym_cmd::judge::{ScriptedJudge, Verdict};
+    use crate::gym_judge::{ScriptedJudge, Verdict};
     use async_trait::async_trait;
 
     fn five_category_bank(everything: &str) -> CaseBank {
