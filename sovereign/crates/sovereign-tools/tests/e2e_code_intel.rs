@@ -128,7 +128,15 @@ vector = false
 
         // ── Build tools ─────────────────────────────────────
 
-        let sym = SymbolLookupTool::new(Arc::clone(&engine));
+        // SymbolLookupTool reads SCIP. Use an empty in-memory graph
+        // for the LanceDB-only fixtures — those tests assert empty
+        // results today.
+        let scip_handle: sovereign_tools::ScipGraphHandle =
+            Arc::new(arc_swap::ArcSwap::from_pointee(
+                corpus_engine::ScipGraph::open_in_memory("fixture")
+                    .expect("in-memory ScipGraph for fixture"),
+            ));
+        let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&scip_handle));
         let search = CodeSearchTool::new(Arc::clone(&engine));
         let recent = RecentChangesTool::new(Arc::clone(&engine));
 
@@ -721,7 +729,7 @@ vector = false
 
         // ── Build tools ──────────────────────────────────────
 
-        let sym = SymbolLookupTool::new(Arc::clone(&engine));
+        let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph));
         let search = CodeSearchTool::new(Arc::clone(&engine));
         let callees = FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph));
         let callers = FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph));
@@ -1377,7 +1385,12 @@ embedding_dimensions = 8
     );
 
     // ── Run the three tools. Each must succeed (no Lance error). ─
-    let sym = SymbolLookupTool::new(Arc::clone(&engine));
+    let mixed_graph: sovereign_tools::ScipGraphHandle =
+        Arc::new(arc_swap::ArcSwap::from_pointee(
+            corpus_engine::ScipGraph::open_in_memory("mixed")
+                .expect("in-memory ScipGraph for mixed-corpora test"),
+        ));
+    let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&mixed_graph));
     let search = CodeSearchTool::new(Arc::clone(&engine));
     let recent = RecentChangesTool::new(Arc::clone(&engine));
     let ctx = ToolContext {

@@ -175,6 +175,33 @@ pub enum IngestProgress {
     OptimizingIndex {
         current_chunks: u64,
     },
+    /// Post-embed enrichment phases (skeleton extraction, entity
+    /// extraction, embedding clustering, cluster labeling, atlas
+    /// build). Emitted by the field engine via the enrichment progress
+    /// callback after the embed/index pipeline finishes; the desktop
+    /// UI maps `phase` to a human-readable label and shows
+    /// `detail` verbatim.
+    ///
+    /// Without this variant, the desktop polled `/internal/corpus/progress`
+    /// and saw the last `Embedding` event from before enrichment
+    /// started — so any ingest with enrichment enabled (conversations-
+    /// anthropic, atlas-bearing recipes) appeared to hang at
+    /// "Embedding chunks…" while clustering or entity extraction
+    /// burned CPU silently. Observed 2026-05-20 mid-conversations
+    /// ingest.
+    ///
+    /// `phase` is a stable machine token (`skeleton-extraction`,
+    /// `entity-extraction`, `clustering`, `cluster-labeling`,
+    /// `phase-skipped`, `resuming`). `detail` carries the same
+    /// human-readable text the daemon already eprintln's. `fraction`
+    /// is set when the underlying phase reports a numeric ratio
+    /// (Phase 1b batch progress); `None` otherwise.
+    Enriching {
+        phase: String,
+        detail: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fraction: Option<f32>,
+    },
     Complete {
         total_chunks: u64,
         duration_secs: u64,

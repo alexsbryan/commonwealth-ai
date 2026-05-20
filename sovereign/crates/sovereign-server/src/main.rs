@@ -318,9 +318,27 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // SCIP call graph database + tools (v2).
+    //
+    // The call-graph tools take `Arc<ArcSwap<ScipGraph>>` so the CLI's
+    // `project serve` can hot-swap the graph when the on-disk DB changes.
+    // sovereign-server opens a single on-disk DB at a fixed path and doesn't
+    // swap, but the tool signature still requires the wrapper.
+    //
+    // Built before the code-intel tools below so `SymbolLookupTool`
+    // can share the handle (exact-name lookup reads SCIP directly
+    // since the SCIP-as-truth refactor).
+    let scip_db_path = home.join(".sovereign").join("indexes").join("_scip_graph.db");
+    let scip_graph = corpus_engine::ScipGraph::open(&scip_db_path, "default")
+        .expect("SCIP graph database");
+    let scip_graph: sovereign_tools::ScipGraphHandle =
+        Arc::new(arc_swap::ArcSwap::from_pointee(scip_graph));
+    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(&scip_graph)));
+
     // Code Intelligence tools.
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
+        Arc::clone(&scip_graph),
     )));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
@@ -329,19 +347,6 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
         Arc::clone(&corpus_engine),
     )));
-
-    // SCIP call graph database + tools (v2).
-    //
-    // The call-graph tools take `Arc<ArcSwap<ScipGraph>>` so the CLI's
-    // `project serve` can hot-swap the graph when the on-disk DB changes.
-    // sovereign-server opens a single on-disk DB at a fixed path and doesn't
-    // swap, but the tool signature still requires the wrapper.
-    let scip_db_path = home.join(".sovereign").join("indexes").join("_scip_graph.db");
-    let scip_graph = corpus_engine::ScipGraph::open(&scip_db_path, "default")
-        .expect("SCIP graph database");
-    let scip_graph: sovereign_tools::ScipGraphHandle =
-        Arc::new(arc_swap::ArcSwap::from_pointee(scip_graph));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(&scip_graph)));
     tools.register(Box::new(sovereign_tools::FindCalleesTool::new(
         Arc::clone(&corpus_engine),
         Arc::clone(&scip_graph),

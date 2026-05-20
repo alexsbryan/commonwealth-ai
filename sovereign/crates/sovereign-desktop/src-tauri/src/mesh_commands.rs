@@ -511,15 +511,36 @@ pub struct PeerPreferenceDto {
     pub set_at: u64,
 }
 
-/// Snapshot of every peer's dimensional contributions. Empty list
-/// in Attach mode (TODO — expose over HTTP) and when no events
-/// have accumulated.
+/// Snapshot of every peer's dimensional contributions. In Attach
+/// mode the daemon's `GET /internal/contribution/view` is the
+/// source of truth (the daemon owns the MeshStore the
+/// ContributionEmitter writes into). In Local mode the in-process
+/// `AppState` is read directly.
 #[tauri::command]
 pub async fn mesh_get_contributions(
     state: State<'_, Arc<AppState>>,
 ) -> Result<Vec<NodeContributionsDto>, String> {
     if attached_port(&state).is_some() {
-        return Ok(Vec::new());
+        // Internal API is loopback-only on the fixed internal port —
+        // matches the pinning used by every other `/internal/*` fetch
+        // in this crate (see `DAEMON_INTERNAL_URL` in commands.rs).
+        let client = http_client()?;
+        let resp = client
+            .get("http://127.0.0.1:9742/internal/contribution/view")
+            .send()
+            .await
+            .map_err(|e| format!("GET /internal/contribution/view: {e}"))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "daemon /internal/contribution/view returned {status}: {text}"
+            ));
+        }
+        return resp
+            .json::<Vec<NodeContributionsDto>>()
+            .await
+            .map_err(|e| format!("parse /internal/contribution/view response: {e}"));
     }
     let Some(mesh) = state.mesh.as_ref() else {
         return Ok(Vec::new());

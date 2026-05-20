@@ -150,7 +150,7 @@ pub use yield_hook::YieldHook;
 #[cfg(feature = "treesitter")]
 pub use scip_graph::{
     BlastEntry, BlastRadiusResult, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
-    ScipRefRecord, ScipSymbolRecord, SCHEMA_VERSION,
+    ScipRefRecord, ScipSymbolRecord, SymbolRow, SCHEMA_VERSION,
 };
 
 #[cfg(feature = "treesitter")]
