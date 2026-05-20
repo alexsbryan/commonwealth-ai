@@ -1104,11 +1104,17 @@ pub struct SearchAugmentation {
 ///   - the search backend returns zero results (don't fabricate a
 ///     "search succeeded" signal back to the runtime)
 ///   - the search backend errors entirely (network / API failure)
+// `conversation_id` (Option<String>) is the active conversation for
+// the Tool-Mastery `tool_decision` write. When `Some`, the runtime's
+// per-conversation dossier pre-pass surfaces the prior unsuccessful
+// lookup on the next turn. `None` falls back to a global write that
+// won't filter into any single conversation's dossier.
 #[tauri::command]
 pub async fn submit_information_search(
     state: State<'_, Arc<AppState>>,
     key: String,
     query: String,
+    conversation_id: Option<String>,
 ) -> Result<SearchAugmentation, String> {
     use sovereign_tools::web::search::{
         BraveBackendImpl, BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator,
@@ -1125,6 +1131,33 @@ pub async fn submit_information_search(
         // Stale submission — the request was already resolved
         // (paste / skip / timed out). Don't spend a search budget.
         return Err("no pending information request for this key".to_string());
+    }
+
+    // Tool-Mastery Layer 3 — the click itself IS the user telling
+    // us the prior tool didn't satisfy. Write that outcome BEFORE
+    // the web search runs (regardless of whether the search will
+    // succeed) so the next turn's dossier surfaces "the
+    // in-conversation lookup came up short and the user reached
+    // for the external escape hatch." Soft-fail: missing NoteStore
+    // is silently skipped. See `dossier::record_tool_outcome`.
+    {
+        let notes_guard = state.notes.read().await;
+        let notes_ref: Option<&corpus_engine::NoteStore> =
+            notes_guard.as_ref().map(|arc| arc.as_ref());
+        sovereign_core::dossier::record_tool_outcome(
+            notes_ref,
+            // `key` is a per-conversation-turn opaque id (see
+            // approval::TauriApprovalChannel) — using it as the
+            // session-id proxy keeps the audit trail traceable
+            // back to the originating INFORMATION REQUEST card.
+            &key,
+            conversation_id.as_deref(),
+            "knowledge_lookup",
+            sovereign_core::memory::ToolDecisionOutcome::NoResults,
+            "user clicked Search-the-web on the INFORMATION REQUEST card \
+             — prior in-conversation lookup did not satisfy",
+        )
+        .await;
     }
 
     let config_snapshot = state.config.read().await.clone();

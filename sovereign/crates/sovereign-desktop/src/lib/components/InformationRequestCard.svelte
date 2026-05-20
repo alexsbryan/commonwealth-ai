@@ -11,6 +11,13 @@
   interface Props {
     request: InformationRequestPayload | null;
     onHandled: () => void;
+    /** Active conversation id — threaded through to
+     *  `submit_information_search` so the runtime's `tool_decision`
+     *  write keys against this conversation. The next turn's Tool-
+     *  Mastery dossier then surfaces the prior unsuccessful lookup.
+     *  `null` falls back to a global write that won't filter into
+     *  any single conversation's per-turn dossier. */
+    conversationId?: string | null;
     /** Fired the moment the user kicks off a refinement (paste-submit
      *  or search-submit). ChatView uses this to mark the targeted
      *  assistant bubble as `refining: true` so AssistantMessage can
@@ -28,6 +35,7 @@
   let {
     request,
     onHandled,
+    conversationId = null,
     onRefiningStarted,
     onSearchAugmented,
   }: Props = $props();
@@ -96,6 +104,7 @@
       const augmentation = await submitInformationSearch(
         request.key,
         request.gap,
+        conversationId,
       );
       if (augmentation.accepted) {
         onSearchAugmented?.(augmentation);

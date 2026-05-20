@@ -322,12 +322,17 @@ impl LlmRouter {
 
     /// Pass 1: Coarse classification into one of three buckets.
     /// Each is a simple yes/no-like question the small model handles well.
+    ///
+    /// Skill-based trigger phrases were retired alongside the
+    /// skills-as-menu UI; the wisdom they encoded was migrated into
+    /// the embed-exemplar bank (`sovereign/router/exemplars.toml`)
+    /// where it informs classification at every turn rather than
+    /// only when the matching skill happened to be activated.
     fn build_pass1_prompt(
         message: &str,
         context: &ConversationContext,
         available_tools: &[ToolDescriptor],
         corrections: &[RoutingCorrection],
-        routing_hints: &crate::skills::MergedRoutingHints,
     ) -> String {
         let context_str = Self::format_context_summary(context);
         let has_tools = !available_tools.is_empty();
@@ -343,20 +348,6 @@ impl LlmRouter {
                 .join("\n");
             format!(
                 "\n\nPrevious classification mistakes (avoid these):\n{examples}"
-            )
-        };
-
-        let skill_hints = if routing_hints.trigger_phrases.is_empty() {
-            String::new()
-        } else {
-            let phrases: String = routing_hints
-                .trigger_phrases
-                .iter()
-                .map(|(phrase, _)| format!("\"{phrase}\""))
-                .collect::<Vec<_>>()
-                .join(", ");
-            format!(
-                "\n\nActive skill hints: If the message relates to {phrases}, prefer ACTION (C)."
             )
         };
 
@@ -506,7 +497,7 @@ EXPRESSIVE
   NOT EXPRESSIVE: longer messages that embed a real question are
   the question type, not EXPRESSIVE.
 
-User message: "{message}"{corrections_note}{skill_hints}
+User message: "{message}"{corrections_note}
 
 Respond with JSON only:
 {{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE"}}"#,
@@ -1819,9 +1810,6 @@ impl Router for LlmRouter {
             .await
             .unwrap_or_default();
 
-        // Get active skill routing hints.
-        let routing_hints = self.skills.routing_hints();
-
         // Pre-check -3: personal-recall content question. Fires BEFORE
         // the embed router because the embed router's nearest-exemplar
         // matching reliably picks ExpressiveQuery or MetalingualQuery
@@ -2273,7 +2261,6 @@ impl Router for LlmRouter {
                 context,
                 available_tools,
                 &corrections,
-                &routing_hints,
             );
             // 60-token budget: JSON + confidence + short rationale clause.
             // 60-token budget: gemma-4-E4B writes terse rationales

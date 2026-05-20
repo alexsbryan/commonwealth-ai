@@ -200,12 +200,24 @@ export interface SearchAugmentation {
  *  feeding the formatted results back as if the user had pasted them.
  *  Errors when the search returns zero results (DDG bot-block etc.)
  *  so the UI can surface that without resolving the request — the
- *  card stays live for the user to paste / skip / retry. */
+ *  card stays live for the user to paste / skip / retry.
+ *
+ *  `conversationId` is optional but recommended: the runtime writes
+ *  a `tool_decision` outcome (Tool-Mastery Layer 3) keyed by it so
+ *  the next turn's dossier surfaces the fact that the prior
+ *  in-conversation lookup didn't satisfy. Without it, the outcome
+ *  lands in the global tail and won't filter into this
+ *  conversation's per-turn dossier pre-pass. */
 export async function submitInformationSearch(
   key: string,
   query: string,
+  conversationId?: string | null,
 ): Promise<SearchAugmentation> {
-  return invoke("submit_information_search", { key, query });
+  return invoke("submit_information_search", {
+    key,
+    query,
+    conversationId: conversationId ?? null,
+  });
 }
 
 export async function listSkills(): Promise<SkillEntry[]> {

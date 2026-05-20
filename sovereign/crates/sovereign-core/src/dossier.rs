@@ -27,9 +27,10 @@
 
 use corpus_engine::NoteStore;
 
+use crate::intent_policy;
 use crate::memory::{read_recent_tool_decisions, ToolDecisionOutcome};
 use crate::registry::ToolRegistry;
-use crate::skills::{narrow_tools_for_skill, Skill};
+use crate::skills::{Skill, SkillRegister};
 use crate::types::{ToolDossier, ToolDossierEntry, ToolDossierOutcome};
 
 /// Cap on `tools_available` entries rendered into the prompt.
@@ -55,9 +56,7 @@ pub async fn compute_tool_dossier(
     active_skill: Option<&Skill>,
     conversation_id: Option<&str>,
 ) -> Option<ToolDossier> {
-    use crate::skills::SkillRegister;
-
-    // Inner-work gate: relational skills don't get a dossier. Run
+    // Inner-work gate: relational mode doesn't get a dossier. Run
     // before any I/O so the NoteStore stays untouched on this
     // path.
     if matches!(
@@ -71,11 +70,18 @@ pub async fn compute_tool_dossier(
         return None;
     }
 
-    let full_catalog = tools.descriptors();
-    let narrowed = match active_skill {
-        Some(skill) => narrow_tools_for_skill(&full_catalog, skill),
-        None => full_catalog,
-    };
+    // Mode-only narrowing — the dossier renders BEFORE the router
+    // has classified an intent for this turn, so it shows the
+    // surface-wide catalog (full for default chat, mode-narrowed
+    // for recipe-author). Matches the policy the router itself
+    // sees at `runtime::narrow_tools_pre_classification`.
+    let mode_policy = intent_policy::policy_for_mode_only(
+        active_skill
+            .map(|s| s.inference.register)
+            .unwrap_or(SkillRegister::Factual),
+        active_skill.map(|s| s.id.as_str()),
+    );
+    let narrowed = intent_policy::narrow_tools(&tools.descriptors(), &mode_policy);
 
     let tools_available: Vec<ToolDossierEntry> = narrowed
         .into_iter()
@@ -180,6 +186,30 @@ pub fn render_tool_dossier(dossier: &ToolDossier, now_unix: i64) -> String {
                 ));
             }
         }
+        // SHAPE-level usage discipline. The dossier is most
+        // valuable when the model SURFACES prior attempts to the
+        // user — "I tried earlier and couldn't find X, so let me
+        // be cautious about Y" beats silently retrying the same
+        // approach. This is general advice (not bank-specific
+        // vocabulary) and applies to any outcome history.
+        let has_negative = dossier.outcome_history.iter().any(|o| {
+            o.outcome == "no-results"
+                || o.outcome == "stale"
+                || o.outcome == "wrong-tool"
+        });
+        if has_negative {
+            history_block.push_str(
+                "\n\nGuidance (load-bearing, not optional): the user's \
+                 next question is likely a follow-up to one of the above. \
+                 If your honest answer would be similar to a prior \
+                 unsuccessful one (no-results / stale / wrong-tool), \
+                 open your reply by surfacing the prior attempt — e.g. \
+                 \"I tried looking that up earlier and couldn't find it, \
+                 so I expect the same is true here\" — rather than \
+                 silently reasoning from first principles. The user is \
+                 owed the continuity of what's already been tried.",
+            );
+        }
     }
     parts.push(history_block);
 
@@ -211,7 +241,7 @@ pub async fn record_tool_outcome(
     reasoning: &str,
 ) {
     let Some(store) = notes else {
-        tracing::trace!(
+        tracing::info!(
             tool_id,
             outcome = outcome.as_str(),
             "dossier:record_outcome_no_store"

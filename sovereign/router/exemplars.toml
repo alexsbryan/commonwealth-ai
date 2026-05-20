@@ -609,3 +609,130 @@ query = "How has my thinking about commuting changed since I moved?"
 intent = "deep_query"
 scope = "personal"
 query = "What tensions keep showing up in how I describe my mornings?"
+
+
+# ─────────────────────────────────────────────────────────────────
+# Migrated from the retired skill `routing.trigger_phrases` lists.
+# Skills-as-menu was retired in favour of intent-keyed policy;
+# the trigger phrases that pointed users at the right "skill"
+# now seed the router's classification directly. Each exemplar
+# below is a SHAPE of query the corresponding retired skill
+# wanted to handle — not a literal trigger phrase, because the
+# embed router classifies whole user queries, not isolated
+# keywords.
+# ─────────────────────────────────────────────────────────────────
+
+# ── codebase-navigator → metalingual_query / knowledge_query ──
+# These shapes ask about the codebase/project as a coded system —
+# Jakobson's metalingual function. The in-system locator ("in
+# this codebase", "in our project") is the load-bearing signal.
+
+[[example]]
+intent = "metalingual_query"
+query = "Where is the function that handles tool dispatch in this codebase?"
+
+[[example]]
+intent = "metalingual_query"
+query = "Who calls KnowledgeViewManager::splice_into in our code?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does `IntentPolicy` mean in this project?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What recent changes touched the router classification pipeline?"
+
+[[example]]
+intent = "metalingual_query"
+query = "Find the implementation of the URL-allowlist constraint."
+
+[[example]]
+intent = "knowledge_query"
+query = "What's the call chain from handle_message_stream to the inference provider?"
+
+# ── research-analyst → deep_query ──
+# Multi-source synthesis with evaluation, not a flat lookup.
+
+[[example]]
+intent = "deep_query"
+query = "Research what's been published on situated agents for open-weight models."
+
+[[example]]
+intent = "deep_query"
+query = "Survey the field of constrained-decoding sampling techniques."
+
+[[example]]
+intent = "deep_query"
+query = "Compare the major sources on context-window scaling and which one has the strongest evidence."
+
+# ── epistemic-research → deep_query (contested-position shape) ──
+# Questions about where the debate is, not just what's true.
+
+[[example]]
+intent = "deep_query"
+query = "What's the scholarly consensus on whether large language models reason?"
+
+[[example]]
+intent = "deep_query"
+query = "What are the contested positions on free will and which is the strongest?"
+
+[[example]]
+intent = "deep_query"
+query = "Where do philosophers disagree about consciousness?"
+
+[[example]]
+intent = "deep_query"
+query = "Are moral facts objective — what positions exist and what's the standing of each?"
+
+# ── collaborative-research → deep_query ──
+# Multi-turn inquiry with intermediate scoping. The "let's
+# research together" phrasing maps to the same deep-query shape;
+# the multi-turn collaboration is handled by the conversation
+# loop, not a separate intent.
+
+[[example]]
+intent = "deep_query"
+query = "Let's dig into how the M-series Apple Silicon roadmap has evolved — start with what was announced."
+
+# ── document-analyst → complex_task ──
+# Document operations that span the whole document; not a
+# simple lookup. The "[Document attached: …]" prefix already
+# bypasses classification entirely, but bare phrasings hit
+# the router.
+
+[[example]]
+intent = "complex_task"
+query = "Read through this paper and extract every methodology decision the authors made."
+
+[[example]]
+intent = "complex_task"
+query = "Map the character relationships across all the chapters."
+
+[[example]]
+intent = "complex_task"
+query = "Summarize the argument structure of this essay and identify the load-bearing premises."
+
+# ── code-review → complex_task ──
+# Code review is a multi-step plan: read, identify issues,
+# explain, suggest fixes. Maps to ComplexTask cleanly.
+
+[[example]]
+intent = "complex_task"
+query = "Review this function for correctness and find bugs that aren't obvious from the diff."
+
+# ── personal-assistant → commissive_query / conation_query ──
+# Already well-covered by existing exemplars, but adding a few
+# task-management shapes that the retired skill's phrases pointed at.
+
+[[example]]
+intent = "commissive_query"
+query = "Remind me to follow up with the design team on Thursday."
+
+[[example]]
+intent = "commissive_query"
+query = "Keep track of my reading list — I'll add things as I find them."
+
+[[example]]
+intent = "conation_query"
+query = "Schedule a focused work block for tomorrow morning."

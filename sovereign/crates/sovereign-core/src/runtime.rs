@@ -11,7 +11,7 @@ use crate::executor::{Executor, TaskContext};
 use crate::memory;
 use crate::query_session::{SessionStore, SharedSessionStore};
 use crate::registry::ToolRegistry;
-use crate::skills::{SkillRegister, SkillRegistry, narrow_tools_for_skill};
+use crate::skills::{SkillRegister, SkillRegistry};
 use crate::traits::{
     ApprovalChannel, InferenceProvider, NoOpRoutingEventSink, Planner, Router,
     RoutingEventSink, StateStore,
@@ -6242,15 +6242,16 @@ impl Runtime {
         parts.push(today_anchor_block(&now_utc.format("%Y-%m-%d").to_string()));
 
         // Tool-Mastery Layer 2 — tool dossier ambient context.
-        // Computed by `maybe_compute_tool_dossier` in the pre-pass
-        // chain. `None` on relational skills, on the no-NoteStore
-        // path, and on legacy call sites that build a context
-        // outside `handle_message_stream` / `handle_turn` — all of
-        // those keep today's behaviour because the splice simply
-        // skips when the field is unset.
-        if let Some(dossier) = &context.tool_dossier {
-            parts.push(crate::dossier::render_tool_dossier(dossier, now_utc.timestamp()));
-        }
+        // Spliced LATE in the system message (after conversation
+        // history / memories / landscape) so it sits closest to
+        // the user's in-flight message in the prompt. Empirically
+        // the dossier is most influential at the tail of the
+        // system block — earlier placements get buried under
+        // intervening sections and the model under-weights them.
+        // The splice itself happens after all the other sections
+        // below; we store the now_utc here so the renderer sees
+        // a single consistent "now" across the whole assembly.
+        let now_unix = now_utc.timestamp();
 
         // Conversation history. CompletionRequest is a single
         // user-turn prompt+system shape — prior assistant/user turns
@@ -6318,6 +6319,15 @@ impl Runtime {
             parts.push(render_temporal_tensions(&context.temporal_tensions));
         }
 
+        // Tool-Mastery dossier — spliced LAST so it sits at the tail
+        // of the system block, closest to the user's in-flight
+        // message in the assembled prompt. Earlier placements get
+        // buried under intervening sections; the tail position
+        // maximises salience for the model's next action.
+        if let Some(dossier) = &context.tool_dossier {
+            parts.push(crate::dossier::render_tool_dossier(dossier, now_unix));
+        }
+
         parts.join("\n\n")
     }
 
@@ -6383,23 +6393,37 @@ impl Runtime {
     /// inference error, or a transport hiccup must never block a
     /// turn. The model just doesn't get the tension-surfacing cue
     /// for this turn and continues normally.
-    /// Build the per-turn tool catalog narrowed to the active
-    /// skill's declared `required ∪ optional`. Returns the full
-    /// catalog when no skill is active (preserving the historical
-    /// behaviour for headless / CLI callers that haven't activated
-    /// a skill) and when the active skill declares neither field
-    /// (audit-gap path; [`narrow_tools_for_skill`] emits a one-shot
-    /// `warn!`). Called once per turn at each of the three top-level
-    /// dispatch sites in this file.
-    fn narrow_tools_for_active_skill(&self) -> Vec<ToolDescriptor> {
-        let all = self.tools.descriptors();
-        match self.skills.primary_skill_id_for_conversation() {
-            Some(skill_id) => match self.skills.skill_by_id(&skill_id) {
-                Some(skill) => narrow_tools_for_skill(&all, skill),
-                None => all,
-            },
-            None => all,
-        }
+    /// Build the per-turn tool catalog for a PRE-CLASSIFICATION call
+    /// site (i.e. before the router has produced an intent). Mode-only
+    /// narrowing applies — default-chat sees the full catalog so the
+    /// router can reason across the broadest set of options; inner-
+    /// work and recipe-author surface narrowing wins because the
+    /// user explicitly entered those modes.
+    ///
+    /// Post-classification sites should use
+    /// [`Self::narrow_tools_for_intent`] instead — that picks up the
+    /// intent-derived narrowing too.
+    fn narrow_tools_pre_classification(&self) -> Vec<ToolDescriptor> {
+        let policy = crate::intent_policy::policy_for_mode_only(
+            self.skills.primary_skill_register(),
+            self.skills.primary_skill_id_for_conversation().as_deref(),
+        );
+        crate::intent_policy::narrow_tools(&self.tools.descriptors(), &policy)
+    }
+
+    /// Build the per-turn tool catalog given a CLASSIFIED intent.
+    /// Used by handlers that have already received their `Intent`
+    /// argument from the dispatch site (e.g. the retrieval-miss
+    /// diversion in `handle_knowledge_query`). Routes through
+    /// `intent_policy::policy_for` so mode + register + intent
+    /// each get their say.
+    fn narrow_tools_for_intent(&self, intent: &Intent) -> Vec<ToolDescriptor> {
+        let policy = crate::intent_policy::policy_for(
+            intent,
+            self.skills.primary_skill_register(),
+            self.skills.primary_skill_id_for_conversation().as_deref(),
+        );
+        crate::intent_policy::narrow_tools(&self.tools.descriptors(), &policy)
     }
 
     /// Tool-Mastery Layer 2 pre-pass. Computes the tool dossier
@@ -6428,7 +6452,22 @@ impl Runtime {
         )
         .await
         {
+            tracing::info!(
+                conversation_id,
+                skill = active_skill.as_ref().map(|s| s.id.as_str()),
+                tools = dossier.tools_available.len(),
+                outcomes = dossier.outcome_history.len(),
+                has_note_store = self.note_store.is_some(),
+                "dossier:computed_for_turn"
+            );
             context.tool_dossier = Some(dossier);
+        } else {
+            tracing::info!(
+                conversation_id,
+                skill = active_skill.as_ref().map(|s| s.id.as_str()),
+                has_note_store = self.note_store.is_some(),
+                "dossier:skipped_for_turn"
+            );
         }
     }
 
@@ -7181,7 +7220,13 @@ impl Runtime {
         // intent via `ClarificationCard` or `NextStepButtons`, and
         // re-classifying the same message would waste a Fast-slot
         // call and risk drifting from the user's explicit choice.
-        let tool_descriptors = self.narrow_tools_for_active_skill();
+        //
+        // Pre-classification narrowing: mode-only. The router sees
+        // the broadest catalog the surface admits so classification
+        // isn't artificially constrained by an as-yet-unknown
+        // intent. Handlers downstream can re-narrow via
+        // `narrow_tools_for_intent` once the intent is in hand.
+        let tool_descriptors = self.narrow_tools_pre_classification();
         let classification = if let Some(preset) = preset {
             preset
         } else {
@@ -7539,6 +7584,13 @@ impl Runtime {
             let store = Arc::clone(&self.store);
             let approval = Arc::clone(&self.approval);
             let inference_config = self.inference_config.clone();
+            // Tool-Mastery Layer 3 — cloned so the nested
+            // post-stream gap-check spawn can write a
+            // `tool_decision` outcome note after refinement
+            // resolves. Soft-fail when no NoteStore is wired
+            // (test harnesses): `record_tool_outcome` no-ops.
+            let notes_for_outcome: Option<Arc<corpus_engine::NoteStore>> =
+                self.note_store.clone();
             // Cloned into the outer spawn so the post-stream gap-
             // check can emit narration chips that reach the desktop
             // UI alongside the INFORMATION REQUEST card. Without
@@ -7759,8 +7811,100 @@ impl Runtime {
                     // the in-flight INFORMATION REQUEST card.
                     let collab_events = collab_routing_events.clone();
                     let collab_sid = collab_session_id.clone();
+                    let collab_sid_for_outcome = collab_sid.clone();
+                    let collab_notes_for_outcome = notes_for_outcome.clone();
+                    // Tool-Mastery Layer 3 — record what happened
+                    // on this KQ turn so the next turn's dossier
+                    // can read it. Outcome resolves from the
+                    // post-stream refinement result (Stale =
+                    // gap-check fired and rewrote the answer),
+                    // plus the evidence-presence signal captured
+                    // before the spawn (NoResults = retrieval was
+                    // empty; Useful = chunks landed and the
+                    // original answer stood). All writes are
+                    // best-effort — see `dossier::record_tool_outcome`.
+                    // Tool-Mastery Layer 3 — synchronous baseline
+                    // write BEFORE the gap-check spawn fires. Writing
+                    // here (not inside the spawn) guarantees the
+                    // tool_decision lands even when the bench / CLI
+                    // exits before the gap-check spawn completes —
+                    // run_post_stream_refinement can take 10-30s and
+                    // the next turn's dossier read would otherwise
+                    // see nothing. The spawn below MAY overwrite with
+                    // `Stale` when refinement actually rewrites the
+                    // answer; the dossier reader returns
+                    // most-recent-first so the later write supersedes
+                    // when it lands in time.
+                    // Decide outcome from three orthogonal signals so a
+                    // turn whose retrieval LANDED but whose answer
+                    // landed in "I don't know" territory still records
+                    // `no-results` (the snapshot-freshness shape: the
+                    // hybrid retriever happily returns 30+ historical
+                    // Tour de France articles for a "2027 Tour" query
+                    // even though none of them are about 2027). The
+                    // answer-content check uses general English
+                    // negation + absence patterns, not bank vocabulary,
+                    // so it transfers across questions.
+                    let answer_is_honest_negation = {
+                        let lower = full_text.to_lowercase();
+                        let has_negation = ["don't", "do not", "cannot", "can't",
+                            "doesn't have", "no information", "no data",
+                            "no record", "outside", "unable to"]
+                            .iter()
+                            .any(|w| lower.contains(w));
+                        let has_scope_token = ["information", "data", "record",
+                            "snapshot", "knowledge base", "details", "results"]
+                            .iter()
+                            .any(|w| lower.contains(w));
+                        has_negation && has_scope_token
+                    };
+                    let retrieval_missed = documents_found == 0
+                        || answer_is_honest_negation
+                        || (!shape.title_match
+                            && shape.query_token_coverage < EVIDENCE_MIN_TOKEN_COVERAGE);
+                    let baseline_outcome = if retrieval_missed {
+                        crate::memory::ToolDecisionOutcome::NoResults
+                    } else {
+                        crate::memory::ToolDecisionOutcome::Useful
+                    };
+                    let baseline_reasoning = if documents_found == 0 {
+                        "knowledge retrieval returned 0 chunks".to_string()
+                    } else if answer_is_honest_negation {
+                        format!(
+                            "retrieval returned {documents_found} chunks but \
+                             the assistant's answer acknowledged a gap \
+                             (snapshot-freshness or scope mismatch)"
+                        )
+                    } else if retrieval_missed {
+                        format!(
+                            "retrieval returned {documents_found} chunks but \
+                             title_match=false and query_token_coverage={:.2} \
+                             (corpus does not cover this topic)",
+                            shape.query_token_coverage
+                        )
+                    } else {
+                        format!("synthesised over {documents_found} chunks")
+                    };
+                    crate::dossier::record_tool_outcome(
+                        notes_for_outcome.as_deref(),
+                        collab_sid_for_outcome.as_deref().unwrap_or(""),
+                        Some(&conversation_id_owned),
+                        "knowledge_lookup",
+                        baseline_outcome,
+                        &baseline_reasoning,
+                    )
+                    .await;
+
+                    let outcome_notes = collab_notes_for_outcome.clone();
+                    let outcome_notes_present = outcome_notes.is_some();
                     tokio::spawn(async move {
-                        run_post_stream_refinement(
+                        tracing::info!(
+                            conversation_id = %collab_cid,
+                            has_notes = outcome_notes_present,
+                            documents_found,
+                            "dossier:streaming_kq_outcome_spawn_fired"
+                        );
+                        let refined = run_post_stream_refinement(
                             collab_inference.as_ref(),
                             collab_approval.as_ref(),
                             collab_store.as_ref(),
@@ -7775,6 +7919,17 @@ impl Runtime {
                             collab_sid,
                         )
                         .await;
+                        if refined.is_some() {
+                            crate::dossier::record_tool_outcome(
+                                outcome_notes.as_deref(),
+                                collab_sid_for_outcome.as_deref().unwrap_or(""),
+                                Some(&collab_cid),
+                                "knowledge_lookup",
+                                crate::memory::ToolDecisionOutcome::Stale,
+                                "gap-check refined the post-stream answer",
+                            )
+                            .await;
+                        }
                     });
                 }
 
@@ -8274,7 +8429,13 @@ impl Runtime {
         context.topic_context = topic_context;
 
         // 2. Route.
-        let tool_descriptors = self.narrow_tools_for_active_skill();
+        //
+        // Pre-classification narrowing (mode-only). See the
+        // streaming-path comment for rationale; this keeps the two
+        // dispatch surfaces symmetric so a turn classified the same
+        // way sees the same tool catalog regardless of the
+        // streaming/non-streaming distinction.
+        let tool_descriptors = self.narrow_tools_pre_classification();
         let routing_start = std::time::Instant::now();
         let classification = self
             .router
@@ -11319,7 +11480,13 @@ impl Runtime {
                 .latest_for_conversation(conversation_id)
                 .map(|s| s.id)
                 .unwrap_or_default();
-            let tool_descriptors = self.narrow_tools_for_active_skill();
+            // Post-classification site: intent IS in hand here, so
+            // we apply full intent-keyed narrowing. The
+            // retrieval-miss handler renders an INFORMATION
+            // REQUEST card; surfacing the intent-appropriate tool
+            // catalog lets the model offer accurate "next-step"
+            // affordances to the user.
+            let tool_descriptors = self.narrow_tools_for_intent(intent);
             tracing::info!(
                 distinct_sources = plan.shape.distinct_sources,
                 retrieval_count = plan.shape.count,

@@ -260,6 +260,11 @@ fn default_data_dir() -> PathBuf {
 }
 
 fn default_skills_dir() -> PathBuf {
+    // Note: the path keyword stays `skills` for back-compat with any
+    // user-overlay TOMLs already on disk. The bundled in-repo
+    // directory is now `modes/` (only inner-work + recipe-author),
+    // but the user-overlay slot is unchanged so existing custom
+    // skill files still load.
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("sovereign")
@@ -272,6 +277,12 @@ fn default_enabled_tools() -> Vec<String> {
         "search".to_string(),
         "web_fetch".to_string(),
         "document".to_string(),
+        // Tool-Mastery Phase 5 — unified knowledge front door
+        // (corpus + memory + notes). Default-on so the desktop's
+        // skill-narrowed catalogs (codebase-navigator, research-
+        // analyst, etc.) actually expose it; skills' ToolPreferences
+        // can drop it explicitly when not needed.
+        "knowledge_lookup".to_string(),
     ]
 }
 
@@ -1016,6 +1027,22 @@ pub async fn bootstrap_with_progress(
     if enabled.iter().any(|t| t == "web_fetch") {
         tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     }
+    if enabled.iter().any(|t| t == "knowledge_lookup") {
+        // Tool-Mastery Phase 5 — unified evidence front door
+        // (corpus + memory + notes). The notes channel is wired
+        // only when the recipe-author NoteStore opened cleanly
+        // earlier in bootstrap; that's the same store the
+        // dossier write hook reads/writes, so chat-side outcome
+        // history and notes-channel evidence are coherent.
+        let mut tool = sovereign_tools::KnowledgeLookupTool::new(
+            Arc::clone(&store),
+            Arc::clone(&inference),
+        );
+        if let Some(ref ns) = *state.notes.read().await {
+            tool = tool.with_notes(Arc::clone(ns));
+        }
+        tools.register(Box::new(tool));
+    }
 
     // Construct a shared CorpusEngine. This single instance backs both
     // the install/list/remove Tauri commands AND the in-runtime epistemic
@@ -1753,6 +1780,17 @@ pub async fn bootstrap_with_progress(
         inference_config,
     )
     .with_corpus_engine(Arc::clone(&corpus_engine));
+    // Tool-Mastery Layer 3 — NoteStore drives the per-conversation
+    // tool_decision write hook (runtime.rs handle_message_stream's
+    // post-gap-check spawn) and the Layer-2 dossier read at the
+    // top of the next turn. Without this wiring the desktop's
+    // chat surface gets dossier=None on every turn — the framework
+    // becomes structurally invisible to the user. Reading the
+    // already-opened store rather than re-opening keeps a single
+    // sqlite handle (WAL-friendly).
+    if let Some(ns) = state.notes.read().await.as_ref() {
+        runtime = runtime.with_note_store(Arc::clone(ns));
+    }
     // Landscape-digest provider wiring. Three branches:
     //
     // 1. **Local mode + KnowledgeView enabled** — install the local
@@ -1884,25 +1922,24 @@ pub async fn rebuild_runtime(state: &AppState) -> Result<(), String> {
 
 /// Skills shipped with the binary. Each entry is the raw `skill.toml`
 /// contents embedded at compile time via `include_str!`. This keeps
-/// the Settings → Skills panel populated on every fresh install
-/// regardless of filesystem layout, and survives Tauri bundle
-/// repackaging without needing `bundle.resources` plumbing.
+/// the surviving modes available on every fresh install regardless
+/// of filesystem layout, and survives Tauri bundle repackaging
+/// without needing `bundle.resources` plumbing.
 ///
-/// To add a new built-in skill:
-///   1. Drop a `skill.toml` under `<repo>/skills/<name>/`.
-///   2. Add a matching `include_str!("../../../../skills/<name>/skill.toml")`
-///      entry here.
-/// User-created skills live under `config.skills_dir` and are loaded
-/// alongside these at runtime.
+/// After the skills-as-menu retirement, only two modes survive:
+///   - inner-work — reflective surface (relational register, local-only)
+///   - recipe-author — workspace surface (bespoke tool set)
+///
+/// The other seven entries were retired because they were intent-
+/// shape variants masquerading as user-selected skills. Intent-keyed
+/// policy in `sovereign_core::intent_policy` now drives the
+/// default-chat behavior they used to provide.
+///
+/// User-created skills (custom workflows on disk) still load from
+/// `config.skills_dir` alongside these two bundled modes.
 const BUILTIN_SKILLS: &[&str] = &[
-    include_str!("../../../../skills/collaborative-research/skill.toml"),
-    include_str!("../../../../skills/code-review/skill.toml"),
-    include_str!("../../../../skills/codebase-navigator/skill.toml"),
-    include_str!("../../../../skills/document-analyst/skill.toml"),
-    include_str!("../../../../skills/epistemic-research/skill.toml"),
-    include_str!("../../../../skills/inner-work/skill.toml"),
-    include_str!("../../../../skills/personal-assistant/skill.toml"),
-    include_str!("../../../../skills/research-analyst/skill.toml"),
+    include_str!("../../../../modes/inner-work/skill.toml"),
+    include_str!("../../../../modes/recipe-author/skill.toml"),
 ];
 
 fn register_builtin_skills(skills: &mut SkillRegistry) {
@@ -1917,8 +1954,8 @@ fn register_builtin_skills(skills: &mut SkillRegistry) {
     }
 }
 
-/// Debug-only: look up the workspace `skills/` directory so developers
-/// running `cargo tauri dev` can add a new skill TOML without needing
+/// Debug-only: look up the workspace `modes/` directory so developers
+/// running `cargo tauri dev` can add a new mode TOML without needing
 /// to rebuild the binary with a new `include_str!` entry. Returns
 /// `None` outside the workspace layout (e.g. an installed debug build).
 #[cfg(debug_assertions)]
@@ -1929,7 +1966,7 @@ fn dev_workspace_skills_dir() -> Option<PathBuf> {
             .parent()? // crates/sovereign-desktop/
             .parent()? // crates/
             .parent()? // <repo root>
-            .join("skills"),
+            .join("modes"),
     )
 }
 
