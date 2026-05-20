@@ -2044,6 +2044,18 @@ pub struct ResponseProvenance {
     /// `None` when not applicable or for old messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub self_assessment: Option<String>,
+    /// Human-readable rationale for the coarse classification — set
+    /// by the router itself (e.g. `"current/time-sensitive signal →
+    /// external tool"`, `"factual-lookup shape (what/who/when/where)
+    /// → knowledge query"`, `"first-person + content-discourse verb
+    /// → personal-corpus lookup"`). Surfaced in the desktop
+    /// RoutingMeta footer so the operator can tell whether a
+    /// surprising route came from a heuristic shortcut or the LLM
+    /// classifier, without having to scrape the daemon logs. `None`
+    /// when no rationale was emitted (rare: usually only on errors)
+    /// or for old messages that predate this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_trigger: Option<String>,
     /// Folder-ingest v1 §6.3: per-turn coverage assessment over the
     /// user's watched-folder corpora. `None` for turns where no
     /// folder corpus contributed retrieval (the common "talked to a

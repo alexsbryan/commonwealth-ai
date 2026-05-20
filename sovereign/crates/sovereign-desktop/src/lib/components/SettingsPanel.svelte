@@ -209,7 +209,10 @@
   }
 
   let needsSave = $derived(
-    activeTab === "models" || activeTab === "paths" || activeTab === "knowledge",
+    activeTab === "models"
+      || activeTab === "paths"
+      || activeTab === "knowledge"
+      || activeTab === "tools",
   );
 
   // ── Semantic preset detection ──────────────────────────────────

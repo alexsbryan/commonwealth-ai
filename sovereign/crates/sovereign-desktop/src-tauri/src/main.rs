@@ -336,6 +336,7 @@ fn main() -> ExitCode {
             commands::submit_approval,
             commands::submit_input,
             commands::submit_information_response,
+            commands::submit_information_search,
             commands::list_skills,
             commands::toggle_skill,
             commands::get_last_turn_provenance,

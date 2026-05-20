@@ -134,6 +134,13 @@ impl TauriApprovalChannel {
         }
     }
 
+    /// True iff a pending information-request exists for `key`. Used by
+    /// the search-now affordance to fail fast before spending a search
+    /// budget on a stale UI submission.
+    pub async fn has_pending_information(&self, key: &str) -> bool {
+        self.pending_info.read().await.contains_key(key)
+    }
+
     fn emit<S: serde::Serialize + Clone>(&self, event: &str, payload: S) {
         if let Err(e) = self.app_handle.emit(event, payload) {
             tracing::warn!("Failed to emit event {event}: {e}");

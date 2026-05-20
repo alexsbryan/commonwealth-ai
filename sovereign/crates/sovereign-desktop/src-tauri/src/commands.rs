@@ -1049,6 +1049,131 @@ pub async fn submit_information_response(
         .await)
 }
 
+/// Resolve a pending information-request by running a web search and
+/// feeding the formatted results back as if the user had pasted them.
+/// Powers the InformationRequest "Search the web" affordance — the
+/// user is operator-vouching that the search itself is acceptable
+/// evidence for re-synthesis, mirroring the paste flow's contract.
+///
+/// Builds a fresh `SearchOrchestrator` per call from the persisted
+/// `config.search_backend`. This mirrors `state.rs` build-tools
+/// logic intentionally — the orchestrator is cheap to construct
+/// (wraps stateless backend trait objects) and rebuilding here
+/// keeps the affordance live against config edits without needing
+/// to thread a long-lived handle through `AppState`.
+///
+/// Returns an error string when:
+///   - no pending information request matches `key` (stale UI)
+///   - the search backend returns zero results (don't fabricate a
+///     "search succeeded" signal back to the runtime)
+///   - the search backend errors entirely (network / API failure)
+#[tauri::command]
+pub async fn submit_information_search(
+    state: State<'_, Arc<AppState>>,
+    key: String,
+    query: String,
+) -> Result<bool, String> {
+    use sovereign_tools::web::search::{
+        BraveBackendImpl, BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator,
+        SearchPrivacy, SelectInputs, TavilyBackendImpl, WebSearchBackend,
+        WebSearchRegistry,
+    };
+
+    let query = query.trim();
+    if query.is_empty() {
+        return Err("query must not be empty".to_string());
+    }
+
+    if !state.approval.has_pending_information(&key).await {
+        // Stale submission — the request was already resolved
+        // (paste / skip / timed out). Don't spend a search budget.
+        return Ok(false);
+    }
+
+    let config_snapshot = state.config.read().await.clone();
+
+    let mut registry = WebSearchRegistry::new();
+    // DuckDuckGo is always available — the zero-config fallback.
+    // Registered first so even a missing operator key still has
+    // a backend to dispatch to.
+    registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
+    let preferred: Box<dyn WebSearchBackend> =
+        match config_snapshot.search_backend.provider.as_str() {
+            "tavily" => config_snapshot.search_backend.api_key.as_ref().map(
+                |k| -> Box<dyn WebSearchBackend> {
+                    Box::new(TavilyBackendImpl::new(k.clone()))
+                },
+            ),
+            "brave" => config_snapshot.search_backend.api_key.as_ref().map(
+                |k| -> Box<dyn WebSearchBackend> {
+                    Box::new(BraveBackendImpl::new(k.clone()))
+                },
+            ),
+            _ => None,
+        }
+        .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
+    registry.register(Arc::from(preferred));
+
+    let orchestrator = SearchOrchestrator::new(Arc::new(registry));
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("reqwest client build: {e}"))?;
+    let budget = BudgetView::new();
+    let prefer = match config_snapshot.search_backend.provider.as_str() {
+        "tavily" => &["tavily", "duckduckgo"][..],
+        "brave" => &["brave", "duckduckgo"][..],
+        _ => &["duckduckgo"][..],
+    };
+    let out = orchestrator
+        .search(
+            &client,
+            SelectInputs {
+                query,
+                max_results: 5,
+                max_privacy: SearchPrivacy::External {
+                    provider: "duckduckgo",
+                },
+                budget: &budget,
+                prefer,
+            },
+        )
+        .await;
+
+    if out.results.is_empty() {
+        // Treat as a soft failure surfaced to the UI. The pending
+        // request stays open so the user can paste / skip / retry
+        // with a tighter query without rebuilding the card.
+        return Err(format!(
+            "web search returned 0 results via {} (DDG may be bot-blocking; \
+             try a tighter query or paste a source instead)",
+            out.backend_id,
+        ));
+    }
+
+    // Format as a paste-shaped block so the runtime's re-synthesis
+    // path treats this identically to user-pasted content. Each
+    // entry is numbered (matches the gym runner's tool-result shape
+    // that the URL-allowlist constraint was trained against).
+    let mut formatted = format!(
+        "Web search results for \"{}\" (via {}):\n\n",
+        query, out.backend_id
+    );
+    for (i, r) in out.results.iter().enumerate() {
+        formatted.push_str(&format!("[{}] {}\n    {}\n", i + 1, r.title, r.url));
+        if !r.snippet.is_empty() {
+            formatted.push_str(&format!("    {}\n", r.snippet));
+        }
+        formatted.push('\n');
+    }
+
+    Ok(state
+        .approval
+        .submit_information_response(&key, Some(formatted))
+        .await)
+}
+
 /// Trigger memory extraction on a finished inner-work conversation.
 ///
 /// Until 2026-05-05 the desktop had no path to invoke memory
@@ -2642,6 +2767,7 @@ pub async fn ask_document(
         tokens_used: output.tokens_used,
         coarse_intent: None,
         self_assessment: None,
+        routing_trigger: None,
         coverage: None,
     };
 

@@ -301,7 +301,9 @@ pub async fn run_bank_routing(
 }
 
 async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingResult {
-    use sovereign_core::types::{ConversationContext, Intent};
+    use sovereign_core::types::{
+        ConversationContext, Effect, Idempotency, Intent, Latency, Scope, ToolDescriptor,
+    };
 
     let expected = match &q.expected_intent {
         Some(s) => crate::eval_cmd::bank::ExpectedIntent::Exact(
@@ -350,11 +352,31 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
             compacted_history: None,
     };
 
+    // Expose a `web_search` tool descriptor so the router's
+    // `force_action` gate (which checks `has_search` against
+    // available_tools) fires under the same conditions as the
+    // production desktop, where SearchTool is always registered.
+    // Without this, routing-only eval underrepresents the daemon's
+    // real behaviour — temporal/future questions fall through to
+    // the LLM Pass 1 instead of taking the heuristic ACTION path.
+    let eval_tools = vec![ToolDescriptor {
+        id: "web_search".to_string(),
+        name: "web_search".to_string(),
+        description: "Search the web for current information".to_string(),
+        parameters: serde_json::json!({}),
+        examples: vec![],
+        effect: Effect::Read,
+        idempotency: Idempotency::Idempotent,
+        latency: Latency::Slow,
+        scope: Scope::External,
+        output_schema: None,
+    }];
+
     let t = Instant::now();
     let classification = match session
         .runtime
         .router
-        .classify(&q.question, &context, &[])
+        .classify(&q.question, &context, &eval_tools)
         .await
     {
         Ok(c) => c,

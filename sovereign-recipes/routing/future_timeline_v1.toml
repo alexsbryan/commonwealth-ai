@@ -1,0 +1,120 @@
+# Routing eval — future-timeline questions.
+#
+# Origin: 2026-05-19 desktop-app session. User asked "When is the next
+# generation of Mac Studio expected to come out?" and was routed to
+# KnowledgeQuery → corpus search → "I don't know" instead of a web
+# search.
+#
+# Root cause traced to `router.rs:1135 looks_like_factual_lookup`
+# matching "when is " unconditionally before `force_action` /
+# `needs_current_info` could catch the future-tense framing.
+#
+# This bank captures the failure shape. The discipline per
+# `feedback_no_teaching_to_test.md` and `feedback_routing_eval_method.md`:
+# every question here is a real user phrasing of "when will/does/is X
+# come out", chosen to exercise SHAPES (future-orientation, upcoming
+# product/event lookup) not bank-specific vocabulary. The heuristic
+# fix is allowed to gate on shape markers ("next", "upcoming",
+# "expected", "coming out", "release", "launch") because those are
+# linguistic shape descriptors that any future-timeline question
+# carries — they do not encode answers from this bank.
+#
+# Expected intent: `simple_action` — the router should produce
+# `Intent::SimpleAction { tool: "web_search" }` so the model is given
+# the search tool and reaches for it. Any `simple_action` is accepted
+# because the available-tools list may pick `web_search` or `search`
+# depending on which is registered.
+
+[bank]
+name = "future-timeline-v1"
+corpus = "wikipedia"  # required by loader; unused under --routing-only
+description = """
+Routing-only bank covering future-timeline questions: "when does X
+launch", "when is Y expected", "what's coming at Z". Each row should
+route to a web-search-class action, not to KnowledgeQuery — corpus
+content cannot answer questions about events that haven't happened
+yet, and the heuristic floor must not steal them from the action
+path.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 30000
+max_per_question_ms = 60000
+
+# ─── Lead failing case: the literal Mac Studio question ────────────
+
+[[questions]]
+id = "future_mac_studio"
+category = "factual_recall"  # category irrelevant under expected_intent override
+question = "When is the next generation of Mac Studio expected to come out?"
+expected_intent = "simple_action"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Product-launch siblings ──────────────────────────────────────
+
+[[questions]]
+id = "future_iphone_launch"
+category = "factual_recall"
+question = "When does the next iPhone launch?"
+expected_intent = "simple_action"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "future_switch_release"
+category = "factual_recall"
+question = "When is the new Nintendo Switch coming out?"
+expected_intent = "simple_action"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "future_gpt5_release"
+category = "factual_recall"
+question = "When does GPT-5 come out?"
+expected_intent = "simple_action"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Event-timeline siblings ──────────────────────────────────────
+
+[[questions]]
+id = "future_wwdc_expected"
+category = "factual_recall"
+question = "What's expected at the upcoming WWDC?"
+expected_intent = "simple_action"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "future_spacex_launch"
+category = "factual_recall"
+question = "When is the next SpaceX launch scheduled?"
+expected_intent = "simple_action"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "future_fed_meeting"
+category = "factual_recall"
+question = "When is the next Fed meeting?"
+expected_intent = "simple_action"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Edge: future-tense without an explicit shape marker ──────────
+#
+# These exercise the boundary. "When will the eclipse happen" is
+# astronomically computable — corpus-answerable in principle — but
+# in practice users asking it want the next-occurrence date, which
+# is fresh-info. Accepting either knowledge_query OR simple_action
+# would let the heuristic legitimately defer to the LLM classifier.
+
+[[questions]]
+id = "future_eclipse"
+category = "factual_recall"
+question = "When is the next solar eclipse visible from the US?"
+expected_intent = "simple_action"
+expected_facts = ["stub"]
+expected_sources = []

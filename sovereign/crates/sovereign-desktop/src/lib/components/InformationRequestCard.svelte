@@ -1,5 +1,8 @@
 <script lang="ts">
-  import { submitInformationResponse } from "../api";
+  import {
+    submitInformationResponse,
+    submitInformationSearch,
+  } from "../api";
   import type { InformationRequestPayload } from "../types";
 
   interface Props {
@@ -11,6 +14,14 @@
 
   let pasteValue = $state("");
   let submitting = $state(false);
+  /// Reflects the loading state of the web-search affordance.
+  /// Separate from `submitting` because a failed search leaves the
+  /// card live (user can paste / skip / retry); we want the spinner
+  /// off and the other buttons re-enabled while the gap text stays.
+  let searching = $state(false);
+  /// Surfaced inline when a search affordance fails (zero results,
+  /// network error). Cleared on the next interaction.
+  let searchError = $state("");
 
   async function handleSubmit() {
     if (!request || submitting || !pasteValue.trim()) return;
@@ -36,6 +47,31 @@
     submitting = false;
     pasteValue = "";
     onHandled();
+  }
+
+  /// Run a web search against the gap text. On success the daemon
+  /// resolves the same pending channel that `handleSubmit` would
+  /// resolve, so the runtime gets identical re-synthesis input — no
+  /// new wire path for the search result. On failure (zero results
+  /// from a bot-blocked DDG fallback, or a backend error), surface
+  /// the message inline and leave the card live.
+  async function handleSearch() {
+    if (!request || submitting || searching) return;
+    searchError = "";
+    searching = true;
+    try {
+      await submitInformationSearch(request.key, request.gap);
+      // Daemon resolved the pending channel; tear down the card.
+      onHandled();
+    } catch (e) {
+      // Tauri command-handler errors arrive as strings.
+      searchError =
+        typeof e === "string"
+          ? e
+          : (e as { message?: string })?.message || "Web search failed";
+      console.error("Web search affordance failed:", e);
+    }
+    searching = false;
   }
 </script>
 
@@ -93,18 +129,30 @@
       ></textarea>
     </section>
 
+    {#if searchError}
+      <div class="search-error" role="alert">{searchError}</div>
+    {/if}
+
     <div class="info-actions">
       <button
         class="btn skip"
         onclick={handleSkip}
-        disabled={submitting}
+        disabled={submitting || searching}
       >
         Skip — proceed with current knowledge
       </button>
       <button
+        class="btn search"
+        onclick={handleSearch}
+        disabled={submitting || searching}
+        title="Run a web search using the gap text and feed results back to the agent"
+      >
+        {searching ? "Searching…" : "Search the web"}
+      </button>
+      <button
         class="btn submit"
         onclick={handleSubmit}
-        disabled={submitting || !pasteValue.trim()}
+        disabled={submitting || searching || !pasteValue.trim()}
       >
         Submit
       </button>
@@ -244,6 +292,26 @@
   .skip:hover:not(:disabled) {
     color: var(--text-secondary);
     border-color: var(--border-bright);
+  }
+
+  .search {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+  .search:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  .search-error {
+    margin: 0 16px 8px;
+    padding: 8px 12px;
+    background: color-mix(in srgb, crimson 6%, transparent);
+    border: 1px solid color-mix(in srgb, crimson 30%, transparent);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.45;
   }
 
   .submit {

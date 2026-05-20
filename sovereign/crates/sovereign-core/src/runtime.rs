@@ -7450,6 +7450,7 @@ impl Runtime {
             let top_source_label = shape.top_source_label.clone();
             let coarse_intent_for_prov = coarse_intent.clone();
             let self_assessment_for_prov = self_assessment.clone();
+            let routing_trigger_for_prov = classification.rationale.clone();
 
             // PR3: compute next-step offers against the same
             // retrieval the answer was built from. We do this on the
@@ -7564,6 +7565,7 @@ impl Runtime {
                     tokens_used: 0,
                     coarse_intent: coarse_intent_for_prov,
                     self_assessment: self_assessment_for_prov,
+                    routing_trigger: routing_trigger_for_prov,
                     coverage: coverage_for_prov,
                 };
                 let metadata_json = serde_json::json!({
@@ -7863,6 +7865,7 @@ impl Runtime {
                 tokens_used: 0,
                 coarse_intent,
                 self_assessment,
+                routing_trigger: classification.rationale.clone(),
                 coverage,
             };
             let metadata_json = serde_json::json!({
@@ -8409,7 +8412,13 @@ impl Runtime {
             }
             Intent::KnowledgeQuery | Intent::ComparisonQuery => {
                 self.handle_knowledge_query(
-                    message, conversation_id, &context, &intent, coarse_intent, self_assessment,
+                    message,
+                    conversation_id,
+                    &context,
+                    &intent,
+                    coarse_intent,
+                    self_assessment,
+                    classification.rationale.clone(),
                 )
                 .await
             }
@@ -8433,6 +8442,7 @@ impl Runtime {
                     &intent,
                     coarse_intent,
                     self_assessment,
+                    classification.rationale.clone(),
                     scope.as_deref(),
                 )
                 .await
@@ -8934,6 +8944,7 @@ impl Runtime {
         intent: &Intent,
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
+        routing_trigger: Option<String>,
         scope: Option<&str>,
     ) -> Result<Response> {
         // Search knowledge + build prompt (shared with handle_message_stream).
@@ -9099,6 +9110,7 @@ impl Runtime {
             tokens_used: completion.tokens_used,
             coarse_intent,
             self_assessment,
+            routing_trigger,
             coverage: kc.coverage,
         };
 
@@ -11145,6 +11157,7 @@ impl Runtime {
         intent: &Intent,
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
+        routing_trigger: Option<String>,
     ) -> Result<Response> {
         let plan = self.prepare_knowledge_query_plan(message, context, intent, None).await;
 
@@ -11221,6 +11234,7 @@ impl Runtime {
             tokens_used: completion.tokens_used,
             coarse_intent,
             self_assessment,
+            routing_trigger,
             coverage: coverage_for_prov,
         };
 
@@ -11509,6 +11523,7 @@ impl Runtime {
             tokens_used: 0,
             coarse_intent: None,
             self_assessment: None,
+            routing_trigger: None,
             coverage: None,
         };
 
@@ -11771,6 +11786,7 @@ impl Runtime {
             tokens_used: synthesis.tokens_used,
             coarse_intent: None,
             self_assessment: None,
+            routing_trigger: None,
             coverage: None,
         };
 
