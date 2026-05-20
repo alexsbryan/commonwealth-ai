@@ -9,6 +9,7 @@ import type { InformationRequestPayload } from "../types";
 
 vi.mock("../api", () => ({
   submitInformationResponse: vi.fn(async () => undefined),
+  submitInformationSearch: vi.fn(async () => undefined),
 }));
 
 const api = await import("../api");
@@ -32,6 +33,7 @@ function payload(
 describe("InformationRequestCard", () => {
   beforeEach(() => {
     vi.mocked(api.submitInformationResponse).mockClear();
+    vi.mocked(api.submitInformationSearch).mockClear();
   });
 
   it("renders nothing when request is null", () => {
@@ -85,5 +87,44 @@ describe("InformationRequestCard", () => {
     await fireEvent.click(skip);
     expect(api.submitInformationResponse).toHaveBeenCalledWith("r-skip", null);
     await vi.waitFor(() => expect(onHandled).toHaveBeenCalled());
+  });
+
+  it("Search the web forwards the gap text + calls onHandled on success", async () => {
+    const onHandled = vi.fn();
+    render(InformationRequestCard, {
+      props: {
+        request: payload({ key: "r-search", gap: "Mac Studio next gen date" }),
+        onHandled,
+      },
+    });
+    const searchBtn = screen.getByRole("button", { name: /search the web/i });
+    await fireEvent.click(searchBtn);
+    expect(api.submitInformationSearch).toHaveBeenCalledWith(
+      "r-search",
+      "Mac Studio next gen date",
+    );
+    await vi.waitFor(() => expect(onHandled).toHaveBeenCalled());
+  });
+
+  it("Search the web shows the error inline + keeps the card live on failure", async () => {
+    const onHandled = vi.fn();
+    // Tauri command-handler errors arrive as plain strings on the JS
+    // side. Simulate a DDG-bot-block / zero-results path.
+    vi.mocked(api.submitInformationSearch).mockRejectedValueOnce(
+      "web search returned 0 results via duckduckgo",
+    );
+    render(InformationRequestCard, {
+      props: { request: payload({ key: "r-fail" }), onHandled },
+    });
+    const searchBtn = screen.getByRole("button", { name: /search the web/i });
+    await fireEvent.click(searchBtn);
+    await vi.waitFor(() => {
+      expect(
+        screen.getByText(/web search returned 0 results/i),
+      ).toBeInTheDocument();
+    });
+    // Card must stay live — onHandled must NOT have been called so the
+    // user can still paste / skip / retry.
+    expect(onHandled).not.toHaveBeenCalled();
   });
 });

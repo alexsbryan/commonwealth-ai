@@ -181,6 +181,18 @@ export async function submitInformationResponse(
   return invoke("submit_information_response", { key, content });
 }
 
+/** Resolve a pending information-request by running a web search and
+ *  feeding the formatted results back as if the user had pasted them.
+ *  Errors when the search returns zero results (DDG bot-block etc.)
+ *  so the UI can surface that without resolving the request — the
+ *  card stays live for the user to paste / skip / retry. */
+export async function submitInformationSearch(
+  key: string,
+  query: string,
+): Promise<boolean> {
+  return invoke("submit_information_search", { key, query });
+}
+
 export async function listSkills(): Promise<SkillEntry[]> {
   return invoke("list_skills");
 }
