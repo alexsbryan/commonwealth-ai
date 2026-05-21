@@ -40,6 +40,13 @@ tests check Unicode scalar value order.
 ## How to deliver
 
 You are running in a tools-driven harness. Replace the body of
-`reverse_string` in `src/lib.rs` using the `edit` (or `write`) tool.
+`reverse_string` in `src/lib.rs` using the **`write` tool** to
+rewrite the entire file. Prefer `write` over `edit` — the `edit`
+tool requires the `oldText` to match the file byte-for-byte
+including whitespace, which is brittle.
+
+The full file to write is short — header doc comments + the
+function definition. Reproduce them in your `write` call.
+
 **Files written via tools are the only thing the grader sees.** Pasting
-code into chat without calling `edit`/`write` will score zero.
+code into chat without calling `write` will score zero.

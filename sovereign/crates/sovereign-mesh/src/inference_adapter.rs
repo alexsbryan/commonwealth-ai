@@ -506,7 +506,24 @@ impl SovereignInferenceAdapter {
 pub(crate) fn parse_tool_envelope_direct(
     text: &str,
 ) -> Vec<sovereign_inference::embedded::ParsedToolCall> {
-    let trimmed = text.trim();
+    // Strip a leading `<think>...</think>` block if present.
+    // Qwen-family chat templates wrap the assistant turn opener in
+    // `<think>` tags, so under JSON-schema grammar the model's bare
+    // JSON ends up inside think markers. Without this strip, the
+    // .trim() below leaves `<think>` at the start and `from_str`
+    // can't parse.
+    //
+    // Also strip a TRAILING `</tool_call>` marker — the chat
+    // template (or model's training) appends this after the JSON
+    // envelope closes. Without removing it, `serde_json::from_str`
+    // rejects the trailing data and parse_tool_envelope_direct
+    // returns empty even though the JSON itself was perfectly
+    // formed. Observed 2026-05-21: fast-slot model emitted
+    // `{"name":"read",...}</tool_call>` under grammar, daemon
+    // extracted zero tool calls.
+    let without_think = strip_leading_think_block(text);
+    let without_close = strip_trailing_tool_call_close(without_think);
+    let trimmed = without_close.trim();
     let parsed: Result<serde_json::Value, _> =
         serde_json::from_str(trimmed).or_else(|_| {
             // Mirror the parser-hardening pre-pass: unescaped raw
@@ -542,6 +559,34 @@ fn force_tool_calls_env() -> bool {
     std::env::var("SOVEREIGN_FORCE_TOOL_CALLS")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
+}
+
+/// Strip a leading `<think>...</think>` block from text. Returns
+/// the original text when no leading think block is present, or
+/// when the block is unterminated (model emitted `<think>` but the
+/// generation ended before `</think>`). Whitespace before the
+/// opener is preserved — `.trim()` after this call handles it.
+fn strip_leading_think_block(text: &str) -> &str {
+    let trimmed = text.trim_start();
+    let Some(rest) = trimmed.strip_prefix("<think>") else {
+        return text;
+    };
+    let Some(end) = rest.find("</think>") else {
+        return text;
+    };
+    &rest[end + "</think>".len()..]
+}
+
+/// Strip a trailing `</tool_call>` marker (and any whitespace
+/// after it). Qwen-family chat templates append this token
+/// automatically after a tool-call assistant turn; under the
+/// grammar-constrained bare-JSON path the marker ends up dangling
+/// after the model's JSON envelope. serde_json's `from_str`
+/// rejects trailing data, so without this strip the
+/// direct-envelope parse returns empty.
+fn strip_trailing_tool_call_close(text: &str) -> &str {
+    let trimmed = text.trim_end();
+    trimmed.strip_suffix("</tool_call>").unwrap_or(text)
 }
 
 /// Inject a `done` virtual tool into the tool-envelope `anyOf`.
@@ -1006,7 +1051,15 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         //     still has a chance.
         //   • free-form — the legacy `<tool_call>{...}</tool_call>`
         //     markup the chat template emits when no grammar is set.
-        let grammar_constrained = req.structured_output.is_some()
+        // Two grammar paths produce bare-JSON tool envelopes:
+        //   * `structured_output` (in-house JsonConstraint) — Phase
+        //     1 enrichment and the historical force-tool-calls path.
+        //   * `lark_grammar` (llguidance, canonical from_json_schema)
+        //     — the 2026-05-21 alternation-grammar adoption.
+        // Either one means the model emitted a `{"name":...,
+        // "arguments":...}` envelope without `<tool_call>` markers.
+        let grammar_constrained = (req.structured_output.is_some()
+            || req.lark_grammar.is_some())
             && tool_envelope_schema_for_with_env(&request).is_some();
         if tools_present {
             tracing::debug!(
@@ -1709,6 +1762,28 @@ mod adapter_translation_tests {
         let schema = super::tool_envelope_schema_for_with_env(&req);
         std::env::remove_var("SOVEREIGN_FORCE_TOOL_CALLS");
         assert!(schema.is_none(), "explicit none must NOT be overridden");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_strips_trailing_close_marker() {
+        // 2026-05-21 regression: fast-slot model emitted bare JSON
+        // followed by a `</tool_call>` close (chat-template suffix).
+        // serde_json rejects trailing data so direct-parse returned
+        // empty unless the close is stripped first.
+        let text = r#"{"name":"read","arguments":{"path":"src/lib.rs"}}</tool_call>"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1, "trailing </tool_call> must be stripped");
+        assert_eq!(calls[0].name, "read");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_strips_leading_think_block() {
+        // Mirror: Qwen-template chat-prefix `<think>...</think>` may
+        // wrap the bare JSON. Without the strip, JSON parse fails.
+        let text = r#"<think>I plan to read.</think>{"name":"read","arguments":{"path":"a"}}"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "read");
     }
 
     #[test]
