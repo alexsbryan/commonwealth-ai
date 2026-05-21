@@ -228,6 +228,27 @@ pub async fn run_one_problem(
             "agent_bench: tier=Scaffolded but no scaffold_subdir set — agent sees empty workdir"
         );
     }
+
+    // Copy the canonical `prompt.md` into the workdir. Without this,
+    // a stub comment like "See prompt.md" sends the model on a
+    // 7-turn hunt for a file that exists only in conversation
+    // history. Putting the spec where the model expects it ("perfect
+    // tools and resources" framing — situate the model so its work
+    // can complete with minimum confusion). See trial 4 of the
+    // 2026-05-21 H4 retest for the failure mode this closes.
+    let prompt_doc = problem.problem_dir.join("prompt.md");
+    if prompt_doc.is_file() {
+        let dest = sandbox.workdir().join("prompt.md");
+        if let Err(e) = std::fs::copy(&prompt_doc, &dest) {
+            warn!(
+                problem = %problem.meta.id,
+                source = %prompt_doc.display(),
+                error = %e,
+                "agent_bench: failed to copy prompt.md into workdir; agent will be told the spec is in chat only"
+            );
+        }
+    }
+
     let (workdir, _fixture_path) = sandbox.into_workdir();
     let ctx = context_for(
         problem,

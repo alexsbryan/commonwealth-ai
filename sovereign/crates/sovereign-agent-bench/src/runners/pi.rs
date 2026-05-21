@@ -91,6 +91,14 @@ enum KillReason {
     Wall { cap_seconds: u64 },
     NoProgress { consecutive: u32 },
     WriteThrash { consecutive_writes: u32 },
+    /// Model emitted the `done` virtual tool. Pi-agent-core has no
+    /// max-iteration heuristic and won't terminate on `done` by
+    /// itself (per `invariant_pi_done_heuristic` — it exits only
+    /// when the assistant turn contains NO tool calls). So we
+    /// intercept here: first `done` ends the run cleanly via
+    /// SIGTERM. The witness still scores whatever is in the
+    /// workdir, which is the model's last `write`.
+    ModelDone,
 }
 
 pub struct PiRunner {
@@ -352,6 +360,16 @@ impl AgentRunner for PiRunner {
                                 }
                                 consecutive_writes_no_bash = 0;
                             }
+                            "done" => {
+                                if let Some(tx) = kill_tx_opt.take() {
+                                    tracing::info!(
+                                        problem = %problem_id,
+                                        "agent_bench: model emitted `done` — terminating run"
+                                    );
+                                    let _ = tx.send(KillReason::ModelDone);
+                                }
+                                break;
+                            }
                             _ => {}
                         }
                     }
@@ -416,6 +434,7 @@ impl AgentRunner for PiRunner {
                             threshold: WRITE_THRASH_THRESHOLD,
                         }
                     }
+                    KillReason::ModelDone => ExitReason::Completed,
                 }
             }
             SelectOutcome::NoKill => {
