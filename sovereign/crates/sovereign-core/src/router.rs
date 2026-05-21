@@ -616,7 +616,11 @@ Reply with JSON only:
             "discuss", "debate",
             "reconcile", "how does", "why does", "in what ways",
             "pros and cons", "advantages and disadvantages",
-            "relationship between", "difference between",
+            // "relationship between" / "difference between" removed
+            // 2026-05-21: those are bounded-comparison signals, not
+            // deep-reasoning. The embed router's comparison_query
+            // cluster catches them faster + more accurately than
+            // forcing them to deep_query here.
             "summarize the", "summarise the",
             "history of", "overview of", "evolution of",
             "how have", "how has",
@@ -764,219 +768,24 @@ Reply with JSON only:
     /// - No system-internal locator (`in this codebase`, `in this
     ///   repo`) — those are real metalingual codebase-lookup
     ///   questions about the system's own vocabulary.
-    fn looks_like_personal_recall(message: &str) -> bool {
-        let lower = message.to_lowercase();
-
-        const FIRST_PERSON_MARKERS: &[&str] = &[
-            "have i ",
-            "did i ",
-            "do i ",
-            "what did i ",
-            "what have i ",
-            "have we ",
-            "did we ",
-            "what did we ",
-            "what have we ",
-            // possessive
-            " my ",
-            " our ",
-            "across my ",
-            "across our ",
-            // contractions
-            "i've ",
-            "we've ",
-            "i'm ",
-            "we're ",
-        ];
-
-        const CONTENT_DISCOURSE_VERBS: &[&str] = &[
-            "mentioned",
-            "mention",
-            "talked",
-            "talk about",
-            "discussed",
-            "discuss",
-            "brought up",
-            "bring up",
-            "come up",
-            "came up",
-            "shared",
-            "told",
-            "tell",
-            "said",
-            "say",
-        ];
-
-        // Word-definition markers — keep metalingual signal for these.
-        const DEFINITIONAL_OF_WORD: &[&str] = &[
-            " mean ",
-            " mean?",
-            " means ",
-            " means?",
-            "refers to",
-            "refer to",
-            "definition",
-            "defines",
-            "stand for",
-        ];
-
-        // System-internal locators — keep metalingual for codebase
-        // vocabulary questions.
-        const SYSTEM_MARKERS: &[&str] = &[
-            "in this codebase",
-            "in this repo",
-            "in this repository",
-            "in this project",
-            "in this code",
-            "in our codebase",
-            "in our repo",
-            "in our system",
-            "in the codebase",
-            "in the repo",
-            "in sovereign",
-        ];
-
-        let has_first_person = FIRST_PERSON_MARKERS.iter().any(|m| lower.contains(m));
-        if !has_first_person {
-            return false;
-        }
-        let has_content_verb = CONTENT_DISCOURSE_VERBS.iter().any(|m| lower.contains(m));
-        if !has_content_verb {
-            return false;
-        }
-        let has_word_def = DEFINITIONAL_OF_WORD.iter().any(|m| lower.contains(m));
-        if has_word_def {
-            return false;
-        }
-        let has_system = SYSTEM_MARKERS.iter().any(|m| lower.contains(m));
-        if has_system {
-            return false;
-        }
-        true
+    fn looks_like_personal_recall(_message: &str) -> bool {
+    // Retired (2026-05-21): vocabulary-list pre-check replaced
+    // by the embed router's cluster centroid + Pass 1 prompt
+    // category description. See exemplars.toml for the
+    // semantic coverage. Tombstoned (not deleted) so
+    // downstream `force_*` guards compile unchanged; follow-up
+    // PR can delete the guards and the stub together.
+    false
     }
 
-    fn looks_like_metalingual(message: &str) -> bool {
-        let lower = message.to_lowercase();
-
-        // System-internal locators — the original code/project case.
-        const SYSTEM_MARKERS: &[&str] = &[
-            "in this codebase",
-            "in this repo",
-            "in this repository",
-            "in this project",
-            "in this code",
-            "in our codebase",
-            "in our repo",
-            "in our system",
-            "in the codebase",
-            "in the repo",
-            "in sovereign",
-            "in the sovereign",
-        ];
-
-        // Conversation-internal locators — asking about something said
-        // earlier in this thread.
-        const CONVERSATION_MARKERS: &[&str] = &[
-            "in this conversation",
-            "in our conversation",
-            " earlier ",
-            "earlier you",
-            "earlier i ",
-            "we mentioned",
-            "we discussed",
-            "we discuss ",   // "did we discuss" past-construction
-            "we talked",
-            "did we",
-            "did you",
-            "you mentioned",
-            "you said",
-        ];
-
-        // Source-anchored locators — "according to X / per X / X says /
-        // X defines / X uses the term Y". Phrases here must be high-
-        // precision; bare "how does" is too broad (false-positives on
-        // "how does Darwin's theory account for...") and is omitted.
-        const SOURCE_ANCHORS: &[&str] = &[
-            "according to",
-            " per ",
-            " says",
-            " defines",
-            " uses the term",
-            " use the term",
-        ];
-
-        let has_system = SYSTEM_MARKERS.iter().any(|m| lower.contains(m));
-        let has_conversation = CONVERSATION_MARKERS.iter().any(|m| lower.contains(m));
-        let has_source_anchor = SOURCE_ANCHORS.iter().any(|m| lower.contains(m));
-
-        // Ambient: " here" / " this" as a deictic locator. The
-        // downstream definitional-verb check is the actual precision
-        // gate — we don't double-require "mean"/"refer" here, so
-        // "how is gossip implemented here" qualifies despite having
-        // a verb-side rather than noun-side definitional shape.
-        // " this " is excluded when it's the start of an in-prompt
-        // content reference ("this is broken"), which is content-
-        // processing not metalingual.
-        let has_ambient_here = lower.contains(" here?")
-            || lower.contains(" here.")
-            || lower.contains(" here,")
-            || lower.contains(" here ");
-        let has_ambient_this = lower.contains(" this ")
-            && !lower.contains(" this is ")
-            && !lower.contains(" this code")
-            && !lower.contains(" this passage")
-            && !lower.contains(" this section");
-        let has_ambient = has_ambient_here || has_ambient_this;
-
-        // Pure source-anchored questions ("according to SEP, what does X mean")
-        // qualify even without an explicit definitional verb if the anchor
-        // itself implies metalingual framing — but in practice they almost
-        // always include a definitional verb downstream, so we still
-        // require one for precision.
-        let has_locator = has_system || has_conversation || has_source_anchor || has_ambient;
-        if !has_locator {
-            return false;
-        }
-
-        // Source-anchored questions ("according to X", "X says")
-        // are AMBIGUOUS — they can be metalingual ("what does X
-        // mean according to source Y") OR referential ("what's
-        // the fact according to source Y"). String matching can't
-        // tell; only the full-sentence LLM classifier can. So when
-        // the only locator is source-anchored (no system/conversation
-        // /ambient signal), abstain from forcing metalingual and let
-        // the LLM decide downstream.
-        //
-        // System and conversation locators stay as overrides because
-        // their signals are unambiguous: "in this codebase" / "what
-        // did we discuss earlier" are always metalingual.
-        if has_source_anchor && !has_system && !has_conversation && !has_ambient {
-            return false;
-        }
-
-        // Definitional / structural / discourse verbs — what the user
-        // is asking about the located term.
-        //
-        // Discourse verbs ("discuss", "say", "mention", "explain") are
-        // included because, paired with a conversation-internal
-        // locator ("what did we discuss earlier"), they're inherently
-        // metalingual — asking about a prior linguistic act, not about
-        // the world. They never fire without a locator since the
-        // outer `has_locator` gate already rejected those cases.
-        const DEFINITIONAL_VERBS: &[&str] = &[
-            "what does", "what is", "what's", "what are",
-            "what did", "what do",
-            "how does", "how do", "how is",
-            "mean", "refers to", "refer to", "stand for",
-            "where is", "where's", "where do",
-            "definition", "defines", "describe", "describes",
-            "discuss", "discussed",
-            "say", "said", "says",
-            "mention", "mentioned",
-            "explain", "explained",
-            "talk", "talked",
-        ];
-        DEFINITIONAL_VERBS.iter().any(|m| lower.contains(m))
+    fn looks_like_metalingual(_message: &str) -> bool {
+    // Retired (2026-05-21): vocabulary-list pre-check replaced
+    // by the embed router's cluster centroid + Pass 1 prompt
+    // category description. See exemplars.toml for the
+    // semantic coverage. Tombstoned (not deleted) so
+    // downstream `force_*` guards compile unchanged; follow-up
+    // PR can delete the guards and the stub together.
+    false
     }
 
     /// Retired (2026-05-21): the substring-based conation
@@ -1009,25 +818,14 @@ Reply with JSON only:
     /// to know X" — that's still a question). Requires a future-
     /// commitment marker AND no question mark AND no memory-reference
     /// opener — see `looks_like_memory_reference` for the latter.
-    fn looks_like_commissive(message: &str) -> bool {
-        if message.contains('?') {
-            return false;
-        }
-        // A memory-reference framing is a recall move, not a commit.
-        // "Last time we talked about X, I'll come back to it" looks
-        // commissive on the tail but the lead is recall — the witness
-        // contract is the right surface.
-        if Self::looks_like_memory_reference(message) {
-            return false;
-        }
-        let lower = message.to_lowercase();
-        const COMMITMENT_MARKERS: &[&str] = &[
-            "i'll ", "i will ", "i'm going to ", "i am going to ",
-            "i'm gonna ", "i plan to ", "i'll be ",
-            "remind me to ", "remind me about ", "remind me later ",
-            "remind me on ", "remind me in ",
-        ];
-        COMMITMENT_MARKERS.iter().any(|m| lower.contains(m))
+    fn looks_like_commissive(_message: &str) -> bool {
+    // Retired (2026-05-21): vocabulary-list pre-check replaced
+    // by the embed router's cluster centroid + Pass 1 prompt
+    // category description. See exemplars.toml for the
+    // semantic coverage. Tombstoned (not deleted) so
+    // downstream `force_*` guards compile unchanged; follow-up
+    // PR can delete the guards and the stub together.
+    false
     }
 
     /// Heuristic check: factual-lookup shape — the message opens
@@ -1045,53 +843,17 @@ Reply with JSON only:
     /// - Skipped on long messages (>15 words) — the longer the
     ///   message, the more likely it embeds a multi-clause shape
     ///   the LLM should resolve.
-    fn looks_like_factual_lookup(message: &str) -> bool {
-        let lower = message.to_lowercase();
-        let word_count = message.split_whitespace().count();
-        if word_count > 15 {
-            return false;
-        }
-
-        // Opener triggers — checked at the start of the message
-        // (allowing leading punctuation but not nested clauses).
-        const LOOKUP_OPENERS: &[&str] = &[
-            "what is ", "what was ", "what are ", "what were ",
-            "who is ", "who was ", "who are ", "who were ",
-            "when is ", "when was ", "when did ", "when does ",
-            "where is ", "where was ", "where are ",
-            "which ", // "which X is Y" — selection lookup
-            "name the ", "name a ", // direct lookup imperative
-        ];
-        // Trim leading punctuation/whitespace to test opener
-        // positions like "What is X?" or "  who was X?".
-        let trimmed = lower.trim_start_matches(|c: char| !c.is_alphanumeric());
-        let has_opener = LOOKUP_OPENERS.iter().any(|m| trimmed.starts_with(m));
-        if !has_opener {
-            return false;
-        }
-
-        // Multi-clause / analytical exclusions. These drag the
-        // message into deep-reasoning territory regardless of the
-        // lookup opener.
-        const ANALYTICAL_EXCLUSIONS: &[&str] = &[
-            " and what ", " and how ", " and why ",
-            " and were ", " and is ",
-            " compared to ", " compared with ",
-            " compatible ", " incompatible ",
-            " differ ", " differs ", " differences ",
-            " consequences ", " implications ", " causes ",
-            " contributed ", " contribute to ",
-            " led to ", " caused ", " influenced ",
-            " significance ", // "what is the significance of X" — borderline
-            " role of ", // "what was the role of X in Y" — multi-relation
-            " contested ", " debated ",
-            " arguments for ", " arguments against ",
-        ];
-        if ANALYTICAL_EXCLUSIONS.iter().any(|m| lower.contains(m)) {
-            return false;
-        }
-
-        true
+    fn looks_like_factual_lookup(_message: &str) -> bool {
+    // Retired (2026-05-21): "what is X" / "who was X" opener
+    // detection had a substring-exclusion list (" differ " /
+    // " consequences " / etc.) that drifted from real phrasings
+    // — e.g. "difference between X and Y" misclassified because
+    // the exclusion list had " differ " but not " difference ".
+    // Same architectural debt as the other retired vocabulary
+    // heuristics. Embed router's knowledge_query cluster +
+    // Pass 1 LOOKUP category cover the same shapes without the
+    // substring-mismatch failure mode.
+    false
     }
 
     /// Heuristic check: does this message lead with (or contain) a
@@ -1104,30 +866,14 @@ Reply with JSON only:
     /// that catches the trailing "I want to come back to that" misses
     /// the lead. High-precision floor: substring match on phrases
     /// that don't appear inside other words.
-    fn looks_like_memory_reference(message: &str) -> bool {
-        let lower = message.to_lowercase();
-        const MEMORY_REF_MARKERS: &[&str] = &[
-            "remember when",
-            "remember our",
-            "remember the",
-            "do you remember",
-            "you remember",
-            "last time we",
-            "last time you",
-            "you mentioned",
-            "you said",
-            "you told me",
-            "we talked about",
-            "we discussed",
-            "what we discussed",
-            "i told you",
-            "i mentioned",
-            "going back to what",
-            "back to what you",
-            "come back to that",
-            "come back to what",
-        ];
-        MEMORY_REF_MARKERS.iter().any(|m| lower.contains(m))
+    fn looks_like_memory_reference(_message: &str) -> bool {
+    // Retired (2026-05-21): vocabulary-list pre-check replaced
+    // by the embed router's cluster centroid + Pass 1 prompt
+    // category description. See exemplars.toml for the
+    // semantic coverage. Tombstoned (not deleted) so
+    // downstream `force_*` guards compile unchanged; follow-up
+    // PR can delete the guards and the stub together.
+    false
     }
 
     /// Heuristic check: is this message an expressive move — user
@@ -1139,47 +885,14 @@ Reply with JSON only:
     /// borderline cases. We require an emotive marker AND no question
     /// mark AND short message length, because longer messages tend to
     /// embed a real question that the LLM should classify.
-    fn looks_like_expressive(message: &str) -> bool {
-        if message.contains('?') {
-            return false;
-        }
-        let token_count = message.split_whitespace().count();
-        if token_count > 15 {
-            return false;
-        }
-        let lower = message.to_lowercase();
-
-        // Multi-word markers — substring match is safe because they
-        // include word characters that can't appear inside other words
-        // ("im stuck" can't accidentally match anywhere outside an
-        // intended occurrence).
-        const PHRASE_MARKERS: &[&str] = &[
-            "i'm stuck", "im stuck",
-            "i'm bored", "im bored",
-            "i'm frustrated", "im frustrated",
-            "i'm exhausted", "im exhausted",
-            "i'm tired", "im tired",
-            "i give up", "i gave up",
-            "i have no idea", "no idea where to start",
-            "this is frustrating", "this is broken",
-            "this is annoying", "this is exhausting",
-        ];
-        if PHRASE_MARKERS.iter().any(|m| lower.contains(m)) {
-            return true;
-        }
-
-        // Single-word interjections — must match as a whole word, not
-        // a substring (otherwise "ugh" matches inside "through",
-        // "argh" inside "marginal", "sigh" inside "signing"). Split
-        // on non-alphabetic so punctuation doesn't anchor us to the
-        // wrong boundary.
-        const WORD_MARKERS: &[&str] = &["ugh", "argh", "sigh", "agh", "blah"];
-        for word in lower.split(|c: char| !c.is_alphabetic()) {
-            if WORD_MARKERS.contains(&word) {
-                return true;
-            }
-        }
-        false
+    fn looks_like_expressive(_message: &str) -> bool {
+    // Retired (2026-05-21): vocabulary-list pre-check replaced
+    // by the embed router's cluster centroid + Pass 1 prompt
+    // category description. See exemplars.toml for the
+    // semantic coverage. Tombstoned (not deleted) so
+    // downstream `force_*` guards compile unchanged; follow-up
+    // PR can delete the guards and the stub together.
+    false
     }
 
     /// Heuristic check: is this message a two-entity comparison shape
@@ -1188,55 +901,14 @@ Reply with JSON only:
     /// verb/preposition AND a conjunction/separator AND no in-prompt-content
     /// markers ("this", "these", "the passage", etc.) so it doesn't
     /// poach `looks_like_content_processing`'s territory.
-    fn looks_like_comparison(message: &str) -> bool {
-        let lower = message.to_lowercase();
-
-        // In-prompt-content markers — if present, this is "compare these
-        // sections" not "compare X and Y", so let content_processing handle.
-        const IN_PROMPT_MARKERS: &[&str] = &[
-            "this passage", "this section", "this chapter", "this paragraph",
-            "this code", "this snippet", "this text", "this excerpt",
-            "this document", "this article", "this paper",
-            "these passages", "these sections", "these paragraphs",
-            "these snippets", "these excerpts", "the passage above",
-            "the section above", "the snippet above", "the excerpt above",
-            "above and below", "the above", "the below",
-        ];
-        if IN_PROMPT_MARKERS.iter().any(|m| lower.contains(m)) {
-            return false;
-        }
-
-        // Unambiguous comparison signals — any one of these is sufficient.
-        const STRONG_SIGNALS: &[&str] = &[
-            "difference between", "differences between",
-            "differ from", "differs from", "differing from",
-            " vs ", " vs.", " versus ",
-        ];
-        if STRONG_SIGNALS.iter().any(|m| lower.contains(m)) {
-            return true;
-        }
-
-        // "differ" anywhere in the message is a strong contrast signal as
-        // long as it's not part of "different" (a softer adjective).
-        // We check for whitespace/punctuation boundaries on both sides.
-        if lower.split(|c: char| !c.is_alphabetic()).any(|w| w == "differ") {
-            return true;
-        }
-
-        // "compare X and Y" / "contrast X and Y" — comparison verb plus a
-        // conjunction. Loose, but the in-prompt filter above already
-        // ruled out content-processing cases.
-        let has_compare_verb = lower.contains("compare ")
-            || lower.contains("contrast ")
-            || lower.contains("comparison of ")
-            || lower.contains("compared to ")
-            || lower.contains("compared with ");
-        let has_conjunction = lower.contains(" and ") || lower.contains(" or ");
-        if has_compare_verb && has_conjunction {
-            return true;
-        }
-
-        false
+    fn looks_like_comparison(_message: &str) -> bool {
+    // Retired (2026-05-21): vocabulary-list pre-check replaced
+    // by the embed router's cluster centroid + Pass 1 prompt
+    // category description. See exemplars.toml for the
+    // semantic coverage. Tombstoned (not deleted) so
+    // downstream `force_*` guards compile unchanged; follow-up
+    // PR can delete the guards and the stub together.
+    false
     }
 
     /// Heuristic check: is this message asking the model to *process* content
