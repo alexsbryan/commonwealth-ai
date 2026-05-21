@@ -396,6 +396,14 @@ impl SovereignInferenceAdapter {
         // so downstream tooling (chat-template selection,
         // tools-on-fast-slot guard, telemetry) sees what the caller
         // actually sent.
+        tracing::info!(
+            structured_output_pre = req.structured_output.is_some(),
+            assistant_prefix = request.assistant_prefix.is_some(),
+            tools_count = request.tools.as_ref().map(|t| t.len()).unwrap_or(0),
+            tool_choice = ?request.tool_choice,
+            alternation_env = alternation_grammar_enabled(),
+            "inference_adapter: pre-envelope-check"
+        );
         if req.structured_output.is_none() && request.assistant_prefix.is_none() {
             // R1 (assistant_prefix) and envelope-schema don't compose:
             // the prefill places the model mid-JSON while the grammar
@@ -420,11 +428,39 @@ impl SovereignInferenceAdapter {
                 // Behind an env-var so we can A/B against the
                 // existing `structured_output` JSON-mask path.
                 if alternation_grammar_enabled() {
-                    let schema_json = serde_json::to_string(&envelope).unwrap_or_default();
-                    let lark = sovereign_inference::llguidance_constraint::build_tool_alternation_grammar(
-                        &schema_json,
+                    // Canonical first-principles path (2026-05-21):
+                    // attach the tool-envelope JSON Schema directly
+                    // and route through llguidance's
+                    // `TopLevelGrammar::from_json_schema`. Strict
+                    // schema closure is enforced upstream (proven
+                    // by `from_json_schema_rejects_incomplete_envelope`
+                    // unit test in llguidance_constraint.rs).
+                    //
+                    // The Lark+%json wrapper was the previous
+                    // attempt; it accepted partial JSON
+                    // (model emitting `{...]}` without outer `}`),
+                    // leaving the daemon parser to recover via the
+                    // leniency chain. The schema route closes that
+                    // gap structurally.
+                    //
+                    // To preserve the model's escape into plain text
+                    // (the "I'm done" turn), the envelope is
+                    // augmented with a `done` virtual tool that
+                    // accepts a free-form `reason` string. Pi /
+                    // bench harness treats `done` as the
+                    // termination signal instead of a real tool
+                    // execution.
+                    let envelope_with_done = inject_done_tool(&envelope);
+                    let schema_json =
+                        serde_json::to_string(&envelope_with_done).unwrap_or_default();
+                    tracing::info!(
+                        schema_bytes = schema_json.len(),
+                        "inference_adapter: llguidance schema installed (canonical, with done)"
                     );
-                    req.lark_grammar = Some(lark);
+                    // Re-uses the `lark_grammar` field but the
+                    // LlguidanceConstraint constructor detects JSON
+                    // schema input by leading `{`.
+                    req.lark_grammar = Some(schema_json);
                 } else {
                     req.structured_output = Some(envelope);
                 }
@@ -508,6 +544,40 @@ fn force_tool_calls_env() -> bool {
         .unwrap_or(false)
 }
 
+/// Inject a `done` virtual tool into the tool-envelope `anyOf`.
+/// The done tool's only field is `reason: string`. Pi/bench recognise
+/// `name="done"` as the model's termination signal instead of a real
+/// tool execution. Replaces the Lark `text | tool_envelope`
+/// alternation hack — the model now has a structured exit via a
+/// regular tool call. Under llguidance's `from_json_schema` the
+/// schema enforces strict closure; the model can't emit malformed
+/// envelopes regardless of which variant it picks.
+fn inject_done_tool(envelope: &serde_json::Value) -> serde_json::Value {
+    let mut envelope = envelope.clone();
+    let done_variant = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "enum": ["done"]},
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "reason": {"type": "string"},
+                },
+                "required": ["reason"],
+                "additionalProperties": false,
+            },
+        },
+        "required": ["name", "arguments"],
+        "additionalProperties": false,
+    });
+    if let Some(variants) = envelope.get_mut("oneOf").and_then(|v| v.as_array_mut()) {
+        variants.push(done_variant);
+    } else if let Some(variants) = envelope.get_mut("anyOf").and_then(|v| v.as_array_mut()) {
+        variants.push(done_variant);
+    }
+    envelope
+}
+
 /// True when `SOVEREIGN_ALTERNATION_GRAMMAR` is set to a truthy
 /// value. When on, `build_completion_request` builds a Lark
 /// `text | tool_envelope` alternation grammar via llguidance and
@@ -549,8 +619,23 @@ pub(crate) fn tool_envelope_schema_for_with_env_and_cmd_prefix(
     cmd_prefix: Option<&str>,
 ) -> Option<serde_json::Value> {
     let mut envelope = tool_envelope_schema_for(request).or_else(|| {
-        // Replicate the env-var fallback below for the prefix-using path.
-        if force_tool_calls_env() {
+        // Two env-var paths can synthesize an envelope when the
+        // caller passed `tool_choice=auto` (or omitted it):
+        //
+        //   * `SOVEREIGN_FORCE_TOOL_CALLS=1` — original behaviour.
+        //     Overrides to "required" so the model is grammar-
+        //     locked to a tool call.
+        //   * `SOVEREIGN_ALTERNATION_GRAMMAR=1` — alternation path.
+        //     We still need the envelope schema (it gets embedded
+        //     in the Lark grammar's `tool_envelope` rule) but the
+        //     grammar's `start: text | tool_envelope` rule lets
+        //     the model escape into plain text when no tool call
+        //     is appropriate, so we don't induce a loop trap by
+        //     synthesizing the envelope here.
+        //
+        // `tool_choice="none"` opts out of both paths — caller
+        // explicitly asked for no tool calls, honour it.
+        if force_tool_calls_env() || alternation_grammar_enabled() {
             let tc = request.tool_choice.as_ref().map(|v| v.as_str()).flatten();
             if tc == Some("none") {
                 return None;
@@ -1588,6 +1673,27 @@ mod adapter_translation_tests {
         let schema = super::tool_envelope_schema_for_with_env(&req);
         std::env::remove_var("SOVEREIGN_FORCE_TOOL_CALLS");
         assert!(schema.is_some(), "env override should upgrade auto to required");
+    }
+
+    #[test]
+    fn alternation_grammar_env_engages_schema_on_auto() {
+        // Test that SOVEREIGN_ALTERNATION_GRAMMAR=1 also triggers
+        // the envelope-schema synthesis when tool_choice is "auto"
+        // (or omitted). Same env-var gating as
+        // SOVEREIGN_FORCE_TOOL_CALLS but without the loop trap —
+        // the grammar gives the model a text branch to escape.
+        let _guard = force_tool_calls_env_lock();
+        std::env::set_var("SOVEREIGN_ALTERNATION_GRAMMAR", "1");
+        let req = req_with_tool_choice(
+            Some(vec![tool_def("write")]),
+            Some(serde_json::json!("auto")),
+        );
+        let schema = super::tool_envelope_schema_for_with_env(&req);
+        std::env::remove_var("SOVEREIGN_ALTERNATION_GRAMMAR");
+        assert!(
+            schema.is_some(),
+            "alternation env should synthesize tool_choice=required like force does"
+        );
     }
 
     #[test]

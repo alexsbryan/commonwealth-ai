@@ -63,14 +63,33 @@ pub struct LlguidanceConstraint {
 }
 
 impl LlguidanceConstraint {
-    /// Build a constraint from a Lark grammar string and the model
-    /// the request is bound to. Returns `Err` if the grammar fails
-    /// to compile against the model's tokenizer (typically a syntax
-    /// error in the Lark or a referenced JSON Schema the embedded
-    /// `%json {…}` rule rejects).
-    pub fn new(lark_grammar: &str, model: &LlamaModel) -> Result<Self, LlgError> {
+    /// Build a constraint from EITHER a Lark grammar string or a
+    /// JSON Schema string. Detects format by first non-whitespace
+    /// byte:
+    ///   * `{` → JSON Schema (canonical tool-call entry, strict
+    ///     closure enforcement via `TopLevelGrammar::from_json_schema`)
+    ///   * anything else → Lark grammar
+    ///
+    /// 2026-05-21 finding (`from_json_schema_rejects_incomplete_envelope`
+    /// test): `%json {schema}` inside Lark does NOT enforce schema
+    /// closure as strictly as the direct `from_json_schema` entry.
+    /// For tool-call envelopes we want strict closure — every
+    /// envelope produced under grammar must be parseable JSON — so
+    /// the schema path is the canonical first-principles route.
+    /// Lark stays available for callers that genuinely need
+    /// alternation (text vs structured), but the recommended
+    /// pattern for tool calls is `from_json_schema(envelope_schema)`.
+    pub fn new(grammar_or_schema: &str, model: &LlamaModel) -> Result<Self, LlgError> {
         let factory = factory_for(model);
-        let grammar = TopLevelGrammar::from_lark(lark_grammar.to_string());
+        let trimmed = grammar_or_schema.trim_start();
+        let grammar = if trimmed.starts_with('{') {
+            let schema: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
+                LlgError::ParserCreate(format!("json schema parse: {e}"))
+            })?;
+            TopLevelGrammar::from_json_schema(schema)
+        } else {
+            TopLevelGrammar::from_lark(grammar_or_schema.to_string())
+        };
         let parser = factory.create_parser(grammar);
         let matcher = Matcher::new(parser);
         if matcher.is_error() {
@@ -130,11 +149,21 @@ impl LlguidanceConstraint {
     /// `JsonConstraint::mask` so the sampler integration is a
     /// straight enum-dispatch.
     ///
-    /// On `compute_mask` failure (parser hit an unrecoverable state),
-    /// every non-EOS candidate is clamped — same fail-closed posture
-    /// as `JsonConstraint`'s `emitted_invalid` latch. The sampler
-    /// will then emit EOS and the streaming loop exits.
+    /// **Stop-state passthrough.** Once the grammar reaches its
+    /// accept state (`is_stopped() == true`), llguidance's
+    /// `compute_mask` returns "parser stopped in compute_mask".
+    /// The model is allowed to emit anything from here — typically
+    /// the chat template's closing marker (`</tool_call>`) then EOS.
+    /// Without this short-circuit, every post-acceptance token gets
+    /// clamped → fail-closed → ten thousand warnings + a stuck
+    /// streaming loop. Observed 2026-05-21 under the canonical
+    /// `from_json_schema` path immediately after the envelope
+    /// closed.
     pub fn mask(&mut self, data: &mut LlamaTokenDataArray) {
+        if self.matcher.is_stopped() {
+            self.last_mask = None;
+            return;
+        }
         let mask = match self.matcher.compute_mask() {
             Ok(m) => m,
             Err(e) => {
@@ -158,9 +187,37 @@ impl LlguidanceConstraint {
     /// JsonConstraint-shaped accept. Takes `LlamaToken` (not raw u32)
     /// so call sites that already operate on `LlamaToken` don't have
     /// to convert. Internally maps to `consume_token`.
+    ///
+    /// Per-token diagnostic (gated on `SOVEREIGN_TRACE_LLGUIDANCE=1`)
+    /// logs the matcher's `is_stopped()` + `is_accepting()` after
+    /// each commit. Used to investigate the 2026-05-21 finding that
+    /// the model emits `<tool_call>{...incomplete...}</tool_call>`
+    /// despite the `%json {schema}` constraint requiring full
+    /// closure. We need to see EXACTLY when the matcher transitions
+    /// to accepting state — if it accepts mid-JSON, the schema
+    /// isn't enforcing closure as expected.
     pub fn accept_llama(&mut self, token: LlamaToken) {
+        // Mirror the mask short-circuit: once grammar accepts, the
+        // parser is in a stopped state and consume_token returns
+        // "parser stopped". Token tracking after the grammar's
+        // acceptance is the chat template's responsibility, not
+        // ours.
+        if self.matcher.is_stopped() {
+            self.last_mask = None;
+            return;
+        }
         if let Err(e) = self.matcher.consume_token(token.0 as u32) {
             tracing::warn!(error = %e, token = token.0, "llguidance: consume_token failed");
+        }
+        if trace_enabled() {
+            let stopped = self.matcher.is_stopped();
+            let accepting = self.matcher.is_accepting().unwrap_or(false);
+            tracing::info!(
+                token = token.0,
+                stopped,
+                accepting,
+                "llguidance:trace token committed"
+            );
         }
         self.last_mask = None;
     }
@@ -170,18 +227,11 @@ impl LlguidanceConstraint {
     /// has only one legal continuation across multiple tokens, return
     /// them upfront so the sampler can batch them into the next
     /// decode without paying a forward pass per forced token.
-    ///
-    /// Callers MUST commit any forced tokens via `accept()` (or use
-    /// `Matcher::consume_tokens` directly via `accept_run`) to keep
-    /// the parser state in lockstep.
     pub fn forced_ff_tokens(&mut self) -> Vec<u32> {
         self.matcher.compute_ff_tokens()
     }
 
     /// Commit a forced-run of tokens (the result of `forced_ff_tokens`).
-    /// Bulk version of `accept` for tokens the parser already
-    /// promised; uses `consume_tokens` so the matcher does the run in
-    /// one call.
     pub fn accept_run(&mut self, tokens: &[u32]) -> Result<(), LlgError> {
         self.matcher
             .consume_tokens(tokens)
@@ -189,6 +239,12 @@ impl LlguidanceConstraint {
         self.last_mask = None;
         Ok(())
     }
+}
+
+fn trace_enabled() -> bool {
+    std::env::var("SOVEREIGN_TRACE_LLGUIDANCE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 // ---------------------------------------------------------------------------
@@ -264,10 +320,36 @@ fn build_tok_env(model: &LlamaModel) -> TokEnv {
 /// `%json { … }` rule so llguidance's JSON-Schema compiler enforces
 /// the shape exactly.
 pub fn build_tool_alternation_grammar(envelope_schema_json: &str) -> String {
+    // Three iterations of grammar design surfaced what works:
+    //
+    // 1. `start: text | %json {schema}` — model led with `<think>`
+    //    which committed to the text branch on the first byte; tool
+    //    envelope unreachable.
+    //
+    // 2. Add optional think-block prefix. Model emitted
+    //    `<tool_call>{...}</tool_call>` after the think — text
+    //    branch matched the `<` and swallowed the whole envelope
+    //    as free text. Daemon marker-stop fired mid-JSON, parser
+    //    rejected unbalanced body.
+    //
+    // 3. (this) Wrap the JSON in literal `<tool_call>` /
+    //    `</tool_call>` markers as part of the grammar. The model
+    //    can ONLY enter the tool branch via the literal opener.
+    //    The plain_text branch is gated to not match `<tool_call>`,
+    //    `<think>`, or `{` openers so the parser picks
+    //    tool_envelope unambiguously.
+    //
+    // The Qwen chat template wraps tool calls in
+    // `<tool_call>...</tool_call>` markers anyway — making them
+    // part of the grammar means the marker-stop in `embedded.rs`
+    // and llguidance's grammar end-condition agree on the same
+    // boundary instead of fighting each other.
     format!(
-        "start: text_branch | tool_envelope\n\
-         text_branch: /[^{{](.|\\n)*/\n\
-         tool_envelope: %json {{ {envelope_schema_json} }}\n"
+        "start: think_block? body\n\
+         think_block: /<think>([^<]|<[^\\/])*<\\/think>\\s*/\n\
+         body: tool_envelope | plain_text\n\
+         tool_envelope: \"<tool_call>\" /\\s*/ %json {envelope_schema_json} /\\s*<\\/tool_call>/\n\
+         plain_text: /[^{{<](.|\\n)*|<[^t](.|\\n)*|<t[^ho](.|\\n)*|<th[^i](.|\\n)*|<tho(.|\\n)*|<to[^o](.|\\n)*|<too[^l](.|\\n)*|<tool[^_](.|\\n)*|<tool_[^c](.|\\n)*/\n"
     )
 }
 
@@ -279,10 +361,9 @@ mod tests {
     fn alternation_grammar_renders_with_schema_body() {
         let schema = r#"{"type":"object","properties":{"name":{"type":"string"}}}"#;
         let lark = build_tool_alternation_grammar(schema);
-        // Both branches present.
-        assert!(lark.contains("text_branch | tool_envelope"));
-        // Text branch excludes leading '{'.
-        assert!(lark.contains("[^{](.|\\n)*"));
+        // Optional think prefix + body alternation.
+        assert!(lark.contains("think_block? body"));
+        assert!(lark.contains("body: tool_envelope | plain_text"));
         // JSON branch embeds the schema body verbatim.
         assert!(lark.contains(r#""type":"object""#));
     }
@@ -327,6 +408,111 @@ mod tests {
         assert!(
             matcher.is_accepting().expect("is_accepting"),
             "matcher should accept after 'hi'"
+        );
+    }
+
+    /// Canonical-path diagnostic: pure `TopLevelGrammar::from_json_schema`
+    /// (no Lark wrapping, no markers). If llguidance enforces schema
+    /// closure here, the failure mode we've been chasing (model
+    /// emitting incomplete JSON despite schema constraint) is in the
+    /// Lark+%json wrapper, not in the schema constraint itself. If
+    /// llguidance ALSO accepts partial JSON via from_json_schema,
+    /// the issue is upstream in llguidance.
+    #[test]
+    fn from_json_schema_rejects_incomplete_envelope() {
+        let envelope_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "enum": ["edit"]},
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": false,
+                },
+            },
+            "required": ["name", "arguments"],
+            "additionalProperties": false,
+        });
+
+        let tok_env = ApproximateTokEnv::single_byte_env();
+        let factory = ParserFactory::new_simple(&tok_env).expect("factory");
+        let grammar = TopLevelGrammar::from_json_schema(envelope_schema);
+        let parser = factory.create_parser(grammar);
+        let mut matcher = Matcher::new(parser);
+        assert!(!matcher.is_error(), "json_schema grammar should compile");
+
+        // Feed bytes simulating the model's incomplete emission:
+        // `{"name":"edit","arguments":{"path":"x","content":"y"}` —
+        // missing the final outer `}`. Each byte is a token in the
+        // single-byte env. Consume them one by one.
+        let incomplete = br#"{"name":"edit","arguments":{"path":"x","content":"y"}"#;
+        for &b in incomplete {
+            let mask = matcher.compute_mask().expect("mask");
+            assert!(
+                mask.is_allowed(b as u32),
+                "byte {:?} should be allowed at this position",
+                b as char
+            );
+            matcher.consume_token(b as u32).expect("consume");
+        }
+        // At this point — the WHOLE outer object isn't closed.
+        // is_accepting() should be FALSE (grammar expects `}` next).
+        let accepting = matcher.is_accepting().expect("is_accepting");
+        assert!(
+            !accepting,
+            "grammar must NOT accept incomplete envelope (missing outer `}}`)"
+        );
+        // Consume `}` — now should accept.
+        matcher.consume_token(b'}' as u32).expect("consume close");
+        let accepting_after = matcher.is_accepting().expect("is_accepting after close");
+        assert!(
+            accepting_after,
+            "grammar should accept after the final `}}`"
+        );
+    }
+
+    #[test]
+    fn build_tool_alternation_grammar_compiles_with_real_schema() {
+        // Catch the failure mode that bit us 2026-05-21: a grammar
+        // string that the helper produces but llguidance can't
+        // parse. Earlier the helper wrapped `%json` in extra braces
+        // (`%json { {"anyOf":[...]} }`) and llguidance rejected it
+        // with "key must be a string at line 1 column 4". Pinning
+        // this test catches that regression at unit-test time
+        // instead of only at end-to-end smoke.
+        let envelope_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "enum": ["write"]},
+                "arguments": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": false,
+                },
+            },
+            "required": ["name", "arguments"],
+            "additionalProperties": false,
+        });
+        let schema_json = serde_json::to_string(&envelope_schema).unwrap();
+        let lark = build_tool_alternation_grammar(&schema_json);
+        let tok_env = ApproximateTokEnv::single_byte_env();
+        let factory = ParserFactory::new_simple(&tok_env).expect("factory");
+        let grammar = TopLevelGrammar::from_lark(lark.clone());
+        let parser = factory.create_parser(grammar);
+        let matcher = Matcher::new(parser);
+        assert!(
+            !matcher.is_error(),
+            "alternation grammar with %json schema must compile cleanly: {:?}\ngrammar:\n{}",
+            matcher.get_error(),
+            lark,
         );
     }
 
