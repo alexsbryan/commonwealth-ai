@@ -39,7 +39,13 @@ use crate::sandbox::Sandbox;
 
 /// Allowlisted pi tools. Structural invariant per ARCH §7.2 — not
 /// configurable from TOML.
-pub const PI_TOOL_ALLOWLIST: &[&str] = &["read", "edit", "write", "bash", "find", "grep", "ls"];
+/// Pi tools exposed to the agent. `edit` is intentionally absent —
+/// pi's edit requires `oldText` to match the file byte-for-byte
+/// (whitespace + line endings included), which models struggle to
+/// reproduce after a `read`. Forcing `write` (full-file replacement)
+/// removes that brittleness. See `bench/agent-coding/problems/*/prompt.md`
+/// — each prompt now nudges the model toward `write` + `bash` verify.
+pub const PI_TOOL_ALLOWLIST: &[&str] = &["read", "write", "bash", "find", "grep", "ls"];
 
 /// Default daemon endpoint. The setup script writes a matching provider
 /// in `~/.pi/agent/models.json`.
@@ -801,7 +807,7 @@ mod tests {
     fn tool_allowlist_is_canonical() {
         assert_eq!(
             PI_TOOL_ALLOWLIST,
-            &["read", "edit", "write", "bash", "find", "grep", "ls"]
+            &["read", "write", "bash", "find", "grep", "ls"]
         );
     }
 
