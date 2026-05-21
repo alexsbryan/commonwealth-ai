@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::runner::AgentRunner;
-use crate::runners::{MockAgentRunner, PiRunner};
+use crate::runners::{MockAgentRunner, NativeRunner, PiRunner};
 
 type RunnerFactory = Box<dyn Fn() -> Arc<dyn AgentRunner> + Send + Sync>;
 
@@ -33,6 +33,14 @@ impl AgentRunnerRegistry {
     pub fn builtin() -> Self {
         let mut r = Self::empty();
         r.register("pi", || Arc::new(PiRunner::new()));
+        r.register("native", || Arc::new(NativeRunner::new()));
+        // PR-1 baseline preserved for the role-layer A/B/C comparison.
+        // Same daemon, same canonical primitives, no role transitions
+        // — measures the verify-discipline gap without the role
+        // layer's structural counter-force.
+        r.register("native-monolithic", || {
+            Arc::new(NativeRunner::monolithic())
+        });
         r.register("mock", || Arc::new(MockAgentRunner::canned()));
         r
     }
@@ -68,12 +76,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn builtin_registers_pi_and_mock() {
+    fn builtin_registers_pi_native_and_mock() {
         let r = AgentRunnerRegistry::builtin();
         let ids = r.agent_ids();
         assert!(ids.contains(&"pi"), "expected `pi` in {ids:?}");
+        assert!(ids.contains(&"native"), "expected `native` in {ids:?}");
+        assert!(
+            ids.contains(&"native-monolithic"),
+            "expected `native-monolithic` in {ids:?}"
+        );
         assert!(ids.contains(&"mock"), "expected `mock` in {ids:?}");
         assert!(r.get("pi").is_some());
+        assert!(r.get("native").is_some());
+        assert!(r.get("native-monolithic").is_some());
         assert!(r.get("mock").is_some());
     }
 

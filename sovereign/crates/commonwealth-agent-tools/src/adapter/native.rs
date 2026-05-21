@@ -9,7 +9,8 @@ use serde_json::Value;
 use crate::adapter::{AgentToolAdapter, TranslateOutcome};
 use crate::descriptor::descriptors;
 use crate::primitive::{
-    AgentDoneArgs, CargoSmokeArgs, InspectIntent, Primitive, PrimitiveKind, WriteFileArgs,
+    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
+    InspectIntent, Primitive, PrimitiveKind, SmokeArgs, WriteFileArgs,
 };
 
 /// Passthrough adapter — the canonical primitives ARE the agent's
@@ -47,17 +48,32 @@ impl AgentToolAdapter for Adapter {
                     .ok()
                     .map(Primitive::WriteFile)
             }
-            PrimitiveKind::CargoBuild => Some(Primitive::CargoBuild),
-            PrimitiveKind::CargoSmoke => {
-                serde_json::from_value::<CargoSmokeArgs>(raw_args.clone())
+            PrimitiveKind::Build => Some(Primitive::Build),
+            PrimitiveKind::Smoke => {
+                serde_json::from_value::<SmokeArgs>(raw_args.clone())
                     .ok()
-                    .or_else(|| Some(CargoSmokeArgs::default()))
-                    .map(Primitive::CargoSmoke)
+                    .or_else(|| Some(SmokeArgs::default()))
+                    .map(Primitive::Smoke)
             }
             PrimitiveKind::AgentDone => {
                 serde_json::from_value::<AgentDoneArgs>(raw_args.clone())
                     .ok()
                     .map(Primitive::AgentDone)
+            }
+            PrimitiveKind::AgentPlan => {
+                serde_json::from_value::<AgentPlanArgs>(raw_args.clone())
+                    .ok()
+                    .map(Primitive::AgentPlan)
+            }
+            PrimitiveKind::HandoffToEvaluator => {
+                serde_json::from_value::<HandoffToEvaluatorArgs>(raw_args.clone())
+                    .ok()
+                    .map(Primitive::HandoffToEvaluator)
+            }
+            PrimitiveKind::HandoffToImplementer => {
+                serde_json::from_value::<HandoffToImplementerArgs>(raw_args.clone())
+                    .ok()
+                    .map(Primitive::HandoffToImplementer)
             }
         };
         match parsed {
@@ -119,10 +135,40 @@ mod tests {
     }
 
     #[test]
-    fn translate_cargo_build_no_args() {
+    fn translate_build_no_args() {
         let a = Adapter;
-        let r = a.translate("cargo_build", &json!({}));
-        assert_eq!(r.canonical_kind(), Some(PrimitiveKind::CargoBuild));
+        let r = a.translate("build", &json!({}));
+        assert_eq!(r.canonical_kind(), Some(PrimitiveKind::Build));
+    }
+
+    #[test]
+    fn translate_agent_plan() {
+        let a = Adapter;
+        let r = a.translate(
+            "agent_plan",
+            &json!({"plan": "use HashMap", "files_to_create": ["src/lib.rs"]}),
+        );
+        assert_eq!(r.canonical_kind(), Some(PrimitiveKind::AgentPlan));
+    }
+
+    #[test]
+    fn translate_handoff_to_evaluator() {
+        let a = Adapter;
+        let r = a.translate(
+            "handoff_to_evaluator",
+            &json!({"what_you_changed": "wrote lib.rs"}),
+        );
+        assert_eq!(r.canonical_kind(), Some(PrimitiveKind::HandoffToEvaluator));
+    }
+
+    #[test]
+    fn translate_handoff_to_implementer() {
+        let a = Adapter;
+        let r = a.translate(
+            "handoff_to_implementer",
+            &json!({"diagnosis": "build failed"}),
+        );
+        assert_eq!(r.canonical_kind(), Some(PrimitiveKind::HandoffToImplementer));
     }
 
     #[test]

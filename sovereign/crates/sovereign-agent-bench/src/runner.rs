@@ -91,6 +91,14 @@ pub struct ToolCallRecord {
     /// JSON-serialized argument body, capped to keep the report compact.
     pub args_preview: String,
     pub ok: bool,
+    /// Canonical primitive kind this tool call maps to (via the
+    /// agent's adapter). `None` for unrecognized agent tool calls,
+    /// for reports written before the canonical layer existed, and
+    /// for the `agent_done` virtual that doesn't go through a
+    /// runner. Lets cross-agent rollups slice by canonical kind
+    /// instead of agent-specific tool names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canonical_kind: Option<commonwealth_agent_tools::PrimitiveKind>,
 }
 
 /// Read-only context handed to the runner. The runner sees the workdir
@@ -113,6 +121,15 @@ pub struct AgentRunContext {
     /// Daemon-side model id (`commonwealth/coder` etc.) the agent
     /// should bind. Runners pass this through to their underlying CLI.
     pub model_handle: String,
+    /// Per-language build command bound for this problem (e.g.
+    /// `cargo build 2>&1` for Rust). Native runner threads it into
+    /// `ExecCtx.build_cmd`; pi runner threads it into the pi adapter
+    /// so `BashIntent::Build` matches the actual invocation.
+    pub build_cmd: String,
+    /// Per-language smoke/integration-test command (e.g. `cargo
+    /// test --quiet --test integration`). Same threading as
+    /// build_cmd.
+    pub verify_cmd: String,
 }
 
 impl AgentRunContext {
@@ -200,6 +217,8 @@ pub fn context_for(
         token_budget: token_budget_override.unwrap_or(problem.budget.token_cap),
         wall_seconds_cap: wall_seconds_override.unwrap_or(problem.budget.wall_seconds_cap),
         model_handle,
+        build_cmd: problem.witness.resolved_build_cmd(),
+        verify_cmd: problem.witness.verify_cmd.clone(),
     }
 }
 
@@ -230,6 +249,7 @@ mod tests {
                 fixture_subdir: "fixtures".to_string(),
                 scaffold_subdir: None,
                 verify_cmd: "true".to_string(),
+                build_cmd: None,
                 score_buckets: vec![[0.0, 1.001, 3.0]],
             },
             budget: BudgetCfg {

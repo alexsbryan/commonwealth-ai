@@ -9843,6 +9843,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "clap",
+ "commonwealth-agent-tools",
  "futures",
  "reqwest 0.12.28",
  "serde",

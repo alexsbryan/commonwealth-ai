@@ -14,9 +14,27 @@ use serde::{Deserialize, Serialize};
 pub enum PrimitiveKind {
     InspectWorkdir,
     WriteFile,
-    CargoBuild,
-    CargoSmoke,
+    /// Language-agnostic build step. The command is bound at
+    /// `ExecCtx.build_cmd` per problem — Rust uses
+    /// `cargo build 2>&1`, Go uses `go build ./...`, Python is a
+    /// no-op. Per the multi-language plan: the bench was always
+    /// intended for Rust + Go + TS + Python; the primitive holds
+    /// the verb, the problem config holds the command.
+    Build,
+    /// Language-agnostic smoke test. Bound at `ExecCtx.verify_cmd`.
+    Smoke,
     AgentDone,
+    /// Planner emits this to deliver a chunked plan to the
+    /// Implementer. Closes the orientation-vs-execution attention
+    /// split.
+    AgentPlan,
+    /// Implementer signals "ready for verify, hand off to the
+    /// Evaluator."
+    HandoffToEvaluator,
+    /// Evaluator signals "verification failed / needs another
+    /// pass" with a diagnosis the Implementer threads into its
+    /// next turn.
+    HandoffToImplementer,
 }
 
 impl PrimitiveKind {
@@ -27,9 +45,12 @@ impl PrimitiveKind {
         match self {
             PrimitiveKind::InspectWorkdir => "inspect_workdir",
             PrimitiveKind::WriteFile => "write_file",
-            PrimitiveKind::CargoBuild => "cargo_build",
-            PrimitiveKind::CargoSmoke => "cargo_smoke",
+            PrimitiveKind::Build => "build",
+            PrimitiveKind::Smoke => "smoke",
             PrimitiveKind::AgentDone => "agent_done",
+            PrimitiveKind::AgentPlan => "agent_plan",
+            PrimitiveKind::HandoffToEvaluator => "handoff_to_evaluator",
+            PrimitiveKind::HandoffToImplementer => "handoff_to_implementer",
         }
     }
 
@@ -40,9 +61,12 @@ impl PrimitiveKind {
         match id {
             "inspect_workdir" => Some(PrimitiveKind::InspectWorkdir),
             "write_file" => Some(PrimitiveKind::WriteFile),
-            "cargo_build" => Some(PrimitiveKind::CargoBuild),
-            "cargo_smoke" => Some(PrimitiveKind::CargoSmoke),
+            "build" => Some(PrimitiveKind::Build),
+            "smoke" => Some(PrimitiveKind::Smoke),
             "agent_done" => Some(PrimitiveKind::AgentDone),
+            "agent_plan" => Some(PrimitiveKind::AgentPlan),
+            "handoff_to_evaluator" => Some(PrimitiveKind::HandoffToEvaluator),
+            "handoff_to_implementer" => Some(PrimitiveKind::HandoffToImplementer),
             _ => None,
         }
     }
@@ -53,9 +77,12 @@ impl PrimitiveKind {
         &[
             PrimitiveKind::InspectWorkdir,
             PrimitiveKind::WriteFile,
-            PrimitiveKind::CargoBuild,
-            PrimitiveKind::CargoSmoke,
+            PrimitiveKind::Build,
+            PrimitiveKind::Smoke,
             PrimitiveKind::AgentDone,
+            PrimitiveKind::AgentPlan,
+            PrimitiveKind::HandoffToEvaluator,
+            PrimitiveKind::HandoffToImplementer,
         ]
     }
 }
@@ -68,9 +95,12 @@ impl PrimitiveKind {
 pub enum Primitive {
     InspectWorkdir(InspectIntent),
     WriteFile(WriteFileArgs),
-    CargoBuild,
-    CargoSmoke(CargoSmokeArgs),
+    Build,
+    Smoke(SmokeArgs),
     AgentDone(AgentDoneArgs),
+    AgentPlan(AgentPlanArgs),
+    HandoffToEvaluator(HandoffToEvaluatorArgs),
+    HandoffToImplementer(HandoffToImplementerArgs),
 }
 
 impl Primitive {
@@ -78,9 +108,12 @@ impl Primitive {
         match self {
             Primitive::InspectWorkdir(_) => PrimitiveKind::InspectWorkdir,
             Primitive::WriteFile(_) => PrimitiveKind::WriteFile,
-            Primitive::CargoBuild => PrimitiveKind::CargoBuild,
-            Primitive::CargoSmoke(_) => PrimitiveKind::CargoSmoke,
+            Primitive::Build => PrimitiveKind::Build,
+            Primitive::Smoke(_) => PrimitiveKind::Smoke,
             Primitive::AgentDone(_) => PrimitiveKind::AgentDone,
+            Primitive::AgentPlan(_) => PrimitiveKind::AgentPlan,
+            Primitive::HandoffToEvaluator(_) => PrimitiveKind::HandoffToEvaluator,
+            Primitive::HandoffToImplementer(_) => PrimitiveKind::HandoffToImplementer,
         }
     }
 }
@@ -111,9 +144,10 @@ pub struct WriteFileArgs {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CargoSmokeArgs {
-    /// Optional test-name filter passed to `cargo test`. None runs
-    /// the whole integration suite.
+pub struct SmokeArgs {
+    /// Optional test-name filter. None runs the whole bound suite.
+    /// The per-language test runner (cargo / go test / pytest /
+    /// vitest) interprets the filter according to its convention.
     pub filter: Option<String>,
 }
 
@@ -122,6 +156,33 @@ pub struct AgentDoneArgs {
     /// Free-form reason. Recorded in telemetry; not used for
     /// control flow.
     pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentPlanArgs {
+    /// 3-6 sentence plan from the Planner. Sticky into the
+    /// `RoleDossier.plan` field — every Implementer + Evaluator
+    /// call sees it for the rest of the run.
+    pub plan: String,
+    /// Optional list of files the plan intends to create (not yet
+    /// in the workdir). Hints Implementer about net-new vs.
+    /// modification.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files_to_create: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HandoffToEvaluatorArgs {
+    /// Implementer's one-line summary of what changed this turn.
+    /// Threaded into the Evaluator's dossier.
+    pub what_you_changed: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HandoffToImplementerArgs {
+    /// Evaluator's diagnosis of what the verification revealed.
+    /// Implementer reads this in its next system message.
+    pub diagnosis: String,
 }
 
 #[cfg(test)]
@@ -145,9 +206,6 @@ mod tests {
     #[test]
     fn primitive_kind_round_trips() {
         for kind in PrimitiveKind::all() {
-            // Each variant has a default-constructible Primitive
-            // shape; this test pins that the kind() projection is
-            // total.
             let p = match kind {
                 PrimitiveKind::InspectWorkdir => Primitive::InspectWorkdir(InspectIntent::File {
                     path: "x".into(),
@@ -156,11 +214,25 @@ mod tests {
                     path: "x".into(),
                     content: String::new(),
                 }),
-                PrimitiveKind::CargoBuild => Primitive::CargoBuild,
-                PrimitiveKind::CargoSmoke => Primitive::CargoSmoke(CargoSmokeArgs::default()),
+                PrimitiveKind::Build => Primitive::Build,
+                PrimitiveKind::Smoke => Primitive::Smoke(SmokeArgs::default()),
                 PrimitiveKind::AgentDone => Primitive::AgentDone(AgentDoneArgs {
                     reason: "test".into(),
                 }),
+                PrimitiveKind::AgentPlan => Primitive::AgentPlan(AgentPlanArgs {
+                    plan: "test plan".into(),
+                    files_to_create: None,
+                }),
+                PrimitiveKind::HandoffToEvaluator => {
+                    Primitive::HandoffToEvaluator(HandoffToEvaluatorArgs {
+                        what_you_changed: "wrote lib.rs".into(),
+                    })
+                }
+                PrimitiveKind::HandoffToImplementer => {
+                    Primitive::HandoffToImplementer(HandoffToImplementerArgs {
+                        diagnosis: "build failed".into(),
+                    })
+                }
             };
             assert_eq!(p.kind(), *kind);
         }
