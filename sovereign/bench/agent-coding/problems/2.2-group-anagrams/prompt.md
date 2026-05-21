@@ -46,13 +46,22 @@ Edge cases:
 
 ## Workdir
 
-Your workdir holds `Cargo.toml` plus `src/lib.rs` (stubbed with
-`todo!()`).
+Your workdir holds:
 
-**No tests are visible to you.** The grader runs a private suite
-after you signal `done`. You verify syntactic correctness with
-`cargo build`; you verify behavioral correctness by reading the
-spec — especially the three claims above — carefully.
+```
+.
+├── Cargo.toml
+├── prompt.md         (this document, available as a file)
+├── src/lib.rs        (function stub with `todo!()`)
+└── tests/integration.rs  (three smoke tests you can iterate against)
+```
+
+The three smoke tests cover empty input, single string, and the
+canonical three-group ordering case. Passing them is **necessary
+but not sufficient** — the grader replaces this file with a private
+12-test suite after you signal `done`, so a smoke-pass doesn't
+guarantee a full-pass. Use `cargo test --quiet --test integration`
+to run them.
 
 ## Execution discipline (load-bearing)
 
@@ -76,19 +85,24 @@ After the write, stop — do not chain another tool in the same turn.
 
 ### Stage 3 — VERIFY  (one `bash`, nothing else)
 
-`bash` with `cargo build 2>&1`. Stop after the call. Read the full
-output before proceeding.
+`bash` with `cargo test --quiet --test integration 2>&1`. This
+compiles AND runs the three smoke tests. Stop after the call. Read
+the full output before proceeding.
 
 ### Stage 4 — FIX  (conditional)
 
-* If `cargo build` **succeeded**: in your reply, walk the worked
-  example through your code in 2–3 sentences. If your code would
-  produce `[["eat","tea","ate"], ["tan","nat"], ["bat"]]`, signal
-  `done`. Otherwise, return to Stage 2 with a corrected plan.
-* If `cargo build` **failed**: in your reply, quote the FIRST error
-  line verbatim. Reason about its specific cause in 1–2 sentences.
-  Then return to Stage 2 with a fix targeted at THAT error. Do not
-  rewrite untouched parts of the file.
+* If `cargo test` shows `test result: ok. 3 passed`: signal `done`.
+  Your code passes the smoke suite; the grader will run the full
+  private suite next.
+* If `cargo test` failed to **compile**: quote the FIRST error line
+  verbatim in your reply. Reason about its specific cause in 1–2
+  sentences. Return to Stage 2 with a fix targeted at THAT error.
+  Do not rewrite untouched parts of the file.
+* If `cargo test` **compiled but a test failed**: quote the
+  `assertion `left == right`` block. Walk through which of the
+  three claims above (1=within-group order, 2=first-appearance
+  group, 3=cross-group order) the failure violates. Return to
+  Stage 2 with a fix that addresses THAT claim.
 
 ## Self-monitor — write counter
 

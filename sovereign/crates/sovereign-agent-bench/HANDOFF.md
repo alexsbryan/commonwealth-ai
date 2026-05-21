@@ -72,21 +72,64 @@ cargo run -p sovereign-agent-bench --release --quiet -- run \
   --artifacts-dir /tmp/r
 ```
 
+**Scaffolding-vs-measurement tension (raised 2026-05-21 evening).**
+Each fix layered on Tier 1 (PLAN/WRITE/VERIFY stages, write-thrash
+detector, smoke tests in workdir, prompt.md as a file, worked-example
+claims, clean stubs) increasingly carries the model. At some point we
+must measure the agent's ability to PRODUCE this scaffolding rather
+than just consume it. That's Tier 2 (FromScratch in `problem.rs`):
+empty workdir, agent must author `Cargo.toml`, `src/lib.rs`,
+function signature, and (optionally) its own tests before reaching
+the algorithm. Tier-2 infrastructure is already in `problem.toml` —
+we just haven't authored from-scratch variants. The proposed
+empirical move: one CLI flag `--tier from-scratch` skips
+`install_scaffold` and `prompt.md` copy, runs the same fixture suite
+against whatever the agent produced. Direct A/B → measures the
+scaffold's contribution to success rate.
+
+**`done`-loop fix landed 2026-05-21 evening** (`runners/pi.rs`).
+First `done` tool call → `KillReason::ModelDone` → SIGTERM →
+`ExitReason::Completed`. Closes the trailing-done-loop tax that
+previously tainted every successful trial as `no_progress`.
+
+**Minimum-confusion fixes landed 2026-05-21 evening (Tier-1):**
+
+- `prompt.md` copied into workdir by `run.rs` after
+  `install_scaffold`. Model that takes "See prompt.md" literally
+  (trial 4 of the F1+F2 retest, 7-turn search for a phantom file)
+  finds the spec where it expects it.
+- Misleading `// X. See prompt.md.` comment removed from all 5
+  scaffold stubs. Clean function-signature + `todo!()` only.
+- `scaffold/tests/integration.rs` for 2.2 carries 3 smoke tests
+  (empty, single, classic). Held-out 12-fixture suite still
+  overrides at grading time per `auto_test.rs:135`. Model can now
+  iterate against a real `cargo test --quiet --test integration`
+  command instead of "verify by reading the spec carefully."
+
+**Daemon RSS anomaly observed 2026-05-21 evening.** Even in alias
+mode (config-level fix landed), daemon RSS climbed to 45GB and
+jetsam-SIGTERMed during a multi-trial run. Each individual trial
+should peak at ~6GB. Either KV cache accumulates across requests
+without bounds, or primary slot unload isn't fully releasing
+memory. Worth a session of trace-the-allocations work.
+
 **Next-iter (ordered, smallest-first):**
 
-1. **`done`-loop fix** in `runners/pi.rs`: intercept the `done` tool
-   call, SIGTERM with `ExitReason::ModelDone` (new variant). Stops
-   the "every successful trial taints as `no_progress`" cosmetic
-   regression. ~30 min.
-2. **Trial-4 zero-writes diagnosis**: inspect the final assistant
-   text + first 3 turns of `agent.jsonl`. Likely a prompt-density
-   issue.
-3. **Multi-trial averaging** in the bench runner: today single-shot
+1. **Multi-trial averaging** in the bench runner: today single-shot
    variance dominates measurement. Add `--trials N` flag that runs
    the same problem N times and reports mean ± stdev. Closes the
    "is this 6/9 stable or lucky?" gap.
-4. **Propagate F1 stage-discipline to 2.1, 1.3, 1.2, 1.1 prompts.**
-   The pattern generalizes; only 2.2 has it today.
+2. **Tier 2 (FromScratch) variants** of 1.1, 1.2, 2.1: empty
+   workdir, same fixture suite. Add `--tier from-scratch` flag
+   that skips scaffold + prompt.md copy. Measures agent's
+   scaffolding capability separately from algorithmic capability.
+3. **Daemon RSS leak investigation**. Reproduce: restart daemon
+   clean, run N=5 primary inferences with 4000-token budgets, log
+   RSS after each. Linear growth → leak. Stable → workload-driven.
+   Mitigations downstream of that signal.
+4. **Propagate Tier-1 minimum-confusion stack to 2.1, 1.3, 1.2, 1.1**:
+   smoke tests, clean stubs, stage-discipline prompts. Hold prompt.md
+   copy as the only no-effort layer per-problem (already in run.rs).
 5. **F-OBS** (memory pinned): new `/internal/runtime/slots` endpoint
    exposing real embedded daemon inventory. The existing `/status.
    loaded_models` is still a hardcoded lie.
