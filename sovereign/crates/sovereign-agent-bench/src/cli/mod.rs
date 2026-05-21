@@ -78,7 +78,11 @@ Common flags for `run`:
   --agent <id>                 (default: pi; from AgentRunnerRegistry)
   --model <handle>             (default: commonwealth/coder)
   --problems <ids>             comma-separated; default: all
-  --judge-trials N             (default: 3)
+  --judge-trials N             (default: 3) — judge variance per single agent run
+  --trials N                   (default: 1) — full agent-loop trials per problem; surfaces mean ± stdev
+  --tier scaffolded|from-scratch  override per-problem tier — `from-scratch` skips install_scaffold AND
+                               the prompt.md workdir copy. Same fixture suite; measures scaffold's
+                               contribution to success rate via direct A/B.
   --judge-model <handle>       (default: same as --model)
   --judge-base-url <url>       (default: http://localhost:9741/v1)
   --token-cap-override N       (override budget.token_cap)

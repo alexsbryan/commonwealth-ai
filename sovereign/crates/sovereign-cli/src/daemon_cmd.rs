@@ -1573,6 +1573,58 @@ async fn run_daemon(args: &[String]) -> i32 {
             work_atlas_cfg.clone(),
         )
         .spawn();
+
+    // ── Foreground back-pressure for lint/test watchers ─────────────
+    //
+    // The lint and test runners burst memory (workspace cargo check
+    // ≈ 2-4 GB peak; 22-crate `cargo test` higher) and historically
+    // ran without coordination with the chat slot. Combined with a
+    // 35B chat slot ≈ 30 GB resident, that crosses jetsam threshold
+    // on memory-tight boxes and SIGTERMs the daemon mid-request.
+    //
+    // Install `AppStateYieldHook` on each watcher so its subprocess
+    // runner waits until `should_yield()` returns false before
+    // spawning cargo. Late-bind: daemon_cmd builds the watchers
+    // earlier in this function (before EmbeddedDaemon exists);
+    // `daemon.app_state()` returns Some only after start_daemon
+    // completes. Poll with the same deadline pattern as the
+    // work-atlas broadcaster wire-up above.
+    if lint_watcher.is_some() || test_watcher.is_some() {
+        let daemon_for_hook = Arc::clone(&daemon);
+        let lint_for_hook = lint_watcher.clone();
+        let test_for_hook = test_watcher.clone();
+        tokio::spawn(async move {
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            loop {
+                if let Some(hook) = daemon_for_hook.build_yield_hook().await {
+                    if let Some(w) = lint_for_hook.as_ref() {
+                        w.set_yield_hook(Arc::clone(&hook));
+                        tracing::info!(
+                            "foreground-yield: hook installed on lint watcher"
+                        );
+                    }
+                    if let Some(w) = test_for_hook.as_ref() {
+                        w.set_yield_hook(Arc::clone(&hook));
+                        tracing::info!(
+                            "foreground-yield: hook installed on test watcher"
+                        );
+                    }
+                    return;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    tracing::warn!(
+                        "foreground-yield: watcher hook wire-up timed out \
+                         — lint/test will not yield to chat (memory \
+                         contention possible)"
+                    );
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+        });
+    }
+
     eprintln!(
         "sovereign daemon running — http://localhost:{}/v1 + /mcp",
         config.daemon.client_port

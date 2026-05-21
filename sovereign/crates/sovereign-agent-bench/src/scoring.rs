@@ -83,6 +83,115 @@ impl ProblemScore {
     }
 }
 
+/// Per-trial breakdown for a multi-trial run (`--trials N` with N > 1).
+/// Carries the integer scores per trial plus mean/stdev — the operator
+/// can tell at a glance whether 6/9 was stable across trials or a
+/// lucky outlier. The headline `ProblemScore.total` is the mean
+/// rounded to the nearest integer; this struct preserves the full
+/// distribution alongside.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProblemTrialDetail {
+    pub problem_id: String,
+    pub n: u8,
+    pub per_trial: Vec<TrialEntry>,
+    pub mean_total: f64,
+    pub stdev_total: f64,
+    pub mean_dim_a: f64,
+    pub mean_dim_b: f64,
+    pub mean_dim_c: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrialEntry {
+    pub trial: u8,
+    pub total: u8,
+    pub dim_a: u8,
+    pub dim_b: u8,
+    pub dim_c: u8,
+    pub exit_reason: ExitReason,
+    pub tokens_out: u64,
+    pub wall_ms: u64,
+}
+
+impl ProblemTrialDetail {
+    /// Build the detail block from the per-trial `ProblemScore`s. The
+    /// caller has already collected one `ProblemScore` per trial; this
+    /// flattens into the mean/stdev surface plus a typed per-trial vec.
+    pub fn from_trials(problem_id: &str, trials: &[ProblemScore]) -> Self {
+        let n = trials.len() as u8;
+        let mut per_trial: Vec<TrialEntry> = Vec::with_capacity(trials.len());
+        for (i, t) in trials.iter().enumerate() {
+            per_trial.push(TrialEntry {
+                trial: i as u8,
+                total: t.total,
+                dim_a: t.dim_a.raw,
+                dim_b: t.dim_b.raw,
+                dim_c: t.dim_c.raw,
+                exit_reason: t.exit_reason.clone(),
+                tokens_out: t.tokens.output,
+                wall_ms: t.wall_ms,
+            });
+        }
+        let mean = |xs: &[u8]| -> f64 {
+            if xs.is_empty() {
+                0.0
+            } else {
+                xs.iter().map(|x| *x as f64).sum::<f64>() / xs.len() as f64
+            }
+        };
+        let stdev = |xs: &[u8], m: f64| -> f64 {
+            if xs.len() < 2 {
+                0.0
+            } else {
+                let var = xs
+                    .iter()
+                    .map(|x| {
+                        let d = *x as f64 - m;
+                        d * d
+                    })
+                    .sum::<f64>()
+                    / xs.len() as f64;
+                var.sqrt()
+            }
+        };
+        let totals: Vec<u8> = per_trial.iter().map(|t| t.total).collect();
+        let dim_a_vals: Vec<u8> = per_trial.iter().map(|t| t.dim_a).collect();
+        let dim_b_vals: Vec<u8> = per_trial.iter().map(|t| t.dim_b).collect();
+        let dim_c_vals: Vec<u8> = per_trial.iter().map(|t| t.dim_c).collect();
+        let mean_total = mean(&totals);
+        Self {
+            problem_id: problem_id.to_string(),
+            n,
+            per_trial,
+            mean_total,
+            stdev_total: stdev(&totals, mean_total),
+            mean_dim_a: mean(&dim_a_vals),
+            mean_dim_b: mean(&dim_b_vals),
+            mean_dim_c: mean(&dim_c_vals),
+        }
+    }
+
+    /// Pick the trial whose total is closest to the mean. Ties broken
+    /// by the first index. Used as the "representative" `ProblemScore`
+    /// for the multi-trial bench report — preserves real per-dim
+    /// integer scores, real exit_reason, real tool_calls (vs.
+    /// fabricating a synthetic average).
+    pub fn representative_index(&self) -> usize {
+        if self.per_trial.is_empty() {
+            return 0;
+        }
+        let m = self.mean_total;
+        let mut best: (usize, f64) = (0, f64::INFINITY);
+        for (i, t) in self.per_trial.iter().enumerate() {
+            let d = (t.total as f64 - m).abs();
+            if d < best.1 {
+                best = (i, d);
+            }
+        }
+        best.0
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegressionDelta {
     pub prior_grand_total: u16,

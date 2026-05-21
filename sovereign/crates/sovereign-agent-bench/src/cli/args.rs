@@ -7,6 +7,8 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
+use crate::problem::Tier;
+
 #[derive(Debug, Clone)]
 pub struct RunArgs {
     pub bench_root: PathBuf,
@@ -28,6 +30,19 @@ pub struct RunArgs {
     /// about where the run's evidence went — it's always next to the
     /// bench data.
     pub artifacts_dir: Option<PathBuf>,
+    /// Number of independent agent runs per problem. Default 1
+    /// preserves single-shot semantics; N>1 wraps the agent → witness
+    /// → judge pipeline in a loop and surfaces mean ± stdev so the
+    /// operator can tell a stable score from a lucky/unlucky single
+    /// trial. Distinct from `--judge-trials`, which only varies the
+    /// judge inside one agent run.
+    pub trials: u8,
+    /// When Some, overrides the per-problem `Tier` for this whole
+    /// run. `FromScratch` skips both `install_scaffold` and the
+    /// `prompt.md` workdir copy — measures the agent's project-
+    /// scaffolding capability separately from its algorithmic
+    /// capability. None preserves each problem's declared tier.
+    pub tier_override: Option<Tier>,
 }
 
 #[derive(Debug, Error)]
@@ -38,6 +53,8 @@ pub enum ArgsError {
     MissingValue(String),
     #[error("flag `{0}` value `{1}` is not a number")]
     BadNumber(String, String),
+    #[error("flag `--tier` expects `scaffolded` or `from-scratch`, got `{0}`")]
+    BadTier(String),
 }
 
 impl RunArgs {
@@ -55,6 +72,8 @@ impl RunArgs {
         let mut report_path = PathBuf::from("agent-bench-report.json");
         let mut pi_binary: Option<String> = None;
         let mut artifacts_dir: Option<PathBuf> = None;
+        let mut trials: u8 = 1;
+        let mut tier_override: Option<Tier> = None;
 
         let mut i = 0;
         while i < argv.len() {
@@ -117,6 +136,19 @@ impl RunArgs {
                 "--artifacts-dir" => {
                     artifacts_dir = Some(require_value("--artifacts-dir", argv, &mut i)?.into());
                 }
+                "--trials" => {
+                    let v = require_value("--trials", argv, &mut i)?;
+                    trials = v
+                        .parse()
+                        .map_err(|_| ArgsError::BadNumber("--trials".into(), v.clone()))?;
+                    if trials == 0 {
+                        trials = 1;
+                    }
+                }
+                "--tier" => {
+                    let v = require_value("--tier", argv, &mut i)?;
+                    tier_override = Some(parse_tier(&v)?);
+                }
                 "-h" | "--help" => {
                     return Err(ArgsError::UnknownFlag("--help".into()));
                 }
@@ -140,6 +172,8 @@ impl RunArgs {
             report_path,
             pi_binary,
             artifacts_dir,
+            trials,
+            tier_override,
         })
     }
 }
@@ -150,6 +184,16 @@ fn require_value(flag: &str, argv: &[String], i: &mut usize) -> Result<String, A
     }
     *i += 1;
     Ok(argv[*i].clone())
+}
+
+fn parse_tier(v: &str) -> Result<Tier, ArgsError> {
+    // Accept the canonical TOML names (Scaffolded/FromScratch) plus
+    // the kebab-case variants an operator types on the command line.
+    match v.to_ascii_lowercase().as_str() {
+        "scaffolded" => Ok(Tier::Scaffolded),
+        "from-scratch" | "fromscratch" | "from_scratch" => Ok(Tier::FromScratch),
+        _ => Err(ArgsError::BadTier(v.to_string())),
+    }
 }
 
 #[cfg(test)]
@@ -167,6 +211,43 @@ mod tests {
         assert_eq!(r.model, "commonwealth/coder");
         assert_eq!(r.judge_trials, 3);
         assert!(!r.update_baseline);
+        assert_eq!(r.trials, 1);
+    }
+
+    #[test]
+    fn parse_trials_flag() {
+        let r = RunArgs::parse(&argv(&["--trials", "5"])).unwrap();
+        assert_eq!(r.trials, 5);
+    }
+
+    #[test]
+    fn parse_trials_zero_clamps_to_one() {
+        let r = RunArgs::parse(&argv(&["--trials", "0"])).unwrap();
+        assert_eq!(r.trials, 1);
+    }
+
+    #[test]
+    fn parse_tier_from_scratch_kebab() {
+        let r = RunArgs::parse(&argv(&["--tier", "from-scratch"])).unwrap();
+        assert_eq!(r.tier_override, Some(Tier::FromScratch));
+    }
+
+    #[test]
+    fn parse_tier_scaffolded() {
+        let r = RunArgs::parse(&argv(&["--tier", "scaffolded"])).unwrap();
+        assert_eq!(r.tier_override, Some(Tier::Scaffolded));
+    }
+
+    #[test]
+    fn parse_tier_default_is_none() {
+        let r = RunArgs::parse(&[]).unwrap();
+        assert!(r.tier_override.is_none());
+    }
+
+    #[test]
+    fn parse_tier_bad_value_errors() {
+        let err = RunArgs::parse(&argv(&["--tier", "nope"])).unwrap_err();
+        assert!(matches!(err, ArgsError::BadTier(_)));
     }
 
     #[test]

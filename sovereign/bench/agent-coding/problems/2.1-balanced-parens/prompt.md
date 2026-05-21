@@ -1,4 +1,4 @@
-# Balanced parentheses (Scaffolded tier)
+# Balanced parentheses
 
 Decide whether a string of brackets is correctly nested.
 
@@ -28,21 +28,16 @@ Examples:
 
 - O(n) time, single pass through `s`.
 - `s` is guaranteed to contain only the six bracket characters.
-
-## What's in the workdir
-
-```
-.
-├── Cargo.toml
-└── src/
-    └── lib.rs   # `is_balanced` stub with `todo!()`
-```
+- Crate name is `is_balanced`. The grader rebinds
+  `is_balanced::is_balanced` exactly as declared.
 
 ## How to deliver
 
-You are running in a tools-driven harness. Mandatory loop:
+Check the workdir-state preamble above for what files exist.
+Mandatory loop:
 
-1. `write` the full file body to `src/lib.rs`.
+1. `write` whatever files are missing; finally `write` the function
+   body to `src/lib.rs`.
 2. `bash` with command `cargo build 2>&1` — if errors, fix and write again.
 3. `bash` with command `cargo test --quiet --test integration` — if any test fails, fix and write again.
 4. ONLY after step 3 shows `test result: ok` for all tests, signal completion with the `done` tool.

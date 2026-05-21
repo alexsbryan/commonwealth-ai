@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::scoring::{ProblemScore, RegressionDelta};
+use crate::scoring::{ProblemScore, ProblemTrialDetail, RegressionDelta};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchReport {
@@ -10,12 +10,27 @@ pub struct BenchReport {
     pub model: String,
     pub judge_model: String,
     pub judge_trials: u8,
+    /// Number of independent agent runs per problem this report
+    /// covers (`--trials` flag). Default 1; >1 means
+    /// `per_problem_trials` carries the per-trial breakdown.
+    #[serde(default = "default_run_trials")]
+    pub run_trials: u8,
     pub started_at: String,  // RFC3339
     pub finished_at: String, // RFC3339
     pub per_problem: Vec<ProblemScore>,
+    /// Per-trial detail when `run_trials > 1`. Each entry's
+    /// `problem_id` matches a `per_problem` entry; the headline
+    /// `ProblemScore` is the trial closest to the mean (per
+    /// `representative_index`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub per_problem_trials: Vec<ProblemTrialDetail>,
     pub grand_total: u16,
     pub max_total: u16,
     pub regression: Option<RegressionDelta>,
+}
+
+fn default_run_trials() -> u8 {
+    1
 }
 
 impl BenchReport {
@@ -31,8 +46,8 @@ impl BenchReport {
     pub fn text_rollup(&self) -> String {
         let mut out = String::new();
         out.push_str(&format!(
-            "Agent-bench report — agent={} model={} judge={} trials={}\n",
-            self.agent, self.model, self.judge_model, self.judge_trials
+            "Agent-bench report — agent={} model={} judge={} judge_trials={} run_trials={}\n",
+            self.agent, self.model, self.judge_model, self.judge_trials, self.run_trials
         ));
         out.push_str(&format!(
             "Started {} → Finished {}\n",
@@ -52,6 +67,35 @@ impl BenchReport {
                 wall = p.wall_ms,
                 partial = if p.is_partial { "  (partial)" } else { "" },
             ));
+            // Multi-trial supplement: per-trial totals + mean ± stdev
+            // + exit_reason histogram. Surfaces the "lucky vs stable"
+            // signal the operator needs to read variance honestly.
+            if let Some(d) = self
+                .per_problem_trials
+                .iter()
+                .find(|d| d.problem_id == p.problem_id)
+            {
+                let per_trial: Vec<String> =
+                    d.per_trial.iter().map(|t| t.total.to_string()).collect();
+                let mut exit_counts: std::collections::BTreeMap<&str, u32> =
+                    std::collections::BTreeMap::new();
+                for t in &d.per_trial {
+                    *exit_counts.entry(t.exit_reason.id()).or_insert(0) += 1;
+                }
+                let exit_mix: Vec<String> = exit_counts
+                    .iter()
+                    .map(|(k, v)| format!("{k}×{v}"))
+                    .collect();
+                out.push_str(&format!(
+                    "  {:<32} N={n} mean={mean:.2}±{stdev:.2} totals=({tot}) exit_mix={mix}\n",
+                    "",
+                    n = d.n,
+                    mean = d.mean_total,
+                    stdev = d.stdev_total,
+                    tot = per_trial.join(","),
+                    mix = exit_mix.join(","),
+                ));
+            }
         }
         out.push_str("\n");
         out.push_str(&format!(
@@ -123,9 +167,11 @@ mod tests {
             model: "commonwealth/coder".into(),
             judge_model: "commonwealth/coder".into(),
             judge_trials: 3,
+            run_trials: 1,
             started_at: "2026-05-20T12:00:00Z".into(),
             finished_at: "2026-05-20T12:10:00Z".into(),
             per_problem: vec![fake_score("3.2-lights-out", 3, 2, 2)],
+            per_problem_trials: vec![],
             grand_total: 7,
             max_total: 9,
             regression: None,
@@ -134,5 +180,38 @@ mod tests {
         assert!(s.contains("3.2-lights-out"));
         assert!(s.contains("Grand total: 7 / 9"));
         assert!(s.contains("commonwealth/coder"));
+        assert!(s.contains("run_trials=1"));
+        assert!(!s.contains("mean="));
+    }
+
+    #[test]
+    fn text_rollup_surfaces_multi_trial_variance() {
+        use crate::scoring::ProblemTrialDetail;
+        let trials = vec![
+            fake_score("2.2-x", 3, 2, 3),
+            fake_score("2.2-x", 0, 1, 0),
+            fake_score("2.2-x", 3, 2, 2),
+        ];
+        let detail = ProblemTrialDetail::from_trials("2.2-x", &trials);
+        let r = BenchReport {
+            agent: "pi".into(),
+            model: "commonwealth/primary".into(),
+            judge_model: "commonwealth/primary".into(),
+            judge_trials: 1,
+            run_trials: 3,
+            started_at: "2026-05-21T20:00:00Z".into(),
+            finished_at: "2026-05-21T21:00:00Z".into(),
+            per_problem: vec![fake_score("2.2-x", 3, 2, 2)],
+            per_problem_trials: vec![detail],
+            grand_total: 7,
+            max_total: 9,
+            regression: None,
+        };
+        let s = r.text_rollup();
+        assert!(s.contains("run_trials=3"));
+        assert!(s.contains("N=3"));
+        assert!(s.contains("mean="));
+        assert!(s.contains("totals=(8,1,7)"));
+        assert!(s.contains("exit_mix=completed×3"));
     }
 }

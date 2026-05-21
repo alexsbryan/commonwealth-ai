@@ -524,15 +524,28 @@ pub(crate) fn parse_tool_envelope_direct(
     let without_think = strip_leading_think_block(text);
     let without_close = strip_trailing_tool_call_close(without_think.as_ref());
     let trimmed = without_close.trim();
-    let parsed: Result<serde_json::Value, _> =
-        serde_json::from_str(trimmed).or_else(|_| {
-            // Mirror the parser-hardening pre-pass: unescaped raw
-            // newlines inside string values are common from
-            // Qwen-Coder. Re-try on a normalized copy.
+    // Use a streaming JSON deserializer to consume the FIRST complete
+    // JSON value and ignore trailing garbage. Without this, an input
+    // like `{envelope}\n<tool_call>` (model started a second
+    // tool-call chain but ran out of tokens, observed in 2026-05-21
+    // 35B primary sweep across 1.1/2.1/2.2/3.2) failed
+    // `serde_json::from_str`'s strict "entire input must be JSON"
+    // requirement → empty result → daemon emitted envelope as text
+    // → pi parser saw text → toolCall lost.
+    //
+    // StreamDeserializer reads one value and stops; trailing
+    // `<tool_call>` / `</tool_call>` / other model-emission noise
+    // doesn't break the parse. This closes all "model emits envelope
+    // then arbitrary trailing content" variants structurally —
+    // including ones not yet observed.
+    let obj_opt = parse_first_json_value(trimmed)
+        .or_else(|| {
+            // Fall back to escape-fixup once. Qwen-Coder sometimes
+            // emits unescaped raw newlines inside string values.
             let fixed = sovereign_inference::embedded::escape_unescaped_control_chars_in_string_values(trimmed);
-            serde_json::from_str(&fixed)
+            parse_first_json_value(&fixed)
         });
-    let Ok(obj) = parsed else { return Vec::new() };
+    let Some(obj) = obj_opt else { return Vec::new() };
     let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
         return Vec::new();
     };
@@ -545,6 +558,20 @@ pub(crate) fn parse_tool_envelope_direct(
         name: name.to_string(),
         arguments: args_str,
     }]
+}
+
+/// Parse the first complete JSON value from `text` using a streaming
+/// deserializer. Returns `Some(value)` when the prefix is a valid
+/// JSON object; ignores any trailing garbage (markers, partial
+/// envelopes, control chars). Returns `None` when no leading JSON
+/// value parses.
+fn parse_first_json_value(text: &str) -> Option<serde_json::Value> {
+    let mut stream =
+        serde_json::Deserializer::from_str(text).into_iter::<serde_json::Value>();
+    match stream.next() {
+        Some(Ok(v)) => Some(v),
+        _ => None,
+    }
 }
 
 /// True when the `SOVEREIGN_FORCE_TOOL_CALLS` env-var is set to a
@@ -1823,6 +1850,43 @@ mod adapter_translation_tests {
         let calls = super::parse_tool_envelope_direct(text);
         assert_eq!(calls.len(), 1, "normalization should recover");
         assert_eq!(calls[0].name, "write");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_ignores_trailing_open_marker() {
+        // 2026-05-21 N=3 sweep failure mode: 35B emits envelope + a
+        // stray `<tool_call>` opener at the end (intended to chain a
+        // second call but ran out of tokens). Strict serde_json
+        // rejected trailing data → daemon emitted as text → pi lost
+        // the tool call. Streaming parser must consume first complete
+        // JSON value and ignore the trailing marker.
+        let text = r#"{"name":"write","arguments":{"path":"src/lib.rs","content":"pub fn f() {}\n"}}
+<tool_call>"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1, "should extract envelope despite trailing <tool_call>");
+        assert_eq!(calls[0].name, "write");
+        assert!(calls[0].arguments.contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_ignores_trailing_garbage_text() {
+        // Class B fix generalizes beyond `<tool_call>` — any trailing
+        // garbage after a valid envelope is fine.
+        let text = r#"{"name":"bash","arguments":{"command":"ls"}} blah blah"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "bash");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_ignores_second_envelope() {
+        // Two complete envelopes in a row: take the first, leave the
+        // second (pi protocol is one tool call per turn).
+        let text = r#"{"name":"read","arguments":{"path":"a"}} {"name":"read","arguments":{"path":"b"}}"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "read");
+        assert!(calls[0].arguments.contains("\"a\""));
     }
 
     #[test]

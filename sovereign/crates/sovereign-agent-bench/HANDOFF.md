@@ -7,6 +7,109 @@ OICP-runner diary) and the plan at
 
 ---
 
+## 2026-05-21 late evening — `--trials N` + `--tier from-scratch` flags
+
+Both measurement flags shipped. Closes two gaps the prior session
+flagged in *Next-iter (ordered, smallest-first)*: #1 multi-trial
+averaging and #2 from-scratch A/B without authoring tier-2 variants.
+
+### `--trials N` (`src/cli/args.rs`, `src/cli/run.rs`, `src/scoring.rs`, `src/report.rs`)
+
+Default 1 preserves single-shot semantics. N>1 wraps the agent → witness
+→ judge pipeline in a loop per problem.
+
+Data shape:
+- `ProblemTrialDetail { problem_id, n, per_trial: Vec<TrialEntry>, mean_*, stdev_total }`
+- `BenchReport.per_problem_trials: Vec<ProblemTrialDetail>` (serde skip if empty)
+- Headline `ProblemScore` is the trial whose total is closest to mean
+  (`representative_index`). Honest integer dims/exit/tool_calls rather
+  than a synthetic average — keeps regression compare and per-dim
+  scoring meaningful while the per_trial vec preserves the
+  distribution alongside.
+- Per-trial artifacts under `<problem>/trial-N/` when N>1; flat layout
+  when N=1 (preserves `failure_class::classify_from_dir`'s expected
+  shape + existing operator habits).
+
+Text rollup multi-trial line:
+```
+1.1-reverse-string               0/3/0 = 3/9   exit=completed        tokens(out)=   483 wall=52932ms
+                                 N=2 mean=1.50±1.50 totals=(3,0) exit_mix=completed×2
+```
+
+### `--tier scaffolded|from-scratch` (`src/cli/args.rs`, `src/cli/run.rs`)
+
+`from-scratch` override skips both `install_scaffold` AND the
+`prompt.md` workdir copy. Same fixture suite at grading time → direct
+A/B between "scaffold provided" and "agent must author it." Measures
+scaffold's contribution to success rate.
+
+Smoke validated on 1.1 (commonwealth/coder):
+- Default (scaffolded): variance signal real — `--trials 2` produced
+  (3,0). Trial 1 emitted a tool-envelope JSON in text content with
+  trailing `<tool_call>` marker but no real `toolCall` event. Pi
+  declared agent_end with no write. Parser/grammar issue distinct
+  from the bench surface — flag as system-debt for next session.
+- `--tier from-scratch`: workdir confirmed empty before agent ran;
+  9B coder scored 0/9 — couldn't bootstrap a Cargo project from one
+  chat turn. Honest signal: scaffolding capability ≠ algorithmic
+  capability on this model.
+
+### CLI surface additions
+```
+--trials N                   (default: 1) — full agent-loop trials per problem; surfaces mean ± stdev
+--tier scaffolded|from-scratch  override per-problem tier — `from-scratch` skips install_scaffold AND
+                             the prompt.md workdir copy.
+```
+
+### Same-path write-thrash detector (`runners/pi.rs`)
+
+Trial-3 of the 2.2 N=3 was: write→bash→write→bash→write→bash→write→bash→write→write
+(two trailing writes to `src/lib.rs` post-verification, typo on the
+last). The original `consecutive_writes_no_bash` counter at threshold
+5 missed it — 4 bashes had reset the counter, the trailing 2 writes
+never reached 5.
+
+Replaced with `ThrashTracker` (pure helper, 7 unit tests):
+- Tracks `last_write_path` + same-path consecutive write count.
+- `bash` resets both. `write` to a different path resets and tracks
+  the new path. `write` to the same path increments.
+- `SAME_PATH_WRITE_THRESHOLD = 2` — fires on the SECOND same-file
+  write since the last bash.
+
+Why same-path semantics (not raw consecutive count):
+- Tier=FromScratch needs to allow `write Cargo.toml; write src/lib.rs`
+  before first bash as healthy scaffolding (3-test case
+  `thrash_tracker_different_paths_do_not_kill` pins it).
+- Successful 2.2 trials wrote each file at most once per bash cycle
+  (the canonical `read read read read write bash done` shape);
+  threshold=2 same-path doesn't bother them.
+- Trial-3 mode is now caught by the
+  `thrash_tracker_post_verify_two_writes_fires` regression test —
+  4 bash cycles followed by 2 same-path writes → SIGTERM.
+
+`ExitReason::WriteThrash { consecutive_writes, threshold }` reuses
+the existing failure-class taxonomy; `consecutive_writes` now means
+"same-path" instead of "raw consecutive."
+
+### Outstanding before Lights Out attempt
+1. **Propagate Tier-1 minimum-confusion stack** (smoke tests, clean
+   stubs, stage-discipline prompt) to 2.1, 1.3, 1.2, 1.1. The
+   `prompt.md`-copy layer is already harness-side via `run.rs`.
+2. **Tier-2 FromScratch sweep**: now that `--tier from-scratch` lands,
+   run 1.1 / 1.2 / 1.3 under both tiers to surface the scaffold
+   delta. 1.x problems are simple enough that a capable agent should
+   write Cargo.toml + lib.rs + done. The signal: how much of current
+   1.x scores comes from the scaffold, how much from the model.
+3. **Multi-trial smoke on 2.2** under same-path detector. Repro the
+   prior retest with `--trials 5` to see whether tightening the
+   threshold from 5 to 2 (same-path) and harness-level done-loop fix
+   pushes mean above 6/9 reliably.
+4. **F-OBS** (`/internal/runtime/slots` endpoint) — still pinned in
+   memory; not blocking bench iteration, but `/status.loaded_models`
+   remains a hardcoded lie at `capabilities.rs:139`.
+
+---
+
 ## 2026-05-21 evening — H4 write-thrash + alias-mode unlock
 
 **Decisive intervention.** N=5 on 2.2-group-anagrams under 35B primary

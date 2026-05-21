@@ -1,4 +1,4 @@
-# Binary search — leftmost insertion point (Scaffolded tier)
+# Binary search — leftmost insertion point
 
 Implement the canonical `lower_bound` / `bisect_left` operation on a
 sorted array.
@@ -27,23 +27,16 @@ Examples:
 - Time complexity must be O(log n). The O(n) linear scan is rejected.
 - `arr` is guaranteed sorted in non-decreasing order.
 - Must work for empty arrays.
-
-## What's in the workdir
-
-```
-.
-├── Cargo.toml      # already correct; do not modify
-└── src/
-    └── lib.rs      # `lower_bound` stub with `todo!()`
-```
+- Crate name is `lower_bound`. The grader rebinds
+  `lower_bound::lower_bound` exactly as declared.
 
 ## How to deliver
 
-You are running in a tools-driven harness. **Use the `write` tool to
-rewrite `src/lib.rs` in full** with your implementation. Then verify
-your work by running `cargo test --quiet --test integration` via the
-`bash` tool — if any tests fail, fix the implementation and write
-again. Signal completion with the `done` tool.
+Check the workdir-state preamble above for what files exist.
+**Use the `write` tool** to author whatever is missing and to
+implement `lower_bound`. Verify by running `cargo test --quiet
+--test integration` via the `bash` tool — if any tests fail, fix
+and write again. Signal completion with the `done` tool.
 
 Prefer `write` over `edit` (exact-match brittleness).
 

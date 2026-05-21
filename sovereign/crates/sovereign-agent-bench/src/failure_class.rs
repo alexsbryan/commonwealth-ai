@@ -37,9 +37,11 @@
 //!     mutating call (write/edit/bash) AND tests fail. The agent
 //!     tried; the algorithm was wrong.
 //! 14. **WriteThrash** — agent exit = `write_thrash`. Model emitted
-//!     N consecutive `write` tool calls without an interleaving
-//!     `bash` verify. Each rewrite overlays partial code on top of
-//!     partial code and the final file is incoherent. Distinct from
+//!     two consecutive `write` tool calls to the SAME path without
+//!     an interleaving `bash` verify. Each rewrite overlays partial
+//!     code on top of partial code and the final file is incoherent.
+//!     Different paths reset the counter — healthy multi-file
+//!     scaffolding under tier=FromScratch is not thrash. Distinct from
 //!     LoopTrap because the workdir IS changing on each tool call
 //!     — the no-progress detector wouldn't catch this. Distinct from
 //!     AlgorithmicWrong because the model never stabilized on a single
@@ -112,7 +114,7 @@ impl FailureClass {
             FailureClass::EmptyResponse => "agent produced no output",
             FailureClass::ToolCallNoop => "agent only read/grep'd, never wrote",
             FailureClass::AlgorithmicWrong => "agent wrote code; tests failed",
-            FailureClass::WriteThrash => "agent wrote >=5x without bash verify between",
+            FailureClass::WriteThrash => "agent wrote same path 2x without bash verify between",
         }
     }
 
