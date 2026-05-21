@@ -522,7 +522,7 @@ pub(crate) fn parse_tool_envelope_direct(
     // `{"name":"read",...}</tool_call>` under grammar, daemon
     // extracted zero tool calls.
     let without_think = strip_leading_think_block(text);
-    let without_close = strip_trailing_tool_call_close(without_think);
+    let without_close = strip_trailing_tool_call_close(without_think.as_ref());
     let trimmed = without_close.trim();
     let parsed: Result<serde_json::Value, _> =
         serde_json::from_str(trimmed).or_else(|_| {
@@ -561,20 +561,25 @@ fn force_tool_calls_env() -> bool {
         .unwrap_or(false)
 }
 
-/// Strip a leading `<think>...</think>` block from text. Returns
-/// the original text when no leading think block is present, or
-/// when the block is unterminated (model emitted `<think>` but the
-/// generation ended before `</think>`). Whitespace before the
-/// opener is preserved — `.trim()` after this call handles it.
-fn strip_leading_think_block(text: &str) -> &str {
-    let trimmed = text.trim_start();
-    let Some(rest) = trimmed.strip_prefix("<think>") else {
-        return text;
-    };
-    let Some(end) = rest.find("</think>") else {
-        return text;
-    };
-    &rest[end + "</think>".len()..]
+/// Strip `<think>` and `</think>` tags from text, KEEPING the
+/// content between them. Under llguidance schema-driven grammar,
+/// the chat template's `<think>` opener gets prepended to the
+/// model's generation; the model then emits the JSON tool envelope
+/// INSIDE the think block, and the chat template appends
+/// `</think>` after. Removing the whole block (as an earlier
+/// version of this function did) loses the JSON envelope. Stripping
+/// just the tags leaves the JSON intact for `serde_json::from_str`
+/// to parse.
+///
+/// Returns a `Cow<str>` because the no-tag path is the common case
+/// for non-think models (Qwopus3.5-Coder under instruct mode); only
+/// allocate when we actually have tags to remove.
+fn strip_leading_think_block(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.contains("<think>") && !text.contains("</think>") {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let stripped = text.replace("<think>", "").replace("</think>", "");
+    std::borrow::Cow::Owned(stripped)
 }
 
 /// Strip a trailing `</tool_call>` marker (and any whitespace
@@ -1777,12 +1782,16 @@ mod adapter_translation_tests {
     }
 
     #[test]
-    fn parse_tool_envelope_direct_strips_leading_think_block() {
-        // Mirror: Qwen-template chat-prefix `<think>...</think>` may
-        // wrap the bare JSON. Without the strip, JSON parse fails.
-        let text = r#"<think>I plan to read.</think>{"name":"read","arguments":{"path":"a"}}"#;
+    fn parse_tool_envelope_direct_strips_think_tags_keeps_content() {
+        // Old behaviour stripped the whole `<think>...</think>` block.
+        // New behaviour strips only the tags so the JSON envelope
+        // INSIDE the block (which happens under llguidance schema +
+        // Qwen chat template) survives parsing.
+        // The think prefix here contains arbitrary prose; the
+        // envelope-shaped JSON is INSIDE the tags.
+        let text = r#"<think>{"name":"read","arguments":{"path":"a"}}</think>"#;
         let calls = super::parse_tool_envelope_direct(text);
-        assert_eq!(calls.len(), 1);
+        assert_eq!(calls.len(), 1, "JSON inside think must survive strip");
         assert_eq!(calls[0].name, "read");
     }
 
