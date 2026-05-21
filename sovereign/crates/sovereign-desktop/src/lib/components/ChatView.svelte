@@ -1105,6 +1105,8 @@
       <AttachmentBanner
         filename={attachedAsset.title || attachedAsset.filename}
         chunksCreated={attachedAsset.chunk_count}
+        assetId={attachedAsset.id}
+        initialState={attachedAsset.state}
         onremove={() => { attachedAsset = null; attachment = null; }}
       />
     {:else if attachment}

@@ -213,8 +213,41 @@
     }, 3000);
   }
 
+  async function handleCodeCopy(btn: HTMLButtonElement) {
+    const encoded = btn.dataset.code;
+    if (!encoded) return;
+    try {
+      const bin = atob(encoded);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const text = new TextDecoder().decode(bytes);
+      await navigator.clipboard.writeText(text);
+      const original = btn.textContent ?? "Copy";
+      btn.textContent = "Copied";
+      btn.classList.add("copied");
+      setTimeout(() => {
+        if (btn.isConnected) {
+          btn.textContent = original;
+          btn.classList.remove("copied");
+        }
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to copy code:", err);
+    }
+  }
+
   function handleProseClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
+
+    // Code-block copy button — handled by event delegation so
+    // streaming-coalesced re-renders don't need per-block listeners.
+    const copyBtn = target.closest<HTMLButtonElement>(".code-block-copy");
+    if (copyBtn) {
+      e.preventDefault();
+      void handleCodeCopy(copyBtn);
+      return;
+    }
+
     if (!target.classList.contains("source-citation")) return;
 
     const sourceName = target.getAttribute("data-source");

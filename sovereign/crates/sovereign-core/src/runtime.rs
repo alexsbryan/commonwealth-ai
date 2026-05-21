@@ -99,7 +99,14 @@ On uncertainty:\n\
 - \"I don't know\" is an acceptable answer. \"I'm not certain, but...\" followed by \
 clearly-labelled general knowledge is acceptable.\n\
 - Fabricating specific facts (names, statistics, dates, roster members) to fill a gap \
-is never acceptable, even if it would make the response sound more complete.";
+is never acceptable, even if it would make the response sound more complete.\n\n\
+On tool results:\n\
+- If a tool returns no useful results, an error, or an empty payload, continue with \
+what you know and tell the user briefly what didn't work. One short acknowledgement \
+is enough; do not apologise multiple times or restate the failure.\n\
+- An empty search result is itself information. Say \"I didn't find coverage of X in \
+your knowledge base\" or \"the web search returned nothing relevant\" and then answer \
+from training if you can do so honestly under the uncertainty rules above.";
 
 /// Prepended to Primary-slot completions when the active skill
 /// operates in the **relational** register (`[inference] register =
@@ -7543,9 +7550,34 @@ impl Runtime {
                 intent = ?intent,
                 "runtime: stream path — KnowledgeQuery/ComparisonQuery with token streaming"
             );
+
+            // RetrievalStart — fire immediately so the desktop chip
+            // appears before the corpus search begins. Bypasses
+            // `try_emit_narration` (which suppresses below 1.5s
+            // elapsed) because the user is staring at typing-dots
+            // and needs to see activity within 200ms. RetrievalComplete
+            // below remains gated by the suppression rules.
+            let retrieval_start_at = std::time::Instant::now();
+            self.routing_events
+                .emit_turn_narration(TurnNarration {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    event: NarrationEvent {
+                        phase: NarrationPhase::RetrievalStart,
+                        text: "Searching your knowledge…".to_string(),
+                        elapsed_ms: 0,
+                    },
+                })
+                .await;
+
             let plan = self
                 .prepare_knowledge_query_plan(message, &context, &intent, scope.as_deref())
                 .await;
+            tracing::debug!(
+                retrieval_ms = retrieval_start_at.elapsed().as_millis() as u64,
+                chunks = plan.chunks.len(),
+                "runtime:retrieval_start_to_complete"
+            );
 
             // PR5 — post-retrieval retrieval-miss diversion. Off-
             // target evidence shape (dispersed across ≥3 sources,
@@ -8048,6 +8080,26 @@ impl Runtime {
             let stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
                 Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx));
             return Ok(StreamHandle { message_id, stream });
+        }
+
+        // RetrievalStart — DeepQuery streaming path. Skipped for
+        // SimpleQuery because that intent is a quick factual answer
+        // and the existing RetrievalComplete narration is also gated
+        // off for it (chunks typically empty). Fires immediately so
+        // the chip is on screen before `prepare_knowledge_context`
+        // returns.
+        if !matches!(intent, Intent::SimpleQuery) {
+            self.routing_events
+                .emit_turn_narration(TurnNarration {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    event: NarrationEvent {
+                        phase: NarrationPhase::RetrievalStart,
+                        text: "Searching your knowledge…".to_string(),
+                        elapsed_ms: 0,
+                    },
+                })
+                .await;
         }
 
         // 4. Search knowledge + build prompt (shared with handle_simple).
@@ -11951,7 +12003,79 @@ impl Runtime {
             turn_index: 0,
         };
 
-        let result = tool.execute(&params, &tool_ctx).await?;
+        // Tool-activity narration — bracket the tool.execute call with
+        // Start/Complete frames. Bypasses `try_emit_narration` (which
+        // suppresses under 1.5s elapsed) because tool dispatch needs to
+        // surface immediately for the "feels alive" UX. The call_id
+        // correlates Start with Complete so the desktop can pair them
+        // even if they arrive out of order with other narration frames.
+        let call_id = uuid::Uuid::new_v4().to_string();
+        let (session_id, session_elapsed_ms) = self
+            .sessions
+            .latest_for_conversation(conversation_id)
+            .map(|s| (s.id, s.started_at.elapsed().as_millis() as u64))
+            .unwrap_or_default();
+        let tool_start = std::time::Instant::now();
+        let resolved_label = std::path::Path::new(&resolved_source)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(resolved_source.as_str())
+            .to_string();
+        self.routing_events
+            .emit_turn_narration(TurnNarration {
+                session_id: session_id.clone(),
+                conversation_id: conversation_id.to_string(),
+                event: NarrationEvent {
+                    phase: NarrationPhase::ToolInvocationStart {
+                        call_id: call_id.clone(),
+                        tool_id: "document_operation".to_string(),
+                        summary: format!("Analyzing {resolved_label}"),
+                    },
+                    text: format!(
+                        "Analyzing {resolved_label} — {chunk_count} chunk{} across {word_count} words",
+                        if chunk_count == 1 { "" } else { "s" }
+                    ),
+                    elapsed_ms: session_elapsed_ms,
+                },
+            })
+            .await;
+
+        let exec_result = tool.execute(&params, &tool_ctx).await;
+        let elapsed_after = session_elapsed_ms + tool_start.elapsed().as_millis() as u64;
+        let (ok, result_summary) = match &exec_result {
+            Ok(out) => {
+                let chars = match out {
+                    StepOutput::Text(t) => t.len(),
+                    StepOutput::Json(v) => {
+                        serde_json::to_string(v).map(|s| s.len()).unwrap_or(0)
+                    }
+                    _ => 0,
+                };
+                (
+                    true,
+                    format!("Synthesized {chars} chars from {chunk_count} chunks"),
+                )
+            }
+            Err(e) => (false, format!("Document analysis failed: {e}")),
+        };
+        self.routing_events
+            .emit_turn_narration(TurnNarration {
+                session_id: session_id.clone(),
+                conversation_id: conversation_id.to_string(),
+                event: NarrationEvent {
+                    phase: NarrationPhase::ToolInvocationComplete {
+                        call_id: call_id.clone(),
+                        tool_id: "document_operation".to_string(),
+                        ok,
+                        result_summary: result_summary.clone(),
+                    },
+                    text: result_summary,
+                    elapsed_ms: elapsed_after,
+                },
+            })
+            .await;
+
+        let result = exec_result?;
         let result_text = match &result {
             StepOutput::Text(t) => t.clone(),
             StepOutput::Json(v) => serde_json::to_string_pretty(v).unwrap_or_default(),

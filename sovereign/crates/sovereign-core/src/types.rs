@@ -1920,6 +1920,42 @@ pub enum NarrationPhase {
         stage: String,
         error: String,
     },
+
+    // ── Tool-invocation frames (table-stakes "Searching for X…" UX) ──
+    //
+    // Unlike the pipeline-stage frames above (Routing → Retrieval →
+    // Curation → Drafting → Presentation, which fire at most once each),
+    // tool invocations can fan out — a single turn may call web_search +
+    // knowledge_search in parallel, then web_fetch on a follow-up. The
+    // `call_id` correlates Start with Complete so the desktop can resolve
+    // out-of-order arrivals back into per-call cards.
+    //
+    // These frames intentionally bypass the 3-event narration cap and
+    // 5s-elapsed suppression in `QuerySession`: the user needs to see
+    // tool activity *immediately* (within 200ms) for the "feels alive"
+    // contract. Emit via `emit_turn_narration` directly, not via
+    // `try_emit_narration`.
+    /// A tool call has started. `tool_id` is the canonical id
+    /// (`web_search`, `knowledge_search`, `web_fetch`, `document`, etc.);
+    /// `summary` is a one-line user-facing description ("Searching the
+    /// web for *quantum entanglement*", "Reading docs.python.org") that
+    /// the desktop chip can render without re-interpreting tool args.
+    ToolInvocationStart {
+        call_id: String,
+        tool_id: String,
+        summary: String,
+    },
+    /// A tool call has finished. `ok` distinguishes success (chip turns
+    /// done-coloured) from failure (chip turns muted, paired with the
+    /// graceful-failure prompt rule). `result_summary` is a short
+    /// user-facing outcome ("Retrieved 4 results", "No matches found",
+    /// "404 Not Found") — never the raw tool output.
+    ToolInvocationComplete {
+        call_id: String,
+        tool_id: String,
+        ok: bool,
+        result_summary: String,
+    },
 }
 
 /// One narration entry emitted in the model's voice during a long
