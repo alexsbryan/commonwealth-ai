@@ -1712,6 +1712,57 @@ co-evolution clusters + staleness queue); `Investigation queue`
 method-function / abstract-principle / self-reference / worth-a-closer-look
 buckets); `Internal` (rough-edges summary).
 
+### 4.17 Agent-coding battery — `sovereign-agent-bench`
+
+Eight-problem graded battery measuring how well an end-to-end coding
+agent (pi / opencode / codex / aider, model-agnostic) drives a real
+software-engineering task to completion. Replaces the OICP-types
+one-shot demo (`HANDOFF.md`) — that proved plumbing works; this
+*measures* how well plumbing works on diverse tasks.
+
+Problem mix: three algorithmic (1.1 Regex Shortest Path, 1.2 Group
+Knapsack, 1.3 Tree LIS), three system-design (2.1 Strict-Order Global
+Counter, 2.2 Mutual Friend at 1B Scale, 2.3 Zero-Knowledge BMI), two
+code tests (3.1 Hex Conway, 3.2 Light's Out). Witness languages span
+Rust × 3, Go × 2, TypeScript × 2, Python × 1. Each problem scored
+`0..=3` on three dimensions (correctness / approach / efficiency),
+`72` max total.
+
+**Crate:** `sovereign/crates/sovereign-agent-bench/` (~3.5k lines,
+14 files all under the §3.1 800-line ceiling). Bench data lives at
+`sovereign/bench/agent-coding/problems/<id>/` (TOML config + prompt.md
++ rubric.md + held-out fixtures), with dated baselines under
+`baselines/agent-coding/<date>-<agent>-<model>.json` and a
+`latest.json` symlink for regression compare.
+
+**CLI:** `sovereign agent-bench <run|list|show>`. The `run` subcommand
+launches the chosen agent on each selected problem in an ephemeral
+`TempDir` workdir with `env_clear()`'d credentials, monitors a JSONL
+event stream for the token-budget kill (default 16K output tokens
+per problem), copies held-out test fixtures into the workdir AFTER
+the agent exits, runs the witness verify command, parses test
+results via a per-language parser (cargo libtest / `go test -json` /
+vitest text / pytest text), buckets the pass fraction into a 0..=3
+score, runs the LLM judge for the judged dimensions (default 3 trials,
+majority vote + `coverage_mean` continuous signal per
+`runner_threads.rs:597-680` pattern), assembles a `BenchReport`,
+optionally retargets the `latest.json` baseline, and surfaces a
+regression delta. Agent dispatch is via `AgentRunnerRegistry`
+(mirror of `corpus-engine::DomainRegistry`); the MVS ships the `pi`
+runner — opencode / codex / aider land as later PRs.
+
+**MVS scope (PR 1):** crate scaffold + trait + registry + `PiRunner` +
+`MockAgentRunner` + problem loader + cargo-test witness parser +
+HTTP judge + multi-trial aggregator + scoring + report + baseline
+persistence + 3.2 Light's Out problem data + `tests/mvs_pipeline.rs`
+(end-to-end against the mock runner + stub judge; no GPU/network).
+
+**Setup:** `bash scripts/setup-pi-provider.sh` writes
+`~/.pi/agent/models.json` with a `commonwealth` provider pointing
+at `http://localhost:9741/v1`. Idempotent.
+
+**Plan:** `~/.claude/plans/i-want-to-pickup-sorted-eagle.md`.
+
 ---
 
 ## 5. Commonwealth — The Coordination Daemon

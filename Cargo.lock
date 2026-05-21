@@ -9748,6 +9748,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "sovereign-agent-bench"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "clap",
+ "futures",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "toml 0.8.2",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "sovereign-atos"
 version = "0.1.0"
 dependencies = [
@@ -9792,6 +9814,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-agent-bench",
  "sovereign-atos",
  "sovereign-core",
  "sovereign-inference",

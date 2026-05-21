@@ -1,5 +1,19 @@
 # ATOS Runner — improvement loop handoff
 
+## 2026-05-20 — superseded as the measurement surface
+
+The OICP-types demo proved end-to-end plumbing (opencode → daemon →
+tools → file edited → cargo green). The graded battery in
+`sovereign/crates/sovereign-agent-bench/` (see SYSTEM_OVERVIEW §4.17)
+is the canonical measurement surface from here on — eight problems,
+three dimensions × `0..=3`, `72` max. Daemon changes that previously
+shipped against vibes ("the OICP loop got faster") now ship against a
+numeric regression signal, run via `sovereign agent-bench run
+--update-baseline`.
+
+This handoff doc stays as the diary of how we got here; the bench is
+the contract.
+
 ## Direction change (2026-05-07)
 
 The sovereign-cli runner (`sovereign atos run`) is being replaced by an opencode-ralph + MCP tools approach. The daemon provides `atos_verify` (the gate), opencode-ralph provides the loop, and the agent follows an ATOS loop prompt.

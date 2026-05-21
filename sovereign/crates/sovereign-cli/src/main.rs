@@ -673,6 +673,13 @@ async fn async_main() {
                 let code = bench_cmd::run_bench(&raw_args[1..]).await;
                 std::process::exit(code);
             }
+            "agent-bench" => {
+                // Eight-problem coding battery; subprocess-driven
+                // pi / opencode / codex runners. See SYSTEM_OVERVIEW §11
+                // and `sovereign/crates/sovereign-agent-bench/`.
+                let code = sovereign_agent_bench::run_agent_bench(&raw_args[1..]).await;
+                std::process::exit(code as i32);
+            }
             "search-gym" => {
                 util::tracing_init::init_tracing("sovereign_cli=info");
                 let code = search_gym_cmd::run_search_gym(&raw_args[1..]).await;

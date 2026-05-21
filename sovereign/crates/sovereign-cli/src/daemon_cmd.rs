@@ -2829,8 +2829,17 @@ async fn wait_for_shutdown() {
     // path with no breadcrumb naming the trigger — was it SIGINT
     // from a stray Ctrl-C, SIGTERM from a peer `sovereign daemon
     // stop`, launchd OOM, or something else? Without a log, the
-    // post-mortem stalls. Emit the signal source here so the next
-    // incident points at the trigger immediately.
+    // post-mortem stalls. Emit the signal source + process context
+    // (PID, PPID, peak RSS, jetsam hint) so the next incident
+    // surfaces the trigger immediately.
+    //
+    // We can't get the sender PID — `tokio::signal::unix::signal`
+    // abstracts away `SA_SIGINFO`, so siginfo.si_pid is unreachable
+    // without dropping to raw `sigaction()`. Logging local context
+    // is the practical second-best: if RSS is in the jetsam danger
+    // zone (>~24 GiB on a 64 GiB host) and the signal was SIGTERM,
+    // the operator gets a strong hint to inspect Console for a
+    // "low memory" jetsam event.
     #[cfg(unix)]
     {
         let mut sigterm = match tokio::signal::unix::signal(
@@ -2843,16 +2852,16 @@ async fn wait_for_shutdown() {
                     "sigterm handler install failed — falling back to SIGINT-only"
                 );
                 let _ = tokio::signal::ctrl_c().await;
-                tracing::info!(signal = "SIGINT", path = "fallback", "daemon: shutdown signal received");
+                log_shutdown_context("SIGINT", "fallback");
                 return;
             }
         };
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
-                tracing::info!(signal = "SIGINT", "daemon: shutdown signal received");
+                log_shutdown_context("SIGINT", "primary");
             }
             _ = sigterm.recv() => {
-                tracing::info!(signal = "SIGTERM", "daemon: shutdown signal received");
+                log_shutdown_context("SIGTERM", "primary");
             }
         }
     }
@@ -2861,6 +2870,64 @@ async fn wait_for_shutdown() {
     {
         let _ = tokio::signal::ctrl_c().await;
         tracing::info!(signal = "ctrl_c", "daemon: shutdown signal received");
+    }
+}
+
+/// One-line shutdown-receipt log with forensic context. Field names
+/// are stable so `grep "daemon: shutdown signal received"` walks the
+/// trail across runs.
+#[cfg(unix)]
+fn log_shutdown_context(signal: &'static str, path: &'static str) {
+    let pid = std::process::id();
+    let ppid: i64 = unsafe { libc::getppid() } as i64;
+    let rss_mb = peak_rss_mb();
+    let jetsam_risk = rss_mb.map(|mb| mb >= 24 * 1024).unwrap_or(false);
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if jetsam_risk && signal == "SIGTERM" {
+        tracing::warn!(
+            signal,
+            path,
+            pid,
+            ppid,
+            rss_mb = rss_mb.unwrap_or(0),
+            at_unix = now_unix,
+            "daemon: shutdown signal received — peak RSS suggests possible jetsam/OOM trigger; inspect Console.app for 'low memory' or 'memorystatus' around this timestamp"
+        );
+    } else {
+        tracing::info!(
+            signal,
+            path,
+            pid,
+            ppid,
+            rss_mb = rss_mb.unwrap_or(0),
+            at_unix = now_unix,
+            "daemon: shutdown signal received"
+        );
+    }
+}
+
+/// Peak resident-set size in MiB via `getrusage(RUSAGE_SELF)`.
+/// On macOS, `ru_maxrss` is in *bytes*; on Linux it's in *kilobytes*.
+/// `None` on platforms / failures.
+#[cfg(unix)]
+fn peak_rss_mb() -> Option<u64> {
+    // SAFETY: getrusage with a properly-zeroed `rusage` struct is safe.
+    let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+    let rc = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
+    if rc != 0 {
+        return None;
+    }
+    let raw = ru.ru_maxrss as u64;
+    #[cfg(target_os = "macos")]
+    {
+        Some(raw / (1024 * 1024)) // bytes → MiB
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Some(raw / 1024) // kilobytes → MiB
     }
 }
 

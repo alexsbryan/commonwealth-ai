@@ -1415,6 +1415,17 @@ impl ModelSlot {
         // past the close `}` was wasted on a grammar mask cycling
         // through whitespace / preferred-but-masked tokens.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        // Brace-balance stop (shape B) only fires when grammar is
+        // actively constraining output to the tool envelope shape —
+        // i.e., `request.structured_output` is set. Without that
+        // gate, the tracker counts literal `{...}` in prose (LaTeX,
+        // markdown, code fences) and stops generation mid-thought.
+        // Repro: Qwopus3.5-9B-Coder emitting "x_{r,c}" inside a
+        // markdown bullet → false-positive stop at n_generated=87,
+        // observed 2026-05-21. The marker stop (`</tool_call>`,
+        // shape A) stays unconditional below.
+        let tools_grammar_locked =
+            tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -1546,12 +1557,14 @@ impl ModelSlot {
 
                 output.push_str(&piece);
 
-                // Tool-emission stop. Two cases, both unconditional
-                // once detected (no `!in_think` guard — see fn-scope
-                // comment): marker-wrapped close-tag, or grammar-
-                // locked balanced JSON envelope. Track brace depth
-                // incrementally on the piece bytes, ignoring braces
-                // inside JSON strings.
+                // Tool-emission stop. Marker-wrapped close-tag fires
+                // whenever tools were requested (shape A — works on
+                // any model whose chat template wraps tool calls in
+                // `<tool_call>...</tool_call>`). Brace-balance stop
+                // (shape B — bare JSON envelope) only fires when
+                // grammar is actively constraining output to the
+                // envelope schema; without that gate the tracker
+                // matches any `{...}` in prose. See `tools_grammar_locked`.
                 if tools_present {
                     if tail.contains("</tool_call>") {
                         tracing::info!(
@@ -1563,7 +1576,7 @@ impl ModelSlot {
                         n_generated += 1;
                         break;
                     }
-                    if !in_think {
+                    if tools_grammar_locked && !in_think {
                         for b in piece.bytes() {
                             if tc_json_escape_next {
                                 tc_json_escape_next = false;
@@ -1704,7 +1717,9 @@ impl ModelSlot {
                         // when one's active; if the envelope balances
                         // on a forced byte, stop here so the loop's
                         // existing close detection still fires on the
-                        // next iteration's check.
+                        // next iteration's check. Brace tracker is
+                        // gated on `tools_grammar_locked` per the
+                        // fn-scope note; marker stop stays unconditional.
                         if tools_present {
                             if tail.contains("</tool_call>") {
                                 tracing::info!(
@@ -1718,39 +1733,41 @@ impl ModelSlot {
                                 forced_hit_break = true;
                                 break;
                             }
-                            for b in piece.bytes() {
-                                if tc_json_escape_next {
-                                    tc_json_escape_next = false;
-                                    continue;
-                                }
-                                if tc_json_in_string {
+                            if tools_grammar_locked {
+                                for b in piece.bytes() {
+                                    if tc_json_escape_next {
+                                        tc_json_escape_next = false;
+                                        continue;
+                                    }
+                                    if tc_json_in_string {
+                                        match b {
+                                            b'\\' => tc_json_escape_next = true,
+                                            b'"' => tc_json_in_string = false,
+                                            _ => {}
+                                        }
+                                        continue;
+                                    }
                                     match b {
-                                        b'\\' => tc_json_escape_next = true,
-                                        b'"' => tc_json_in_string = false,
+                                        b'"' => tc_json_in_string = true,
+                                        b'{' => {
+                                            tc_json_depth += 1;
+                                            tc_json_ever_opened = true;
+                                        }
+                                        b'}' => tc_json_depth -= 1,
                                         _ => {}
                                     }
-                                    continue;
                                 }
-                                match b {
-                                    b'"' => tc_json_in_string = true,
-                                    b'{' => {
-                                        tc_json_depth += 1;
-                                        tc_json_ever_opened = true;
-                                    }
-                                    b'}' => tc_json_depth -= 1,
-                                    _ => {}
+                                if tc_json_ever_opened && tc_json_depth == 0 {
+                                    tracing::info!(
+                                        model = %model_id,
+                                        n_generated,
+                                        "inference: stopping on balanced JSON envelope (jump_fwd)"
+                                    );
+                                    forced_run.push(ftok);
+                                    n_generated += 1;
+                                    forced_hit_break = true;
+                                    break;
                                 }
-                            }
-                            if tc_json_ever_opened && tc_json_depth == 0 {
-                                tracing::info!(
-                                    model = %model_id,
-                                    n_generated,
-                                    "inference: stopping on balanced JSON envelope (jump_fwd)"
-                                );
-                                forced_run.push(ftok);
-                                n_generated += 1;
-                                forced_hit_break = true;
-                                break;
                             }
                         }
                     }
@@ -2747,8 +2764,12 @@ impl ModelSlot {
 
         // See generate_sync: stop on `</tool_call>` (marker) or
         // balanced JSON envelope (grammar-locked) when tools were
-        // requested.
+        // requested. Shape-B tracker gated on `structured_output` to
+        // avoid false-positive stops on prose `{...}` — see fn-scope
+        // note on the sync path.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let tools_grammar_locked =
+            tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -2826,9 +2847,10 @@ impl ModelSlot {
 
                 // Tool-emission JSON-balance bookkeeping — done BEFORE
                 // the send so we don't need to re-borrow piece bytes
-                // after the move into the channel.
+                // after the move into the channel. Gated on
+                // `tools_grammar_locked` per the sync-path note.
                 let mut json_envelope_complete = false;
-                if tools_present && !in_think {
+                if tools_grammar_locked && !in_think {
                     for b in piece.bytes() {
                         if tc_json_escape_next {
                             tc_json_escape_next = false;
@@ -2999,8 +3021,12 @@ impl ModelSlot {
 
         // See generate_sync: stop on `</tool_call>` (marker) or
         // balanced JSON envelope (grammar-locked) when tools were
-        // requested.
+        // requested. Shape-B tracker gated on `structured_output` to
+        // avoid false-positive stops on prose `{...}` — see fn-scope
+        // note on the sync path.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let tools_grammar_locked =
+            tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -3059,9 +3085,10 @@ impl ModelSlot {
                 }
 
                 // JSON-balance bookkeeping BEFORE the send so we don't
-                // need to re-borrow piece bytes after the move.
+                // need to re-borrow piece bytes after the move. Gated
+                // on `tools_grammar_locked` per the sync-path note.
                 let mut json_envelope_complete = false;
-                if tools_present && !in_think {
+                if tools_grammar_locked && !in_think {
                     for b in piece.bytes() {
                         if tc_json_escape_next {
                             tc_json_escape_next = false;
@@ -8329,6 +8356,12 @@ pub fn parse_tool_calls_from_text(text: &str) -> Vec<ParsedToolCall> {
                 let fixed =
                     escape_unescaped_control_chars_in_string_values(&body);
                 serde_json::from_str::<serde_json::Value>(&fixed)
+            })
+            .or_else(|_| {
+                let stripped = strip_orphan_close_brackets(&body);
+                let fixed =
+                    escape_unescaped_control_chars_in_string_values(&stripped);
+                serde_json::from_str::<serde_json::Value>(&fixed)
             });
         match parsed {
             Ok(obj) => {
@@ -8389,10 +8422,20 @@ pub fn parse_tool_calls_with_errors(text: &str) -> (Vec<ParsedToolCall>, Vec<Str
 
         // Same retry-on-normalized-body pattern as the non-with-errors
         // variant (Qwen3-Coder emits raw \n inside a content string).
+        // Plus a third retry that strips orphan `]` chars Qwen3.5-9B
+        // observed emitting mid-envelope (2026-05-21): model duplicated
+        // a key after a runaway content-string and inserted `}]}` at the
+        // tail, breaking serde.
         let parsed = serde_json::from_str::<serde_json::Value>(body)
             .or_else(|_| {
                 let fixed =
                     escape_unescaped_control_chars_in_string_values(body);
+                serde_json::from_str::<serde_json::Value>(&fixed)
+            })
+            .or_else(|_| {
+                let stripped = strip_orphan_close_brackets(body);
+                let fixed =
+                    escape_unescaped_control_chars_in_string_values(&stripped);
                 serde_json::from_str::<serde_json::Value>(&fixed)
             });
         match parsed {
@@ -8415,6 +8458,61 @@ pub fn parse_tool_calls_with_errors(text: &str) -> (Vec<ParsedToolCall>, Vec<Str
         }
     }
     (out, errors)
+}
+
+/// Walk a JSON candidate and drop any `]` that doesn't match an open
+/// `[`. Used as a last-ditch repair when a tool-call body has been
+/// damaged by mid-stream prose drift (model wrote `}]}` where it
+/// meant `}}`). Mirror-image `[` are NOT dropped — that would create
+/// new orphan `]` later in the stream and the repair has to stay
+/// idempotent under retry.
+///
+/// String contents pass through verbatim (we don't want to touch
+/// `]` inside JSON strings). Escape sequences within strings are
+/// honoured so a `\"` doesn't prematurely close the string.
+pub fn strip_orphan_close_brackets(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut bracket_depth: i32 = 0;
+    let mut in_str = false;
+    let mut esc = false;
+    for c in s.chars() {
+        if esc {
+            out.push(c);
+            esc = false;
+            continue;
+        }
+        if in_str {
+            if c == '\\' {
+                esc = true;
+                out.push(c);
+                continue;
+            }
+            if c == '"' {
+                in_str = false;
+            }
+            out.push(c);
+            continue;
+        }
+        match c {
+            '"' => {
+                in_str = true;
+                out.push(c);
+            }
+            '[' => {
+                bracket_depth += 1;
+                out.push(c);
+            }
+            ']' => {
+                if bracket_depth > 0 {
+                    bracket_depth -= 1;
+                    out.push(c);
+                }
+                // else: orphan close, skip
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Handles the subset of JSON schema used by tool descriptors:
@@ -8623,6 +8721,55 @@ mod parse_tool_calls_tests {
         assert_eq!(calls.len(), 2);
         assert_eq!(calls[0].name, "a");
         assert_eq!(calls[1].name, "b");
+    }
+
+    #[test]
+    fn orphan_close_bracket_inside_envelope_recovers_via_repair() {
+        // Qwen3.5-9B-HighIQ observed 2026-05-21 (run r): model
+        // emitted a runaway `content` string ending with `","path":"src/lib.rs"}]}`.
+        // The trailing `]` is orphan — no matching `[` open — and
+        // serde rejects the body. The repair pass strips the orphan
+        // close bracket so the call survives.
+        let body = r#"{"name":"write","arguments":{"path":"src/lib.rs","content":"// short","path":"src/lib.rs"}]}"#;
+        let text = format!("<tool_call>{}</tool_call>", body);
+        let calls = parse_tool_calls_from_text(&text);
+        assert_eq!(
+            calls.len(),
+            1,
+            "orphan-bracket repair should rescue the call"
+        );
+        assert_eq!(calls[0].name, "write");
+        assert!(calls[0].arguments.contains("src/lib.rs"));
+
+        let (out, errors) = parse_tool_calls_with_errors(&text);
+        assert_eq!(out.len(), 1);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn strip_orphan_close_brackets_idempotent_on_valid_input() {
+        let s = r#"{"a":1,"b":[2,3],"c":"x]y"}"#;
+        assert_eq!(super::strip_orphan_close_brackets(s), s);
+    }
+
+    #[test]
+    fn strip_orphan_close_brackets_drops_lone_close() {
+        let s = r#"{"a":1}]}"#;
+        // Only the `]` is orphan; the outer braces balance. The
+        // surrounding `}` after `]` is also at depth 0 here, but the
+        // repair only touches brackets.
+        let repaired = super::strip_orphan_close_brackets(s);
+        assert!(!repaired.contains(']'));
+        assert!(repaired.starts_with('{'));
+    }
+
+    #[test]
+    fn strip_orphan_close_brackets_leaves_bracketed_inside_strings_alone() {
+        // `]` inside a JSON string should NOT be stripped — it isn't
+        // structural. Repair only touches characters at depth 0 of
+        // string nesting.
+        let s = r#"{"a":"x]y","b":"]"}"#;
+        assert_eq!(super::strip_orphan_close_brackets(s), s);
     }
 
     #[test]
