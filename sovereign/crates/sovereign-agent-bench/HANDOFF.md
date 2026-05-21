@@ -7,6 +7,92 @@ OICP-runner diary) and the plan at
 
 ---
 
+## 2026-05-21 evening — H4 write-thrash + alias-mode unlock
+
+**Decisive intervention.** N=5 on 2.2-group-anagrams under 35B primary
+moved from baseline `8, 1, 7, 1, 2` (mean 3.8, median 2) to
+`8, 6, 9, 0, 8` (mean 6.2, median 8) after F1+F2 + alias mode.
+
+Three load-bearing changes layered:
+
+1. **F1 — stage-discipline prompt** (`problems/2.2-group-anagrams/prompt.md`).
+   PLAN → WRITE → VERIFY → FIX-ONE structure. Self-monitor write
+   counter ("if N > 3 you are thrashing; summarize prior attempts
+   before continuing"). Each stage exactly one concern per turn.
+2. **F2 — runner-side write-thrash detector** (`runners/pi.rs`).
+   `KillReason::WriteThrash` SIGTERMs at 5 consecutive writes
+   without an interleaving bash. New `ExitReason::WriteThrash` +
+   `FailureClass::WriteThrash` for scanner classification.
+3. **Alias-mode daemon config** (`~/.sovereign/config.toml`). Removed
+   `fast = ...` key. `setup_config::ModelsSection::fast_path()`
+   subsumes to primary when fast is unset; `embedded.rs:5020`
+   `primary_is_alias` branch constructs primary as alias of fast's
+   `Arc<LlamaModel>` (one weights copy, separate KV contexts).
+   Baseline daemon RSS dropped 32GB → 5.8GB, peak during single
+   primary inference 46GB → 6.1GB. Jetsam SIGTERM at 44GB on 64GB
+   Mac is eliminated. The 9B fast slot is no longer pinned, so
+   the daemon never has both 9B and 35B resident at once.
+
+**Residual gaps observed in the F1+F2 retest:**
+
+- **Trial 4 zero-writes outlier** (0/9). Model ran 7 bashes + 1 read,
+  never reached WRITE stage. Possibly stage instructions are too
+  dense and the model spent too long in PLAN. Need to inspect the
+  final assistant text to confirm.
+- **`done`-loop on completion.** Every successful trial ended with
+  the model emitting `done` 4-6 times consecutively, eventually
+  triggering `no_progress` SIGTERM. Pi-agent-core doesn't recognise
+  `done` as termination — see `invariant_pi_done_heuristic`. The
+  witness still scores correctly because workdir is fixed by then,
+  but exit_reason taints to `no_progress`. Cleanup: pi runner could
+  intercept `done` tool name and SIGTERM with a new
+  `ExitReason::ModelDone` so the scanner doesn't blame `no_progress`
+  for a successful run.
+
+**Verified diagnostics (memory):**
+
+- `invariant_daemon_eager_fast_slot_2026_05_21.md` — RSS trajectory
+  table + alias-mode fix recipe.
+- `project_h4_write_thrash_2026_05_21.md` — mechanism, per-trial
+  evidence, F1+F2 design.
+
+**Bench reproduction recipe (working today):**
+
+```
+# One-time: remove `fast = ...` from ~/.sovereign/config.toml
+SOVEREIGN_DISABLE_AUTO_RESUME=1 SOVEREIGN_ALTERNATION_GRAMMAR=1 \
+  sovereign daemon restart
+
+cargo run -p sovereign-agent-bench --release --quiet -- run \
+  --problems 2.2 \
+  --model commonwealth/primary \
+  --judge-model commonwealth/primary \
+  --judge-trials 1 \
+  --report /tmp/r.json \
+  --artifacts-dir /tmp/r
+```
+
+**Next-iter (ordered, smallest-first):**
+
+1. **`done`-loop fix** in `runners/pi.rs`: intercept the `done` tool
+   call, SIGTERM with `ExitReason::ModelDone` (new variant). Stops
+   the "every successful trial taints as `no_progress`" cosmetic
+   regression. ~30 min.
+2. **Trial-4 zero-writes diagnosis**: inspect the final assistant
+   text + first 3 turns of `agent.jsonl`. Likely a prompt-density
+   issue.
+3. **Multi-trial averaging** in the bench runner: today single-shot
+   variance dominates measurement. Add `--trials N` flag that runs
+   the same problem N times and reports mean ± stdev. Closes the
+   "is this 6/9 stable or lucky?" gap.
+4. **Propagate F1 stage-discipline to 2.1, 1.3, 1.2, 1.1 prompts.**
+   The pattern generalizes; only 2.2 has it today.
+5. **F-OBS** (memory pinned): new `/internal/runtime/slots` endpoint
+   exposing real embedded daemon inventory. The existing `/status.
+   loaded_models` is still a hardcoded lie.
+
+---
+
 ## 2026-05-20 → 2026-05-21 — what landed
 
 The crate `sovereign/crates/sovereign-agent-bench/` ships as the
