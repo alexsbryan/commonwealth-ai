@@ -1,0 +1,24 @@
+{
+  "query": "chunk-level retrieval scoring",
+  "evidence": [
+    {
+      "id": "ev-T0-0000",
+      "source_kind": "corpus",
+      "source_id": "project-docs::retrieval_scoring",
+      "title": "Retrieval scoring overview",
+      "content": "The retrieval pipeline combines a vector similarity component with a lexical overlap component, weighted by token coverage. Top-k chunks are returned in descending score order, with the median ratio surfaced as a downstream signal.",
+      "confidence": 0.88,
+      "retrieval_context": "corpus chunk (score 0.88)"
+    },
+    {
+      "id": "ev-T0-0001",
+      "source_kind": "corpus",
+      "source_id": "project-docs::scoring_signals",
+      "title": "Scoring signals",
+      "content": "Beyond the headline score, the pipeline tracks query token coverage, title match, distinct sources, and a median ratio. Combined these support an off-target predicate the runtime uses to decide whether retrieval landed.",
+      "confidence": 0.82,
+      "retrieval_context": "corpus chunk (score 0.82)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 2, "memory": 0, "note": 0, "web": 0 }
+}

@@ -1,0 +1,24 @@
+{
+  "query": "upcoming launch event next month",
+  "evidence": [
+    {
+      "id": "ev-T0-0000",
+      "source_kind": "web",
+      "source_id": "https://example.test/news/launch-announcement",
+      "title": "Launch event scheduled",
+      "content": "The upcoming launch event was confirmed for the third week of next month, with registration opening this Friday. Three keynote slots are listed on the announcement page.",
+      "confidence": 0.55,
+      "retrieval_context": "web search (operator-enabled escalation, backend=duckduckgo)"
+    },
+    {
+      "id": "ev-T0-0001",
+      "source_kind": "web",
+      "source_id": "https://example.test/blog/event-format",
+      "title": "Format notes for the event",
+      "content": "Coverage of the event format mentioned hybrid attendance and a recorded archive within seven days.",
+      "confidence": 0.55,
+      "retrieval_context": "web search (operator-enabled escalation, backend=duckduckgo)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 0, "memory": 0, "note": 0, "web": 2 }
+}

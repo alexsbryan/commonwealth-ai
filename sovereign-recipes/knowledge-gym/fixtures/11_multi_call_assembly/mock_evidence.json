@@ -1,0 +1,24 @@
+{
+  "query": "multi-call test",
+  "evidence": [
+    {
+      "id": "ev-T0-0000",
+      "source_kind": "corpus",
+      "source_id": "project-docs::memory_decay",
+      "title": "Confidence decay defaults",
+      "content": "The default uniform decay rate is 10 percent confidence loss per month. Memories whose decayed confidence falls below the 0.2 prune floor are dropped during prune sweeps.",
+      "confidence": 0.91,
+      "retrieval_context": "corpus chunk (score 0.91)"
+    },
+    {
+      "id": "ev-T0-0001",
+      "source_kind": "corpus",
+      "source_id": "project-docs::url_constraint",
+      "title": "URL allowlist constraint",
+      "content": "A byte-trie of allowed URLs is attached to the sampler. When the cursor is mid-URL at a non-terminal trie node, candidate tokens whose bytes would extend into an off-trie path get logit-clamped to negative infinity. EOS at non-terminal also masks so the model cannot terminate mid-URL.",
+      "confidence": 0.89,
+      "retrieval_context": "corpus chunk (score 0.89)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 2, "memory": 0, "note": 0, "web": 0 }
+}
