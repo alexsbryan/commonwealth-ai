@@ -43,6 +43,15 @@ Brute force is `2^(n^2)` — infeasible past `n ≈ 5`. There's a much cleaner a
 
 ## How to deliver
 
-You are running in a tools-driven harness. The workdir already has the project scaffold. **Use the `edit` (or `write`) tool to replace the body of `solve` in `src/lib.rs`.** When the implementation is in place, reply with a one-line `DONE`.
+You are running in a tools-driven harness. The workdir already has
+the project scaffold. **Use the `write` tool to rewrite `src/lib.rs`
+in full** with your implementation of `solve`. Prefer `write` over
+`edit`: the `edit` tool's exact-match requirement on `oldText` is
+brittle for multi-line code changes. With `write` you provide the
+entire file body (the header comments + your `solve` function) and
+the harness installs it verbatim.
 
-**Do NOT paste the solution into chat.** Only files written via tools count. If your reply contains code in a fenced block but you never called `edit`/`write`, your score will be zero.
+When the implementation is in place, signal completion with the
+`done` tool: `{"name":"done","arguments":{"reason":"…"}}`.
+
+**Do NOT paste the solution into chat.** Only files written via tools count.
