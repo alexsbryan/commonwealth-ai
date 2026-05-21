@@ -226,16 +226,62 @@ export const OVERSIZE_MESSAGE_HINT =
 // ClarificationRequest, TurnNarration, NarrationEvent. Wire format
 // is JSON via Tauri events.
 
+// NarrationPhase mirrors `sovereign_core::types::NarrationPhase`. Serde's
+// default external tagging serialises unit variants as bare strings
+// ("routing_committed") and struct variants as a one-key object
+// ({"tool_invocation_start": {...}}). Consumers must handle both shapes.
 export type NarrationPhase =
+  // Unit variants — serialised as bare strings.
   | "routing_committed"
   | "retrieval_complete"
   | "primary_synthesis_start"
-  | "gap_check_fired";
+  | "gap_check_fired"
+  | "routing_start"
+  | "retrieval_start"
+  | "curation_start"
+  | "drafting_start"
+  | "presentation_start"
+  // Struct variants — serialised as `{key: payload}` objects.
+  | { routing_complete: { intent: string; register: string; confidence: number } }
+  | { retrieval_complete: { chunks_in: number; corpora: string[] } }
+  | {
+      curation_complete: {
+        chunks_kept: number;
+        skeleton: string[];
+        sufficient: boolean;
+      };
+    }
+  | { drafting_complete: { tokens: number; finish_reason: string } }
+  | { presentation_complete: { judge_score: number | null } }
+  | { stage_error: { stage: string; error: string } }
+  | {
+      tool_invocation_start: {
+        call_id: string;
+        tool_id: string;
+        summary: string;
+      };
+    }
+  | {
+      tool_invocation_complete: {
+        call_id: string;
+        tool_id: string;
+        ok: boolean;
+        result_summary: string;
+      };
+    };
 
 export interface NarrationEvent {
   phase: NarrationPhase;
   text: string;
   elapsed_ms: number;
+}
+
+/** Discriminator: returns the snake_case tag whether `phase` is a bare
+ *  string (unit variant) or a one-key object (struct variant). */
+export function narrationPhaseTag(phase: NarrationPhase): string {
+  if (typeof phase === "string") return phase;
+  const keys = Object.keys(phase);
+  return keys[0] ?? "unknown";
 }
 
 /** Wire payload for `interpretation-proposed`. Emitted before the

@@ -2,10 +2,11 @@
 // DOM, no Svelte, no singleton. Mirrors approval.machine.test.ts.
 import { describe, it, expect, vi } from "vitest";
 import { createActor, fromPromise } from "xstate";
-import { routingMachine } from "./routing.machine";
+import { applyNarration, routingMachine } from "./routing.machine";
 import type {
   ClarificationRequestPayload,
   InterpretationProposedPayload,
+  NarrationEvent,
   TurnNarrationPayload,
 } from "../types";
 
@@ -282,6 +283,129 @@ describe("routingMachine — narrating region", () => {
     expect(actor.getSnapshot().context.narrationLog).toHaveLength(2);
     actor.send({ type: "CLEAR_NARRATION" });
     expect(actor.getSnapshot().context.narrationLog).toHaveLength(0);
+  });
+});
+
+describe("applyNarration — tool-invocation pairing", () => {
+  function toolStart(
+    callId: string,
+    elapsed = 100,
+    toolId = "document_operation",
+  ): NarrationEvent {
+    return {
+      phase: {
+        tool_invocation_start: {
+          call_id: callId,
+          tool_id: toolId,
+          summary: `Analyzing ${callId}`,
+        },
+      },
+      text: `Analyzing ${callId}`,
+      elapsed_ms: elapsed,
+    };
+  }
+
+  function toolComplete(
+    callId: string,
+    elapsed = 2000,
+    ok = true,
+    toolId = "document_operation",
+  ): NarrationEvent {
+    return {
+      phase: {
+        tool_invocation_complete: {
+          call_id: callId,
+          tool_id: toolId,
+          ok,
+          result_summary: ok ? `Done ${callId}` : `Failed ${callId}`,
+        },
+      },
+      text: ok ? `Done ${callId}` : `Failed ${callId}`,
+      elapsed_ms: elapsed,
+    };
+  }
+
+  function retrievalStart(elapsed = 0): NarrationEvent {
+    return {
+      phase: "retrieval_start",
+      text: "Searching your knowledge…",
+      elapsed_ms: elapsed,
+    };
+  }
+
+  it("appends a non-tool phase unchanged", () => {
+    const next = applyNarration([], retrievalStart(50));
+    expect(next).toHaveLength(1);
+    expect(next[0].phase).toBe("retrieval_start");
+  });
+
+  it("appends a ToolInvocationStart on its own", () => {
+    const next = applyNarration([], toolStart("c1"));
+    expect(next).toHaveLength(1);
+    expect(next[0].phase).toMatchObject({ tool_invocation_start: { call_id: "c1" } });
+  });
+
+  it("replaces matching Start when Complete arrives", () => {
+    const afterStart = applyNarration([], toolStart("c1", 100));
+    const afterComplete = applyNarration(afterStart, toolComplete("c1", 1800));
+    expect(afterComplete).toHaveLength(1);
+    expect(afterComplete[0].phase).toMatchObject({
+      tool_invocation_complete: { call_id: "c1", ok: true },
+    });
+    expect(afterComplete[0].elapsed_ms).toBe(1800);
+  });
+
+  it("preserves order when Complete pairs with the middle of three Starts", () => {
+    const log = [
+      toolStart("a", 100),
+      toolStart("b", 200),
+      toolStart("c", 300),
+    ];
+    const next = applyNarration(log, toolComplete("b", 900));
+    expect(next).toHaveLength(3);
+    expect(next[0].phase).toMatchObject({ tool_invocation_start: { call_id: "a" } });
+    expect(next[1].phase).toMatchObject({ tool_invocation_complete: { call_id: "b" } });
+    expect(next[2].phase).toMatchObject({ tool_invocation_start: { call_id: "c" } });
+  });
+
+  it("appends Complete when no matching Start exists (defensive fallback)", () => {
+    const next = applyNarration([retrievalStart()], toolComplete("orphan"));
+    expect(next).toHaveLength(2);
+    expect(next[1].phase).toMatchObject({
+      tool_invocation_complete: { call_id: "orphan" },
+    });
+  });
+
+  it("does not double-replace when a second Complete arrives for the same call_id", () => {
+    // Once Start has been replaced by Complete, a later duplicate
+    // Complete should append (defensive) rather than replace itself,
+    // since the matching Start is gone. Prevents silent overwrite of
+    // the original Complete metadata.
+    const log = applyNarration([], toolStart("c1"));
+    const afterFirst = applyNarration(log, toolComplete("c1", 1000, true));
+    const afterDup = applyNarration(afterFirst, toolComplete("c1", 1100, false));
+    expect(afterDup).toHaveLength(2);
+    expect(afterDup[0].phase).toMatchObject({
+      tool_invocation_complete: { call_id: "c1", ok: true },
+    });
+    expect(afterDup[1].phase).toMatchObject({
+      tool_invocation_complete: { call_id: "c1", ok: false },
+    });
+  });
+
+  it("appends ToolInvocationStart even when an unrelated Start exists", () => {
+    const log = applyNarration([], toolStart("a"));
+    const next = applyNarration(log, toolStart("b"));
+    expect(next).toHaveLength(2);
+    expect(next[0].phase).toMatchObject({ tool_invocation_start: { call_id: "a" } });
+    expect(next[1].phase).toMatchObject({ tool_invocation_start: { call_id: "b" } });
+  });
+
+  it("does not mutate the input log array", () => {
+    const original = [toolStart("c1")];
+    const snapshot = [...original];
+    applyNarration(original, toolComplete("c1"));
+    expect(original).toEqual(snapshot);
   });
 });
 
