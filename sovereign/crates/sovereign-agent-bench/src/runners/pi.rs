@@ -70,6 +70,19 @@ const NO_PROGRESS_TOOL_CALLS_THRESHOLD: u32 = 8;
 /// recompute the workdir hash. Cheaper than per-call polling.
 const NO_PROGRESS_CHECK_EVERY: u32 = 1;
 
+/// Maximum consecutive `write` tool calls without an interleaving
+/// `bash` call. Beyond this, the model has entered write-thrash:
+/// each rewrite overlays partial code on top of partial code without
+/// any verification feedback, producing incoherent final output.
+///
+/// Empirical basis: 2026-05-21 H4 study on 2.2-group-anagrams (35B
+/// primary). Successful trials (8/9, 7/9) wrote 2 times with 7+ bash
+/// verifies between. Failed trials (1/9, 1/9, 2/9) wrote 4-11 times
+/// with at most 1 bash interleaved. Threshold 5 is the conservative
+/// boundary that catches the canonical thrash without clipping the
+/// rare healthy "many tiny iterations" pattern.
+const WRITE_THRASH_THRESHOLD: u32 = 5;
+
 /// Why the budget kill fired (used internally to classify the artifact's
 /// `ExitReason`).
 #[derive(Debug, Clone)]
@@ -77,6 +90,7 @@ enum KillReason {
     Tokens { cap: u64, observed: u64 },
     Wall { cap_seconds: u64 },
     NoProgress { consecutive: u32 },
+    WriteThrash { consecutive_writes: u32 },
 }
 
 pub struct PiRunner {
@@ -214,6 +228,7 @@ impl AgentRunner for PiRunner {
             let mut last_workdir_hash: u64 = hash_workdir(&workdir_path_for_reader);
             let mut consecutive_no_progress_calls: u32 = 0;
             let mut calls_since_check: u32 = 0;
+            let mut consecutive_writes_no_bash: u32 = 0;
             while let Ok(Some(line)) = lines.next_line().await {
                 // Push raw line first so artifact capture wins even
                 // if the parser panics on a malformed payload.
@@ -294,6 +309,52 @@ impl AgentRunner for PiRunner {
                             }
                         }
                     }
+
+                    // Write-thrash detector. Streaming inspection of
+                    // tools-by-name in this turn. `write` increments
+                    // the counter; `bash` resets it. Other tools are
+                    // neutral. When the counter crosses threshold,
+                    // SIGTERM with a distinct exit reason so the
+                    // operator can tell write-thrash from token cap
+                    // or no-progress kills.
+                    for name in tool_names_in_turn(content) {
+                        match name.as_str() {
+                            "write" => {
+                                consecutive_writes_no_bash =
+                                    consecutive_writes_no_bash.saturating_add(1);
+                                tracing::debug!(
+                                    problem = %problem_id,
+                                    consecutive_writes = consecutive_writes_no_bash,
+                                    threshold = WRITE_THRASH_THRESHOLD,
+                                    "agent_bench: write-thrash increment"
+                                );
+                                if consecutive_writes_no_bash >= WRITE_THRASH_THRESHOLD {
+                                    if let Some(tx) = kill_tx_opt.take() {
+                                        tracing::warn!(
+                                            problem = %problem_id,
+                                            consecutive_writes = consecutive_writes_no_bash,
+                                            threshold = WRITE_THRASH_THRESHOLD,
+                                            "agent_bench: write_thrash kill"
+                                        );
+                                        let _ = tx.send(KillReason::WriteThrash {
+                                            consecutive_writes: consecutive_writes_no_bash,
+                                        });
+                                    }
+                                    break;
+                                }
+                            }
+                            "bash" => {
+                                if consecutive_writes_no_bash > 0 {
+                                    tracing::debug!(
+                                        problem = %problem_id,
+                                        "agent_bench: write-thrash reset (bash observed)"
+                                    );
+                                }
+                                consecutive_writes_no_bash = 0;
+                            }
+                            _ => {}
+                        }
+                    }
                 }
                 let _ = evt_tx.send(parsed);
             }
@@ -349,6 +410,12 @@ impl AgentRunner for PiRunner {
                         consecutive_tool_calls: consecutive,
                         threshold: NO_PROGRESS_TOOL_CALLS_THRESHOLD,
                     },
+                    KillReason::WriteThrash { consecutive_writes } => {
+                        ExitReason::WriteThrash {
+                            consecutive_writes,
+                            threshold: WRITE_THRASH_THRESHOLD,
+                        }
+                    }
                 }
             }
             SelectOutcome::NoKill => {
@@ -557,6 +624,32 @@ fn read_prefix(path: &std::path::Path, limit: usize) -> std::io::Result<Vec<u8>>
     let n = f.read(&mut buf)?;
     buf.truncate(n);
     Ok(buf)
+}
+
+/// Extract tool-call names in the order they appear in an assistant
+/// content array. Used by the write-thrash detector to inspect the
+/// per-turn tool sequence without paying the cost of the full
+/// `harvest_assistant_blocks` extraction.
+fn tool_names_in_turn(content: &Value) -> Vec<String> {
+    content
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|b| {
+                    let is_tool = matches!(
+                        b.get("type").and_then(|x| x.as_str()),
+                        Some("tool_use") | Some("toolCall")
+                    );
+                    if !is_tool {
+                        return None;
+                    }
+                    b.get("name")
+                        .and_then(|x| x.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Count tool-use blocks in an assistant content array — used by the

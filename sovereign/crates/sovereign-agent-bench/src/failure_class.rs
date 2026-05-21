@@ -36,6 +36,14 @@
 //! 13. **AlgorithmicWrong** — `tool_calls.len() > 0` AND at least one
 //!     mutating call (write/edit/bash) AND tests fail. The agent
 //!     tried; the algorithm was wrong.
+//! 14. **WriteThrash** — agent exit = `write_thrash`. Model emitted
+//!     N consecutive `write` tool calls without an interleaving
+//!     `bash` verify. Each rewrite overlays partial code on top of
+//!     partial code and the final file is incoherent. Distinct from
+//!     LoopTrap because the workdir IS changing on each tool call
+//!     — the no-progress detector wouldn't catch this. Distinct from
+//!     AlgorithmicWrong because the model never stabilized on a single
+//!     algorithm to be wrong about.
 //!
 //! Class 13 is the desired bottom of the funnel: every class above is
 //! a *system* failure to convert agent intent into bench outcome; class
@@ -65,6 +73,7 @@ pub enum FailureClass {
     EmptyResponse,
     ToolCallNoop,
     AlgorithmicWrong,
+    WriteThrash,
 }
 
 impl FailureClass {
@@ -83,6 +92,7 @@ impl FailureClass {
             FailureClass::EmptyResponse => "empty_response",
             FailureClass::ToolCallNoop => "tool_call_noop",
             FailureClass::AlgorithmicWrong => "algorithmic_wrong",
+            FailureClass::WriteThrash => "write_thrash",
         }
     }
 
@@ -102,6 +112,7 @@ impl FailureClass {
             FailureClass::EmptyResponse => "agent produced no output",
             FailureClass::ToolCallNoop => "agent only read/grep'd, never wrote",
             FailureClass::AlgorithmicWrong => "agent wrote code; tests failed",
+            FailureClass::WriteThrash => "agent wrote >=5x without bash verify between",
         }
     }
 
@@ -206,6 +217,7 @@ pub fn classify(
         "crashed" => return FailureClass::AgentCrash,
         "tokens_exceeded" => return FailureClass::TokenBudget,
         "no_progress" => return FailureClass::LoopTrap,
+        "write_thrash" => return FailureClass::WriteThrash,
         "tool_denied" => return FailureClass::ToolDenied,
         _ => {}
     }

@@ -10,57 +10,97 @@ pub fn group_anagrams(strs: Vec<String>) -> Vec<Vec<String>>
 
 ## Behaviour
 
-Return a vector of groups. Two strings belong to the same group iff
-they are anagrams of each other (same multiset of characters).
+Two strings are in the same group iff they have the same multiset of
+characters (one is a permutation of the other).
 
-Examples:
-- `group_anagrams(vec!["eat", "tea", "tan", "ate", "nat", "bat"])`
-  → groups: `["eat", "tea", "ate"]`, `["tan", "nat"]`, `["bat"]`
-  (in some order; see "Ordering" below)
-- `group_anagrams(vec!["a"])` → `[["a"]]`
-- `group_anagrams(vec![])` → `[]`
-- `group_anagrams(vec!["", ""])` → `[["", ""]]`
+**Worked example — memorize this. Most tests are variations.**
 
-## Ordering (CRITICAL — half the tests check this)
+```
+input:  ["eat", "tea", "tan", "ate", "nat", "bat"]
+output: [["eat", "tea", "ate"], ["tan", "nat"], ["bat"]]
+```
 
-Within each group, preserve the **order of first appearance** in the
-input. Across groups, order groups by the **first appearance of any
-member** in the input (so the group containing `strs[0]` comes
-first).
+Three claims that uniquely pin the output structure:
 
-A plain `HashMap::into_values().collect()` returns groups in
-**arbitrary** order and will fail those tests. You MUST maintain a
-separate insertion-order list of keys (or use a structure like
-`IndexMap`) to emit groups in input order.
+1. `output[0] == ["eat", "tea", "ate"]` — order WITHIN a group is
+   the order strings first appeared in input (input indices 0, 1, 3).
+2. `output[0]` is first because `input[0]` ("eat") joined this group
+   before any other group was started.
+3. `output[1]` precedes `output[2]` because `input[2]` ("tan") joined
+   its group before `input[5]` ("bat") joined its.
+
+If your code doesn't satisfy all three claims on this example, the
+algorithm is wrong. Rethink before writing.
+
+Edge cases:
+
+- empty input → `[]`
+- duplicate strings → keep every occurrence in its group
+- empty strings → all empty strings cluster into one group
 
 ## Constraints
 
-- All input strings are ASCII lowercase letters (or empty).
-- Standard library only.
-- Total time should be O(N · K log K) where N is the number of
-  strings and K is the maximum string length.
+- Inputs are ASCII lowercase letters or the empty string.
+- Standard library only. No `IndexMap`, no `itertools`.
+- O(N · K log K) time, where N = strings, K = max length.
 
-## What's in the workdir
+## Workdir
 
-```
-.
-├── Cargo.toml
-└── src/
-    └── lib.rs   # `group_anagrams` stub with `todo!()`
-```
+Your workdir holds `Cargo.toml` plus `src/lib.rs` (stubbed with
+`todo!()`).
 
-## How to deliver
+**No tests are visible to you.** The grader runs a private suite
+after you signal `done`. You verify syntactic correctness with
+`cargo build`; you verify behavioral correctness by reading the
+spec — especially the three claims above — carefully.
 
-You are running in a tools-driven harness. Mandatory loop:
+## Execution discipline (load-bearing)
 
-1. `write` the full file body to `src/lib.rs`.
-2. `bash` with command `cargo build 2>&1` — if errors, fix and write again.
-3. `bash` with command `cargo test --quiet --test integration` — if any test fails, fix and write again.
-4. ONLY after step 3 shows `test result: ok` for all tests, signal completion with the `done` tool.
+Each `write` REPLACES the whole file. Successive writes without
+thinking lose coherence and produce frankenstein code that scores
+zero. Follow the stages below in order. Do exactly one stage's
+worth of work per turn.
 
-You MUST NOT signal `done` before `cargo test` has reported all
-tests passing. Skipping verification scores zero — the grader only
-trusts a clean test report.
+### Stage 1 — PLAN  (no tools)
 
-Prefer `write` over `edit`. Files written via tools are the only
-thing the grader sees.
+In your reply, write 2–4 sentences naming the data structures you
+will use for (a) the canonical anagram key per string and (b) the
+order in which groups first appeared. Reference the worked example
+to check yourself. **Do not call any tool in this turn.**
+
+### Stage 2 — WRITE  (one `write`, nothing else)
+
+Emit the complete file body to `src/lib.rs` in a single `write`
+call. The code must compile. The code must match your Stage 1 plan.
+After the write, stop — do not chain another tool in the same turn.
+
+### Stage 3 — VERIFY  (one `bash`, nothing else)
+
+`bash` with `cargo build 2>&1`. Stop after the call. Read the full
+output before proceeding.
+
+### Stage 4 — FIX  (conditional)
+
+* If `cargo build` **succeeded**: in your reply, walk the worked
+  example through your code in 2–3 sentences. If your code would
+  produce `[["eat","tea","ate"], ["tan","nat"], ["bat"]]`, signal
+  `done`. Otherwise, return to Stage 2 with a corrected plan.
+* If `cargo build` **failed**: in your reply, quote the FIRST error
+  line verbatim. Reason about its specific cause in 1–2 sentences.
+  Then return to Stage 2 with a fix targeted at THAT error. Do not
+  rewrite untouched parts of the file.
+
+## Self-monitor — write counter
+
+Before each `write`, count: this is my Nth write. If N > 3 you are
+thrashing. In your reply, summarize what each previous write tried
+and why it failed, then commit to one specific change for the next
+write. Do not write a fourth time without that summary.
+
+## Tools available
+
+- `read` — read a file in workdir.
+- `write` — replace file contents (whole-file).
+- `bash` — run shell command in workdir.
+- `done` — signal completion. Only after `cargo build` succeeds
+  AND you've mentally walked the worked example through your code.
