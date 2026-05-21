@@ -401,6 +401,44 @@ query = "Halt — wrong direction."
 intent = "conation_query"
 query = "Faster, just the headline."
 
+# ── Memory-reference shape (expressive cluster) ──
+# When the substring looks_like_memory_reference heuristic was
+# retired, these were added so the expressive centroid covers
+# the "Remember when..." / "Last time we talked" / "You mentioned
+# X" recall framings that route to EXPRESSIVE (relational), not
+# COMMISSION or METALINGUAL.
+
+[[example]]
+intent = "expressive_query"
+query = "Last time we talked about my old job — I wanted to circle back to that."
+
+[[example]]
+intent = "expressive_query"
+query = "You mentioned my brother before; I keep thinking about that."
+
+[[example]]
+intent = "expressive_query"
+query = "Remember the thing I said about my mom? I'm still sitting with it."
+
+# ── Personal-recall (knowledge_query cluster) ──
+# When looks_like_personal_recall retired, these cover the
+# "what books have I mentioned" / "did I tell you about X"
+# shape that asks about the conversation's content, not its
+# vocabulary. Routes to knowledge_query (LOOKUP against the
+# personal corpus), not METALINGUAL.
+
+[[example]]
+intent = "knowledge_query"
+query = "What books have I mentioned to you in past conversations?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Did I tell you about the trip I took last spring?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What did I share earlier about my reading list?"
+
 # ── commissive_query — first-person future commitments ──
 
 [[example]]
