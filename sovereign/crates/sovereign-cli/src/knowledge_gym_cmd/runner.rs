@@ -957,6 +957,191 @@ fn eval_block(
             format!("min={min}, actual={actual}"),
         );
     }
+
+    // `evidence_set_excludes_kind` — sibling of
+    // `evidence_set_includes_kind`. List of kinds that must NOT
+    // appear in the scope's returned evidence. Use for negative
+    // controls (e.g. "this scope must not include web rows" =
+    // escalation did NOT fire when it shouldn't have).
+    if let Some(forbidden) = pass
+        .get("evidence_set_excludes_kind")
+        .and_then(|v| v.as_array())
+    {
+        let forbidden_set: std::collections::HashSet<String> = forbidden
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect();
+        let actual_set: std::collections::HashSet<String> = scope
+            .tool_calls
+            .iter()
+            .flat_map(|tc| tc.returned_evidence_kinds.iter().cloned())
+            .collect();
+        let intersect: Vec<&String> = forbidden_set
+            .iter()
+            .filter(|k| actual_set.contains(*k))
+            .collect();
+        push(
+            out,
+            "evidence_set_excludes_kind",
+            intersect.is_empty(),
+            format!("forbidden={forbidden_set:?}, actual={actual_set:?}, found={intersect:?}"),
+        );
+    }
+
+    // `answer_attributes_conflict` — SHAPE-level. When the
+    // evidence set contains genuinely-contradicting rows (mock
+    // sets up A and ¬A), the model should acknowledge the
+    // disagreement rather than silently pick one. Looks for
+    // contrast-shape vocabulary in the final answer AND that
+    // the model cited at least two distinct evidence ids (you
+    // can't attribute a conflict you didn't reference both
+    // sides of).
+    //
+    // Per `feedback_no_teaching_to_test`: the vocabulary lists
+    // describe SHAPES (English contrast / negation / disagreement
+    // patterns), not bank-derived phrases. Multiple disjoint
+    // clusters keep the predicate from over-fitting to one
+    // phrasing convention.
+    if pass
+        .get("answer_attributes_conflict")
+        .and_then(|v| v.as_bool())
+        == Some(true)
+    {
+        let msg_l = scope.final_message.unwrap_or_default().to_lowercase();
+
+        let contrast_token = [
+            "however", "but ", "yet", "whereas", "while",
+            "on the other hand", "in contrast", "by contrast",
+            "though", "although",
+        ]
+        .iter()
+        .any(|w| msg_l.contains(w));
+
+        let disagreement_token = [
+            "disagree", "conflict", "contradict", "inconsisten",
+            "tension", "differ", "different account",
+            "competing", "at odds", "diverge", "discrepancy",
+        ]
+        .iter()
+        .any(|w| msg_l.contains(w));
+
+        // Plural-source acknowledgement — the model is talking
+        // about multiple evidence rows, not picking one.
+        let plural_sources = [
+            "two sources", "both sources", "two accounts",
+            "the sources", "the evidence rows", "the two pieces",
+            "one source", // "one source says X, another says Y"
+            "another source", "the other source",
+        ]
+        .iter()
+        .any(|w| msg_l.contains(w));
+
+        // Cited at least two distinct ids — without this, the
+        // model might use contrast vocabulary while only
+        // grounding in one row, which isn't conflict attribution.
+        let two_plus_cited = cited_ids.len() >= 2;
+
+        let passed = two_plus_cited
+            && (disagreement_token
+                || (contrast_token && plural_sources));
+
+        push(
+            out,
+            "answer_attributes_conflict",
+            passed,
+            format!(
+                "contrast={contrast_token}, disagree={disagreement_token}, \
+                 plural_src={plural_sources}, two_cited={two_plus_cited}, \
+                 cited={cited_ids:?}"
+            ),
+        );
+    }
+
+    // `answer_acknowledges_partial_match` — SHAPE-level. When
+    // the mock evidence is related-but-not-directly-answering,
+    // the model should acknowledge the gap between what the
+    // corpus has and what the user asked rather than confidently
+    // synthesising a non-answer.
+    //
+    // Distinct from `answer_acknowledges_gap` (which checks for
+    // "I don't know" when evidence is empty) — here the evidence
+    // is NON-empty, just off-target. The vocabulary lists below
+    // describe SHAPES of scope-qualification / hedging, not
+    // bank-derived phrases.
+    if pass
+        .get("answer_acknowledges_partial_match")
+        .and_then(|v| v.as_bool())
+        == Some(true)
+    {
+        let msg_l = scope.final_message.unwrap_or_default().to_lowercase();
+
+        // Direct-answer denial: the model explicitly says the
+        // evidence doesn't answer the question directly. Includes
+        // the "doesn't / does not explicitly / specifically /
+        // clarify / state" family — all common English shapes
+        // for "source-doesn't-address-this-specific-point".
+        let direct_denial = [
+            "doesn't directly", "does not directly",
+            "doesn't specifically", "does not specifically",
+            "doesn't explicitly", "does not explicitly",
+            "doesn't clarify", "does not clarify",
+            "doesn't state", "does not state",
+            "doesn't answer", "does not answer",
+            "without directly", "not directly address",
+            "not specifically address",
+            "no explicit", "no specific mention",
+        ]
+        .iter()
+        .any(|w| msg_l.contains(w));
+
+        // Scope-qualifier: the model frames what the evidence
+        // covers vs what it doesn't. The "covers X but leaves
+        // out Y" / "discusses X without Y" patterns are
+        // structurally identical to "doesn't include" — they
+        // partition what the source has from what it doesn't.
+        let scope_qualifier = [
+            "doesn't cover", "does not cover",
+            "doesn't include", "does not include",
+            "leaves out", "leaving out",
+            "without addressing", "without specifying",
+            "related to", "in the context of",
+            "tangentially", "adjacent to", "broader topic",
+            "the evidence is about", "the corpus has",
+            "no information about the specific",
+            "but leaves", "but does not",
+            "covers the", // "covers the rate but leaves out the formulation"
+        ]
+        .iter()
+        .any(|w| msg_l.contains(w));
+
+        // Hedge token — softening the answer rather than
+        // asserting confidently.
+        let hedge_token = [
+            "while", "although", "though",
+            "more general", "the closest",
+            "what's available", "what i can tell",
+        ]
+        .iter()
+        .any(|w| msg_l.contains(w));
+
+        // At least one citation — the model is referencing the
+        // evidence (otherwise "no information" would be the
+        // honest answer, not partial-match acknowledgement).
+        let some_citation = !cited_ids.is_empty();
+
+        let passed = some_citation
+            && (direct_denial || (scope_qualifier && hedge_token));
+
+        push(
+            out,
+            "answer_acknowledges_partial_match",
+            passed,
+            format!(
+                "direct_denial={direct_denial}, scope_qual={scope_qualifier}, \
+                 hedge={hedge_token}, citations={cited_ids:?}"
+            ),
+        );
+    }
 }
 
 /// Extract the turn segment from an `ev-Tn-NNNN` handle. Returns

@@ -361,146 +361,97 @@ impl LlmRouter {
         } else {
             "none".to_string()
         };
-        let lookup_note = if context.installed_corpora.is_empty() {
-            "  Note: no local knowledge sources are installed, so LOOKUP is less useful."
-        } else {
-            ""
-        };
 
+        // 2026-05-21 compression pass: condensed from ~1000 words →
+        // ~520 words for ~9B router model context budget. SHAPE-level
+        // signals + critical NOT-X disambiguations preserved; one
+        // example per category (was three); INFERENCE header slimmed.
+        // Cells_v1 + voice_routing_v1 + skills_migration_smoke gate
+        // any future cuts.
         format!(
             r#"Classify this message into exactly ONE category.
 
-═══ SITUATED CONTEXT (use for Gricean inference) ═══
+═══ SITUATED CONTEXT ═══
 {context_str}
 
 Installed knowledge sources: {corpus_list}
 Other available tools: {tool_list}
 
-═══ INFERENCE INSTRUCTION ═══
-Pick the category whose move-shape would make the user's message
-*optimally relevant given the situated context above*. The
-grammatical surface form does NOT pick the category — the user's
-actual move does. Examples of surface ≠ intent:
-  - "you there?" after a long-running task → PHATIC under DIRECTIVE,
-    not LOOKUP. The user is checking presence, not asking a question.
-  - "I'm stuck on this" while debugging → EXPRESSIVE with implicit
-    help-request, not a SIMPLE statement of fact.
-  - "shorter please" after a long answer → CONATION (act on prior
-    turn), not a question about brevity.
-Reason about what the user actually wants given that they said this
-*now*, after seeing the assistant's last reply.
+═══ INFERENCE ═══
+Pick the intent for the user's actual MOVE, not the surface form.
+"shorter please" after a long answer is CONATION (transform prior
+turn), not a question. "I'm stuck" while debugging is EXPRESSIVE
+with implicit help-request, not SIMPLE.
 
 ═══ Categories ═══
 
 SIMPLE
-  Answerable from general world knowledge without needing to look
-  anything up. Pure reasoning, math, definitions, logic puzzles,
-  things that have exactly one universally known answer.
-  NOTE: contested philosophical, ethical, or metaphysical topics
-  (free will, consciousness, moral realism, God's existence,
-  political philosophy) are NOT SIMPLE — use REASONING.
-  Examples: "What is 12 × 14?", "What does 'ephemeral' mean?",
-            "If all A are B and all B are C, are all A C?"
+  Pure reasoning / math / definitions / logic — one universally
+  known answer, no lookup needed.
+  NOT SIMPLE: contested philosophy / ethics / metaphysics (free
+  will, consciousness, moral realism) → REASONING.
+  Example: "If all A are B and all B are C, are all A C?"
 
 LOOKUP
-  A factual question where ONE specific, atomic answer exists and
-  could plausibly be wrong if answered from memory alone. The full
-  answer fits in a sentence or a short list; no aggregation across
-  sources is required.
-  Includes: names, dates, statistics, records, single-fact rosters,
-  specific events, anything that changes over time.
-  When installed knowledge sources are available, prefer LOOKUP
-  over SIMPLE for atomic factual questions involving specific details.
-  When in doubt between SIMPLE and LOOKUP: choose LOOKUP.{lookup_note}
-  NOT LOOKUP: questions that ask for *causes*, *effects*, *reasons*,
-  *contributions across multiple actors*, *how X drew on Y*, or *why
-  X happened*. Those aggregate across sources and are REASONING. For
-  *the differences between X and Y* / *compare X and Y*, use COMPARISON.
-  Examples: "Who was in the Arsenal Invincibles squad?",
-            "What year was the Eiffel Tower built?",
-            "How many episodes are in Breaking Bad season 3?"
+  One specific atomic fact: names, dates, statistics, records.
+  When knowledge sources are installed, prefer LOOKUP over SIMPLE
+  for atomic facts. When in doubt: LOOKUP.
+  NOT LOOKUP: causes / effects / reasons / multi-source aggregation
+  → REASONING. "Difference between X and Y" → COMPARISON.
+  Example: "What year was the Eiffel Tower built?"
 
 COMPARISON
-  Two or more named entities (people, theories, technologies, places)
-  being contrasted. The answer has a bounded structure: a handful of
-  axes on which X and Y differ. Not an open-ended essay — fits in a
-  short paragraph or three bullets.
-  Signals: "difference between X and Y", "compare X and Y",
-  "how does X differ from Y", "X vs Y".
-  Examples: "What's the difference between TCP and UDP?",
-            "How does a turbine engine differ from a piston engine?",
-            "Compare cuneiform and hieroglyphic writing systems."
+  Two named entities contrasted on bounded axes. Fits in three
+  bullets, not an essay.
+  Signals: "difference between X and Y", "X vs Y", "compare X and Y".
+  Example: "What's the difference between TCP and UDP?"
 
 REASONING
-  Open-ended analysis, synthesis, creative work, or multi-step
-  thinking where no single lookup would answer it. A REASONING
-  answer aggregates evidence across multiple facts/sources without
-  the bounded contrast shape of COMPARISON.
-  Includes: causes/effects/reasons questions, multi-aspect "how did
-  X relate to Y" / "how did X draw on Y" questions, multi-actor
-  attributions, anything that asks for the structure or logic behind
-  a sequence of facts rather than a single fact.
-  Examples: "Write a short poem about autumn",
-            "Explain why inflation causes interest rate rises",
-            "What were the main causes of the 2008 financial crisis?",
-            "How did Roman trade networks shape early Christian spread?"
+  Open-ended synthesis or multi-step thinking. Aggregates evidence
+  across facts WITHOUT the bounded contrast shape of COMPARISON.
+  Causes, effects, "how did X relate to Y", multi-actor attributions.
+  Example: "What were the main causes of the 2008 financial crisis?"
 
 ACTION
-  Requires a tool with external reach or side-effects: web search,
-  email, calendar, file system, shell, or MCP tools.
-  Only use ACTION when no installed knowledge source could answer
-  the question — web search costs money per call.
-  IMPORTANT: Questions about current events, today's news, live
-  prices/scores, or anything time-sensitive are ACTION.
-  Examples: "Search the web for today's Arsenal news",
-            "Send an email to my team",
-            "What time is it in Tokyo right now?"
-  NOT ACTION: processing content that's already in the prompt or
-  conversation is REASONING. "Summarize this", "Explain this passage",
-  "Paraphrase the excerpt", "Compare these sections" are REASONING,
-  not ACTION, even though they use imperative verbs.
+  Needs an external-reach tool: web, email, calendar, files, shell.
+  Use only when no installed knowledge source could answer. Current
+  events / live data / today's news are ACTION.
+  NOT ACTION: processing prompt-embedded content ("summarize this",
+  "explain this passage") is REASONING, even with imperative verbs.
+  Example: "What time is it in Tokyo right now?"
 
 CONATION
-  Imperative command directed at *the assistant about its last reply*.
-  Short (typically 1-4 words), no question mark, no proper nouns,
-  references the assistant's prior turn — not the world. The user is
-  asking the system to *transform* what was just produced.
-  Examples: "Stop", "Try again", "Shorter please",
-            "Skip the boilerplate", "Walk me through it slower"
-  NOT CONATION: questions about whether to stop something in the
-  world ("should I stop the migration?") are ACTION or REASONING.
+  Short imperative directed at the assistant about its last reply.
+  Typically 1-4 words, no question mark, no proper nouns. The user
+  is asking to TRANSFORM what was just produced.
+  Example: "Shorter please"
 
 COMMISSION
-  User committing to a future action, or asking the assistant to
-  remember something. First-person future framing ("I'll", "I'm
-  going to", "remind me to"). The intent is to *persist a
-  commitment*, not get an immediate answer.
-  Examples: "I'll fix the migration tomorrow",
-            "I'm going to refactor the router later",
-            "Remind me to review this Friday"
-  NOT COMMISSION: questions about future events ("when will X
-  happen?") are LOOKUP or REASONING.
-  NOT COMMISSION: memory-reference framings ("Remember when …",
-  "Last time we talked about …", "You mentioned X", "I told you
-  about Y") are recall moves, NOT commitments — even when followed
-  by "I want to come back to that" or similar tail framing. These
-  are EXPRESSIVE (relational) or REASONING.
+  First-person future commitment ("I'll", "I'm going to",
+  "remind me to"). Persists a commitment, not an immediate answer.
+  NOT COMMISSION: memory-recall framings ("Remember when…",
+  "You mentioned X") are EXPRESSIVE or REASONING.
+  Example: "Remind me to review this Friday"
 
 EXPRESSIVE
-  User expressing how they're feeling about the current work,
-  often with implicit help-request. Short, first-person, emotive
-  vocabulary ("stuck", "frustrated", "no idea"). Surface looks like
-  a feeling-statement but the actual move — given conversation
-  context — is usually "help me unstick".
-  Examples: "I'm stuck on this", "Ugh, broken again",
-            "I have no idea where to start", "This is exhausting"
-  NOT EXPRESSIVE: longer messages that embed a real question are
-  the question type, not EXPRESSIVE.
+  Short emotive disclosure with implicit help-request ("stuck",
+  "frustrated", "no idea"). Surface looks like a statement, the
+  move is "help me unstick".
+  Example: "I'm stuck on this"
+
+METALINGUAL
+  Asks how a term is USED by a named anchor — this system, this
+  conversation, or a named external source. Meta to language, not
+  the fact itself.
+  Signals: "in this codebase / conversation", "we discussed",
+  "according to <source>", "how does <source> define".
+  Example: "According to Wikipedia, what does 'recursion' mean?"
+  NOT METALINGUAL: bare definitions with no anchor are SIMPLE / LOOKUP.
 
 User message: "{message}"{corrections_note}
 
 Respond with JSON only:
-{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE"}}"#,
+{{"intent": "SIMPLE|LOOKUP|COMPARISON|REASONING|ACTION|CONATION|COMMISSION|EXPRESSIVE|METALINGUAL"}}"#,
         )
     }
 
@@ -1028,55 +979,25 @@ Reply with JSON only:
         DEFINITIONAL_VERBS.iter().any(|m| lower.contains(m))
     }
 
-    /// Heuristic check: is this message a conation move — short
-    /// imperative directed at the assistant about its prior reply
-    /// ("stop", "try again", "shorter please", "skip the boilerplate",
-    /// "more detail")?
+    /// Retired (2026-05-21): the substring-based conation
+    /// pre-check used a maintained-by-hand `IMPERATIVE_MARKERS`
+    /// list that duplicated work the embed router already does
+    /// via cluster centroids. Each missed phrasing required a
+    /// new Rust source edit + rebuild + restart — exactly the
+    /// failure mode the embed router was introduced to retire.
     ///
-    /// High-precision: requires (a) ≤4 alphanumeric tokens, (b) no
-    /// question mark, (c) no proper nouns (filters out "Compare X
-    /// and Y"), (d) at least one imperative or style-modifier marker.
-    /// The conation handler then operates on the situated artifact —
-    /// the prior `QuerySession.classification` — without re-running
-    /// the router.
-    fn looks_like_conation(message: &str) -> bool {
-        if message.contains('?') {
-            return false;
-        }
-        let tokens: Vec<&str> = message
-            .split_whitespace()
-            .filter(|w| w.chars().any(|c| c.is_alphanumeric()))
-            .collect();
-        if tokens.is_empty() || tokens.len() > 4 {
-            return false;
-        }
-        // Reject mid-sentence proper nouns. First token treated as
-        // sentence-initial so "Stop" capitalized at start is allowed.
-        for (i, t) in tokens.iter().enumerate() {
-            if i == 0 {
-                continue;
-            }
-            let cleaned = t.trim_matches(|c: char| !c.is_alphabetic());
-            if cleaned
-                .chars()
-                .next()
-                .map(|c| c.is_uppercase())
-                .unwrap_or(false)
-            {
-                return false;
-            }
-        }
-        let lower = message.to_lowercase();
-        const IMPERATIVE_MARKERS: &[&str] = &[
-            "stop", "cancel", "abort", "halt",
-            "try again", "retry", "regenerate", "redo", "again",
-            "shorter", "terser", "concise", "be terse", "tldr",
-            "longer", "more detail", "expand", "elaborate",
-            "slower", "step by step", "walk through",
-            "faster", "skip", "boilerplate",
-            "less", "more",
-        ];
-        IMPERATIVE_MARKERS.iter().any(|m| lower.contains(m))
+    /// The conation cluster in `sovereign/router/exemplars.toml`
+    /// now carries representative entries for the shapes the
+    /// substring list used to catch (stop / cancel / shorter /
+    /// elaborate / walk-through / slower / faster / etc.). New
+    /// conation phrasings ship as DATA (one row in exemplars.toml)
+    /// rather than CODE.
+    ///
+    /// This stub stays as a tombstone so the downstream `!force_conation`
+    /// guards compile unchanged. A follow-up PR can delete the
+    /// guards and the stub together.
+    fn looks_like_conation(_message: &str) -> bool {
+        false
     }
 
     /// Heuristic check: is this message a commissive move — user

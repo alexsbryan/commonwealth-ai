@@ -359,6 +359,48 @@ query = "Give me just the answer."
 intent = "conation_query"
 query = "Drop the caveat at the end."
 
+# ── Conation centroid expansion (2026-05) ──
+# When the substring-based looks_like_conation heuristic was
+# retired, these were added so the embed-router centroid for
+# CONATION covers the shapes the substring list used to catch:
+# pace-modifiers (slower / faster), length-modifiers (longer /
+# expand / elaborate), abort-shapes (cancel / abort / halt),
+# and walk-through-shapes. Each entry is a representative
+# imperative — when a user says something semantically nearby,
+# the embed router picks CONATION without any code change.
+
+[[example]]
+intent = "conation_query"
+query = "Slower, walk me through that piece."
+
+[[example]]
+intent = "conation_query"
+query = "Walk through what you just did, step by step."
+
+[[example]]
+intent = "conation_query"
+query = "Expand on that last part."
+
+[[example]]
+intent = "conation_query"
+query = "Make it longer with more detail."
+
+[[example]]
+intent = "conation_query"
+query = "Elaborate on the second point."
+
+[[example]]
+intent = "conation_query"
+query = "Cancel that, start over."
+
+[[example]]
+intent = "conation_query"
+query = "Halt — wrong direction."
+
+[[example]]
+intent = "conation_query"
+query = "Faster, just the headline."
+
 # ── commissive_query — first-person future commitments ──
 
 [[example]]
@@ -736,3 +778,67 @@ query = "Keep track of my reading list — I'll add things as I find them."
 [[example]]
 intent = "conation_query"
 query = "Schedule a focused work block for tomorrow morning."
+
+# ── cells_v1 regression patches ──
+# Two SHAPES under-represented in the cluster centroids surfaced
+# as nearest-neighbour misroutes on the cells_v1 routing bench.
+# Per `feedback_no_teaching_to_test`, each addition uses
+# different surface vocabulary than the failing bench question —
+# the cluster should generalise across subject matter.
+
+# Source-attribution metalingual: "According to <named external
+# source>, what does <term> mean?" — the question is about how
+# a specific source uses a term, not the term's free-form
+# meaning. Distinct from the existing "in this codebase / in
+# our project" metalingual cluster (which is self-referential).
+# Source-attribution metalingual is still about HOW SOMEONE
+# USES A WORD, just with the someone being an external named
+# document rather than the conversation itself.
+
+[[example]]
+intent = "metalingual_query"
+query = "According to Wikipedia, what does 'recursion' mean?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does the IPCC define as a climate tipping point?"
+
+[[example]]
+intent = "metalingual_query"
+query = "How does the WHO guideline define a 'pandemic phase'?"
+
+[[example]]
+intent = "metalingual_query"
+query = "According to the textbook, what does 'thermodynamic equilibrium' refer to?"
+
+[[example]]
+intent = "metalingual_query"
+query = "According to the EPA, what does the term 'pollutant' cover?"
+
+[[example]]
+intent = "metalingual_query"
+query = "According to the dictionary, what does 'inference' refer to?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does the rulebook define as a 'foul' in this context?"
+
+# Generic-concept comparison: "What's the difference between X
+# and Y?" where X and Y are well-known concepts (programming
+# constructs, scientific phenomena, protocols) rather than
+# symbols in this codebase. The metalingual "in our codebase"
+# variant has been pulling these into metalingual via nearest-
+# neighbour drift; these additions reweight the comparison
+# centroid toward generic-concept asks.
+
+[[example]]
+intent = "comparison_query"
+query = "What's the difference between SQL and NoSQL databases?"
+
+[[example]]
+intent = "comparison_query"
+query = "How do TCP and UDP differ as transport protocols?"
+
+[[example]]
+intent = "comparison_query"
+query = "What's the difference between a function and a method in object-oriented code?"
