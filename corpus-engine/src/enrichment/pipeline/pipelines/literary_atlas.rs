@@ -774,21 +774,7 @@ impl Pipeline for LiteraryAtlasPipeline {
         &self,
         response: &str,
     ) -> Result<Vec<crate::enrichment::atlas::analysis::Phase8ParseItem>> {
-        let cleaned =
-            super::literary::prepare_phase_json(response, "phase 8 (configuration)")?;
-
-        #[derive(serde::Deserialize)]
-        struct RawOutput {
-            #[serde(default)]
-            configurations: Vec<crate::enrichment::atlas::analysis::Phase8ParseItem>,
-        }
-
-        let raw: RawOutput = serde_json::from_str(&cleaned).map_err(|e| {
-            crate::error::Error::Serialization(format!(
-                "phase 8 (configuration) response is not valid JSON: {e}"
-            ))
-        })?;
-        Ok(raw.configurations)
+        parse_phase8_configuration_tolerant(response)
     }
 
     // ── Phase 6 atlas Tension classifier ─────────────────────────
@@ -2103,6 +2089,91 @@ pub fn phase1a_seed_schema() -> serde_json::Value {
         .expect("PHASE1A_SEED_SCHEMA must be valid JSON")
 }
 
+/// Parse a Phase 8 (`configurations`) response with tolerance for
+/// three real-world model deviations observed during the SEP atlas
+/// ingest:
+///
+/// 1. Strict shape: `{"configurations": [ {...}, {...} ]}` — the
+///    documented format.
+/// 2. Map-keyed shape: `{"configurations": {"key_a": {...},
+///    "key_b": {...}}}` — DeepSeek-family models occasionally
+///    interpret "0–3 configurations" as a keyed dict. Coerce values
+///    into an array.
+/// 3. Bare-array shape: `[ {...}, {...} ]` — model skips the wrapper
+///    object.
+/// 4. No JSON at all (e.g. an unclosed `<think>` trace or model
+///    declined): return `Ok(vec![])`. Phase 8's prompt explicitly
+///    allows "0–3 configurations" so zero configurations is a valid
+///    answer, not a build failure.
+pub(crate) fn parse_phase8_configuration_tolerant(
+    response: &str,
+) -> Result<Vec<crate::enrichment::atlas::analysis::Phase8ParseItem>> {
+    let cleaned =
+        match super::literary::prepare_phase_json(response, "phase 8 (configuration)") {
+            Ok(c) => c,
+            Err(Error::Serialization(msg))
+                if msg.contains("contained no recognisable JSON object") =>
+            {
+                tracing::warn!(
+                    phase = "phase8_configuration",
+                    "model returned no JSON block; treating as 0 configurations"
+                );
+                return Ok(Vec::new());
+            }
+            Err(e) => return Err(e),
+        };
+
+    let root: serde_json::Value = serde_json::from_str(&cleaned).map_err(|e| {
+        Error::Serialization(format!(
+            "phase 8 (configuration) response is not valid JSON: {e}"
+        ))
+    })?;
+
+    // Locate the items: either `root.configurations` or root itself
+    // (when the model skipped the wrapper).
+    let items_value = match &root {
+        serde_json::Value::Object(map) => match map.get("configurations") {
+            Some(v) => v.clone(),
+            // No `configurations` key. If the object itself looks like
+            // a single Phase8ParseItem (has `label` + `description`),
+            // wrap it. Otherwise preserve the historical default of
+            // "ignore unknown shape" and return empty.
+            None => {
+                if map.contains_key("label") && map.contains_key("description") {
+                    serde_json::Value::Array(vec![root.clone()])
+                } else {
+                    return Ok(Vec::new());
+                }
+            }
+        },
+        serde_json::Value::Array(_) => root.clone(),
+        _ => {
+            return Err(Error::Serialization(format!(
+                "phase 8 (configuration) response is not valid JSON: \
+                 expected object or array at root, got {root}"
+            )));
+        }
+    };
+
+    // Coerce a map-of-configs into an array of values.
+    let items_array = match items_value {
+        serde_json::Value::Array(arr) => arr,
+        serde_json::Value::Object(map) => map.into_iter().map(|(_, v)| v).collect(),
+        other => {
+            return Err(Error::Serialization(format!(
+                "phase 8 (configuration) response is not valid JSON: \
+                 `configurations` must be an array or object, got {other}"
+            )));
+        }
+    };
+
+    serde_json::from_value(serde_json::Value::Array(items_array)).map_err(|e| {
+        Error::Serialization(format!(
+            "phase 8 (configuration) response is not valid JSON: {e}"
+        ))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2122,6 +2193,107 @@ mod tests {
     fn seed_strategy_is_llm() {
         let p = LiteraryAtlasPipeline::new();
         assert_eq!(p.seed_strategy(), SeedStrategy::Llm);
+    }
+
+    // ── Phase 8 tolerant parser ─────────────────────────────────
+
+    #[test]
+    fn phase8_parses_strict_array_shape() {
+        // The documented happy path: `{configurations: [...]}`.
+        let response = r#"{
+          "configurations": [
+            {
+              "label": "Developmental Framework",
+              "description": "Reads the corpus as a chronological progression.",
+              "interpretive_note": "Strongest in early sections.",
+              "confidence": 0.85,
+              "constituent_atoms": ["entity-0001"],
+              "evidence_chunk_ids": ["sec_0001"]
+            }
+          ]
+        }"#;
+        let items = parse_phase8_configuration_tolerant(response).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].label, "Developmental Framework");
+        assert!((items[0].confidence - 0.85).abs() < 1e-6);
+    }
+
+    #[test]
+    fn phase8_tolerates_map_keyed_configurations() {
+        // Observed on SEP descartes ingest: model returned
+        // `configurations` as a keyed dict instead of an array. The
+        // tolerant parser coerces the dict values into a Vec.
+        let response = r#"{
+          "configurations": {
+            "developmental": {
+              "label": "Developmental Framework",
+              "description": "Chronological reading.",
+              "interpretive_note": "First half evidence."
+            },
+            "doctrinal": {
+              "label": "Doctrinal Framework",
+              "description": "Reads positions as a system.",
+              "interpretive_note": "Holistic synthesis."
+            }
+          }
+        }"#;
+        let items = parse_phase8_configuration_tolerant(response).unwrap();
+        assert_eq!(items.len(), 2);
+        // Map iteration order is preserved (serde_json::Map is
+        // backed by IndexMap when `preserve_order` is on; either way
+        // both items should appear).
+        let labels: Vec<_> = items.iter().map(|i| i.label.as_str()).collect();
+        assert!(labels.contains(&"Developmental Framework"));
+        assert!(labels.contains(&"Doctrinal Framework"));
+    }
+
+    #[test]
+    fn phase8_tolerates_bare_array_root() {
+        // Model skipped the wrapper object entirely.
+        let response = r#"[
+          {
+            "label": "Sole Reading",
+            "description": "Only one plausible framing.",
+            "interpretive_note": "Atoms cohere uniquely."
+          }
+        ]"#;
+        let items = parse_phase8_configuration_tolerant(response).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].label, "Sole Reading");
+    }
+
+    #[test]
+    fn phase8_no_json_returns_empty_not_error() {
+        // Observed on SEP culture-cogsci ingest: model emitted only
+        // a `<think>` trace, never produced JSON. The prompt allows
+        // "0–3 configurations" so zero is a valid answer — must not
+        // fail the build step.
+        let response = "<think>\nThis input is too ambiguous to fit a configuration.\n</think>";
+        let items = parse_phase8_configuration_tolerant(response).unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn phase8_empty_configurations_array_is_zero() {
+        let response = r#"{ "configurations": [] }"#;
+        let items = parse_phase8_configuration_tolerant(response).unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn phase8_rejects_malformed_items() {
+        // The response is well-formed JSON and routes through the
+        // tolerant parser successfully up to the per-item deserialize
+        // — but the items are missing required fields. That's a real
+        // shape error worth surfacing (not the kind of model variance
+        // we want to silently swallow).
+        let response = r#"{"configurations": [{"label": "x"}]}"#;
+        let err = parse_phase8_configuration_tolerant(response).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("phase 8 (configuration)"),
+            "error must name the phase: {msg}"
+        );
     }
 
     #[test]

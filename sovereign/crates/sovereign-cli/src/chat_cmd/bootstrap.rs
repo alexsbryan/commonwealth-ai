@@ -321,6 +321,17 @@ pub async fn build_session_with_skills(
     tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // `attached_doc_search` is registered unconditionally; the
+    // execute() path returns a clear "no document attached" payload
+    // on conversations without a DocumentSession, so the model can
+    // probe it harmlessly. When a doc IS attached, the runtime's
+    // ReasonWithTools loop can call it directly — that's the lever
+    // the book-report bench exposed as missing (sovereign decision
+    // 7693f16b: attached docs as Tool, not parallel pipeline).
+    tools.register(Box::new(sovereign_tools::AttachedDocumentSearchTool::new(
+        Arc::clone(&store),
+        Arc::clone(&inference),
+    )));
     eprintln!("Tools:       {} registered", tools.count());
 
     // 7. Router + planner. The legacy REPL defaults to

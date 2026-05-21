@@ -188,6 +188,31 @@ impl SessionStore {
         Some(event)
     }
 
+    /// Push a narration entry directly, bypassing the elapsed-time
+    /// suppression and the per-turn cap. Required for `ToolInvocation*`
+    /// frames per the contract in `NarrationPhase` (see types.rs):
+    /// tool activity has to surface immediately even on fast turns,
+    /// and a multi-tool ReasonWithTools loop can fire more frames
+    /// than the 3-event cap would otherwise allow.
+    ///
+    /// Returns `None` when no session by that id exists.
+    pub fn force_push_narration(
+        &self,
+        session_id: &str,
+        phase: NarrationPhase,
+        text: String,
+    ) -> Option<NarrationEvent> {
+        let mut entry = self.sessions.get_mut(session_id)?;
+        let elapsed = entry.started_at.elapsed();
+        let event = NarrationEvent {
+            phase,
+            text,
+            elapsed_ms: elapsed.as_millis() as u64,
+        };
+        entry.narration.push(event.clone());
+        Some(event)
+    }
+
     pub fn get(&self, id: &str) -> Option<QuerySession> {
         self.sessions.get(id).map(|s| s.clone())
     }

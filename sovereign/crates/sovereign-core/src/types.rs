@@ -2581,7 +2581,93 @@ pub struct DocumentSkeleton {
     /// One-paragraph overview used by the router to decide
     /// operation type without reading the full document.
     pub overview: String,
+    /// Atlas-light: per-entity action atoms with chunk-level evidence.
+    /// Each atom captures *what an entity does*, anchored to a chunk
+    /// so retrieval can be entity-action lookup, not just embedding
+    /// similarity. Built optionally during ingest. Empty for pre-atlas
+    /// ingests (`#[serde(default)]` keeps old `skeleton_json` rows
+    /// deserialising cleanly).
+    ///
+    /// The book-report bench (2026-05-21) surfaced the failure this
+    /// addresses: even with K=16 embedding RAG + entity-name queries
+    /// from the briefing, the chunk containing "Winnie stitched the
+    /// address label into the lapel" never surfaced. Conrad's
+    /// chapter-5 family-drama passages don't embed close to
+    /// "Greenwich Park bomber identification" queries. Action atoms
+    /// bridge that semantic gap: query "what did Winnie do?" →
+    /// atom lookup → chunk_index 11 → return Conrad's actual prose.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<ActionAtom>,
+    /// Document-type-agnostic multi-chunk units the LLM grouped at
+    /// ingest. Each Segment is a contiguous chunk_range with a
+    /// title + summary + function label, capturing whatever
+    /// "coherent unit larger than a chunk, smaller than the whole
+    /// document" means for this doc_type (scene in fiction, section
+    /// in a paper, procedure in a manual, episode in a chronicle).
+    ///
+    /// Retrieval-time use: when a chunk K is hit by cosine K-NN,
+    /// look up the Segment containing K and return the whole
+    /// segment together. Replaces the runtime ±1 mechanical
+    /// neighbour expansion with LLM-judged structural boundaries.
+    ///
+    /// Empty for pre-segment ingests; `#[serde(default)]` keeps
+    /// old `skeleton_json` rows deserialising cleanly.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<DocumentSegment>,
     pub built_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A coherent multi-chunk unit the LLM grouped at ingest time.
+/// Generic across document types — the `function` enum reuses the
+/// same `SectionFunction` codes the per-chunk SectionAnnotation
+/// uses, so the same vocabulary serves both per-chunk and per-
+/// segment annotations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentSegment {
+    /// Stable id within this document — `seg-<chunk_start>`.
+    pub id: String,
+    /// Inclusive range of chunk_indices this segment spans.
+    /// `[start, end]` (both endpoints inclusive) — segments are
+    /// guaranteed to be at least 1 chunk.
+    pub chunk_start: usize,
+    pub chunk_end: usize,
+    /// Short, doc-type-aware title in the document's own
+    /// register. Free-form so a narrative gets "Heat searches
+    /// the wreckage" while a paper gets "Method — fMRI protocol".
+    pub title: String,
+    /// 1-3 sentence neutral summary of what the segment covers.
+    pub summary: String,
+    /// Main entities active in this segment (subset of skeleton's
+    /// main_entities, scoped to this range).
+    pub key_entities: Vec<String>,
+    /// Structural function — reuses the existing chunk-scope
+    /// SectionFunction enum so retrieval code doesn't branch on
+    /// segment-vs-chunk distinction.
+    pub function: SectionFunction,
+}
+
+/// What an entity does in the document, anchored to a chunk so the
+/// passage is recoverable as evidence. Atlas-light — one notch above
+/// the entity_index quote_samples (which are just first-200-chars
+/// of chunks where the entity appears) and one notch below the full
+/// atlas Atom schema (with typed Entity/Event/Relation IDs).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionAtom {
+    /// Canonical entity name from `main_entities`.
+    pub entity: String,
+    /// Action verb the LLM extracted ("stitched", "discovers",
+    /// "killed"). Lowercase, no surrounding whitespace.
+    pub verb: String,
+    /// What the verb acts on or modifies — short noun phrase.
+    pub object: String,
+    /// The chunk this action lives in. Used by retrieval to
+    /// surface the original passage when the model queries
+    /// the entity name.
+    pub chunk_index: usize,
+    /// Verbatim ~140-char snippet from the chunk that grounds
+    /// the atom. Lets the model see the document's actual
+    /// phrasing without re-querying the chunk.
+    pub evidence: String,
 }
 
 /// A chunk annotated with its structural role in the document.
