@@ -7728,6 +7728,19 @@ pub struct ConstrainedSampler {
     inner_explore: LlamaSampler,
     inner_content: LlamaSampler,
     constraint: Option<crate::json_constraint::JsonConstraint>,
+    /// llguidance-driven constraint, parallel to `constraint`.
+    /// Mutually exclusive in practice — `build_sampler` picks ONE of
+    /// `constraint` or `llg_constraint` based on the request:
+    /// `request.lark_grammar` wins when set (Lark + JSON-Schema +
+    /// top-level alternation via `LlguidanceConstraint`); otherwise
+    /// `request.structured_output` selects the in-house mask.
+    ///
+    /// Wired 2026-05-21 to close the `parse_failed_envelope` +
+    /// `loop_trap` failure classes the agent-bench scanner surfaced
+    /// the same day. The lark path lets the model emit either a
+    /// parseable tool envelope OR plain text (no parser leniency
+    /// retry chain needed; no force-tool-call loop trap).
+    llg_constraint: Option<crate::llguidance_constraint::LlguidanceConstraint>,
     /// URL-allowlist constraint. When `Some`, every sampled token's
     /// bytes are simulated against a byte-trie of allowed URLs; tokens
     /// whose bytes would start or extend a URL outside the allowlist
@@ -7789,7 +7802,13 @@ impl ConstrainedSampler {
         } else {
             ctx.token_data_array_ith(idx)
         };
-        if let Some(c) = self.constraint.as_mut() {
+        // Constraint dispatch: llguidance (lark + alternation) wins
+        // over the in-house JsonConstraint mask when both are set.
+        // build_sampler enforces mutual exclusion; this dispatch is
+        // defensive should that invariant ever drift.
+        if let Some(llg) = self.llg_constraint.as_mut() {
+            llg.mask(&mut data);
+        } else if let Some(c) = self.constraint.as_mut() {
             c.mask(&mut data);
         } else {
             // URL + evidence-id constraints are mutually exclusive
@@ -7838,7 +7857,14 @@ impl ConstrainedSampler {
     pub fn accept(&mut self, token: LlamaToken) {
         self.inner_explore.accept(token);
         self.inner_content.accept(token);
-        if let Some(c) = self.constraint.as_mut() {
+        // Constraint accept dispatch mirrors `sample`'s mask dispatch.
+        // llguidance wins when set; otherwise the in-house JSON
+        // constraint advances. URL + evidence-id FSMs always advance
+        // (their state has to stay synchronised with emitted bytes
+        // even when the JSON mask was the gating constraint).
+        if let Some(llg) = self.llg_constraint.as_mut() {
+            llg.accept_llama(token);
+        } else if let Some(c) = self.constraint.as_mut() {
             c.accept(token);
         }
         // Advance URL FSM unconditionally (even when JSON constraint
@@ -7904,21 +7930,56 @@ fn build_sampler(
     // response_format → CompletionRequest.structured_output. Failure
     // to compile is a real schema problem; warn loudly and fall back
     // to unconstrained sampling so the request doesn't hard-fail.
-    let constraint = request.structured_output.as_ref().and_then(|schema| {
-        match crate::json_constraint::JsonConstraint::new(schema, model) {
+    // llguidance-driven constraint takes precedence when set. The
+    // request carries a pre-built Lark grammar string
+    // (`request.lark_grammar`); the adapter (`sovereign-mesh::
+    // inference_adapter::build_completion_request`) sets this when
+    // tools are present and `SOVEREIGN_ALTERNATION_GRAMMAR` is on.
+    // Compile failure warns and falls back to free-form sampling so
+    // the request still produces output rather than 503'ing.
+    let llg_constraint = request.lark_grammar.as_deref().and_then(|lark| {
+        match crate::llguidance_constraint::LlguidanceConstraint::new(lark, model) {
             Ok(c) => {
-                tracing::info!("grammar-constrained decoding enabled (in-house mask, no llama-grammar.cpp)");
+                tracing::info!(
+                    grammar_bytes = lark.len(),
+                    "grammar-constrained decoding enabled (llguidance, lark)"
+                );
                 Some(c)
             }
             Err(e) => {
                 tracing::warn!(
                     error = %e,
-                    "JsonConstraint compile failed — falling back to free-form sampling"
+                    "LlguidanceConstraint compile failed — falling back to free-form sampling"
                 );
                 None
             }
         }
     });
+
+    // In-house JSON-Schema mask. Skipped when llguidance is already
+    // claiming the constraint slot — both engines mask the same logit
+    // chain; layering them would deadlock (each one would reject any
+    // token the other allowed). When `lark_grammar` is set,
+    // `structured_output` is intentionally ignored.
+    let constraint = if llg_constraint.is_some() {
+        None
+    } else {
+        request.structured_output.as_ref().and_then(|schema| {
+            match crate::json_constraint::JsonConstraint::new(schema, model) {
+                Ok(c) => {
+                    tracing::info!("grammar-constrained decoding enabled (in-house mask, no llama-grammar.cpp)");
+                    Some(c)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "JsonConstraint compile failed — falling back to free-form sampling"
+                    );
+                    None
+                }
+            }
+        })
+    };
 
     // URL-allowlist constraint: built when the caller declares a
     // non-empty allowlist on the request. Shares vocab_bytes storage
@@ -8133,6 +8194,7 @@ fn build_sampler(
         inner_explore: build_chain(&explore, explore.temp),
         inner_content: build_chain(&content, content_temp),
         constraint,
+        llg_constraint,
         url_constraint,
         evidence_id_constraint,
         non_latin_denylist,

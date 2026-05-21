@@ -144,6 +144,7 @@ pub async fn identify_gap(
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         })
         .await?;
 

@@ -138,6 +138,19 @@ lancedb = "0.27"
 # Markdown (sovereign-atos charter parsing)
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
 
+# Grammar-constrained sampling: llguidance is the upstream
+# Microsoft/Guidance constraint engine. We re-adopt it (after the
+# 2026-04 dismissal that traced to the llama-cpp-4 binding dropping
+# its `LlamaSampler::llguidance` shim) by using llguidance directly
+# from Rust — bypasses llama-cpp's grammar API entirely, same
+# pattern as our existing in-house `JsonConstraint` mask but with
+# Lark + JSON-Schema + top-level alternation support out of the
+# box. Lets us pin a `tool_envelope | plain_text` grammar so the
+# model can either emit a parseable tool call OR plain text "done"
+# — closes the parse_failed_envelope + loop_trap failure classes
+# surfaced by the agent-bench sweep on 2026-05-21.
+llguidance = "1.7"
+
 # ── Build profile ────────────────────────────────────────────────────────
 # Skip debug symbols on dev builds — biggest single speedup for `cargo
 # check` per the prior sub-workspace settings; preserved here so

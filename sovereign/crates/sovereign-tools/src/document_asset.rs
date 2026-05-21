@@ -827,6 +827,7 @@ impl DocumentAssetManager {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -991,6 +992,7 @@ impl DocumentAssetManager {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -1153,6 +1155,7 @@ impl DocumentAssetManager {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -1273,6 +1276,7 @@ impl DocumentAssetManager {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -1340,6 +1344,7 @@ impl DocumentAssetManager {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -1407,6 +1412,7 @@ async fn detect_document_type(
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         })
         .await;
 
@@ -1512,6 +1518,7 @@ async fn build_skeleton(
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await;
 
@@ -1667,6 +1674,7 @@ async fn generate_overview(
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         })
         .await
         .map(|r| r.text)

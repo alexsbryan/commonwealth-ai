@@ -30,6 +30,16 @@ rayon = "1.10"
 # See `embedded::apply_chat_template_minijinja`.
 minijinja = { workspace = true }
 
+# Re-adopted 2026-05-21 after the agent-bench sweep showed both
+# observed failure classes (parse_failed_envelope, loop_trap) trace
+# to the parser-leniency surface around free-form tool emission.
+# llguidance's top-level alternation (`tool_envelope | plain_text`)
+# closes both classes structurally. Used directly from Rust — the
+# llama-cpp-4 binding's `LlamaSampler::llguidance` shim doesn't
+# exist in 0.2.x, so we call llguidance from `ConstrainedSampler`
+# alongside the existing in-house `JsonConstraint` mask.
+llguidance = { workspace = true }
+
 # llama.cpp's GPU backend is picked per-OS. Linux uses Vulkan because
 # ROCm crashes in `ggml_cpu_extra_work_size` during Qwen3-A3B MoE
 # inference on gfx1151 — a secondary CPU SEGV after a primary GPU

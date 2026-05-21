@@ -109,6 +109,7 @@ pub fn inference_to_inference_fn(
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
         Box::pin(async move {
             let resp = inf

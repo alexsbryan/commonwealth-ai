@@ -282,6 +282,7 @@ pub async fn score_facts_judge(
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         match inference.complete(&request).await {
@@ -500,6 +501,7 @@ pub async fn score_sources_loose(
     cmd_prefix: None,
     url_allowlist: None,
     evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     let mut all_matched = rigid.matched.clone();
@@ -824,6 +826,7 @@ pub async fn score_essay_readiness(
     cmd_prefix: None,
     url_allowlist: None,
     evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     match inference.complete(&request).await {

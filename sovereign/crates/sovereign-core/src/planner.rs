@@ -70,6 +70,7 @@ impl Planner for LlmPlanner {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -155,6 +156,7 @@ impl Planner for LlmPlanner {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let response = self.inference.complete(&request).await?;

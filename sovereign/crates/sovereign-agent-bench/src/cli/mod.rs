@@ -1,5 +1,6 @@
 //! `sovereign agent-bench` subcommand dispatch.
 
+pub mod aggregate;
 pub mod args;
 pub mod run;
 
@@ -27,6 +28,13 @@ pub async fn run_agent_bench(args: &[String]) -> u8 {
             Ok(()) => 0,
             Err(e) => {
                 eprintln!("agent-bench show failed: {e}");
+                1
+            }
+        },
+        "aggregate" => match aggregate::run_command(&args[1..]) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("agent-bench aggregate failed: {e}");
                 1
             }
         },
@@ -61,6 +69,8 @@ Subcommands:
   run         Run one or more problems against an agent. See `run --help`.
   list        List available problems (id, category, language).
   show <id>   Print the problem.toml + prompt.md for a problem.
+  aggregate   Walk artifact roots, classify failure modes, print histogram.
+              See `aggregate --help` for flags.
   help        Show this help.
 
 Common flags for `run`:

@@ -582,6 +582,7 @@ mod tests {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let body = provider.build_request(&request);
@@ -631,6 +632,7 @@ mod tests {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let body = provider.build_request(&request);
