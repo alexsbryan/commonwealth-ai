@@ -37,6 +37,16 @@ pub enum ExitReason {
     /// Agent attempted a tool not in the allowlist. Reserved for runners
     /// that enforce allowlist client-side.
     ToolDenied { tool: String },
+    /// Agent issued N consecutive `write` tool calls without a `bash`
+    /// verification step in between — the canonical write-thrash
+    /// failure mode where each rewrite overlays partial code on top
+    /// of partial code and final output is incoherent. Distinct from
+    /// `NoProgress` (which fires when workdir is unchanged) because
+    /// write-thrash DOES change the workdir, just incoherently.
+    WriteThrash {
+        consecutive_writes: u32,
+        threshold: u32,
+    },
 }
 
 impl Default for ExitReason {
@@ -54,6 +64,7 @@ impl ExitReason {
             ExitReason::NoProgress { .. } => "no_progress",
             ExitReason::Crashed { .. } => "crashed",
             ExitReason::ToolDenied { .. } => "tool_denied",
+            ExitReason::WriteThrash { .. } => "write_thrash",
         }
     }
 
