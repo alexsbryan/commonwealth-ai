@@ -19,6 +19,7 @@
 
 use std::sync::Arc;
 
+use serde::Deserialize;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
@@ -190,14 +191,30 @@ impl ExecutionOutput {
     }
 }
 
-/// First `max` chars of `content`, trimmed at a word boundary when possible.
-/// Matches the snippet format used elsewhere in the codebase so citation
-/// popovers look consistent with knowledge-query popovers.
+/// First `max` *bytes* of `content` — walked back to the nearest UTF-8
+/// char boundary, then to a whitespace boundary when one is available
+/// within the safe window. Matches the snippet format used elsewhere in
+/// the codebase so citation popovers look consistent with
+/// knowledge-query popovers.
+///
+/// The char-boundary walk is load-bearing for non-ASCII documents:
+/// Conrad uses curly quotes (U+201C, 3 bytes), em-dashes (U+2014, 3
+/// bytes), and ellipses (U+2026, 3 bytes); slicing at a raw byte index
+/// in that text used to panic with "end byte index N is not a char
+/// boundary" inside the Cargo runtime.
 fn short_snippet(content: &str, max: usize) -> String {
     if content.len() <= max {
         return content.to_string();
     }
-    let truncated = &content[..max];
+    // Walk back to the nearest char boundary. is_char_boundary is
+    // stable since 1.9; floor_char_boundary is nightly-only, so we
+    // open-code the walk. At most 3 iterations (UTF-8 chars are ≤4
+    // bytes), so the cost is negligible.
+    let mut end = max;
+    while end > 0 && !content.is_char_boundary(end) {
+        end -= 1;
+    }
+    let truncated = &content[..end];
     match truncated.rfind(char::is_whitespace) {
         Some(pos) if pos > 0 => format!("{}...", &truncated[..pos]),
         _ => format!("{truncated}..."),
@@ -1481,19 +1498,25 @@ async fn build_skeleton(
             DocumentTypeTag::Unknown => "Character, Argument, Concept, Claim, Evidence, Theme, Person, Event",
         };
 
+        // Decode-minimal schema. The prior version emitted an
+        // `establishes` prose sentence per chunk (~40-80 decode
+        // tokens × 1006 chunks = ~60K tokens spent on text no
+        // downstream code read). Removed entirely. The
+        // moment_description is kept (briefing surfaces it) but
+        // capped at a fragment, not a sentence, to halve its
+        // decode cost when it fires.
         let prompt = format!(
             "Analyse these passages from a {doc_type} document. For each passage, extract:\n\n\
              1. **function**: One of: Introduces, Develops, Complicates, Resolves, Transitions, Evidences\n\
              2. **key_entities**: Important names, concepts, arguments, or themes (up to 5). \
                 Each entity is an object: {{\"name\": \"...\", \"kind\": \"...\"}}\n\
                 Valid kinds: {entity_kinds_hint}\n\
-             3. **establishes**: One sentence — what this section establishes or advances\n\
-             4. **is_structural_moment**: true/false — is this a major turning point, revelation, or shift?\n\
-             5. **moment_description**: If structural moment, one sentence describing it\n\n\
+             3. **is_structural_moment**: true/false — is this a major turning point, revelation, or shift?\n\
+             4. **moment_description**: If structural moment, a brief fragment (<=12 words) naming what shifted; otherwise null. Do NOT write a full sentence.\n\n\
              Passages (starting at section {batch_start}):\n\n{passage}\n\n\
-             Respond as a JSON array with one object per passage:\n\
+             Respond as a JSON array with one object per passage. Output the JSON only, no preamble:\n\
              [{{\"function\": \"...\", \"key_entities\": [{{\"name\": \"...\", \"kind\": \"...\"}}], \
-             \"establishes\": \"...\", \"is_structural_moment\": false, \"moment_description\": null}}]",
+             \"is_structural_moment\": false, \"moment_description\": null}}]",
             doc_type = doc_type.label(),
         );
 
@@ -1501,7 +1524,15 @@ async fn build_skeleton(
             .complete(&CompletionRequest {
                 prompt,
                 system_message: None,
-                preferred_speed: Speed::Fast,
+                // Skeleton entity extraction lifted from Fast → Slow.
+                // Direct prompt-probe on 2026-05-21 showed Fast-slot
+                // 9B silently drops major characters (Stevie, Ossipon,
+                // Professor) while Primary 35B catches them. The
+                // 4-chunk batches are small (~5-10s on Primary) so
+                // running this on Slow adds bounded ingest latency
+                // for a structural-quality win that every downstream
+                // briefing + retrieval signal depends on.
+                preferred_speed: Speed::Slow,
                 max_tokens: Some(512),
                 temperature: Some(0.1),
                 think_budget: Some(0),
@@ -1549,7 +1580,13 @@ async fn build_skeleton(
                             .iter()
                             .map(|(n, _)| n.clone())
                             .collect(),
-                        establishes: entry.establishes,
+                        // `establishes` was dropped from the
+                        // extraction schema (2026-05-21) to save
+                        // ~60K decode tokens per ingest; nothing
+                        // downstream read it. Placeholder kept here
+                        // so serialised skeletons from before the
+                        // change still deserialise cleanly.
+                        establishes: String::new(),
                     });
                 }
             }
@@ -1600,11 +1637,16 @@ async fn build_skeleton(
         .into_iter()
         .filter(|(name, _)| main_entities.iter().any(|e| &e.name == name))
         .map(|(name, indices)| {
+            // Char-bounded truncation. The prior `c.content[..len.min(200)]`
+            // byte-sliced and panicked when byte 200 landed inside a
+            // multi-byte char (curly quotes, em-dashes, ellipses — common
+            // in literary text). Same fix shape as `short_snippet`: take
+            // chars not bytes.
             let quote_samples: Vec<String> = indices
                 .iter()
                 .take(3)
                 .filter_map(|&i| chunks.get(i))
-                .map(|c| c.content[..c.content.len().min(200)].to_string())
+                .map(|c| c.content.chars().take(200).collect::<String>())
                 .collect();
             (
                 name,
@@ -1621,14 +1663,456 @@ async fn build_skeleton(
 
     structural_moments.truncate(40);
 
+    // ── Action atoms (atlas-light) ──────────────────────────
+    // For each top-N entity, run a Fast-slot pass over the entity's
+    // appearance chunks and extract verb-object pairs anchored to
+    // chunk_index. Cap N at 6 so the per-document cost stays bounded
+    // (6 entities × 1 LLM call each = 6 extra Fast-slot calls).
+    //
+    // Why this matters for retrieval (book-report 2026-05-21
+    // findings): embedding RAG plateaus around top-K=16 because the
+    // chunks that hold load-bearing actions ("Winnie stitched the
+    // address label into the lapel") don't embed close to the
+    // model's question-shaped queries ("Greenwich Park bomber
+    // identification"). Action atoms route around the semantic gap
+    // — the model queries by entity name, the tool consults the
+    // atom index, and the original chunk surfaces by structural
+    // lookup rather than embedding similarity.
+    let actions = extract_action_atoms(inference, chunks, &main_entities, &entity_index).await;
+
+    // ── Document segments ──────────────────────────────────
+    // Two-pass LLM-judged grouping of adjacent chunks into
+    // coherent multi-chunk units. Replaces retrieval-time
+    // mechanical ±1 expansion with structurally-judged ranges
+    // the ingest LLM picked while it had the document in
+    // hand. See `extract_segments` for the protocol.
+    let segments = extract_segments(inference, chunks, &main_entities, doc_type).await;
+
     Ok(DocumentSkeleton {
         sections,
         main_entities,
         entity_index,
         structural_moments,
         overview,
+        actions,
+        segments,
         built_at: chrono::Utc::now(),
     })
+}
+
+/// Two-pass segment extraction.
+///
+/// **Pass A — boundary detection.** For each pair of adjacent
+/// chunks, ask the model whether there is a segment break between
+/// them. Output is a single word (`BREAK` or `CONTINUE`) — minimal
+/// decode cost, accuracy is the model's job. ~N-1 calls for N
+/// chunks.
+///
+/// **Pass B — segment naming.** Derive segment ranges from the
+/// boundary decisions, then fire one call per segment to produce
+/// title + summary + function. Output is bounded JSON.
+///
+/// Both passes use Speed::Slow (Primary 35B). Fast slot would
+/// likely do well at Pass A (binary decision on adjacent chunks)
+/// but is currently unloaded; revisit if ingest latency becomes a
+/// production-perf blocker.
+///
+/// The function is fault-tolerant: any call failure falls back to
+/// `CONTINUE` (no break) or a default title, so a partial network
+/// blip produces fewer, larger segments rather than failing the
+/// whole ingest. Segments are an additive retrieval surface, not
+/// a load-bearing index — degraded extraction degrades retrieval
+/// gracefully.
+async fn extract_segments(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[TextChunk],
+    main_entities: &[RankedEntity],
+    doc_type: DocumentTypeTag,
+) -> Vec<DocumentSegment> {
+    if chunks.len() < 2 {
+        return Vec::new();
+    }
+
+    let doc_type_cue = match doc_type {
+        DocumentTypeTag::Narrative => {
+            "Boundaries land where setting, time, or active characters change."
+        }
+        DocumentTypeTag::Argument => {
+            "Boundaries land where the argument shifts or a new claim is introduced."
+        }
+        DocumentTypeTag::Evidence => {
+            "Boundaries land at Method / Result / Discussion / Limitation transitions."
+        }
+        DocumentTypeTag::Technical => {
+            "Boundaries land at procedure starts or topic changes."
+        }
+        DocumentTypeTag::Chronicle => {
+            "Boundaries land at time-skip or new event onset."
+        }
+        DocumentTypeTag::Unknown => {
+            "Boundaries land where the topic, mode, or subject changes."
+        }
+    };
+
+    // ── Pass A — boundary detection ─────────────────────────
+    let mut breaks: Vec<bool> = vec![false; chunks.len().saturating_sub(1)];
+    for i in 0..chunks.len().saturating_sub(1) {
+        let a = chunks[i].content.chars().take(550).collect::<String>();
+        let b = chunks[i + 1].content.chars().take(550).collect::<String>();
+        let prompt = format!(
+            "You are tagging segment boundaries in a {doc_type} document. \
+             {cue} Below are two adjacent chunks. Decide whether a NEW SEGMENT BEGINS \
+             with the second chunk (BREAK) or whether the second chunk continues the \
+             current segment (CONTINUE). Respond with ONLY one word: BREAK or CONTINUE.\n\n\
+             [chunk {i}]\n{a}\n\n[chunk {ip1}]\n{b}\n\nAnswer:",
+            doc_type = doc_type.label(),
+            cue = doc_type_cue,
+            i = i,
+            ip1 = i + 1,
+        );
+        let resp = inference
+            .complete(&CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Slow,
+                max_tokens: Some(4),
+                temperature: Some(0.0),
+                think_budget: Some(0),
+                structured_output: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+            })
+            .await;
+        if let Ok(r) = resp {
+            let trimmed = r.text.trim().to_uppercase();
+            breaks[i] = trimmed.starts_with('B');
+        }
+    }
+
+    // Derive segment ranges from break decisions.
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    let mut seg_start = 0usize;
+    for (i, &is_break) in breaks.iter().enumerate() {
+        if is_break {
+            // Segment [seg_start..=i] ends. Next segment starts at i+1.
+            ranges.push((seg_start, i));
+            seg_start = i + 1;
+        }
+    }
+    // Close the final segment, which runs to the last chunk.
+    ranges.push((seg_start, chunks.len() - 1));
+
+    // Cap segment count so a pathological "every chunk is a break"
+    // response from a misbehaving model can't blow up Pass B.
+    if ranges.len() > 200 {
+        return Vec::new();
+    }
+
+    // ── Pass B — name each segment ─────────────────────────
+    let mut segments = Vec::new();
+    let entity_list = main_entities
+        .iter()
+        .take(8)
+        .map(|e| e.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    for (start, end) in ranges {
+        // Compose segment body — clip each chunk to keep prompt
+        // bounded for very long segments.
+        let mut body = String::new();
+        for j in start..=end {
+            if let Some(c) = chunks.get(j) {
+                let snippet: String = c.content.chars().take(400).collect();
+                body.push_str(&format!("[chunk {j}] {snippet}\n\n"));
+            }
+            // Cap body size at ~6 chunks worth to keep prefill
+            // bounded; longer segments still get title+summary
+            // but from a clipped view (acceptable for naming).
+            if body.len() > 2400 {
+                break;
+            }
+        }
+        let prompt = format!(
+            "You are naming a segment of a {doc_type} document. The segment spans \
+             chunks {start}..={end}. Main document entities (subset may appear here): \
+             {entity_list}. Respond with a JSON object only — no prose:\n\
+             {{\"title\":\"<short, in document's own register>\", \
+             \"summary\":\"<1-2 sentences, neutral>\", \
+             \"function\":\"Introduces|Develops|Complicates|Resolves|Transitions|Evidences\", \
+             \"key_entities\":[\"name1\",\"name2\"]}}\n\n\
+             Segment content:\n{body}\nJSON:",
+            doc_type = doc_type.label(),
+        );
+        let resp = inference
+            .complete(&CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Slow,
+                max_tokens: Some(180),
+                temperature: Some(0.1),
+                think_budget: Some(0),
+                structured_output: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+            })
+            .await;
+        let (title, summary, function, key_entities) = match resp {
+            Ok(r) => parse_segment_naming(&r.text).unwrap_or_else(|| {
+                (
+                    format!("Segment chunks {start}..={end}"),
+                    String::new(),
+                    SectionFunction::Develops,
+                    Vec::new(),
+                )
+            }),
+            Err(_) => (
+                format!("Segment chunks {start}..={end}"),
+                String::new(),
+                SectionFunction::Develops,
+                Vec::new(),
+            ),
+        };
+        segments.push(DocumentSegment {
+            id: format!("seg-{start}"),
+            chunk_start: start,
+            chunk_end: end,
+            title,
+            summary,
+            key_entities,
+            function,
+        });
+    }
+
+    segments
+}
+
+/// Parse the Pass-B segment-naming JSON response. Returns None for
+/// unparseable responses; the caller falls back to a placeholder
+/// title rather than failing the segment.
+fn parse_segment_naming(
+    text: &str,
+) -> Option<(String, String, SectionFunction, Vec<String>)> {
+    let trimmed = text.trim();
+    let start = trimmed.find('{')?;
+    let end = trimmed.rfind('}')?;
+    if end <= start {
+        return None;
+    }
+    let json_str = &trimmed[start..=end];
+    let v: serde_json::Value = serde_json::from_str(json_str).ok()?;
+    let obj = v.as_object()?;
+    let title = obj.get("title").and_then(|x| x.as_str())?.to_string();
+    let summary = obj
+        .get("summary")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
+    let function = match obj
+        .get("function")
+        .and_then(|x| x.as_str())
+        .unwrap_or("Develops")
+        .to_lowercase()
+        .as_str()
+    {
+        "introduces" => SectionFunction::Introduces,
+        "develops" => SectionFunction::Develops,
+        "complicates" => SectionFunction::Complicates,
+        "resolves" => SectionFunction::Resolves,
+        "transitions" => SectionFunction::Transitions,
+        "evidences" => SectionFunction::Evidences,
+        _ => SectionFunction::Develops,
+    };
+    let key_entities = obj
+        .get("key_entities")
+        .and_then(|x| x.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((title, summary, function, key_entities))
+}
+
+/// Run a Fast-slot extraction over the top-N entities' chunks and
+/// emit `ActionAtom`s. One LLM call per entity, batching that entity's
+/// appearance chunks into a single prompt. The model is asked for a
+/// JSON list of `{verb, object, chunk_index, evidence}`; any chunk
+/// we can't parse cleanly is silently dropped — atoms are an additive
+/// retrieval surface, not a load-bearing index, so missing data is
+/// degraded behaviour, not a failure mode.
+async fn extract_action_atoms(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[TextChunk],
+    main_entities: &[RankedEntity],
+    entity_index: &std::collections::HashMap<String, EntityAppearances>,
+) -> Vec<ActionAtom> {
+    let mut out: Vec<ActionAtom> = Vec::new();
+    // Top-6: covers the load-bearing characters/concepts in a typical
+    // narrative; running the full top-30 would blow the budget for
+    // marginal lift on peripheral entities.
+    for ent in main_entities.iter().take(6) {
+        let Some(appearances) = entity_index.get(&ent.name) else {
+            continue;
+        };
+        // Cap appearance chunks at 6 to bound the prompt size. The
+        // entity's earliest appearances are usually introductory;
+        // we sample stride-wise from the appearance list so we cover
+        // beginning, middle, end of the entity's arc.
+        let total = appearances.chunk_indices.len();
+        let sample_indices: Vec<usize> = if total <= 6 {
+            appearances.chunk_indices.clone()
+        } else {
+            let stride = (total / 6).max(1);
+            appearances
+                .chunk_indices
+                .iter()
+                .step_by(stride)
+                .take(6)
+                .copied()
+                .collect()
+        };
+
+        // Compose a single prompt listing the sampled chunks with
+        // their indices. Cap each chunk excerpt at 500 chars so the
+        // total prompt stays inside Fast-slot context limits even
+        // when an entity hits 6 long chunks.
+        let mut passages = String::new();
+        for &idx in &sample_indices {
+            if let Some(chunk) = chunks.get(idx) {
+                let excerpt: String = chunk.content.chars().take(500).collect();
+                passages.push_str(&format!(
+                    "\n[chunk {idx}]\n{}\n",
+                    excerpt.trim(),
+                ));
+            }
+        }
+        if passages.trim().is_empty() {
+            continue;
+        }
+
+        let prompt = format!(
+            "Extract what \"{name}\" DOES in these passages. For each chunk \
+             where {name} performs a notable action, emit one JSON object:\n\
+             {{\"chunk_index\": <int>, \"verb\": \"<lowercase verb>\", \
+             \"object\": \"<short noun phrase>\", \"evidence\": \"<verbatim snippet ≤140 chars>\"}}\n\n\
+             Rules:\n\
+             - Skip chunks where {name} is only mentioned in passing.\n\
+             - Verb is a single lowercase past-tense verb (e.g. \"stitched\", \"discovered\", \"killed\").\n\
+             - Object is what the verb acts on, in the document's own wording.\n\
+             - Evidence is verbatim text from the chunk, ≤140 chars, that contains the verb+object.\n\
+             - Skip if nothing notable happens to/by {name} in the chunk.\n\n\
+             Passages:\n{passages}\n\n\
+             Respond with a JSON array, no commentary:\n[",
+            name = ent.name,
+        );
+
+        let response = inference
+            .complete(&CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Fast,
+                max_tokens: Some(768),
+                temperature: Some(0.1),
+                think_budget: Some(0),
+                structured_output: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+            })
+            .await;
+
+        let text = match response {
+            Ok(r) => r.text,
+            Err(e) => {
+                tracing::debug!(entity = %ent.name, error = %e, "extract_action_atoms — LLM call failed; skipping entity");
+                continue;
+            }
+        };
+
+        // Tolerant JSON parse — the model sometimes wraps the array
+        // in ```json fences or appends explanatory prose. Isolate
+        // the first `[` to the last `]`.
+        let start = text.find('[');
+        let end = text.rfind(']');
+        let (start, end) = match (start, end) {
+            (Some(s), Some(e)) if e > s => (s, e),
+            _ => continue,
+        };
+        let payload = &text[start..=end];
+        let parsed: Vec<ActionAtomDraft> = match serde_json::from_str(payload) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::debug!(
+                    entity = %ent.name,
+                    error = %e,
+                    payload = %payload.chars().take(200).collect::<String>(),
+                    "extract_action_atoms — parse failed; skipping entity"
+                );
+                continue;
+            }
+        };
+
+        for draft in parsed {
+            // Sanity: drop atoms whose chunk_index isn't in the
+            // sampled set — the model occasionally hallucinates
+            // chunk numbers when extracting.
+            if !sample_indices.contains(&draft.chunk_index) {
+                continue;
+            }
+            let evidence = draft.evidence.trim();
+            if evidence.is_empty() {
+                continue;
+            }
+            out.push(ActionAtom {
+                entity: ent.name.clone(),
+                verb: draft.verb.trim().to_lowercase(),
+                object: draft.object.trim().to_string(),
+                chunk_index: draft.chunk_index,
+                evidence: evidence.chars().take(140).collect(),
+            });
+        }
+    }
+
+    tracing::info!(atoms = out.len(), "extract_action_atoms — done");
+    out
+}
+
+#[derive(Debug, Deserialize)]
+struct ActionAtomDraft {
+    chunk_index: usize,
+    verb: String,
+    object: String,
+    evidence: String,
 }
 
 /// Generate a one-paragraph overview of the document.
@@ -1689,7 +2173,6 @@ struct SkeletonBatchEntry {
     function: SectionFunction,
     /// Entity names paired with their classified kind.
     entity_names_and_kinds: Vec<(String, EntityKind)>,
-    establishes: String,
     moment_description: Option<String>,
 }
 
@@ -1766,12 +2249,6 @@ fn parse_skeleton_batch(response: &str, batch_start: usize) -> Option<Vec<Skelet
             })
             .unwrap_or_default();
 
-        let establishes = obj
-            .get("establishes")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
         let is_moment = obj
             .get("is_structural_moment")
             .and_then(|v| v.as_bool())
@@ -1789,7 +2266,6 @@ fn parse_skeleton_batch(response: &str, batch_start: usize) -> Option<Vec<Skelet
             chunk_index: batch_start + i,
             function,
             entity_names_and_kinds,
-            establishes,
             moment_description,
         });
     }
@@ -2033,6 +2509,27 @@ mod tests {
     #[test]
     fn short_snippet_returns_input_when_under_max() {
         assert_eq!(short_snippet("hello", 100), "hello");
+    }
+
+    #[test]
+    fn short_snippet_handles_multibyte_at_boundary() {
+        // Regression: Conrad's text uses U+201C / U+201D curly quotes
+        // (3 bytes each in UTF-8). Passing `max` such that the byte
+        // index lands inside one of those quotes used to panic with
+        // "end byte index N is not a char boundary". This is the input
+        // shape that book-report bench v1.1 caught on the Tier-4
+        // winnie_incurious_motif question.
+        let content = "Mr Verloc observed quietly\u{201C}I have no means of action upon the police here.\u{201D} Vladimir replied at length.";
+        // Find the byte index of the opening curly quote and ask for a
+        // snippet that lands inside it.
+        let quote_byte = content.find('\u{201C}').expect("test fixture must contain U+201C");
+        let inside_quote = quote_byte + 1; // mid-character; would panic on raw slice
+        let snip = short_snippet(content, inside_quote);
+        // Must not panic AND must end with the ellipsis sentinel.
+        assert!(
+            snip.ends_with("..."),
+            "expected snippet to end with `...`, got: {snip:?}"
+        );
     }
 
     #[test]

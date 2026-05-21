@@ -1,13 +1,25 @@
 /// Chunking strategy: split on paragraph boundaries, respecting a max token estimate.
 ///
-/// - Max chunk size: ~512 tokens (estimated as ~4 chars per token)
-/// - Overlap: 64 tokens (~256 chars) from the end of the previous chunk
+/// - Max chunk size: ~175 tokens (estimated as ~4 chars per token)
+/// - Overlap: 30 tokens (~120 chars) from the end of the previous chunk
 /// - Splits on double-newlines first, then single newlines, then sentence boundaries,
 ///   then hard-cuts at word boundaries as a last resort.
 /// - Designed to handle documents of any size (100k+ words).
-
-const MAX_CHUNK_CHARS: usize = 2048; // ~512 tokens at ~4 chars/token
-const OVERLAP_CHARS: usize = 256; // ~64 tokens overlap
+///
+/// **Tuning rationale (2026-05-21, book-report v1.1).** Was 2048 chars
+/// (~512 tokens). Conrad's paragraphs hold multiple distinct ideas in
+/// a single 2 KB chunk — the embed model represented the chunk's
+/// dominant topic, and load-bearing details (the sentence "stitched
+/// carefully on the under side of the lapel" sitting inside a chunk
+/// otherwise about Verloc-as-lodger) embedded poorly against queries
+/// targeting the specific detail. Empirically the load-bearing
+/// sentence was inside a 2001-char chunk; queries about it ranked
+/// the chunk at position 80-200 of 316. Cutting to 700 chars / 175
+/// tokens forces sentence-level granularity where Conrad's prose is
+/// dense; the chunker still keeps paragraph boundaries when they
+/// fit, so semantic coherence isn't sacrificed for short paragraphs.
+const MAX_CHUNK_CHARS: usize = 700; // ~175 tokens at ~4 chars/token
+const OVERLAP_CHARS: usize = 120;   // ~30 tokens overlap
 
 /// A text chunk with its index in the source document.
 #[derive(Debug, Clone)]

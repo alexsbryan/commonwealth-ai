@@ -3,6 +3,7 @@ pub mod atlas_peer_advice;
 pub mod atlas_postinstall;
 pub mod atlas_status;
 pub mod atlas_view;
+pub mod attached_document_search;
 pub mod wikipedia_fetch;
 pub mod calendar;
 pub mod catalog;
@@ -80,6 +81,7 @@ pub use code::{
 #[cfg(feature = "treesitter")]
 pub use code::DesignSignalsExtractTool;
 pub use code::AtosVerifyTool;
+pub use attached_document_search::AttachedDocumentSearchTool;
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use wikipedia_fetch::WikipediaFetchTool;
