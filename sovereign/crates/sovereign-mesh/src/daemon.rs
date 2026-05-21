@@ -634,6 +634,21 @@ impl EmbeddedDaemon {
         }
     }
 
+    /// Build a `YieldHook` backed by the running daemon's `AppState`.
+    /// Returns `None` when the daemon hasn't started yet. Lives here
+    /// so callers in `sovereign-cli` (which depends on this crate but
+    /// not on `commonwealth-api`) can install foreground back-pressure
+    /// on the lint/test watchers without taking a direct
+    /// `commonwealth-api` dep.
+    pub async fn build_yield_hook(
+        &self,
+    ) -> Option<std::sync::Arc<dyn corpus_engine::YieldHook>> {
+        let state = self.app_state().await?;
+        Some(commonwealth_api::yield_hook::AppStateYieldHook::new(
+            state.inner.clone(),
+        ))
+    }
+
     /// Where mesh state + setup are persisted. Needed by the HTTP
     /// mesh API's rotate handler, which talks to `persist::rotate_join_key`
     /// directly rather than going through a daemon method.

@@ -1,4 +1,4 @@
-# Reverse a string (Scaffolded tier)
+# Reverse a string
 
 Implement a function that returns the input string with its characters
 in reverse order.
@@ -21,32 +21,26 @@ You may assume the input is well-formed UTF-8. You do NOT need to
 preserve grapheme clusters that span multiple code points — the held
 tests check Unicode scalar value order.
 
-## What's in the workdir
-
-```
-.
-├── Cargo.toml      # already correct; do not modify
-└── src/
-    └── lib.rs      # contains a `reverse_string` stub with `todo!()`
-```
-
 ## Constraints
 
 - Standard library only. No `unicode-segmentation` or other crates.
 - Single function, public, exact signature as above.
-- Do not modify Cargo.toml or the project layout — the grader rebinds
-  `reverse_string::reverse_string` exactly as declared.
+- Crate name is `reverse_string`. The grader rebinds
+  `reverse_string::reverse_string` exactly as declared, so the
+  Cargo.toml `[package].name` must be `reverse_string` and the
+  function must be public at the crate root.
 
 ## How to deliver
 
-You are running in a tools-driven harness. Replace the body of
-`reverse_string` in `src/lib.rs` using the **`write` tool** to
-rewrite the entire file. Prefer `write` over `edit` — the `edit`
-tool requires the `oldText` to match the file byte-for-byte
-including whitespace, which is brittle.
+You are running in a tools-driven harness. Check the workdir-state
+preamble above for what files (if any) already exist. Use the
+`write` tool to author whatever is missing (Cargo.toml, src/lib.rs)
+and to fill in the function body. Use `bash` with `cargo test
+--quiet --test integration 2>&1` to verify, then signal `done`.
 
-The full file to write is short — header doc comments + the
-function definition. Reproduce them in your `write` call.
+Prefer `write` over `edit` — the `edit` tool requires the `oldText`
+to match the file byte-for-byte including whitespace, which is
+brittle. With `write` you provide the entire file body.
 
 **Files written via tools are the only thing the grader sees.** Pasting
 code into chat without calling `write` will score zero.

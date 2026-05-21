@@ -44,24 +44,18 @@ Edge cases:
 - Standard library only. No `IndexMap`, no `itertools`.
 - O(N · K log K) time, where N = strings, K = max length.
 
-## Workdir
+## Workdir conventions
 
-Your workdir holds:
+Check the workdir-state preamble at the top of this message for what
+files actually exist. When `tests/integration.rs` is present, it
+contains three smoke tests (empty input, single string, canonical
+three-group ordering). Passing them is **necessary but not
+sufficient** — the grader replaces this file with a private 12-test
+suite after you signal `done`. Use `cargo test --quiet --test
+integration` to run them.
 
-```
-.
-├── Cargo.toml
-├── prompt.md         (this document, available as a file)
-├── src/lib.rs        (function stub with `todo!()`)
-└── tests/integration.rs  (three smoke tests you can iterate against)
-```
-
-The three smoke tests cover empty input, single string, and the
-canonical three-group ordering case. Passing them is **necessary
-but not sufficient** — the grader replaces this file with a private
-12-test suite after you signal `done`, so a smoke-pass doesn't
-guarantee a full-pass. Use `cargo test --quiet --test integration`
-to run them.
+Crate name is `group_anagrams`; grader rebinds
+`group_anagrams::group_anagrams`.
 
 ## Execution discipline (load-bearing)
 

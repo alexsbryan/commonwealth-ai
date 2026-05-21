@@ -53,9 +53,19 @@ pub async fn run_auto_witness(
     }
     copy_dir_recursive(&fixture_src, workdir).map_err(|e| AutoWitnessError::FixtureCopy(e.to_string()))?;
 
-    // 2. Run verify_cmd from inside the workdir.
+    // 2. Run verify_cmd from inside the workdir. Cap wall time at
+    // 2× the agent's wall budget — a model that writes an
+    // infinite-loop test would otherwise hang the witness
+    // indefinitely (observed 2026-05-21: 1.2 trial 1 stuck for 20+
+    // min in `cargo test` because model's two_sum impl had a
+    // non-terminating loop). 2× is generous: the agent's own wall
+    // budget already accommodates cold-compile + iteration; the
+    // witness only needs a fresh compile + the test run, so 2×
+    // covers cold-target rebuild even on a slow disk.
+    let witness_wall =
+        std::time::Duration::from_secs(problem.budget.wall_seconds_cap.saturating_mul(2).max(60));
     let (verify_exit_ok, stdout_tail) =
-        run_verify_cmd(workdir, &problem.witness.verify_cmd).await;
+        run_verify_cmd(workdir, &problem.witness.verify_cmd, witness_wall).await;
 
     // 3. Parse + bucket.
     let parsed = parse_test_output(problem.witness.language, &stdout_tail);
@@ -143,24 +153,54 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
 /// Duplicated from `sovereign-tools::code::atos_utils::run_verify_cmd`
 /// per ARCH §8.5 — taking a dep on sovereign-tools just for this 25-line
 /// helper would pull lancedb + treesitter + arrow into a leaf crate.
-async fn run_verify_cmd(workdir: &Path, cmd: &str) -> (bool, String) {
+async fn run_verify_cmd(
+    workdir: &Path,
+    cmd: &str,
+    wall_cap: std::time::Duration,
+) -> (bool, String) {
     if cmd.trim().is_empty() {
         return (false, "verify_cmd is empty".into());
     }
-    let output = match tokio::process::Command::new("sh")
+    // Spawn the subprocess directly (not via .output()) so we can
+    // SIGKILL it if `tokio::time::timeout` fires. Without this kill,
+    // an infinite-loop test (e.g. agent's broken two_sum running a
+    // non-terminating while loop) would leave a zombie cargo
+    // process consuming a core indefinitely.
+    let mut child = match tokio::process::Command::new("sh")
         .arg("-c")
         .arg(cmd)
         .current_dir(workdir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
-        .await
+        .kill_on_drop(true)
+        .spawn()
     {
-        Ok(o) => o,
+        Ok(c) => c,
         Err(e) => {
             warn!(error = %e, "agent_bench: verify spawn failed");
             return (false, format!("verify spawn failed: {e}"));
+        }
+    };
+    let wait_future = child.wait_with_output();
+    let output = match tokio::time::timeout(wall_cap, wait_future).await {
+        Ok(Ok(o)) => o,
+        Ok(Err(e)) => {
+            warn!(error = %e, "agent_bench: verify wait failed");
+            return (false, format!("verify wait failed: {e}"));
+        }
+        Err(_) => {
+            warn!(
+                wall_cap_secs = wall_cap.as_secs(),
+                "agent_bench: verify wall-cap fired — verify subprocess killed"
+            );
+            return (
+                false,
+                format!(
+                    "verify exceeded wall cap of {}s — killed",
+                    wall_cap.as_secs()
+                ),
+            );
         }
     };
     let mut combined = String::new();
@@ -234,10 +274,14 @@ mod tests {
         assert!(dst.path().join("tests/integration.rs").exists());
     }
 
+    fn test_wall() -> std::time::Duration {
+        std::time::Duration::from_secs(30)
+    }
+
     #[tokio::test]
     async fn run_verify_cmd_exit_zero_succeeds() {
         let tmp = tempfile::tempdir().unwrap();
-        let (ok, out) = run_verify_cmd(tmp.path(), "true").await;
+        let (ok, out) = run_verify_cmd(tmp.path(), "true", test_wall()).await;
         assert!(ok);
         assert!(out.is_empty() || !out.contains("verify spawn failed"));
     }
@@ -245,16 +289,37 @@ mod tests {
     #[tokio::test]
     async fn run_verify_cmd_exit_nonzero_fails() {
         let tmp = tempfile::tempdir().unwrap();
-        let (ok, _) = run_verify_cmd(tmp.path(), "exit 7").await;
+        let (ok, _) = run_verify_cmd(tmp.path(), "exit 7", test_wall()).await;
         assert!(!ok);
     }
 
     #[tokio::test]
     async fn run_verify_cmd_empty_rejected() {
         let tmp = tempfile::tempdir().unwrap();
-        let (ok, msg) = run_verify_cmd(tmp.path(), "").await;
+        let (ok, msg) = run_verify_cmd(tmp.path(), "", test_wall()).await;
         assert!(!ok);
         assert!(msg.contains("empty"));
+    }
+
+    #[tokio::test]
+    async fn run_verify_cmd_wall_cap_fires_on_infinite_loop() {
+        // Class E regression: an infinite-loop verify subprocess
+        // must be killed and reported as failed instead of hanging
+        // forever. Without the wall cap, the sweep would block
+        // indefinitely on the first model that writes a
+        // non-terminating test (observed 2026-05-21).
+        let tmp = tempfile::tempdir().unwrap();
+        let (ok, msg) = run_verify_cmd(
+            tmp.path(),
+            "while true; do :; done",
+            std::time::Duration::from_secs(1),
+        )
+        .await;
+        assert!(!ok);
+        assert!(
+            msg.contains("wall cap") || msg.contains("killed"),
+            "expected wall-cap message, got: {msg}"
+        );
     }
 
     #[test]

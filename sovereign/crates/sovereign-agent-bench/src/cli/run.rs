@@ -24,7 +24,7 @@ use crate::runners::AgentRunnerRegistry;
 use crate::sandbox::Sandbox;
 use crate::scoring::{
     compute_regression, dim_from_auto, dim_from_hybrid, dim_from_judge, DimensionScore,
-    ProblemScore, WitnessSummary,
+    ProblemScore, ProblemTrialDetail, WitnessSummary,
 };
 use crate::witness::run_auto_witness;
 
@@ -84,37 +84,89 @@ pub async fn run_command(argv: &[String]) -> Result<(), RunError> {
     );
 
     let mut scores: Vec<ProblemScore> = Vec::new();
+    let mut details: Vec<ProblemTrialDetail> = Vec::new();
+    let trials_n = args.trials.max(1);
     for problem in &problems {
         info!(
             problem = %problem.meta.id,
             agent = %args.agent,
             model = %args.model,
             budget = problem.budget.token_cap,
+            trials = trials_n,
             "agent_bench: problem started"
         );
-        let sink = ArtifactSink::new(artifacts_root.join(&problem.meta.id))
-            .map_err(RunError::Io)?;
-        let score = run_one_problem(
-            &*runner,
-            judge.as_ref(),
-            problem,
-            &args,
-            Some(&sink),
-        )
-        .await?;
-        info!(
-            problem = %problem.meta.id,
-            total = score.total,
-            dim_a = score.dim_a.raw,
-            dim_b = score.dim_b.raw,
-            dim_c = score.dim_c.raw,
-            wall_ms = score.wall_ms,
-            tokens_out = score.tokens.output,
-            exit = score.exit_reason.id(),
-            partial = score.is_partial,
-            "agent_bench: problem complete"
-        );
-        scores.push(score);
+
+        let problem_root = artifacts_root.join(&problem.meta.id);
+        let mut per_trial_scores: Vec<ProblemScore> = Vec::with_capacity(trials_n as usize);
+        for t in 0..trials_n {
+            // Single-trial: flat layout (preserves existing operator
+            // habits + the path failure_class::classify_from_dir
+            // walks). Multi-trial: trial-N subdir so per-trial
+            // artifacts don't overwrite each other.
+            let sink_root = if trials_n == 1 {
+                problem_root.clone()
+            } else {
+                problem_root.join(format!("trial-{t}"))
+            };
+            let sink = ArtifactSink::new(sink_root).map_err(RunError::Io)?;
+            if trials_n > 1 {
+                info!(
+                    problem = %problem.meta.id,
+                    trial = t,
+                    of = trials_n,
+                    "agent_bench: trial started"
+                );
+            }
+            let score = run_one_problem(
+                &*runner,
+                judge.as_ref(),
+                problem,
+                &args,
+                Some(&sink),
+            )
+            .await?;
+            info!(
+                problem = %problem.meta.id,
+                trial = t,
+                total = score.total,
+                dim_a = score.dim_a.raw,
+                dim_b = score.dim_b.raw,
+                dim_c = score.dim_c.raw,
+                wall_ms = score.wall_ms,
+                tokens_out = score.tokens.output,
+                exit = score.exit_reason.id(),
+                partial = score.is_partial,
+                "agent_bench: trial complete"
+            );
+            per_trial_scores.push(score);
+        }
+
+        // Headline ProblemScore. Single-trial → that one score.
+        // Multi-trial → the trial closest to the mean total; preserves
+        // honest integer dim/exit/tool_calls (not a synthetic average).
+        let (headline, detail_opt) = if trials_n == 1 {
+            (per_trial_scores.into_iter().next().expect("trials>=1"), None)
+        } else {
+            let detail = ProblemTrialDetail::from_trials(&problem.meta.id, &per_trial_scores);
+            let idx = detail.representative_index();
+            let headline = per_trial_scores
+                .into_iter()
+                .nth(idx)
+                .expect("representative index in range");
+            info!(
+                problem = %problem.meta.id,
+                n = detail.n,
+                mean = detail.mean_total,
+                stdev = detail.stdev_total,
+                "agent_bench: problem multi-trial summary"
+            );
+            (headline, Some(detail))
+        };
+
+        if let Some(d) = detail_opt {
+            details.push(d);
+        }
+        scores.push(headline);
     }
 
     let finished_at = Utc::now().to_rfc3339();
@@ -143,9 +195,11 @@ pub async fn run_command(argv: &[String]) -> Result<(), RunError> {
         model: args.model.clone(),
         judge_model,
         judge_trials: args.judge_trials,
+        run_trials: trials_n,
         started_at,
         finished_at,
         per_problem: scores,
+        per_problem_trials: details,
         grand_total,
         max_total,
         regression,
@@ -212,20 +266,36 @@ pub async fn run_one_problem(
 ) -> Result<ProblemScore, RunError> {
     // 1. Build sandbox. Scaffolded tier — install the pre-supplied
     // Cargo.toml + src/lib.rs stub BEFORE handing control to the
-    // agent. From-scratch tier — workdir stays empty.
+    // agent. From-scratch tier — workdir stays empty. CLI override
+    // (`--tier from-scratch`) wins over the problem's declared tier
+    // for direct A/B measurement: same problem, same fixtures, with
+    // vs. without the scaffold safety net.
+    let effective_tier = args
+        .tier_override
+        .unwrap_or(problem.meta.tier);
     let sandbox = Sandbox::new(problem.fixture_path())?;
-    if let Some(scaffold) = problem.scaffold_path() {
-        sandbox.install_scaffold(&scaffold)?;
+    let install_scaffold = matches!(effective_tier, crate::problem::Tier::Scaffolded);
+    if install_scaffold {
+        if let Some(scaffold) = problem.scaffold_path() {
+            sandbox.install_scaffold(&scaffold)?;
+            info!(
+                problem = %problem.meta.id,
+                scaffold = %scaffold.display(),
+                tier = effective_tier.id(),
+                "agent_bench: scaffold installed"
+            );
+        } else {
+            warn!(
+                problem = %problem.meta.id,
+                "agent_bench: tier=Scaffolded but no scaffold_subdir set — agent sees empty workdir"
+            );
+        }
+    } else {
         info!(
             problem = %problem.meta.id,
-            scaffold = %scaffold.display(),
-            tier = problem.meta.tier.id(),
-            "agent_bench: scaffold installed"
-        );
-    } else if matches!(problem.meta.tier, crate::problem::Tier::Scaffolded) {
-        warn!(
-            problem = %problem.meta.id,
-            "agent_bench: tier=Scaffolded but no scaffold_subdir set — agent sees empty workdir"
+            tier = effective_tier.id(),
+            override_from = problem.meta.tier.id(),
+            "agent_bench: scaffold skipped (from-scratch tier)"
         );
     }
 
@@ -236,8 +306,13 @@ pub async fn run_one_problem(
     // tools and resources" framing — situate the model so its work
     // can complete with minimum confusion). See trial 4 of the
     // 2026-05-21 H4 retest for the failure mode this closes.
+    //
+    // From-scratch tier suppresses this copy too: the on-disk doc is
+    // part of the scaffolding the agent is being measured on
+    // producing. The prompt remains in chat history regardless.
+    let copy_prompt_md = install_scaffold;
     let prompt_doc = problem.problem_dir.join("prompt.md");
-    if prompt_doc.is_file() {
+    if copy_prompt_md && prompt_doc.is_file() {
         let dest = sandbox.workdir().join("prompt.md");
         if let Err(e) = std::fs::copy(&prompt_doc, &dest) {
             warn!(
