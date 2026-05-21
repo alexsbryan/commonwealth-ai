@@ -346,6 +346,7 @@ async fn summarize_via_fast_slot(
     cmd_prefix: None,
     url_allowlist: None,
     evidence_id_allowlist: None,
+    lark_grammar: None,
     };
     let response = provider.complete(&request).await.map_err(|e| Error::Tool {
         tool_id: "read_note_digest".into(),

@@ -115,6 +115,7 @@ async fn main() {
     cmd_prefix: None,
     url_allowlist: None,
     evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     if args.stream {

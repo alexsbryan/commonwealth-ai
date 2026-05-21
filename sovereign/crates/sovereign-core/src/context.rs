@@ -175,6 +175,7 @@ pub async fn summarize_dropped_history(
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
     };
 
     let response = inference.complete(&request).await?;
@@ -340,6 +341,7 @@ pub async fn update_topic_context(
     cmd_prefix: None,
     url_allowlist: None,
     evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     let response = inference.complete(&request).await?;

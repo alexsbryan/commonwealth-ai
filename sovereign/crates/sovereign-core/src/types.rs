@@ -236,6 +236,25 @@ pub struct CompletionRequest {
     /// in `frontdoor.rs`); consumed by `embedded::build_sampler`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_id_allowlist: Option<Vec<String>>,
+    /// Lark grammar that constrains the model's per-turn output.
+    /// Mutually exclusive with `structured_output`: when both are
+    /// set the lark path wins (this is the newer mechanism).
+    ///
+    /// Set by `sovereign_mesh::inference_adapter::build_completion_request`
+    /// when `tools.is_some()` and `tool_choice != Some("none")` AND
+    /// the `SOVEREIGN_ALTERNATION_GRAMMAR` env var is truthy. The
+    /// rendered grammar is the alternation shape
+    /// `start: text_branch | tool_envelope`, which lets the model
+    /// emit either a parseable tool-call envelope OR plain text;
+    /// closes the `parse_failed_envelope` + `loop_trap` failure
+    /// classes the agent-bench scanner surfaced on 2026-05-21.
+    ///
+    /// Built via `llguidance_constraint::build_tool_alternation_grammar`.
+    /// Consumed by `embedded::build_sampler`, which constructs a
+    /// `LlguidanceConstraint` and attaches it to `ConstrainedSampler`
+    /// in place of the usual `JsonConstraint`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lark_grammar: Option<String>,
 }
 
 /// Sampler-profile selector. Mirrored in the inference layer's
@@ -290,6 +309,7 @@ impl CompletionRequest {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -340,6 +360,7 @@ impl CompletionRequest {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 }

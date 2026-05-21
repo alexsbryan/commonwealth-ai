@@ -19,6 +19,7 @@
 pub mod artifacts;
 pub mod baseline;
 pub mod cli;
+pub mod failure_class;
 pub mod judge;
 pub mod judge_multi;
 pub mod problem;

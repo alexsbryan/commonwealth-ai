@@ -163,6 +163,7 @@ impl DocumentOperationTool {
                     cmd_prefix: None,
                     url_allowlist: None,
                     evidence_id_allowlist: None,
+                    lark_grammar: None,
                     }
                 })
                 .collect();
@@ -314,6 +315,7 @@ impl DocumentOperationTool {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -358,6 +360,7 @@ impl DocumentOperationTool {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -606,6 +609,7 @@ impl DocumentOperationTool {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             };
 
             self.inference.complete(&request).await?.text

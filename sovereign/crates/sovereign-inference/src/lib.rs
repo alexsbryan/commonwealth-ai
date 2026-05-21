@@ -7,6 +7,7 @@ pub mod health;
 pub mod hybrid;
 pub mod json_constraint;
 pub mod json_grammar;
+pub mod llguidance_constraint;
 pub mod llama;
 pub mod url_constraint;
 pub mod evidence_id_constraint;

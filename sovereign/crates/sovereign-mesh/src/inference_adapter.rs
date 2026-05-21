@@ -410,7 +410,24 @@ impl SovereignInferenceAdapter {
             if let Some(envelope) =
                 tool_envelope_schema_for_with_env_and_cmd_prefix(request, request.cmd_prefix.as_deref())
             {
-                req.structured_output = Some(envelope);
+                // **Alternation grammar path (2026-05-21).** When
+                // `SOVEREIGN_ALTERNATION_GRAMMAR` is on, route the
+                // envelope schema through llguidance's Lark grammar
+                // with a top-level `text | tool_envelope` rule so
+                // the model can emit either a parseable tool call
+                // OR plain text. Closes the agent-bench scanner's
+                // `parse_failed_envelope` + `loop_trap` classes.
+                // Behind an env-var so we can A/B against the
+                // existing `structured_output` JSON-mask path.
+                if alternation_grammar_enabled() {
+                    let schema_json = serde_json::to_string(&envelope).unwrap_or_default();
+                    let lark = sovereign_inference::llguidance_constraint::build_tool_alternation_grammar(
+                        &schema_json,
+                    );
+                    req.lark_grammar = Some(lark);
+                } else {
+                    req.structured_output = Some(envelope);
+                }
             }
         }
         // Per-request `enable_thinking` toggle. The OpenAI extension
@@ -487,6 +504,19 @@ pub(crate) fn parse_tool_envelope_direct(
 /// next request.
 fn force_tool_calls_env() -> bool {
     std::env::var("SOVEREIGN_FORCE_TOOL_CALLS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// True when `SOVEREIGN_ALTERNATION_GRAMMAR` is set to a truthy
+/// value. When on, `build_completion_request` builds a Lark
+/// `text | tool_envelope` alternation grammar via llguidance and
+/// sets `request.lark_grammar` instead of `request.structured_output`.
+/// Off by default during rollout so existing JsonConstraint paths
+/// stay unchanged; flip on per-daemon-process to A/B the alternation
+/// path against the in-house mask.
+fn alternation_grammar_enabled() -> bool {
+    std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }

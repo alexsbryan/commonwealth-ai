@@ -2959,6 +2959,7 @@ pub(crate) async fn run_collaboration(
     cmd_prefix: None,
     url_allowlist: None,
     evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     match inference.complete(&refine_req).await {
@@ -4171,6 +4172,7 @@ impl Runtime {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let response = match self.inference.complete(&request).await {
@@ -8124,6 +8126,7 @@ impl Runtime {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist,
+        lark_grammar: None,
         };
 
         let search_method = kc.search_method;
@@ -9472,6 +9475,7 @@ impl Runtime {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist,
+        lark_grammar: None,
         };
 
         let synth_start = std::time::Instant::now();
@@ -10048,6 +10052,7 @@ impl Runtime {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             };
             return KnowledgeQueryPlan {
                 request,
@@ -10311,6 +10316,7 @@ impl Runtime {
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
+                lark_grammar: None,
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -10340,6 +10346,7 @@ impl Runtime {
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
+                lark_grammar: None,
                 }
             }
         };
@@ -10594,6 +10601,7 @@ impl Runtime {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
         let completion = self.inference.complete(&request).await?;
         let response_msg = Message {
@@ -10950,6 +10958,7 @@ impl Runtime {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
@@ -11172,6 +11181,7 @@ impl Runtime {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let _synth_start = std::time::Instant::now();
@@ -11550,6 +11560,7 @@ impl Runtime {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -11849,6 +11860,7 @@ impl Runtime {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
@@ -12152,6 +12164,7 @@ impl Runtime {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
