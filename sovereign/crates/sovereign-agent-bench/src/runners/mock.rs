@@ -109,6 +109,7 @@ mod tests {
                 tool: "write".into(),
                 args_preview: "{...}".into(),
                 ok: true,
+                canonical_kind: None,
             }],
             tokens: TokenCounts {
                 input: 200,
@@ -128,6 +129,8 @@ mod tests {
             token_budget: 1_000,
             wall_seconds_cap: 60,
             model_handle: "commonwealth/coder".into(),
+            build_cmd: "cargo build".into(),
+            verify_cmd: "cargo test".into(),
         };
         let artifact = runner.run(ctx).await.unwrap();
         assert_eq!(artifact.tokens.output, 80);

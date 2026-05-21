@@ -33,12 +33,22 @@ use serde_json::Value;
 
 use crate::adapter::{AgentToolAdapter, TranslateOutcome};
 use crate::primitive::{
-    AgentDoneArgs, CargoSmokeArgs, InspectIntent, Primitive, PrimitiveKind, WriteFileArgs,
+    AgentDoneArgs, InspectIntent, Primitive, PrimitiveKind, SmokeArgs, WriteFileArgs,
 };
 
-/// Pi observer adapter.
+/// Pi observer adapter. Per-problem build/verify commands are
+/// installed via the builder so `BashIntent` classification matches
+/// the actual cargo / go / pytest / vitest invocations the bench
+/// configured for this problem, not hardcoded Rust strings.
 #[derive(Debug, Clone, Default)]
-pub struct Adapter;
+pub struct Adapter {
+    /// Prefix matched against pi's `bash { command }` to classify
+    /// the build intent. Default empty = no match.
+    build_cmd: Option<String>,
+    /// Prefix matched against pi's `bash { command }` to classify
+    /// the smoke intent.
+    verify_cmd: Option<String>,
+}
 
 impl Adapter {
     /// Pi tool descriptors are pi-defined (read/write/bash/find/
@@ -48,6 +58,21 @@ impl Adapter {
     /// constant.
     pub fn pi_tool_allowlist() -> &'static [&'static str] {
         &["read", "write", "bash", "find", "grep", "ls"]
+    }
+
+    /// Bind the per-problem build/verify commands. The bench calls
+    /// this when constructing a per-trial adapter from the loaded
+    /// problem config. Both arguments are the same strings the
+    /// bench uses for ExecCtx — so the pi adapter recognizes
+    /// exactly what the native runner would have run.
+    pub fn with_problem_commands(
+        mut self,
+        build_cmd: impl Into<String>,
+        verify_cmd: impl Into<String>,
+    ) -> Self {
+        self.build_cmd = Some(build_cmd.into());
+        self.verify_cmd = Some(verify_cmd.into());
+        self
     }
 }
 
@@ -81,7 +106,7 @@ impl AgentToolAdapter for Adapter {
             "find" => translate_find(raw_args),
             "grep" => translate_grep(raw_args),
             "write" => translate_write(raw_args),
-            "bash" => translate_bash(raw_args),
+            "bash" => translate_bash(raw_args, self.build_cmd.as_deref(), self.verify_cmd.as_deref()),
             "done" => translate_done(raw_args),
             other => TranslateOutcome::Unknown {
                 tool_name: other.to_string(),
@@ -203,10 +228,14 @@ fn translate_done(args: &Value) -> TranslateOutcome {
     }
 }
 
-/// Pi's `bash` is unconstrained. Inspect the command and map to
-/// the canonical set, or return `Unrecognized` with the exact
-/// command for forensics.
-fn translate_bash(args: &Value) -> TranslateOutcome {
+/// Pi's `bash` is unconstrained. Match the command against the
+/// per-problem build/verify command prefixes, or return
+/// `Unrecognized` with the exact command for forensics.
+fn translate_bash(
+    args: &Value,
+    build_prefix: Option<&str>,
+    verify_prefix: Option<&str>,
+) -> TranslateOutcome {
     let Some(cmd) = args.get("command").and_then(|v| v.as_str()) else {
         return TranslateOutcome::Unrecognized {
             tool_name: "bash".into(),
@@ -214,14 +243,14 @@ fn translate_bash(args: &Value) -> TranslateOutcome {
             reason: "missing `command`".into(),
         };
     };
-    match classify_bash(cmd) {
+    match classify_bash(cmd, build_prefix, verify_prefix) {
         BashIntent::Build => TranslateOutcome::Canonical {
-            canonical: Primitive::CargoBuild,
-            canonical_kind: PrimitiveKind::CargoBuild,
+            canonical: Primitive::Build,
+            canonical_kind: PrimitiveKind::Build,
         },
         BashIntent::Smoke { filter } => TranslateOutcome::Canonical {
-            canonical: Primitive::CargoSmoke(CargoSmokeArgs { filter }),
-            canonical_kind: PrimitiveKind::CargoSmoke,
+            canonical: Primitive::Smoke(SmokeArgs { filter }),
+            canonical_kind: PrimitiveKind::Smoke,
         },
         BashIntent::Unrecognized => TranslateOutcome::Unrecognized {
             tool_name: "bash".into(),
@@ -233,9 +262,10 @@ fn translate_bash(args: &Value) -> TranslateOutcome {
 
 /// Closed enum of bash commands the canonical layer recognizes.
 /// Adding a variant is intentionally heavy — see the methodology
-/// in `~/.claude/plans/autonomous-loop-tick-tingly-clock.md` for
-/// the convergence test ("does this map to a canonical
-/// primitive?").
+/// in the plan files for the convergence test ("does this map to a
+/// canonical primitive?"). Pi's `bash` calls map to one of these;
+/// per-problem prefixes are passed in at adapter construction so
+/// Go / TS / Python problems get the same convergent surface.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum BashIntent {
     Build,
@@ -243,47 +273,102 @@ enum BashIntent {
     Unrecognized,
 }
 
-fn classify_bash(cmd: &str) -> BashIntent {
-    // Strip common shell prefixes pi tends to emit ("cargo build
-    // 2>&1", "cd workdir && cargo test ..."). We don't try to be
-    // a real shell — pi's actual cwd is the workdir already; the
-    // adapter just inspects the cargo invocation.
+fn classify_bash(
+    cmd: &str,
+    build_prefix: Option<&str>,
+    verify_prefix: Option<&str>,
+) -> BashIntent {
+    // Strip common shell wrappers + noise so prefix matching sees
+    // the actual command head.
     let normalized = cmd
         .trim()
         .trim_start_matches("set -e ")
         .trim_start_matches("set -e\n")
         .trim();
-
-    // Common suffix noise like " 2>&1" or " | head -50" — drop the
-    // pipe tail so we look at the head of the pipeline only.
     let head = normalized.split('|').next().unwrap_or(normalized).trim();
     let head = head.split("2>&1").next().unwrap_or(head).trim();
 
-    // `cargo test --test integration [filter]` — order matters
-    // (check the more specific before `cargo build`).
-    if let Some(rest) = head.strip_prefix("cargo test ") {
-        // The integration suite is the canonical bench surface;
-        // anything else (workspace test, etc.) is not the same
-        // class of action and gets recorded as Unrecognized so
-        // operators can see what the agent ran.
-        if rest.contains("--test integration") {
-            // Optional positional filter after the flag block.
-            let filter = rest
-                .split("--test integration")
-                .nth(1)
-                .and_then(|tail| tail.trim().split_whitespace().next())
+    // Defaults — if no per-problem commands are bound, fall back
+    // to Rust prefixes (preserves PR 1 behavior for existing
+    // Rust-only problems before the bench wiring lands).
+    let build_match = build_prefix.unwrap_or("cargo build");
+    let verify_match = verify_prefix.unwrap_or("cargo test --quiet --test integration");
+
+    // Check verify_match FIRST when it's a strict prefix of
+    // build_match (or vice versa) — longest match wins.
+    let (first, first_intent, second, second_intent): (
+        &str,
+        BashIntent,
+        &str,
+        BashIntent,
+    ) = if verify_match.len() >= build_match.len() {
+        (
+            verify_match,
+            BashIntent::Smoke { filter: None },
+            build_match,
+            BashIntent::Build,
+        )
+    } else {
+        (
+            build_match,
+            BashIntent::Build,
+            verify_match,
+            BashIntent::Smoke { filter: None },
+        )
+    };
+
+    if matches_command_prefix(head, first) {
+        return refine_intent(head, first, first_intent);
+    }
+    if matches_command_prefix(head, second) {
+        return refine_intent(head, second, second_intent);
+    }
+    BashIntent::Unrecognized
+}
+
+/// True when `head` begins with `prefix` after token boundary —
+/// i.e. `head == prefix` OR `head` starts with `prefix` followed by
+/// whitespace. Prevents false matches like "cargo build-script"
+/// for a "cargo build" prefix.
+fn matches_command_prefix(head: &str, prefix: &str) -> bool {
+    let prefix = prefix.trim();
+    if prefix.is_empty() {
+        return false;
+    }
+    let head_norm: String = head.split_whitespace().collect::<Vec<_>>().join(" ");
+    let prefix_norm: String = prefix
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if head_norm == prefix_norm {
+        return true;
+    }
+    head_norm.starts_with(&format!("{prefix_norm} "))
+}
+
+/// For the Smoke intent, extract an optional filter token from
+/// the head if the bound verify_cmd ends in `--test integration`
+/// or similar (libtest convention). Falls back to None for other
+/// runners.
+fn refine_intent(head: &str, prefix: &str, base: BashIntent) -> BashIntent {
+    match base {
+        BashIntent::Smoke { .. } => {
+            let head_norm: String = head.split_whitespace().collect::<Vec<_>>().join(" ");
+            let prefix_norm: String =
+                prefix.split_whitespace().collect::<Vec<_>>().join(" ");
+            let tail = head_norm
+                .strip_prefix(&prefix_norm)
+                .unwrap_or("")
+                .trim();
+            let filter = tail
+                .split_whitespace()
+                .next()
                 .filter(|tok| !tok.starts_with("--"))
                 .map(|s| s.to_string());
-            return BashIntent::Smoke { filter };
+            BashIntent::Smoke { filter }
         }
-        return BashIntent::Unrecognized;
+        other => other,
     }
-
-    if head.starts_with("cargo build") {
-        return BashIntent::Build;
-    }
-
-    BashIntent::Unrecognized
 }
 
 fn cap_args_summary(args: &Value) -> String {
@@ -305,7 +390,7 @@ mod tests {
 
     #[test]
     fn read_to_inspect_file() {
-        let a = Adapter;
+        let a = Adapter::default();
         let r = a.translate("read", &json!({"path": "src/lib.rs"}));
         match r {
             TranslateOutcome::Canonical {
@@ -318,14 +403,14 @@ mod tests {
 
     #[test]
     fn ls_to_inspect_dir() {
-        let a = Adapter;
+        let a = Adapter::default();
         let r = a.translate("ls", &json!({"path": "src"}));
         assert_eq!(r.canonical_kind(), Some(PrimitiveKind::InspectWorkdir));
     }
 
     #[test]
     fn find_to_inspect_find_by_name() {
-        let a = Adapter;
+        let a = Adapter::default();
         let r = a.translate(
             "find",
             &json!({"root": ".", "pattern": "*.rs"}),
@@ -335,14 +420,14 @@ mod tests {
 
     #[test]
     fn grep_to_inspect_grep_contents() {
-        let a = Adapter;
+        let a = Adapter::default();
         let r = a.translate("grep", &json!({"root": "src", "pattern": "todo"}));
         assert_eq!(r.canonical_kind(), Some(PrimitiveKind::InspectWorkdir));
     }
 
     #[test]
     fn write_to_write_file() {
-        let a = Adapter;
+        let a = Adapter::default();
         let r = a.translate(
             "write",
             &json!({"path": "src/lib.rs", "content": "pub fn x() {}"}),
@@ -359,23 +444,32 @@ mod tests {
         }
     }
 
+    fn rust_defaults() -> (Option<&'static str>, Option<&'static str>) {
+        (
+            Some("cargo build"),
+            Some("cargo test --quiet --test integration"),
+        )
+    }
+
     #[test]
     fn bash_cargo_build_classifies_as_build() {
-        assert_eq!(classify_bash("cargo build"), BashIntent::Build);
-        assert_eq!(classify_bash("cargo build 2>&1"), BashIntent::Build);
+        let (b, v) = rust_defaults();
+        assert_eq!(classify_bash("cargo build", b, v), BashIntent::Build);
+        assert_eq!(classify_bash("cargo build 2>&1", b, v), BashIntent::Build);
         assert_eq!(
-            classify_bash("cargo build --release"),
+            classify_bash("cargo build --release", b, v),
             BashIntent::Build
         );
     }
 
     #[test]
     fn bash_cargo_test_integration_classifies_as_smoke() {
-        match classify_bash("cargo test --quiet --test integration") {
+        let (b, v) = rust_defaults();
+        match classify_bash("cargo test --quiet --test integration", b, v) {
             BashIntent::Smoke { filter: None } => {}
             other => panic!("got {:?}", other),
         }
-        match classify_bash("cargo test --quiet --test integration my_test_name") {
+        match classify_bash("cargo test --quiet --test integration my_test_name", b, v) {
             BashIntent::Smoke { filter: Some(f) } => assert_eq!(f, "my_test_name"),
             other => panic!("got {:?}", other),
         }
@@ -383,26 +477,52 @@ mod tests {
 
     #[test]
     fn bash_workspace_test_is_unrecognized() {
-        // Workspace `cargo test` (no --test integration) is NOT
-        // the canonical smoke shape — it would run the wrong
-        // suite. Adapter records as Unrecognized so the model's
-        // choice is honestly captured.
+        let (b, v) = rust_defaults();
         assert_eq!(
-            classify_bash("cargo test --workspace"),
+            classify_bash("cargo test --workspace", b, v),
             BashIntent::Unrecognized
         );
     }
 
     #[test]
     fn bash_arbitrary_shell_is_unrecognized() {
-        assert_eq!(classify_bash("ls -la"), BashIntent::Unrecognized);
-        assert_eq!(classify_bash("rm -rf /"), BashIntent::Unrecognized);
-        assert_eq!(classify_bash("python -c 'print(1)'"), BashIntent::Unrecognized);
+        let (b, v) = rust_defaults();
+        assert_eq!(classify_bash("ls -la", b, v), BashIntent::Unrecognized);
+        assert_eq!(classify_bash("rm -rf /", b, v), BashIntent::Unrecognized);
+        assert_eq!(
+            classify_bash("python -c 'print(1)'", b, v),
+            BashIntent::Unrecognized
+        );
+    }
+
+    #[test]
+    fn bash_per_language_go_build_classifies_as_build() {
+        // Multi-language: pi adapter bound to Go problem commands
+        // recognizes `go build ./...` as canonical Build.
+        let r = classify_bash(
+            "go build ./... 2>&1",
+            Some("go build ./..."),
+            Some("go test ./..."),
+        );
+        assert_eq!(r, BashIntent::Build);
+    }
+
+    #[test]
+    fn bash_per_language_pytest_classifies_as_smoke() {
+        let r = classify_bash(
+            "pytest -v tests/",
+            Some(""), // python has no build step
+            Some("pytest -v tests/"),
+        );
+        match r {
+            BashIntent::Smoke { .. } => {}
+            other => panic!("got {:?}", other),
+        }
     }
 
     #[test]
     fn bash_translate_emits_unrecognized_outcome_for_arbitrary_command() {
-        let a = Adapter;
+        let a = Adapter::default();
         let r = a.translate("bash", &json!({"command": "echo hi"}));
         match r {
             TranslateOutcome::Unrecognized {
@@ -419,7 +539,7 @@ mod tests {
 
     #[test]
     fn done_to_agent_done() {
-        let a = Adapter;
+        let a = Adapter::default();
         let r = a.translate("done", &json!({"reason": "all tests pass"}));
         match r {
             TranslateOutcome::Canonical {
@@ -432,7 +552,7 @@ mod tests {
 
     #[test]
     fn unknown_tool_name() {
-        let a = Adapter;
+        let a = Adapter::default();
         let r = a.translate("not_a_tool", &json!({}));
         match r {
             TranslateOutcome::Unknown { tool_name } => assert_eq!(tool_name, "not_a_tool"),

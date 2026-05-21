@@ -15,19 +15,32 @@ use tokio::io::AsyncReadExt;
 use tracing::info;
 
 use crate::primitive::{
-    AgentDoneArgs, CargoSmokeArgs, InspectIntent, Primitive, WriteFileArgs,
+    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
+    InspectIntent, Primitive, SmokeArgs, WriteFileArgs,
 };
 use crate::result::{ToolError, ToolResult};
 
 /// Bound execution context. Every primitive is workdir-relative;
 /// nothing escapes the directory by design.
+///
+/// `build_cmd` and `verify_cmd` carry the per-problem language-
+/// specific commands. Rust problems use `cargo build` / `cargo test
+/// --test integration`; Go uses `go build ./...` / `go test ./...`;
+/// Python's build is a no-op string and the executor returns
+/// success immediately. The primitive holds the verb; the problem
+/// config holds the command.
 #[derive(Debug, Clone)]
 pub struct ExecCtx {
     pub workdir: PathBuf,
-    /// Wall-clock cap for any subprocess this primitive may spawn.
-    /// `inspect_workdir` and `write_file` ignore this; `cargo_build`
-    /// and `cargo_smoke` honor it.
+    /// Wall-clock cap for subprocess primitives (`build`, `smoke`).
+    /// `inspect_workdir` / `write_file` / handoffs ignore this.
     pub subprocess_wall_cap: Duration,
+    /// Shell command for the `build` primitive. Empty string means
+    /// "no-op build" (Python, etc.).
+    pub build_cmd: String,
+    /// Shell command for the `smoke` primitive. The bench reads
+    /// this from `problem.witness.verify_cmd`.
+    pub verify_cmd: String,
 }
 
 impl ExecCtx {
@@ -35,11 +48,25 @@ impl ExecCtx {
         Self {
             workdir,
             subprocess_wall_cap: Duration::from_secs(120),
+            // Default to Rust commands; per-language overrides
+            // arrive via builders below.
+            build_cmd: "cargo build 2>&1".to_string(),
+            verify_cmd: "cargo test --quiet --test integration 2>&1".to_string(),
         }
     }
 
     pub fn with_subprocess_wall_cap(mut self, dur: Duration) -> Self {
         self.subprocess_wall_cap = dur;
+        self
+    }
+
+    pub fn with_build_cmd(mut self, cmd: impl Into<String>) -> Self {
+        self.build_cmd = cmd.into();
+        self
+    }
+
+    pub fn with_verify_cmd(mut self, cmd: impl Into<String>) -> Self {
+        self.verify_cmd = cmd.into();
         self
     }
 }
@@ -51,9 +78,12 @@ pub async fn execute(ctx: &ExecCtx, prim: &Primitive) -> Result<ToolResult, Tool
     let result = match prim {
         Primitive::InspectWorkdir(intent) => exec_inspect(ctx, intent).await,
         Primitive::WriteFile(args) => exec_write_file(ctx, args).await,
-        Primitive::CargoBuild => exec_cargo_build(ctx).await,
-        Primitive::CargoSmoke(args) => exec_cargo_smoke(ctx, args).await,
+        Primitive::Build => exec_build(ctx).await,
+        Primitive::Smoke(args) => exec_smoke(ctx, args).await,
         Primitive::AgentDone(args) => exec_agent_done(args).await,
+        Primitive::AgentPlan(args) => exec_agent_plan(args).await,
+        Primitive::HandoffToEvaluator(args) => exec_handoff_to_evaluator(args).await,
+        Primitive::HandoffToImplementer(args) => exec_handoff_to_implementer(args).await,
     };
     match &result {
         Ok(r) => info!(
@@ -230,14 +260,22 @@ async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResu
     })))
 }
 
-// ── cargo_build ───────────────────────────────────────────────────
+// ── build ─────────────────────────────────────────────────────────
 
-async fn exec_cargo_build(ctx: &ExecCtx) -> Result<ToolResult, ToolError> {
-    let (status_ok, stdout_tail) = run_subprocess(
+async fn exec_build(ctx: &ExecCtx) -> Result<ToolResult, ToolError> {
+    // No-op build (e.g. Python) — return success immediately.
+    if ctx.build_cmd.trim().is_empty() {
+        return Ok(ToolResult::ok(json!({
+            "ok": true,
+            "note": "no-op build (interpreted language)",
+            "stdout_tail": "",
+        })));
+    }
+    let (status_ok, stdout_tail) = run_shell(
         &ctx.workdir,
-        &["cargo", "build"],
+        &ctx.build_cmd,
         ctx.subprocess_wall_cap,
-        "cargo_build",
+        "build",
     )
     .await?;
     Ok(ToolResult::ok(json!({
@@ -246,19 +284,30 @@ async fn exec_cargo_build(ctx: &ExecCtx) -> Result<ToolResult, ToolError> {
     })))
 }
 
-// ── cargo_smoke ───────────────────────────────────────────────────
+// ── smoke ─────────────────────────────────────────────────────────
 
-async fn exec_cargo_smoke(
-    ctx: &ExecCtx,
-    args: &CargoSmokeArgs,
-) -> Result<ToolResult, ToolError> {
-    let mut argv: Vec<&str> = vec!["cargo", "test", "--quiet", "--test", "integration"];
-    if let Some(filter) = args.filter.as_deref() {
-        argv.push(filter);
+async fn exec_smoke(ctx: &ExecCtx, args: &SmokeArgs) -> Result<ToolResult, ToolError> {
+    if ctx.verify_cmd.trim().is_empty() {
+        return Err(ToolError::Subprocess {
+            primitive: "smoke",
+            reason: "ExecCtx.verify_cmd is empty — bench problem config missing verify_cmd"
+                .into(),
+        });
     }
+    // Append filter as a single positional argument when supplied.
+    // The per-language test runner interprets it according to its
+    // convention (cargo: test name substring; pytest: -k expression;
+    // etc.). The native runner is language-agnostic; the problem
+    // config decides what the filter means.
+    let cmd = match args.filter.as_deref() {
+        Some(f) if !f.is_empty() => format!("{} {}", ctx.verify_cmd, shell_escape(f)),
+        _ => ctx.verify_cmd.clone(),
+    };
     let (status_ok, stdout_tail) =
-        run_subprocess(&ctx.workdir, &argv, ctx.subprocess_wall_cap, "cargo_smoke").await?;
-    // Parse libtest output into structured pass/fail counts.
+        run_shell(&ctx.workdir, &cmd, ctx.subprocess_wall_cap, "smoke").await?;
+    // Parse libtest output into structured pass/fail counts when
+    // possible. Non-libtest output (go test json, vitest, pytest)
+    // parses to all-zeros; the model still gets stdout_tail.
     let parsed = parse_libtest_summary(&stdout_tail);
     Ok(ToolResult::ok(json!({
         "ok": status_ok,
@@ -330,6 +379,41 @@ async fn exec_agent_done(args: &AgentDoneArgs) -> Result<ToolResult, ToolError> 
     })))
 }
 
+// ── role-transition virtual primitives ────────────────────────────
+//
+// These don't execute work; they thread payload into the
+// RoleDossier downstream. Returning a structured payload lets the
+// role-aware runner (and the bench's telemetry) record exactly
+// what was emitted without re-parsing.
+
+async fn exec_agent_plan(args: &AgentPlanArgs) -> Result<ToolResult, ToolError> {
+    Ok(ToolResult::ok(json!({
+        "kind": "plan",
+        "plan": args.plan,
+        "files_to_create": args.files_to_create,
+    })))
+}
+
+async fn exec_handoff_to_evaluator(
+    args: &HandoffToEvaluatorArgs,
+) -> Result<ToolResult, ToolError> {
+    Ok(ToolResult::ok(json!({
+        "kind": "handoff",
+        "to": "evaluator",
+        "what_you_changed": args.what_you_changed,
+    })))
+}
+
+async fn exec_handoff_to_implementer(
+    args: &HandoffToImplementerArgs,
+) -> Result<ToolResult, ToolError> {
+    Ok(ToolResult::ok(json!({
+        "kind": "handoff",
+        "to": "implementer",
+        "diagnosis": args.diagnosis,
+    })))
+}
+
 // ── shared helpers ────────────────────────────────────────────────
 
 /// Reject paths that escape the workdir (no `..` traversal,
@@ -355,31 +439,36 @@ fn resolve_workdir_path(workdir: &Path, rel: &str) -> Result<PathBuf, ToolError>
     Ok(workdir.join(candidate))
 }
 
-/// Spawn a subprocess in `workdir`, wait for it with the given wall
-/// cap, return (status_ok, captured_stdout_tail). Wall-cap fires
-/// SIGKILL via `kill_on_drop(true)`. Output is capped at 16 KiB
-/// tail to keep the tool result small (the model doesn't need 50
-/// KB of cargo output to know "build failed").
-async fn run_subprocess(
+/// Spawn a shell command in `workdir` (`sh -c <cmd>`), wait with
+/// wall-cap, return (status_ok, stdout+stderr tail). Wall-cap
+/// fires SIGKILL via `kill_on_drop(true)`. Tail capped at 16 KiB
+/// so the model doesn't drown in cargo output.
+///
+/// Shell form (vs argv form) means the bound build/verify commands
+/// can include redirections + pipes (`2>&1`, `| head`) without
+/// the executor parsing shell grammar. The per-problem commands
+/// are operator-trusted; the workdir is sandboxed to the bench's
+/// tempdir.
+async fn run_shell(
     workdir: &Path,
-    argv: &[&str],
+    cmd: &str,
     wall_cap: Duration,
     primitive: &'static str,
 ) -> Result<(bool, String), ToolError> {
     use std::process::Stdio;
     use tokio::process::Command;
 
-    let mut cmd = Command::new(argv[0]);
-    for arg in &argv[1..] {
-        cmd.arg(arg);
-    }
-    cmd.current_dir(workdir)
+    let mut command = Command::new("sh");
+    command
+        .arg("-c")
+        .arg(cmd)
+        .current_dir(workdir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    let mut child = cmd.spawn().map_err(|e| ToolError::Subprocess {
+    let mut child = command.spawn().map_err(|e| ToolError::Subprocess {
         primitive,
         reason: format!("spawn: {e}"),
     })?;
@@ -413,6 +502,14 @@ async fn run_subprocess(
             secs: wall_cap.as_secs(),
         }),
     }
+}
+
+/// Minimal shell-escape for filter args appended to the bound
+/// verify_cmd. Wraps in single quotes; replaces internal single
+/// quotes with `'\''`. Sufficient for test-name filters; not
+/// general-purpose.
+fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
 }
 
 fn cap_tail(s: &str, limit: usize) -> String {

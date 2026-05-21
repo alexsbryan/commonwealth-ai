@@ -2,8 +2,301 @@
 
 Continuation doc for the agent-coding battery. Pairs with
 `/Users/alexsbryan/dev/commonwealth-ai/HANDOFF.md` (the predecessor
-OICP-runner diary) and the plan at
-`~/.claude/plans/i-want-to-pickup-sorted-eagle.md`.
+OICP-runner diary) and the plans at
+`~/.claude/plans/i-want-to-pickup-sorted-eagle.md` (original) +
+`~/.claude/plans/autonomous-loop-tick-tingly-clock.md` (PR 1
+canonical-tools crate) + `~/.claude/plans/role-layer-multilang.md`
+(PR 2 role layer).
+
+---
+
+## Methodology — convergence as correctness criterion
+
+(Carried forward verbatim across PRs because it's load-bearing.)
+
+This work is architectural, not feature work. Per ARCH §0.4 ("don't
+whack moles") and the user's stated convergence test, every change
+in the agent-bench / canonical-tools layer must satisfy:
+
+1. **Class identification.** Every primitive, role, detector, or
+   adapter rule corresponds to a NAMED CATEGORY of model behavior
+   — a meta-skill (verify-before-iterate, inspect-before-mutate,
+   terminate-cleanly) or a NAMED failure class (write-thrash,
+   parse-fail-envelope, attention-diffusion). Not a fix for one
+   observed trial.
+
+2. **Analytical closure.** Argue *why* the change closes a class of
+   failures we may not yet have observed, with reference to the
+   shape of the contract. "Splitting the Implementer from the
+   Evaluator role" closes the entire write-thrash class because the
+   tool subset structurally excludes the iterate-without-verify
+   shape — not just the 2.1 instance.
+
+3. **Convergent set, not à la carte.** Adding a primitive, role,
+   or detector variant is a commitment. Resist adding more every
+   time a problem surfaces a need; ask whether the surface can be
+   composed from the existing N. "Make the essential primitives"
+   (user 2026-05-21) — primitives are essential when removing
+   them would break a class, not just an instance.
+
+4. **Pin invariants with tests** (ARCH §7.2, §12.3). Cross-adapter
+   equivalence (`pi_and_native_expose_the_same_canonical_set`),
+   role tool-subset disjointness, role transition rules, dossier
+   render caps — every contract is pinned by a test that fails
+   when a future PR softens it. Convergence enforced in code, not
+   in a wiki.
+
+5. **Glassbox** (ARCH §0.1, §9). Every adapter translation, every
+   primitive execution, every role transition emits a
+   `tracing::info!` or `debug!` event. Operator reading
+   `RUST_LOG=commonwealth_agent_tools=debug,sovereign_agent_bench
+   ::runners::native=debug` can reconstruct the whole loop.
+
+6. **Don't coach to test** (user, 2026-05-21). Discipline that's
+   universal engineering practice (verify-before-iterate,
+   inspect-before-mutate, terminate-cleanly) goes into the tool
+   contract or role structure. Discipline that's algorithm-specific
+   (use GF(2) for Lights Out, use a hashmap of sorted-keys for
+   anagrams) stays in the problem prompt at most. The bench is a
+   measurement instrument; coaching distorts the measurement.
+
+7. **Measure honestly, then iterate** (user, 2026-05-21). If the
+   architecture lands an honest measurement that the proposed
+   meta-skill DIDN'T close the gap (e.g. PR 1's tool-naming
+   hypothesis didn't move 2.1/3.2), that's a *result*, not a
+   failure. The architecture earns its weight as the measurement
+   instrument, and the next iteration targets a sharper gap.
+
+The roles + primitives + transitions in PR 2 are framed by these
+seven. When in doubt about adding a new role / primitive / detector,
+walk down the list and ask "does this change satisfy criterion N?".
+
+---
+
+## 2026-05-21 night — PR 2 role layer + multi-language primitives
+
+Built on top of PR 1 (`commonwealth-agent-tools` canonical crate +
+single-role native runner). PR 1 measured that *tool naming alone*
+(rebrand `bash` → `cargo_build`) did NOT close the verify-discipline
+gap on 2.1/3.2 — 35B primary still wrote `src/lib.rs` 3× without
+calling cargo_build. The diagnosis: a single-role agent has no
+counter-force.
+
+**Three-role split (Planner / Implementer / Evaluator):**
+
+| Role | Tool subset | Forced first tool | Sampling T |
+|---|---|---|---|
+| Planner | `[agent_plan]` | `agent_plan` | 0.4 |
+| Implementer | `[write_file, handoff_to_evaluator, agent_done]` | `write_file` | default |
+| Evaluator | `[build, smoke, handoff_to_implementer, agent_done]` | None | 0.5 |
+
+Tool subsets are the structural enforcement: the model literally
+cannot call a tool that isn't in the active role's subset (OpenAI's
+schema validation drops it). The `inspect_workdir` primitive is
+deliberately ABSENT from Implementer's subset because empirically
+including it led to inspect-loops (35B kept inspecting `Cargo.toml`
+instead of writing). The workdir state lands in the initial user
+message; Implementer doesn't need a separate inspect tool.
+
+Profiles are data (TOML-shaped, defaults compiled in at
+`commonwealth-agent-tools::role::profile::default_profile_for`).
+Operator tuning of the Evaluator's voice or the Planner's
+verbosity doesn't require a code change.
+
+**Multi-language readiness (the bench was always intended for
+Rust × 3 + Go × 2 + TypeScript × 2 + Python × 1):**
+
+- `cargo_build` → `build`, `cargo_smoke` → `smoke`. Closed-enum
+  rename enforced by compile-time exhaustive matches.
+- `ExecCtx { build_cmd, verify_cmd }` populated from the problem's
+  `WitnessCfg`. New optional field `WitnessCfg.build_cmd` (None →
+  per-language default from `resolved_build_cmd()`: Rust=cargo,
+  Go=go build, TS=tsc, Python=no-op).
+- Pi adapter `with_problem_commands(build, verify)` does prefix
+  matching per problem instead of hardcoded Rust strings. Pi's
+  `bash { command: "go build ./..." }` now classifies as canonical
+  `Build` when the problem binds Go commands.
+
+**Same-primitive loop detector** (`runners/native.rs`): when the
+active role emits the same primitive 3 times in a row, exit with
+`ExitReason::NoProgress { consecutive_tool_calls: 3, threshold: 3 }`.
+Caught Evaluator's build→build→build loop in the validation smoke;
+the bench exits honestly instead of churning to token cap.
+
+**Validation result (2026-05-21 night, smoke run on 1.1):**
+
+```
+T1: agent_plan      (Planner)
+T2: write_file      (Implementer)
+T3: build           (Evaluator)
+T4: smoke
+T5: smoke
+T6: build
+T7: smoke
+T8: build
+T9: build
+T10: build → same-primitive loop detector fires
+Exit: no_progress
+Score: 8/9 (dim_a=3 / dim_b=2 / dim_c=3) — 12/12 tests passed
+```
+
+Role chain works end-to-end. Verify-discipline gap closed:
+Implementer cannot iterate without verify, by tool-subset
+construction. The new gap surfaced — *Evaluator can't decide to
+call agent_done after smoke passes* — is the next iteration's
+target.
+
+**File map (PR 2 additions):**
+
+- `sovereign/crates/commonwealth-agent-tools/src/role/mod.rs` —
+  `Role` closed enum + re-exports
+- `.../src/role/profile.rs` — `RoleProfile` + compiled-in defaults
+  + tool-subset / forced-first-tool tests
+- `.../src/role/transition.rs` — pure-data transition rules +
+  unit tests pinning each rule
+- `.../src/role/dossier.rs` — `RoleDossier` (sticky plan +
+  staleness counter + outcome history) + per-primitive `summarize`
+- `sovereign/crates/sovereign-agent-bench/src/runners/native.rs` —
+  rewritten with `NativeMode::RoleAware` (default) + `Monolithic`
+  (PR-1 regression baseline). `--agent native` and `--agent
+  native-monolithic` both registered.
+- `sovereign/crates/sovereign-agent-bench/src/problem.rs` —
+  `WitnessCfg.build_cmd` + `resolved_build_cmd()`
+- `sovereign/SYSTEM_OVERVIEW.md` §4.18 — PR 2 architecture +
+  measurement result
+
+182 unit tests pass across both crates.
+
+---
+
+## What the next session should pick up (ordered)
+
+### A. Run the full 3-way A/B/C sweep
+
+This is the measurement PR 2 promised but didn't ship — daemon
+jetsam'd repeatedly during validation. With a fresh daemon + the
+SOVEREIGN_DISABLE_AUTO_RESUME + alternation grammar env vars set:
+
+```bash
+SOVEREIGN_DISABLE_AUTO_RESUME=1 SOVEREIGN_ALTERNATION_GRAMMAR=1 \
+  sovereign daemon restart
+
+for agent in pi native-monolithic native; do
+  ./target/release/sovereign-agent-bench run \
+    --agent $agent \
+    --problems 1.1,2.1,3.2 \
+    --model commonwealth/primary \
+    --judge-model commonwealth/primary \
+    --judge-trials 1 \
+    --trials 3 \
+    --bench-root sovereign/bench/agent-coding \
+    --report /tmp/three-way-${agent}.json \
+    --artifacts-dir /tmp/three-way-${agent}
+done
+```
+
+Acceptance per PR 2 plan §"Verification":
+
+1. pi numbers stable vs PR 1's measurement (1.1 ≈ 9.0, 2.1 ≈ 3.33,
+   3.2 = 0.0). Observer-only pi adapter must not have introduced
+   regression.
+2. native-monolithic ≈ PR 1's native numbers (1.1 ≈ 9.0, 2.1 ≈ 3.0,
+   3.2 = 0.0).
+3. native (role-aware) on 1.1 ≥ 8.5 (validated already: 8/9 single
+   trial; need N=3 mean).
+4. native (role-aware) on 2.1 + 3.2: the architectural payoff
+   measurement. Either it pushes the mean up (architecture works)
+   OR same-primitive loop detector fires and exits honestly
+   (different failure class, no more silent write-thrash). Either
+   is a result; ambiguous "still all write-thrash" would mean role
+   subset isn't doing what we think.
+
+### B. Close the Evaluator "can't decide done" gap
+
+The Evaluator currently loops build→smoke→build→build→build after a
+successful smoke pass. Hypothesis-frame per the methodology:
+
+- **Class:** "Evaluator can't disambiguate 'verified, ship it' from
+  'verified, iterate more'." This is symmetric to PR 1's
+  verify-discipline gap, on the other end of the loop.
+- **Counter-force candidate:** add a fourth role, Terminator, that
+  *only* sees the build + smoke outcomes and chooses `agent_done`
+  vs `handoff_to_implementer`. Single tool subset = `[agent_done,
+  handoff_to_implementer]`, forced first tool = none. Forces a
+  fresh-context decision on "is this finished?"
+- **Cheaper experiment first:** before adding a role, try a
+  stronger Evaluator system prompt that says "after `smoke` reports
+  all tests passed, your next call MUST be agent_done." If the
+  model behaves, no new role needed. If not, ship Terminator.
+
+### C. Author Go / TS / Python problems
+
+Multi-language primitives ship in PR 2 but only Rust problems
+exist in the bench. Author at least one Go problem (1.2 two-sum
+exists in Rust; clone to Go with `verify_cmd = "go test
+./..."` and a Go scaffold dir). Re-run the 3-way A/B/C against
+it; pi adapter's `with_problem_commands(...)` should classify the
+Go commands correctly. Same convergence test applies.
+
+### D. Pi adapter — pi-side tool descriptors
+
+Pi defines its tool schemas inside `pi-coding-agent`. The pi
+adapter's `tool_descriptors()` currently returns empty; the bench
+sources pi's `--tools` allowlist from
+`Adapter::pi_tool_allowlist()`. This is a sound separation but
+means pi's tool descriptions are NOT under the canonical layer's
+control. If pi-coding-agent ever changes its `write` tool
+behavior (e.g. starts accepting JSON content with diff hunks), the
+bench's pi adapter silently miscalibrates. A future PR could
+fork-and-patch pi or move to a different agent that lets us
+define descriptors. Not urgent.
+
+### E. Daemon stability under bench load
+
+The 35B primary slot + bench's burst load is jetsam-prone on a
+64 GB Mac. PR 1 shipped foreground-yield wiring for
+newsworthy/lint/test watchers; the daemon still SIGTERMs around
+36-45 GB RSS during 3-trial sweeps. Real fix: implement the
+slot/role-on-different-peers vision so Planner can run on a 9B
+peer slot while Evaluator stays on the big primary. The mesh
+already has the gossip + selector primitives; what's missing is
+the OICP role vocabulary (capability_hint extensions). Beyond
+this PR's scope; flagged for the next architecture iteration.
+
+### F. SYSTEM_OVERVIEW maintenance
+
+§4.18 is current as of PR 2. If you add primitives, roles, or
+adapters, update §4.18 in the same PR per ARCH §1.1.
+
+---
+
+## How to verify the architecture in a fresh terminal
+
+```bash
+# All tests green:
+cargo test -p commonwealth-agent-tools -p sovereign-agent-bench --lib --quiet
+
+# Single-trial smoke (role-aware native):
+./target/release/sovereign-agent-bench run \
+  --agent native \
+  --problems 1.1 \
+  --model commonwealth/primary \
+  --judge-model commonwealth/primary \
+  --judge-trials 1 \
+  --trials 1 \
+  --bench-root sovereign/bench/agent-coding \
+  --report /tmp/sanity.json \
+  --artifacts-dir /tmp/sanity
+
+# Inspect role transitions:
+cat /tmp/sanity/1.1-reverse-string/agent.json \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); \
+    [print(f'T{c[\"turn\"]} {c[\"tool\"]} canonical={c.get(\"canonical_kind\")}') \
+     for c in d['tool_calls']]"
+```
+
+Expected: `T1 agent_plan` → `T2 write_file` → `T3 build` → ... ending
+in `agent_done` or `same-primitive loop detected`.
 
 ---
 

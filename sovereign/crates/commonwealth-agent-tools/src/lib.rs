@@ -36,7 +36,13 @@ pub mod executor;
 pub mod primitive;
 pub mod registry;
 pub mod result;
+pub mod role;
 
-pub use primitive::{InspectIntent, Primitive, PrimitiveKind};
+pub use primitive::{
+    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
+    InspectIntent, Primitive, PrimitiveKind, SmokeArgs, WriteFileArgs,
+};
 pub use result::{ToolError, ToolResult};
 pub use registry::Registry;
+pub use role::{Role, RoleDossier, RoleProfile};
+pub use role::dossier::summarize as summarize_for_dossier;

@@ -33,7 +33,7 @@ pub fn descriptor_for(kind: PrimitiveKind) -> Value {
             }),
         ),
         PrimitiveKind::WriteFile => (
-            "Atomically replace the contents of a file in the workdir with `content`. Creates parent directories if needed. Whole-file replacement — there is no diff/edit form (the exact-match brittleness of edit-tools has bitten this bench before, see HANDOFF.md). Does NOT run cargo; call `cargo_build` next to verify your change compiled.",
+            "Atomically replace the contents of a file in the workdir with `content`. Creates parent directories if needed. Whole-file replacement — there is no diff/edit form. Does NOT run any build step; call `build` next to verify the change compiled.",
             json!({
                 "type": "object",
                 "properties": {
@@ -43,20 +43,20 @@ pub fn descriptor_for(kind: PrimitiveKind) -> Value {
                 "required": ["path", "content"]
             }),
         ),
-        PrimitiveKind::CargoBuild => (
-            "Run `cargo build` in the workdir and report pass/fail with compile errors. Use this after `write_file` to check your change typechecks before moving on.",
+        PrimitiveKind::Build => (
+            "Run the bench-bound build command in the workdir (cargo for Rust, go build for Go, tsc for TypeScript, no-op for Python). Reports pass/fail plus the command's output tail. Use after `write_file` to check your change typechecks before moving on.",
             json!({
                 "type": "object",
                 "properties": {},
                 "additionalProperties": false
             }),
         ),
-        PrimitiveKind::CargoSmoke => (
-            "Run the integration test suite (`cargo test --test integration`) and report parsed pass/fail counts plus failing-test names. Optional `filter` runs only tests whose names contain the substring. Use this AFTER `cargo_build` reports ok to verify behavioral correctness.",
+        PrimitiveKind::Smoke => (
+            "Run the bench-bound integration test command (cargo test / go test / vitest / pytest) and report parsed pass/fail counts plus failing-test names. Optional `filter` is appended as a positional argument; the per-language runner interprets it as a test-name substring or expression. Use AFTER `build` reports ok.",
             json!({
                 "type": "object",
                 "properties": {
-                    "filter": {"type": "string", "description": "Optional test-name substring filter."}
+                    "filter": {"type": "string", "description": "Optional test-name filter."}
                 }
             }),
         ),
@@ -68,6 +68,37 @@ pub fn descriptor_for(kind: PrimitiveKind) -> Value {
                     "reason": {"type": "string"}
                 },
                 "required": ["reason"]
+            }),
+        ),
+        PrimitiveKind::AgentPlan => (
+            "Emit the chunked plan. Use 3–6 sentences naming the data structures, the algorithm in one phrase, and the files to write. Optionally list `files_to_create` for net-new files. Available only to the Planner role; calling this hands off to the Implementer.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "plan": {"type": "string"},
+                    "files_to_create": {"type": "array", "items": {"type": "string"}}
+                },
+                "required": ["plan"]
+            }),
+        ),
+        PrimitiveKind::HandoffToEvaluator => (
+            "Signal that your write is complete and verification should run next. One-line `what_you_changed` summary. Available to the Implementer role; calling this transfers control to the Evaluator.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "what_you_changed": {"type": "string"}
+                },
+                "required": ["what_you_changed"]
+            }),
+        ),
+        PrimitiveKind::HandoffToImplementer => (
+            "Send control back to the Implementer with a diagnosis. Use when build or smoke revealed an issue. One-paragraph `diagnosis`. Available to the Evaluator role.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "diagnosis": {"type": "string"}
+                },
+                "required": ["diagnosis"]
             }),
         ),
     };

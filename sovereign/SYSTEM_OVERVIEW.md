@@ -1765,6 +1765,122 @@ at `http://localhost:9741/v1`. Idempotent.
 
 ---
 
+### 4.18 Canonical agent-tools layer — `commonwealth-agent-tools`
+
+The Commonwealth single-source-of-truth tool surface. Five canonical
+primitives — `inspect_workdir` (polymorphic over file/dir/find/grep),
+`write_file`, `cargo_build`, `cargo_smoke`, `agent_done` — every
+agent runner (pi / codex / opencode / native) translates to and
+from. The `native` runner uses the canonical set end-to-end (no
+arbitrary `bash`); the `pi` adapter is observer-only (pi keeps its
+own tools internally but every tool call gets normalized into the
+canonical shape for cross-agent comparison).
+
+**Crate:** `sovereign/crates/commonwealth-agent-tools/` (~1.2k lines,
+8 source files all under the §3.1 800-line ceiling). 34 unit tests
+pinning the canonical contract: schema completeness, descriptor
+shape, adapter equivalence (`pi_and_native_expose_the_same_canonical_set`
+fails if a future PR teaches one adapter a primitive and not the
+other), workdir-path traversal rejection, and per-primitive
+round-trip.
+
+**Layering:**
+
+- `primitive::Primitive` — closed enum, 5 variants. `PrimitiveKind`
+  carries id() + from_id() + all(). Adding a variant is a hard
+  break that touches every adapter + executor exhaustively.
+- `descriptor` — JSON Schema per variant. This is what the model
+  sees in the OpenAI chat completion `tools` array.
+- `executor::execute` — async dispatch over `Primitive`; bound to
+  `ExecCtx { workdir, subprocess_wall_cap }`. Reuses the witness's
+  `tokio::time::timeout` + `kill_on_drop` shape so an
+  infinite-loop test never hangs the runner.
+- `result::ToolResult` / `ToolError` — structured envelope + closed
+  error taxonomy. Cross-agent failure-class comparison is
+  well-defined because the error variants are closed.
+- `registry::Registry` — open registry per ARCH §4. v1 seeds all 5
+  primitives.
+- `adapter::AgentToolAdapter` — translate-call + translate-result
+  + canonical-coverage. `native::Adapter` is identity;
+  `pi::Adapter` maps pi's six tools (`read`, `ls`, `find`, `grep`,
+  `write`, `bash`) through `BashIntent` (closed enum) onto the
+  canonical set.
+
+**Bench wiring:** `sovereign-agent-bench`'s `ToolCallRecord` carries
+`canonical_kind: Option<PrimitiveKind>` (serde-default for
+backwards-compat). `runners/pi.rs` calls
+`pi::Adapter::translate(name, args)` after harvesting each tool
+event; `runners/native.rs` drives the daemon's
+`/v1/chat/completions` directly with the canonical descriptor set
+and dispatches via `Registry::dispatch`. `runners/shared_detectors.rs`
+holds the `ThrashTracker` both runners share so the
+`SAME_PATH_WRITE_THRESHOLD = 3` rule lives in exactly one place.
+
+**First measurement (2026-05-21, 35B primary, N=3, PR 1):** native
+and pi tie on 1.1 (9.0 ± 0.0), 2.1 (~3 ± 2), and 3.2 (0.0). Canonical
+purity (no `bash` in the native tool set) did NOT close the
+verify-discipline gap on 2.1 / 3.2 — the model still wrote
+`src/lib.rs` 3× without calling `cargo_build`, even when
+`cargo_build` was right there in the registry. The architectural
+result is the measurement instrument; the meta-skill hypothesis
+"tool naming closes the gap" did not hold. Future work targets
+the deeper attention-budget gap.
+
+**PR 2 — Role layer + multi-language primitives (2026-05-21 evening).**
+The slot/role framing surfaced: one model trying to play one role
+loses the counter-force that produces discipline. Solution: split
+the agent loop across three roles operating on the same model
+weights via different prompts + tool subsets + forced first tools:
+
+- `Planner` — emits `agent_plan { plan }` once at run start. Tool
+  subset = `[agent_plan]` only. Forced first tool fires `agent_plan`
+  immediately. The plan is sticky in `RoleDossier.plan` across every
+  subsequent role call.
+- `Implementer` — `write_file` + `handoff_to_evaluator` + `agent_done`.
+  Forced first tool = `write_file`. NO `inspect_workdir` in the
+  subset (structural enforcement: the workdir state is already in
+  the user message; including inspect just enabled inspect-loops).
+- `Evaluator` — `build` + `smoke` + `handoff_to_implementer` +
+  `agent_done`. The model can't write here by construction.
+
+Three new primitives: `agent_plan`, `handoff_to_evaluator`,
+`handoff_to_implementer`. Two renames: `cargo_build` → `build`,
+`cargo_smoke` → `smoke`. The renamed primitives carry the bench
+language-agnostically — `ExecCtx.build_cmd` + `verify_cmd` are
+populated from `problem.witness.resolved_build_cmd()` /
+`problem.witness.verify_cmd`. Per-language defaults exist for Rust /
+Go / TypeScript / Python (Python's build is a no-op since it's
+interpreted). The pi adapter's `BashIntent` classifier accepts
+per-problem command prefixes via `with_problem_commands(build,
+verify)` — Go's `go test` is recognized when the problem binds Go
+commands, etc.
+
+`runners/native.rs` gained a `NativeMode` enum: `RoleAware` (default,
+v2 behavior) and `Monolithic` (PR-1 baseline, kept for the
+apples-to-apples regression compare). The registry registers both:
+`--agent native` for the role-aware loop, `--agent native-monolithic`
+for the baseline.
+
+**Counter-force closes verify-discipline (validated 2026-05-21
+evening):** smoke run on 1.1 — Planner → Implementer (one write) →
+Evaluator (build + smoke) → 8/9 (dim_a=3 / dim_b=2 / dim_c=3).
+12/12 tests passed; the Evaluator looped between build and smoke at
+the end (couldn't decide to call agent_done after seeing tests
+pass), tripping the `same-primitive loop` detector — a separate
+attention-budget gap that's the next iteration's target. The role
+layer's structural commitment to verify-after-write is what the
+plan promised; it held.
+
+`role::Role` is a closed enum + exhaustive matches in
+`role::transition`, `role::profile::default_profile_for`, and every
+adapter site — adding a 4th role (Critic, Spec-Anchor) is a
+typed-fence operation.
+
+**Plans:** PR 1 — `~/.claude/plans/autonomous-loop-tick-tingly-clock.md`.
+PR 2 — `~/.claude/plans/role-layer-multilang.md`.
+
+---
+
 ## 5. Commonwealth — The Coordination Daemon
 
 A symmetric daemon. Every node runs the same binary; no master. Members

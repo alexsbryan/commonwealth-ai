@@ -45,6 +45,12 @@ use crate::sandbox::Sandbox;
 /// reproduce after a `read`. Forcing `write` (full-file replacement)
 /// removes that brittleness. See `bench/agent-coding/problems/*/prompt.md`
 /// — each prompt now nudges the model toward `write` + `bash` verify.
+/// Tool names this runner passes to pi via `--tools`. Authoritative
+/// source is `commonwealth_agent_tools::adapter::pi::Adapter::
+/// pi_tool_allowlist()`; the equivalence is pinned by
+/// `tool_allowlist_matches_canonical_adapter` below so a future PR
+/// that adds a primitive to the canonical layer can't forget to
+/// expose it on the pi runner.
 pub const PI_TOOL_ALLOWLIST: &[&str] = &["read", "write", "bash", "find", "grep", "ls"];
 
 /// Default daemon endpoint. The setup script writes a matching provider
@@ -70,28 +76,13 @@ const NO_PROGRESS_TOOL_CALLS_THRESHOLD: u32 = 8;
 /// recompute the workdir hash. Cheaper than per-call polling.
 const NO_PROGRESS_CHECK_EVERY: u32 = 1;
 
-/// Maximum consecutive `write` tool calls to the **same path** without
-/// an interleaving `bash` call. Beyond this, the model has entered
-/// write-thrash: each rewrite overlays partial code on top of partial
-/// code without any verification feedback, producing incoherent final
-/// output.
-///
-/// Same-path semantics matters: under tier=FromScratch the model may
-/// legitimately write `Cargo.toml` then `src/lib.rs` before its first
-/// bash, and that's healthy scaffolding, not thrash. Rewriting the
-/// same file twice in a row without a verify is the actual incoherent
-/// pattern. The earlier "consecutive writes ignoring path" detector
-/// (threshold 5) missed the trial-3 post-verification mode where 4
-/// bashes interleaved early, then 3 writes piled up on the same file
-/// at the end with a typo on the last rewrite.
-///
-/// Threshold = 3: observed distribution from N=3 scaffolded sweep
-/// 2026-05-21 evening. Productive trials wrote at most 2 times to the
-/// same path between bashes (including iterative refinement patterns
-/// like write→bash→write→read→write that earlier threshold-2 falsely
-/// killed on 1.1 trial 0). Failure trials wrote 3+ times. M=3 catches
-/// all observed thrash while preserving iterate-after-read.
-const SAME_PATH_WRITE_THRESHOLD: u32 = 3;
+// SAME_PATH_WRITE_THRESHOLD + ThrashTracker live in
+// `runners::shared_detectors` so the native runner can reuse them
+// (ARCH §10.3). Re-imported below.
+
+use crate::runners::shared_detectors::{
+    ThrashSignal, ThrashTracker, SAME_PATH_WRITE_THRESHOLD,
+};
 
 /// Why the budget kill fired (used internally to classify the artifact's
 /// `ExitReason`).
@@ -235,6 +226,8 @@ impl AgentRunner for PiRunner {
         let token_budget = ctx.token_budget;
         let problem_id = ctx.problem_id.clone();
         let workdir_path_for_reader = ctx.workdir.path().to_path_buf();
+        let pi_build_cmd = ctx.build_cmd.clone();
+        let pi_verify_cmd = ctx.verify_cmd.clone();
 
         // Reader task — JSONL parser + budget watcher + no-progress
         // detector. Owns the kill sender; uses Option::take to fire
@@ -377,7 +370,7 @@ impl AgentRunner for PiRunner {
                                         "agent_bench: write-thrash reset (bash observed)"
                                     );
                                 }
-                                thrash.observe_bash();
+                                thrash.observe_verify();
                             }
                             "done" => {
                                 if let Some(tx) = kill_tx_opt.take() {
@@ -491,7 +484,8 @@ impl AgentRunner for PiRunner {
                     tokens.input = tokens.input.saturating_add(input_tokens);
                     tokens.output = tokens.output.saturating_add(output_tokens);
                     turn = turn.saturating_add(1);
-                    let (turn_tools, turn_text) = harvest_assistant_blocks(&content);
+                    let (turn_tools, turn_text) =
+                        harvest_assistant_blocks(&content, &pi_build_cmd, &pi_verify_cmd);
                     for mut rec in turn_tools {
                         rec.turn = turn;
                         tool_calls.push(rec);
@@ -668,65 +662,6 @@ fn read_prefix(path: &std::path::Path, limit: usize) -> std::io::Result<Vec<u8>>
 /// content array. Used by the write-thrash detector to inspect the
 /// per-turn tool sequence without paying the cost of the full
 /// `harvest_assistant_blocks` extraction.
-/// Streaming state for the write-thrash detector. Pure data — the
-/// `observe_*` methods return `ThrashSignal::Kill` when the
-/// caller should SIGTERM with `KillReason::WriteThrash`. Extracted
-/// out of the async reader so each transition is unit-testable.
-#[derive(Debug, Default, Clone)]
-struct ThrashTracker {
-    same_path_writes: u32,
-    last_write_path: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ThrashSignal {
-    Continue,
-    Kill { same_path_writes: u32 },
-}
-
-impl ThrashTracker {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    /// Observe a `write` to the supplied path (None when the parser
-    /// failed to surface the path field — falls back to treating it
-    /// as a fresh write). Returns `Kill` when the same-path counter
-    /// crosses `SAME_PATH_WRITE_THRESHOLD`.
-    fn observe_write(&mut self, path: Option<&str>) -> ThrashSignal {
-        match (&self.last_write_path, path) {
-            (Some(prev), Some(curr)) if prev.as_str() == curr => {
-                self.same_path_writes = self.same_path_writes.saturating_add(1);
-            }
-            _ => {
-                self.same_path_writes = 1;
-                self.last_write_path = path.map(str::to_string);
-            }
-        }
-        if self.same_path_writes >= SAME_PATH_WRITE_THRESHOLD {
-            ThrashSignal::Kill {
-                same_path_writes: self.same_path_writes,
-            }
-        } else {
-            ThrashSignal::Continue
-        }
-    }
-
-    /// Observe a `bash` — verification happened, the slate is clean.
-    fn observe_bash(&mut self) {
-        self.same_path_writes = 0;
-        self.last_write_path = None;
-    }
-
-    fn same_path_writes(&self) -> u32 {
-        self.same_path_writes
-    }
-
-    fn last_write_path(&self) -> Option<&str> {
-        self.last_write_path.as_deref()
-    }
-}
-
 /// Per-turn tool sequence with the `arguments.path` field surfaced for
 /// `write` calls. Used by the write-thrash detector to identify
 /// same-path consecutive rewrites — under tier=FromScratch a model
@@ -866,7 +801,11 @@ fn extract_token_count(usage: &Value, keys: &[&str]) -> u64 {
 
 /// Walk an assistant-message `content` array and emit per-block
 /// observations (tool_use → ToolCallRecord, text → string).
-fn harvest_assistant_blocks(content: &Value) -> (Vec<ToolCallRecord>, String) {
+fn harvest_assistant_blocks(
+    content: &Value,
+    pi_build_cmd: &str,
+    pi_verify_cmd: &str,
+) -> (Vec<ToolCallRecord>, String) {
     let mut tools: Vec<ToolCallRecord> = Vec::new();
     let mut text = String::new();
     if let Some(arr) = content.as_array() {
@@ -889,11 +828,25 @@ fn harvest_assistant_blocks(content: &Value) -> (Vec<ToolCallRecord>, String) {
                         .chars()
                         .take(256)
                         .collect::<String>();
+                    // Normalize through the pi adapter into a
+                    // canonical primitive kind. Observer-only —
+                    // pi already executed the tool; this just
+                    // labels the telemetry for cross-agent
+                    // comparison. `Unrecognized` / `Unknown`
+                    // outcomes leave `canonical_kind = None`,
+                    // which the failure-class aggregator surfaces.
+                    let canonical_kind = {
+                        use commonwealth_agent_tools::adapter::{AgentToolAdapter, pi as pi_adapter};
+                        let adapter = pi_adapter::Adapter::default()
+                            .with_problem_commands(pi_build_cmd, pi_verify_cmd);
+                        adapter.translate(&name, &input).canonical_kind()
+                    };
                     tools.push(ToolCallRecord {
                         turn: 0,
                         tool: name,
                         args_preview,
                         ok: true,
+                        canonical_kind,
                     });
                 }
                 "text" => {
@@ -968,7 +921,7 @@ mod tests {
             {"type": "tool_use", "id": "abc", "name": "write", "input": {"path": "src/lib.rs", "content": "pub fn solve() {}"}},
             {"type": "text", "text": "Done."},
         ]);
-        let (tools, text) = harvest_assistant_blocks(&content);
+        let (tools, text) = harvest_assistant_blocks(&content, "cargo build", "cargo test --quiet --test integration");
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].tool, "write");
         assert!(tools[0].args_preview.contains("src/lib.rs"));
@@ -978,14 +931,14 @@ mod tests {
 
     #[test]
     fn harvest_handles_empty_content() {
-        let (tools, text) = harvest_assistant_blocks(&serde_json::json!([]));
+        let (tools, text) = harvest_assistant_blocks(&serde_json::json!([]), "cargo build", "cargo test");
         assert!(tools.is_empty());
         assert!(text.is_empty());
     }
 
     #[test]
     fn harvest_handles_null_content() {
-        let (tools, text) = harvest_assistant_blocks(&serde_json::Value::Null);
+        let (tools, text) = harvest_assistant_blocks(&serde_json::Value::Null, "cargo build", "cargo test");
         assert!(tools.is_empty());
         assert!(text.is_empty());
     }
@@ -1016,6 +969,17 @@ mod tests {
     }
 
     #[test]
+    fn tool_allowlist_matches_canonical_adapter() {
+        // The canonical pi adapter is the source of truth for which
+        // pi tools the bench exposes. If a future PR adds a tool to
+        // the adapter (e.g. opens up `mv` for some new primitive)
+        // without updating PI_TOOL_ALLOWLIST, this fails.
+        let canonical =
+            commonwealth_agent_tools::adapter::pi::Adapter::pi_tool_allowlist();
+        assert_eq!(PI_TOOL_ALLOWLIST, canonical);
+    }
+
+    #[test]
     fn cap_tail_short_string_passes_through() {
         let s = "hello";
         assert_eq!(cap_tail(s), "hello");
@@ -1029,7 +993,10 @@ mod tests {
         assert!(cut.len() < s.len());
     }
 
-    // -- write-thrash detector ----------------------------------------
+    // tools_in_turn — kept here because the helper is pi-local;
+    // ThrashTracker state-machine tests live in
+    // `runners::shared_detectors::tests` since that's where the
+    // tracker now lives.
 
     #[test]
     fn tools_in_turn_extracts_path_for_write() {
@@ -1043,112 +1010,5 @@ mod tests {
         assert_eq!(tools[0], ("read".to_string(), Some("src/lib.rs".to_string())));
         assert_eq!(tools[1], ("write".to_string(), Some("src/lib.rs".to_string())));
         assert_eq!(tools[2], ("bash".to_string(), None));
-    }
-
-    #[test]
-    fn thrash_tracker_first_write_does_not_kill() {
-        let mut t = ThrashTracker::new();
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(t.same_path_writes(), 1);
-    }
-
-    #[test]
-    fn thrash_tracker_same_path_three_kills_at_threshold() {
-        let mut t = ThrashTracker::new();
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        let sig = t.observe_write(Some("src/lib.rs"));
-        assert!(matches!(sig, ThrashSignal::Kill { same_path_writes: 3 }));
-    }
-
-    #[test]
-    fn thrash_tracker_two_same_path_writes_does_not_kill() {
-        // Threshold = 3, so 2 consecutive same-path writes (the
-        // common iterate-after-read pattern) does NOT fire. Regression
-        // test for the 1.1 trial 0 false-positive observed in the
-        // 2026-05-21 N=3 sweep.
-        let mut t = ThrashTracker::new();
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(t.same_path_writes(), 2);
-    }
-
-    #[test]
-    fn thrash_tracker_bash_resets_between_writes() {
-        let mut t = ThrashTracker::new();
-        t.observe_write(Some("src/lib.rs"));
-        t.observe_bash();
-        // After bash, another write to same file is fresh — not a kill.
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(t.same_path_writes(), 1);
-    }
-
-    #[test]
-    fn thrash_tracker_post_verify_three_writes_fires() {
-        // Reproduce historical 2.2 retest trial-3 thrash mode:
-        // write→bash→write→bash→write→bash→write→bash→write→write→write
-        // Three trailing same-path writes (no intervening bash) must
-        // fire the detector at threshold 3.
-        let mut t = ThrashTracker::new();
-        for _ in 0..4 {
-            t.observe_write(Some("src/lib.rs"));
-            t.observe_bash();
-        }
-        t.observe_write(Some("src/lib.rs")); // fifth — fresh after bash
-        t.observe_write(Some("src/lib.rs")); // sixth — same path, no bash
-        let sig = t.observe_write(Some("src/lib.rs")); // seventh — fires
-        assert!(matches!(sig, ThrashSignal::Kill { same_path_writes: 3 }));
-    }
-
-    #[test]
-    fn thrash_tracker_different_paths_do_not_kill() {
-        // FromScratch tier: model may legitimately scaffold multiple
-        // files before its first bash. Cross-file writes reset the
-        // same-path counter.
-        let mut t = ThrashTracker::new();
-        assert_eq!(
-            t.observe_write(Some("Cargo.toml")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(
-            t.observe_write(Some("src/lib.rs")),
-            ThrashSignal::Continue
-        );
-        assert_eq!(
-            t.observe_write(Some("tests/integration.rs")),
-            ThrashSignal::Continue
-        );
-        // None of those kill — different paths each time.
-        assert_eq!(t.same_path_writes(), 1);
-    }
-
-    #[test]
-    fn thrash_tracker_missing_path_treated_as_fresh() {
-        // Parser couldn't extract `arguments.path` — fall back to
-        // treating it as a fresh write. Don't kill on the basis of
-        // missing data; the detector should be conservative.
-        let mut t = ThrashTracker::new();
-        assert_eq!(t.observe_write(None), ThrashSignal::Continue);
-        assert_eq!(t.observe_write(None), ThrashSignal::Continue);
-        // Two writes with no path → both treated as fresh, not same.
-        assert_eq!(t.same_path_writes(), 1);
     }
 }

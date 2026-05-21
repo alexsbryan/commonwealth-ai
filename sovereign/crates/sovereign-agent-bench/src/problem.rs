@@ -160,6 +160,12 @@ pub struct WitnessCfg {
     pub language: WitnessLanguage,
     pub fixture_subdir: String,
     pub verify_cmd: String,
+    /// Optional per-language build command (cargo build, go build,
+    /// tsc --noEmit, etc.). The canonical `build` primitive runs
+    /// this. When `None`, the executor returns a no-op success
+    /// (interpreted languages: Python).
+    #[serde(default)]
+    pub build_cmd: Option<String>,
     /// Optional subdirectory copied into the agent's workdir BEFORE
     /// the agent runs. Used to pre-supply scaffolding (Cargo.toml +
     /// src/lib.rs stub) so the bench measures algorithmic work, not
@@ -171,6 +177,23 @@ pub struct WitnessCfg {
     /// is `0..=3`. Buckets are sorted ascending by `low`.
     #[serde(default)]
     pub score_buckets: Vec<[f64; 3]>,
+}
+
+impl WitnessCfg {
+    /// Resolved build command — falls back to a per-language default
+    /// when problem.toml didn't set one explicitly. Python's default
+    /// is empty (no-op build).
+    pub fn resolved_build_cmd(&self) -> String {
+        if let Some(cmd) = self.build_cmd.as_deref() {
+            return cmd.to_string();
+        }
+        match self.language {
+            WitnessLanguage::Rust => "cargo build 2>&1".to_string(),
+            WitnessLanguage::Go => "go build ./... 2>&1".to_string(),
+            WitnessLanguage::TypeScript => "tsc --noEmit 2>&1".to_string(),
+            WitnessLanguage::Python => String::new(), // interpreted
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

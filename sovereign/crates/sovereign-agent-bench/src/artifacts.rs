@@ -196,6 +196,7 @@ mod tests {
                 tool: "write".into(),
                 args_preview: "{...}".into(),
                 ok: true,
+                canonical_kind: None,
             }],
             stderr_tail: "no errors".into(),
             final_assistant_text: "done".into(),
