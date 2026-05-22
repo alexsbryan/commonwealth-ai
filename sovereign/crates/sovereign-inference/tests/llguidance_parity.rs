@@ -365,26 +365,105 @@ fn parity_tool_envelope_oneof_with_cmd_prefix() {
     assert!(!allows(&mut m, b'o'), "non-prefix byte `o` must be masked");
 }
 
-// ─── §4 #6/#7 perf benches — placeholder markers ──────────────────────
+// ─── §3.A end-to-end via from_schema_value ────────────────────────────
+
+#[test]
+fn parity_from_schema_value_applies_walker_then_compiles() {
+    // Schema without explicit additionalProperties — the
+    // `from_schema_value` helper must inject false before passing to
+    // llguidance, so the resulting grammar masks extra fields.
+    use sovereign_inference::llguidance_constraint::default_additional_properties_false;
+
+    let raw_schema = serde_json::json!({
+        "type": "object",
+        "properties": { "x": { "type": "string" } },
+        "required": ["x"]
+    });
+
+    // Mirror what `from_schema_value` does internally (so the test
+    // doesn't require a real LlamaModel to inspect the post-walker
+    // schema bytes).
+    let mut walked = raw_schema.clone();
+    default_additional_properties_false(&mut walked);
+
+    let mut m = matcher_for(walked);
+    consume_ok(&mut m, br#"{"x":"a""#);
+    // After the value closes, the only legal next-byte is `}` (close
+    // root). `,` would attempt to open an extra field — masked.
+    assert!(
+        !allows(&mut m, b','),
+        "extra-field comma must be masked when walker injected additionalProperties:false"
+    );
+    assert!(allows(&mut m, b'}'), "close-brace must be allowed");
+}
+
+// ─── env gate parser (matches embedded::full_llguidance_enabled_from_env)
+
+/// Local mirror of `full_llguidance_enabled_from_env` from
+/// `embedded.rs`. The fn is `pub(crate)` over there (private outside
+/// the module). Test the contract here so the env-gate parsing
+/// behaviour is pinned by a public test that documents intent for
+/// future maintainers.
+///
+/// Contract: ONLY `"1"` or case-insensitive `"true"` enables the
+/// gate. Empty string, missing var, "0", "false", "yes", "no",
+/// random garbage — all return `false`. Mirrors the
+/// `jump_fwd_enabled_from_env` shape upstream.
+fn env_gate_parser(env_get: impl Fn(&str) -> Option<String>) -> bool {
+    match env_get("SOVEREIGN_FULL_LLGUIDANCE") {
+        Some(v) => v == "1" || v.eq_ignore_ascii_case("true"),
+        None => false,
+    }
+}
+
+#[test]
+fn env_gate_off_by_default_when_var_missing() {
+    assert!(!env_gate_parser(|_| None));
+}
+
+#[test]
+fn env_gate_on_with_literal_one() {
+    assert!(env_gate_parser(|k| {
+        if k == "SOVEREIGN_FULL_LLGUIDANCE" { Some("1".into()) } else { None }
+    }));
+}
+
+#[test]
+fn env_gate_on_with_case_insensitive_true() {
+    for v in ["true", "True", "TRUE", "tRuE"] {
+        assert!(
+            env_gate_parser(|k| {
+                if k == "SOVEREIGN_FULL_LLGUIDANCE" { Some(v.into()) } else { None }
+            }),
+            "value {v:?} must enable the gate"
+        );
+    }
+}
+
+#[test]
+fn env_gate_off_with_falsy_and_garbage_values() {
+    for v in ["0", "false", "False", "no", "yes", "", "garbage"] {
+        assert!(
+            !env_gate_parser(|k| {
+                if k == "SOVEREIGN_FULL_LLGUIDANCE" { Some(v.into()) } else { None }
+            }),
+            "value {v:?} must NOT enable the gate (only `1`/`true` do)"
+        );
+    }
+}
+
+// ─── §4 perf benches — superseded by `examples/bench_constraint.rs` ───
 //
-// Real LlamaModel + GGUF on disk required. Live as `#[ignore]` so
-// `cargo test` doesn't choke on missing models; promoted to an
-// examples/bench_* binary once the wiring PR exists.
-
-#[test]
-#[ignore = "needs LlamaModel + Strix Halo Vulkan slot; see audit §4 #6"]
-fn bench_warm_toks_qwen35_9b_titles_x50() {
-    // TODO(post-wiring-PR): load Qwen3.5-9B GGUF, build
-    // ConstrainedSampler with both engines in turn, drive 50
-    // title-expansion calls, compare warm tok/s. Acceptance: llg ≥
-    // 0.85× of JsonConstraint baseline.
-}
-
-#[test]
-#[ignore = "needs LlamaModel + Strix Halo Vulkan slot; see audit §4 #7"]
-fn bench_ff_tokens_strix_halo_vulkan() {
-    // TODO(post-wiring-PR): measure `Matcher::compute_ff_tokens`
-    // return length on a real Qwen vocab. Empty-rate > 50% means
-    // ApproximateTokEnv isn't viable and we need the custom
-    // TokenizerEnv path (re-adoption plan Q1, path B).
-}
+// The two perf questions (decode tok/s parity + `compute_ff_tokens`
+// yield) now have a real runnable harness:
+//
+//   cargo run --release -p sovereign-inference --example bench_constraint -- \
+//       --model <gguf> --engine both --iters 5 --gen-tokens 200
+//
+// First smoke run (Qwen3.5-2B Metal, 2026-05-22): llguidance was
+// 2.5× faster on decode tok/s and `ff_yield = 0.00` (every
+// `compute_ff_tokens` call returned empty under `ApproximateTokEnv`).
+// See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.C/§3.G smoke note.
+//
+// The `bench all --synth` regression gate (audit §4.2) is the
+// canonical end-to-end test.

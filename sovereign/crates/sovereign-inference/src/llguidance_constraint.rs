@@ -103,6 +103,28 @@ impl LlguidanceConstraint {
         })
     }
 
+    /// Build a constraint from a JSON Schema value. Applies
+    /// `default_additional_properties_false` to preserve the in-house
+    /// `JsonConstraint` default before serialising and delegating to
+    /// `new` (which routes through `TopLevelGrammar::from_json_schema`
+    /// when the leading byte is `{`).
+    ///
+    /// This is the canonical entry point for migrating the 11
+    /// `structured_output: Some(schema)` call sites that don't set
+    /// `additionalProperties` explicitly. See
+    /// `LLGUIDANCE_MIGRATION_AUDIT.md` §3.A.
+    pub fn from_schema_value(
+        schema: &serde_json::Value,
+        model: &LlamaModel,
+    ) -> Result<Self, LlgError> {
+        let mut walked = schema.clone();
+        default_additional_properties_false(&mut walked);
+        let serialised = serde_json::to_string(&walked).map_err(|e| {
+            LlgError::ParserCreate(format!("serialise walked schema: {e}"))
+        })?;
+        Self::new(&serialised, model)
+    }
+
     /// Compute the next-token mask. Call once per sampling step
     /// before any `allows()` queries.
     pub fn step(&mut self) -> Result<(), LlgError> {
@@ -288,7 +310,7 @@ fn factory_for(model: &LlamaModel) -> Arc<ParserFactory> {
 /// (`compute_ff_tokens`) returns empty when tokenisation isn't
 /// canonical, but the mask path — what we actually need — is exact.
 fn build_tok_env(model: &LlamaModel) -> TokEnv {
-    let vocab_bytes = crate::json_constraint::vocab_bytes_for(model);
+    let vocab_bytes = crate::vocab_cache::vocab_bytes_for(model);
     let n_vocab = model.n_vocab();
     // TokRxInfo carries vocab size + EOS id (and optionally BOS / PAD).
     // We only need vocab_size + EOS to drive the mask; the rest stays

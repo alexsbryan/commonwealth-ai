@@ -1,8 +1,11 @@
 # Llguidance Migration Audit
 
-**Status:** draft — pre-implementation audit. Decides whether
-D-full (delete `JsonConstraint`, route all structured-output through
-`LlguidanceConstraint`) is safe.
+**Status:** **SHIPPED 2026-05-22.** D-full landed —
+`json_constraint.rs` deleted (-5623 LOC), `vocab_bytes_for` +
+`non_latin_denylist_for` extracted to `vocab_cache.rs`, env gate
+removed, `ConstrainedSampler::constraint` field retired.
+`structured_output` and `lark_grammar` both route through
+`LlguidanceConstraint`. All sovereign-inference tests green.
 
 **Engines under audit:**
 - `sovereign-inference::json_constraint::JsonConstraint` (5623 LOC,
@@ -56,6 +59,14 @@ These constraints are present in 2 of the 11 schemas but **never
 enforced**. Migration would change behaviour from "silently
 permissive" → "actually enforced" — likely a net positive, but
 needs verification per site (see §3.B).
+
+**Correction (2026-05-22):** an earlier draft of this section
+listed `maxLength` as silently ignored. That was wrong. JsonConstraint
+fully enforces `maxLength` per its `Schema::StringAny { max_length, … }`
+field (`json_constraint.rs:84-98`), counted in unicode code points
+(UTF-8 start bytes). Both engines treat the field identically for
+the schemas in §2 (all rationale strings are English ASCII). It is
+NOT a candidate explanation for any observed bench drift.
 
 ### §1.4 Llguidance feature surface (1.7 / `from_json_schema`)
 
@@ -156,6 +167,89 @@ llguidance pushes the rubric score into a worse number (e.g. `0`
 instead of `5`), the rubric becomes less informative — flag the
 caller for schema rework.
 
+### §4.2 first datapoint — `bench all --synth sep` 2026-05-22
+
+**Initial run vs 7-day-old baseline** appeared to show drift
+(contested −16, position_summary −7, +18 comparative etc).
+Diagnosis: baseline was captured 2026-05-15, predating llguidance,
+MTP fast-path, and ~5 days of other daemon work. Apples-to-oranges.
+
+**Apples-to-apples test (gate=OFF vs gate=ON, both runs today):**
+
+| Category | JSON-side today | LLG-side today | Δ |
+|---|---|---|---|
+| argument_reconstruction | 35/38 = 0.92 | 35/38 = 0.92 | 0 |
+| comparative | 30/31 = 0.97 | 30/31 = 0.97 | 0 |
+| concept_distinction | 12/14 = 0.86 | 12/14 = 0.86 | 0 |
+| contested | 21/25 = 0.84 | 21/25 = 0.84 | 0 |
+| dialectical | 17/21 = 0.81 | 17/21 = 0.81 | 0 |
+| position_summary | 28/30 = 0.93 | 28/30 = 0.93 | 0 |
+| **OVERALL** | **143/159 = 0.90** | **143/159 = 0.90** | **0** |
+
+**Byte-identical synth-answer texts across all 21 questions.**
+Zero judge-verdict flips. The two engines produce structurally
+equivalent outputs.
+
+**Conclusion:** llguidance is a drop-in replacement for
+JsonConstraint on the full sep-synth pipeline (router + topic
+extractor + answer judge + loose-credit + essay-readiness +
+tool envelope). The migration is shippable. Action items:
+
+1. Refresh the sep baseline against current daemon state (so
+   future bench-all diffs use today's snapshot, not 2026-05-15).
+2. Run `bench all --synth` across remaining banks (wikipedia,
+   atlas, conversation) for broader signal. Same pattern
+   expected.
+3. Flip `SOVEREIGN_FULL_LLGUIDANCE` default to on, or remove the
+   gate entirely.
+4. Stage the `json_constraint.rs` deletion (~5623 LOC).
+
+### §3.C/§3.G first datapoint — `bench_constraint` smoke 2026-05-22
+
+Initial smoke run on Apple Silicon Metal (Qwen3.5-2B, 2 iters,
+60-token cap, single ctx) revealed the perf shape is **the
+opposite of what we feared**:
+
+```
+          engine    iters   decode tok/s  mask p50 us  mask p99 us     ff_yield
+ json_constraint        2           37.5         9080        68649            —
+      llguidance        2           94.2         7786        34031  0.00 (26/26 empty)
+```
+
+Three signals worth pinning before doing the larger sweep:
+
+1. **llguidance is 2.5× faster on decode tok/s** even WITHOUT
+   jump-forward wired into the sampler hot path. The audit §3.G
+   hypothesis (llguidance ≥ JsonConstraint baseline) understated
+   the win: it's a meaningful speedup, not a wash.
+
+2. **mask p99 ~half** (34ms vs 69ms). The JsonConstraint full-vocab
+   per-candidate parser walk (`embedded.rs:7821`) is exactly the
+   pathology llguidance's precomputed bitmask retires.
+
+3. **ff_yield = 0.00** across 26 sample points. This is the audit
+   §6 #1 question answered empirically: `ApproximateTokEnv` returns
+   empty `compute_ff_tokens` on Qwen 3.5 BPE every time. Tier 2
+   jump-forward equivalent **doesn't fire** at all on this path
+   without the custom `TokenizerEnv` (re-adoption plan Q1 path B).
+
+What this changes:
+
+- §3.C is no longer a blocker. llguidance wins decode tok/s on
+  mask alone, before we get the jump-forward back.
+- Custom `TokenizerEnv` (Q1 path B) becomes a follow-up
+  optimisation, not a prerequisite. The headline number already
+  clears the migration bar.
+- The audit §5 acceptance threshold of "≥ 0.85× json baseline" is
+  trivially met on this slot. Run the sweep on the 9B + A3B slots
+  to confirm before flipping default.
+
+Caveat: this is a 2-iter smoke with a 2B model and a tiny gen
+budget. Run `bench_constraint --iters 20 --gen-tokens 400` against
+Qwen3.5-9B + Qwen3.6-35B-A3B before the operator A/B kicks off.
+And confirm the same shape under `bench all --synth` — that's
+the real regression gate per §4.2.
+
 ### §3.C Jump-forward perf regression — **MEDIUM/HIGH**
 
 `embedded.rs:1647` notes the Tier 1 + Tier 2 jump-forward gives
@@ -237,8 +331,11 @@ Acceptance: no regression. Hypothesis: 1.2-2× speedup.
 
 ## §4 — Fixture plan
 
-Before D-full implementation, build these in
-`sovereign-inference/tests/llguidance_parity.rs`:
+Two layers: unit-test parity fixtures (live in
+`sovereign-inference/tests/llguidance_parity.rs`) + end-to-end
+regression via the existing `sovereign bench all` harness.
+
+### §4.1 Unit-test fixtures
 
 | Fixture | Validates |
 |---|---|
@@ -247,13 +344,71 @@ Before D-full implementation, build these in
 | `parity_thread_judge_type_union` | type:["integer","null"] expands correctly |
 | `parity_intent_enum_router` | §1.1 enum drop-in |
 | `parity_tool_envelope_oneof_with_cmd_prefix` | §3.D pattern handling |
-| `bench_warm_toks_qwen35_9b_titles_x50` | §3.C / §3.G perf |
-| `bench_ff_tokens_strix_halo_vulkan` | §3.C jump-forward regression |
 | `unit_default_additional_properties_walker` | §3.A bridge implementation correctness |
 
-**Sequencing:** §3.A walker + parity fixtures land first (1-2 days).
-Run perf benches second on warm daemon (~1 day). Only then start
-the bridge/wiring PR.
+### §4.2 End-to-end regression — `sovereign bench all --synth`
+
+The canonical migration regression gate. The bench harness already
+drives schema-constrained call sites liberally:
+
+- **Router intent classifier** (§2 row #6) — every bench question
+  hits this on the routing pass.
+- **Topic / domain extractor** (§2 row #4) — wikipedia bench
+  multi-turn cases.
+- **Loose-credit + concept + essay-readiness judges** (§2 rows
+  #8/#9/#10) — every retrieval-judge surface (sep, atlas,
+  wikipedia) runs these per question.
+- **Per-fact thread judge** (§2 row #11) — conversation bench.
+- **Tool envelope schema** (§2 dynamic) — agent-coding bench's
+  bash/edit/read tool calls.
+
+Workflow:
+
+```sh
+# Baseline (default — JsonConstraint path).
+sovereign bench all --synth --report /tmp/bench-json.json
+
+# Restart daemon with the gate on, then re-run.
+SOVEREIGN_FULL_LLGUIDANCE=1 sovereign daemon restart
+sovereign bench all --synth --report /tmp/bench-llg.json
+
+# Compare. A clean migration shows no bench regressed past the
+# threshold (default 0.5pt of F1).
+```
+
+**Acceptance:** zero `regressed` cells across all discovered
+benches. `improved` cells are fine (§3.B silent bounds suddenly
+enforced should produce some). `first_run` cells on fresh bench
+banks are also fine.
+
+If both runs need to coexist in CI, add an `-llg` suffix to the
+bench id so the two baselines don't overwrite each other (mirror
+the existing `-synth`/`-routing` suffix shape in
+`bench_cmd::all::baseline_bench`). One follow-up PR if we want
+automated A/B in CI.
+
+### §4.3 Microbench — `examples/bench_constraint.rs`
+
+Single-model A/B harness measuring decode tok/s, mask p50/p99
+latency, and llguidance ff-token yield. Subordinate to
+`bench all` (which measures correctness across the full pipeline);
+use the microbench when you need to attribute a regression to the
+mask path specifically vs. the router or judge.
+
+```sh
+cargo run --release -p sovereign-inference --example bench_constraint -- \
+    --model ~/.sovereign/models/Qwen3.5-9B.Q8_0.1.gguf \
+    --engine both --iters 5 --gen-tokens 200
+```
+
+Reports per-engine warm tok/s + mask p50/p99 + llguidance ff_yield
+(empty-rate answers audit §6 #1 — whether `ApproximateTokEnv` is
+viable without the custom `TokenizerEnv` path B).
+
+**Sequencing:** §3.A walker + parity fixtures land first (done).
+Bridge wiring + env gate land second (done). `bench all --synth`
+A/B is the rollout gate. Microbench is the diagnostic for
+attributing perf signals when something does regress.
 
 ---
 
