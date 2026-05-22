@@ -346,6 +346,29 @@ async fn run_daemon(args: &[String]) -> i32 {
         );
     }
 
+    // ── Alternation-grammar config → process env ──────────────────
+    //
+    // Same propagation pattern as force_tool_calls. The inference
+    // adapter reads `SOVEREIGN_ALTERNATION_GRAMMAR` per request to
+    // route tool-envelope requests through llguidance's canonical
+    // `TopLevelGrammar::from_json_schema` path instead of the
+    // in-house `JsonConstraint` mask. Caller-supplied env wins so
+    // operators can A/B test (`SOVEREIGN_ALTERNATION_GRAMMAR=0
+    // sovereign daemon run` ignores the config).
+    //
+    // launchd-spawned daemons don't inherit caller env, so flipping
+    // this in setup_config.toml is the load-bearing path on macOS
+    // hosts running the daemon via `sovereign daemon start`.
+    if config.daemon.alternation_grammar
+        && std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR").is_err()
+    {
+        std::env::set_var("SOVEREIGN_ALTERNATION_GRAMMAR", "1");
+        tracing::info!(
+            "daemon: alternation_grammar=true — llguidance schema path \
+             engaged on tools-using requests (set via setup_config.toml)"
+        );
+    }
+
     // ── Inference provider ────────────────────────────────────────
     // Build the embedded llama.cpp provider from the three GGUF slots.
     // Synchronous — load happens inline; model files are mmapped so
