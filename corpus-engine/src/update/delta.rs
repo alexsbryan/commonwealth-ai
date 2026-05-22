@@ -182,9 +182,167 @@ impl CorpusUpdater {
         // ── Phase 3: Additions ────────────────────────────────────────────────
         self.phase_additions(corpus_id, diff, &mut log, &fetch_content).await?;
 
+        // ── Move 6 P5.b/c: post-update atlas delta ──────────────────────────
+        // Best-effort. A failure here does not roll the chunk-side
+        // updates back; the atlas is recoverable via a full rebuild.
+        if let Err(e) = self.maybe_apply_atlas_delta(corpus_id, diff).await {
+            tracing::warn!(
+                corpus_id,
+                error = %e,
+                "delta.atlas_incremental_failed — chunk-side updates committed; atlas may need full rebuild"
+            );
+        }
+
         // All done — persist the new manifest and clear progress.
         self.engine.clear_update_progress(corpus_id)?;
         self.engine.save_stored_manifest(corpus_id, new_manifest)?;
+        Ok(())
+    }
+
+    /// Run the per-doc atlas delta when the corpus is opted in via
+    /// `_corpus_meta.json::atlas_incremental_enabled`.
+    ///
+    /// Always-safe path: `removed_doc_ids` (drops atoms whose owning
+    /// doc disappeared from the diff) — works for any pipeline.
+    ///
+    /// Structure-first path: when the touched chunks carry
+    /// WikipediaChunkMetadata, also re-extract per-doc atoms via
+    /// `extract_atoms_for_articles`. Non-structural pipelines (literary
+    /// / obsidian / philosophy) yield an empty article map from the
+    /// aggregator and contribute only the deletion side of the delta —
+    /// adds + updates fall back to whatever next ran the pipeline.
+    async fn maybe_apply_atlas_delta(
+        &self,
+        corpus_id: &str,
+        diff: &ManifestDiff,
+    ) -> Result<()> {
+        use crate::enrichment::atlas::atoms_delta::{apply_atom_delta, AtomsDelta};
+        use crate::enrichment::atlas::strategies::structure_first::{
+            aggregate_articles_from_chunks, extract_atoms_for_articles, StructureFirstConfig,
+        };
+        use crate::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
+        use crate::error::Error;
+
+        let index = self.engine.open_index_for_corpus(corpus_id).await?;
+        if !index.atlas_incremental_enabled() {
+            return Ok(());
+        }
+        let index_dir = index.path();
+        let atlas_dir = index_dir.join(ATLAS_DIRNAME);
+
+        // Pre-flight: atoms.json must exist and carry content-hash
+        // ids end-to-end. Mix-and-match with sequential ids is bad
+        // for apply_atom_delta's drop-by-doc step.
+        let atoms_file = match read_atlas_atoms(&atlas_dir) {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(
+                    corpus_id,
+                    atlas_dir = %atlas_dir.display(),
+                    error = %e,
+                    "delta.atlas_incremental_skipped — atoms.json unreadable"
+                );
+                return Ok(());
+            }
+        };
+        if !atoms_file.atoms.is_empty()
+            && !atoms_file.atoms.iter().all(|env| env.id().is_content_hash())
+        {
+            tracing::warn!(
+                corpus_id,
+                "delta.atlas_incremental_skipped — sequential-id atoms, run sovereign atlas migrate-ids"
+            );
+            return Ok(());
+        }
+
+        let started = std::time::Instant::now();
+
+        // ── Build the delta ─────────────────────────────────
+        let mut delta = AtomsDelta {
+            added: Vec::new(),
+            removed_doc_ids: diff.deleted_documents.clone(),
+            upserted_docs: Vec::new(),
+            added_edges: Vec::new(),
+        };
+
+        // Per-doc extraction for the structure_first pipeline. The
+        // aggregator only fires on chunks carrying
+        // WikipediaChunkMetadata; non-structural pipelines yield an
+        // empty article map and contribute nothing on the add/update
+        // side of the delta. That's fine — those pipelines need the
+        // LLM-driven extractor (literary_atlas), which lands in P4.
+        let touched: Vec<String> = diff
+            .updated_documents
+            .iter()
+            .chain(diff.new_documents.iter())
+            .cloned()
+            .collect();
+        if !touched.is_empty() {
+            let chunks = index
+                .chunks_by_source_doc_ids(&touched)
+                .await
+                .map_err(|e| {
+                    Error::Database(format!(
+                        "chunks_by_source_doc_ids: {e}"
+                    ))
+                })?;
+            let agg = aggregate_articles_from_chunks(&chunks);
+            if !agg.articles.is_empty() {
+                let cfg = StructureFirstConfig {
+                    source_corpus_id: corpus_id.to_string(),
+                    ..Default::default()
+                };
+                let extracted = extract_atoms_for_articles(&agg.articles, corpus_id, &cfg);
+                delta.upserted_docs = extracted.atoms_delta.upserted_docs;
+                delta.added_edges = extracted.atoms_delta.added_edges;
+            }
+        }
+
+        if delta.is_empty() {
+            tracing::info!(
+                corpus_id,
+                deleted = diff.deleted_documents.len(),
+                updated = diff.updated_documents.len(),
+                added = diff.new_documents.len(),
+                "delta.atlas_incremental_noop — diff carried nothing the atlas tracks"
+            );
+            return Ok(());
+        }
+
+        // ── Apply ───────────────────────────────────────────
+        let summary = apply_atom_delta(&atlas_dir, delta)
+            .map_err(|e| Error::Database(format!("apply_atom_delta: {e}")))?;
+
+        // Refresh meta-atlas anchors for this corpus only. Best-effort.
+        let indexes_dir = self.engine.index_dir().to_path_buf();
+        let meta_outcome =
+            match crate::meta_atlas::rebuild_for_corpus(&indexes_dir, corpus_id, None) {
+                Ok(_) => "ok",
+                Err(e) => {
+                    tracing::warn!(
+                        corpus_id,
+                        error = %e,
+                        "delta.atlas_meta_partial_rebuild_failed"
+                    );
+                    "failed"
+                }
+            };
+
+        tracing::info!(
+            corpus_id,
+            deleted = diff.deleted_documents.len(),
+            updated = diff.updated_documents.len(),
+            added = diff.new_documents.len(),
+            atoms_before = summary.atoms_before,
+            atoms_after = summary.atoms_after,
+            atoms_added = summary.atoms_added,
+            atoms_removed = summary.atoms_removed,
+            docs_upserted = summary.docs_upserted,
+            docs_removed = summary.docs_removed,
+            meta_atlas = meta_outcome,
+            wall_ms = started.elapsed().as_millis() as u64,
+            "delta.atlas_incremental_complete"
+        );
         Ok(())
     }
 
