@@ -78,3 +78,10 @@ name = "grammar_smoke"
 
 [[example]]
 name = "sd_smoke"
+
+# A/B harness comparing JsonConstraint vs LlguidanceConstraint on a
+# real LlamaModel. See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.C / §3.G /
+# §6 — measures decode tok/s, mask p50/p99, and llguidance ff-token
+# yield. Drop-in path for the D-full migration perf gate.
+[[example]]
+name = "bench_constraint"
