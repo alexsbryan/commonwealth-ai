@@ -1576,6 +1576,26 @@ impl ModelSlot {
                         n_generated += 1;
                         break;
                     }
+                    // llguidance grammar-stop: when the schema-driven
+                    // constraint reports `is_stopped() == true`, the
+                    // JSON envelope has closed. Without this break, the
+                    // chat template's post-tool tail (`</think>`,
+                    // `</tool_call>`) leaks into the response content
+                    // and the model can keep generating free-form prose
+                    // until token cap. Distinct from the brace-balance
+                    // stop below (which is gated on `tools_grammar_locked`
+                    // i.e. legacy JsonConstraint) — both close the same
+                    // class but llguidance is the authoritative signal
+                    // when it's the active constraint.
+                    if sampler.grammar_is_stopped() {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on llguidance grammar accept"
+                        );
+                        n_generated += 1;
+                        break;
+                    }
                     if tools_grammar_locked && !in_think {
                         for b in piece.bytes() {
                             if tc_json_escape_next {
@@ -2898,6 +2918,14 @@ impl ModelSlot {
                         );
                         break;
                     }
+                    if sampler.grammar_is_stopped() {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on llguidance grammar accept (stream)"
+                        );
+                        break;
+                    }
                     if json_envelope_complete {
                         tracing::info!(
                             model = %model_id,
@@ -3135,6 +3163,15 @@ impl ModelSlot {
                             n_generated,
                             tail = %tail,
                             "inference: stopping on </tool_call> marker (stream-finish)"
+                        );
+                        reason = FinishReason::Stop;
+                        break;
+                    }
+                    if sampler.grammar_is_stopped() {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on llguidance grammar accept (stream-finish)"
                         );
                         reason = FinishReason::Stop;
                         break;
@@ -7880,6 +7917,30 @@ impl ConstrainedSampler {
         if let Some(eic) = self.evidence_id_constraint.as_mut() {
             eic.accept(token);
         }
+    }
+
+    /// True when the active llguidance grammar has reached its accept
+    /// state — generation can stop because the schema is satisfied.
+    /// Returns `false` when no llguidance constraint is active OR the
+    /// grammar still has open requirements (e.g. unclosed braces).
+    ///
+    /// The generation loop polls this after every `accept` to know
+    /// when to break out cleanly. Without this check, the chat
+    /// template's post-JSON tail (`</think>`, `</tool_call>`) gets
+    /// emitted as free-text content because the mask becomes a no-op
+    /// once `is_stopped` flips (see `LlguidanceConstraint::mask`'s
+    /// short-circuit). Net effect was 5+ KiB of post-JSON prose
+    /// inflating tokens past the per-turn cap; observed 2026-05-22
+    /// in the agent-bench scaffolded run on Qwen 3.6-A3B.
+    ///
+    /// JsonConstraint has no equivalent — the brace-balance tracker
+    /// in the generation loop is its stop signal. This method is
+    /// scoped to llguidance only.
+    pub fn grammar_is_stopped(&self) -> bool {
+        self.llg_constraint
+            .as_ref()
+            .map(|llg| llg.is_stopped())
+            .unwrap_or(false)
     }
 
     /// Returns `Some(token)` iff the active JSON-schema constraint has
