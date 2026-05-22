@@ -45,6 +45,19 @@ vector = true
 # embedding_model and embedding_dimensions are auto-detected from the
 # loaded model at ingest time.
 
+# ── Cold-start: prebuilt snapshot on HuggingFace ────────────────────
+#
+# Private repo (Stanford license forbids public redistribution of SEP
+# text — mesh_sharing = false above). Restorers must export HF_TOKEN
+# and be added as collaborators on the svrnmesh org for the GET to
+# succeed. The snapshot includes the philosophy_atlas enrichment
+# (1770 articles, 100% atlas coverage as of 2026-05-22).
+[prebuilt]
+hf_repo = "svrnmesh/sep-index"
+hf_filename = "sep-qwen-embedding-0.6b-2026-05-22.tar.zst"
+sha256 = "919dfdb8ae6f73f1f53de0bc32ccfe36537a408df595a5742f1d612b0249d8e0"
+compatible_embedding_model = "qwen-embedding-0.6b"
+
 # ── Atlas enrichment (v2, per-article) ───────────────────────────────
 #
 # The SEP parquet holds 1,770 articles across ~182k paragraphs;

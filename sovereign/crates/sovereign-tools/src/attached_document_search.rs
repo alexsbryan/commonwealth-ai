@@ -40,8 +40,8 @@ use async_trait::async_trait;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::{
-    AssetState, Effect, Idempotency, Latency, Permission, Scope,
-    StepOutput, ToolContext, ToolDescriptor,
+    AssetState, Effect, Idempotency, Latency, Permission, RaptorNode,
+    Scope, StepOutput, ToolContext, ToolDescriptor,
 };
 
 pub struct AttachedDocumentSearchTool {
@@ -332,6 +332,113 @@ impl Tool for AttachedDocumentSearchTool {
                 }
             }
         }
+        // ── RAPTOR cluster-score blend ──────────────────────────
+        //
+        // Cosine alone tells us which chunks resemble the query.
+        // It tells us nothing about which structural NEIGHBOURHOOD
+        // those chunks belong to. RAPTOR's leaf clusters do — each
+        // chunk lives in a leaf cluster whose `summary_embedding`
+        // captures what the surrounding scene is about. Blending a
+        // cluster-relevance signal back into the per-chunk score
+        // gives the retrieval a soft "the answer is in the document's
+        // ending neighbourhood" prior that cosine cannot represent.
+        //
+        // Inspired by the SEP rerank experiment's `atlas_weight`
+        // finding (sovereign/docs/RERANK_EXPERIMENT.md): a structural
+        // blend term lifted SEP sources 40→65 of 66 on the canonical
+        // bench. The book-report bench's T1 winnie_fate volatility
+        // (chunk 957, the Ossipon-reads-newspaper epilogue) and T3
+        // motif-recurrence misses share the same shape — cosine
+        // bouncing between equally-similar chunks because the model
+        // had no neighbourhood signal to break the tie. See spec at
+        // `sovereign/docs/specs/CLUSTER_SCORE_BLEND.md`.
+        //
+        // Default OFF (cluster_weight = 0.0) — byte-identical
+        // baseline. Operators / bench runs flip it on via env var.
+        let cluster_weight = std::env::var("SOVEREIGN_DOC_CLUSTER_WEIGHT")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .map(|w| w.clamp(0.0, 1.0))
+            .unwrap_or(0.0);
+        if cluster_weight > 0.0 {
+            // Pool size widens the slice of cosine candidates we
+            // re-rank. The rerank experiment showed wider pools are
+            // what let structural blends earn their keep — at the
+            // default 16 there's no headroom for the cluster signal
+            // to promote chunks above the cosine top-1/2 even when
+            // they're in the right neighbourhood.
+            let cluster_pool_size: usize = std::env::var("SOVEREIGN_DOC_CLUSTER_POOL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .map(|n: usize| n.clamp(1, 256))
+                .unwrap_or(16);
+            // Empty at PartiallyReady / MultiHopReady — T3 hasn't
+            // landed yet. `blend_by_cluster_score` handles empty
+            // gracefully (falls through to cosine ordering).
+            let leaf_nodes: Vec<RaptorNode> = self
+                .store
+                .list_raptor_nodes(&asset.id)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|n| n.level == 0)
+                .collect();
+            // Build the candidate pool from BOTH cosine top-K and
+            // PPR-boosted chunks. PPR's contribution stays as recall
+            // (adding chunks beyond cosine top-K), but those chunks
+            // are still legitimate candidates for the blended
+            // ranking — they earn a slot when their cluster is the
+            // right neighbourhood.
+            let mut pool: Vec<(usize, f32)> = scored
+                .iter()
+                .take(cluster_pool_size)
+                .map(|(s, i)| (*i, *s))
+                .collect();
+            let in_pool: std::collections::HashSet<usize> =
+                pool.iter().map(|(i, _)| *i).collect();
+            // PPR chunks may sit below the cosine top-K cut. Look
+            // their cosine score up from `scored` (the full sorted
+            // list). Cosine score is unique per chunk, so a linear
+            // scan over `scored` is fine — `ppr_boosted_chunks` is
+            // capped at 12.
+            for &ppr_idx in &ppr_boosted_chunks {
+                if in_pool.contains(&ppr_idx) {
+                    continue;
+                }
+                if let Some((s, _)) = scored.iter().find(|(_, i)| *i == ppr_idx) {
+                    pool.push((ppr_idx, *s));
+                }
+            }
+            let ranked = blend_by_cluster_score(
+                &pool,
+                &leaf_nodes,
+                &query_embedding,
+                cluster_weight,
+            );
+            // Map the new chunk-index ordering back into the
+            // (cosine_score, chunk_index) shape downstream code
+            // expects. Cosine scores carry through unchanged — they
+            // aren't read after this point, but keeping them avoids
+            // a wider refactor of `scored`'s type. The blended order
+            // is what matters.
+            let cosine_by_chunk: std::collections::HashMap<usize, f32> = pool
+                .iter()
+                .copied()
+                .map(|(i, s)| (i, s))
+                .collect();
+            scored = ranked
+                .into_iter()
+                .map(|i| (*cosine_by_chunk.get(&i).unwrap_or(&0.0), i))
+                .collect();
+            tracing::debug!(
+                cluster_weight,
+                cluster_pool_size,
+                leaf_nodes = leaf_nodes.len(),
+                pool_size = pool.len(),
+                "attached_doc_search: cluster-score blend applied"
+            );
+        }
+
         // K=16. Per-turn latency probes 2026-05-21 measured the
         // accumulating-prefill cost as the dominant per-iteration
         // wall-clock — 25s → 44s between iterations as the
@@ -506,10 +613,16 @@ impl Tool for AttachedDocumentSearchTool {
             } else {
                 ""
             };
-            let tag = if hit_indices.contains(&c.chunk_index) {
-                "HIT"
-            } else if ppr_hit_set.contains(&c.chunk_index) {
+            // Check entity-walk origin first so a PPR chunk that
+            // also survived the cluster-blend re-ranking keeps the
+            // "(entity-walk)" tag — the tag reflects HOW retrieval
+            // surfaced the chunk, not WHERE it ranked. Pre-blend
+            // (cluster_weight=0.0) the two sets are disjoint by
+            // construction so the order is behaviour-neutral.
+            let tag = if ppr_hit_set.contains(&c.chunk_index) {
                 "HIT (entity-walk)"
+            } else if hit_indices.contains(&c.chunk_index) {
+                "HIT"
             } else {
                 "context"
             };
@@ -591,4 +704,286 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         return 0.0;
     }
     dot / (na.sqrt() * nb.sqrt())
+}
+
+/// Min-max normalise a slice into `[0, 1]`. When all values are
+/// equal (within `f32::EPSILON`), returns a constant `0.5` for every
+/// element — a neutral midpoint that lets the score contribute
+/// nothing to a blend rather than poisoning the result with NaN or
+/// collapsing every chunk to zero.
+fn min_max_normalize(xs: &[f32]) -> Vec<f32> {
+    if xs.is_empty() {
+        return Vec::new();
+    }
+    let max = xs.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let min = xs.iter().copied().fold(f32::INFINITY, f32::min);
+    let range = max - min;
+    if range <= f32::EPSILON {
+        return vec![0.5; xs.len()];
+    }
+    xs.iter().map(|x| (x - min) / range).collect()
+}
+
+/// Re-rank a candidate pool by blending cosine relevance with the
+/// query's relevance to each chunk's RAPTOR leaf-cluster summary.
+///
+/// `pool` is the (chunk_index, cosine_score) candidates to consider.
+/// Order does not matter on input; the returned `Vec<usize>` is
+/// the chunk indices sorted by blended score, descending.
+///
+/// `leaf_nodes` MUST be RAPTOR level-0 nodes (caller filters). When
+/// empty — e.g. the asset hasn't reached T3 yet, or the atlas builder
+/// hasn't run — the function returns the pool's cosine ordering. The
+/// caller sees a graceful baseline instead of a panic.
+///
+/// `weight` is the cluster blend weight in `[0, 1]`. The caller is
+/// expected to clamp; we don't re-clamp here.
+fn blend_by_cluster_score(
+    pool: &[(usize, f32)],
+    leaf_nodes: &[RaptorNode],
+    query_embedding: &[f32],
+    weight: f32,
+) -> Vec<usize> {
+    if pool.is_empty() {
+        return Vec::new();
+    }
+    if leaf_nodes.is_empty() {
+        // Atlas hasn't landed (PartiallyReady / MultiHopReady) — fall
+        // back to cosine ordering. This is the graceful baseline the
+        // spec calls out as a hard requirement.
+        let mut by_cosine: Vec<(usize, f32)> = pool.to_vec();
+        by_cosine.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        return by_cosine.into_iter().map(|(i, _)| i).collect();
+    }
+
+    // chunk_id (u32) → leaf node index. Built once per call; PPR
+    // boosting + cosine top-K typically gives a pool of ~22-50,
+    // each lookup is O(1).
+    let mut chunk_to_cluster: std::collections::HashMap<u32, usize> =
+        std::collections::HashMap::with_capacity(
+            leaf_nodes.iter().map(|n| n.direct_member_chunk_ids.len()).sum(),
+        );
+    for (node_idx, node) in leaf_nodes.iter().enumerate() {
+        for chunk_id in &node.direct_member_chunk_ids {
+            chunk_to_cluster.insert(*chunk_id, node_idx);
+        }
+    }
+
+    // Cache cluster→query cosine across candidates — multiple
+    // chunks in the same cluster share a score, so cosine the
+    // cluster summary embedding once per cluster, not per chunk.
+    let mut cluster_score_cache: Vec<Option<f32>> = vec![None; leaf_nodes.len()];
+    let mut cosines: Vec<f32> = Vec::with_capacity(pool.len());
+    let mut clusters: Vec<f32> = Vec::with_capacity(pool.len());
+    for (chunk_idx, cosine_score) in pool {
+        cosines.push(*cosine_score);
+        let cluster_score = match chunk_to_cluster.get(&(*chunk_idx as u32)) {
+            Some(&node_idx) => match cluster_score_cache[node_idx] {
+                Some(s) => s,
+                None => {
+                    let s = cosine_similarity(
+                        query_embedding,
+                        &leaf_nodes[node_idx].summary_embedding,
+                    );
+                    cluster_score_cache[node_idx] = Some(s);
+                    s
+                }
+            },
+            // Chunk has no leaf-cluster assignment (rare edge: a
+            // chunk index outside any cluster's direct members).
+            // Use the candidate-pool minimum so it neither helps
+            // nor distinctively hurts — the cosine signal alone
+            // decides this chunk's fate.
+            None => 0.0,
+        };
+        clusters.push(cluster_score);
+    }
+
+    let cosine_norm = min_max_normalize(&cosines);
+    let cluster_norm = min_max_normalize(&clusters);
+    let mut scored: Vec<(usize, f32)> = pool
+        .iter()
+        .zip(cosine_norm.iter().zip(cluster_norm.iter()))
+        .map(|((idx, _), (cn, kn))| (*idx, (1.0 - weight) * cn + weight * kn))
+        .collect();
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.into_iter().map(|(idx, _)| idx).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn leaf_node(node_id: &str, chunks: Vec<u32>, summary_embedding: Vec<f32>) -> RaptorNode {
+        RaptorNode {
+            node_id: node_id.to_string(),
+            level: 0,
+            summary: format!("summary for {node_id}"),
+            summary_embedding,
+            centroid_embedding: vec![],
+            children_node_ids: vec![],
+            direct_member_chunk_ids: chunks.clone(),
+            evidence_chunk_ids: chunks,
+            quote_spans: vec![],
+            primary_entities: vec![],
+            cluster_coherence: 1.0,
+            created_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn min_max_normalize_handles_empty_slice() {
+        assert!(min_max_normalize(&[]).is_empty());
+    }
+
+    #[test]
+    fn min_max_normalize_handles_all_equal_returns_midpoint() {
+        // All-equal cosines is a real pool shape — every chunk equally
+        // close to the query (typical of broad thematic queries). The
+        // normaliser must not divide by zero and must not collapse
+        // every chunk to 0.0, which would let cluster_norm dictate
+        // the ranking even when the user asked for `weight=0.25`.
+        let out = min_max_normalize(&[0.7, 0.7, 0.7, 0.7]);
+        assert_eq!(out, vec![0.5; 4]);
+    }
+
+    #[test]
+    fn min_max_normalize_basic_scales_to_unit_interval() {
+        let out = min_max_normalize(&[0.1, 0.5, 0.9]);
+        assert!((out[0] - 0.0).abs() < 1e-5);
+        assert!((out[1] - 0.5).abs() < 1e-5);
+        assert!((out[2] - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn blend_falls_through_to_cosine_when_no_leaf_nodes() {
+        // PartiallyReady / MultiHopReady have no raptor_nodes yet.
+        // The blend MUST return cosine ordering rather than panic
+        // or collapse everything to zero.
+        let pool = vec![(7, 0.2), (3, 0.9), (5, 0.5)];
+        let ranked = blend_by_cluster_score(&pool, &[], &[1.0, 0.0], 0.5);
+        // Expected order: highest cosine first.
+        assert_eq!(ranked, vec![3, 5, 7]);
+    }
+
+    #[test]
+    fn blend_handles_empty_pool() {
+        let ranked = blend_by_cluster_score(&[], &[], &[0.0], 0.5);
+        assert!(ranked.is_empty());
+    }
+
+    #[test]
+    fn blend_at_zero_weight_yields_cosine_order() {
+        // Spec invariant: when callers do disable the gate they
+        // should NEVER call with weight=0.0 (we early-return at the
+        // env gate). But the math should still be correct — proving
+        // it here means a future refactor that removes the gate
+        // doesn't silently change behaviour.
+        let query = vec![1.0, 0.0];
+        let leaves = vec![
+            // Cluster 0 — orthogonal to query, low cluster_score.
+            leaf_node("c0", vec![10, 11], vec![0.0, 1.0]),
+            // Cluster 1 — perfectly aligned, high cluster_score.
+            leaf_node("c1", vec![20, 21], vec![1.0, 0.0]),
+        ];
+        // Chunks in cluster 0 have higher cosine; chunks in cluster
+        // 1 have lower cosine. At weight=0.0 the cosine winner (10)
+        // must come out on top despite cluster 1 being a better
+        // structural match.
+        let pool = vec![(10, 0.9), (11, 0.7), (20, 0.2), (21, 0.1)];
+        let ranked = blend_by_cluster_score(&pool, &leaves, &query, 0.0);
+        assert_eq!(ranked, vec![10, 11, 20, 21]);
+    }
+
+    #[test]
+    fn blend_at_full_weight_promotes_cluster_winner() {
+        // Same fixture as above. At weight=1.0 the cosine signal is
+        // out — cluster 1 (aligned) should dominate. Chunks 20 and
+        // 21 share a cluster, so they tie on cluster_norm; the
+        // sort is stable enough that BOTH must rank ahead of the
+        // chunks in cluster 0. Exact order within a cluster falls
+        // back to the original pool position; we only assert the
+        // cluster-level promotion.
+        let query = vec![1.0, 0.0];
+        let leaves = vec![
+            leaf_node("c0", vec![10, 11], vec![0.0, 1.0]),
+            leaf_node("c1", vec![20, 21], vec![1.0, 0.0]),
+        ];
+        let pool = vec![(10, 0.9), (11, 0.7), (20, 0.2), (21, 0.1)];
+        let ranked = blend_by_cluster_score(&pool, &leaves, &query, 1.0);
+        let first_two: std::collections::HashSet<usize> =
+            ranked.iter().take(2).copied().collect();
+        assert_eq!(
+            first_two,
+            [20, 21].iter().copied().collect::<std::collections::HashSet<usize>>(),
+            "weight=1.0 should rank both cluster-1 chunks ahead of cluster-0 chunks; got {ranked:?}"
+        );
+    }
+
+    #[test]
+    fn blend_at_intermediate_weight_lifts_cluster_winner_above_cosine() {
+        // The realistic case: cosine ranks chunk 10 first, but
+        // chunk 20 lives in the RIGHT neighbourhood (cluster 1).
+        // The structurally on-target chunk should overtake the
+        // cosine winner once the cluster signal has enough weight.
+        // This is the failure mode the spec targets: T1 winnie_fate's
+        // chunk 957 has middling cosine but lives in the load-bearing
+        // ending cluster.
+        //
+        // Note on the symmetry trap: with a 2-chunk pool where the
+        // cosine and cluster signals point in EXACTLY opposite
+        // directions, both signals normalise to {0.0, 1.0} so any
+        // weight ≠ 0.5 has a clear winner but weight = 0.5 ties.
+        // We probe at 0.7 — past the symmetry inflection — to keep
+        // the test resilient to floating-point sort tie-breaking.
+        let query = vec![1.0, 0.0];
+        let leaves = vec![
+            // Cluster 0 — barely related to query.
+            leaf_node("c0", vec![10], vec![0.1, 0.99]),
+            // Cluster 1 — perfectly on-topic.
+            leaf_node("c1", vec![20], vec![1.0, 0.05]),
+        ];
+        let pool = vec![(10, 0.6), (20, 0.4)];
+        let ranked = blend_by_cluster_score(&pool, &leaves, &query, 0.7);
+        assert_eq!(
+            ranked[0], 20,
+            "structurally on-target chunk should win at weight=0.7; got {ranked:?}"
+        );
+    }
+
+    #[test]
+    fn blend_uses_zero_cluster_score_for_unassigned_chunks() {
+        // Defensive: a chunk in the pool that isn't a direct member
+        // of any leaf cluster (edge case — partial atlas, off-by-one
+        // chunk indexing) must not panic. It gets cluster_score=0.0,
+        // so it gets penalised by the blend but doesn't poison the
+        // rest of the pool.
+        let query = vec![1.0, 0.0];
+        let leaves = vec![leaf_node("c0", vec![10], vec![1.0, 0.0])];
+        let pool = vec![(10, 0.6), (999, 0.5)]; // 999 is unassigned
+        let ranked = blend_by_cluster_score(&pool, &leaves, &query, 0.9);
+        // The assigned chunk's cluster_score is 1.0 → blend dominates;
+        // the unassigned chunk's cluster_score is 0.0 → falls behind.
+        assert_eq!(ranked[0], 10);
+        assert_eq!(ranked[1], 999);
+    }
+
+    #[test]
+    fn blend_does_not_divide_by_zero_on_all_equal_cosines() {
+        // Failure mode #2 from the spec: a pool where every chunk
+        // has identical cosine. min-max normalise on cosine alone
+        // would divide by zero; here the cluster signal still has
+        // variance, so the blend should produce a non-NaN ranking.
+        let query = vec![1.0, 0.0];
+        let leaves = vec![
+            leaf_node("c0", vec![1], vec![0.0, 1.0]),
+            leaf_node("c1", vec![2], vec![1.0, 0.0]),
+        ];
+        let pool = vec![(1, 0.5), (2, 0.5)];
+        let ranked = blend_by_cluster_score(&pool, &leaves, &query, 0.5);
+        // Cluster signal breaks the tie — chunk 2 (cluster 1, aligned
+        // with query) wins.
+        assert_eq!(ranked, vec![2, 1]);
+    }
 }
