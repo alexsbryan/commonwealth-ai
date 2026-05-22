@@ -250,6 +250,61 @@ impl CorpusIndex {
         Ok(out)
     }
 
+    /// Move 6 P6: read `(id, content_hash)` for every chunk whose
+    /// `source_doc_id == doc_id`. Pairs with
+    /// [`crate::chunkers::chunk_delta`] so the watcher's
+    /// `reindex_file` hot path can drop the nuke-and-re-embed cycle
+    /// for files where most chunks survived a single-line edit.
+    ///
+    /// Returns rows in undefined order. Chunks with a NULL
+    /// `content_hash` (legacy ingests before the column was
+    /// populated) are skipped — they would never match the
+    /// extractor's blake3 hash anyway and would force a full
+    /// re-embed if we returned them with an empty hash.
+    pub async fn committed_chunks_for_doc(
+        &self,
+        doc_id: &str,
+    ) -> Result<Vec<crate::chunkers::CommittedChunk>> {
+        let safe_id = doc_id.replace('\'', "''");
+        let filter = format!("source_doc_id = '{safe_id}'");
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .only_if(filter)
+            .select(Select::Columns(vec![
+                "id".to_string(),
+                "content_hash".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("committed_chunks_for_doc query: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("committed_chunks_for_doc collect: {e}")))?;
+
+        let mut out: Vec<crate::chunkers::CommittedChunk> = Vec::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let hashes = batch
+                .column_by_name("content_hash")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            for i in 0..batch.num_rows() {
+                let Some(hashes) = hashes else { continue };
+                if hashes.is_null(i) {
+                    continue;
+                }
+                out.push(crate::chunkers::CommittedChunk {
+                    id: ids.value(i) as u64,
+                    content_hash: hashes.value(i).to_string(),
+                });
+            }
+        }
+        Ok(out)
+    }
+
     /// Move 6 P5.a.1: fetch every chunk whose `source_doc_id` is in
     /// `doc_ids`. Used by the newsworthy incremental atlas path to
     /// re-extract atoms for just the articles touched by a tick
