@@ -470,6 +470,17 @@ struct IndexMeta {
     /// `None` on legacy indexes ingested before the field existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     display: Option<crate::recipe::DisplayMeta>,
+
+    /// Move 6 P5.b/c: opt-in flag for the post-update incremental
+    /// atlas hook. When `Some(true)` and the atlas at
+    /// `<index_dir>/atlas/` carries content-hash IDs, the
+    /// `CorpusUpdater::apply_update` post-phase hook fires
+    /// `apply_atom_delta` with per-doc removals + (for structural
+    /// corpora) per-doc re-extractions. Defaults to `None` —
+    /// existing watched-folder / delta-ingest pipelines keep their
+    /// pre-Move-6 behaviour until the user opts the corpus in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    atlas_incremental_enabled: Option<bool>,
 }
 
 /// Provenance of an on-disk index. See the `IndexMeta::provenance`
@@ -903,6 +914,29 @@ impl CorpusIndex {
         let index_dir = Path::new(self.db.uri());
         let mut meta = read_meta(index_dir)?;
         meta.display = display;
+        write_meta(index_dir, &meta)
+    }
+
+    /// Move 6 P5.b/c: read the per-corpus opt-in flag for the
+    /// post-update incremental atlas hook. `false` (or absent) means
+    /// `CorpusUpdater::apply_update` skips the hook entirely.
+    pub fn atlas_incremental_enabled(&self) -> bool {
+        let index_dir = Path::new(self.db.uri());
+        read_meta(index_dir)
+            .ok()
+            .and_then(|m| m.atlas_incremental_enabled)
+            .unwrap_or(false)
+    }
+
+    /// Move 6 P5.b/c: stamp the per-corpus opt-in flag. Run
+    /// `sovereign atlas migrate-ids` first on the same corpus —
+    /// flipping this on against a sequential-id atlas is a no-op
+    /// (the hook's pre-flight check rejects it) but the rejection
+    /// log line is more useful than a malformed-id silent failure.
+    pub fn set_atlas_incremental_enabled(&self, enabled: bool) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.atlas_incremental_enabled = Some(enabled);
         write_meta(index_dir, &meta)
     }
 
