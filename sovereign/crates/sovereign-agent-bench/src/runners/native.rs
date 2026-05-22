@@ -838,8 +838,25 @@ async fn run_native_role_aware(
                     canonical_kind.unwrap_or(PrimitiveKind::AgentDone),
                     format!("rejected: `{}` not allowed in {} role", name, active_role.id()),
                 );
+                let allowed_list: Vec<String> = profile
+                    .allowed_primitives
+                    .iter()
+                    .map(|k| format!("`{}`", k.id()))
+                    .collect();
+                let stdout_tail = format!(
+                    "error: tool `{name}` rejected\n  \
+                     = reason: the `{}` role does not have access to `{name}`.\n  \
+                     = help: this role can use: {}. If you need a different \
+                     tool, hand off to the appropriate role first \
+                     (e.g. `handoff_to_evaluator` to run `build`/`smoke`, \
+                     `handoff_to_implementer` to run `write_file`).",
+                    active_role.id(),
+                    allowed_list.join(", "),
+                );
                 let body = json!({
-                    "error": "tool not allowed in current role",
+                    "ok": false,
+                    "stdout_tail": stdout_tail,
+                    "rejected": "tool_not_allowed_in_role",
                     "tool": name,
                     "role": active_role.id(),
                 })
@@ -853,19 +870,36 @@ async fn run_native_role_aware(
             let canonical = match outcome {
                 TranslateOutcome::Canonical { canonical, .. } => canonical,
                 TranslateOutcome::Unrecognized { tool_name, args_summary, reason } => {
+                    let stdout_tail = format!(
+                        "error: tool `{tool_name}` arguments did not parse\n  \
+                         = reason: {reason}\n  \
+                         = args (truncated): {args_summary}\n  \
+                         = help: re-emit `{tool_name}` with arguments matching its \
+                         parameter schema. Common causes: missing required fields, \
+                         wrong types, or escaped JSON inside JSON."
+                    );
                     let body = json!({
-                        "error": "unrecognized tool call",
+                        "ok": false,
+                        "stdout_tail": stdout_tail,
+                        "rejected": "arguments_did_not_parse",
                         "tool": tool_name,
-                        "args_summary": args_summary,
-                        "reason": reason,
                     })
                     .to_string();
                     this_turn_tool_results.push(tool_result_message(&id, &body));
                     continue;
                 }
                 TranslateOutcome::Unknown { tool_name } => {
+                    let stdout_tail = format!(
+                        "error: tool `{tool_name}` is not in the canonical primitive set\n  \
+                         = help: use one of the tools listed in the `tools` array. \
+                         The canonical primitives are: write_file, build, smoke, \
+                         agent_done, agent_plan, handoff_to_evaluator, \
+                         handoff_to_implementer."
+                    );
                     let body = json!({
-                        "error": "unknown tool",
+                        "ok": false,
+                        "stdout_tail": stdout_tail,
+                        "rejected": "unknown_tool",
                         "tool": tool_name,
                     })
                     .to_string();
@@ -933,7 +967,19 @@ async fn run_native_role_aware(
                         kind,
                         format!("error: {e}"),
                     );
-                    let body = json!({"error": e.to_string()}).to_string();
+                    // Render in cargo-shape texture so the model sees
+                    // a structured, actionable error instead of the
+                    // bare enum string. Per ARCH §0.1 (glassbox):
+                    // model-to-model communication is itself part of
+                    // the system surface that must be legible.
+                    let stdout_tail = e.render_for_agent();
+                    let body = json!({
+                        "ok": false,
+                        "stdout_tail": stdout_tail,
+                        "rejected": "executor_error",
+                        "tool": name,
+                    })
+                    .to_string();
                     this_turn_tool_results.push(tool_result_message(&id, &body));
                     continue;
                 }
