@@ -2778,6 +2778,7 @@ pub(crate) async fn apply_distiller(
     cmd_prefix: None,
     url_allowlist: None,
     evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -3289,6 +3290,7 @@ async fn summarise_block(
     cmd_prefix: None,
     url_allowlist: None,
     evidence_id_allowlist: None,
+    lark_grammar: None,
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();

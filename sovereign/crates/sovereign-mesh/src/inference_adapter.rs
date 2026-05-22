@@ -372,6 +372,19 @@ impl SovereignInferenceAdapter {
         if let Some(rf) = request.response_format.as_ref() {
             req.structured_output = extract_response_format_schema(rf);
         }
+        // Commonwealth extension: forward `lark_grammar` directly.
+        // Unlike `response_format` (which we extract a JSON Schema
+        // from), `lark_grammar` is the raw Lark source string —
+        // pass it through as-is. The sampler builder
+        // (`embedded::build_sampler`) compiles it via llguidance.
+        // When both `lark_grammar` and `structured_output` are set,
+        // `lark_grammar` wins (`embedded.rs:7964` mutual-exclusion).
+        // This is intentional: the in-process daemon path already
+        // honoured `lark_grammar` precedence; wiring it through
+        // HTTP preserves the semantics.
+        if let Some(grammar) = request.lark_grammar.as_ref() {
+            req.lark_grammar = Some(grammar.clone());
+        }
         // Tool-call grammar: when the caller sets `tool_choice =
         // "required"` (OpenAI semantics: model MUST call a tool) and
         // tools are present, install a JSON-Schema grammar over the

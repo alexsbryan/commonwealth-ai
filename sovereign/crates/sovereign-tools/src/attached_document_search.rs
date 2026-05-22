@@ -232,6 +232,22 @@ impl Tool for AttachedDocumentSearchTool {
             })
             .collect();
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        // K=16. Per-turn latency probes 2026-05-21 measured the
+        // accumulating-prefill cost as the dominant per-iteration
+        // wall-clock — 25s → 44s between iterations as the
+        // conversation doubled. Tried K=12 to halve tool result
+        // size; gave ~19% per-turn latency saving on stevie_circles
+        // probe but full-20 bench showed T4 judge dropped 4.0→3.0
+        // and T5 judge collapsed 1.3→0.0. The model uses retrieval
+        // BREADTH (chunks 13-16) for cross-scene synthesis even
+        // though it rarely CITES them directly — they shape the
+        // context the synthesis prompt sees.
+        //
+        // Future perf paths that won't hurt synthesis: shrink the
+        // briefing (resent on every iteration's prefill); drop old
+        // tool results once newer queries on the same topic
+        // supersede them; use a draft model for tool-decision
+        // turns (Primary for final synthesis only).
         scored.truncate(16);
 
         // ── Mechanical ±1 chunk-neighbour expansion ─────────────

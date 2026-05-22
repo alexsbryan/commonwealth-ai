@@ -203,6 +203,29 @@ impl RemoteApiProvider {
             });
         }
 
+        // Forward `lark_grammar` to the daemon as a sovereign-specific
+        // extension field. The daemon's inference_adapter unwraps it
+        // back onto CompletionRequest.lark_grammar; embedded.rs then
+        // compiles it via llguidance and constrains decoding.
+        //
+        // Why this exists separately from `response_format`: lark
+        // grammars are strictly more expressive than JSON-Schema
+        // (regex tokens, recursion, custom productions) and the
+        // OpenAI envelope has no slot for free-form lark. The
+        // structured_output → response_format path remains the
+        // canonical route for schema-shaped output; this is the
+        // escape hatch for non-schema constraints like
+        // `(entity ("," entity)*)?` per-line lists or strict
+        // BREAK/CONTINUE alternations.
+        //
+        // The wire field name `lark_grammar` mirrors the
+        // CompletionRequest field exactly — chosen for symmetry
+        // with the in-process path so daemon-side debugging
+        // doesn't need a translation table.
+        if let Some(grammar) = &request.lark_grammar {
+            body["lark_grammar"] = serde_json::json!(grammar);
+        }
+
         body
     }
 
