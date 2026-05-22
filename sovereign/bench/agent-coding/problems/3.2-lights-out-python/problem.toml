@@ -1,0 +1,57 @@
+[meta]
+id = "3.2-lights-out-python"
+title = "Light's Out — minimum-press solve over GF(2) (Python)"
+category = "CodeTest"
+tier = "Scaffolded"
+version = "v0"
+notes = """
+Python variant of 3.2 Light's Out. Same algorithm spec (GF(2)
+Gaussian elimination on n×n press matrix), same 12-fixture held-out
+test suite (translated to pytest), but the agent writes Python
+instead of Rust.
+
+Diagnostic value: isolates Rust-specific failure modes (syntax,
+borrow checker, type system overhead, cargo cycle time) from the
+language-agnostic algorithmic capability. If the model solves this
+in Python but not Rust, the bottleneck is Rust fluency. If neither
+solves, the algorithm is genuinely above the model's reach.
+
+Tier=Scaffolded: harness pre-installs `lights_out.py` stub +
+`tests/test_integration.py` smoke. Agent's job is the algorithm
+only.
+"""
+
+[prompt]
+file = "prompt.md"
+
+[witness]
+kind = "Hybrid"
+language = "Python"
+fixture_subdir = "fixtures"
+scaffold_subdir = "scaffold"
+# pytest auto-discovers tests/test_*.py. No-op build (interpreted).
+verify_cmd = "python3 -m pytest -q tests/test_integration.py 2>&1"
+score_buckets = [
+  [0.0,  0.25,  0],
+  [0.25, 0.6,   1],
+  [0.6,  0.85,  2],
+  [0.85, 1.001, 3],
+]
+
+[budget]
+token_cap = 16000
+wall_seconds_cap = 900
+
+[scoring.dim_a]
+name = "Correctness"
+mode = "AutoTestPassFraction"
+
+[scoring.dim_b]
+name = "Algorithmic insight"
+mode = "JudgeRubric"
+rubric_id = "dim_b"
+
+[scoring.dim_c]
+name = "Code quality and efficiency"
+mode = "HybridAutoFloor"
+rubric_id = "dim_c"

@@ -205,13 +205,26 @@ pub fn parse_pytest_text(stdout: &str) -> TestParseResult {
                 failed_names.push(name);
             }
         }
-        if !trimmed.contains('=') {
+        // Pytest summary line shapes:
+        //   verbose: "============ 1 failed, 11 passed in 0.05s ============"
+        //   short  (`-q`): "1 failed, 11 passed in 0.05s"
+        // Previously gated on `=` decoration → missed `-q` form.
+        // Now we trim any `=` decoration if present, then look for
+        // "N passed" / "N failed" tokens. Last matching line wins
+        // (pytest emits the count summary as the very last line).
+        let stripped = trimmed.trim_matches('=').trim();
+        if !stripped.contains("passed") && !stripped.contains("failed") {
             continue;
         }
-        let stripped = trimmed.trim_matches('=').trim();
+        // Defensive: only consume a line that looks like a count
+        // summary (contains "in <duration>s" or "in <duration>") to
+        // avoid eating unrelated "FAILED foo" lines.
+        let looks_like_summary = stripped.contains(" in ");
+        if !looks_like_summary {
+            continue;
+        }
         let p = count_number_before_token(stripped, "passed");
         let f = count_number_before_token(stripped, "failed");
-        // Only consume from lines that actually carry a summary.
         if p > 0 || f > 0 {
             passed = p;
             failed = f;
@@ -292,6 +305,41 @@ mod tests {
         assert_eq!(r.failed, 1);
         assert_eq!(r.total, 4);
         assert_eq!(r.failed_names, vec!["tests/test_a.py::test_b"]);
+    }
+
+    #[test]
+    fn pytest_text_extracts_quiet_mode_summary() {
+        // `-q` mode: no `===` decoration around the summary line.
+        // Observed on 3.2-lights-out-python (2026-05-22) where the
+        // parser previously read passed=0/total=0 despite stdout
+        // showing "1 failed, 11 passed in 0.05s".
+        let out = "......F.....\nFAILED tests/test_a.py::test_b - assert\n1 failed, 11 passed in 0.05s\n";
+        let r = parse_pytest_text(out);
+        assert_eq!(r.passed, 11);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.total, 12);
+        assert_eq!(r.failed_names, vec!["tests/test_a.py::test_b"]);
+    }
+
+    #[test]
+    fn pytest_text_all_pass_quiet() {
+        let out = "............\n12 passed in 0.12s\n";
+        let r = parse_pytest_text(out);
+        assert_eq!(r.passed, 12);
+        assert_eq!(r.failed, 0);
+        assert_eq!(r.total, 12);
+    }
+
+    #[test]
+    fn pytest_text_doesnt_consume_failed_marker_lines() {
+        // "FAILED tests/..." lines name failed tests but don't carry
+        // counts. Without the "looks_like_summary" gate they could
+        // be mistaken for a summary by the prior heuristic.
+        let out = "FAILED tests/test_a.py::test_x\nFAILED tests/test_b.py::test_y\n";
+        let r = parse_pytest_text(out);
+        assert_eq!(r.passed, 0);
+        assert_eq!(r.failed, 0);
+        assert_eq!(r.failed_names.len(), 2);
     }
 
     #[test]
