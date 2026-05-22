@@ -249,6 +249,11 @@ impl sovereign_core::traits::DocumentAssetStore for MockStore {
     async fn list_document_assets(&self) -> sovereign_core::error::Result<Vec<sovereign_core::DocumentAsset>> { Ok(Vec::new()) }
     async fn delete_document_asset(&self, _id: &str) -> sovereign_core::error::Result<()> { Ok(()) }
     async fn save_document_operation(&self, _message_id: &str, _asset_id: &str, _operation: &sovereign_core::DocumentAssetOperation, _duration_ms: u64) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn save_raptor_nodes(&self, _asset_id: &str, _nodes: &[sovereign_core::types::RaptorNode]) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn list_raptor_nodes(&self, _asset_id: &str) -> sovereign_core::error::Result<Vec<sovereign_core::types::RaptorNode>> { Ok(Vec::new()) }
+    async fn get_raptor_node(&self, _node_id: &str) -> sovereign_core::error::Result<Option<sovereign_core::types::RaptorNode>> { Ok(None) }
+    async fn save_asset_motifs(&self, _asset_id: &str, _motifs: &[sovereign_core::types::AssetMotif]) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn list_asset_motifs(&self, _asset_id: &str) -> sovereign_core::error::Result<Vec<sovereign_core::types::AssetMotif>> { Ok(Vec::new()) }
 }
 
 impl StateStore for MockStore {}

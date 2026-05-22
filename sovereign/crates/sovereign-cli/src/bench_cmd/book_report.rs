@@ -49,7 +49,7 @@ const HELP: Help = Help {
     command: "sovereign bench book-report",
     summary: "Attach-document benchmark on Conrad's The Secret Agent. Fetch → attach → state-stream → tier dispatch → mechanical + LLM-judge scoring.",
     sections: &[
-        HelpSection::Usage("sovereign bench book-report [--reuse-asset <id>] [--tier <N>] [--questions <ids>] [--list-assets] [--cache-dir <path>] [--output <path>] [--refresh-source]"),
+        HelpSection::Usage("sovereign bench book-report [--reuse-asset <id>] [--rebuild-skeleton] [--rebuild-raptor] [--tier <N>] [--questions <ids>] [--list-assets] [--cache-dir <path>] [--output <path>] [--refresh-source]"),
         HelpSection::Flags(&[
             (
                 "--reuse-asset <id>",
@@ -298,6 +298,13 @@ struct Opts {
     /// the original skeleton was built with a smaller model and
     /// missed entities the bench depends on.
     rebuild_skeleton: bool,
+    /// When set alongside `--reuse-asset`, rebuild the RAPTOR atlas
+    /// + motif index for the asset before firing questions. Skips
+    /// the legacy skeleton rebuild, so it's the fast path for
+    /// populating the new atlas on assets ingested before the
+    /// RAPTOR pipeline shipped (~2-3 min vs ~20 min for full
+    /// re-ingest).
+    rebuild_raptor: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Opts, String> {
@@ -310,6 +317,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
     let mut tier: Option<u8> = None;
     let mut question_ids: Option<Vec<String>> = None;
     let mut rebuild_skeleton = false;
+    let mut rebuild_raptor = false;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -359,6 +367,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
             "--refresh-source" => refresh_source = true,
             "--wire" => wire = true,
             "--rebuild-skeleton" => rebuild_skeleton = true,
+            "--rebuild-raptor" => rebuild_raptor = true,
             other => return Err(format!("unknown flag `{other}`")),
         }
         i += 1;
@@ -378,6 +387,7 @@ fn parse_args(args: &[String]) -> Result<Opts, String> {
         tier,
         question_ids,
         rebuild_skeleton,
+        rebuild_raptor,
     })
 }
 
@@ -459,6 +469,33 @@ async fn run(opts: Opts) -> Result<BookReportRun, String> {
                     } else {
                         found
                     };
+                    if opts.rebuild_raptor {
+                        eprintln!("      --rebuild-raptor: populating RAPTOR atlas + motif index on the existing asset");
+                        let raptor_start = std::time::Instant::now();
+                        match manager.rebuild_raptor_atlas(reuse_id).await {
+                            Ok(()) => {
+                                let secs = raptor_start.elapsed().as_secs();
+                                let node_count = session
+                                    .store
+                                    .list_raptor_nodes(reuse_id)
+                                    .await
+                                    .map(|v| v.len())
+                                    .unwrap_or(0);
+                                let motif_count = session
+                                    .store
+                                    .list_asset_motifs(reuse_id)
+                                    .await
+                                    .map(|v| v.iter().filter(|m| m.is_distinctive).count())
+                                    .unwrap_or(0);
+                                eprintln!(
+                                    "      raptor rebuild ok in {secs}s: {node_count} nodes, {motif_count} distinctive motifs"
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("      rebuild_raptor_atlas failed: {e}; continuing without RAPTOR data");
+                            }
+                        }
+                    }
                     (
                         Some(asset_to_use),
                         0u64,

@@ -231,7 +231,107 @@ impl Tool for AttachedDocumentSearchTool {
                 (score, c.chunk_index)
             })
             .collect();
+
+        // Sort by cosine first — this is the load-bearing ranking
+        // for narrow factual questions. PPR may add additional
+        // chunks below, but it must NOT displace cosine's top hits.
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // ── PPR recall-boost (HippoRAG-style multi-hop) ─────────
+        //
+        // Bench run #6 (PPR-as-re-rank @ 30%, 2026-05-22) lifted
+        // T3 stevie_circles from 0.0 → 4.0 judge by surfacing the
+        // entity-walk-discovered chunk, but collapsed T1 winnie_fate
+        // from 100% → 20% — PPR re-ranking pushed cosine's load-
+        // bearing chunk 957 (Ossipon-reads-newspaper, an epilogue
+        // chunk with low central-entity density) out of the top-K.
+        //
+        // The HippoRAG-faithful pattern is PPR-as-recall-boost,
+        // not re-rank: keep cosine's top-K untouched, then ADD
+        // high-PPR chunks beyond as additional candidates. The
+        // multi-hop signal arrives as breadth, not as displacement.
+        // Cosine continues to win factual questions; PPR composes
+        // for synthesis questions that need entity-walk reasoning.
+        //
+        // Invisible to the model — the briefing never surfaces the
+        // graph. The only observable effect is additional chunks in
+        // the tool result that pure cosine would have missed.
+        //
+        // Skipped when (a) the skeleton has no action atoms,
+        // (b) the query mentions no known entities, or (c) the
+        // operator disables it via SOVEREIGN_DOC_PPR=off.
+        let ppr_enabled =
+            std::env::var("SOVEREIGN_DOC_PPR").map(|v| v != "off").unwrap_or(true);
+        let mut ppr_boosted_chunks: Vec<usize> = Vec::new();
+        if ppr_enabled {
+            if let Some(skel) = asset.skeleton.as_ref() {
+                if !skel.actions.is_empty() && !skel.entity_index.is_empty() {
+                    let graph = crate::entity_graph::EntityGraph::build(skel);
+                    let seeds = graph.seeds_from_query(query);
+                    if !seeds.is_empty() {
+                        let ppr = graph.personalized_pagerank(
+                            &seeds,
+                            crate::entity_graph::DEFAULT_DAMPING,
+                            crate::entity_graph::DEFAULT_MAX_ITERS,
+                            crate::entity_graph::DEFAULT_EPSILON,
+                        );
+                        let max_chunk_id = scored
+                            .iter()
+                            .map(|(_, i)| *i)
+                            .max()
+                            .unwrap_or(0)
+                            .saturating_add(1);
+                        let chunk_ppr = graph.score_chunks(&ppr, max_chunk_id);
+
+                        // Identify the cosine top-K so PPR adds chunks
+                        // *beyond* it. Boost count configurable via env
+                        // var (default 6); cap of 12 keeps the tool
+                        // result bounded even on noisy graphs.
+                        let cosine_top_k: usize = 16;
+                        let cosine_top_indices: std::collections::HashSet<usize> = scored
+                            .iter()
+                            .take(cosine_top_k)
+                            .map(|(_, i)| *i)
+                            .collect();
+                        let boost_count: usize = std::env::var("SOVEREIGN_DOC_PPR_BOOST")
+                            .ok()
+                            .and_then(|v| v.parse().ok())
+                            .map(|v: usize| v.clamp(0, 12))
+                            .unwrap_or(6);
+
+                        // Pick the highest-PPR chunks NOT already in
+                        // the cosine top-K. Tie-break by chunk index
+                        // for stability (lower index first).
+                        let mut candidates: Vec<(usize, f32)> = chunk_ppr
+                            .iter()
+                            .enumerate()
+                            .filter(|(idx, score)| {
+                                **score > f32::EPSILON
+                                    && !cosine_top_indices.contains(idx)
+                                    && chunk_by_index.contains_key(idx)
+                            })
+                            .map(|(idx, score)| (idx, *score))
+                            .collect();
+                        candidates.sort_by(|a, b| {
+                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                                .then(a.0.cmp(&b.0))
+                        });
+                        ppr_boosted_chunks = candidates
+                            .into_iter()
+                            .take(boost_count)
+                            .map(|(idx, _)| idx)
+                            .collect();
+
+                        tracing::debug!(
+                            seeds = seeds.len(),
+                            entity_count = graph.entity_count(),
+                            boosted = ppr_boosted_chunks.len(),
+                            "attached_doc_search: PPR recall-boost applied"
+                        );
+                    }
+                }
+            }
+        }
         // K=16. Per-turn latency probes 2026-05-21 measured the
         // accumulating-prefill cost as the dominant per-iteration
         // wall-clock — 25s → 44s between iterations as the
@@ -273,10 +373,23 @@ impl Tool for AttachedDocumentSearchTool {
         // good *retrieval units*.
         let hit_indices: std::collections::HashSet<usize> =
             scored.iter().map(|(_, i)| *i).collect();
+        // PPR-boosted chunks join the hit set as primary hits — they
+        // get ±1 neighbour expansion same as cosine hits because the
+        // model needs surrounding context to reason about whatever
+        // the entity-walk surfaced. They're flagged separately below
+        // when rendering so the model can see WHY they were retrieved
+        // (entity walk vs cosine similarity), but they count as HITs.
+        let ppr_hit_set: std::collections::HashSet<usize> =
+            ppr_boosted_chunks.iter().copied().collect();
+        let combined_hits: std::collections::HashSet<usize> = hit_indices
+            .iter()
+            .chain(ppr_hit_set.iter())
+            .copied()
+            .collect();
         let expanded_ordered: Vec<usize> = {
             let mut expanded: std::collections::BTreeSet<usize> =
-                hit_indices.iter().copied().collect();
-            for &h in &hit_indices {
+                combined_hits.iter().copied().collect();
+            for &h in &combined_hits {
                 if h > 0 {
                     expanded.insert(h - 1);
                 }
@@ -349,7 +462,14 @@ impl Tool for AttachedDocumentSearchTool {
         // which ones were the actual cosine hits vs which are
         // contextual neighbours. The model is told to cite hits as
         // load-bearing evidence and use context for synthesis.
-        let hit_count = hit_indices.len();
+        //
+        // Recall-boost chunks (from PPR entity-walk discovery) are
+        // tagged distinctly as "HIT (entity-walk)" so the model can
+        // see HOW each chunk was surfaced — useful for the model's
+        // reasoning trace and for downstream diagnostics. They count
+        // as HITs (load-bearing evidence), just discovered via the
+        // graph instead of cosine.
+        let hit_count = hit_indices.len() + ppr_hit_set.len();
         let mut formatted = format!(
             "Retrieved {} passage(s) from \"{}\" with surrounding context ({} chunks total):\n\n",
             hit_count + atom_chunks.len(),
@@ -388,6 +508,8 @@ impl Tool for AttachedDocumentSearchTool {
             };
             let tag = if hit_indices.contains(&c.chunk_index) {
                 "HIT"
+            } else if ppr_hit_set.contains(&c.chunk_index) {
+                "HIT (entity-walk)"
             } else {
                 "context"
             };

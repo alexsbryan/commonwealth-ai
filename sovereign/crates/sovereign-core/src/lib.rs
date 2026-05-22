@@ -1,6 +1,7 @@
 pub mod atlas_context;
 pub mod context;
 pub mod dossier;
+pub mod quote_verification;
 pub mod error;
 pub mod intent_policy;
 pub mod executor;
