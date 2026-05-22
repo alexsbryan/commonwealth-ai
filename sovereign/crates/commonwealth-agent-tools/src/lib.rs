@@ -37,6 +37,7 @@ pub mod primitive;
 pub mod registry;
 pub mod result;
 pub mod role;
+pub mod syntax;
 
 pub use primitive::{
     AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,

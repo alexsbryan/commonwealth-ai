@@ -64,6 +64,22 @@ const STDERR_TAIL_CAP_BYTES: usize = 32 * 1024;
 /// defensive ceiling against runaway content when grammar fails
 /// to bind.
 const PER_TURN_MAX_TOKENS: u64 = 4096;
+/// Handoff_to_implementer events since the last `agent_plan`.
+/// When this threshold is hit, the next handoff routes back to
+/// Planner instead of Implementer — giving the model a chance to
+/// revise the plan with full failure dossier visible. Closes the
+/// "Implementer spins on same broken approach because plan doesn't
+/// change" class observed on 3.2-lights-out (model wrote 4 broken
+/// drafts of the GF(2) solver, each abandoning mid-function with
+/// thinking-comments, because the plan never said anything
+/// different from cycle 1).
+///
+/// 3 is one less than HANDOFF_CYCLE_CAP (6) so the model gets at
+/// least one replan attempt before the cycle limit fires. Universal
+/// engineering practice — equivalent to a sprint retro when
+/// implementation keeps failing against the same plan.
+const REPLAN_THRESHOLD: u32 = 3;
+
 /// Consecutive turns with `tool_calls.is_empty()` before exit.
 /// Closes loop class L18 — model emits content-only responses (no
 /// tool envelope) under alternation grammar's plain-text path.
@@ -189,7 +205,7 @@ async fn run_native_monolithic(
     let wall_cap = Duration::from_secs(ctx.wall_seconds_cap);
 
     let started = Instant::now();
-    let exec_ctx = ExecCtx::new(workdir.path().to_path_buf())
+    let mut exec_ctx = ExecCtx::new(workdir.path().to_path_buf())
         .with_subprocess_wall_cap(Duration::from_secs(
             ctx.wall_seconds_cap.saturating_mul(2).max(60),
         ))
@@ -200,6 +216,9 @@ async fn run_native_monolithic(
                 .clone()
                 .unwrap_or_else(|| ctx.verify_cmd.clone()),
         );
+    if let Some(v) = ctx.syntax_validator.clone() {
+        exec_ctx = exec_ctx.with_syntax_validator(v);
+    }
     let registry = Registry::with_canonical_primitives();
     let adapter = native_adapter::Adapter;
 
@@ -545,6 +564,7 @@ async fn run_native_role_aware(
     let mut last_workdir_hash = hash_workdir(workdir.path());
     let mut consecutive_no_progress: u32 = 0;
     let mut empty_tool_call_streak: u32 = 0;
+    let mut cycles_since_last_plan: u32 = 0;
     let mut turn: u32 = 0;
     let mut total_role_calls: u32 = 0;
 
@@ -963,8 +983,13 @@ async fn run_native_role_aware(
 
             // HandoffToImplementer increments the cycle counter
             // (Evaluator concluding "Implementer retry"). Cap closes
-            // L4/L7/L17 unbounded-alternation classes.
+            // L4/L7/L17 unbounded-alternation classes. Also tracks
+            // replan threshold (B): after `REPLAN_THRESHOLD` handoffs
+            // without an intervening agent_plan, the transition rule
+            // below routes the next handoff back to Planner instead
+            // of Implementer.
             if matches!(kind, PrimitiveKind::HandoffToImplementer) {
+                cycles_since_last_plan = cycles_since_last_plan.saturating_add(1);
                 if let CycleSignal::Kill { cycles } =
                     handoff_cycles.observe_handoff_to_implementer()
                 {
@@ -980,6 +1005,11 @@ async fn run_native_role_aware(
                         cap: HANDOFF_CYCLE_CAP,
                     };
                 }
+            }
+            // AgentPlan resets the replan counter — Planner just emitted
+            // a fresh plan, so subsequent handoffs start from cycle 0.
+            if matches!(kind, PrimitiveKind::AgentPlan) {
+                cycles_since_last_plan = 0;
             }
 
             // Special updates from transition primitives.
@@ -1037,8 +1067,28 @@ async fn run_native_role_aware(
                 };
             }
 
-            // Transition.
-            let next = transition_after(active_role, TransitionTrigger::Primitive(kind));
+            // Transition. Standard rules from `transition_after`; the
+            // role-aware runner additionally overrides for replan: if
+            // HandoffToImplementer fires with the cycle counter at or
+            // above REPLAN_THRESHOLD, route back to Planner instead
+            // so the model can revise the plan against the failure
+            // dossier. Counter resets on the next AgentPlan dispatch
+            // (already wired above).
+            let next_raw = transition_after(active_role, TransitionTrigger::Primitive(kind));
+            let next = if matches!(kind, PrimitiveKind::HandoffToImplementer)
+                && cycles_since_last_plan >= REPLAN_THRESHOLD
+                && matches!(next_raw, NextRole::Flip(Role::Implementer))
+            {
+                tracing::info!(
+                    problem = %problem_id,
+                    cycles_since_last_plan,
+                    threshold = REPLAN_THRESHOLD,
+                    "native_runner: replan triggered — routing handoff_to_implementer back to Planner instead"
+                );
+                NextRole::Flip(Role::Planner)
+            } else {
+                next_raw
+            };
             match next {
                 NextRole::Terminate => break 'outer ExitReason::Completed,
                 NextRole::Stay => {}
