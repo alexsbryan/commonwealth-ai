@@ -575,11 +575,31 @@ impl DocumentAssetManager {
                 let (segments, overview) = tokio::join!(segments_future, overview_future);
                 skeleton.segments = segments;
                 skeleton.overview = overview;
+                // Coarse progress checkpoint after segments+overview —
+                // small fraction of T3 wall-clock but worth a tick so
+                // the UI doesn't look frozen during the embedding
+                // window of TextTiling + the single overview LLM call.
+                on_progress(IngestProgress::BuildingSkeleton {
+                    done: (chunk_count as f32 * 0.10).round() as usize,
+                    total: chunk_count,
+                });
+                let _ = store
+                    .update_asset_state(
+                        &asset_id,
+                        &AssetState::BuildingSkeleton {
+                            chunks_done: (chunk_count as f32 * 0.10).round() as usize,
+                            chunks_total: chunk_count,
+                        },
+                    )
+                    .await;
 
                 // RAPTOR + motif build. Failures are logged inside
                 // the helper and degrade quality without breaking
                 // ingest — the partial skeleton from T2 is still a
-                // valid retrieval surface.
+                // valid retrieval surface. Progress events fire at
+                // coarse phase boundaries inside this helper so the
+                // UI bar continues to advance through the ~4-min
+                // window.
                 let source_key = format!("asset:{asset_id}");
                 build_and_persist_raptor_atlas(
                     &inference,
@@ -587,6 +607,8 @@ impl DocumentAssetManager {
                     &asset_id,
                     &source_key,
                     doc_type.clone(),
+                    &on_progress,
+                    chunk_count,
                 )
                 .await;
 
@@ -762,12 +784,19 @@ impl DocumentAssetManager {
             .ok_or_else(|| Error::NotFound(format!("document asset {asset_id}")))?;
         let source_key = asset.source_key();
         let doc_type = asset.document_type.clone();
+        let chunk_count = asset.chunk_count;
+        // Rebuild path has no UI progress channel — supply a noop
+        // callback so the helper's signature can stay uniform with
+        // the main ingest path.
+        let noop_progress: Arc<dyn Fn(IngestProgress) + Send + Sync> = Arc::new(|_| ());
         build_and_persist_raptor_atlas(
             &self.inference,
             &self.store,
             asset_id,
             &source_key,
             doc_type,
+            &noop_progress,
+            chunk_count,
         )
         .await;
         Ok(())
@@ -2043,21 +2072,62 @@ async fn extract_segments(
 }
 
 /// Build the RAPTOR atlas + motif index for an asset and persist them.
-/// Runs after the legacy skeleton has finished so chunks-with-embeddings
-/// are guaranteed to be in the store.
+/// Runs inside the T3 phase of the tiered ingest pipeline. By this
+/// point chunks-with-embeddings are guaranteed to be in the store
+/// (T1 persisted them; T2 ran on them).
 ///
-/// Errors are logged and swallowed: the legacy skeleton is the durable
-/// retrieval surface, and RAPTOR is additive. A RAPTOR build failure
-/// degrades briefing quality but never breaks attach.
+/// Emits `IngestProgress::BuildingSkeleton` progress events at coarse
+/// phase boundaries (chunks-fetched, RAPTOR tree built, RAPTOR
+/// persisted, motifs done) so the UI's progress bar moves through
+/// the ~5-min T3 window. The progress fractions are mapped onto
+/// `chunks_total` so the existing UI math (chunks_done / chunks_total)
+/// continues to work — without this the bar would stay at 0/N for
+/// the entire T3 duration, which made the May-22 fresh-ingest probe
+/// look stuck on MultiHopReady.
+///
+/// Errors are logged and swallowed: the T2 skeleton is the durable
+/// retrieval surface, RAPTOR is additive. A RAPTOR build failure
+/// degrades briefing quality at Ready but never breaks attach.
 async fn build_and_persist_raptor_atlas(
     inference: &Arc<dyn InferenceProvider>,
     store: &Arc<dyn StateStore>,
     asset_id: &str,
     source_key: &str,
     doc_type: DocumentTypeTag,
+    on_progress: &Arc<dyn Fn(IngestProgress) + Send + Sync>,
+    chunks_total: usize,
 ) {
     let started = std::time::Instant::now();
-    tracing::info!(asset_id, "raptor_atlas: starting background build");
+    tracing::info!(asset_id, "raptor_atlas: starting T3 build");
+
+    // Helper to emit + persist a coarse progress checkpoint. The
+    // fractions are deliberate guesses — RAPTOR's leaf-summarisation
+    // doesn't expose per-cluster progress, so we mark phase
+    // boundaries instead. UI shows monotonic movement; users see
+    // "something is happening" instead of a frozen 0/N bar.
+    let emit = |fraction: f32| {
+        let done = ((chunks_total as f32 * fraction).round() as usize).min(chunks_total);
+        on_progress(IngestProgress::BuildingSkeleton {
+            done,
+            total: chunks_total,
+        });
+        let asset_id = asset_id.to_string();
+        let store = Arc::clone(store);
+        // Fire-and-forget the state update — failure is non-fatal,
+        // the UI just doesn't show this checkpoint. Spawn so we
+        // don't block the T3 build path on the write.
+        tokio::spawn(async move {
+            let _ = store
+                .update_asset_state(
+                    &asset_id,
+                    &AssetState::BuildingSkeleton {
+                        chunks_done: done,
+                        chunks_total,
+                    },
+                )
+                .await;
+        });
+    };
 
     // Fetch chunks (which carry embeddings from the embed phase).
     let chunks = match store.get_chunks_by_source(source_key).await {
@@ -2067,6 +2137,7 @@ async fn build_and_persist_raptor_atlas(
             return;
         }
     };
+    emit(0.20);
     let total = chunks.len();
     let mut raptor_chunks: Vec<ChunkInput> = Vec::with_capacity(total);
     let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(total);
@@ -2095,10 +2166,15 @@ async fn build_and_persist_raptor_atlas(
         }
     };
     let node_count = nodes.len();
+    // RAPTOR tree built — this is the longest single sub-phase of T3
+    // (~4 min on Conrad). Mark ~75% complete so the UI bar visibly
+    // jumped through the longest opaque wait.
+    emit(0.75);
     if let Err(e) = store.save_raptor_nodes(asset_id, &nodes).await {
         tracing::warn!(asset_id, error = %e, "raptor_atlas: save_raptor_nodes failed");
         return;
     }
+    emit(0.80);
 
     // ── Motif index ─────────────────────────────────────────
     let text_chunks: Vec<TextChunk> = raptor_chunks
@@ -2121,6 +2197,7 @@ async fn build_and_persist_raptor_atlas(
         tracing::warn!(asset_id, error = %e, "raptor_atlas: save_asset_motifs failed");
         return;
     }
+    emit(0.95);
 
     tracing::info!(
         asset_id,
@@ -2129,7 +2206,7 @@ async fn build_and_persist_raptor_atlas(
         motif_candidates = motif_count,
         distinctive_motifs = distinctive_count,
         elapsed_ms = started.elapsed().as_millis() as u64,
-        "raptor_atlas: background build complete"
+        "raptor_atlas: T3 build complete"
     );
 }
 

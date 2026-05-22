@@ -142,3 +142,12 @@ filetime = "0.2"
 # we can exercise `LocalLlmBackend` without a live daemon. Production
 # code does NOT depend on axum.
 axum = { workspace = true }
+
+# Examples that import treesitter-gated symbols (SymbolLookupTool,
+# ScipGraphHandle, etc.) only compile when the matching crate
+# feature is on. Declaring `required-features` lets `cargo test`
+# / `cargo check` skip them under the default feature set instead
+# of failing the workspace build.
+[[example]]
+name = "exercise_code_tools"
+required-features = ["treesitter"]
