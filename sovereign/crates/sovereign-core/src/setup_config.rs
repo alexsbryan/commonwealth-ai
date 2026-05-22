@@ -323,6 +323,21 @@ pub struct DaemonSection {
     /// Aider / autonomous-loop traffic.
     #[serde(default = "default_force_tool_calls")]
     pub force_tool_calls: bool,
+    /// Engage the llguidance alternation grammar for tools-using
+    /// requests (`start: text | tool_envelope`). When set, the daemon
+    /// installs a JSON-Schema-driven tool envelope via llguidance's
+    /// canonical `TopLevelGrammar::from_json_schema` path; the
+    /// schema-driven mask is the structural fix for empty-args /
+    /// content-as-envelope failures observed under the prior
+    /// JsonConstraint mask. Propagated to process env at daemon boot
+    /// (mirrors the `force_tool_calls` propagation) — the inference
+    /// adapter reads `SOVEREIGN_ALTERNATION_GRAMMAR` per request.
+    ///
+    /// Defaults to `false` because the canonical path is still
+    /// landing; flip to `true` per-host once the bench shows clean
+    /// tool emissions on the agent-bench's from-scratch tier.
+    #[serde(default = "default_alternation_grammar")]
+    pub alternation_grammar: bool,
 }
 
 /// Filesystem paths for mutable state.
@@ -344,6 +359,7 @@ impl Default for DaemonSection {
             extras_idle_secs: default_extras_idle_secs(),
             yield_to_foreground_secs: default_yield_to_foreground_secs(),
             force_tool_calls: default_force_tool_calls(),
+            alternation_grammar: default_alternation_grammar(),
         }
     }
 }
@@ -415,6 +431,8 @@ fn default_extras_idle_secs() -> u64 { 0 }
 fn default_yield_to_foreground_secs() -> u64 { 60 }
 
 fn default_force_tool_calls() -> bool { false }
+
+fn default_alternation_grammar() -> bool { false }
 
 /// `~/.sovereign/`. Previously lived in `sovereign-cli::util::dirs`;
 /// inlined here so `sovereign-core` has no dependency on the CLI crate.
