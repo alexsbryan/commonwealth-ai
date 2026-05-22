@@ -1524,14 +1524,9 @@ async fn build_skeleton(
             .complete(&CompletionRequest {
                 prompt,
                 system_message: None,
-                // Skeleton entity extraction lifted from Fast → Slow.
-                // Direct prompt-probe on 2026-05-21 showed Fast-slot
-                // 9B silently drops major characters (Stevie, Ossipon,
-                // Professor) while Primary 35B catches them. The
-                // 4-chunk batches are small (~5-10s on Primary) so
-                // running this on Slow adds bounded ingest latency
-                // for a structural-quality win that every downstream
-                // briefing + retrieval signal depends on.
+                // Skeleton entity extraction on Primary 35B per
+                // 2026-05-21 probe (Fast slot drops Stevie/Ossipon/
+                // Professor silently).
                 preferred_speed: Speed::Slow,
                 max_tokens: Some(512),
                 temperature: Some(0.1),
@@ -1549,6 +1544,15 @@ async fn build_skeleton(
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            // lark_grammar: a 2026-05-21 attempt at lean-schema +
+            // grammar enforcement was reverted after discovering
+            // remote.rs::build_request silently drops the
+            // lark_grammar field — it has wire-format encoding for
+            // `structured_output` (line 196) but NOT for
+            // lark_grammar. The grammar field works only on the
+            // in-process path. Wiring it through HTTP is the
+            // prerequisite for any grammar-constrained Pass A or
+            // skeleton work; see handoff doc.
             lark_grammar: None,
             })
             .await;
@@ -1686,7 +1690,7 @@ async fn build_skeleton(
     // mechanical ±1 expansion with structurally-judged ranges
     // the ingest LLM picked while it had the document in
     // hand. See `extract_segments` for the protocol.
-    let segments = extract_segments(inference, chunks, &main_entities, doc_type).await;
+    let segments = extract_segments(inference, chunks, &main_entities, doc_type.clone()).await;
 
     Ok(DocumentSkeleton {
         sections,
@@ -1756,6 +1760,20 @@ async fn extract_segments(
 
     // ── Pass A — boundary detection ─────────────────────────
     let mut breaks: Vec<bool> = vec![false; chunks.len().saturating_sub(1)];
+    // Pass A is one LLM call per adjacent chunk pair. We tried
+    // window-batched (8 chunks per call → 7 decisions per call) on
+    // 2026-05-21 expecting ~6× speedup; pre-flight probe against
+    // single-pair ground truth showed the batched prompt produced
+    // template-shaped output (`BCBBBBB` appeared on 3 unrelated
+    // document regions) with 5% precision and 27% over-emission
+    // of breaks. The model can't reason about 7 pairs independently
+    // in one context. Reverted; sequential per-pair stays.
+    //
+    // Future paths: chain-of-thought per pair before the answer,
+    // a llguidance grammar plus per-pair reasoning, or a smaller-
+    // window batched variant (3 chunks → 2 decisions). All would
+    // need pre-flight accuracy validation against the single-pair
+    // baseline before being committed.
     for i in 0..chunks.len().saturating_sub(1) {
         let a = chunks[i].content.chars().take(550).collect::<String>();
         let b = chunks[i + 1].content.chars().take(550).collect::<String>();
@@ -1791,6 +1809,7 @@ async fn extract_segments(
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await;
         if let Ok(r) = resp {
@@ -1874,6 +1893,7 @@ async fn extract_segments(
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await;
         let (title, summary, function, key_entities) = match resp {
@@ -1904,6 +1924,62 @@ async fn extract_segments(
     }
 
     segments
+}
+
+/// Parse the lean skeleton-extraction response (one line per chunk,
+/// comma-separated entity names). Returns one SkeletonBatchEntry per
+/// chunk in the batch.
+///
+/// Lines are taken in order — line N maps to batch_start+N. Empty
+/// lines (chunks with no entities) produce an entry with an empty
+/// entity list. If the model emits fewer lines than expected, the
+/// missing tail is filled with empty entries so chunk_index alignment
+/// is preserved.
+///
+/// The lark grammar wired alongside this parser should make
+/// fewer-than-expected lines impossible in practice, but we defend
+/// against it so a grammar-compile fallback (which silently drops
+/// the constraint) doesn't desync the entity_index.
+fn parse_lean_skeleton_batch(
+    response: &str,
+    batch_start: usize,
+    batch_len: usize,
+) -> Vec<SkeletonBatchEntry> {
+    let trimmed = response.trim();
+    // Strip a stray "Answer:" prefix if the model echoes the cue.
+    let cleaned = trimmed
+        .strip_prefix("Answer:")
+        .map(|s| s.trim())
+        .unwrap_or(trimmed);
+
+    let mut lines: Vec<&str> = cleaned.lines().collect();
+    // Pad with empty lines if model emitted fewer than expected.
+    while lines.len() < batch_len {
+        lines.push("");
+    }
+    lines.truncate(batch_len);
+
+    let mut entries = Vec::with_capacity(batch_len);
+    for (i, line) in lines.iter().enumerate() {
+        let entity_names_and_kinds: Vec<(String, EntityKind)> = line
+            .split(',')
+            .map(|n| n.trim())
+            .filter(|n| !n.is_empty() && n.chars().any(|c| c.is_alphabetic()))
+            .map(|n| (n.to_string(), EntityKind::Concept))
+            .collect();
+        entries.push(SkeletonBatchEntry {
+            chunk_index: batch_start + i,
+            // Per-chunk function is no longer carried in the lean
+            // schema; segments carry function at segment scope which
+            // is what downstream consumes. Default to Develops as
+            // an unobtrusive placeholder.
+            function: SectionFunction::Develops,
+            entity_names_and_kinds,
+            // structural_moments superseded by segments.
+            moment_description: None,
+        });
+    }
+    entries
 }
 
 /// Parse the Pass-B segment-naming JSON response. Returns None for
@@ -2048,6 +2124,7 @@ async fn extract_action_atoms(
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
+                lark_grammar: None,
             })
             .await;
 

@@ -12604,6 +12604,7 @@ impl Runtime {
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
+                lark_grammar: None,
             };
 
             let completion = self.inference.complete(&request).await?;
@@ -12867,6 +12868,7 @@ impl Runtime {
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let final_completion = self.inference.complete(&final_request).await?;
         let mut final_text = final_completion.text.trim().to_string();
@@ -13050,6 +13052,34 @@ impl Runtime {
                     })
                     .unwrap_or_default();
                 s.push_str(&format!("- {label}{passage}\n"));
+            }
+
+            // ── Segment map (scene/section index) ──────────────
+            //
+            // The ingest LLM walked adjacent chunks and grouped
+            // them into `DocumentSegment`s (scene in fiction,
+            // section in a paper, procedure in a manual). We
+            // experimented with using these as retrieval-time
+            // expansion units; that hurt aggregate bench scores
+            // (T1 mech -18 from the prompt-budget squeeze
+            // needed to bound 70-chunk segments). Reverted —
+            // but the segment labels themselves are valuable
+            // as a scene index for query formulation: a model
+            // asking about "the bomb-handover scene" can see
+            // the actual segment title + chunk range and form
+            // a more targeted retrieval query.
+            //
+            // Cap at 24 segments to keep the briefing bounded;
+            // longer documents have more scenes than any single
+            // question needs surfaced.
+            if !skeleton.segments.is_empty() {
+                s.push_str("\n**Scene/section map** (titles the ingest LLM assigned to coherent multi-chunk units — use these to formulate scene-targeted queries):\n");
+                for seg in skeleton.segments.iter().take(24) {
+                    s.push_str(&format!(
+                        "- chunks {}..={} — \"{}\"\n",
+                        seg.chunk_start, seg.chunk_end, seg.title,
+                    ));
+                }
             }
 
             // ── Entity-association chunks (embedding-based) ─────

@@ -234,41 +234,43 @@ impl Tool for AttachedDocumentSearchTool {
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
         scored.truncate(16);
 
-        // ── Contextual-neighbour expansion ──────────────────────
+        // ── Mechanical ±1 chunk-neighbour expansion ─────────────
         //
-        // 700-char chunks gave precision (T1/T2 lifted) but broke
-        // narrative-scale context (T3/T5 dropped). Compensate at
-        // retrieval time: for each top-K hit, also surface chunks
-        // chunk_index ± 1 so the model sees the passage's
-        // immediate before/after context. Dedup overlapping
-        // windows by BTreeSet (already document-ordered for free).
+        // We experimented (2026-05-21) with using LLM-judged
+        // `DocumentSegment`s as the expansion unit — lift each
+        // cosine hit to its containing segment so the model sees
+        // a structurally coherent block. Single-question probe
+        // on T3/T4 synthesis lifted as predicted (T3 judge
+        // 3.4→4.4), but the full 20-question bench showed the
+        // trade was net-negative: T1 mech regressed 18 pts from
+        // the K-and-chunk-cap squeeze needed to keep prompts
+        // bounded when segments could be 70+ chunks; T5 judge
+        // collapsed (2.5→0.0). Aggregate 72%→69% mech, 3.69→3.47
+        // judge.
         //
-        // HIT vs context marking matters: the model is told which
-        // chunks were the actual semantic hits (citable evidence)
-        // and which are surrounding context (use for synthesis,
-        // not direct citation). Without that, neighbour content
-        // could attract spurious citations.
-        //
-        // Window size ±1 picked empirically: 5-chunk windows
-        // (±2) bloat the prompt without adding much; ±1 covers
-        // the dominant Conrad pattern of "setup-sentence,
-        // load-bearing-sentence, payoff-sentence" landing in 3
-        // adjacent ~700-char chunks.
+        // Mechanical ±1 won the bake-off. Segments are still
+        // built at ingest and surfaced in the briefing as a
+        // scene map (so the model can use scene titles to
+        // formulate queries) but they no longer drive retrieval.
+        // See handoff doc for the architectural lesson:
+        // LLM-judged scenes are good *labels*, not necessarily
+        // good *retrieval units*.
         let hit_indices: std::collections::HashSet<usize> =
             scored.iter().map(|(_, i)| *i).collect();
-        let mut expanded: std::collections::BTreeSet<usize> = hit_indices.clone().into_iter().collect();
-        for &h in &hit_indices {
-            if h > 0 {
-                expanded.insert(h - 1);
+        let expanded_ordered: Vec<usize> = {
+            let mut expanded: std::collections::BTreeSet<usize> =
+                hit_indices.iter().copied().collect();
+            for &h in &hit_indices {
+                if h > 0 {
+                    expanded.insert(h - 1);
+                }
+                expanded.insert(h + 1);
             }
-            expanded.insert(h + 1);
-        }
-        // Filter to chunks that actually exist (drops the +1 over
-        // the end of the document).
-        let expanded_ordered: Vec<usize> = expanded
-            .into_iter()
-            .filter(|i| chunk_by_index.contains_key(i))
-            .collect();
+            expanded
+                .into_iter()
+                .filter(|i| chunk_by_index.contains_key(i))
+                .collect()
+        };
 
         let relevant_owned: Vec<sovereign_core::types::DocumentChunk> = expanded_ordered
             .iter()
@@ -349,7 +351,6 @@ impl Tool for AttachedDocumentSearchTool {
                 prev_idx = Some(c.chunk_index);
                 continue;
             }
-            // Gap → close previous window, open a new one.
             let is_new_window = match prev_idx {
                 Some(p) => c.chunk_index > p + 1,
                 None => true,
@@ -358,7 +359,10 @@ impl Tool for AttachedDocumentSearchTool {
                 if prev_idx.is_some() {
                     formatted.push('\n');
                 }
-                formatted.push_str(&format!("── Window starting at chunk {} ──\n", c.chunk_index));
+                formatted.push_str(&format!(
+                    "── Window starting at chunk {} ──\n",
+                    c.chunk_index,
+                ));
             }
             let snippet_chars: String = c.content.chars().take(600).collect();
             let suffix = if c.content.chars().count() > 600 {
