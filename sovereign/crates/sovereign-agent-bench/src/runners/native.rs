@@ -554,7 +554,16 @@ async fn run_native_role_aware(
     // (e.g. Evaluator emitting `build` repeatedly).
     let mut last_primitive_in_role: Option<PrimitiveKind> = None;
     let mut consecutive_same_primitive: u32 = 0;
-    let initial_user_msg = format_initial_prompt(workdir.path(), &ctx.prompt);
+    // NOTE: user message is REBUILT each turn (inside the loop) so the
+    // `## Workdir state` preamble reflects what files exist NOW. Was
+    // built once here outside the loop pre-2026-05-22 — caused the
+    // from-scratch attention bias bug where Implementer's repeat
+    // tenures saw "(empty workdir) — create Cargo.toml and src/lib.rs"
+    // even after Cargo.toml was written, and obediently rewrote
+    // Cargo.toml instead of progressing to src/lib.rs. Replay isolation
+    // proved corrected workdir state → model writes src/lib.rs on T5.
+    // The workdir-state preamble is the highest-authority signal in the
+    // user message; keeping it stale poisons every subsequent turn.
     // Per-tenure chat history. Closes the "role-aware Evaluator can't
     // react to its own build failure because every turn starts fresh"
     // class: assistant + tool_result messages accumulate within a
@@ -580,13 +589,17 @@ async fn run_native_role_aware(
             };
         }
 
-        // Build the request for the active role.
+        // Build the request for the active role. The user message is
+        // re-rendered every turn with the CURRENT workdir state so
+        // that Implementer's "what files exist" signal matches reality
+        // after each successful write (see note above the loop).
         let profile = default_profile_for(active_role);
+        let user_msg = format_initial_prompt(workdir.path(), &ctx.prompt);
         let role_messages = build_role_messages(
             active_role,
             &profile,
             &role_dossier,
-            &initial_user_msg,
+            &user_msg,
             &role_chat_history,
         );
         let role_tools = filter_descriptors(&adapter, &profile);
