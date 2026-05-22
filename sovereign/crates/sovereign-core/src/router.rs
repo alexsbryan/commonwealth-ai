@@ -743,31 +743,6 @@ Reply with JSON only:
     ///   "in [author / framework]" → resolves to a named corpus.
     /// - **Ambient**: "here", "this" + definitional → resolves from
     ///   conversation context.
-    /// Heuristic check: personal-recall content question — first-person
-    /// (I / my / we / our) + a content-discourse verb (mentioned /
-    /// talked / discussed / brought up / come up / said / told) without
-    /// any source-anchor on the WORD itself. These are LOOKUP/REASONING
-    /// against the conversation corpus, NOT metalingual about word use.
-    ///
-    /// Pre-empts the LLM Pass 1 because the 4B Fast slot reliably
-    /// emits METALINGUAL with confidence 1.00 for "What books have I
-    /// mentioned in our chats?" style framings — the surface verb
-    /// "mentioned" looks like a word-usage signal, but the user is
-    /// asking for the books (content), not how the chats use the
-    /// word.
-    ///
-    /// High-precision floor:
-    /// - First-person marker present (`i `, `my `, `we `, `our `,
-    ///   `i've `, `i'm `, `we've `).
-    /// - Content-discourse verb present (the conversation-internal
-    ///   set the metalingual heuristic uses, but inverted to fire ON
-    ///   instead of off).
-    /// - No definitional-of-a-word marker (`mean`, `refers to`,
-    ///   `definition`, `defines`, `stand for`) — those keep the
-    ///   metalingual signal.
-    /// - No system-internal locator (`in this codebase`, `in this
-    ///   repo`) — those are real metalingual codebase-lookup
-    ///   questions about the system's own vocabulary.
     fn looks_like_personal_recall(_message: &str) -> bool {
     // Retired (2026-05-21): vocabulary-list pre-check replaced
     // by the embed router's cluster centroid + Pass 1 prompt

@@ -470,6 +470,17 @@ struct IndexMeta {
     /// `None` on legacy indexes ingested before the field existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     display: Option<crate::recipe::DisplayMeta>,
+
+    /// Move 6 P5.b/c: opt-in flag for the post-update incremental
+    /// atlas hook. When `Some(true)` and the atlas at
+    /// `<index_dir>/atlas/` carries content-hash IDs, the
+    /// `CorpusUpdater::apply_update` post-phase hook fires
+    /// `apply_atom_delta` with per-doc removals + (for structural
+    /// corpora) per-doc re-extractions. Defaults to `None` —
+    /// existing watched-folder / delta-ingest pipelines keep their
+    /// pre-Move-6 behaviour until the user opts the corpus in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    atlas_incremental_enabled: Option<bool>,
 }
 
 /// Provenance of an on-disk index. See the `IndexMeta::provenance`
@@ -903,6 +914,29 @@ impl CorpusIndex {
         let index_dir = Path::new(self.db.uri());
         let mut meta = read_meta(index_dir)?;
         meta.display = display;
+        write_meta(index_dir, &meta)
+    }
+
+    /// Move 6 P5.b/c: read the per-corpus opt-in flag for the
+    /// post-update incremental atlas hook. `false` (or absent) means
+    /// `CorpusUpdater::apply_update` skips the hook entirely.
+    pub fn atlas_incremental_enabled(&self) -> bool {
+        let index_dir = Path::new(self.db.uri());
+        read_meta(index_dir)
+            .ok()
+            .and_then(|m| m.atlas_incremental_enabled)
+            .unwrap_or(false)
+    }
+
+    /// Move 6 P5.b/c: stamp the per-corpus opt-in flag. Run
+    /// `sovereign atlas migrate-ids` first on the same corpus —
+    /// flipping this on against a sequential-id atlas is a no-op
+    /// (the hook's pre-flight check rejects it) but the rejection
+    /// log line is more useful than a malformed-id silent failure.
+    pub fn set_atlas_incremental_enabled(&self, enabled: bool) -> Result<()> {
+        let index_dir = Path::new(self.db.uri());
+        let mut meta = read_meta(index_dir)?;
+        meta.atlas_incremental_enabled = Some(enabled);
         write_meta(index_dir, &meta)
     }
 
@@ -1730,6 +1764,62 @@ mod tests {
         let got = idx.chunks_by_ids(&dupes).await.unwrap();
         assert_eq!(got.len(), 1, "duplicate ids must collapse to one row");
         assert_eq!(got[0].id, one);
+    }
+
+    #[tokio::test]
+    async fn chunks_by_source_doc_ids_filters_on_lance() {
+        // Move 6 P5.a.1 contract: only chunks whose source_doc_id is
+        // in the requested set come back, in any order. Empty input
+        // short-circuits without a database round-trip.
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+
+        let one = idx
+            .chunks_by_source_doc_ids(&["https://rust-lang.org".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(one.len(), 1);
+        assert_eq!(one[0].source_doc_id.as_deref(), Some("https://rust-lang.org"));
+
+        let both = idx
+            .chunks_by_source_doc_ids(&[
+                "https://rust-lang.org".to_string(),
+                "https://sqlite.org".to_string(),
+            ])
+            .await
+            .unwrap();
+        let mut got: Vec<String> = both
+            .iter()
+            .filter_map(|c| c.source_doc_id.clone())
+            .collect();
+        got.sort();
+        assert_eq!(got, vec!["https://rust-lang.org", "https://sqlite.org"]);
+
+        let empty = idx.chunks_by_source_doc_ids(&[]).await.unwrap();
+        assert!(empty.is_empty(), "empty input must short-circuit");
+
+        let unknown = idx
+            .chunks_by_source_doc_ids(&["https://example.invalid".to_string()])
+            .await
+            .unwrap();
+        assert!(unknown.is_empty(), "unknown id returns empty");
+    }
+
+    #[tokio::test]
+    async fn chunks_by_source_doc_ids_escapes_quotes() {
+        // The IN-list builder must double-escape single quotes so a
+        // doc_id like `O'Brien` doesn't break the SQL fragment.
+        // Smoke-test: send a quote-containing id; expect no panic and
+        // a clean empty result (no chunk in the fixture matches).
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+        let got = idx
+            .chunks_by_source_doc_ids(&["O'Brien".to_string()])
+            .await
+            .unwrap();
+        assert!(got.is_empty());
     }
 
     #[tokio::test]

@@ -109,71 +109,192 @@ impl CorpusEngine {
         let extractor = CodeExtractor::default();
         let chunks = extractor.extract_file(&content, &rel_path, mtime)?;
 
-        // Delete old chunks first. This means there's a brief window
-        // where a query returning zero results is possible; accepted
-        // because duplicate chunks are much worse than a short gap.
-        index.delete_chunks_by_source_doc(&rel_path).await?;
+        let t = Instant::now();
 
         if chunks.is_empty() {
+            // File supported but empty after extraction (e.g. an
+            // empty source file). Drop any prior chunks; nothing to
+            // insert.
+            index.delete_chunks_by_source_doc(&rel_path).await?;
             return Ok(ReindexResult::Updated {
                 chunks_written: 0,
-                elapsed_ms: 0,
+                elapsed_ms: t.elapsed().as_millis() as u64,
             });
         }
 
-        // ── Batched embed — one call per file, not per symbol ────
-        let t = Instant::now();
-        let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
+        // ── Move 6 P6: chunk-level delta ───────────────────────
+        // Hash-match the freshly-extracted chunks against the
+        // committed set. Skipping re-embed for unchanged chunks turns
+        // a single-line edit on a 1000-line file into one embed call
+        // instead of 30+.
+        let committed = index.committed_chunks_for_doc(&rel_path).await?;
+        let new_text_chunks: Vec<crate::chunkers::TextChunk> = chunks
+            .iter()
+            .enumerate()
+            .map(|(idx, c)| crate::chunkers::TextChunk {
+                content: c.content.clone(),
+                index: idx,
+            })
+            .collect();
+        let diff = crate::chunkers::chunk_delta(
+            &committed,
+            new_text_chunks,
+            |s| blake3::hash(s.as_bytes()).to_hex().to_string(),
+        );
+
+        if diff.is_noop() {
+            tracing::debug!(
+                corpus_id = %corpus_id,
+                path = %rel_path,
+                committed = committed.len(),
+                "reindex_file.noop — every chunk hash-matched a committed row"
+            );
+            return Ok(ReindexResult::Updated {
+                chunks_written: 0,
+                elapsed_ms: t.elapsed().as_millis() as u64,
+            });
+        }
+
+        // Drop only the chunks whose content disappeared from the
+        // new file. Brief query window during the embed step
+        // matches the prior behaviour.
+        if !diff.deleted.is_empty() {
+            index.delete_chunks_by_ids(&diff.deleted).await?;
+        }
+
+        if diff.added.is_empty() {
+            tracing::debug!(
+                corpus_id = %corpus_id,
+                path = %rel_path,
+                deleted = diff.deleted.len(),
+                kept = diff.kept_unchanged.len(),
+                "reindex_file.delete_only — additions empty, no re-embed needed"
+            );
+            return Ok(ReindexResult::Updated {
+                chunks_written: 0,
+                elapsed_ms: t.elapsed().as_millis() as u64,
+            });
+        }
+
+        // Map added TextChunk back to its source ExtractedChunk so we
+        // recover the symbol metadata. Match by content hash —
+        // `chunk_delta` did not return the source ExtractedChunk
+        // because the primitive is chunker-shape-agnostic.
+        use std::collections::HashMap;
+        let by_hash: HashMap<String, &_> = chunks
+            .iter()
+            .map(|c| (c.content_hash.clone(), c))
+            .collect();
+
+        let added_extracted: Vec<_> = diff
+            .added
+            .iter()
+            .filter_map(|tc| {
+                let h = blake3::hash(tc.content.as_bytes()).to_hex().to_string();
+                by_hash.get(&h).copied()
+            })
+            .collect();
+        if added_extracted.len() != diff.added.len() {
+            // Hash collision or extractor edge case — fall back to a
+            // full re-embed for safety. Should be vanishingly rare
+            // (blake3 collisions don't happen in practice).
+            tracing::warn!(
+                corpus_id = %corpus_id,
+                path = %rel_path,
+                added = diff.added.len(),
+                resolved = added_extracted.len(),
+                "reindex_file.fallback — could not resolve some added chunks to extractor output"
+            );
+            // Re-do the work the legacy path did: delete everything,
+            // re-embed everything.
+            index.delete_chunks_by_source_doc(&rel_path).await?;
+            let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
+            let embeddings = self.batch_embed_texts(&texts).await?;
+            let insert_pairs = build_insert_pairs(chunks, embeddings, &rel_path)?;
+            let written = insert_pairs.len();
+            index.insert_batch(&insert_pairs).await?;
+            return Ok(ReindexResult::Updated {
+                chunks_written: written,
+                elapsed_ms: t.elapsed().as_millis() as u64,
+            });
+        }
+
+        // ── Batched embed — only the added chunks ──────────────
+        let texts: Vec<&str> = added_extracted
+            .iter()
+            .map(|c| c.content.as_str())
+            .collect();
         let embeddings = self.batch_embed_texts(&texts).await?;
 
-        if embeddings.len() != chunks.len() {
+        if embeddings.len() != added_extracted.len() {
             return Err(Error::Embed(format!(
                 "batch embed returned {} vectors for {} chunks",
                 embeddings.len(),
-                chunks.len()
+                added_extracted.len()
             )));
         }
 
-        // ── Convert extractor chunks → InsertChunks ─────────────
-        let insert_pairs: Vec<(InsertChunk, Vec<f32>)> = chunks
-            .into_iter()
-            .zip(embeddings.into_iter())
-            .map(|(chunk, emb)| {
-                let metadata_json = chunk.metadata_json();
-                let insert = InsertChunk {
-                    content: chunk.content.clone(),
-                    title: Some(chunk.symbol_name.clone()),
-                    url: None,
-                    metadata: Some(metadata_json.to_string()),
-                    content_hash: Some(chunk.content_hash.clone()),
-                    source_doc_id: Some(rel_path.clone()),
-                    source_file: None,
-                    code: InsertCodeMeta {
-                        symbol_name: Some(chunk.symbol_name),
-                        symbol_kind: Some(chunk.symbol_kind.as_str().to_string()),
-                        file_path: Some(chunk.file_path),
-                        line_start: Some(chunk.line_start as i32),
-                        line_end: Some(chunk.line_end as i32),
-                        language: Some(chunk.language.to_string()),
-                        mtime: Some(chunk.mtime),
-                    },
-                    // Reindex path runs outside any work-queue lease — it's
-                    // invoked by file-watcher deltas for code corpora, which
-                    // are never partitioned across peers.
-                    unit_id: None,
-                };
-                (insert, emb)
-            })
-            .collect();
-
+        let owned_added: Vec<_> = added_extracted.into_iter().cloned().collect();
+        let insert_pairs = build_insert_pairs(owned_added, embeddings, &rel_path)?;
         let written = insert_pairs.len();
         index.insert_batch(&insert_pairs).await?;
+
+        tracing::debug!(
+            corpus_id = %corpus_id,
+            path = %rel_path,
+            kept = diff.kept_unchanged.len(),
+            deleted = diff.deleted.len(),
+            added = written,
+            "reindex_file.delta_applied"
+        );
 
         Ok(ReindexResult::Updated {
             chunks_written: written,
             elapsed_ms: t.elapsed().as_millis() as u64,
         })
     }
+}
+
+#[cfg(feature = "treesitter")]
+fn build_insert_pairs(
+    chunks: Vec<crate::extractors::code::CodeChunk>,
+    embeddings: Vec<Vec<f32>>,
+    rel_path: &str,
+) -> Result<Vec<(InsertChunk, Vec<f32>)>> {
+    if chunks.len() != embeddings.len() {
+        return Err(Error::Embed(format!(
+            "build_insert_pairs: {} chunks vs {} embeddings",
+            chunks.len(),
+            embeddings.len()
+        )));
+    }
+    Ok(chunks
+        .into_iter()
+        .zip(embeddings.into_iter())
+        .map(|(chunk, emb)| {
+            let metadata_json = chunk.metadata_json();
+            let insert = InsertChunk {
+                content: chunk.content.clone(),
+                title: Some(chunk.symbol_name.clone()),
+                url: None,
+                metadata: Some(metadata_json.to_string()),
+                content_hash: Some(chunk.content_hash.clone()),
+                source_doc_id: Some(rel_path.to_string()),
+                source_file: None,
+                code: InsertCodeMeta {
+                    symbol_name: Some(chunk.symbol_name),
+                    symbol_kind: Some(chunk.symbol_kind.as_str().to_string()),
+                    file_path: Some(chunk.file_path),
+                    line_start: Some(chunk.line_start as i32),
+                    line_end: Some(chunk.line_end as i32),
+                    language: Some(chunk.language.to_string()),
+                    mtime: Some(chunk.mtime),
+                },
+                unit_id: None,
+            };
+            (insert, emb)
+        })
+        .collect())
 }
 
 impl CorpusEngine {

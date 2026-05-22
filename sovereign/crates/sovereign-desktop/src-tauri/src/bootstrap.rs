@@ -251,6 +251,7 @@ mod tests {
                 extras_idle_secs: 0,
                 yield_to_foreground_secs: 60,
                 force_tool_calls: false,
+                alternation_grammar: false,
             },
             data: sovereign_core::setup_config::DataSection::default(),
             watched_folders: Default::default(),
