@@ -44,21 +44,80 @@
     return 0;
   }
 
-  function statusText(s: AssetState): string {
+  // ETA estimates calibrated against measured ingest rates (Conrad
+  // 1006-chunk doc on Primary 35B, lean-skeleton + grammar):
+  //   - Embedding (Indexing): ~60s for 1000 chunks → 0.06s/chunk
+  //   - Skeleton (BuildingSkeleton): ~7 min for 1006 chunks → 0.42s/chunk
+  // Real per-chunk speed depends on hardware + chunk content; these
+  // are good-enough for the user to know whether to wait or come back.
+  const SECS_PER_CHUNK_INDEX = 0.06;
+  const SECS_PER_CHUNK_SKELETON = 0.42;
+
+  function etaSecs(s: AssetState): number {
     if (typeof s === "object" && "Indexing" in s) {
-      return `Reading document\u2026 ${s.Indexing.chunks_done} of ${s.Indexing.chunks_total} sections`;
+      const remainingIndex = Math.max(
+        0,
+        s.Indexing.chunks_total - s.Indexing.chunks_done,
+      );
+      const skeletonSecs = s.Indexing.chunks_total * SECS_PER_CHUNK_SKELETON;
+      return remainingIndex * SECS_PER_CHUNK_INDEX + skeletonSecs;
     }
     if (s === "PartiallyReady") {
-      return "Basic questions available. Building full structure\u2026";
+      // We don't know chunks_total at this state — show a rough
+      // mid-range estimate until BuildingSkeleton begins.
+      return 7 * 60;
     }
     if (typeof s === "object" && "BuildingSkeleton" in s) {
-      return `Understanding structure\u2026 ${s.BuildingSkeleton.chunks_done} of ${s.BuildingSkeleton.chunks_total} sections`;
+      const remaining = Math.max(
+        0,
+        s.BuildingSkeleton.chunks_total - s.BuildingSkeleton.chunks_done,
+      );
+      return remaining * SECS_PER_CHUNK_SKELETON;
+    }
+    return 0;
+  }
+
+  function fmtEta(secs: number): string {
+    if (secs <= 0) return "any moment";
+    if (secs < 60) return `~${Math.round(secs)}s`;
+    const mins = Math.round(secs / 60);
+    return mins === 1 ? "~1 min" : `~${mins} min`;
+  }
+
+  // Phase-specific status text. Honesty over optimism: each line
+  // describes the actual capability the user has *right now*, not
+  // a promise of what will arrive.
+  function statusText(s: AssetState): string {
+    if (typeof s === "object" && "Indexing" in s) {
+      return `Reading document — ${s.Indexing.chunks_done} of ${s.Indexing.chunks_total} sections indexed`;
+    }
+    if (s === "PartiallyReady") {
+      return "Searchable now — character recognition still building";
+    }
+    if (typeof s === "object" && "BuildingSkeleton" in s) {
+      return `Searchable now — character recognition ${s.BuildingSkeleton.chunks_done} of ${s.BuildingSkeleton.chunks_total} sections`;
+    }
+    return "";
+  }
+
+  // What works at this phase, told concretely.
+  function capabilityText(s: AssetState): string {
+    if (typeof s === "object" && "Indexing" in s) {
+      return "Search will be available once indexing completes.";
+    }
+    if (s === "PartiallyReady") {
+      return "Ask factual questions now — the document is fully searchable. Character-aware analysis (who said what, scene comparison) will be sharper once the structural pass finishes.";
+    }
+    if (typeof s === "object" && "BuildingSkeleton" in s) {
+      return "Ask anything. Cross-scene questions are getting more accurate as character recognition catches up.";
     }
     return "";
   }
 
   let fraction = $derived(progressFraction(assetState));
   let status = $derived(statusText(assetState));
+  let capability = $derived(capabilityText(assetState));
+  let eta = $derived(fmtEta(etaSecs(assetState)));
 </script>
 
 {#if assetState !== "Ready"}
@@ -68,21 +127,12 @@
     </div>
 
     <div class="ingest-status">
-      <span class="mark">{"\u25C8"}</span>
+      <span class="mark">{"◈"}</span>
       {status}
+      <span class="eta">· full analysis in {eta}</span>
     </div>
 
-    {#if ragReady}
-      <div class="ingest-available">
-        Basic questions are available. Full character and structure analysis
-        will be ready when processing completes.
-      </div>
-    {:else}
-      <div class="ingest-waiting">
-        This document is being read carefully. This cost is paid once &mdash;
-        every question after this will be answered instantly.
-      </div>
-    {/if}
+    <div class="ingest-capability">{capability}</div>
   </div>
 {/if}
 
@@ -115,8 +165,11 @@
     color: var(--accent);
     margin-right: 4px;
   }
-  .ingest-available,
-  .ingest-waiting {
+  .eta {
+    color: var(--text-muted);
+    margin-left: 4px;
+  }
+  .ingest-capability {
     font-size: 11px;
     color: var(--text-muted);
     line-height: 1.5;
