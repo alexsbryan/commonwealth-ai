@@ -84,6 +84,7 @@ impl AgentRunner for MockAgentRunner {
             stderr_tail: String::new(),
             final_assistant_text: self.script.final_assistant_text.clone(),
             raw_stdout_lines: vec![],
+            request_records: Vec::new(),
         })
     }
 }

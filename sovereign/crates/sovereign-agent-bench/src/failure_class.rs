@@ -76,6 +76,14 @@ pub enum FailureClass {
     ToolCallNoop,
     AlgorithmicWrong,
     WriteThrash,
+    /// Build/smoke produced identical failing output N times in a
+    /// row — model cannot fix the error it keeps hitting. Closes the
+    /// L5/L6 loop classes.
+    VerifyStuck,
+    /// Role-aware runner exceeded the bounded handoff-cycle cap
+    /// (Implementer↔Evaluator round-trips without `agent_done`).
+    /// Closes the L4/L7/L17 non-convergent alternation classes.
+    CycleLimit,
 }
 
 impl FailureClass {
@@ -95,6 +103,8 @@ impl FailureClass {
             FailureClass::ToolCallNoop => "tool_call_noop",
             FailureClass::AlgorithmicWrong => "algorithmic_wrong",
             FailureClass::WriteThrash => "write_thrash",
+            FailureClass::VerifyStuck => "verify_stuck",
+            FailureClass::CycleLimit => "cycle_limit",
         }
     }
 
@@ -115,6 +125,8 @@ impl FailureClass {
             FailureClass::ToolCallNoop => "agent only read/grep'd, never wrote",
             FailureClass::AlgorithmicWrong => "agent wrote code; tests failed",
             FailureClass::WriteThrash => "agent wrote same path 2x without bash verify between",
+            FailureClass::VerifyStuck => "build/smoke produced identical failing output 3x — agent could not fix",
+            FailureClass::CycleLimit => "Implementer↔Evaluator alternated past cycle cap without converging",
         }
     }
 
@@ -220,6 +232,8 @@ pub fn classify(
         "tokens_exceeded" => return FailureClass::TokenBudget,
         "no_progress" => return FailureClass::LoopTrap,
         "write_thrash" => return FailureClass::WriteThrash,
+        "verify_stuck" => return FailureClass::VerifyStuck,
+        "cycle_limit" => return FailureClass::CycleLimit,
         "tool_denied" => return FailureClass::ToolDenied,
         _ => {}
     }

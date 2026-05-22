@@ -527,6 +527,10 @@ impl AgentRunner for PiRunner {
             stderr_tail: cap_tail(&stderr_tail),
             final_assistant_text: final_text,
             raw_stdout_lines: raw_lines,
+            // Pi runner is subprocess-driven — request capture would
+            // require parsing pi's internal HTTP traffic. Out of
+            // scope; replay supports the native runner only.
+            request_records: Vec::new(),
         })
     }
 }

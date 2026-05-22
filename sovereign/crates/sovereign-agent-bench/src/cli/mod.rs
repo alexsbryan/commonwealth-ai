@@ -2,6 +2,7 @@
 
 pub mod aggregate;
 pub mod args;
+pub mod replay;
 pub mod run;
 
 /// Public entrypoint. Dispatched from `sovereign-cli/src/main.rs` and
@@ -38,6 +39,13 @@ pub async fn run_agent_bench(args: &[String]) -> u8 {
                 1
             }
         },
+        "replay" => match replay::run_command(&args[1..]).await {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("agent-bench replay failed: {e}");
+                1
+            }
+        },
         "help" | "-h" | "--help" => {
             eprintln!("{}", help_text());
             0
@@ -71,6 +79,8 @@ Subcommands:
   show <id>   Print the problem.toml + prompt.md for a problem.
   aggregate   Walk artifact roots, classify failure modes, print histogram.
               See `aggregate --help` for flags.
+  replay      Re-send a captured chat-completion turn with overrides.
+              See `replay --help` for flags. Native role-aware only.
   help        Show this help.
 
 Common flags for `run`:
