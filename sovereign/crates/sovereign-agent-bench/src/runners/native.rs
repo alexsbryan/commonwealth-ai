@@ -51,14 +51,19 @@ const STDERR_TAIL_CAP_BYTES: usize = 32 * 1024;
 /// Cap on max_tokens passed to a single chat completion request.
 /// Without this, the runner hands the model the entire remaining
 /// token budget on the first turn — under alternation-grammar mode
-/// the model can emit a 6000-token content-only response (one
-/// observed shape: JSON-formatted "name: agent_plan" written in
-/// prose because the alternation grammar picked the plain-text
-/// branch) and exhaust the budget before any tool call lands.
-/// 1024 is well above the typical 50-200 tokens per productive
-/// turn (envelopes are small; agent_plan is 100-300 tokens of
-/// prose; write_file's content is 200-800 tokens).
-const PER_TURN_MAX_TOKENS: u64 = 1024;
+/// the model can emit a content-only response that exhausts the
+/// budget before any tool call lands.
+///
+/// 4096 accommodates code-writing turns: a full `write_file`
+/// envelope for a 3-4 KB lib.rs body lands around 1500-2500
+/// generated tokens (JSON-escaped string + envelope shape). 1024
+/// was too tight — observed on 3.2-lights-out (2026-05-22) cutting
+/// off mid-content, leaving partial JSON the daemon parser
+/// couldn't extract. The llguidance grammar-stop break is the
+/// real "stop on schema accept" mechanism; this cap is just a
+/// defensive ceiling against runaway content when grammar fails
+/// to bind.
+const PER_TURN_MAX_TOKENS: u64 = 4096;
 /// Consecutive turns with `tool_calls.is_empty()` before exit.
 /// Closes loop class L18 — model emits content-only responses (no
 /// tool envelope) under alternation grammar's plain-text path.
