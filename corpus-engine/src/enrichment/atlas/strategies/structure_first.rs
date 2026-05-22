@@ -196,94 +196,11 @@ impl AtlasIngestion for StructureFirstIngestion {
 
             // ── Aggregate per article ───────────────────────────
             // BTreeMap so output is stable across runs.
-            let mut articles: BTreeMap<String, AggregatedArticle> = BTreeMap::new();
-            let mut chunks_with_metadata = 0usize;
-            let mut chunks_without_metadata = 0usize;
-
-            for chunk in chunks {
-                let Some(metadata_raw) = chunk.metadata_raw.as_deref() else {
-                    chunks_without_metadata += 1;
-                    continue;
-                };
-                let meta: WikipediaChunkMetadata = match serde_json::from_str(metadata_raw)
-                {
-                    Ok(m) => m,
-                    Err(_) => {
-                        chunks_without_metadata += 1;
-                        continue;
-                    }
-                };
-                chunks_with_metadata += 1;
-
-                // Resolve canonical article title. Prefer chunk.title;
-                // fall back to URL-derived title; skip if neither.
-                let article_title = chunk
-                    .title
-                    .clone()
-                    .or_else(|| {
-                        chunk
-                            .url
-                            .as_deref()
-                            .and_then(crate::extractors::wikipedia_types::wiki_title_from_url)
-                    });
-                let Some(article_title) = article_title else {
-                    continue;
-                };
-
-                let entry = articles
-                    .entry(article_title.clone())
-                    .or_insert_with(|| AggregatedArticle::new(article_title.clone()));
-
-                // Carry per-article fields from the first metadata
-                // we see for the article. Wikipedia chunks repeat
-                // these across sections.
-                if entry.wikidata_qid.is_none() {
-                    entry.wikidata_qid = meta.wikidata_qid.clone();
-                }
-                if entry.page_id.is_none() {
-                    entry.page_id = meta.page_id;
-                }
-                if entry.url.is_none() {
-                    entry.url = chunk.url.clone();
-                }
-
-                // Capture the lead chunk (first one we see whose
-                // section_type is "lead" OR section_path empty/depth==0).
-                let is_lead = meta.section_type == "lead"
-                    || meta.section_depth == 0
-                    || meta.section_path.is_empty();
-                if is_lead && entry.lead.is_none() {
-                    entry.lead = Some(LeadChunk {
-                        chunk_id: chunk.id,
-                        content: chunk.content.clone(),
-                    });
-                }
-
-                // Outgoing wikilinks — dedupe per (article, target).
-                // First-seen `link_text` wins. Track the first chunk
-                // we saw the link in so the placeholder Entity has a
-                // sensible `first_appearance`.
-                //
-                // Namespace filter: skip wikilinks targeting Wikipedia
-                // meta namespaces (Help:, Wikipedia:, Template:,
-                // Portal:, Category:, File:, User:, Special:, Talk:,
-                // Draft:). The Vital-L5 corpus filter excludes them
-                // by design — leaving them as placeholders pollutes
-                // the link graph (Help:IPA/English collected 6557
-                // inbound on the first pass, dwarfing real entities).
-                for link in &meta.outgoing_links {
-                    if is_meta_namespace(&link.target_title) {
-                        continue;
-                    }
-                    entry
-                        .outgoing
-                        .entry(link.target_title.clone())
-                        .or_insert(OutgoingLink {
-                            link_text: link.link_text.clone(),
-                            first_seen_chunk: chunk.id,
-                        });
-                }
-            }
+            let AggregatedArticles {
+                articles,
+                chunks_with_metadata,
+                chunks_without_metadata,
+            } = aggregate_articles_from_chunks(&chunks);
 
             tracing::info!(
                 articles = articles.len(),
@@ -515,6 +432,106 @@ impl AggregatedArticle {
             lead: None,
             outgoing: BTreeMap::new(),
         }
+    }
+}
+
+/// Output of [`aggregate_articles_from_chunks`]. Carries the article
+/// map plus chunk-level metadata counters that the caller uses for
+/// progress tracing.
+pub struct AggregatedArticles {
+    pub articles: BTreeMap<String, AggregatedArticle>,
+    pub chunks_with_metadata: usize,
+    pub chunks_without_metadata: usize,
+}
+
+/// Walk `chunks` and aggregate them into per-article scratch state.
+///
+/// Shared between the deterministic full-corpus walk in `ingest()`
+/// and the per-doc incremental path used by the newsworthy host
+/// (Move 6 P5.a.1). Both produce the same `AggregatedArticle` shape;
+/// `extract_atoms_for_articles` consumes either.
+///
+/// Skips chunks without `metadata_raw`, with malformed metadata, or
+/// without a resolvable article title (no `chunk.title` and no
+/// wiki-title in `chunk.url`).
+pub fn aggregate_articles_from_chunks(
+    chunks: &[crate::index::EnrichmentChunkRow],
+) -> AggregatedArticles {
+    let mut articles: BTreeMap<String, AggregatedArticle> = BTreeMap::new();
+    let mut chunks_with_metadata = 0usize;
+    let mut chunks_without_metadata = 0usize;
+
+    for chunk in chunks {
+        let Some(metadata_raw) = chunk.metadata_raw.as_deref() else {
+            chunks_without_metadata += 1;
+            continue;
+        };
+        let meta: WikipediaChunkMetadata = match serde_json::from_str(metadata_raw) {
+            Ok(m) => m,
+            Err(_) => {
+                chunks_without_metadata += 1;
+                continue;
+            }
+        };
+        chunks_with_metadata += 1;
+
+        let article_title = chunk.title.clone().or_else(|| {
+            chunk
+                .url
+                .as_deref()
+                .and_then(crate::extractors::wikipedia_types::wiki_title_from_url)
+        });
+        let Some(article_title) = article_title else {
+            continue;
+        };
+
+        let entry = articles
+            .entry(article_title.clone())
+            .or_insert_with(|| AggregatedArticle::new(article_title.clone()));
+
+        if entry.wikidata_qid.is_none() {
+            entry.wikidata_qid = meta.wikidata_qid.clone();
+        }
+        if entry.page_id.is_none() {
+            entry.page_id = meta.page_id;
+        }
+        if entry.url.is_none() {
+            entry.url = chunk.url.clone();
+        }
+
+        let is_lead = meta.section_type == "lead"
+            || meta.section_depth == 0
+            || meta.section_path.is_empty();
+        if is_lead && entry.lead.is_none() {
+            entry.lead = Some(LeadChunk {
+                chunk_id: chunk.id,
+                content: chunk.content.clone(),
+            });
+        }
+
+        // Outgoing wikilinks — dedupe per (article, target). Meta-
+        // namespace targets (Help:, Wikipedia:, Template:, Portal:,
+        // Category:, File:, User:, Special:, Talk:, Draft:) are
+        // excluded; the Vital-L5 corpus filter strips them and they
+        // pollute the placeholder graph otherwise.
+        for link in &meta.outgoing_links {
+            if is_meta_namespace(&link.target_title) {
+                continue;
+            }
+            entry
+                .outgoing
+                .entry(link.target_title.clone())
+                .or_insert(OutgoingLink {
+                    link_text: link.link_text.clone(),
+                    first_seen_chunk: chunk.id,
+                });
+        }
+    }
+
+    AggregatedArticles {
+        articles,
+        chunks_with_metadata,
+        chunks_without_metadata,
     }
 }
 
@@ -835,6 +852,118 @@ mod move6_p3_tests {
             include_functions: true,
             include_private: false,
         }
+    }
+
+    fn wiki_chunk(
+        id: u64,
+        title: &str,
+        content: &str,
+        section_type: &str,
+        outgoing: Vec<(&str, &str)>,
+    ) -> crate::index::EnrichmentChunkRow {
+        let meta = crate::extractors::wikipedia_types::WikipediaChunkMetadata {
+            section_name: "Lead".into(),
+            section_path: vec![],
+            section_depth: 0,
+            section_type: section_type.into(),
+            citation_needed_count: None,
+            pov_count: None,
+            clarification_needed_count: None,
+            update_count: None,
+            is_flagged_stable: None,
+            outgoing_links: outgoing
+                .into_iter()
+                .map(
+                    |(t, lt)| crate::extractors::wikipedia_types::WikiLink {
+                        target_title: t.into(),
+                        link_text: lt.into(),
+                    },
+                )
+                .collect(),
+            revision_id: None,
+            wikidata_qid: None,
+            page_id: None,
+        };
+        crate::index::EnrichmentChunkRow {
+            id,
+            content: content.into(),
+            title: Some(title.into()),
+            url: Some(format!(
+                "https://en.wikipedia.org/wiki/{}",
+                title.replace(' ', "_")
+            )),
+            metadata_raw: Some(serde_json::to_string(&meta).unwrap()),
+            source_doc_id: Some(title.replace(' ', "_")),
+        }
+    }
+
+    #[test]
+    fn aggregate_articles_groups_chunks_by_title() {
+        // Move 6 P5.a.1 contract: per-doc aggregation produces the
+        // same shape as the full-corpus walk so the incremental path
+        // and ingest() share the downstream extractor.
+        let chunks = vec![
+            wiki_chunk(
+                1,
+                "Albert Einstein",
+                "Albert Einstein was a German-born physicist.",
+                "lead",
+                vec![("Physics", "physics"), ("Help:Foo", "help")],
+            ),
+            wiki_chunk(
+                2,
+                "Albert Einstein",
+                "He published the theory of relativity.",
+                "factual",
+                vec![("Theory of relativity", "relativity")],
+            ),
+            wiki_chunk(
+                3,
+                "Isaac Newton",
+                "Isaac Newton was an English mathematician.",
+                "lead",
+                vec![],
+            ),
+        ];
+        let out = aggregate_articles_from_chunks(&chunks);
+        assert_eq!(out.articles.len(), 2);
+        assert_eq!(out.chunks_with_metadata, 3);
+        assert_eq!(out.chunks_without_metadata, 0);
+
+        let einstein = out.articles.get("Albert Einstein").unwrap();
+        assert!(einstein.lead.is_some(), "lead chunk captured");
+        // Meta-namespace target (Help:) is filtered; Physics +
+        // Theory_of_relativity survive.
+        assert_eq!(einstein.outgoing.len(), 2);
+        assert!(einstein.outgoing.contains_key("Physics"));
+        assert!(einstein.outgoing.contains_key("Theory of relativity"));
+        assert!(
+            !einstein.outgoing.contains_key("Help:Foo"),
+            "meta-namespace targets dropped at aggregation"
+        );
+    }
+
+    #[test]
+    fn aggregate_articles_skips_chunks_without_metadata() {
+        let mut chunks = vec![wiki_chunk(
+            1,
+            "Albert Einstein",
+            "lead",
+            "lead",
+            vec![],
+        )];
+        chunks.push(crate::index::EnrichmentChunkRow {
+            id: 2,
+            content: "no metadata".into(),
+            title: Some("Albert Einstein".into()),
+            url: None,
+            metadata_raw: None,
+            source_doc_id: Some("Albert_Einstein".into()),
+        });
+        let out = aggregate_articles_from_chunks(&chunks);
+        assert_eq!(out.chunks_with_metadata, 1);
+        assert_eq!(out.chunks_without_metadata, 1);
+        assert_eq!(out.articles.len(), 1);
     }
 
     #[test]

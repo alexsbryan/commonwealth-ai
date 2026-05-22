@@ -250,6 +250,32 @@ impl CorpusIndex {
         Ok(out)
     }
 
+    /// Move 6 P5.a.1: fetch every chunk whose `source_doc_id` is in
+    /// `doc_ids`. Used by the newsworthy incremental atlas path to
+    /// re-extract atoms for just the articles touched by a tick
+    /// instead of streaming the whole corpus.
+    ///
+    /// Returns rows in the same column shape as
+    /// [`Self::chunks_by_ids`] so the aggregation helper in
+    /// `structure_first` accepts either source. Empty `doc_ids`
+    /// returns `Ok(vec![])` without a database round-trip.
+    pub async fn chunks_by_source_doc_ids(
+        &self,
+        doc_ids: &[String],
+    ) -> Result<Vec<EnrichmentChunkRow>> {
+        if doc_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        // LanceDB's `only_if` accepts a SQL fragment; build an
+        // IN (...) list with single-quoted, escape-doubled values.
+        let mut parts: Vec<String> = Vec::with_capacity(doc_ids.len());
+        for id in doc_ids {
+            parts.push(format!("'{}'", id.replace('\'', "''")));
+        }
+        let predicate = format!("source_doc_id IN ({})", parts.join(","));
+        self.scan_rows(&predicate).await
+    }
+
     /// Folder-ingest v1 §3.7: small read used by the per-document
     /// inspector. Returns `(chunk_count, first_chunk_preview)` for
     /// a given `source_doc_id`. The preview is truncated to
