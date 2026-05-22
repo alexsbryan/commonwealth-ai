@@ -252,7 +252,15 @@ pub async fn build_session_with_skills(
     //    the retrieval + tool-use path exercised here matches what
     //    the user sees in the GUI. Notably: `SearchTool::with_web`
     //    drives the "Searched ... web" sources in provenance.
-    let mut tools = ToolRegistry::new();
+    // Tier 4 — shared tool-result cache. Same shape as the
+    // desktop bootstrap: per-conversation cache slices, 5-turn
+    // TTL. Idempotent tools (knowledge_lookup, code-intel reads)
+    // hit the cache when the model re-calls with the same args
+    // within the window.
+    let tool_cache = Arc::new(
+        sovereign_core::tool_result_cache::ToolResultCache::new(),
+    );
+    let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     tools.register(Box::new(ShellTool));
     tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
         Arc::clone(&store),
@@ -264,8 +272,20 @@ pub async fn build_session_with_skills(
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // SymbolLookupTool now backs lookups via SCIP. The REPL doesn't
+    // attach a long-lived merged graph; stub one in-memory so the
+    // tool registers cleanly. Real SCIP-backed lookups go through
+    // `sovereign daemon`, which builds the merged graph from
+    // ~/.sovereign/indexes/*/scip_graph.db.
+    let symbols_graph: sovereign_tools::ScipGraphHandle = Arc::new(
+        arc_swap::ArcSwap::from_pointee(
+            corpus_engine::ScipGraph::open_in_memory("chat-stub")
+                .expect("in-memory ScipGraph for chat"),
+        ),
+    );
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
+        Arc::clone(&symbols_graph),
     )));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
@@ -281,9 +301,36 @@ pub async fn build_session_with_skills(
         // fallback in main.rs for parity with the legacy REPL.
         sovereign_tools::web::search::SearchBackend::DuckDuckGo,
     )));
+    // Unified knowledge-lookup front door (Tool-Mastery framework
+    // Phase 5). Returns a single Evidence envelope across corpus
+    // + memory + note channels. The plan migrates skills onto
+    // this tool as a follow-up PR; for now it coexists with
+    // `search` / `knowledge` / `claim_search`. Note: the
+    // NoteStore handle is wired later (after Runtime build); we
+    // register the tool here and re-register with notes once we
+    // have the store. For now, register without notes — the
+    // single-turn knowledge-gym mocks the tool client-side so
+    // production daemon-side notes channel isn't load-bearing
+    // for the gym, and the threads bench doesn't drive
+    // knowledge_lookup directly anyway.
+    tools.register(Box::new(sovereign_tools::KnowledgeLookupTool::new(
+        Arc::clone(&store),
+        Arc::clone(&inference),
+    )));
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
         Arc::clone(&corpus_engine),
+    )));
+    // `attached_doc_search` is registered unconditionally; the
+    // execute() path returns a clear "no document attached" payload
+    // on conversations without a DocumentSession, so the model can
+    // probe it harmlessly. When a doc IS attached, the runtime's
+    // ReasonWithTools loop can call it directly — that's the lever
+    // the book-report bench exposed as missing (sovereign decision
+    // 7693f16b: attached docs as Tool, not parallel pipeline).
+    tools.register(Box::new(sovereign_tools::AttachedDocumentSearchTool::new(
+        Arc::clone(&store),
+        Arc::clone(&inference),
     )));
     eprintln!("Tools:       {} registered", tools.count());
 
@@ -328,6 +375,30 @@ pub async fn build_session_with_skills(
             }
         }
     }
+    if let Some(path) = resolve_scope_examples_path() {
+        match sovereign_core::scope_classifier::PersonalScopeClassifier::load(
+            &path,
+            Arc::clone(&inference),
+        )
+        .await
+        {
+            Ok(scope_cls) => {
+                eprintln!(
+                    "Router scope classifier: {} personal / {} external examples from {}",
+                    scope_cls.personal_count(),
+                    scope_cls.external_count(),
+                    path.display()
+                );
+                llm_router = llm_router.with_scope_classifier(Arc::new(scope_cls));
+            }
+            Err(e) => {
+                eprintln!(
+                    "warn: scope classifier load failed ({}); routing without personal-scope bias",
+                    e
+                );
+            }
+        }
+    }
     let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
@@ -361,6 +432,24 @@ pub async fn build_session_with_skills(
         inference_config.max_tokens = n;
         eprintln!("Max tokens: {n} (override)");
     }
+    // Tool-Mastery Layer 3 — NoteStore for the per-conversation
+    // tool_decision write hook (runtime.rs handle_message_stream's
+    // post-gap-check spawn). Same path the daemon uses
+    // (`daemon_cmd.rs::build_tool_registry` → `data_dir.join("notes.db")`)
+    // so the chat REPL and bench surfaces share one outcome log.
+    let notes_path = globals.data_dir.join("notes.db");
+    let notes_store = match corpus_engine::NoteStore::open(&notes_path) {
+        Ok(s) => Some(Arc::new(s)),
+        Err(e) => {
+            eprintln!(
+                "warn: NoteStore open failed at {} ({e}); tool-decision \
+                 writes will no-op this session",
+                notes_path.display()
+            );
+            None
+        }
+    };
+
     let mut runtime = Runtime::new(
         Arc::clone(&inference),
         router,
@@ -372,6 +461,9 @@ pub async fn build_session_with_skills(
         inference_config,
     )
     .with_corpus_engine(Arc::clone(&corpus_engine));
+    if let Some(ns) = notes_store.as_ref() {
+        runtime = runtime.with_note_store(Arc::clone(ns));
+    }
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
     }
@@ -797,6 +889,24 @@ fn resolve_router_exemplars_path() -> Option<PathBuf> {
         }
     }
     let default = PathBuf::from("sovereign/router/exemplars.toml");
+    if default.is_file() {
+        return Some(default);
+    }
+    None
+}
+
+/// Resolve the path to `router/scope_examples.toml`. Mirrors
+/// `resolve_router_exemplars_path` — `$SOVEREIGN_SCOPE_EXAMPLES`
+/// override, then in-repo canonical, then `None` so the classifier
+/// is silently skipped in deployments that don't ship the examples.
+fn resolve_scope_examples_path() -> Option<PathBuf> {
+    if let Ok(env) = std::env::var("SOVEREIGN_SCOPE_EXAMPLES") {
+        let p = PathBuf::from(env);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    let default = PathBuf::from("sovereign/router/scope_examples.toml");
     if default.is_file() {
         return Some(default);
     }

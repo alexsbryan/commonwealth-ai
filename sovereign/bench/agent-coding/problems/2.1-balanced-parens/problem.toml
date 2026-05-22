@@ -1,0 +1,52 @@
+[meta]
+id = "2.1-balanced-parens"
+title = "Balanced parentheses with multiple bracket types"
+category = "CodeTest"
+tier = "Scaffolded"
+version = "v0"
+notes = """
+Classic stack-based problem. Given a string containing only the
+six bracket characters '(' ')' '[' ']' '{' '}', decide whether
+they are correctly nested.
+
+Bridge between Level 1 (linear scans, two-pointer, binary search)
+and Level 3+ (algorithmic complexity). Tests stack management +
+multi-branch matching. A 9B coder should solve this comfortably
+if it knows the canonical stack pattern.
+
+Scaffolded tier: Cargo.toml + src/lib.rs stub installed.
+"""
+
+[prompt]
+file = "prompt.md"
+
+[witness]
+kind = "Hybrid"
+language = "Rust"
+fixture_subdir = "fixtures"
+scaffold_subdir = "scaffold"
+verify_cmd = "cargo test --quiet --test integration"
+score_buckets = [
+  [0.0,  0.25,  0],
+  [0.25, 0.6,   1],
+  [0.6,  0.85,  2],
+  [0.85, 1.001, 3],
+]
+
+[budget]
+token_cap = 6000
+wall_seconds_cap = 600
+
+[scoring.dim_a]
+name = "Correctness"
+mode = "AutoTestPassFraction"
+
+[scoring.dim_b]
+name = "Algorithmic choice"
+mode = "JudgeRubric"
+rubric_id = "dim_b"
+
+[scoring.dim_c]
+name = "Code quality"
+mode = "HybridAutoFloor"
+rubric_id = "dim_c"

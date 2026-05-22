@@ -62,7 +62,10 @@ impl Tool for ReadNotesTool {
                             "enum": [
                                 "decision", "attempt", "invariant", "todo", "reflection",
                                 "uncertainty", "postmortem_pointer", "redteam_finding",
-                                "deviation", "commitment", "follow_up", "goal"
+                                "deviation", "commitment", "follow_up", "goal",
+                                "research_finding", "capability_request", "recipe_issue",
+                                "checkpoint", "checkpoint_restored", "deferred_question",
+                                "tool_decision"
                             ]
                         },
                         "description": "Return only notes of these kinds. \

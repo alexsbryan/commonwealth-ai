@@ -50,7 +50,7 @@ fn renamed_tool_descriptor_ids_are_canonical() {
     let engine = empty_engine();
     let graph = empty_graph();
 
-    let symbols = sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine));
+    let symbols = sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph));
     assert_eq!(symbols.descriptor().id, "symbols");
 
     let callers = sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph));
@@ -82,7 +82,10 @@ fn render_tools_list_includes_canonical_and_aliases() {
     let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
 
     let mut registry = ToolRegistry::new();
-    registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine))));
+    registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+        Arc::clone(&engine),
+        Arc::clone(&graph),
+    )));
     registry.register(Box::new(sovereign_tools::FindCallersTool::new(
         Arc::clone(&engine),
         Arc::clone(&graph),

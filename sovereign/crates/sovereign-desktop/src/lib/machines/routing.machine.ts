@@ -34,6 +34,47 @@ import type {
   TurnNarrationPayload,
 } from "../types";
 
+/**
+ * Pure reducer for `narrationLog`. Default behaviour is append;
+ * `ToolInvocationComplete` frames look up the prior `ToolInvocationStart`
+ * with matching `call_id` and replace it in place, so each tool call
+ * surfaces as one chip that transitions from active → done rather than
+ * two stacked chips. Defensive fallback: if no matching Start exists
+ * (out-of-order delivery, stale Complete after CLEAR_NARRATION),
+ * append so the user still sees something.
+ *
+ * Exported for unit tests; the FSM consumes it through the
+ * `TURN_NARRATION_EMITTED` assign action.
+ */
+export function applyNarration(
+  log: NarrationEvent[],
+  incoming: NarrationEvent,
+): NarrationEvent[] {
+  const phase = incoming.phase;
+  if (
+    typeof phase === "object" &&
+    phase !== null &&
+    "tool_invocation_complete" in phase
+  ) {
+    const completeCallId = phase.tool_invocation_complete.call_id;
+    const idx = log.findIndex((entry) => {
+      const p = entry.phase;
+      return (
+        typeof p === "object" &&
+        p !== null &&
+        "tool_invocation_start" in p &&
+        p.tool_invocation_start.call_id === completeCallId
+      );
+    });
+    if (idx >= 0) {
+      const next = log.slice();
+      next[idx] = incoming;
+      return next;
+    }
+  }
+  return [...log, incoming];
+}
+
 export interface RoutingContext {
   proposed: InterpretationProposedPayload | null;
   clarification: ClarificationRequestPayload | null;
@@ -285,14 +326,14 @@ export const routingMachine = setup({
     },
     narrating: {
       // Narration is a log, not a request/response. Append on event
-      // and reset on new-turn. No submission actor.
+      // and reset on new-turn. Tool-invocation Start/Complete pairs
+      // are reconciled via `applyNarration` so the chip updates in
+      // place rather than rendering two entries per tool call.
       on: {
         TURN_NARRATION_EMITTED: {
           actions: assign({
-            narrationLog: ({ context, event }) => [
-              ...context.narrationLog,
-              event.payload.event,
-            ],
+            narrationLog: ({ context, event }) =>
+              applyNarration(context.narrationLog, event.payload.event),
           }),
         },
         CLEAR_NARRATION: {

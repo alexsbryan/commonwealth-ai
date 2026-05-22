@@ -1,0 +1,54 @@
+[meta]
+id = "1.1-reverse-string"
+title = "Reverse a string — Unicode-correct"
+category = "CodeTest"
+tier = "Scaffolded"
+version = "v0"
+notes = """
+Trivially-easy seed problem. Used as a distribution-shift control in
+the failure-class sweep: if commonwealth/coder fails this with the
+same class as 3.2-lights-out, the problem is upstream of model
+capability (parsing, prompt, daemon stop logic). If 1.1 solves cleanly
+while 3.2 fails, the model genuinely can't reach 3.2's algorithm.
+
+Signature is a public function that returns a `String`. Tests cover
+empty input, ASCII, multi-byte UTF-8 (so naive `.bytes().rev()` fails),
+and a graphemes case (so a naive `.chars().rev()` over-reverses the
+combining sequence).
+
+Scaffolded tier: Cargo.toml + src/lib.rs stub already installed.
+"""
+
+[prompt]
+file = "prompt.md"
+
+[witness]
+kind = "Hybrid"
+language = "Rust"
+fixture_subdir = "fixtures"
+scaffold_subdir = "scaffold"
+verify_cmd = "cargo test --quiet --test integration"
+score_buckets = [
+  [0.0,  0.25,  0],
+  [0.25, 0.6,   1],
+  [0.6,  0.85,  2],
+  [0.85, 1.001, 3],
+]
+
+[budget]
+token_cap = 4000
+wall_seconds_cap = 300
+
+[scoring.dim_a]
+name = "Correctness"
+mode = "AutoTestPassFraction"
+
+[scoring.dim_b]
+name = "Implementation choice"
+mode = "JudgeRubric"
+rubric_id = "dim_b"
+
+[scoring.dim_c]
+name = "Code quality"
+mode = "HybridAutoFloor"
+rubric_id = "dim_c"

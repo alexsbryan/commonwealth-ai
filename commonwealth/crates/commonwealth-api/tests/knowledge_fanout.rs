@@ -145,6 +145,7 @@ fn member(
 
             embed_model: None,
             benchmark: None,
+            current_in_flight: None,
         },
         addresses: vec![addr],
     }

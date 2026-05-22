@@ -12,6 +12,7 @@ sovereign-mesh = { workspace = true }
 sovereign-atos = { workspace = true }
 sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }
+sovereign-agent-bench = { workspace = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
@@ -29,6 +30,14 @@ reqwest = { workspace = true }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
 dirs = "5"
+# Ephemeral worker pods: the owner persists a single Ed25519 signing
+# key under ~/.sovereign/worker_owner_key.bin, generated on first use
+# via OS rng. See worker_pod_provider.rs.
+ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
+rand = "0.9"
+# `hex::encode` formats pod-pubkey thumbprints in the `pod up` output;
+# the same display format `pod down` will consume in a follow-up.
+hex = "0.4"
 hostname = { workspace = true }
 # `oicp-types` intentionally NOT a direct dep — the sovereign-core
 # re-export (`sovereign_core::oicp`) is the canonical consumer path
@@ -38,6 +47,10 @@ tempfile = "3"
 which = "7"
 sha2 = { workspace = true }
 chrono = { workspace = true }
+# `eval_cmd::attribution` parses `### [ts] {user|assistant}` turn
+# headers in retrieved chunks to strip opposite-attribution spans
+# before scoring conversation-history bench questions.
+regex = "1"
 # Used by `awareness_cmd` (gated behind the `dev-tools` feature) for
 # direct SQLite reads — chunk-id → memory.body lookups for the
 # `awareness timeline --include-chunks` flag and selective row deletes

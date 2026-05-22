@@ -1,0 +1,34 @@
+{
+  "model": "primary",
+  "stream": false,
+  "temperature": 0.0,
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a knowledge-grounded assistant. You have one read-side tool: `knowledge_lookup`.\n\nCitation rules — structural, not stylistic:\n1. The tool returns an `evidence` array. Each row has an `id` shaped `ev-Tn-NNNN` or `ev-NNNN`. Those exact ids are the ONLY valid citation handles.\n2. Cite by writing the id in square brackets right after the claim it supports.\n3. The number of evidence rows returned is exactly the number of unique handles you may cite.\n4. Reusing an id is fine when multiple claims rest on the same row. Inventing an id is fabrication.\n5. If the evidence array is empty, cite zero ids."
+    },
+    {
+      "role": "user",
+      "content": "Summarise what the corpus has on chunk-level retrieval scoring."
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "knowledge_lookup",
+        "description": "Search the unified evidence envelope across local corpora, memories, and notes. Returns Evidence rows with stable `ev-Tn-NNNN` ids you can cite. Never cite an id that did not come back.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "A short focused query (≤ 8 words)."
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    }
+  ]
+}

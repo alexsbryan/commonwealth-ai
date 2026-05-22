@@ -1,0 +1,46 @@
+# Default web-search orchestrator configuration.
+#
+# Per ARCH §6 ("data vs. program"): operator-tunable selection rules
+# live as data, loaded via `include_str!` from this file. The
+# orchestrator (`sovereign-tools::web::search::orchestrator`) reads
+# this at daemon startup; an operator override in a user-level config
+# can replace these defaults without recompiling.
+#
+# Sections:
+#   [selection]  — backend preference order
+#   [budget]     — per-backend daily call budget (orchestrator's gate)
+#   [privacy]    — defense-in-depth privacy floor
+
+[selection]
+# Backend ids tried in order. The orchestrator filters by privacy +
+# budget first, then orders the survivors by this list. Backends
+# not listed sort to the end in registry-arbitrary order.
+#
+# Default order: local first (free, fast, private), then external in
+# capability order (Tavily's pre-extracted content is best for citation-
+# heavy synthesis; Brave is reliable but raw HTML; DuckDuckGo is
+# fragile against anti-bot).
+prefer = ["mock", "internal", "tavily", "brave", "duckduckgo"]
+
+[budget]
+# Per-backend daily call budget. The orchestrator drops backends
+# whose remaining budget is 0 from the candidate set. Denomination
+# is backend-specific (Tavily counts credits; Brave counts queries);
+# operator-configured values use the matching denomination.
+#
+# Local backends ("mock", "internal") have no entry — they're not
+# budget-gated. External backends without an entry are treated as
+# unlimited (the orchestrator's "untracked = unlimited" rule).
+
+[budget.tavily]
+daily_calls = 100
+
+[budget.brave]
+daily_calls = 500
+
+[privacy]
+# Default privacy floor for the orchestrator. Per ARCH §7 this is
+# the operator's "do not exceed" hint for the daemon as a whole;
+# per-request OICP privacy can be tighter (LocalOnly) but never
+# looser. Accepted: "local", "mesh", "external".
+default_max = "external"

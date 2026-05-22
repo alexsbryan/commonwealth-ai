@@ -905,6 +905,7 @@ mod tests {
             filter_mode: Default::default(),
             parameters: Default::default(),
             resolved_parameters: Default::default(),
+            display: None,
         }
     }
 

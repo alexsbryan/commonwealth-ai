@@ -1,0 +1,75 @@
+# Mock-corpus alias index.
+#
+# Each `[[entry]]` binds a response file to one or more query
+# phrasings the model is plausibly going to emit. Lookup order at
+# runtime:
+#
+#   1. Alias match (normalized: lowercase + whitespace-collapsed).
+#   2. Fall back to SHA-256(normalized query).json if no alias hit.
+#
+# A typo in a field name fails the whole index (deny_unknown_fields);
+# a malformed file fails loudly too. The author-facing trade is: pay
+# one TOML stanza per fixture, save yourself hash-mining every model
+# phrasing variant.
+#
+# When a fixture run fails with `mock search fixture missing`, the
+# error message echoes both the offending query and the path it
+# tried. Two recovery moves:
+#   - Add the new phrasing to an existing alias entry below.
+#   - Author a new file + entry (one fixture per topical cluster).
+
+[[entry]]
+file    = "spacex-starship-flight-14.json"
+aliases = [
+  "spacex starship test launch",
+  "latest spacex starship test launch",
+  "spacex starship flight",
+  "spacex starship",
+  "starship test launch",
+  "spacex starship launch",
+  "latest spacex starship launch",
+]
+
+[[entry]]
+file    = "nvda-stock-quote.json"
+aliases = [
+  "nvda stock price",
+  "nvda current price",
+  "nvda price",
+  "nvidia stock price",
+  "nvidia nvda stock price",
+  "nvidia nvda current stock price",
+  "current nvda stock price",
+  "nvda stock price today",
+  "nvda current stock price",
+  "nvidia stock price today",
+  "nvidia current stock price",
+  "nvidia stock price right now",
+]
+
+[[entry]]
+file    = "freedonia-summit-empty.json"
+aliases = [
+  "freedonia ai summit 2026 keynote",
+  "freedonia ai summit 2026",
+  "freedonia ai summit",
+  "freedonia 2026 keynote",
+]
+
+[[entry]]
+# Fixture 10 (multicorpus_contradicting_local). The knowledge corpus
+# returns two articles that disagree; we want the SAME contradiction
+# to appear in web results so the model sees the conflict regardless
+# of which tool path it picks. The predicate scores whether the
+# response acknowledges multiple guidelines / lack of single figure.
+file    = "water-intake-conflicting.json"
+aliases = [
+  "recommended daily water intake for adults",
+  "recommended daily water intake",
+  "daily water intake adults",
+  "daily water intake",
+  "how much water should i drink",
+  "how much water should adults drink",
+  "water intake recommendation",
+  "water consumption adults",
+]

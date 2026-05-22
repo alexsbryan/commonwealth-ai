@@ -26,6 +26,7 @@ pub mod extractors;
 pub mod filters;
 pub mod git_archaeology;
 pub mod index;
+pub mod pii;
 pub mod progress;
 pub mod recipe;
 pub mod recipe_builtin;
@@ -116,8 +117,8 @@ pub use progress::{
     SourceFileManifest, SourceFileRecord, SourceFileStatus,
 };
 pub use recipe::{
-    Comparison, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig, HttpMethod,
-    PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl,
+    Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig,
+    HttpMethod, PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl,
     PrebuiltConfig, Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters,
 };
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
@@ -149,7 +150,7 @@ pub use yield_hook::YieldHook;
 #[cfg(feature = "treesitter")]
 pub use scip_graph::{
     BlastEntry, BlastRadiusResult, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
-    ScipRefRecord, ScipSymbolRecord, SCHEMA_VERSION,
+    ScipRefRecord, ScipSymbolRecord, SymbolRow, SCHEMA_VERSION,
 };
 
 #[cfg(feature = "treesitter")]

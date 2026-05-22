@@ -354,6 +354,103 @@ describe("chatMachine — post-stream refinement", () => {
     });
     expect(actor.getSnapshot().context.messages[0].content).toBe("B's answer");
   });
+
+  it("MESSAGE_REFINING sets refining=true on the targeted bubble", () => {
+    const actor = startActor();
+    actor.send({
+      type: "HYDRATE",
+      conversationId: "c1",
+      messages: [
+        userMsg("u1"),
+        assistantMsg("a1", "Initial corpus-only answer."),
+      ],
+    });
+    actor.send({ type: "MESSAGE_REFINING", messageId: "a1" });
+    expect(actor.getSnapshot().context.messages[1].refining).toBe(true);
+  });
+
+  it("MESSAGE_REFINED clears the refining flag", () => {
+    const actor = startActor();
+    actor.send({
+      type: "HYDRATE",
+      conversationId: "c1",
+      messages: [
+        userMsg("u1"),
+        assistantMsg("a1", "Initial corpus-only answer."),
+      ],
+    });
+    actor.send({ type: "MESSAGE_REFINING", messageId: "a1" });
+    actor.send({
+      type: "MESSAGE_REFINED",
+      conversationId: "c1",
+      messageId: "a1",
+      newContent: "Refined.",
+    });
+    const m = actor.getSnapshot().context.messages[1];
+    expect(m.refining).toBe(false);
+    expect(m.content).toBe("Refined.");
+  });
+
+  it("SEARCH_AUGMENTED stashes the augmentation on the targeted bubble", () => {
+    const actor = startActor();
+    actor.send({
+      type: "HYDRATE",
+      conversationId: "c1",
+      messages: [
+        userMsg("u1"),
+        assistantMsg("a1", "Initial."),
+      ],
+    });
+    actor.send({
+      type: "SEARCH_AUGMENTED",
+      messageId: "a1",
+      augmentation: {
+        query: "Mac Studio next gen",
+        backend_id: "duckduckgo",
+        sources: [
+          { title: "Wikipedia", url: "https://en.wikipedia.org/wiki/Mac_Studio" },
+        ],
+      },
+    });
+    expect(actor.getSnapshot().context.messages[1].searchAugmentation).toEqual({
+      query: "Mac Studio next gen",
+      backend_id: "duckduckgo",
+      sources: [
+        { title: "Wikipedia", url: "https://en.wikipedia.org/wiki/Mac_Studio" },
+      ],
+    });
+  });
+
+  it("MESSAGE_REFINED preserves searchAugmentation set earlier", () => {
+    // Order: SEARCH_AUGMENTED then MESSAGE_REFINED. The refine must
+    // NOT wipe the augmentation footer — that's how the bubble keeps
+    // its "this was a web-search refinement" provenance after the
+    // content swap.
+    const actor = startActor();
+    actor.send({
+      type: "HYDRATE",
+      conversationId: "c1",
+      messages: [userMsg("u1"), assistantMsg("a1", "Initial.")],
+    });
+    actor.send({
+      type: "SEARCH_AUGMENTED",
+      messageId: "a1",
+      augmentation: {
+        query: "q",
+        backend_id: "duckduckgo",
+        sources: [{ title: "T", url: "https://example.test/" }],
+      },
+    });
+    actor.send({
+      type: "MESSAGE_REFINED",
+      conversationId: "c1",
+      messageId: "a1",
+      newContent: "Web-augmented answer.",
+    });
+    const m = actor.getSnapshot().context.messages[1];
+    expect(m.content).toBe("Web-augmented answer.");
+    expect(m.searchAugmentation?.query).toBe("q");
+  });
 });
 
 describe("chatMachine — non-streaming assistant responses", () => {

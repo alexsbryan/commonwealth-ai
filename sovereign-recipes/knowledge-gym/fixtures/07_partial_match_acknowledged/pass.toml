@@ -1,0 +1,32 @@
+# Knowledge-gym fixture 07 — partial-match acknowledged.
+#
+# Shape: the evidence is RELATED to the user's question (both
+# rows are about confidence decay) but doesn't address the
+# specific sub-question — whether decay compounds monthly or
+# applies linearly across the time delta. The rows tell us
+# decay = 10%/month and that modes can override, but neither
+# specifies the compounding vs linear semantics.
+#
+# The model should acknowledge that what the corpus has covers
+# the general topic but not the specific question, rather than
+# extrapolating an answer the evidence doesn't support.
+#
+# Mechanism: structural SHAPE-level predicate
+# answer_acknowledges_partial_match. Looks for direct-denial
+# vocabulary (doesn't directly / not specifically) OR
+# scope-qualifier + hedge vocabulary (the corpus has X but...).
+# Per feedback_no_teaching_to_test: the vocabulary describes
+# SHAPES of English scope-acknowledgement, not bank-derived
+# phrases. The prompt nudges toward shape without specifying
+# language.
+
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+
+# Citation faithfulness on the related rows.
+must_not_cite_evidence_id_outside_returned = true
+
+# The load-bearing predicate: model acknowledges the
+# evidence covers the topic but not the specific sub-question.
+answer_acknowledges_partial_match = true

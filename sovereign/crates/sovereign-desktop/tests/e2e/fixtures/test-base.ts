@@ -25,6 +25,7 @@ export interface SovereignTestAPI {
   errorMessage(message: string): number;
   lastStreamStart(): { conversationId: string; messageId: string } | null;
   lastCancel(): { conversationId: string } | null;
+  lastConsent(): { shareGpu: boolean } | null;
   reset(): void;
 }
 

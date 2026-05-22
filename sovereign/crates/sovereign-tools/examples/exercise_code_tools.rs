@@ -45,11 +45,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         working_directory: None,
         in_reasoning_loop: false,
         agent_session_token: None,
+        turn_index: 0,
     };
 
     // ─── symbol_lookup ────────────────────────────────────────
     println!("─── symbol_lookup(name = \"Runtime\") ───");
-    let sym_tool = SymbolLookupTool::new(Arc::clone(&engine));
+    // SymbolLookupTool now reads SCIP. Example uses an empty
+    // in-memory graph; lookups will report "not found" honestly.
+    let graph: sovereign_tools::ScipGraphHandle = Arc::new(
+        arc_swap::ArcSwap::from_pointee(
+            corpus_engine::ScipGraph::open_in_memory("example")
+                .expect("in-memory ScipGraph"),
+        ),
+    );
+    let sym_tool = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph));
     let out = sym_tool
         .execute(&serde_json::json!({ "name": "Runtime" }), &ctx)
         .await?;

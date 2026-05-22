@@ -18,14 +18,17 @@ pub struct Skill {
     pub version: String,
     #[serde(default)]
     pub description: String,
-    pub routing: RoutingHints,
+    /// Plan templates the planner injects as a hint when this skill
+    /// is active and the user's goal matches a template's trigger.
+    /// Consumed by `planner.rs::plan` for ComplexTask flows.
     pub planner_templates: Vec<PlanTemplate>,
     pub tool_config: ToolPreferences,
+    /// Synthesis prompt overrides — concatenated by
+    /// `SkillRegistry::prompt_overrides()` and prepended to the
+    /// executor's ReasonWithTools / reasoning step system message
+    /// for ComplexTask flows. Read at `executor.rs:461,1020`.
     pub prompts: PromptOverrides,
     pub memory_rules: MemoryConfig,
-    /// Named evaluation prompts (e.g., "synthesis" → eval prompt).
-    #[serde(default)]
-    pub evaluation_prompts: HashMap<String, String>,
     /// OICP inference requirements for this skill.
     #[serde(default)]
     pub inference: SkillInferenceConfig,
@@ -102,12 +105,15 @@ pub enum SkillRegister {
     Relational,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RoutingHints {
-    pub trigger_phrases: Vec<String>,
-    pub default_intent: Option<String>,
-    pub min_confidence: Option<f64>,
-}
+// `RoutingHints` retired — skill-keyed router hints were the
+// load-bearing input to the Pass 1 prompt's "Active skill hints"
+// splice block; that splice was removed when the skills-as-menu
+// UI retired. The wisdom in the retired skills' `trigger_phrases`
+// lists migrated into the router's embed-exemplar bank
+// (`sovereign/router/exemplars.toml`); see the migration commit
+// for the audit. The surviving modes (inner-work, recipe-author)
+// do not need router hints because the user explicitly enters
+// their surfaces.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlanTemplate {
@@ -140,11 +146,9 @@ pub struct MemoryConfig {
 
 // ─── Merged Results ────────────────────────────────────────────
 
-#[derive(Debug, Clone, Default)]
-pub struct MergedRoutingHints {
-    pub trigger_phrases: Vec<(String, String)>, // (phrase, skill_id)
-    pub min_confidence: Option<f64>,
-}
+// `MergedRoutingHints` retired alongside `RoutingHints` + the
+// trigger-phrase splice in router.rs. No production consumers
+// remain.
 
 #[derive(Debug, Clone, Default)]
 pub struct MergedMemoryConfig {
@@ -159,11 +163,14 @@ pub struct MergedMemoryConfig {
 
 /// TOML structure for skill.toml files.
 /// Maps the TOML layout to our internal Skill struct.
+///
+/// Serde does NOT `deny_unknown_fields`, so legacy mode TOMLs that
+/// still carry `[routing]` or `[evaluation]` blocks load cleanly
+/// (the blocks are silently ignored). New mode TOMLs should omit
+/// those sections.
 #[derive(Debug, Deserialize)]
 struct SkillToml {
     skill: SkillMeta,
-    #[serde(default)]
-    routing: RoutingToml,
     #[serde(default)]
     planner: PlannerToml,
     #[serde(default)]
@@ -174,8 +181,6 @@ struct SkillToml {
     memory: MemoryToml,
     #[serde(default)]
     inference: InferenceToml,
-    #[serde(default)]
-    evaluation: EvaluationToml,
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,14 +194,6 @@ struct SkillMeta {
     signature: Option<String>,
     #[serde(default)]
     signed_by: Option<String>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct RoutingToml {
-    #[serde(default)]
-    trigger_phrases: Vec<String>,
-    default_intent: Option<String>,
-    min_confidence: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -226,14 +223,6 @@ struct ToolsToml {
 #[derive(Debug, Default, Deserialize)]
 struct PromptsToml {
     synthesis: Option<String>,
-}
-
-/// Named evaluation prompts for step-level quality checking.
-/// Keys are eval names (e.g., "synthesis"), values are eval prompts.
-#[derive(Debug, Default, Deserialize)]
-struct EvaluationToml {
-    #[serde(flatten)]
-    prompts: HashMap<String, String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -289,11 +278,6 @@ impl SkillToml {
             name: self.skill.name,
             version: self.skill.version,
             description: self.skill.description,
-            routing: RoutingHints {
-                trigger_phrases: self.routing.trigger_phrases,
-                default_intent: self.routing.default_intent,
-                min_confidence: self.routing.min_confidence,
-            },
             planner_templates: self
                 .planner
                 .templates
@@ -317,7 +301,6 @@ impl SkillToml {
                 confidence_decay_per_month: self.memory.confidence_decay_per_month,
                 prune_threshold: self.memory.prune_threshold,
             },
-            evaluation_prompts: self.evaluation.prompts,
             inference: SkillInferenceConfig {
                 capability_hint: self.inference.capability_hint,
                 latency_class: self.inference.latency_class,
@@ -521,24 +504,11 @@ impl SkillRegistry {
             .unwrap_or_default()
     }
 
-    pub fn routing_hints(&self) -> MergedRoutingHints {
-        let mut merged = MergedRoutingHints::default();
-        for skill in self.active_skills() {
-            for phrase in &skill.routing.trigger_phrases {
-                merged
-                    .trigger_phrases
-                    .push((phrase.clone(), skill.id.clone()));
-            }
-            if let Some(conf) = skill.routing.min_confidence {
-                merged.min_confidence = Some(
-                    merged
-                        .min_confidence
-                        .map_or(conf, |existing: f64| existing.max(conf)),
-                );
-            }
-        }
-        merged
-    }
+    // `routing_hints()` retired alongside `MergedRoutingHints` +
+    // `RoutingHints`. The skill-keyed trigger-phrase splice in the
+    // router's Pass 1 prompt was removed when the skills-as-menu UI
+    // was retired; the trigger-phrase wisdom migrated to the embed-
+    // exemplar bank.
 
     pub fn planner_templates(&self, _intent: &Intent) -> Vec<&PlanTemplate> {
         self.active_skills()
@@ -682,6 +652,14 @@ impl Default for SkillRegistry {
     }
 }
 
+// Skill-keyed tool narrowing retired — see `crate::intent_policy`
+// for the replacement. The narrow-by-skill function and its
+// audit-gap warn tracker were Phase 1 of the Tool-Mastery framework;
+// the retire-skills-menu plan moves the keying axis to intent +
+// mode. Per-skill TOOL declarations on the surviving modes
+// (inner-work, recipe-author) are now consumed by
+// `intent_policy::policy_for` instead.
+
 // ─── Tests ────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -725,8 +703,10 @@ extract_prompt_addendum = "Extract topics researched."
         let skill = parse_skill_toml(toml).unwrap();
         assert_eq!(skill.id, "research-analyst");
         assert_eq!(skill.name, "Research & Analysis");
-        assert_eq!(skill.routing.trigger_phrases.len(), 2);
-        assert_eq!(skill.routing.min_confidence, Some(0.75));
+        // Note: the input TOML still carries a `[routing]` block —
+        // Serde silently ignores it now that the field is retired
+        // (see SkillToml docstring). The test exercises that
+        // back-compat path.
         assert_eq!(skill.planner_templates.len(), 1);
         assert_eq!(skill.planner_templates[0].name, "multi_source_research");
         assert_eq!(skill.tool_config.required, vec!["web_search"]);
@@ -745,7 +725,6 @@ version = "0.1.0"
 
         let skill = parse_skill_toml(toml).unwrap();
         assert_eq!(skill.id, "minimal");
-        assert!(skill.routing.trigger_phrases.is_empty());
         assert!(skill.planner_templates.is_empty());
         assert!(skill.prompts.synthesis.is_none());
     }
@@ -927,31 +906,77 @@ register = "relational"
         assert_eq!(reg.primary_skill_register(), SkillRegister::Relational);
     }
 
-    /// The bundled inner-work and personal-assistant skill files
-    /// are the production opt-ins to the relational voice contract.
-    /// If either fails to parse, or either silently slips back to
-    /// the factual register, the contract isn't being applied —
-    /// pin both shape and register here.
+    /// `inner-work` is now the sole surviving relational mode.
+    /// (`personal-assistant` was retired in the skills-menu cleanup.)
+    /// Pin that the file parses and the register hasn't drifted —
+    /// the relational voice contract at the ~14 register-keyed
+    /// runtime sites depends on this declaration.
     #[test]
-    fn bundled_relational_skill_files_parse_with_relational_register() {
+    fn inner_work_mode_parses_with_relational_register() {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
             .expect("CARGO_MANIFEST_DIR should be set for tests");
-        let skills_dir = std::path::Path::new(&manifest_dir)
+        let modes_dir = std::path::Path::new(&manifest_dir)
             .join("..")
             .join("..")
-            .join("skills");
+            .join("modes");
 
-        for skill_id in ["inner-work", "personal-assistant"] {
-            let path = skills_dir.join(skill_id).join("skill.toml");
-            let content = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-            let skill = parse_skill_toml(&content)
-                .unwrap_or_else(|| panic!("parse {}", path.display()));
-            assert_eq!(skill.id, skill_id);
-            assert_eq!(
-                skill.inference.register,
-                SkillRegister::Relational,
-                "{skill_id} should declare register=\"relational\""
+        let path = modes_dir.join("inner-work").join("skill.toml");
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let skill = parse_skill_toml(&content)
+            .unwrap_or_else(|| panic!("parse {}", path.display()));
+        assert_eq!(skill.id, "inner-work");
+        assert_eq!(
+            skill.inference.register,
+            SkillRegister::Relational,
+            "inner-work must declare register=\"relational\""
+        );
+    }
+
+    // ─── Surviving-modes declarations ──────────────────────────
+
+    /// After the skill-retirement work, only two TOMLs live under
+    /// `sovereign/modes/`. This test pins their shape so a future
+    /// edit doesn't accidentally widen inner-work's tool surface or
+    /// rename recipe-author's required tools without updating the
+    /// `intent_policy::policy_for` mode arms. Each assertion comes
+    /// from the principled design, not from an audited count.
+    #[test]
+    fn surviving_modes_declare_expected_tool_shape() {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
+            .expect("CARGO_MANIFEST_DIR should be set for tests");
+        let modes_dir = std::path::Path::new(&manifest_dir)
+            .join("..")
+            .join("..")
+            .join("modes");
+
+        let inner_work_toml = std::fs::read_to_string(modes_dir.join("inner-work/skill.toml"))
+            .expect("read modes/inner-work/skill.toml");
+        let inner_work = parse_skill_toml(&inner_work_toml)
+            .expect("parse modes/inner-work/skill.toml");
+        assert_eq!(inner_work.id, "inner-work");
+        assert_eq!(inner_work.inference.register, SkillRegister::Relational);
+        assert!(
+            inner_work.tool_config.required.is_empty()
+                && inner_work.tool_config.optional.is_empty(),
+            "inner-work declares no tools by design — reflective work \
+             is not tool-mediated"
+        );
+
+        let recipe_author_toml =
+            std::fs::read_to_string(modes_dir.join("recipe-author/skill.toml"))
+                .expect("read modes/recipe-author/skill.toml");
+        let recipe_author = parse_skill_toml(&recipe_author_toml)
+            .expect("parse modes/recipe-author/skill.toml");
+        assert_eq!(recipe_author.id, "recipe-author");
+        // Spot-check the must-have recipe tools (matches the
+        // intent_policy::recipe_author_tools() table).
+        let required: HashSet<&str> =
+            recipe_author.tool_config.required.iter().map(String::as_str).collect();
+        for needed in ["recipe_validate", "recipe_test", "decision_log"] {
+            assert!(
+                required.contains(needed),
+                "recipe-author must require '{needed}' (intent_policy table depends on it)"
             );
         }
     }

@@ -14,14 +14,27 @@
 //! failure shapes. Only **elastic** failures count toward backoff —
 //! the things that get better with less load:
 //!
-//! - `refused`     — peer rejected (overloaded)
-//! - `timeout`     — peer stalled (oversaturated)
-//! - `vram_thrash` — GPU swap-out (capacity)
+//! - `refused`       — peer rejected (overloaded)
+//! - `timeout`       — peer stalled (oversaturated)
+//! - `vram_thrash`   — GPU swap-out (capacity)
+//! - `gpu_vulkan`    — Vulkan runtime error (may be contention-driven)
+//! - `gpu_rocm`      — ROCm runtime error (may be contention-driven)
+//! - `inference_5xx` — daemon 5xx (often peer overload)
+//! - `daemon_down`   — daemon was momentarily out; backing off keeps
+//!                     in-flight pressure low while it recovers
 //!
-//! `mismatch` / `model_missing` / `unknown` are **non-elastic** —
-//! lowering concurrency does not help a 404 slug or a missing model.
-//! They are recorded for the failure-bucket histogram but don't
-//! drive concurrency adjustments.
+//! Non-elastic buckets are recorded for the failure-bucket histogram
+//! but don't drive concurrency: `mismatch`, `model_missing`,
+//! `stale_cache`, `inference_json_parse`, `phase_failed`,
+//! `build_step_failed`, `unknown`. Lowering concurrency does not fix
+//! a 404 slug, a missing cache payload, or a sampler that produces
+//! malformed JSON.
+//!
+//! `inference_json_parse` is borderline — it *could* be contention-
+//! induced if concurrent slots are degrading sampler quality — but
+//! we keep it non-elastic so the metric stays a clean backend-quality
+//! signal rather than getting masked by automatic backoff. If the
+//! data later shows backoff helps, promote it.
 //!
 //! With ≥ `MIN_SAMPLES` events in the rolling window: if elastic
 //! failure rate ≥ `BACKOFF_AT`, drop the ceiling by 1 (floor of 1).
@@ -51,7 +64,13 @@ pub enum Outcome {
 /// yet understand the shape of.
 pub fn outcome_from_bucket(bucket: &str) -> Outcome {
     match bucket {
-        "timeout" | "refused" | "vram_thrash" => Outcome::ElasticFail,
+        "timeout"
+        | "refused"
+        | "vram_thrash"
+        | "gpu_vulkan"
+        | "gpu_rocm"
+        | "inference_5xx"
+        | "daemon_down" => Outcome::ElasticFail,
         _ => Outcome::NonElasticFail,
     }
 }
@@ -169,12 +188,28 @@ mod tests {
 
     #[test]
     fn outcome_mapping_uses_elastic_buckets() {
-        assert_eq!(outcome_from_bucket("timeout"), Outcome::ElasticFail);
-        assert_eq!(outcome_from_bucket("refused"), Outcome::ElasticFail);
-        assert_eq!(outcome_from_bucket("vram_thrash"), Outcome::ElasticFail);
-        assert_eq!(outcome_from_bucket("mismatch"), Outcome::NonElasticFail);
-        assert_eq!(outcome_from_bucket("model_missing"), Outcome::NonElasticFail);
-        assert_eq!(outcome_from_bucket("unknown"), Outcome::NonElasticFail);
+        for b in [
+            "timeout",
+            "refused",
+            "vram_thrash",
+            "gpu_vulkan",
+            "gpu_rocm",
+            "inference_5xx",
+            "daemon_down",
+        ] {
+            assert_eq!(outcome_from_bucket(b), Outcome::ElasticFail, "{b}");
+        }
+        for b in [
+            "mismatch",
+            "model_missing",
+            "stale_cache",
+            "inference_json_parse",
+            "phase_failed",
+            "build_step_failed",
+            "unknown",
+        ] {
+            assert_eq!(outcome_from_bucket(b), Outcome::NonElasticFail, "{b}");
+        }
     }
 
     #[test]

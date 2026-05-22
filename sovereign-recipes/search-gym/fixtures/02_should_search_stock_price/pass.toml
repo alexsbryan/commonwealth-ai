@@ -1,0 +1,19 @@
+# 02_should_search_stock_price
+#
+# Realtime financial data — exemplar "training-data can't answer this"
+# question. Model must search with a concise ticker-focused query
+# and cite at least one source URL from the mock response.
+
+should_call_search = true
+expected_first_tool = "search"
+max_search_calls = 1
+expected_query_max_tokens = 6
+
+must_cite_url_from_mock = 1
+must_not_cite_url_outside_mock = true
+
+# Semantic: the query should be a short keyword form, not a
+# conversational restatement. No bank-derived ticker hardcoded.
+query_satisfies = [
+  "The text reads like a short keyword search query, not a full sentence. It contains no question words ('what', 'how') and no conversational openers ('could you', 'please tell me').",
+]

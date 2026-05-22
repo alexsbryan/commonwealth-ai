@@ -25,6 +25,7 @@ use sovereign_tools::shell::ShellTool;
 use tokio_util::sync::CancellationToken;
 
 use crate::approval::TauriApprovalChannel;
+use crate::supervisor::Supervisor;
 
 // ─── Desktop Config ──────────────────────────────────────────
 
@@ -81,6 +82,20 @@ pub struct DesktopConfig {
     /// later without restarting through the wizard.
     #[serde(default)]
     pub enable_recipe_authoring: bool,
+    /// When `true`, the `knowledge_lookup` tool auto-escalates to
+    /// web search when the local envelope returns thin or empty
+    /// results. The escalation is internal to the tool — the
+    /// model sees one unified Evidence envelope with
+    /// `source_kind: web` rows alongside any corpus / memory /
+    /// note results. The INFORMATION REQUEST card path stays
+    /// available regardless — this setting only controls whether
+    /// the tool can ALSO go to the web without asking the user.
+    ///
+    /// Default `false`: users explicitly approve every web call
+    /// via the card. Set `true` for hands-off operation when the
+    /// user has explicitly chosen to delegate that judgement.
+    #[serde(default)]
+    pub auto_escalate_to_web: bool,
 
     // ── Advanced Tuning ─────────────────────────────────────────
     /// Generation temperature (0.0–1.0). Higher = more creative, lower = more focused.
@@ -173,6 +188,35 @@ pub struct DesktopConfig {
     /// the AppState atomic the daemon owns.
     #[serde(default)]
     pub storage_budget_bytes: Option<u64>,
+
+    /// Result of the first-mesh-join consent dialog (W4). `None`
+    /// means the dialog has not yet been shown — the App router
+    /// gates the main UI on this. `Some(_)` is the user's decision;
+    /// the desktop calls /internal/contribution/ceiling on every
+    /// boot with the corresponding peer-inflight cap so the daemon
+    /// matches their preference even if its in-memory state was
+    /// reset.
+    #[serde(default)]
+    pub first_mesh_consent: Option<FirstMeshConsent>,
+}
+
+/// Persisted result of the W4 consent dialog. Captures both the
+/// answer and when it was given — the latter is useful for the
+/// "you set this 6 months ago, want to revisit?" prompt the
+/// Settings panel can surface later.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FirstMeshConsent {
+    /// User chose to share idle GPU with mesh peers. `false`
+    /// translates to `contribution_max_peer_inflight = 0` (peer
+    /// inference all 503s — equivalent to
+    /// `SOVEREIGN_DISABLE_PEER_INFERENCE=1`).
+    pub share_gpu: bool,
+    /// Concrete peer-inflight ceiling applied at boot. For Yes,
+    /// default to 1 (one concurrent peer request — matches the
+    /// plan's 25% bucket). Stored explicitly so the user can later
+    /// edit it in Settings without re-prompting the consent dialog.
+    pub ceiling: usize,
+    pub recorded_at_unix: i64,
 }
 
 fn default_knowledge_view_enabled() -> bool {
@@ -230,6 +274,11 @@ fn default_data_dir() -> PathBuf {
 }
 
 fn default_skills_dir() -> PathBuf {
+    // Note: the path keyword stays `skills` for back-compat with any
+    // user-overlay TOMLs already on disk. The bundled in-repo
+    // directory is now `modes/` (only inner-work + recipe-author),
+    // but the user-overlay slot is unchanged so existing custom
+    // skill files still load.
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("sovereign")
@@ -242,6 +291,12 @@ fn default_enabled_tools() -> Vec<String> {
         "search".to_string(),
         "web_fetch".to_string(),
         "document".to_string(),
+        // Tool-Mastery Phase 5 — unified knowledge front door
+        // (corpus + memory + notes). Default-on so the desktop's
+        // skill-narrowed catalogs (codebase-navigator, research-
+        // analyst, etc.) actually expose it; skills' ToolPreferences
+        // can drop it explicitly when not needed.
+        "knowledge_lookup".to_string(),
     ]
 }
 
@@ -306,6 +361,8 @@ impl Default for DesktopConfig {
             knowledge_view_enabled: default_knowledge_view_enabled(),
             storage_budget_bytes: None,
             enable_recipe_authoring: false,
+            auto_escalate_to_web: false,
+            first_mesh_consent: None,
         }
     }
 }
@@ -487,6 +544,13 @@ pub struct AppState {
     /// or when those DBs failed to open.
     pub notes: RwLock<Option<Arc<NoteStore>>>,
     pub features: RwLock<Option<Arc<FeatureStore>>>,
+    /// Child-process daemon supervisor. Populated only when
+    /// `SOVEREIGN_USE_SUPERVISOR=1` and `supervisor_setup::maybe_start`
+    /// successfully spawned a daemon. `None` for the in-process Local
+    /// path and for Attach mode (where the CLI owns the daemon
+    /// lifecycle separately). Tauri commands subscribe to its state
+    /// channel and call `request_reconnect()` on it.
+    pub supervisor: RwLock<Option<Arc<Supervisor>>>,
 }
 
 impl AppState {
@@ -514,6 +578,7 @@ impl AppState {
     pub fn new_with_mode(
         approval: Arc<TauriApprovalChannel>,
         mode: crate::bootstrap::BootstrapMode,
+        supervisor: Option<Arc<Supervisor>>,
     ) -> Self {
         let config = DesktopConfig::load();
         // The mesh daemon persists its running-mesh state into
@@ -522,6 +587,10 @@ impl AppState {
         // and would-be joiners get "no peer on this network".
         let mesh_data_dir = config.data_dir.clone();
 
+        // When `supervisor_setup` spawned the daemon as a child, the
+        // effective mode is already Attach against that child. The
+        // existing match below covers it — `Attach` → mesh = None,
+        // mutations route over HTTP just like CLI-attached mode.
         let mesh = match &mode {
             crate::bootstrap::BootstrapMode::Attach { .. } => None,
             crate::bootstrap::BootstrapMode::Local { .. } => {
@@ -556,6 +625,7 @@ impl AppState {
             watched_subsystem: RwLock::new(None),
             notes: RwLock::new(None),
             features: RwLock::new(None),
+            supervisor: RwLock::new(supervisor),
         }
     }
 }
@@ -896,8 +966,17 @@ pub async fn bootstrap_with_progress(
     // Planner.
     let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
 
-    // Tools.
-    let mut tools = ToolRegistry::new();
+    // Tools. Tier 4 of tool-framework expansion: wire a shared
+    // ToolResultCache so idempotent tool calls (knowledge_lookup,
+    // future code-intel reads) hit a per-conversation cache
+    // instead of re-doing the corpus + memory + note fan-out on
+    // every follow-up. Cache TTL defaults to 5 turns (configurable
+    // via `with_max_age`); per-conversation scoping walls
+    // inner-work / default-chat slices apart by `conversation_id`.
+    let tool_cache = Arc::new(
+        sovereign_core::tool_result_cache::ToolResultCache::new(),
+    );
+    let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     let enabled = &config.enabled_tools;
 
     if enabled.iter().any(|t| t == "shell") {
@@ -920,35 +999,113 @@ pub async fn bootstrap_with_progress(
         ));
     }
     if enabled.iter().any(|t| t == "search" || t == "knowledge" || t == "web_search") {
-        let backend = match config.search_backend.provider.as_str() {
-            "tavily" => {
-                if let Some(ref key) = config.search_backend.api_key {
-                    sovereign_tools::web::search::SearchBackend::Tavily {
-                        api_key: key.clone(),
-                    }
-                } else {
-                    sovereign_tools::web::search::SearchBackend::DuckDuckGo
-                }
-            }
-            "brave" => {
-                if let Some(ref key) = config.search_backend.api_key {
-                    sovereign_tools::web::search::SearchBackend::Brave {
-                        api_key: key.clone(),
-                    }
-                } else {
-                    sovereign_tools::web::search::SearchBackend::DuckDuckGo
-                }
-            }
-            _ => sovereign_tools::web::search::SearchBackend::DuckDuckGo,
+        // Phase 6 of PRODUCTION_SEARCH_INTEGRATION.md: build a
+        // WebSearchRegistry from operator config + a SearchOrchestrator,
+        // and hand it to SearchTool. The orchestrator path applies the
+        // privacy + budget + fallback-chain invariants that the legacy
+        // direct-enum dispatch never had. The legacy path stays
+        // available via SearchTool::with_web for the seven other call
+        // sites still using it.
+        use sovereign_tools::web::search::{
+            BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator,
+            TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
         };
-        tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
+
+        let mut registry = WebSearchRegistry::new();
+        // DuckDuckGo is always available (zero-config fallback).
+        registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
+        // The operator-chosen provider, if any, gets registered
+        // alongside. Both stay in the registry; the orchestrator
+        // picks via the operator preference order (Tavily/Brave
+        // first when configured, DuckDuckGo as the fallback).
+        let preferred: Box<dyn WebSearchBackend> =
+            match config.search_backend.provider.as_str() {
+                "tavily" => config.search_backend.api_key.as_ref().map(
+                    |key| -> Box<dyn WebSearchBackend> {
+                        Box::new(TavilyBackendImpl::new(key.clone()))
+                    },
+                ),
+                "brave" => config.search_backend.api_key.as_ref().map(
+                    |key| -> Box<dyn WebSearchBackend> {
+                        Box::new(BraveBackendImpl::new(key.clone()))
+                    },
+                ),
+                _ => None,
+            }
+            .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
+        // Convert the Box to Arc so the registry's Arc-of-trait
+        // shape is happy. DuckDuckGo's `register` above sets up the
+        // fallback; this `register` may replace it with the same id
+        // when the operator's provider is also DuckDuckGo (the
+        // registry warn-logs the replacement, which is the right
+        // signal — operator wanted DDG and they got it).
+        registry.register(Arc::from(preferred));
+
+        let orchestrator = Arc::new(SearchOrchestrator::new(Arc::new(registry)));
+        tools.register(Box::new(sovereign_tools::search::SearchTool::with_orchestrator(
             Arc::clone(&store),
             Arc::clone(&inference),
-            backend,
+            orchestrator,
         )));
     }
     if enabled.iter().any(|t| t == "web_fetch") {
         tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
+    }
+    if enabled.iter().any(|t| t == "knowledge_lookup") {
+        // Tool-Mastery Phase 5 — unified evidence front door
+        // (corpus + memory + notes). The notes channel is wired
+        // only when the recipe-author NoteStore opened cleanly
+        // earlier in bootstrap; that's the same store the
+        // dossier write hook reads/writes, so chat-side outcome
+        // history and notes-channel evidence are coherent.
+        let mut tool = sovereign_tools::KnowledgeLookupTool::new(
+            Arc::clone(&store),
+            Arc::clone(&inference),
+        );
+        if let Some(ref ns) = *state.notes.read().await {
+            tool = tool.with_notes(Arc::clone(ns));
+        }
+        // Tier 3 web escalation. Wired only when the operator
+        // opted in via `DesktopConfig.auto_escalate_to_web`.
+        // Builds a dedicated SearchOrchestrator mirroring the
+        // `search` tool's construction (DDG always-on + the
+        // operator-preferred backend). Costs one extra registry
+        // instance vs. sharing — kept duplicate for scope-locality
+        // (the search-tool block above is its own gated branch).
+        if config.auto_escalate_to_web {
+            use sovereign_tools::web::search::{
+                BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator,
+                TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
+            };
+            let mut registry = WebSearchRegistry::new();
+            registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
+            let preferred: Box<dyn WebSearchBackend> =
+                match config.search_backend.provider.as_str() {
+                    "tavily" => config.search_backend.api_key.as_ref().map(
+                        |key| -> Box<dyn WebSearchBackend> {
+                            Box::new(TavilyBackendImpl::new(key.clone()))
+                        },
+                    ),
+                    "brave" => config.search_backend.api_key.as_ref().map(
+                        |key| -> Box<dyn WebSearchBackend> {
+                            Box::new(BraveBackendImpl::new(key.clone()))
+                        },
+                    ),
+                    _ => None,
+                }
+                .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
+            registry.register(Arc::from(preferred));
+            let orchestrator =
+                Arc::new(SearchOrchestrator::new(Arc::new(registry)));
+            tool = tool
+                .with_web_orchestrator(orchestrator)
+                .with_auto_escalate(true);
+            tracing::info!(
+                "knowledge_lookup: auto_escalate_to_web ENABLED — \
+                 thin local results will fall back to web search"
+            );
+        }
+        tools.register(Box::new(tool));
     }
 
     // Construct a shared CorpusEngine. This single instance backs both
@@ -1292,17 +1449,11 @@ pub async fn bootstrap_with_progress(
             Ok(notes_store) => {
                 let notes = Arc::new(notes_store);
                 let mut mcp_tools = ToolRegistry::new();
-                // Code-intel tools — reuse the already-loaded CorpusEngine.
-                mcp_tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-                    Arc::clone(&corpus_engine),
-                )));
-                mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(
-                    Arc::clone(&corpus_engine),
-                )));
-                mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-                    Arc::clone(&corpus_engine),
-                )));
                 // Call-graph tools with initial merged SCIP state.
+                // Built before the code-intel tools below so
+                // `SymbolLookupTool` can share the same handle —
+                // exact-name lookup now reads from SCIP rather than
+                // the Lance chunk projection.
                 let initial_graph = corpus_engine::ScipGraph::open_in_memory("merged")
                     .expect("in-memory ScipGraph for MCP call-graph tools");
                 if let Ok(rd) = std::fs::read_dir(&indexes_dir) {
@@ -1318,6 +1469,17 @@ pub async fn bootstrap_with_progress(
                 }
                 let graph_handle: sovereign_mesh::reindexer::ScipGraphHandle =
                     Arc::new(arc_swap::ArcSwap::from_pointee(initial_graph));
+                // Code-intel tools — reuse the already-loaded CorpusEngine.
+                mcp_tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+                    Arc::clone(&corpus_engine),
+                    Arc::clone(&graph_handle),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(
+                    Arc::clone(&corpus_engine),
+                )));
+                mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
+                    Arc::clone(&corpus_engine),
+                )));
                 let hc = Arc::new(sovereign_tools::IndexHealthChecker::new(
                     Arc::clone(&graph_handle),
                 ));
@@ -1586,9 +1748,33 @@ pub async fn bootstrap_with_progress(
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
-    // Code Intelligence tools.
+    // Code Intelligence tools. Build the merged SCIP handle first so
+    // SymbolLookupTool can share it — exact-name lookup now reads
+    // SCIP directly (Lance kept only embeddings/content/mtime).
+    // `indexes_dir` was moved into `CorpusEngine::new` above; we have
+    // to re-derive the path from `home` rather than reuse the binding.
+    let indexes_dir_for_scip = home.join(".sovereign").join("indexes");
+    let symbols_graph = {
+        let merged = corpus_engine::ScipGraph::open_in_memory("merged")
+            .expect("in-memory ScipGraph for symbols lookup");
+        if let Ok(rd) = std::fs::read_dir(&indexes_dir_for_scip) {
+            for de in rd.flatten() {
+                if !de.path().is_dir() {
+                    continue;
+                }
+                let scip_path = de.path().join("scip_graph.db");
+                if scip_path.exists() {
+                    let _ = merged.import_from_path(&scip_path).await;
+                }
+            }
+        }
+        let handle: sovereign_mesh::reindexer::ScipGraphHandle =
+            Arc::new(arc_swap::ArcSwap::from_pointee(merged));
+        handle
+    };
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
+        Arc::clone(&symbols_graph),
     )));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
@@ -1658,6 +1844,17 @@ pub async fn bootstrap_with_progress(
         inference_config,
     )
     .with_corpus_engine(Arc::clone(&corpus_engine));
+    // Tool-Mastery Layer 3 — NoteStore drives the per-conversation
+    // tool_decision write hook (runtime.rs handle_message_stream's
+    // post-gap-check spawn) and the Layer-2 dossier read at the
+    // top of the next turn. Without this wiring the desktop's
+    // chat surface gets dossier=None on every turn — the framework
+    // becomes structurally invisible to the user. Reading the
+    // already-opened store rather than re-opening keeps a single
+    // sqlite handle (WAL-friendly).
+    if let Some(ns) = state.notes.read().await.as_ref() {
+        runtime = runtime.with_note_store(Arc::clone(ns));
+    }
     // Landscape-digest provider wiring. Three branches:
     //
     // 1. **Local mode + KnowledgeView enabled** — install the local
@@ -1789,25 +1986,24 @@ pub async fn rebuild_runtime(state: &AppState) -> Result<(), String> {
 
 /// Skills shipped with the binary. Each entry is the raw `skill.toml`
 /// contents embedded at compile time via `include_str!`. This keeps
-/// the Settings → Skills panel populated on every fresh install
-/// regardless of filesystem layout, and survives Tauri bundle
-/// repackaging without needing `bundle.resources` plumbing.
+/// the surviving modes available on every fresh install regardless
+/// of filesystem layout, and survives Tauri bundle repackaging
+/// without needing `bundle.resources` plumbing.
 ///
-/// To add a new built-in skill:
-///   1. Drop a `skill.toml` under `<repo>/skills/<name>/`.
-///   2. Add a matching `include_str!("../../../../skills/<name>/skill.toml")`
-///      entry here.
-/// User-created skills live under `config.skills_dir` and are loaded
-/// alongside these at runtime.
+/// After the skills-as-menu retirement, only two modes survive:
+///   - inner-work — reflective surface (relational register, local-only)
+///   - recipe-author — workspace surface (bespoke tool set)
+///
+/// The other seven entries were retired because they were intent-
+/// shape variants masquerading as user-selected skills. Intent-keyed
+/// policy in `sovereign_core::intent_policy` now drives the
+/// default-chat behavior they used to provide.
+///
+/// User-created skills (custom workflows on disk) still load from
+/// `config.skills_dir` alongside these two bundled modes.
 const BUILTIN_SKILLS: &[&str] = &[
-    include_str!("../../../../skills/collaborative-research/skill.toml"),
-    include_str!("../../../../skills/code-review/skill.toml"),
-    include_str!("../../../../skills/codebase-navigator/skill.toml"),
-    include_str!("../../../../skills/document-analyst/skill.toml"),
-    include_str!("../../../../skills/epistemic-research/skill.toml"),
-    include_str!("../../../../skills/inner-work/skill.toml"),
-    include_str!("../../../../skills/personal-assistant/skill.toml"),
-    include_str!("../../../../skills/research-analyst/skill.toml"),
+    include_str!("../../../../modes/inner-work/skill.toml"),
+    include_str!("../../../../modes/recipe-author/skill.toml"),
 ];
 
 fn register_builtin_skills(skills: &mut SkillRegistry) {
@@ -1822,8 +2018,8 @@ fn register_builtin_skills(skills: &mut SkillRegistry) {
     }
 }
 
-/// Debug-only: look up the workspace `skills/` directory so developers
-/// running `cargo tauri dev` can add a new skill TOML without needing
+/// Debug-only: look up the workspace `modes/` directory so developers
+/// running `cargo tauri dev` can add a new mode TOML without needing
 /// to rebuild the binary with a new `include_str!` entry. Returns
 /// `None` outside the workspace layout (e.g. an installed debug build).
 #[cfg(debug_assertions)]
@@ -1834,7 +2030,7 @@ fn dev_workspace_skills_dir() -> Option<PathBuf> {
             .parent()? // crates/sovereign-desktop/
             .parent()? // crates/
             .parent()? // <repo root>
-            .join("skills"),
+            .join("modes"),
     )
 }
 

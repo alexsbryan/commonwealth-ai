@@ -1,0 +1,51 @@
+[meta]
+id = "2.2-group-anagrams"
+title = "Group strings by anagram"
+category = "CodeTest"
+tier = "Scaffolded"
+version = "v0"
+notes = """
+Classic HashMap-key problem. Given a list of strings, group them
+into anagram-equivalence classes. Tests HashMap usage, sorted-key
+normalization, and stable-output ordering.
+
+Bridges from 2.1 (single-pass stack) toward Level 3 (data
+structures + algorithms). A 9B coder should handle this with a
+HashMap<String, Vec<String>> and sorted chars as the key.
+
+Scaffolded tier: Cargo.toml + src/lib.rs stub installed.
+"""
+
+[prompt]
+file = "prompt.md"
+
+[witness]
+kind = "Hybrid"
+language = "Rust"
+fixture_subdir = "fixtures"
+scaffold_subdir = "scaffold"
+verify_cmd = "cargo test --quiet --test integration"
+score_buckets = [
+  [0.0,  0.25,  0],
+  [0.25, 0.6,   1],
+  [0.6,  0.85,  2],
+  [0.85, 1.001, 3],
+]
+
+[budget]
+token_cap = 6000
+wall_seconds_cap = 600
+
+[scoring.dim_a]
+name = "Correctness"
+mode = "AutoTestPassFraction"
+
+[scoring.dim_b]
+name = "Algorithmic choice"
+mode = "JudgeRubric"
+rubric_id = "dim_b"
+
+[scoring.dim_c]
+name = "Code quality"
+mode = "HybridAutoFloor"
+rubric_id = "dim_c"

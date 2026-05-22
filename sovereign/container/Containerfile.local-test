@@ -1,0 +1,62 @@
+# Minimal container for local smoke-testing the worker daemon wire
+# protocol against a real podman runtime — without rebuilding the
+# heavyweight CUDA/ROCm image.
+#
+# What this image is for: validating `entrypoint.sh` + the
+# `--worker-mode` boot path + the four owner-only routes on :9742
+# end-to-end inside an actual container, before paying for Vast.
+#
+# What this image is NOT for: real inference. The release binary
+# baked in is the host build, so its native deps (llama-cpp linking
+# against AMD/NVIDIA libs) won't resolve for child-daemon spawn.
+# Tests that exercise this image set SOVEREIGN_WORKER_RUNNER=echo
+# so the child path is never reached.
+#
+# Build (from commonwealth-ai workspace root):
+#   scripts/pod build -t sovereign-worker-local:test \
+#     -f sovereign/container/Containerfile.local-test .
+#
+# Prereq: target/release/sovereign-cli must exist. The Cargo build
+# happens on the host (in the toolbox), not inside this image —
+# building Rust in here would add 5-10 minutes per iteration with
+# no benefit, since we're not testing the build.
+
+# Fedora minimal — matches the host toolbox's glibc/OpenSSL ABI so
+# the host-built `sovereign-cli` binary actually runs (Debian's
+# libssl.so.3 was built against a different glibc and refuses to
+# load the Fedora-built binary's symbols).
+#
+# Has bash + coreutils + curl + ca-certificates in the base image,
+# so the production `entrypoint.sh` runs without an apt-get step
+# (which would hit setgroups() blocks inside the toolbox).
+#
+# Production CUDA/ROCm images stay on Ubuntu — they need the
+# vendor-provided CUDA/ROCm packages which are Debian-family. The
+# local-test image is the only Fedora flavor and is intentionally
+# lightweight + ABI-compatible with this toolbox.
+FROM quay.io/fedora/fedora-minimal:43
+# NB: libvulkan.so.1 is bind-mounted at run-time by the smoke test
+# (see `tests/local_pod_smoke.rs::run_args`). We can't bake it in
+# via `RUN microdnf install` because build-time RUN steps inside the
+# toolbox hit a setgroups() permission error — bake-vs-mount choice
+# is driven by what works inside the nested namespace.
+
+# Pre-built release binary. The build context is the workspace root
+# so this path resolves. We COPY with --chmod to avoid a second RUN
+# step that would also hit the setgroups() block in the toolbox.
+COPY --chmod=0755 target/release/sovereign-cli /usr/local/bin/sovereign-cli
+
+# Entrypoint script. Same one used by Containerfile.cuda — kept
+# identical so a green smoke here means the production entrypoint
+# script is also correct.
+COPY --chmod=0755 sovereign/container/entrypoint.sh /entrypoint.sh
+
+# Worker daemon binds :9742; the controller's pinned-cert client
+# connects to the host port mapped by `podman run -p`. The container
+# has no other listeners — no /v1/chat, no admin, no mesh.
+EXPOSE 9742
+
+# Workspace dir the entrypoint creates DATA_DIR / MODELS_DIR under.
+WORKDIR /workspace
+
+ENTRYPOINT ["/entrypoint.sh"]

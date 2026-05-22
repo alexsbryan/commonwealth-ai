@@ -48,27 +48,75 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
             source.display()
         )));
     }
-    if output.exists() {
+    // The "canonical Lance is already finalized" marker is
+    // `_corpus_meta.json`, not directory existence: the SCIP
+    // reindexer co-locates `<corpus>/scip_graph.db` and creates the
+    // parent dir long before Lance ingest runs. Refusing on bare
+    // directory existence used to strand every Lance promote behind
+    // a healthy SCIP sidecar.
+    if output.join("_corpus_meta.json").exists() {
         return Err(Error::Database(format!(
-            "promote_single_shard: refusing to overwrite existing {}",
+            "promote_single_shard: refusing to overwrite existing canonical at {}",
             output.display()
         )));
     }
 
-    // Same-filesystem rename is atomic. Fall back to recursive copy if
-    // rename fails with `EXDEV` or similar.
     if let Some(parent) = output.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    if let Err(e) = std::fs::rename(source, output) {
-        tracing::warn!(
-            source = %source.display(),
-            output = %output.display(),
-            error = %e,
-            "promote_single_shard: atomic rename failed, falling back to copy"
-        );
-        copy_dir_recursive(source, output)?;
-        std::fs::remove_dir_all(source)?;
+    if !output.exists() {
+        // Fast path: same-filesystem atomic rename. Fall back to a
+        // recursive copy on EXDEV-style failures.
+        if let Err(e) = std::fs::rename(source, output) {
+            tracing::warn!(
+                source = %source.display(),
+                output = %output.display(),
+                error = %e,
+                "promote_single_shard: atomic rename failed, falling back to copy"
+            );
+            copy_dir_recursive(source, output)?;
+            std::fs::remove_dir_all(source)?;
+        }
+    } else {
+        // Slow path: output dir already exists (typically holds a
+        // SCIP sidecar from the daemon's Reindexer). Move the
+        // partition's contents into it without touching unrelated
+        // siblings — `scip_graph.db` / `.rebuild.lock` must survive.
+        // Per-entry rename inside the same filesystem stays atomic.
+        for entry in std::fs::read_dir(source)? {
+            let entry = entry?;
+            let from = entry.path();
+            let to = output.join(entry.file_name());
+            if to.exists() {
+                // A genuinely-conflicting entry (e.g. an existing
+                // `chunks.lance` from a prior aborted ingest) — refuse
+                // rather than silently overwrite.
+                return Err(Error::Database(format!(
+                    "promote_single_shard: cannot merge {} into {} — \
+                     destination already has an entry named {:?}",
+                    source.display(),
+                    output.display(),
+                    entry.file_name(),
+                )));
+            }
+            if let Err(e) = std::fs::rename(&from, &to) {
+                tracing::warn!(
+                    from = %from.display(),
+                    to = %to.display(),
+                    error = %e,
+                    "promote_single_shard: per-entry rename failed, falling back to copy"
+                );
+                if entry.file_type()?.is_dir() {
+                    copy_dir_recursive(&from, &to)?;
+                    std::fs::remove_dir_all(&from)?;
+                } else {
+                    std::fs::copy(&from, &to)?;
+                    std::fs::remove_file(&from)?;
+                }
+            }
+        }
+        // Source dir is empty after the loop; drop it.
+        std::fs::remove_dir(source).ok();
     }
 
     // Rewrite meta to drop partition-specific fields and mark complete.
@@ -1725,6 +1773,76 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let result = merge_partitions_into_canonical(dir.path(), "nope", None).await;
         assert!(result.is_err(), "must error when nothing to merge");
+    }
+
+    #[tokio::test]
+    async fn promote_single_shard_merges_into_scip_sidecar_dir() {
+        // The SCIP reindexer pre-creates `<corpus>/scip_graph.db`
+        // alongside any future Lance corpus. Earlier versions of
+        // promote_single_shard refused on directory existence,
+        // stranding every Lance partition behind a healthy SCIP DB
+        // and silently breaking `code_search` / `recent_changes`.
+        // This test guards the now-supported "merge into existing
+        // SCIP-bearing dir" path.
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 5).await;
+
+        let canonical = dir.path().join("canonical");
+        std::fs::create_dir_all(&canonical).unwrap();
+        // Stand in for `scip_graph.db` — a sidecar the reindexer owns
+        // and that must survive the promote.
+        std::fs::write(canonical.join("scip_graph.db"), b"stub-scip-bytes").unwrap();
+        // Empty lock file from a prior reindex — also unrelated to
+        // Lance and not something promote should touch.
+        std::fs::write(canonical.join(".rebuild.lock"), b"").unwrap();
+
+        promote_single_shard(&source_path, &canonical).expect("promote into sidecar dir");
+
+        // Sidecars survived.
+        assert_eq!(
+            std::fs::read(canonical.join("scip_graph.db")).unwrap(),
+            b"stub-scip-bytes",
+            "scip_graph.db must not be touched",
+        );
+        assert!(canonical.join(".rebuild.lock").exists());
+
+        // Lance landed.
+        assert!(
+            canonical.join("_corpus_meta.json").exists(),
+            "_corpus_meta.json should be moved into canonical",
+        );
+        // Source dir emptied + dropped.
+        assert!(!source_path.exists(), "source dir should be removed");
+
+        // The promoted index is openable + has the original chunks.
+        let promoted = CorpusIndex::open(&canonical).await.unwrap();
+        let info = promoted.info().await.unwrap();
+        assert_eq!(info.chunk_count, 5);
+        assert!(!info.is_shard, "promote should mark is_shard=false");
+    }
+
+    #[tokio::test]
+    async fn promote_single_shard_refuses_finalized_canonical() {
+        // Conversely: when canonical already has its own
+        // `_corpus_meta.json`, promote must refuse — silently
+        // overwriting a finalized corpus with a partition would lose
+        // data.
+        let dir = tempfile::tempdir().unwrap();
+        let source_path = dir.path().join("source");
+        create_test_index(&source_path, 3).await;
+
+        let canonical_path = dir.path().join("canonical");
+        create_test_index(&canonical_path, 7).await;
+
+        let err = promote_single_shard(&source_path, &canonical_path).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("refusing to overwrite"),
+            "unexpected error: {msg}"
+        );
+        // Source untouched.
+        assert!(source_path.exists());
     }
 
     #[tokio::test]

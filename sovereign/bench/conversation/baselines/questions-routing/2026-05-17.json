@@ -1,0 +1,150 @@
+{
+  "bank_name": "conversations-personal-v0",
+  "started_at_unix": 1779002718,
+  "results": [
+    {
+      "question_id": "entity_recall_cfo_runway",
+      "category": "entity_recall",
+      "question": "What did I discuss with <cfo-acme> about runway during q3-2025?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 97
+    },
+    {
+      "question_id": "entity_recall_advisor_strategy_user_only",
+      "category": "entity_recall",
+      "question": "What strategy questions did I raise with <advisor-1> about the b2b pivot?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 1057
+    },
+    {
+      "question_id": "decision_trace_vendor_switch",
+      "category": "decision_trace",
+      "question": "When did I decide to switch off <vendor-billing> and what triggered it?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "",
+      "confidence": 1.0,
+      "rationale": null,
+      "correct": true,
+      "latency_ms": 922
+    },
+    {
+      "question_id": "decision_trace_hire_freeze",
+      "category": "decision_trace",
+      "question": "When did I decide to pause hiring and what was my reasoning?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "expressive_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"Why is this job decision feeling so heavy?\" (cosine 0.761, margin 0.040)",
+      "correct": false,
+      "latency_ms": 29
+    },
+    {
+      "question_id": "trend_view_on_open_source_strategy",
+      "category": "trend",
+      "question": "How has my view on open-sourcing the core engine shifted over the last ~6mo-ago?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 32
+    },
+    {
+      "question_id": "trend_view_on_pricing_both",
+      "category": "trend",
+      "question": "How has my thinking about pricing tiers evolved this year?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 36
+    },
+    {
+      "question_id": "cross_conv_synth_competitor_analysis",
+      "category": "cross_conv_synth",
+      "question": "Summarize what I've explored about <competitor-rival1> across past chats.\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "content-processing verb on in-prompt material",
+      "correct": true,
+      "latency_ms": 36
+    },
+    {
+      "question_id": "negative_unmapped_person",
+      "category": "negative",
+      "question": "Have I ever discussed <unmapped-person-1> in any past conversation?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 35
+    },
+    {
+      "question_id": "negative_unmapped_topic",
+      "category": "negative",
+      "question": "Have I ever talked about the quantum-leasing protocol?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What did we discuss earlier about routing?\" (cosine 0.810, margin 0.041)",
+      "correct": false,
+      "latency_ms": 36
+    },
+    {
+      "question_id": "temporal_slice_q4_2025",
+      "category": "temporal_slice",
+      "question": "What was on my mind during q4-2025?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "knowledge_query",
+      "coarse_intent": "LOOKUP",
+      "confidence": 1.0,
+      "rationale": "factual-lookup shape (what/who/when/where) → knowledge query",
+      "correct": true,
+      "latency_ms": 34
+    },
+    {
+      "question_id": "temporal_slice_recent_week",
+      "category": "temporal_slice",
+      "question": "What did I work through in chats over the past week?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "metalingual_query",
+      "coarse_intent": "EMBED_ROUTER",
+      "confidence": 0.95,
+      "rationale": "embed router: nearest exemplar \"What did we discuss earlier about routing?\" (cosine 0.830, margin 0.053)",
+      "correct": false,
+      "latency_ms": 35
+    },
+    {
+      "question_id": "combo_entity_trend_user",
+      "category": "trend",
+      "question": "How has my view of <advisor-1>'s advice changed over time?\n",
+      "expected": "knowledge_query|deep_query",
+      "actual_intent": "deep_query",
+      "coarse_intent": "REASONING",
+      "confidence": 1.0,
+      "rationale": "analytical/compatibility signal → deep reasoning",
+      "correct": true,
+      "latency_ms": 34
+    }
+  ]
+}

@@ -5,6 +5,7 @@ pub mod semantic;
 pub mod passthrough;
 pub mod portal_event_bullet;
 pub mod sectioned;
+pub mod threaded_turns;
 
 /// A text chunk produced by a chunker.
 #[derive(Debug, Clone)]

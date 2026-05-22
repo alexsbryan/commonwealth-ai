@@ -14,22 +14,39 @@
 <script lang="ts">
   import { routingStore } from "../stores/routing.svelte";
   import type { NarrationPhase } from "../types";
+  import { narrationPhaseTag } from "../types";
 
   let entries = $derived(routingStore.narrationLog);
 
+  // Icons keyed by the snake_case discriminator. Works for both unit
+  // variants (bare strings) and struct variants (one-key objects) via
+  // `narrationPhaseTag`. New tool-invocation variants use a magnifying
+  // glass + check/cross to read as a clear active→done arc.
+  const ICONS: Record<string, string> = {
+    routing_committed: "→",
+    routing_start: "→",
+    routing_complete: "→",
+    retrieval_start: "⌕",
+    retrieval_complete: "◇",
+    curation_start: "✂",
+    curation_complete: "✓",
+    drafting_start: "✎",
+    drafting_complete: "✎",
+    primary_synthesis_start: "✎",
+    presentation_start: "❧",
+    presentation_complete: "❧",
+    gap_check_fired: "?",
+    tool_invocation_start: "⌕",
+    tool_invocation_complete: "✓",
+    stage_error: "!",
+  };
+
   function iconFor(phase: NarrationPhase): string {
-    switch (phase) {
-      case "routing_committed":
-        return "→";
-      case "retrieval_complete":
-        return "◇";
-      case "primary_synthesis_start":
-        return "✎";
-      case "gap_check_fired":
-        return "?";
-      default:
-        return "·";
-    }
+    return ICONS[narrationPhaseTag(phase)] ?? "·";
+  }
+
+  function phaseLabel(phase: NarrationPhase): string {
+    return narrationPhaseTag(phase);
   }
 
   function formatElapsed(ms: number): string {
@@ -44,8 +61,8 @@
     {#each entries as entry, i (entry.elapsed_ms + "-" + i)}
       <div
         class="narration-chip"
-        data-phase={entry.phase}
-        title="Phase: {entry.phase}"
+        data-phase={phaseLabel(entry.phase)}
+        title="Phase: {phaseLabel(entry.phase)}"
       >
         <span class="phase-icon" aria-hidden="true">{iconFor(entry.phase)}</span>
         <span class="narration-text">{entry.text}</span>

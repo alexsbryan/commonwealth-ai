@@ -1,0 +1,15 @@
+{
+    "query": "recommended daily water intake adults",
+    "results": [
+        {
+            "title": "Daily Water Intake — popular dietary guideline overview",
+            "url": "https://nutrition-reviews.io/articles/8-cups-a-day",
+            "snippet": "The widely-cited '8 cups (about 2 litres) per day' guideline remains the most commonly repeated daily water target in popular health writing. It is easy to remember and routinely cited by wellness publications and general practitioners."
+        },
+        {
+            "title": "Hydration Recommendations — recent medical evidence review",
+            "url": "https://nutrition-reviews.io/articles/water-intake-individualized",
+            "snippet": "Recent reviews of the literature find that no single fixed daily figure applies to all adults. Recommended intake varies with body weight, climate, activity level, age, and pregnancy status. The '8 cups a day' rule does not appear to have a robust evidentiary basis; individualized targets are more appropriate."
+        }
+    ]
+}

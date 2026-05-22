@@ -246,6 +246,7 @@ mod tests {
             loaded_models: vec![],
             embed_model: None,
             benchmark: None,
+            current_in_flight: None,
         }
     }
 

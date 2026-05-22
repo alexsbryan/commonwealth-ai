@@ -54,6 +54,7 @@
     const s = asset.state;
     return (
       s === "PartiallyReady" ||
+      s === "MultiHopReady" ||
       s === "Ready" ||
       (typeof s === "object" && "BuildingSkeleton" in s)
     );

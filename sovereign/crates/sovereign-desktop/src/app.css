@@ -302,3 +302,55 @@ input, textarea, select {
   font-size: 0.8em;
   opacity: 0.6;
 }
+
+/* ─── Code blocks (syntax-highlighted, with copy button) ─────── */
+/* Rendered by markdown.ts's custom code renderer. The hljs theme  */
+/* CSS (imported from highlight.js) colours the `.hljs-*` spans;   */
+/* the container chrome below paints the header + copy affordance. */
+.sv-prose pre.code-block {
+  padding: 0;
+  overflow: hidden;
+}
+.sv-prose .code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4em 0.7em;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-sans);
+}
+.sv-prose .code-block-lang {
+  font-size: 0.72em;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.sv-prose .code-block-copy {
+  font-family: var(--font-sans);
+  font-size: 0.72em;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.sv-prose .code-block-copy:hover {
+  background: var(--lavender-dim);
+  color: var(--text-primary);
+  border-color: var(--lavender);
+}
+.sv-prose .code-block-copy.copied {
+  color: var(--growth);
+  border-color: var(--growth);
+  background: var(--growth-dim);
+}
+.sv-prose pre.code-block > code.hljs {
+  display: block;
+  padding: 0.8em 1em;
+  background: none;
+  overflow-x: auto;
+}

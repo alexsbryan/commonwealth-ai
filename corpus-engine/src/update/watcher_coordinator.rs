@@ -319,11 +319,36 @@ async fn run_coordinator_loop(
 
 /// Collect source-file paths from an event that live under any watched root.
 ///
+/// **Event kind filtering is load-bearing.** Without it, `cargo check`'s own
+/// reads of source files fire `EventKind::Access` (Open / Read / CloseNoWrite)
+/// on every `.rs` it inspects — which the watcher used to interpret as "the
+/// file changed", retriggering itself in an infinite loop. We accept only:
+///
+/// - `Create`             — new file appeared
+/// - `Modify(Data | Name)` — content or rename change
+/// - `Remove`             — deletion
+///
+/// and drop `Access(*)`, `Modify(Metadata | Other)`, `Any`, and `Other`.
+/// Pure mtime/atime touches (e.g. cargo's fingerprint-stamp `touch` of a
+/// dependency input) fall under `Modify::Metadata` and are ignored — if a
+/// rebuild output really *changed* the file, the data write also fires
+/// `Modify::Data` separately.
+///
 /// Paths inside `target/`, `.git/`, `node_modules/`, or any hidden directory
-/// component are excluded — build artifacts and VCS internals trigger constant
-/// events during compilation and would cause the background runners to abort
-/// and restart in an infinite loop.
+/// component are also excluded — build artifacts and VCS internals trigger
+/// constant events during compilation regardless of kind.
 fn interesting_coordinator_paths(event: &Event, roots: &[PathBuf]) -> Vec<PathBuf> {
+    use notify::event::{CreateKind, ModifyKind, RemoveKind};
+    let is_mutating = matches!(
+        event.kind,
+        EventKind::Create(CreateKind::File | CreateKind::Any)
+            | EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Name(_))
+            | EventKind::Remove(RemoveKind::File | RemoveKind::Any)
+    );
+    if !is_mutating {
+        return Vec::new();
+    }
+
     let mut out = Vec::new();
     for path in &event.paths {
         let is_delete = matches!(event.kind, EventKind::Remove(_));

@@ -1,0 +1,24 @@
+# 08_multicorpus_stale_local
+#
+# User asks for a CURRENT stock price. The knowledge corpus
+# happens to have an NVIDIA encyclopedia article that includes a
+# historical price quote (snapshot from years ago). A model that
+# answers from the local article confidently quotes a stale
+# figure as if it were current — the exact failure mode the
+# harness needs to catch.
+
+should_call_search = true
+expected_query_max_tokens = 6
+
+# Structural URL check (inline or [N] marker) covers the citation
+# axis. Semantic predicate focuses on the load-bearing failure
+# mode: model picks the historical figure from the encyclopedia
+# article and presents it as "current". ("Citing a source URL" was
+# dropped 2026-05-19 — judge interpreted it literally and rejected
+# valid [N]-marker citations.)
+must_cite_url_from_mock = 1
+must_not_cite_url_outside_mock = true
+
+final_message_satisfies = [
+  "The response presents NVIDIA's stock price as a recent/live figure (framed as 'today', 'recent close', 'right now', or with similar present-tense markers), rather than as a historical price quote from a fixed past date.",
+]

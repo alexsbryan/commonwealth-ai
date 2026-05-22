@@ -1,0 +1,15 @@
+# Knowledge-gym fixture: memory-first personal recall.
+#
+# Shape: ask a personal question whose answer lives in the user's
+# memory channel (not corpus, not notes). The model must reach
+# for knowledge_lookup just like a corpus-definitional question —
+# the unified evidence shape is the whole point. Cite the one
+# memory row that comes back; don't claim to know it from context.
+
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+max_query_tokens = 8
+
+must_cite_at_least_one_evidence_id = true
+must_not_cite_evidence_id_outside_returned = true

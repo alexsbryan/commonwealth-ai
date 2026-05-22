@@ -1,0 +1,188 @@
+# Conversation-history retrieval bank — seed scaffold.
+#
+# Schema mirrors sovereign/bench/obsidian/questions.toml with one
+# addition: `attribution_mode` ∈ {"user", "assistant", "both"} —
+# see README.md for semantics.
+#
+# Every entity here is a role token, not a real name. See
+# sovereign-recipes/conversations-anthropic/README.md for the
+# pii::scrub_pii contract. The corresponding real-name mapping
+# lives at ~/.sovereign/conversations/entity-map.json (gitignored).
+#
+# Questions are stubs — replace `expected_facts` and
+# `expected_sources` with values from your own scrubbed corpus
+# before running --synth, otherwise scoring is meaningless.
+
+[bank]
+name = "conversations-anthropic-v0"
+corpus = "conversations-anthropic"
+description = """
+Seed bench for conversation-history retrieval. ~12 items spanning the
+six archetypes (entity_recall, decision_trace, trend, cross_conv_synth,
+negative, temporal_slice) × attribution modes (user, assistant, both).
+
+Use as a smoke-test for the conversation ingest path; expand toward
+50-100 questions after one full --synth baseline pass exposes scoring
+noise per archetype.
+
+Authored 2026-05-16 as a scaffold. Entity tokens (<cfo-acme>,
+<advisor-1>, …) resolve via ~/.sovereign/conversations/entity-map.json.
+"""
+
+# ── entity_recall ───────────────────────────────────────────────────
+
+[[questions]]
+id = "entity_recall_cfo_runway"
+category = "entity_recall"
+subject = "conversations"
+attribution_mode = "both"
+question = """
+What did I discuss with <cfo-acme> about runway during q3-2025?
+"""
+expected_facts = ["runway", "burn", "<cfo-acme>"]
+expected_sources = ["conv:runway-discussion"]
+notes = "Single-conversation entity recall. Validates that entity-token + time-bucket combine on retrieval."
+
+[[questions]]
+id = "entity_recall_advisor_strategy_user_only"
+category = "entity_recall"
+subject = "conversations"
+attribution_mode = "user"
+question = """
+What strategy questions did I raise with <advisor-1> about the b2b pivot?
+"""
+expected_facts = ["pivot", "b2b", "strategy"]
+expected_sources = ["conv:pivot-call-prep"]
+notes = "Attribution=user. Assistant restatements of my questions must not count as evidence."
+
+# ── decision_trace ──────────────────────────────────────────────────
+
+[[questions]]
+id = "decision_trace_vendor_switch"
+category = "decision_trace"
+subject = "conversations"
+attribution_mode = "both"
+question = """
+When did I decide to switch off <vendor-billing> and what triggered it?
+"""
+expected_facts = ["<vendor-billing>", "switch", "trigger"]
+expected_sources = ["conv:billing-vendor-review"]
+notes = "Temporal grounding + causal chain. Answer should include approximate date + reason."
+
+[[questions]]
+id = "decision_trace_hire_freeze"
+category = "decision_trace"
+subject = "conversations"
+attribution_mode = "user"
+question = """
+When did I decide to pause hiring and what was my reasoning?
+"""
+expected_facts = ["hiring", "pause", "freeze"]
+expected_sources = ["conv:hiring-pause"]
+notes = "Attribution=user — looking for *my* stated reasoning, not the model's analysis."
+
+# ── trend ───────────────────────────────────────────────────────────
+
+[[questions]]
+id = "trend_view_on_open_source_strategy"
+category = "trend"
+subject = "conversations"
+attribution_mode = "user"
+question = """
+How has my view on open-sourcing the core engine shifted over the last ~6mo-ago?
+"""
+expected_facts = ["open source", "shift", "view"]
+expected_sources = ["conv:os-strategy-q1-2025", "conv:os-strategy-q2-2025"]
+notes = "Hardest class. Must compose chronological evidence across multiple conversations. user-only attribution prevents model-suggestion contamination of *my* view."
+
+[[questions]]
+id = "trend_view_on_pricing_both"
+category = "trend"
+subject = "conversations"
+attribution_mode = "both"
+question = """
+How has my thinking about pricing tiers evolved this year?
+"""
+expected_facts = ["pricing", "tier", "evolution"]
+expected_sources = ["conv:pricing-jan-2025", "conv:pricing-apr-2025"]
+notes = "Mixed-attribution trend — both my exploration and the model's reframing count."
+
+# ── cross_conv_synth ────────────────────────────────────────────────
+
+[[questions]]
+id = "cross_conv_synth_competitor_analysis"
+category = "cross_conv_synth"
+subject = "conversations"
+attribution_mode = "both"
+question = """
+Summarize what I've explored about <competitor-rival1> across past chats.
+"""
+expected_facts = ["<competitor-rival1>"]
+expected_sources = ["conv:competitor-rival1-deep-dive", "conv:competitor-rival1-pricing"]
+notes = "Breadth recall. Tolerates lower per-source fidelity for broader topic coverage."
+
+# ── negative ────────────────────────────────────────────────────────
+
+[[questions]]
+id = "negative_unmapped_person"
+category = "negative"
+subject = "conversations"
+attribution_mode = "both"
+question = """
+Have I ever discussed <unmapped-person-1> in any past conversation?
+"""
+expected_facts = []
+expected_sources = []
+notes = "Constructed-not-in-corpus negative. Use EntityMap::unmapped_person to produce <unmapped-person-1> when deriving the question. Correct answer is no/I-have-no-record; non-empty retrieval is a false positive."
+
+[[questions]]
+id = "negative_unmapped_topic"
+category = "negative"
+subject = "conversations"
+attribution_mode = "both"
+question = """
+Have I ever talked about the quantum-leasing protocol?
+"""
+expected_facts = []
+expected_sources = []
+notes = "Negative on a topic the corpus does not contain. Tests that retrieval doesn't compose adjacent topics into a fabricated answer."
+
+# ── temporal_slice ──────────────────────────────────────────────────
+
+[[questions]]
+id = "temporal_slice_q4_2025"
+category = "temporal_slice"
+subject = "conversations"
+attribution_mode = "user"
+question = """
+What was on my mind during q4-2025?
+"""
+expected_facts = []
+expected_sources = []
+notes = "No entity anchor — temporal-only retrieval. expected_sources should list every conv with created_at in Oct-Dec 2025 when deriving from your own corpus. attribution=user so the synth doesn't restate model output as 'on my mind'."
+
+[[questions]]
+id = "temporal_slice_recent_week"
+category = "temporal_slice"
+subject = "conversations"
+attribution_mode = "both"
+question = """
+What did I work through in chats over the past week?
+"""
+expected_facts = []
+expected_sources = []
+notes = "Sliding-window temporal slice. Validates that 'recent' resolves against the corpus's actual recency, not a stale bench timestamp."
+
+# ── meta: cross-archetype combo ─────────────────────────────────────
+
+[[questions]]
+id = "combo_entity_trend_user"
+category = "trend"
+subject = "conversations"
+attribution_mode = "user"
+question = """
+How has my view of <advisor-1>'s advice changed over time?
+"""
+expected_facts = ["<advisor-1>", "advice", "shift"]
+expected_sources = ["conv:advisor-1-early", "conv:advisor-1-recent"]
+notes = "Entity-anchored trend, attribution=user. Probes whether retrieval handles the conjunction (entity + temporal + attribution) without dropping signal."

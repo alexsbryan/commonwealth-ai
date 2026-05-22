@@ -1,0 +1,32 @@
+# Knowledge-gym fixture 08 — Tier 3 escalation fired (web rows).
+#
+# Shape: corpus + memory + notes returned nothing for the user's
+# query; Tier 3 escalation kicked in and returned web rows. The
+# model should treat those rows like any other evidence: cite by
+# id, never invent handles, ground claims in what came back.
+#
+# Mechanism: the runner injects mock_evidence as the tool result.
+# Mock has source_kind=web on every row; the model sees an
+# evidence array where every confidence is 0.55 (the synthetic
+# web floor below the corpus tier). This SIMULATES the daemon's
+# auto_escalate_to_web branch having fired.
+#
+# Tests validate: model uses the returned rows, doesn't fabricate
+# past them, and the evidence set includes the web kind.
+
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+
+# Citation faithfulness preserved across kinds — web rows are
+# just as cite-faithfully tracked as corpus rows.
+must_not_cite_evidence_id_outside_returned = true
+
+# Reasonableness: at most one citation per returned row (two
+# rows → at most two distinct ids).
+max_cited_evidence_ids = 2
+
+# Tier 3 structural: the scope's returned evidence kinds must
+# include "web". If escalation didn't fire (mock returned no
+# web), this fails.
+evidence_set_includes_kind = ["web"]

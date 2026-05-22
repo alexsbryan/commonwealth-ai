@@ -51,6 +51,22 @@ pub mod types;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
 pub mod work_atlas_broadcaster;
+// Ephemeral worker pods — owner-initiated TLS-pinned transport that
+// replaces the full-mesh-pod path. Pods become single-owner workers,
+// not gossip peers. Spec: sovereign/docs/EPHEMERAL_WORKER_PODS.md.
+pub mod multi_pod_coordinator;
+pub mod worker_controller;
+pub mod worker_daemon;
+pub mod worker_http;
+pub mod worker_pod;
+pub mod worker_subprocess_runner;
+pub mod worker_inference_proxy;
+// Pinned-pod inference routing — lets ephemeral worker pods join the
+// mesh scheduler's inference pool as one more peer, scored by the
+// same load balancer. Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+pub mod pinned_transport;
+pub mod pinned_worker_source;
+pub mod pinned_pod_snapshot;
 
 pub use daemon::EmbeddedDaemon;
 pub use work_atlas_broadcaster::MeshBroadcaster;

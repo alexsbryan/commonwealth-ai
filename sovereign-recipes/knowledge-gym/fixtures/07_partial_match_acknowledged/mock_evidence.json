@@ -1,0 +1,24 @@
+{
+  "query": "confidence decay specifics",
+  "evidence": [
+    {
+      "id": "ev-T0-0000",
+      "source_kind": "corpus",
+      "source_id": "project-docs::memory_module",
+      "title": "Memory module — decay overview",
+      "content": "The default uniform decay rate is 10 percent per month. The decay applies during prune sweeps. Memories whose confidence falls below the 0.2 prune floor are dropped.",
+      "confidence": 0.88,
+      "retrieval_context": "corpus chunk (score 0.88)"
+    },
+    {
+      "id": "ev-T0-0001",
+      "source_kind": "corpus",
+      "source_id": "project-docs::memory_rules",
+      "title": "Per-mode memory rule overrides",
+      "content": "Modes can override the default decay rate via their TOML manifest's memory_rules block. Three retired research-shaped skills declared 0.05 per month; those values were not promoted to defaults.",
+      "confidence": 0.83,
+      "retrieval_context": "corpus chunk (score 0.83)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 2, "memory": 0, "note": 0, "web": 0 }
+}

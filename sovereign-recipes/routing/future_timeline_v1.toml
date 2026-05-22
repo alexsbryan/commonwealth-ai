@@ -1,0 +1,149 @@
+# Routing eval — future-timeline questions, corpus-first contract.
+#
+# Origin: 2026-05-19 desktop-app session. User asked "When is the next
+# generation of Mac Studio expected to come out?" and was routed to
+# KnowledgeQuery → corpus search → "I don't know" instead of a web
+# search.
+#
+# First-pass fix (2026-05-19 morning) added a `has_future_orientation_shape`
+# heuristic to route these to web_search directly via the embed-router-
+# adjacent keyword path. Rolled back the same day after the M5-Mac-Studio
+# retest (`When is the M5 Mac Studio expected?` — bare "expected" with no
+# trailing "to") surfaced the brittleness of keyword matching: every new
+# phrasing demands a new keyword. The principled approach (described in
+# `sovereign/docs/PRODUCTION_SEARCH_INTEGRATION.md`) is:
+#
+#   1. **Humility / corpus-first**: the agent doesn't pre-classify whether
+#      external lookup is warranted. It queries the corpus, synthesises
+#      with what it found, and the gap check is the LLM-based judge of
+#      "did this actually answer the question?".
+#   2. **Gym-validated search-tool discipline**: the SEARCH tool is
+#      exposed to the model with a tuned system prompt + tool description
+#      (gym v8, 90% pass on search-vs-skip decisions). The model decides
+#      to call it. The URL-allowlist constraint ensures citations are
+#      real. Full agent-loop integration is Phase 3 of the integration
+#      doc (not yet shipped); the user-triggered "Search the web"
+#      affordance on the INFORMATION REQUEST card is the current
+#      stand-in.
+#
+# Under this contract, the routing layer's job for these questions is:
+# get them to KnowledgeQuery so the corpus gets searched. The gap check
+# (now always-on, see `project_gap_check_always_on`) then surfaces the
+# INFORMATION REQUEST card whenever the corpus didn't actually answer.
+# `expected_intent = "knowledge_query"` reflects that contract.
+#
+# The bank stays — it pins that the existing factual-lookup heuristic
+# (which catches "when is X" questions) keeps routing these to the KQ
+# path. Without that, they'd fall to the LLM Pass 1 which could pick
+# something else. A regression here would mean fresh-info questions
+# stopped reaching the corpus + gap-check pipeline.
+
+[bank]
+name = "future-timeline-v1"
+corpus = "wikipedia"  # required by loader; unused under --routing-only
+description = """
+Routing-only bank covering future-timeline questions: "when does X
+launch", "when is Y expected", "what's coming at Z". Each row must
+route to KnowledgeQuery so the corpus is queried first (per humility
+principle). The post-stream gap check (always-on) surfaces an
+INFORMATION REQUEST card whenever retrieval + synthesis couldn't
+ground the answer; user-triggered "Search the web" augments via the
+existing affordance. Future Phase-3 agent-loop integration lets the
+model call the search tool itself mid-synthesis.
+"""
+
+[bank.latency_budget]
+default_p95_ms = 30000
+max_per_question_ms = 60000
+
+# ─── Lead case: the literal Mac Studio question ──────────────────
+
+[[questions]]
+id = "future_mac_studio"
+category = "factual_recall"  # irrelevant under expected_intent override
+question = "When is the next generation of Mac Studio expected to come out?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Product-launch siblings ──────────────────────────────────────
+
+[[questions]]
+id = "future_iphone_launch"
+category = "factual_recall"
+question = "When does the next iPhone launch?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "future_switch_release"
+category = "factual_recall"
+question = "When is the new Nintendo Switch coming out?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "future_gpt5_release"
+category = "factual_recall"
+question = "When does GPT-5 come out?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Event-timeline siblings ──────────────────────────────────────
+
+[[questions]]
+id = "future_wwdc_expected"
+category = "factual_recall"
+question = "What's expected at the upcoming WWDC?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "future_spacex_launch"
+category = "factual_recall"
+question = "When is the next SpaceX launch scheduled?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+[[questions]]
+id = "future_fed_meeting"
+category = "factual_recall"
+question = "When is the next Fed meeting?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Edge: bare-"expected" without trailing "to" ──────────────────
+#
+# The M5-Mac-Studio rebuttal case from 2026-05-19. The first-pass
+# heuristic matched "expected to" / "expected at" but missed bare
+# "expected?" — proving the keyword approach was brittle and not
+# generalizable. Under corpus-first this just routes to KQ like the
+# others; the gap check handles the "no info" case.
+
+[[questions]]
+id = "future_m5_mac_studio_bare_expected"
+category = "factual_recall"
+question = "When is the M5 Mac Studio expected?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []
+
+# ─── Edge: astronomically-computable but practically fresh-info ───
+#
+# Could be in the corpus (eclipse dates are deterministic). The bank
+# accepts knowledge_query — the gap check decides whether the corpus
+# actually delivered.
+
+[[questions]]
+id = "future_eclipse"
+category = "factual_recall"
+question = "When is the next solar eclipse visible from the US?"
+expected_intent = "knowledge_query"
+expected_facts = ["stub"]
+expected_sources = []

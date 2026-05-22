@@ -596,3 +596,155 @@ async fn sqlite_get_chunks_by_source() {
 async fn sqlite_list_sources() {
     test_list_sources(&sqlite_store()).await;
 }
+
+// ─── RAPTOR Atlas roundtrip ────────────────────────────────────
+
+fn make_asset(id: &str) -> DocumentAsset {
+    DocumentAsset {
+        id: id.to_string(),
+        title: "Test Doc".to_string(),
+        filename: "test.txt".to_string(),
+        file_size_mb: 0.1,
+        word_count: 100,
+        chunk_count: 4,
+        document_type: DocumentTypeTag::Narrative,
+        ingested_at: chrono::Utc::now(),
+        index_id: format!("asset:{id}"),
+        skeleton: None,
+        state: AssetState::Pending,
+    }
+}
+
+fn make_raptor_node(id: &str, level: u8, children: Vec<String>, members: Vec<u32>) -> RaptorNode {
+    RaptorNode {
+        node_id: id.to_string(),
+        level,
+        summary: format!("summary for {id}"),
+        summary_embedding: vec![0.1, 0.2, 0.3, 0.4],
+        centroid_embedding: vec![0.5, 0.6, 0.7, 0.8],
+        children_node_ids: children,
+        direct_member_chunk_ids: members.clone(),
+        evidence_chunk_ids: members,
+        quote_spans: vec![QuoteSpan {
+            chunk_id: 1,
+            char_start: 10,
+            char_end: 50,
+            text: "verbatim quote from the source chunk".to_string(),
+        }],
+        primary_entities: vec!["Winnie".to_string(), "Stevie".to_string()],
+        cluster_coherence: 0.85,
+        created_at: chrono::Utc::now(),
+    }
+}
+
+#[tokio::test]
+async fn sqlite_raptor_node_roundtrip() {
+    let store = sqlite_store();
+    let asset_id = "doc-raptor-1";
+    store.save_document_asset(&make_asset(asset_id)).await.unwrap();
+
+    let leaf_a = make_raptor_node("leaf-a", 0, vec![], vec![0, 1, 2]);
+    let leaf_b = make_raptor_node("leaf-b", 0, vec![], vec![3, 4, 5]);
+    let parent = make_raptor_node(
+        "root",
+        1,
+        vec!["leaf-a".to_string(), "leaf-b".to_string()],
+        vec![],
+    );
+
+    store
+        .save_raptor_nodes(asset_id, &[leaf_a.clone(), leaf_b.clone(), parent.clone()])
+        .await
+        .unwrap();
+
+    let loaded = store.list_raptor_nodes(asset_id).await.unwrap();
+    assert_eq!(loaded.len(), 3);
+    // Ordered by level ASC — leaves first, then root.
+    assert_eq!(loaded[0].level, 0);
+    assert_eq!(loaded[2].level, 1);
+    assert_eq!(loaded[2].children_node_ids.len(), 2);
+
+    let fetched_leaf = store.get_raptor_node("leaf-a").await.unwrap().unwrap();
+    assert_eq!(fetched_leaf.summary, "summary for leaf-a");
+    assert_eq!(fetched_leaf.summary_embedding, vec![0.1, 0.2, 0.3, 0.4]);
+    assert_eq!(fetched_leaf.quote_spans[0].text, "verbatim quote from the source chunk");
+
+    // The parent has empty direct_member_chunk_ids (NULL on disk),
+    // and the round-trip should keep it empty (not error on missing column).
+    let fetched_parent = store.get_raptor_node("root").await.unwrap().unwrap();
+    assert!(fetched_parent.direct_member_chunk_ids.is_empty());
+
+    // Re-saving replaces existing nodes atomically.
+    let updated_leaf = make_raptor_node("leaf-a", 0, vec![], vec![0, 1, 2, 99]);
+    store
+        .save_raptor_nodes(asset_id, &[updated_leaf])
+        .await
+        .unwrap();
+    let after_replace = store.list_raptor_nodes(asset_id).await.unwrap();
+    assert_eq!(after_replace.len(), 1);
+    assert_eq!(after_replace[0].direct_member_chunk_ids, vec![0, 1, 2, 99]);
+
+    // Cascade: deleting the asset removes its raptor nodes.
+    store.delete_document_asset(asset_id).await.unwrap();
+    let after_delete = store.list_raptor_nodes(asset_id).await.unwrap();
+    assert!(after_delete.is_empty());
+}
+
+#[tokio::test]
+async fn sqlite_asset_motif_roundtrip() {
+    let store = sqlite_store();
+    let asset_id = "doc-motif-1";
+    store.save_document_asset(&make_asset(asset_id)).await.unwrap();
+
+    let motifs = vec![
+        AssetMotif {
+            term: "incurious".to_string(),
+            tf_idf_score: 9.8,
+            occurrence_chunk_ids: vec![234, 567, 712, 891, 943],
+            is_distinctive: true,
+        },
+        AssetMotif {
+            term: "circles".to_string(),
+            tf_idf_score: 7.1,
+            occurrence_chunk_ids: vec![78, 956],
+            is_distinctive: true,
+        },
+        AssetMotif {
+            term: "frill".to_string(),
+            tf_idf_score: 4.2,
+            occurrence_chunk_ids: vec![412],
+            is_distinctive: false,
+        },
+    ];
+    store.save_asset_motifs(asset_id, &motifs).await.unwrap();
+
+    let loaded = store.list_asset_motifs(asset_id).await.unwrap();
+    assert_eq!(loaded.len(), 3);
+    // Distinctive first, then by tf_idf_score DESC.
+    assert_eq!(loaded[0].term, "incurious");
+    assert_eq!(loaded[1].term, "circles");
+    assert_eq!(loaded[2].term, "frill");
+    assert!(!loaded[2].is_distinctive);
+
+    // Re-saving replaces.
+    store
+        .save_asset_motifs(
+            asset_id,
+            &[AssetMotif {
+                term: "professor".to_string(),
+                tf_idf_score: 8.3,
+                occurrence_chunk_ids: vec![1, 2, 3],
+                is_distinctive: true,
+            }],
+        )
+        .await
+        .unwrap();
+    let after_replace = store.list_asset_motifs(asset_id).await.unwrap();
+    assert_eq!(after_replace.len(), 1);
+    assert_eq!(after_replace[0].term, "professor");
+
+    // Cascade.
+    store.delete_document_asset(asset_id).await.unwrap();
+    let after_delete = store.list_asset_motifs(asset_id).await.unwrap();
+    assert!(after_delete.is_empty());
+}

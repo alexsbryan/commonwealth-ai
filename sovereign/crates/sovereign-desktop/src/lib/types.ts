@@ -35,6 +35,25 @@ export interface MessageEntry {
   content: string;
   created_at: number;
   metadata?: Record<string, unknown>;
+  /** True between the moment the user clicks "Search the web" / submits
+   *  paste content on the InformationRequestCard and the moment
+   *  MESSAGE_REFINED arrives. AssistantMessage uses this to render a
+   *  "Refining…" indicator on the bubble so the in-place rewrite is
+   *  not a surprise. Cleared by MESSAGE_REFINED (success) or a
+   *  refinement-error event. */
+  refining?: boolean;
+  /** Set on the refined bubble when the refinement was sourced from
+   *  the search-now affordance. Drives the "Augmented via web
+   *  search: <query> (N sources)" footer note. Persisted into
+   *  `metadata.search_augmentation` so it survives hydration. */
+  searchAugmentation?: SearchAugmentation;
+}
+
+/** Mirrors `SearchAugmentation` in `commands.rs` / `api.ts`. */
+export interface SearchAugmentation {
+  query: string;
+  backend_id: string;
+  sources: Array<{ title: string; url: string }>;
 }
 
 export interface CreateConversationResponse {
@@ -207,16 +226,62 @@ export const OVERSIZE_MESSAGE_HINT =
 // ClarificationRequest, TurnNarration, NarrationEvent. Wire format
 // is JSON via Tauri events.
 
+// NarrationPhase mirrors `sovereign_core::types::NarrationPhase`. Serde's
+// default external tagging serialises unit variants as bare strings
+// ("routing_committed") and struct variants as a one-key object
+// ({"tool_invocation_start": {...}}). Consumers must handle both shapes.
 export type NarrationPhase =
+  // Unit variants — serialised as bare strings.
   | "routing_committed"
   | "retrieval_complete"
   | "primary_synthesis_start"
-  | "gap_check_fired";
+  | "gap_check_fired"
+  | "routing_start"
+  | "retrieval_start"
+  | "curation_start"
+  | "drafting_start"
+  | "presentation_start"
+  // Struct variants — serialised as `{key: payload}` objects.
+  | { routing_complete: { intent: string; register: string; confidence: number } }
+  | { retrieval_complete: { chunks_in: number; corpora: string[] } }
+  | {
+      curation_complete: {
+        chunks_kept: number;
+        skeleton: string[];
+        sufficient: boolean;
+      };
+    }
+  | { drafting_complete: { tokens: number; finish_reason: string } }
+  | { presentation_complete: { judge_score: number | null } }
+  | { stage_error: { stage: string; error: string } }
+  | {
+      tool_invocation_start: {
+        call_id: string;
+        tool_id: string;
+        summary: string;
+      };
+    }
+  | {
+      tool_invocation_complete: {
+        call_id: string;
+        tool_id: string;
+        ok: boolean;
+        result_summary: string;
+      };
+    };
 
 export interface NarrationEvent {
   phase: NarrationPhase;
   text: string;
   elapsed_ms: number;
+}
+
+/** Discriminator: returns the snake_case tag whether `phase` is a bare
+ *  string (unit variant) or a one-key object (struct variant). */
+export function narrationPhaseTag(phase: NarrationPhase): string {
+  if (typeof phase === "string") return phase;
+  const keys = Object.keys(phase);
+  return keys[0] ?? "unknown";
 }
 
 /** Wire payload for `interpretation-proposed`. Emitted before the
@@ -657,6 +722,7 @@ export type AssetState =
   | { Indexing: { chunks_done: number; chunks_total: number } }
   | "PartiallyReady"
   | { BuildingSkeleton: { chunks_done: number; chunks_total: number } }
+  | "MultiHopReady"
   | "Ready"
   | { Failed: { reason: string } };
 
@@ -1624,6 +1690,16 @@ export interface AtlasCorpusSummary {
   /** atoms.json mtime in unix seconds. Closest proxy for "last
    *  extracted at" until provenance metadata lands on the atom. */
   last_extracted_unix?: number;
+  /** Logical UI category from the recipe's `[display]` block.
+   *  Drives Atlas View rail grouping — corpora that share a category
+   *  render under one header (e.g. `"conversation"` groups every
+   *  conversation-source corpus together). `undefined` on legacy
+   *  indexes pre-dating the field; the UI buckets those into
+   *  "Other". */
+  display_category?: string;
+  /** Icon hint from the recipe's `[display]` block. Free-form
+   *  string; the frontend maps known values onto its icon set. */
+  display_icon?: string;
 }
 
 /** Server-side filter for `atlas_list_atoms`. All fields are

@@ -249,6 +249,11 @@ impl sovereign_core::traits::DocumentAssetStore for MockStore {
     async fn list_document_assets(&self) -> sovereign_core::error::Result<Vec<sovereign_core::DocumentAsset>> { Ok(Vec::new()) }
     async fn delete_document_asset(&self, _id: &str) -> sovereign_core::error::Result<()> { Ok(()) }
     async fn save_document_operation(&self, _message_id: &str, _asset_id: &str, _operation: &sovereign_core::DocumentAssetOperation, _duration_ms: u64) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn save_raptor_nodes(&self, _asset_id: &str, _nodes: &[sovereign_core::types::RaptorNode]) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn list_raptor_nodes(&self, _asset_id: &str) -> sovereign_core::error::Result<Vec<sovereign_core::types::RaptorNode>> { Ok(Vec::new()) }
+    async fn get_raptor_node(&self, _node_id: &str) -> sovereign_core::error::Result<Option<sovereign_core::types::RaptorNode>> { Ok(None) }
+    async fn save_asset_motifs(&self, _asset_id: &str, _motifs: &[sovereign_core::types::AssetMotif]) -> sovereign_core::error::Result<()> { Ok(()) }
+    async fn list_asset_motifs(&self, _asset_id: &str) -> sovereign_core::error::Result<Vec<sovereign_core::types::AssetMotif>> { Ok(Vec::new()) }
 }
 
 impl StateStore for MockStore {}
@@ -306,17 +311,15 @@ fn tool_registry_register_and_get() {
 
 // ─── SkillRegistry Tests ──────────────────────────────────────
 
-fn make_skill(id: &str, trigger: &str, synthesis: Option<&str>) -> Skill {
+fn make_skill(id: &str, _trigger: &str, synthesis: Option<&str>) -> Skill {
+    // `_trigger` retained as a positional arg for call-site
+    // compatibility but no longer threads into the Skill struct —
+    // routing was retired alongside the trigger-phrase splice.
     Skill {
         id: id.to_string(),
         name: id.to_string(),
         version: "0.1.0".to_string(),
         description: String::new(),
-        routing: RoutingHints {
-            trigger_phrases: vec![trigger.to_string()],
-            default_intent: Some("ComplexTask".to_string()),
-            min_confidence: Some(0.8),
-        },
         planner_templates: vec![PlanTemplate {
             name: "test".to_string(),
             trigger: "test trigger".to_string(),
@@ -331,7 +334,6 @@ fn make_skill(id: &str, trigger: &str, synthesis: Option<&str>) -> Skill {
             confidence_decay_per_month: None,
             prune_threshold: None,
         },
-        evaluation_prompts: std::collections::HashMap::new(),
         inference: SkillInferenceConfig::default(),
         signature: None,
         signed_by: None,
@@ -344,7 +346,6 @@ fn skill_registry_empty() {
     let reg = SkillRegistry::new();
     assert!(reg.list().is_empty());
     assert!(reg.active_skills().is_empty());
-    assert!(reg.routing_hints().trigger_phrases.is_empty());
     assert!(reg.prompt_overrides(&Intent::SimpleQuery).is_none());
     assert!(reg.memory_rules().extraction_addenda.is_empty());
 }
@@ -369,18 +370,8 @@ fn skill_registry_activate_deactivate() {
     assert_eq!(reg.active_skills()[0].id, "coding");
 }
 
-#[test]
-fn skill_registry_merge_routing_hints() {
-    let mut reg = SkillRegistry::new();
-    reg.register(make_skill("a", "alpha", None));
-    reg.register(make_skill("b", "beta", None));
-    reg.activate("a");
-    reg.activate("b");
-
-    let hints = reg.routing_hints();
-    assert_eq!(hints.trigger_phrases.len(), 2);
-    assert_eq!(hints.min_confidence, Some(0.8));
-}
+// `skill_registry_merge_routing_hints` retired alongside
+// `routing_hints()` itself — see skills.rs for the migration note.
 
 #[test]
 fn skill_registry_merge_prompts() {
@@ -461,6 +452,9 @@ fn format_history_empty() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     };
     assert_eq!(format_history_as_prompt(&ctx, 10), "");
 }
@@ -504,6 +498,9 @@ fn format_history_multi_turn() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 10);
@@ -543,6 +540,9 @@ fn format_history_truncates_to_max() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     };
 
     let prompt = format_history_as_prompt(&ctx, 3);
@@ -575,6 +575,9 @@ async fn passthrough_router_always_simple_query() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     };
 
     let outcome = router.classify("anything", &ctx, &[]).await.unwrap();
@@ -602,6 +605,9 @@ async fn noop_planner_returns_not_implemented() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     };
 
     let result = planner.plan("do something", &ctx, &[]).await;
@@ -1017,6 +1023,9 @@ async fn planner_generates_valid_plan() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     };
 
     let plan = planner.plan("compare languages", &ctx, &[]).await.unwrap();
@@ -1051,6 +1060,9 @@ async fn planner_fallback_on_garbage() {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     };
 
     // Should succeed with fallback plan (single step).
@@ -1080,6 +1092,7 @@ impl Router for ComplexTaskRouter {
             coarse_intent: None,
             self_assessment: None,
             timing: None,
+            scope: None,
         })
     }
 }

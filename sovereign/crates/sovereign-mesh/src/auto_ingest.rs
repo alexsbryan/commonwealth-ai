@@ -154,8 +154,30 @@ async fn auto_collaborate_loop(state: AppState, daemon_port: u16) {
         // cooldown, so a long-running merge isn't relaunched.
         // `try_recover_stranded_partitions` short-circuits cheaply
         // when nothing to do (no partitions / canonical exists).
+        // Snapshot active_ingests up front so we can gate stranded-
+        // partition recovery against it. Without this gate, a recovery
+        // tick that fires DURING a fresh `corpus install` sees the in-
+        // flight partition (it has a meta file with chunks=0), runs
+        // `merge_partitions_into_canonical` against it, and produces a
+        // 0-chunk canonical while the ingest pipeline is still writing
+        // to the partition. The post-embed promote step then fails
+        // with "Missing metadata at <corpus>-partition-node-<hex>"
+        // because the merge already consumed the partition. Surfaced
+        // by conversations-personal install 2026-05-17 — 180 chunks
+        // embedded, zero landed.
+        let active_for_recovery: HashSet<String> = {
+            state.inner.active_ingests.read().await.clone()
+        };
         let stranded = engine.corpora_with_stranded_partitions();
         for corpus_id in &stranded {
+            if active_for_recovery.contains(corpus_id) {
+                tracing::debug!(
+                    corpus = %corpus_id,
+                    "auto_ingest: skipping stranded-recovery — ingest is active \
+                     (will produce canonical itself)"
+                );
+                continue;
+            }
             // Phase 6 canonical-sync: before falling through to a
             // local merge (which may produce an incomplete canonical
             // when this node's partitions don't cover every shard),

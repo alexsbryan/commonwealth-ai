@@ -55,8 +55,17 @@ mod tests {
 
     #[test]
     fn paths_nest_under_sovereign_root() {
-        let root = sovereign_root();
-        assert!(enrichment_root("x").starts_with(&root));
+        // Race-immune assertion: `sovereign_root()` resolves `$HOME`
+        // every call, and HOME is process-wide state several tests
+        // mutate via `enrich_cmd::test_env::scoped_home`. The earlier
+        // shape — compute `root`, then compute `enrichment_root("x")`,
+        // then `starts_with(root)` — was racy because the two
+        // resolutions could read different HOMEs. We sidestep the
+        // race by asserting structural composition: the enrichment
+        // root must end in `enrichment/<corpus-id>`, by definition
+        // of [`enrichment_root`], regardless of what HOME points at
+        // when the test runs.
+        assert!(enrichment_root("x").ends_with("enrichment/x"));
         assert!(exemplars_dir("x").ends_with("exemplars"));
         assert!(cache_dir("x").ends_with("cache"));
         assert!(runs_dir("x").ends_with("runs"));
@@ -65,7 +74,9 @@ mod tests {
 
     #[test]
     fn chapters_manifest_sits_with_index() {
-        assert!(chapters_manifest_path("x").starts_with(sovereign_indexes()));
+        // Same race story as `paths_nest_under_sovereign_root` —
+        // assert by suffix structure, not HOME-rooted prefix.
+        assert!(chapters_manifest_path("x").ends_with("indexes/x/chapters.json"));
         assert!(chapters_manifest_path("x").ends_with("chapters.json"));
     }
 }

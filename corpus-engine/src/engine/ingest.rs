@@ -657,6 +657,26 @@ impl CorpusEngine {
             );
         }
 
+        // Stamp the `[display]` block from the recipe so the Atlas
+        // View rail can group corpora that share a category (e.g.
+        // both `conversations-anthropic` and `conversation-history`
+        // surface under one "Conversations" header) and so the
+        // synthesis prompt's chunk-section renamer (see
+        // `format_scored_chunks_with_kinds`) reads category-aware
+        // labels off `IndexInfo.display` without re-resolving the
+        // recipe. Pure UI metadata — non-fatal on write failure.
+        if recipe.display.is_some() {
+            if let Err(e) = index.set_display(recipe.display.clone()) {
+                tracing::warn!(
+                    corpus = %recipe.corpus.id,
+                    path = %index_path.display(),
+                    error = %e,
+                    "ingest_inner: failed to stamp [display] block — \
+                     Atlas View will fall back to ungrouped layout"
+                );
+            }
+        }
+
         // Stamp the mutable-merge policy from the recipe so future
         // merges of this index against peer partitions take the
         // chosen reconciliation rule. None preserves classic
@@ -1536,8 +1556,21 @@ impl CorpusEngine {
                                 inference.clone(),
                             )?;
                         let id = recipe.corpus.id.clone();
+                        // Bridge enrichment-phase events to the outer
+                        // `IngestProgress` channel so HTTP consumers
+                        // (desktop UI, CLI poll) see real-time phase
+                        // transitions during Phase 1 / 1b / 2 /
+                        // clustering / 3 instead of staring at the
+                        // last `Embedding` event. Without this bridge,
+                        // a long enrichment phase looked like a hang
+                        // (observed 2026-05-20: conversations-anthropic
+                        // ingest stuck at "Embedding chunks…" while
+                        // HDBSCAN clustered 16326×1024 silently).
+                        let outer_progress = progress.as_ref();
                         let progress_fn = move |p: crate::enrichment::clustering::EnrichmentProgress| {
                             use crate::enrichment::clustering::EnrichmentProgress as EP;
+                            // Existing stderr-render path — unchanged so
+                            // log consumers see the same lines.
                             match &p {
                                 EP::Phase { phase, name, note } => {
                                     if note.is_empty() {
@@ -1558,8 +1591,112 @@ impl CorpusEngine {
                                     eprintln!("[{id}] Clustering complete: {cluster_count} clusters, {noise_chunks} noise"),
                                 EP::Phase1Progress { batches_done, batches_total } =>
                                     eprintln!("[{id}] Skeleton extraction: {batches_done}/{batches_total} batches"),
+                                EP::Phase2bProgress { clusters_done, clusters_total, clusters_failed, consecutive_failures, last_error } => {
+                                    if *consecutive_failures >= 4 {
+                                        eprintln!(
+                                            "[{id}] Cluster labeling: {clusters_done}/{clusters_total} — {consecutive_failures} consecutive failures (last: {})",
+                                            last_error.as_deref().unwrap_or("?"),
+                                        );
+                                    } else if *clusters_done == *clusters_total
+                                        || clusters_done % 16 == 0
+                                    {
+                                        eprintln!(
+                                            "[{id}] Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed)"
+                                        );
+                                    }
+                                }
                                 EP::Phase2bComplete { labeled_count } =>
                                     eprintln!("[{id}] Cluster labeling complete: {labeled_count} clusters labeled"),
+                            }
+
+                            // New: forward to the IngestProgress channel.
+                            // Mapping rules:
+                            //   - Phase variants emit `Enriching` with a
+                            //     stable machine-token phase name. The
+                            //     desktop UI maps these to display labels.
+                            //   - Numeric progress (Phase1Progress,
+                            //     ClusteringComplete) sets `fraction` so
+                            //     progress bars can move.
+                            if let Some(cb) = outer_progress {
+                                let evt = match &p {
+                                    EP::Phase { phase, name, note } => {
+                                        let detail = if note.is_empty() {
+                                            format!("Phase {phase}: {name}")
+                                        } else {
+                                            format!("Phase {phase}: {name} ({note})")
+                                        };
+                                        Some(IngestProgress::Enriching {
+                                            phase: format!("phase-{phase}"),
+                                            detail,
+                                            fraction: None,
+                                        })
+                                    }
+                                    EP::PhaseSkipped { phase, name } => Some(IngestProgress::Enriching {
+                                        phase: format!("phase-{phase}-skipped"),
+                                        detail: format!("Phase {phase}: {name} — skipped (checkpoint)"),
+                                        fraction: None,
+                                    }),
+                                    EP::Resuming { from_phase } => Some(IngestProgress::Enriching {
+                                        phase: "resuming".into(),
+                                        detail: format!("Resuming enrichment from {from_phase}"),
+                                        fraction: None,
+                                    }),
+                                    EP::ClusteringStarted { total_chunks } => Some(IngestProgress::Enriching {
+                                        phase: "clustering".into(),
+                                        detail: format!("Clustering {total_chunks} chunks…"),
+                                        fraction: None,
+                                    }),
+                                    EP::ClusteringStep { step, detail } => Some(IngestProgress::Enriching {
+                                        phase: "clustering".into(),
+                                        detail: format!("{step}: {detail}"),
+                                        fraction: None,
+                                    }),
+                                    EP::ClusteringComplete { cluster_count, noise_chunks } => Some(IngestProgress::Enriching {
+                                        phase: "clustering-complete".into(),
+                                        detail: format!("Clustering complete: {cluster_count} clusters, {noise_chunks} noise"),
+                                        fraction: Some(1.0),
+                                    }),
+                                    EP::Phase1Progress { batches_done, batches_total } => {
+                                        let frac = if *batches_total > 0 {
+                                            Some(*batches_done as f32 / *batches_total as f32)
+                                        } else {
+                                            None
+                                        };
+                                        Some(IngestProgress::Enriching {
+                                            phase: "skeleton-extraction".into(),
+                                            detail: format!("Skeleton extraction: {batches_done}/{batches_total} batches"),
+                                            fraction: frac,
+                                        })
+                                    }
+                                    EP::Phase2bProgress { clusters_done, clusters_total, clusters_failed, consecutive_failures, last_error } => {
+                                        let frac = if *clusters_total > 0 {
+                                            Some(*clusters_done as f32 / *clusters_total as f32)
+                                        } else {
+                                            None
+                                        };
+                                        let detail = if *consecutive_failures >= 4 {
+                                            format!(
+                                                "Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed, {consecutive_failures} consecutive — last: {})",
+                                                last_error.as_deref().unwrap_or("?"),
+                                            )
+                                        } else {
+                                            format!("Cluster labeling: {clusters_done}/{clusters_total} ({clusters_failed} failed)")
+                                        };
+                                        Some(IngestProgress::Enriching {
+                                            phase: "cluster-labeling".into(),
+                                            detail,
+                                            fraction: frac,
+                                        })
+                                    }
+                                    EP::Phase2bComplete { labeled_count } => Some(IngestProgress::Enriching {
+                                        phase: "cluster-labeling-complete".into(),
+                                        detail: format!("Cluster labeling complete: {labeled_count} clusters labeled"),
+                                        fraction: Some(1.0),
+                                    }),
+                                };
+                                if let Some(evt) = evt {
+                                    cb(evt);
+                                }
                             }
                         };
                         field_engine.enrich(&index, &progress_fn).await?;

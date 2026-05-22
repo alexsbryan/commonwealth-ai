@@ -243,7 +243,7 @@ mod tests {
         let cfg = SetupConfig {
             models: ModelsSection {
                 primary: PathBuf::from(primary),
-                fast: PathBuf::from("/m/fast.gguf"),
+                fast: Some(PathBuf::from("/m/fast.gguf")),
                 embed: PathBuf::from("/m/embed.gguf"),
                 code: None,
                 context_size: None,

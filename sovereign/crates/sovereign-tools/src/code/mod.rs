@@ -20,20 +20,29 @@
 //! [`ScipGraph`](corpus_engine::scip_graph::ScipGraph) SQLite database.
 //!
 //! None of these tools return results when no code corpora are indexed.
-//! Non-code corpora (Wikipedia, SEP, etc.) are implicitly filtered out by
-//! querying on the typed code columns — rows where `symbol_name IS NULL`
-//! don't match the predicates these tools build.
+//! Non-code corpora (Wikipedia, SEP, etc.) are skipped explicitly by the
+//! `info.kind == CorpusKind::Code` filter in [`query_all_code_indexes`]
+//! and the parallel loop in `code_search`. The earlier design relied on
+//! `symbol_name IS NULL` to implicitly filter prose rows, but that only
+//! works when the prose schema *has* a `symbol_name` column with NULLs;
+//! prose-only chunk tables don't include the typed code columns at all,
+//! and Lance errors at column resolution before the predicate can run.
 
 pub mod brief;
 pub mod code_search;
 pub mod recent_changes;
-pub mod symbol_lookup;
 pub mod working_set;
 
 #[cfg(feature = "treesitter")]
 pub mod callees;
 #[cfg(feature = "treesitter")]
 pub mod callers;
+// `symbol_lookup` reads `ScipGraphHandle` from `callees`, so it shares
+// the same `treesitter` gate. Without the gate the import target
+// doesn't exist and the crate fails to build for non-treesitter
+// consumers (sovereign-core dev-deps among them).
+#[cfg(feature = "treesitter")]
+pub mod symbol_lookup;
 
 // Test watcher MCP tools (require treesitter for SQLite types).
 #[cfg(feature = "treesitter")]
@@ -147,12 +156,13 @@ pub mod design_signals_extract;
 
 pub use code_search::CodeSearchTool;
 pub use recent_changes::RecentChangesTool;
-pub use symbol_lookup::SymbolLookupTool;
 
 #[cfg(feature = "treesitter")]
 pub use callees::{FindCalleesTool, ScipGraphHandle};
 #[cfg(feature = "treesitter")]
 pub use callers::FindCallersTool;
+#[cfg(feature = "treesitter")]
+pub use symbol_lookup::SymbolLookupTool;
 
 #[cfg(feature = "treesitter")]
 pub use test_status::TestStatusTool;
@@ -220,6 +230,7 @@ use arrow_array::{Array, Int32Array, Int64Array, RecordBatch, StringArray};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
+use corpus_engine::types::CorpusKind;
 use corpus_engine::{CorpusEngine, CorpusIndex, Error as CorpusError};
 
 /// A single code chunk row read from a LanceDB query via the typed code
@@ -253,15 +264,14 @@ pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
         && name.chars().all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '$')
 }
 
-/// Run a filter-pushdown query against every installed corpus and collect
-/// the matching rows into `CodeRow` values. Used by `SymbolLookupTool` and
-/// `RecentChangesTool` — both are exact predicates on typed columns, no
-/// vector search involved.
+/// Run a filter-pushdown query against every installed *code* corpus and
+/// collect the matching rows into `CodeRow` values. Used by
+/// `SymbolLookupTool` and `RecentChangesTool` — both are exact predicates
+/// on typed columns, no vector search involved.
 ///
-/// Corpora that don't have code data (Wikipedia, SEP, …) return zero rows
-/// because the filter references `symbol_name IS NOT NULL` implicitly:
-/// metadata rows have all code columns as Null, which don't match equality
-/// or range predicates on those columns.
+/// Non-code corpora (Wikipedia, SEP, …) are skipped before any Lance call
+/// because their chunk tables lack the typed code columns entirely; the
+/// query would error at column resolution rather than return zero rows.
 pub(crate) async fn query_all_code_indexes(
     engine: &Arc<CorpusEngine>,
     filter: &str,
@@ -273,6 +283,9 @@ pub(crate) async fn query_all_code_indexes(
     };
 
     for info in &indexes {
+        if info.kind != CorpusKind::Code {
+            continue;
+        }
         let Ok(index) = engine.open_index(&info.path).await else {
             continue;
         };
@@ -374,27 +387,6 @@ fn extract_code_rows(batch: &RecordBatch, corpus_id: &str, out: &mut Vec<CodeRow
             corpus_id: corpus_id.to_string(),
         });
     }
-}
-
-/// Format a set of `CodeRow` values as fenced code blocks with a header
-/// comment per block. Shared by `SymbolLookupTool` and `CodeSearchTool` so
-/// the output shape is consistent across the two tools.
-pub(crate) fn format_code_rows(rows: &[CodeRow]) -> String {
-    rows.iter()
-        .map(|r| {
-            format!(
-                "```{lang}\n// {file}:{start}-{end}  [{kind}]  ({corpus})\n{content}\n```",
-                lang = r.language,
-                file = r.file_path,
-                start = r.line_start + 1, // 1-indexed display
-                end = r.line_end + 1,
-                kind = r.symbol_kind,
-                corpus = r.corpus_id,
-                content = r.content,
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n")
 }
 
 /// Group code rows by `file_path` preserving insertion order. Used by

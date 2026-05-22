@@ -1,0 +1,27 @@
+# Knowledge-gym fixture 09 — escalation did NOT fire (negative control).
+#
+# Shape: corpus returned satisfactory rows. Tier 3 escalation
+# should NOT have fired (the operator setting can be on or off;
+# either way, present-and-relevant corpus rows beat web). The
+# evidence set therefore contains corpus only — no web rows.
+#
+# Mechanism: mock evidence has source_kind=corpus on every row.
+# This SIMULATES the daemon path where the escalation gate
+# (merged.is_empty() || top-3 confidence < 0.4) failed to trip.
+#
+# Purpose: catches a regression where the escalation branch
+# fires unconditionally and starts adding web rows even when
+# the corpus has the answer. With this fixture in the gym,
+# turning off the gate by accident shows up immediately.
+
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+
+# Citation faithfulness on corpus rows.
+must_not_cite_evidence_id_outside_returned = true
+max_cited_evidence_ids = 2
+
+# Tier 3 structural: web must NOT appear in the returned set.
+# Pairs with fixture 08 (web MUST appear when corpus is empty).
+evidence_set_excludes_kind = ["web"]

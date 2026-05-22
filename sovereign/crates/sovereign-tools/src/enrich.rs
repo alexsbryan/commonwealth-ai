@@ -90,12 +90,94 @@ pub struct EnrichBuildOutcome {
     pub cancelled: bool,
 }
 
+/// Resolve the path to the `sovereign-cli` binary the runner should
+/// spawn. Honours `$SOVEREIGN_CLI` first (for ops who installed it
+/// somewhere non-standard), then walks a deterministic ladder of
+/// candidates so the desktop app works whether launched from a
+/// terminal (full `$PATH`) or from Finder (minimal `$PATH`):
+///
+/// 1. `$SOVEREIGN_CLI` env var (explicit override).
+/// 2. Sibling of the current executable — covers a packaged install
+///    where `sovereign-desktop` and `sovereign-cli` ship in the same
+///    bin dir.
+/// 3. `which sovereign-cli` (canonical PATH lookup).
+/// 4. `which sovereign` (the `~/.local/bin/sovereign` symlink the
+///    `sovereign-cli` README installs).
+/// 5. Workspace-relative `target/release/sovereign-cli` /
+///    `target/debug/sovereign-cli` ascended from `current_exe()` —
+///    dev-mode fallback when the desktop was `cargo run`'d from the
+///    workspace.
+///
+/// Returns `None` only when every candidate is missing; callers
+/// surface that as a clear "sovereign-cli not installed" error with
+/// remediation steps rather than the kernel's bare `ENOENT`.
+pub fn resolve_sovereign_cli() -> Option<PathBuf> {
+    if let Ok(v) = std::env::var("SOVEREIGN_CLI") {
+        let p = PathBuf::from(v);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            for name in ["sovereign-cli", "sovereign"] {
+                let sibling = parent.join(name);
+                if sibling.is_file() {
+                    return Some(sibling);
+                }
+            }
+            // Dev mode: `cargo run -p sovereign-desktop` puts the
+            // exe at `target/debug/sovereign-desktop`; ascend to the
+            // workspace root and look for `target/{release,debug}/
+            // sovereign-cli`.
+            let mut anc = parent;
+            for _ in 0..6 {
+                for profile in ["release", "debug"] {
+                    let cand = anc.join("target").join(profile).join("sovereign-cli");
+                    if cand.is_file() {
+                        return Some(cand);
+                    }
+                }
+                match anc.parent() {
+                    Some(up) => anc = up,
+                    None => break,
+                }
+            }
+        }
+    }
+    for name in ["sovereign-cli", "sovereign"] {
+        if let Ok(p) = which_on_path(name) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Minimal `which`-style lookup against `$PATH`. Returns the first
+/// executable file matching `name`. Hand-rolled rather than pulling
+/// the `which` crate just for two call sites — the loop is six lines.
+fn which_on_path(name: &str) -> std::io::Result<PathBuf> {
+    let path = std::env::var_os("PATH").ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "PATH unset")
+    })?;
+    for dir in std::env::split_paths(&path) {
+        let cand = dir.join(name);
+        if cand.is_file() {
+            return Ok(cand);
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("{name} not on PATH"),
+    ))
+}
+
 /// Configuration for a build invocation.
 ///
-/// `cli_path` overrides the default binary lookup (which
-/// searches `$PATH` for `sovereign-cli`). Tests point it at a
-/// fixture binary; the desktop passes `None` to use the
-/// installed CLI.
+/// `cli_path` overrides the default binary lookup (which uses
+/// [`resolve_sovereign_cli`]). Tests point it at a fixture binary;
+/// the desktop passes `None` to let the resolver walk its candidate
+/// ladder.
 #[derive(Debug, Clone, Default)]
 pub struct EnrichBuildConfig {
     pub cli_path: Option<PathBuf>,
@@ -125,10 +207,19 @@ pub async fn run_enrich_build(
     config: EnrichBuildConfig,
     progress: Option<EnrichProgressFn>,
 ) -> std::io::Result<EnrichBuildOutcome> {
-    let bin = config
-        .cli_path
-        .clone()
-        .unwrap_or_else(|| PathBuf::from("sovereign-cli"));
+    let bin = match config.cli_path.clone() {
+        Some(p) => p,
+        None => resolve_sovereign_cli().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "sovereign-cli not found. Tried $SOVEREIGN_CLI, the desktop's \
+                 sibling-binary dir, $PATH (`sovereign-cli` and `sovereign`), \
+                 and the workspace `target/{release,debug}/` paths. Build via \
+                 `cargo build --release -p sovereign-cli` and symlink it onto \
+                 $PATH, or set `SOVEREIGN_CLI=/abs/path/to/sovereign-cli`.",
+            )
+        })?,
+    };
 
     let mut cmd = Command::new(&bin);
     cmd.arg("enrich")
@@ -634,6 +725,25 @@ mod tests {
             path
         }
 
+        /// Per-test-module serialisation. Without this, parallel
+        /// `cargo test` workers can race fork+exec on the freshly-
+        /// written `fake-sovereign-cli.sh` and hit ETXTBSY: a sibling
+        /// worker has the file's path open in its fd table at the
+        /// moment a forked child reaches the `execve` of *this*
+        /// worker's just-written script. The kernel treats "any
+        /// process holds the inode open for write" as a write-busy
+        /// condition for exec. Tempdirs differ per test, but the
+        /// fork+exec window crosses fd tables. Serialising the e2e
+        /// path eliminates the race without dropping `cargo test`'s
+        /// parallelism for the rest of the file.
+        fn e2e_test_lock() -> std::sync::MutexGuard<'static, ()> {
+            static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+                std::sync::OnceLock::new();
+            LOCK.get_or_init(|| std::sync::Mutex::new(()))
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+        }
+
         /// Collect every EnrichProgress callback into a shared
         /// Vec. Returns the callback + the Vec handle.
         fn event_collector() -> (EnrichProgressFn, Arc<Mutex<Vec<EnrichProgress>>>) {
@@ -666,6 +776,7 @@ mod tests {
 
         #[tokio::test]
         async fn e2e_happy_path_emits_build_start_and_complete() {
+            let _guard = e2e_test_lock();
             // Minimal happy-path script: emit the start banner
             // + planned step list + one step-start + the
             // complete banner. Exit 0.
@@ -723,6 +834,7 @@ exit 0
 
         #[tokio::test]
         async fn e2e_nonzero_exit_without_complete_banner_synthesizes_aborted() {
+            let _guard = e2e_test_lock();
             // Script emits one step_start then exits 1 WITHOUT
             // printing a complete banner. The library should
             // synthesize `Aborted` so the UI's state machine
@@ -777,6 +889,7 @@ exit 1
 
         #[tokio::test]
         async fn e2e_cancellation_kills_subprocess_and_emits_cancelled() {
+            let _guard = e2e_test_lock();
             // Script streams a banner line, sleeps long enough
             // for the test to flip the cancel flag, then would
             // print more. The cancel should fire between the
@@ -843,6 +956,7 @@ exit 0
 
         #[tokio::test]
         async fn e2e_spawn_error_when_binary_does_not_exist() {
+            let _guard = e2e_test_lock();
             // Point `cli_path` at a nonexistent file — the
             // spawn itself fails, bubbling up as Err. The
             // library doesn't synthesize SpawnFailed here

@@ -27,10 +27,14 @@
 //! routing and aggregation layers, which are tunable in their own
 //! right.
 
+pub mod attribution;
 pub mod bank;
 pub mod report;
 pub mod runner;
+pub mod runner_threads;
 pub mod score;
+
+use runner_threads as threads;
 
 use std::path::PathBuf;
 
@@ -68,6 +72,9 @@ const RUN_HELP: Help = Help {
             ("--limit <N>",    "Top-N chunks to retrieve per question (retrieval mode only; default: 10)."),
             ("--inspect",      "Print missing facts/sources + top retrieved chunks per question."),
             ("--no-judge",     "Skip the LLM-as-judge \"instructor mode\" pass under --synth. Default: judge runs alongside the strict scorer to catch paraphrased coverage."),
+            ("--threads",      "Multi-turn mode. Bank must be a `[[threads]]` shape (see sovereign/bench/wikipedia_learn/threads.toml). Each thread walks N follow-up turns under one conversation_id; per-turn deterministic scoring + one thread-level LLM judge call. Implies --synth pipeline. Disables --routing-only / --with-atlas / retrieval-only mode."),
+            ("--thread-id <id>", "Filter --threads mode to a single thread by id. Useful for fast iteration on one fixture (e.g. `--thread-id computing_history`)."),
+            ("--judge-trials <N>", "Run the LLM judge N times per thread on the same transcript. Default 1 (single-judge). N>1 enables multi-judge: per-fact present_count out of N, coverage from majority vote (≥⌈N/2⌉), coverage_mean as the continuous signal. Adds ~Nx10s per thread (~Nx2min for the 13-thread bank). Targets judge-side variance — cheaper than multi-trial of the whole synth pipeline."),
             ("--format text|json", "Stdout format (default: text)."),
             ("--output <path>", "Also write the full run as pretty JSON to this path."),
             ("--with-atlas <ids>", "Comma-separated list of atlas corpus ids; each is embedded once and the per-question retrieval pools their entries via global cosine top-K (the multi-article SEP pilot path). One id is the single-atlas case. Off by default."),
@@ -175,6 +182,29 @@ struct RunArgs {
     /// Costs ~one fast-slot call per question. Off by default. See
     /// `score::score_essay_readiness`.
     essay_judge: bool,
+    /// Multi-turn thread bench. Bank file carries `[[threads]]` with
+    /// nested `[[threads.turns]]`. Each thread is replayed under one
+    /// `conversation_id` so retrieval and synthesis see prior turns'
+    /// history. Per-turn scores are deterministic; the LLM judge runs
+    /// ONCE per thread over the full transcript. See
+    /// `eval_cmd::runner_threads`.
+    threads: bool,
+    /// Optional thread-id filter for `--threads` mode. When set, the
+    /// runner executes only threads whose `id` matches. Useful for
+    /// fast iteration on a single fixture (e.g. the marathon thread)
+    /// without paying the cost of running the whole bank.
+    thread_id_filter: Option<String>,
+    /// Number of judge passes per thread. Default 1. With N>1, the
+    /// runner runs the LLM judge prompt N times on the same transcript
+    /// and aggregates: per-fact `present_count / N` (fractional
+    /// coverage), and reports the mean ± range. Targets judge-side
+    /// variance — the bench substrate is deterministic at temperature=0
+    /// so re-running the synth pipeline rarely changes the answer, but
+    /// the judge's binary present/absent verdict can flip on
+    /// borderline cases. Multi-trial of the synth pipeline costs
+    /// ~Nx wall time per iteration; multi-judge costs ~+Nx10s per
+    /// thread (~6min for N=3 on the 13-thread bank).
+    judge_trials: usize,
 }
 
 impl Default for RunArgs {
@@ -196,6 +226,9 @@ impl Default for RunArgs {
             atlas_include_kinds: Vec::new(),
             loose_source_judge: false,
             essay_judge: false,
+            threads: false,
+            thread_id_filter: None,
+            judge_trials: 1,
         }
     }
 }
@@ -257,6 +290,31 @@ async fn cmd_run(args: &[String]) -> i32 {
             }
             "--no-judge" => {
                 a.no_judge = true;
+            }
+            "--threads" => {
+                a.threads = true;
+            }
+            "--thread-id" => {
+                i += 1;
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: --thread-id needs a value");
+                    return 2;
+                };
+                a.thread_id_filter = Some(v.clone());
+            }
+            "--judge-trials" => {
+                i += 1;
+                let Some(v) = rest.get(i) else {
+                    eprintln!("error: --judge-trials needs a positive integer");
+                    return 2;
+                };
+                match v.parse::<usize>() {
+                    Ok(n) if n >= 1 => a.judge_trials = n,
+                    _ => {
+                        eprintln!("error: --judge-trials expects a positive integer, got `{v}`");
+                        return 2;
+                    }
+                }
             }
             "--format" => {
                 i += 1;
@@ -349,6 +407,73 @@ async fn cmd_run(args: &[String]) -> i32 {
         eprintln!("error: --bank is required");
         eprintln!("hint: try sovereign-recipes/wikipedia/eval/wikipedia_questions.toml");
         return 2;
+    }
+
+    // Thread bench short-circuits the rest of the flow. The bank
+    // shape is different (`[[threads]]` vs `[[questions]]`), the
+    // runner is different (`run_thread_bank`), and atlas / routing-
+    // only modes don't apply.
+    if a.threads {
+        if a.routing_only {
+            eprintln!("error: --threads is incompatible with --routing-only");
+            return 2;
+        }
+        let mut bank = match bank::load_thread_bank(&a.bank) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("error: load thread bank: {e}");
+                return 1;
+            }
+        };
+        if let Some(filter) = a.thread_id_filter.as_deref() {
+            let before = bank.threads.len();
+            bank.threads.retain(|t| t.id == filter);
+            if bank.threads.is_empty() {
+                eprintln!(
+                    "error: --thread-id `{filter}` matched no threads (bank has {before})"
+                );
+                return 2;
+            }
+            eprintln!(
+                "filter: --thread-id `{filter}` → kept {} of {before} threads",
+                bank.threads.len()
+            );
+        }
+        let total_turns: usize = bank.threads.iter().map(|t| t.turns.len()).sum();
+        eprintln!(
+            "loaded thread bank `{}` — {} threads, {total_turns} turns, target corpus `{}`",
+            bank.bank.name, bank.threads.len(), bank.bank.corpus,
+        );
+        crate::util::tracing_init::init_tracing(
+            "sovereign_cli=info,sovereign_tools::atlas_context_manager=info,\
+             sovereign_tools::knowledge_view=warn",
+        );
+        let session = match build_session(&globals).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("bootstrap failed: {e}");
+                return 1;
+            }
+        };
+        let judge_trials = if a.no_judge { 0 } else { a.judge_trials };
+        let run = threads::run_thread_bank(&session, &bank, judge_trials).await;
+        match a.format {
+            OutputFormat::Text => threads::print_threads_text(&run),
+            OutputFormat::Json => {
+                if let Err(e) = threads::print_threads_json(&run) {
+                    eprintln!("error: {e}");
+                    return 1;
+                }
+            }
+        }
+        if let Some(path) = a.output.as_deref() {
+            if let Err(e) = threads::write_threads_json_file(&run, path) {
+                eprintln!("error: write output: {e}");
+                return 1;
+            }
+            eprintln!("wrote thread run JSON to {}", path.display());
+        }
+        return 0;
     }
 
     let bank = match bank::load_bank(&a.bank) {

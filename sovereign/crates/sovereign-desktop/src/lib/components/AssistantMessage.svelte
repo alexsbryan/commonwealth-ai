@@ -4,7 +4,11 @@
   import { insightStore } from "../stores/insights.svelte";
   import { clipInsight } from "../api";
   import { readingSession } from "../stores/readingSession.svelte";
-  import type { InsightSource, NextStepOffer } from "../types";
+  import type {
+    InsightSource,
+    NextStepOffer,
+    SearchAugmentation,
+  } from "../types";
   import ThinkBlock from "./ThinkBlock.svelte";
   import RoutingMeta from "./RoutingMeta.svelte";
   import SourceAttribution from "./SourceAttribution.svelte";
@@ -17,6 +21,15 @@
     conversationId: string;
     metadata?: Record<string, unknown>;
     isStreaming?: boolean;
+    /** True while the user has triggered a post-stream refinement
+     *  (paste-submit or web-search) but the runtime hasn't yet
+     *  emitted MESSAGE_REFINED. Drives the "Refining…" overlay so
+     *  the in-place rewrite is not a surprise flash. */
+    refining?: boolean;
+    /** Set on bubbles whose refinement came from the search-now
+     *  affordance — drives the "Augmented via web search" footer
+     *  with clickable source URLs. */
+    searchAugmentation?: SearchAugmentation;
     onNextStep?: (offer: NextStepOffer) => void;
   }
 
@@ -26,10 +39,44 @@
     conversationId,
     metadata,
     isStreaming,
+    refining,
+    searchAugmentation,
     onNextStep,
   }: Props = $props();
 
-  let blocks = $derived(parseAssistantContent(content));
+  // rAF-coalesce parse work. `parseAssistantContent` is O(n) over
+  // the full growing message string and is read transitively by
+  // `blocks`, `thinkBlocks`, `proseText` and `proseHtml`. At fast
+  // token rates several chunks can land in distinct microtasks
+  // within a single frame; only the latest one matters for the
+  // pixel that will be painted. We mirror `content` into
+  // `renderContent` on the next animation frame so the parse runs
+  // at most once per frame regardless of inbound chunk cadence.
+  //
+  // Streaming-complete safety: when `isStreaming` flips false the
+  // effect bypasses the coalesce and assigns synchronously so the
+  // formatted markdown branch reads the FINAL text in the same
+  // frame as the {#if isStreaming} swap above — otherwise the
+  // formatted prose would pop in one frame late.
+  let renderContent: string = $state("");
+  let coalesceScheduled = false;
+  // $effect.pre runs synchronously before DOM updates, so the first
+  // mount paints with `renderContent === content` (not the empty
+  // initial). Subsequent re-runs track `content` reactively.
+  $effect.pre(() => {
+    const next = content;
+    if (!isStreaming) {
+      renderContent = next;
+      return;
+    }
+    if (coalesceScheduled) return;
+    coalesceScheduled = true;
+    requestAnimationFrame(() => {
+      renderContent = content;
+      coalesceScheduled = false;
+    });
+  });
+  let blocks = $derived(parseAssistantContent(renderContent));
 
   // Separate think blocks from prose content. Prose blocks are merged
   // and rendered as a single markdown document so headings, lists, and
@@ -166,8 +213,41 @@
     }, 3000);
   }
 
+  async function handleCodeCopy(btn: HTMLButtonElement) {
+    const encoded = btn.dataset.code;
+    if (!encoded) return;
+    try {
+      const bin = atob(encoded);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const text = new TextDecoder().decode(bytes);
+      await navigator.clipboard.writeText(text);
+      const original = btn.textContent ?? "Copy";
+      btn.textContent = "Copied";
+      btn.classList.add("copied");
+      setTimeout(() => {
+        if (btn.isConnected) {
+          btn.textContent = original;
+          btn.classList.remove("copied");
+        }
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to copy code:", err);
+    }
+  }
+
   function handleProseClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
+
+    // Code-block copy button — handled by event delegation so
+    // streaming-coalesced re-renders don't need per-block listeners.
+    const copyBtn = target.closest<HTMLButtonElement>(".code-block-copy");
+    if (copyBtn) {
+      e.preventDefault();
+      void handleCodeCopy(copyBtn);
+      return;
+    }
+
     if (!target.classList.contains("source-citation")) return;
 
     const sourceName = target.getAttribute("data-source");
@@ -262,11 +342,22 @@
   }
 </script>
 
-<div class="sv-ai-msg" class:redirected={redirectedAway}>
+<div
+  class="sv-ai-msg"
+  class:redirected={redirectedAway}
+  class:refining
+  data-message-id={messageId}
+>
   <div class="role-label">
     &#x25C8; SOVEREIGN
     {#if redirectedAway}
       <span class="redirected-note">• redirected to a different approach</span>
+    {/if}
+    {#if refining}
+      <span class="refining-note">
+        <span class="pulse-dot" aria-hidden="true">◌</span>
+        Refining with new information…
+      </span>
     {/if}
   </div>
 
@@ -286,8 +377,61 @@
   {#if proseText}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <div class="sv-prose" onclick={handleProseClick}>
-      {@html proseHtml}
+    <div
+      class="sv-prose"
+      class:prose-refining={refining}
+      onclick={handleProseClick}
+    >
+      {#if isStreaming}
+        <!-- During streaming we render plain text into a stable div so
+             the prose subtree is not torn down and re-mounted per word.
+             That tear-down + the `transform: translateY` fade animation
+             below were the cause of the streaming jank: every word
+             flipped the text into a GPU compositor layer, disabling
+             subpixel antialiasing and re-running marked.parse over the
+             full growing message. Plain text during the stream → the
+             formatted markdown swaps in once on completion via the
+             {#key content} block below. -->
+        <div class="prose-streaming">{proseText}</div>
+      {:else}
+        {#key content}
+          <div class="prose-content-fade">
+            {@html proseHtml}
+          </div>
+        {/key}
+      {/if}
+    </div>
+  {/if}
+
+  {#if searchAugmentation}
+    <div class="search-augmentation" class:aug-refining={refining} role="note">
+      <div class="aug-header">
+        <span class="aug-mark" aria-hidden="true">⌕</span>
+        <span class="aug-label">
+          Augmented via web search ({searchAugmentation.backend_id})
+        </span>
+      </div>
+      <div class="aug-query">"{searchAugmentation.query}"</div>
+      {#if refining}
+        <!-- Active-work indicator: search returned, model is now
+             folding the results into the new answer. Cleared on
+             MESSAGE_REFINED. The aria-live region announces the
+             transition for screen readers without forcing focus. -->
+        <div class="aug-refining-status" aria-live="polite">
+          <span class="aug-spinner" aria-hidden="true">◌</span>
+          Refining your answer with these {searchAugmentation.sources.length}
+          source{searchAugmentation.sources.length === 1 ? "" : "s"}…
+        </div>
+      {/if}
+      <ul class="aug-sources">
+        {#each searchAugmentation.sources as src}
+          <li>
+            <a href={src.url} target="_blank" rel="noopener noreferrer">
+              {src.title || src.url}
+            </a>
+          </li>
+        {/each}
+      </ul>
     </div>
   {/if}
 
@@ -336,6 +480,154 @@
     color: var(--text-muted);
     letter-spacing: 0.06em;
     text-transform: none;
+  }
+
+  /* "Refining…" indicator — shown on the role-label row while the
+     post-stream refinement is in flight (user clicked search-now or
+     submitted paste content on the InformationRequestCard). The
+     pulse on the dot signals motion without competing with the
+     prose for attention. */
+  .refining-note {
+    margin-left: 8px;
+    font-weight: 400;
+    color: var(--accent, #c9a84c);
+    letter-spacing: 0.06em;
+    text-transform: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78em;
+  }
+
+  .pulse-dot {
+    display: inline-block;
+    animation: refining-pulse 1.3s ease-in-out infinite;
+  }
+
+  @keyframes refining-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(0.9); }
+    50%      { opacity: 1;    transform: scale(1.05); }
+  }
+
+  /* While refining, the existing prose desaturates and dims to
+     signal "this content is about to change" without blanking the
+     screen. The {#key content} block in the template tears the
+     prose subtree down on content swap so the fade-in animation
+     fires on the NEW content rather than re-styling the old. */
+  .sv-ai-msg.refining {
+    border-left-color: color-mix(in srgb, var(--accent, #c9a84c) 60%, transparent);
+  }
+
+  .prose-refining {
+    opacity: 0.55;
+    filter: saturate(0.6);
+    transition: opacity 0.3s ease, filter 0.3s ease;
+  }
+
+  /* Fade-in for refined content — fires every time {#key content}
+     remounts the inner div, including the post-refine swap. Only
+     reached on the non-streaming branch in the template above, so
+     the translateY transform never engages mid-stream (which is
+     what was disabling subpixel antialiasing per word). */
+  .prose-content-fade {
+    animation: refine-fade-in 0.45s ease-out;
+  }
+
+  /* Streaming branch — no animation, no transform, stable subtree.
+     Text content is updated in place via Svelte's reactive update
+     so the WebView keeps the layer on the document plane (subpixel
+     AA preserved) instead of promoting it to a GPU compositor
+     layer per word. Inherits typography from `.sv-prose`. */
+  .prose-streaming {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  @keyframes refine-fade-in {
+    from { opacity: 0; transform: translateY(2px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Augmentation footer — appears under the prose when the
+     refinement was sourced from the search-now affordance. Shows
+     the operator-chosen backend, the query that was issued, and
+     the source URLs that fed the re-synthesis. Persistent: stays
+     on the bubble for the lifetime of the conversation so a later
+     reader can tell which answers were web-augmented. */
+  .search-augmentation {
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: color-mix(in srgb, var(--accent, #c9a84c) 5%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent, #c9a84c) 25%, transparent);
+    border-radius: var(--radius);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+  /* While the post-search refinement is in flight, the whole block
+     pulses subtly via box-shadow so the user can tell the model is
+     actively working on the answer (not just "search done, here
+     are the links"). Pairs with the inline `aug-refining-status`
+     row that names what's happening. */
+  .search-augmentation.aug-refining {
+    animation: aug-block-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes aug-block-pulse {
+    0%, 100% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #c9a84c) 0%, transparent);
+    }
+    50% {
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #c9a84c) 18%, transparent);
+    }
+  }
+  .search-augmentation .aug-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent, #c9a84c);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .search-augmentation .aug-refining-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0 8px;
+    padding: 4px 8px;
+    background: color-mix(in srgb, var(--accent, #c9a84c) 8%, transparent);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 0.78em;
+    font-style: italic;
+  }
+  .search-augmentation .aug-spinner {
+    color: var(--accent, #c9a84c);
+    display: inline-block;
+    animation: refining-pulse 1.3s ease-in-out infinite;
+  }
+  .search-augmentation .aug-mark {
+    font-size: 0.95em;
+  }
+  .search-augmentation .aug-query {
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: 6px;
+  }
+  .search-augmentation .aug-sources {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text-secondary);
+  }
+  .search-augmentation .aug-sources li {
+    margin: 2px 0;
+  }
+  .search-augmentation .aug-sources a {
+    color: var(--accent, #c9a84c);
+    text-decoration: none;
+    border-bottom: 1px dotted color-mix(in srgb, var(--accent, #c9a84c) 50%, transparent);
+  }
+  .search-augmentation .aug-sources a:hover {
+    border-bottom-style: solid;
   }
 
   .role-label {

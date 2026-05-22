@@ -36,6 +36,17 @@ pub enum PodError {
 
 pub type Result<T> = std::result::Result<T, PodError>;
 
+/// Map Vast's `verification: "<status>"` string onto our bool. "verified"
+/// is the only status that counts; anything else (missing, "frozen",
+/// "deverified", null) yields false.
+fn deserialize_verified_from_verification<'de, D>(d: D) -> std::result::Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: Option<String> = serde::Deserialize::deserialize(d)?;
+    Ok(s.as_deref() == Some("verified"))
+}
+
 /// One row from `vastai search offers --raw`. Vast returns dozens of
 /// fields; we deserialize only what we use. Unknown fields are
 /// silently ignored.
@@ -52,9 +63,23 @@ pub struct Offer {
     pub gpu_ram: f64,
     #[serde(default)]
     pub geolocation: String,
-    #[serde(default)]
+    // Vast's offer JSON has no boolean `verified` field — host status
+    // is reported as `verification: "<status>"` (string). Only the value
+    // "verified" means "host has passed Vast's verification suite";
+    // "frozen", "deverified", and friends do not. Deserialize from the
+    // string and project onto our bool so pick_offer's ranking and the
+    // display layer keep their simple shape. Without this, every offer
+    // parsed as `verified=false` regardless of host status, and the
+    // verified-first ranking was a no-op — observed in pod-up runs
+    // picking unverified offers despite the search asking `verified=true`.
+    #[serde(default, rename = "verification", deserialize_with = "deserialize_verified_from_verification")]
     pub verified: bool,
-    #[serde(default, alias = "reliability2", alias = "reliability")]
+    // Vast emits both `reliability` and `reliability2` in the same offer
+    // object (identical values today; reliability2 is the documented "last
+    // 90 days" surface). We can't alias both onto this field — serde-json
+    // rejects two JSON keys mapping to one struct slot as DuplicateField.
+    // Take `reliability` only; `reliability2` is silently ignored.
+    #[serde(default)]
     pub reliability: f64,
     #[serde(default)]
     pub cuda_max_good: f64,
@@ -258,5 +283,42 @@ mod tests {
     fn pick_handles_empty() {
         let pick = pick_offer(&[]);
         assert!(pick.is_none());
+    }
+
+    #[test]
+    fn offer_reads_verified_from_verification_string() {
+        // Real-world Vast response shape: `verification` is a STRING,
+        // not a `verified` bool. Captured from `vastai search offers
+        // --raw` on 2026-05-15; trimmed to the fields we deserialize.
+        let raw = r#"{
+            "id": 35153580,
+            "dph_total": 0.548,
+            "gpu_name": "L40S",
+            "num_gpus": 1,
+            "gpu_ram": 46068,
+            "geolocation": "Texas, US",
+            "reliability": 0.9979,
+            "verification": "verified",
+            "cuda_max_good": 13.0
+        }"#;
+        let o: Offer = serde_json::from_str(raw).unwrap();
+        assert!(o.verified, "verification=\"verified\" must parse as verified=true");
+        assert_eq!(o.id, 35153580);
+        assert_eq!(o.geolocation, "Texas, US");
+    }
+
+    #[test]
+    fn offer_treats_non_verified_strings_as_false() {
+        for state in &["frozen", "deverified", "unverified", ""] {
+            let raw = format!(r#"{{"id":1,"verification":"{state}"}}"#);
+            let o: Offer = serde_json::from_str(&raw).unwrap();
+            assert!(!o.verified, "{state:?} must NOT parse as verified");
+        }
+    }
+
+    #[test]
+    fn offer_missing_verification_is_false() {
+        let o: Offer = serde_json::from_str(r#"{"id":1}"#).unwrap();
+        assert!(!o.verified);
     }
 }

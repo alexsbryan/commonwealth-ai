@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS notes (
     kind       TEXT    NOT NULL CHECK(kind IN (
         'decision','attempt','invariant','todo','reflection',
         'uncertainty','postmortem_pointer','redteam_finding',
-        'deviation'
+        'deviation','tool_decision'
     )),
     content    TEXT    NOT NULL,
     symbols    TEXT    NOT NULL DEFAULT '[]',
@@ -399,6 +399,112 @@ CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
 END;
 
 PRAGMA user_version = 7;
+
+COMMIT;
+";
+
+// ─── Schema migration v7 → v8 (Tool-Mastery Framework: tool_decision kind) ─
+
+/// Applied to databases at `user_version = 7`. Adds a single new
+/// `kind` value — `tool_decision` — used by the Tool-Mastery
+/// framework's Layer 3 to record the outcome of an agent's tool
+/// invocation against the running conversation (`useful` / `stale` /
+/// `wrong-tool` / `no-results`). The structured fields ride in the
+/// existing v7 `payload_json` column; only the CHECK constraint
+/// changes here.
+///
+/// Same rename-recreate-copy pattern as MIGRATION_V7 — SQLite can't
+/// ALTER a CHECK constraint in place. FTS5 + triggers are rebuilt
+/// because they reference the `notes` table by name.
+pub(crate) const MIGRATION_V8: &str = "
+BEGIN;
+
+ALTER TABLE notes RENAME TO notes_v7;
+
+CREATE TABLE notes (
+    id            TEXT    PRIMARY KEY,
+    kind          TEXT    NOT NULL CHECK(kind IN (
+        'decision','attempt','invariant','todo','reflection',
+        'uncertainty','postmortem_pointer','redteam_finding',
+        'deviation','commitment','follow_up','goal',
+        'research_finding','capability_request','recipe_issue',
+        'checkpoint','checkpoint_restored','deferred_question',
+        'tool_decision'
+    )),
+    content       TEXT    NOT NULL,
+    symbols       TEXT    NOT NULL DEFAULT '[]',
+    files         TEXT    NOT NULL DEFAULT '[]',
+    session_id    TEXT    NOT NULL,
+    created_at    INTEGER NOT NULL,
+    updated_at    INTEGER NOT NULL,
+    tool_name     TEXT,
+    retired_at    INTEGER,
+    retired_by    TEXT,
+    scope         TEXT    NOT NULL DEFAULT 'global'
+                  CHECK(scope IN ('global','feature','session')),
+    feature_id    TEXT,
+    promoted_from TEXT,
+    related_entity TEXT,
+    source        TEXT    NOT NULL DEFAULT 'agent',
+    supersedes    TEXT,
+    payload_json  TEXT
+);
+
+INSERT INTO notes (
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from,
+    related_entity, source, supersedes, payload_json
+)
+SELECT
+    id, kind, content, symbols, files, session_id, created_at, updated_at,
+    tool_name, retired_at, retired_by, scope, feature_id, promoted_from,
+    related_entity, source, supersedes, payload_json
+FROM notes_v7;
+
+DROP TABLE notes_v7;
+
+CREATE INDEX IF NOT EXISTS idx_notes_kind            ON notes(kind);
+CREATE INDEX IF NOT EXISTS idx_notes_created         ON notes(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_tool_name       ON notes(tool_name);
+CREATE INDEX IF NOT EXISTS idx_notes_retired_at      ON notes(retired_at);
+CREATE INDEX IF NOT EXISTS idx_notes_scope_feature   ON notes(scope, feature_id);
+CREATE INDEX IF NOT EXISTS idx_notes_feature
+    ON notes(feature_id) WHERE feature_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_related_entity
+    ON notes(related_entity) WHERE related_entity IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_notes_source_created
+    ON notes(source, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_supersedes
+    ON notes(supersedes) WHERE supersedes IS NOT NULL;
+
+DROP TABLE IF EXISTS notes_fts;
+CREATE VIRTUAL TABLE notes_fts USING fts5(
+    content, kind,
+    content='notes',
+    content_rowid='rowid'
+);
+INSERT INTO notes_fts(notes_fts) VALUES('rebuild');
+
+DROP TRIGGER IF EXISTS notes_fts_ai;
+DROP TRIGGER IF EXISTS notes_fts_ad;
+DROP TRIGGER IF EXISTS notes_fts_au;
+
+CREATE TRIGGER notes_fts_ai AFTER INSERT ON notes BEGIN
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+CREATE TRIGGER notes_fts_ad BEFORE DELETE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+END;
+
+CREATE TRIGGER notes_fts_au AFTER UPDATE ON notes BEGIN
+    INSERT INTO notes_fts(notes_fts, rowid, content, kind)
+    VALUES ('delete', old.rowid, old.content, old.kind);
+    INSERT INTO notes_fts(rowid, content, kind) VALUES (new.rowid, new.content, new.kind);
+END;
+
+PRAGMA user_version = 8;
 
 COMMIT;
 ";

@@ -1,0 +1,666 @@
+//! Rust executors for the canonical primitives. One async fn per
+//! `PrimitiveKind`. Each takes `&ExecCtx` (the bound workdir) +
+//! parsed args and returns `Result<ToolResult, ToolError>`.
+//!
+//! Per ARCH §9, every executor emits a `tracing::info!` event with
+//! the canonical primitive id, the args fingerprint, and the
+//! outcome. The events are what makes "what did we run" auditable
+//! after the fact.
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use serde_json::json;
+use tokio::io::AsyncReadExt;
+use tracing::info;
+
+use crate::primitive::{
+    AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
+    InspectIntent, Primitive, SmokeArgs, WriteFileArgs,
+};
+use crate::result::{ToolError, ToolResult};
+use crate::syntax::DynSyntaxValidator;
+
+/// Bound execution context. Every primitive is workdir-relative;
+/// nothing escapes the directory by design.
+///
+/// `build_cmd` and `verify_cmd` carry the per-problem language-
+/// specific commands. Rust problems use `cargo build` / `cargo test
+/// --test integration`; Go uses `go build ./...` / `go test ./...`;
+/// Python's build is a no-op string and the executor returns
+/// success immediately. The primitive holds the verb; the problem
+/// config holds the command.
+#[derive(Clone)]
+pub struct ExecCtx {
+    pub workdir: PathBuf,
+    /// Wall-clock cap for subprocess primitives (`build`, `smoke`).
+    /// `inspect_workdir` / `write_file` / handoffs ignore this.
+    pub subprocess_wall_cap: Duration,
+    /// Shell command for the `build` primitive. Empty string means
+    /// "no-op build" (Python, etc.).
+    pub build_cmd: String,
+    /// Shell command for the `smoke` primitive. The bench reads
+    /// this from `problem.witness.verify_cmd`.
+    pub verify_cmd: String,
+    /// Optional pre-build syntax validator. When set, `exec_build`
+    /// walks the workdir, parses every source file matching the
+    /// validator's language extensions, and short-circuits the
+    /// subprocess invocation if any parse-level error is found.
+    /// Closes "model emits broken syntax → wastes 5-30s `cargo
+    /// build` cycle on something a static parser catches in <50ms"
+    /// faster-feedback class. Language-agnostic: bench wires a
+    /// language-appropriate impl per problem.
+    pub syntax_validator: Option<DynSyntaxValidator>,
+}
+
+impl std::fmt::Debug for ExecCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExecCtx")
+            .field("workdir", &self.workdir)
+            .field("subprocess_wall_cap", &self.subprocess_wall_cap)
+            .field("build_cmd", &self.build_cmd)
+            .field("verify_cmd", &self.verify_cmd)
+            .field("syntax_validator", &self.syntax_validator.as_ref().map(|_| "<set>"))
+            .finish()
+    }
+}
+
+impl ExecCtx {
+    pub fn new(workdir: PathBuf) -> Self {
+        Self {
+            workdir,
+            subprocess_wall_cap: Duration::from_secs(120),
+            // Default to Rust commands; per-language overrides
+            // arrive via builders below.
+            build_cmd: "cargo build 2>&1".to_string(),
+            verify_cmd: "cargo test --quiet --test integration 2>&1".to_string(),
+            syntax_validator: None,
+        }
+    }
+
+    pub fn with_subprocess_wall_cap(mut self, dur: Duration) -> Self {
+        self.subprocess_wall_cap = dur;
+        self
+    }
+
+    pub fn with_build_cmd(mut self, cmd: impl Into<String>) -> Self {
+        self.build_cmd = cmd.into();
+        self
+    }
+
+    pub fn with_verify_cmd(mut self, cmd: impl Into<String>) -> Self {
+        self.verify_cmd = cmd.into();
+        self
+    }
+
+    pub fn with_syntax_validator(mut self, v: DynSyntaxValidator) -> Self {
+        self.syntax_validator = Some(v);
+        self
+    }
+}
+
+/// Dispatch a parsed `Primitive` to its executor.
+pub async fn execute(ctx: &ExecCtx, prim: &Primitive) -> Result<ToolResult, ToolError> {
+    let id = prim.kind().id();
+    info!(primitive = id, "commonwealth_agent_tools::executor: invoke");
+    let result = match prim {
+        Primitive::InspectWorkdir(intent) => exec_inspect(ctx, intent).await,
+        Primitive::WriteFile(args) => exec_write_file(ctx, args).await,
+        Primitive::Build => exec_build(ctx).await,
+        Primitive::Smoke(args) => exec_smoke(ctx, args).await,
+        Primitive::AgentDone(args) => exec_agent_done(args).await,
+        Primitive::AgentPlan(args) => exec_agent_plan(args).await,
+        Primitive::HandoffToEvaluator(args) => exec_handoff_to_evaluator(args).await,
+        Primitive::HandoffToImplementer(args) => exec_handoff_to_implementer(args).await,
+    };
+    match &result {
+        Ok(r) => info!(
+            primitive = id,
+            ok = r.ok,
+            "commonwealth_agent_tools::executor: ran"
+        ),
+        Err(e) => info!(
+            primitive = id,
+            error = %e,
+            "commonwealth_agent_tools::executor: failed"
+        ),
+    }
+    result
+}
+
+// ── inspect_workdir ────────────────────────────────────────────────
+
+async fn exec_inspect(ctx: &ExecCtx, intent: &InspectIntent) -> Result<ToolResult, ToolError> {
+    match intent {
+        InspectIntent::File { path } => {
+            let abs = resolve_workdir_path(&ctx.workdir, path)?;
+            let bytes = tokio::fs::read(&abs).await.map_err(|e| ToolError::Filesystem {
+                primitive: "inspect_workdir",
+                reason: format!("read {}: {e}", path),
+            })?;
+            let content = String::from_utf8_lossy(&bytes).into_owned();
+            Ok(ToolResult::ok(json!({
+                "intent": "file",
+                "path": path,
+                "bytes": bytes.len(),
+                "content": content,
+            })))
+        }
+        InspectIntent::Dir { path } => {
+            let abs = resolve_workdir_path(&ctx.workdir, path)?;
+            let mut entries: Vec<serde_json::Value> = Vec::new();
+            let mut rd = tokio::fs::read_dir(&abs).await.map_err(|e| ToolError::Filesystem {
+                primitive: "inspect_workdir",
+                reason: format!("readdir {}: {e}", path),
+            })?;
+            while let Some(entry) = rd.next_entry().await.map_err(|e| ToolError::Filesystem {
+                primitive: "inspect_workdir",
+                reason: format!("readdir-iter {}: {e}", path),
+            })? {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let ft = entry.file_type().await.ok();
+                let kind = match ft {
+                    Some(t) if t.is_dir() => "dir",
+                    Some(t) if t.is_file() => "file",
+                    Some(t) if t.is_symlink() => "symlink",
+                    _ => "other",
+                };
+                entries.push(json!({"name": name, "kind": kind}));
+            }
+            entries.sort_by(|a, b| {
+                a.get("name").and_then(|v| v.as_str()).unwrap_or("").cmp(
+                    b.get("name").and_then(|v| v.as_str()).unwrap_or(""),
+                )
+            });
+            Ok(ToolResult::ok(json!({
+                "intent": "dir",
+                "path": path,
+                "entries": entries,
+            })))
+        }
+        InspectIntent::FindByName { root, pattern } => {
+            let abs = resolve_workdir_path(&ctx.workdir, root)?;
+            let mut matches: Vec<String> = Vec::new();
+            walk_collect_paths(&abs, pattern, &mut matches);
+            let rel: Vec<String> = matches
+                .into_iter()
+                .filter_map(|p| {
+                    PathBuf::from(&p)
+                        .strip_prefix(&ctx.workdir)
+                        .ok()
+                        .map(|r| r.to_string_lossy().into_owned())
+                })
+                .collect();
+            Ok(ToolResult::ok(json!({
+                "intent": "find_by_name",
+                "root": root,
+                "pattern": pattern,
+                "matches": rel,
+            })))
+        }
+        InspectIntent::GrepContents { root, pattern } => {
+            let abs = resolve_workdir_path(&ctx.workdir, root)?;
+            let mut hits: Vec<serde_json::Value> = Vec::new();
+            walk_grep_contents(&abs, pattern, &ctx.workdir, &mut hits);
+            Ok(ToolResult::ok(json!({
+                "intent": "grep_contents",
+                "root": root,
+                "pattern": pattern,
+                "matches": hits,
+            })))
+        }
+    }
+}
+
+fn walk_collect_paths(dir: &Path, needle: &str, out: &mut Vec<String>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        let p = entry.path();
+        if p.file_name().is_some_and(|n| n.to_string_lossy().contains(needle)) {
+            out.push(p.to_string_lossy().into_owned());
+        }
+        if p.is_dir() && !p.file_name().is_some_and(|n| n == "target" || n == ".git") {
+            walk_collect_paths(&p, needle, out);
+        }
+    }
+}
+
+fn walk_grep_contents(
+    dir: &Path,
+    needle: &str,
+    workdir_root: &Path,
+    out: &mut Vec<serde_json::Value>,
+) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd.flatten() {
+        let p = entry.path();
+        if p.is_dir() && !p.file_name().is_some_and(|n| n == "target" || n == ".git") {
+            walk_grep_contents(&p, needle, workdir_root, out);
+            continue;
+        }
+        if !p.is_file() {
+            continue;
+        }
+        let Ok(bytes) = std::fs::read(&p) else {
+            continue;
+        };
+        if bytes.iter().take(4096).any(|b| *b == 0) {
+            continue; // skip binaries
+        }
+        let s = String::from_utf8_lossy(&bytes);
+        let rel = p
+            .strip_prefix(workdir_root)
+            .map(|r| r.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| p.to_string_lossy().into_owned());
+        for (ln_zero_idx, line) in s.lines().enumerate() {
+            if line.contains(needle) {
+                out.push(json!({
+                    "path": rel,
+                    "line": ln_zero_idx + 1,
+                    "text": line.chars().take(400).collect::<String>(),
+                }));
+            }
+        }
+    }
+}
+
+// ── write_file ────────────────────────────────────────────────────
+
+async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResult, ToolError> {
+    let abs = resolve_workdir_path(&ctx.workdir, &args.path)?;
+    if let Some(parent) = abs.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let bytes = args.content.as_bytes();
+    tokio::fs::write(&abs, bytes)
+        .await
+        .map_err(|e| ToolError::Filesystem {
+            primitive: "write_file",
+            reason: format!("write {}: {e}", args.path),
+        })?;
+    Ok(ToolResult::ok(json!({
+        "wrote": args.path,
+        "bytes": bytes.len(),
+    })))
+}
+
+// ── build ─────────────────────────────────────────────────────────
+
+async fn exec_build(ctx: &ExecCtx) -> Result<ToolResult, ToolError> {
+    // No-op build (e.g. Python) — return success immediately.
+    if ctx.build_cmd.trim().is_empty() {
+        return Ok(ToolResult::ok(json!({
+            "ok": true,
+            "note": "no-op build (interpreted language)",
+            "stdout_tail": "",
+        })));
+    }
+    // Pre-build syntax check (language-agnostic; one impl per
+    // language plugged in via `with_syntax_validator`). When a
+    // validator is bound and any source file fails to parse,
+    // short-circuit the subprocess invocation and return a
+    // cargo-shape error envelope. This gives the model the same
+    // feedback texture as a real `cargo build` failure (caret,
+    // line:col, file path) but in <50ms instead of 5-30s — and
+    // catches a class of model failure (placeholder-comment
+    // abandonments, missing-brace half-writes) that would otherwise
+    // burn the full build cycle's tokens + wall.
+    if let Some(validator) = ctx.syntax_validator.as_ref() {
+        let errors = validator.check_workdir(&ctx.workdir);
+        if !errors.is_empty() {
+            let stdout_tail = validator.render_errors(&errors);
+            tracing::info!(
+                error_count = errors.len(),
+                "commonwealth_agent_tools::executor: pre-build syntax check rejected workdir"
+            );
+            return Ok(ToolResult::ok(json!({
+                "ok": false,
+                "stdout_tail": stdout_tail,
+                "pre_build_syntax_check": true,
+            })));
+        }
+    }
+    let (status_ok, stdout_tail) = run_shell(
+        &ctx.workdir,
+        &ctx.build_cmd,
+        ctx.subprocess_wall_cap,
+        "build",
+    )
+    .await?;
+    Ok(ToolResult::ok(json!({
+        "ok": status_ok,
+        "stdout_tail": stdout_tail,
+    })))
+}
+
+// ── smoke ─────────────────────────────────────────────────────────
+
+async fn exec_smoke(ctx: &ExecCtx, args: &SmokeArgs) -> Result<ToolResult, ToolError> {
+    if ctx.verify_cmd.trim().is_empty() {
+        return Err(ToolError::Subprocess {
+            primitive: "smoke",
+            reason: "ExecCtx.verify_cmd is empty — bench problem config missing verify_cmd"
+                .into(),
+        });
+    }
+    // Append filter as a single positional argument when supplied.
+    // The per-language test runner interprets it according to its
+    // convention (cargo: test name substring; pytest: -k expression;
+    // etc.). The native runner is language-agnostic; the problem
+    // config decides what the filter means.
+    let cmd = match args.filter.as_deref() {
+        Some(f) if !f.is_empty() => format!("{} {}", ctx.verify_cmd, shell_escape(f)),
+        _ => ctx.verify_cmd.clone(),
+    };
+    let (status_ok, stdout_tail) =
+        run_shell(&ctx.workdir, &cmd, ctx.subprocess_wall_cap, "smoke").await?;
+    // Parse libtest output into structured pass/fail counts when
+    // possible. Non-libtest output (go test json, vitest, pytest)
+    // parses to all-zeros; the model still gets stdout_tail.
+    let parsed = parse_libtest_summary(&stdout_tail);
+    Ok(ToolResult::ok(json!({
+        "ok": status_ok,
+        "passed": parsed.passed,
+        "failed": parsed.failed,
+        "total": parsed.total,
+        "failed_names": parsed.failed_names,
+        "stdout_tail": stdout_tail,
+    })))
+}
+
+#[derive(Debug, Default)]
+struct LibtestSummary {
+    passed: u32,
+    failed: u32,
+    total: u32,
+    failed_names: Vec<String>,
+}
+
+/// Tiny libtest output parser. Lifted from the bench's existing
+/// `witness/test_result_parser.rs` shape so canonical and bench
+/// reporting agree on what "pass" means. We don't take a dep on the
+/// bench crate (clean dependency direction); we re-implement the
+/// few lines we need.
+fn parse_libtest_summary(stdout: &str) -> LibtestSummary {
+    let mut s = LibtestSummary::default();
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        // "test foo::bar ... FAILED"
+        if let Some(rest) = trimmed.strip_prefix("test ") {
+            if let Some(name) = rest
+                .strip_suffix(" ... FAILED")
+                .or_else(|| rest.strip_suffix(" ... failed"))
+            {
+                s.failed_names.push(name.trim().to_string());
+            }
+        }
+        // "test result: ok. 3 passed; 0 failed; ..."
+        // "test result: FAILED. 1 passed; 2 failed; ..."
+        // Tokenize on any non-alphanumeric boundary; scan adjacent
+        // (number, label) pairs.
+        if let Some(rest) = trimmed.strip_prefix("test result: ") {
+            let toks: Vec<&str> = rest
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|t| !t.is_empty())
+                .collect();
+            for window in toks.windows(2) {
+                let (n, label) = (window[0], window[1]);
+                if let Ok(v) = n.parse::<u32>() {
+                    match label {
+                        "passed" => s.passed = v,
+                        "failed" => s.failed = v,
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    s.total = s.passed + s.failed;
+    s
+}
+
+// ── agent_done ────────────────────────────────────────────────────
+
+async fn exec_agent_done(args: &AgentDoneArgs) -> Result<ToolResult, ToolError> {
+    Ok(ToolResult::ok(json!({
+        "done": true,
+        "reason": args.reason,
+    })))
+}
+
+// ── role-transition virtual primitives ────────────────────────────
+//
+// These don't execute work; they thread payload into the
+// RoleDossier downstream. Returning a structured payload lets the
+// role-aware runner (and the bench's telemetry) record exactly
+// what was emitted without re-parsing.
+
+async fn exec_agent_plan(args: &AgentPlanArgs) -> Result<ToolResult, ToolError> {
+    Ok(ToolResult::ok(json!({
+        "kind": "plan",
+        "plan": args.plan,
+        "files_to_create": args.files_to_create,
+    })))
+}
+
+async fn exec_handoff_to_evaluator(
+    args: &HandoffToEvaluatorArgs,
+) -> Result<ToolResult, ToolError> {
+    Ok(ToolResult::ok(json!({
+        "kind": "handoff",
+        "to": "evaluator",
+        "what_you_changed": args.what_you_changed,
+    })))
+}
+
+async fn exec_handoff_to_implementer(
+    args: &HandoffToImplementerArgs,
+) -> Result<ToolResult, ToolError> {
+    Ok(ToolResult::ok(json!({
+        "kind": "handoff",
+        "to": "implementer",
+        "diagnosis": args.diagnosis,
+    })))
+}
+
+// ── shared helpers ────────────────────────────────────────────────
+
+/// Reject paths that escape the workdir (no `..` traversal,
+/// absolute paths are clamped). This is a structural invariant per
+/// ARCH §7.1 — the canonical layer cannot be coerced into touching
+/// files outside its workdir.
+fn resolve_workdir_path(workdir: &Path, rel: &str) -> Result<PathBuf, ToolError> {
+    let candidate = Path::new(rel);
+    if candidate.is_absolute() {
+        return Err(ToolError::WorkdirAccess(format!(
+            "absolute path not allowed: {rel}"
+        )));
+    }
+    // Reject `..` components rather than canonicalize — this stays
+    // safe whether the path exists yet or not.
+    for comp in candidate.components() {
+        if matches!(comp, std::path::Component::ParentDir) {
+            return Err(ToolError::WorkdirAccess(format!(
+                "parent-dir traversal not allowed: {rel}"
+            )));
+        }
+    }
+    Ok(workdir.join(candidate))
+}
+
+/// Spawn a shell command in `workdir` (`sh -c <cmd>`), wait with
+/// wall-cap, return (status_ok, stdout+stderr tail). Wall-cap
+/// fires SIGKILL via `kill_on_drop(true)`. Tail capped at 16 KiB
+/// so the model doesn't drown in cargo output.
+///
+/// Shell form (vs argv form) means the bound build/verify commands
+/// can include redirections + pipes (`2>&1`, `| head`) without
+/// the executor parsing shell grammar. The per-problem commands
+/// are operator-trusted; the workdir is sandboxed to the bench's
+/// tempdir.
+async fn run_shell(
+    workdir: &Path,
+    cmd: &str,
+    wall_cap: Duration,
+    primitive: &'static str,
+) -> Result<(bool, String), ToolError> {
+    use std::process::Stdio;
+    use tokio::process::Command;
+
+    let mut command = Command::new("sh");
+    command
+        .arg("-c")
+        .arg(cmd)
+        .current_dir(workdir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut child = command.spawn().map_err(|e| ToolError::Subprocess {
+        primitive,
+        reason: format!("spawn: {e}"),
+    })?;
+
+    // Wait with timeout.
+    let wait_future = async {
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let status = child.wait().await.map_err(|e| ToolError::Subprocess {
+            primitive,
+            reason: format!("wait: {e}"),
+        })?;
+        let mut out = String::new();
+        if let Some(mut s) = stdout {
+            let _ = s.read_to_string(&mut out).await;
+        }
+        if let Some(mut s) = stderr {
+            let _ = s.read_to_string(&mut out).await;
+        }
+        Ok::<_, ToolError>((status.success(), out))
+    };
+
+    match tokio::time::timeout(wall_cap, wait_future).await {
+        Ok(Ok((status_ok, combined))) => {
+            let tail = cap_tail(&combined, 16 * 1024);
+            Ok((status_ok, tail))
+        }
+        Ok(Err(e)) => Err(e),
+        Err(_) => Err(ToolError::Timeout {
+            primitive,
+            secs: wall_cap.as_secs(),
+        }),
+    }
+}
+
+/// Minimal shell-escape for filter args appended to the bound
+/// verify_cmd. Wraps in single quotes; replaces internal single
+/// quotes with `'\''`. Sufficient for test-name filters; not
+/// general-purpose.
+fn shell_escape(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "'\\''"))
+}
+
+fn cap_tail(s: &str, limit: usize) -> String {
+    if s.len() <= limit {
+        s.to_string()
+    } else {
+        let cut = s.len() - limit;
+        format!(
+            "... (truncated {cut} leading bytes) ...\n{}",
+            &s[cut..]
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_workdir_path_rejects_absolute() {
+        let wd = std::path::PathBuf::from("/tmp/workdir");
+        assert!(resolve_workdir_path(&wd, "/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn resolve_workdir_path_rejects_parent_traversal() {
+        let wd = std::path::PathBuf::from("/tmp/workdir");
+        assert!(resolve_workdir_path(&wd, "../outside").is_err());
+        assert!(resolve_workdir_path(&wd, "src/../../outside").is_err());
+    }
+
+    #[test]
+    fn resolve_workdir_path_accepts_relative() {
+        let wd = std::path::PathBuf::from("/tmp/workdir");
+        let r = resolve_workdir_path(&wd, "src/lib.rs").unwrap();
+        assert_eq!(r, std::path::PathBuf::from("/tmp/workdir/src/lib.rs"));
+    }
+
+    #[test]
+    fn cap_tail_preserves_short_strings() {
+        assert_eq!(cap_tail("hello", 100), "hello");
+    }
+
+    #[test]
+    fn cap_tail_truncates_leading() {
+        let s = "x".repeat(50);
+        let capped = cap_tail(&s, 10);
+        assert!(capped.starts_with("... (truncated"));
+        assert!(capped.ends_with(&"x".repeat(10)));
+    }
+
+    #[test]
+    fn parse_libtest_summary_extracts_pass_fail() {
+        let out = "running 3 tests\n\
+                   test foo ... ok\n\
+                   test bar ... FAILED\n\
+                   test baz ... ok\n\
+                   \n\
+                   test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured\n";
+        let s = parse_libtest_summary(out);
+        assert_eq!(s.passed, 2);
+        assert_eq!(s.failed, 1);
+        assert_eq!(s.total, 3);
+        assert_eq!(s.failed_names, vec!["bar".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn write_file_then_inspect_round_trips() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+
+        let write = Primitive::WriteFile(WriteFileArgs {
+            path: "src/lib.rs".into(),
+            content: "pub fn x() -> u8 { 1 }\n".into(),
+        });
+        let r = execute(&ctx, &write).await.unwrap();
+        assert!(r.ok);
+
+        let inspect = Primitive::InspectWorkdir(InspectIntent::File {
+            path: "src/lib.rs".into(),
+        });
+        let r2 = execute(&ctx, &inspect).await.unwrap();
+        let content = r2.payload.get("content").and_then(|v| v.as_str()).unwrap();
+        assert!(content.contains("pub fn x()"));
+    }
+
+    #[tokio::test]
+    async fn agent_done_returns_reason() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        let p = Primitive::AgentDone(AgentDoneArgs {
+            reason: "all green".into(),
+        });
+        let r = execute(&ctx, &p).await.unwrap();
+        assert_eq!(
+            r.payload.get("reason").and_then(|v| v.as_str()),
+            Some("all green")
+        );
+        assert_eq!(r.payload.get("done").and_then(|v| v.as_bool()), Some(true));
+    }
+}

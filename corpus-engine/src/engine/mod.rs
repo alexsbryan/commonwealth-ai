@@ -1815,9 +1815,15 @@ impl CorpusEngine {
     /// single-shard rename.
     pub fn finalise_solo_ingest(&self, corpus_id: &str) -> Result<bool> {
         let canonical = self.index_dir.join(corpus_id);
-        if canonical.exists() {
-            // Canonical already present (previous solo finalise, or
-            // merge leader already finished). Nothing to do.
+        // The "canonical Lance is already finalized" marker is the
+        // `_corpus_meta.json` sidecar that ingest writes on
+        // completion, not directory existence — the SCIP reindexer
+        // creates `<corpus>/scip_graph.db` early in its lifecycle, so
+        // the parent dir is typically present long before Lance has
+        // landed. Checking directory existence here used to make
+        // every solo ingest into a SCIP-pre-populated dir return
+        // `Ok(false)` and silently strand the partition.
+        if canonical.join("_corpus_meta.json").exists() {
             return Ok(false);
         }
 
@@ -2974,7 +2980,13 @@ mod tests {
     fn finalise_solo_ingest_noop_when_canonical_already_exists() {
         let dir = tempfile::tempdir().unwrap();
         let idx_dir = dir.path().join("indexes");
-        std::fs::create_dir_all(idx_dir.join("wikipedia")).unwrap();
+        // Canonical is considered "already finalized" by the presence
+        // of `_corpus_meta.json`, NOT by directory existence — the SCIP
+        // reindexer creates the parent dir early in its lifecycle, so
+        // dir-existence alone would silently strand the partition. The
+        // 2026-05 fix in `finalise_solo_ingest` checks the meta file
+        // specifically; this test pins that behaviour.
+        seed_canonical_meta(&idx_dir.join("wikipedia"), 5, false);
         seed_partition_meta(&idx_dir.join("wikipedia-partition-local"));
 
         let engine = CorpusEngine::new(dir.path().join("recipes"), idx_dir.clone(), mock_embed_fn());

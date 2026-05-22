@@ -132,11 +132,6 @@
     font-size: 0.78rem;
   }
 
-  .mono {
-    font-family: var(--font-mono, monospace);
-    font-size: 0.78rem;
-  }
-
   .atom-link-list {
     list-style: none;
     padding: 0;

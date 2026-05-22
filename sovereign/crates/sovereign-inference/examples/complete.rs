@@ -111,6 +111,11 @@ async fn main() {
             model_id: None,
             enable_thinking: None,
     sampling_mode: None,
+    assistant_prefix: None,
+    cmd_prefix: None,
+    url_allowlist: None,
+    evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     if args.stream {

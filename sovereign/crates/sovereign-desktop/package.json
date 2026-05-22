@@ -28,8 +28,11 @@
     "@tauri-apps/plugin-dialog": "^2.0.0",
     "@tauri-apps/plugin-shell": "^2.0.0",
     "@xstate/svelte": "^5.0.0",
+    "highlight.js": "^11.11.1",
     "immer": "^11.1.4",
+    "katex": "^0.16.47",
     "marked": "^15.0.12",
+    "marked-katex-extension": "^5.1.8",
     "xstate": "^5.30.0"
   },
   "devDependencies": {

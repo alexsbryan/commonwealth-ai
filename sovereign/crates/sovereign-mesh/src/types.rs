@@ -33,6 +33,15 @@ pub struct MeshMember {
     pub status: MemberStatus,
     pub contribution_level: u8, // 0-5 bar chart
     pub contribution_label: String, // "Top contributor", "Mostly uses, that's ok!"
+    /// Tailnet (or other reachable) addresses for this member, as
+    /// known to the local daemon's gossip view. Surfaced for
+    /// operator use — see `sovereign mesh status` for the
+    /// human-readable rendering and `--addr` for scripting. Empty
+    /// when the member hasn't advertised a routable address yet
+    /// (most often during a fresh join, before the first gossip
+    /// round, or when the member crashed without graceful shutdown).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addresses: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

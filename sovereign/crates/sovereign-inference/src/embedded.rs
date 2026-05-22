@@ -9,14 +9,19 @@ use async_trait::async_trait;
 use futures::Stream;
 use tokio::sync::Mutex;
 
-use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
-use llama_cpp_2::llama_backend::LlamaBackend;
-use llama_cpp_2::llama_batch::LlamaBatch;
-use llama_cpp_2::model::params::LlamaModelParams;
-use llama_cpp_2::model::{AddBos, LlamaChatMessage, LlamaModel};
-use llama_cpp_2::openai::OpenAIChatTemplateParams;
-use llama_cpp_2::sampling::LlamaSampler;
-use llama_cpp_2::token::LlamaToken;
+use crate::llama::cpp::context::params::{LlamaContextParams, LlamaContextType};
+use crate::llama::cpp::mtp::MtpSession;
+use crate::llama::cpp::llama_backend::LlamaBackend;
+use crate::llama::cpp::llama_batch::LlamaBatch;
+use crate::llama::cpp::model::params::LlamaModelParams;
+use crate::llama::cpp::model::{AddBos, LlamaChatMessage, LlamaModel};
+use crate::llama::cpp::sampling::LlamaSampler;
+use crate::llama::cpp::token::LlamaToken;
+// Shim-restored 0.1.x-compatible method names. `LlamaModelExt` brings
+// back `token_to_piece`, `token_to_piece_bytes`, `size`; the free
+// functions cover the retired `chat_template` / `apply_chat_template_oaicompat`
+// surface. See `crate::llama` module docs for the rollback story.
+use crate::llama::{LlamaContextExt, LlamaModelExt};
 
 use sovereign_core::error::Error;
 use sovereign_core::model_family::{EmbedQuirks, ModelFamily, ModelQuirks, PoolingStrategy, RerankQuirks, ThinkingControl};
@@ -28,13 +33,402 @@ use crate::hardware::HardwareProfile;
 
 // ─── ModelSlot ─────────────────────────────────────────────────
 
+/// Per-slot inference mode. A sum type so the illegal hybrid state
+/// the daemon hit on 2026-05-20 (`mtp_session = None` while the target
+/// ctx still carries the `set_embeddings_pre_norm(true)` hook from a
+/// prior `common_speculative_init`) is **structurally impossible**.
+///
+/// `MtpSession::new` mutates the target context — there is no
+/// `common_speculative_uninit` upstream — so we cannot demote a
+/// `Speculative` slot by nulling the session field; the target must be
+/// rebuilt from scratch. Carrying that "must rebuild" invariant in the
+/// type system means future maintainers can't reintroduce the half-
+/// quarantined state. See [[invariant_mtp_demote_rebuilds_target]] and
+/// `SlotContext::demote_to_single_token`.
+///
+/// Crate-private — exposed neither to other crates nor as a field on
+/// `ModelSlot`. External callers continue to interact with `ModelSlot`
+/// via `complete()` / `complete_stream()`.
+enum SlotInferenceMode {
+    /// Plain attention-only context. The default; used by every slot
+    /// the daemon serves except for MTP-bearing ggufs that pass the
+    /// upgrade probe.
+    SingleToken {
+        ctx: crate::llama::cpp::context::LlamaContext<'static>,
+    },
+    /// **MTP speculative decoding.** Two contexts (target + draft)
+    /// backed by the same `Arc<LlamaModel>` plus a live `MtpSession`.
+    ///
+    /// Both contexts borrow from the same `LlamaModel` (the MTP gguf
+    /// packs base layers + MTP-head tensors into one file) and both
+    /// require `with_n_rs_seq(>= n_draft_max)` so partial KV rollback
+    /// after rejected drafts succeeds — without it the target's
+    /// recurrent layers refuse `seq_rm` and the next verify batch
+    /// fails. See `generate_sync_mtp` for the loop, and
+    /// [[project_mtp_invariants]] for the precise sequence of API
+    /// calls the loop must make.
+    ///
+    /// **`session` invariant:** built at slot load via
+    /// `MtpSession::new(&target, &draft, ...)`, which calls upstream's
+    /// `common_speculative_init`. The constructor installs
+    /// `set_embeddings_pre_norm(true)` on BOTH contexts so subsequent
+    /// decodes compute the pre-norm hidden state that the draft side
+    /// reads in `session.process(batch)`. Per-request,
+    /// `generate_sync_mtp` rebuilds the session in place (see
+    /// `rebuild_session_in_place`) because the session's internal
+    /// draft-scheduler state persists across calls and pollutes
+    /// subsequent generations — but the contexts are reused.
+    Speculative {
+        target_ctx: crate::llama::cpp::context::LlamaContext<'static>,
+        draft_ctx: crate::llama::cpp::context::LlamaContext<'static>,
+        session: MtpSession,
+        n_draft_max: i32,
+    },
+}
+
+/// Scalars + handles needed to rebuild a target context after a
+/// speculative-mode failure. Stored on `SlotContext` so
+/// `demote_to_single_token` can reconstruct the target without
+/// re-plumbing them from the caller.
+struct MtpRebuildParams {
+    backend: Arc<LlamaBackend>,
+    context_size: u32,
+    n_threads: i32,
+    n_batch: u32,
+    n_ubatch: u32,
+    /// Set iff the gguf is genuinely recurrent. The `with_n_rs_seq`
+    /// call has to stay on the target ctx after demotion — recurrent
+    /// architectures need it regardless of whether speculative
+    /// decoding is active — or `seq_rm` on the recurrent layers fails
+    /// at decode time.
+    n_rs_seq: Option<u32>,
+    /// Was the original target built on GPU? Preserved so a rebuild
+    /// after demotion stays on the same backend; mismatching here
+    /// would force a CPU↔GPU transition mid-life and almost certainly
+    /// confuse the operator (silent perf cliff).
+    used_gpu: bool,
+}
+
 struct SlotContext {
-    ctx: llama_cpp_2::context::LlamaContext<'static>,
+    mode: SlotInferenceMode,
     _model: Arc<LlamaModel>,
+    /// **Prefix-cache bookkeeping.** The full token sequence
+    /// currently resident in the target context's KV cache (positions
+    /// 0..len). Used by `generate_sync` to compute the longest common
+    /// prefix with each new request's tokenized prompt — when the
+    /// prefix matches, we keep that portion of the KV cache and only
+    /// decode the new tail (positions `lcp..new_len`).
+    ///
+    /// Empty when the cache is known to be clean (post-clear), or
+    /// when the previous call cleared on error. Always updated AFTER
+    /// a successful prompt decode so a mid-decode failure rewinds to
+    /// "cache state unknown → clear next time" rather than leaving a
+    /// stale fingerprint.
+    ///
+    /// Hoisted out of the mode-specific variants because both
+    /// `SingleToken` and a future-prefix-cached `Speculative` path
+    /// would use it identically, and a mode transition (demote)
+    /// clears it unconditionally — single ownership for that reset.
+    ///
+    /// 2026-05-17 SEP-pipeline tuning: Phase 3 (cluster naming) has
+    /// 4-7 calls per article sharing ~100% of a 4500-token prompt,
+    /// and Phase 1 has 10 calls per article sharing the ~3000-token
+    /// preamble + schema + exemplars (per-section text appended).
+    /// Prefix-keep saves the prefill cost on every call after the
+    /// first in each phase.
+    cached_tokens: Vec<crate::llama::cpp::token::LlamaToken>,
+    /// Architecture string from the gguf's `general.architecture`
+    /// metadata key, read once at slot construction. Drives the
+    /// `prefix_cache_safe` gate in `generate_sync` — recurrent-layer
+    /// architectures cannot use the partial-keep prefix cache because
+    /// `clear_kv_cache_seq` doesn't rewind their recurrent state.
+    /// Empty string when metadata read failed (defensive — treat as
+    /// "unknown" and fall back to the name-pattern heuristic).
+    arch: String,
+    /// Params used to rebuild the target ctx on demote. `Some` iff
+    /// the slot was originally constructed as an MTP candidate (the
+    /// only case where demote is possible); `None` on plain slots
+    /// built via `from_existing_model` (FastShort) — those start in
+    /// SingleToken and never transition.
+    mtp_rebuild: Option<MtpRebuildParams>,
 }
 
 unsafe impl Send for SlotContext {}
 unsafe impl Sync for SlotContext {}
+
+impl SlotContext {
+    /// Mutable handle to the target context — the one every decode
+    /// (single-token or MTP-verify) runs against. The single
+    /// accessor replaces direct `slot_ctx.ctx` field access that the
+    /// pre-2026-05-20 code used.
+    fn ctx_mut(&mut self) -> &mut crate::llama::cpp::context::LlamaContext<'static> {
+        match &mut self.mode {
+            SlotInferenceMode::SingleToken { ctx } => ctx,
+            SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
+        }
+    }
+
+    /// True iff this slot was built (and probed) as speculative and
+    /// is still in that mode. Replaces `mtp_session.is_some()` checks
+    /// in dispatch.
+    fn is_speculative(&self) -> bool {
+        matches!(self.mode, SlotInferenceMode::Speculative { .. })
+    }
+
+    /// Rebuild the `MtpSession` in place on a `Speculative` slot.
+    /// Used by `generate_sync_mtp` at every request boundary —
+    /// `mtp_session_new` is cheap (no allocation, no model touch)
+    /// and re-running `common_speculative_init` resets the session's
+    /// internal draft-scheduler state, which otherwise desynchronises
+    /// with the fresh prompt after ~1-2 sequential requests (observed
+    /// 2026-05-17 as "Python sorting algorithm" responses to unrelated
+    /// questions once the search-gym ran with `--replays > 1`).
+    ///
+    /// No-op + Err when called on `SingleToken` (dispatcher contract
+    /// violation).
+    fn rebuild_session_in_place(&mut self, model_id: &str) -> Result<()> {
+        let SlotInferenceMode::Speculative {
+            target_ctx,
+            draft_ctx,
+            session,
+            n_draft_max,
+        } = &mut self.mode
+        else {
+            return Err(Error::Inference(
+                "rebuild_session_in_place: slot is in SingleToken mode — dispatcher contract violated"
+                    .into(),
+            ));
+        };
+        let rebuilt = MtpSession::new(&*target_ctx, &*draft_ctx, 1, *n_draft_max).map_err(|e| {
+            Error::Inference(format!("MTP session rebuild failed: {e:?}"))
+        })?;
+        // Drop the old session *after* the rebuild succeeds. Holding
+        // two sessions pointing at the same contexts simultaneously
+        // would be UB inside `common_speculative_*`, so we use
+        // `std::mem::replace` to swap atomically rather than `=
+        // None; = Some(rebuilt)`.
+        let _old = std::mem::replace(session, rebuilt);
+        drop(_old);
+        tracing::debug!(
+            model_id = %model_id,
+            n_draft_max = %*n_draft_max,
+            "mtp: rebuilt session at request boundary"
+        );
+        Ok(())
+    }
+
+    /// **Demote a Speculative slot to SingleToken mode.** Replaces
+    /// the pre-2026-05-20 `slot_ctx.mtp_session = None` quarantine
+    /// path, which left the target context's
+    /// `set_embeddings_pre_norm(true)` hook installed but disconnected
+    /// from any draft-side consumer — every subsequent `ctx.decode`
+    /// returned `Decode Error -3: unknown` for the rest of the
+    /// slot's lifetime.
+    ///
+    /// Because `common_speculative_init` has no upstream inverse, the
+    /// only safe demotion is to **drop both contexts and the session,
+    /// then rebuild the target from scratch** using the params
+    /// captured at slot construction. Cached prefix tokens are
+    /// invalidated — the new ctx has an empty KV cache, so the next
+    /// request pays one cold prefill (acceptable; recovery completes
+    /// in under a second on any reasonable hardware).
+    ///
+    /// No-op + Err when invoked on `SingleToken` (defensive — the
+    /// quarantine substring match in `generate_sync` only fires for
+    /// MTP-side failures, so this branch shouldn't reach a non-MTP
+    /// slot).
+    fn demote_to_single_token(&mut self, model_id: &str) -> Result<()> {
+        let rebuild = self
+            .mtp_rebuild
+            .as_ref()
+            .ok_or_else(|| {
+                Error::Inference(
+                    "demote_to_single_token: slot has no MtpRebuildParams (was it ever built \
+                     as speculative?)"
+                        .into(),
+                )
+            })?;
+        // Materialise the new target FIRST so a rebuild failure
+        // surfaces before we discard the old (mutated, but still
+        // serving) state. If `build_target_ctx_for_slot` fails the
+        // slot is wedged anyway, but at least the error is loud and
+        // diagnosable rather than silent.
+        let new_target = build_target_ctx_for_slot(&self._model, rebuild)
+            .map_err(|e| {
+                Error::Inference(format!(
+                    "demote_to_single_token: failed to rebuild target ctx: {e}"
+                ))
+            })?;
+        // Replace the mode in one step. Dropping the old
+        // `Speculative` variant runs the destructors for
+        // `target_ctx`, `draft_ctx`, and `session` in declaration
+        // order — session first (releases its C++-side hooks on the
+        // target/draft), then draft, then target. That order matches
+        // upstream's `mtp_session_free` contract: free the session
+        // before its referenced contexts.
+        let old_mode = std::mem::replace(
+            &mut self.mode,
+            SlotInferenceMode::SingleToken { ctx: new_target },
+        );
+        drop(old_mode);
+        // Prefix cache is invalid — different ctx, different KV.
+        self.cached_tokens.clear();
+        tracing::warn!(
+            model_id = %model_id,
+            "slot demoted: Speculative → SingleToken (target ctx rebuilt). \
+             Subsequent requests served via single-token decode for the rest \
+             of this slot's lifetime; restart the daemon to retry MTP."
+        );
+        Ok(())
+    }
+}
+
+/// Build a target `LlamaContext<'static>` for a slot given the
+/// rebuild params captured at construction. Used both at initial
+/// load AND by `demote_to_single_token` to replace a target whose
+/// `set_embeddings_pre_norm` hook is poisoned after a failed
+/// speculative upgrade.
+///
+/// SAFETY: the returned context borrows from `model` via a transmute
+/// to `'static`. The caller MUST keep `model` alive (in practice via
+/// the `_model: Arc<LlamaModel>` field on `SlotContext`) for the
+/// lifetime of the returned context.
+fn build_target_ctx_for_slot(
+    model: &Arc<LlamaModel>,
+    params: &MtpRebuildParams,
+) -> Result<crate::llama::cpp::context::LlamaContext<'static>> {
+    let mut ctx_params = LlamaContextParams::default()
+        .with_n_ctx(NonZeroU32::new(params.context_size))
+        .with_n_batch(params.n_batch)
+        .with_n_ubatch(params.n_ubatch)
+        .with_n_threads(params.n_threads)
+        .with_n_threads_batch(params.n_threads)
+        .with_offload_kqv(params.used_gpu);
+    if let Some(n_rs_seq) = params.n_rs_seq {
+        ctx_params = ctx_params.with_n_rs_seq(n_rs_seq);
+    }
+    unsafe {
+        let model_ref: &'static LlamaModel =
+            &*(Arc::as_ptr(model) as *const LlamaModel);
+        model_ref
+            .new_context(&params.backend, ctx_params)
+            .map_err(|e| Error::Inference(format!("Failed to create target context: {e}")))
+    }
+}
+
+/// Probe the speculative path with a 1-token synthetic prefill.
+/// Catches the failure mode where `MtpSession::new` succeeded (so the
+/// gguf appeared MTP-shaped at the C++ level) but the first real
+/// `target.decode → session.process` round-trip fails — most often
+/// because the gguf was MTP-named but lacks the actual head tensors,
+/// or because an upstream `common_speculative_init` partially mutates
+/// the target before erroring.
+///
+/// Without this probe (the pre-2026-05-20 behaviour), the failure
+/// would only manifest on the first real request, at which point the
+/// quarantine path would already have to deal with a mutated target.
+/// Running the probe at construction shifts that failure to a
+/// recoverable moment (caller drops the bad target + rebuilds fresh).
+///
+/// ~10-50ms cost on a warm slot. Acceptable; the alternative is a
+/// silently-broken slot serving traffic.
+///
+/// Leaves both KV caches empty on success so the first real request
+/// starts from a clean state.
+fn probe_mtp_roundtrip(
+    target_ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
+    draft_ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
+    session: &mut MtpSession,
+    model: &LlamaModel,
+) -> std::result::Result<(), String> {
+    target_ctx.clear_kv_cache();
+    draft_ctx.clear_kv_cache();
+    let bos = model.token_bos();
+    let prompt = [bos];
+    let mut batch = LlamaBatch::new(1, 1);
+    batch
+        .add(bos, 0, &[0], true)
+        .map_err(|e| format!("probe: batch add failed: {e}"))?;
+    target_ctx
+        .decode(&mut batch)
+        .map_err(|e| format!("probe: target decode failed: {e}"))?;
+    session
+        .process(&batch)
+        .map_err(|e| format!("probe: session.process failed: {e:?}"))?;
+    session
+        .begin(0, &prompt)
+        .map_err(|e| format!("probe: session.begin failed: {e:?}"))?;
+    target_ctx.clear_kv_cache();
+    draft_ctx.clear_kv_cache();
+    Ok(())
+}
+
+/// Attempt to upgrade a freshly-built target context into a
+/// `Speculative` slot mode. On failure, hand the (now-mutated) target
+/// back to the caller alongside the failure cause — the type signature
+/// encodes the "target is no longer reusable as a SingleToken ctx"
+/// invariant.
+///
+/// Contract: caller MUST drop the returned target on the `Err` path
+/// and rebuild a fresh one for `SingleToken`. The pre-2026-05-20 code
+/// silently reused the mutated target after nulling the session +
+/// draft fields, which left the `set_embeddings_pre_norm(true)` hook
+/// installed and orphaned — every subsequent decode returned -3.
+fn try_upgrade_to_speculative(
+    target: crate::llama::cpp::context::LlamaContext<'static>,
+    model: &Arc<LlamaModel>,
+    backend: &LlamaBackend,
+    draft_params: LlamaContextParams,
+    n_draft_max: i32,
+) -> std::result::Result<
+    SlotInferenceMode,
+    (
+        crate::llama::cpp::context::LlamaContext<'static>,
+        Error,
+    ),
+> {
+    let mut target_ctx = target;
+    let draft_ctx_res = unsafe {
+        let model_ref: &'static LlamaModel = &*(Arc::as_ptr(model) as *const LlamaModel);
+        model_ref.new_context(backend, draft_params)
+    };
+    let mut draft_ctx = match draft_ctx_res {
+        Ok(c) => c,
+        Err(e) => {
+            // Draft never built → target was never passed into
+            // `common_speculative_init`, so it's still pristine. But
+            // the contract says we hand it back regardless; callers
+            // are expected to drop and rebuild on Err for safety.
+            return Err((
+                target_ctx,
+                Error::Inference(format!("MTP draft context build failed: {e}")),
+            ));
+        }
+    };
+    let mut session = match MtpSession::new(&target_ctx, &draft_ctx, 1, n_draft_max) {
+        Ok(s) => s,
+        Err(e) => {
+            return Err((
+                target_ctx,
+                Error::Inference(format!("MtpSession::new failed: {e:?}")),
+            ));
+        }
+    };
+    if let Err(probe_err) =
+        probe_mtp_roundtrip(&mut target_ctx, &mut draft_ctx, &mut session, model)
+    {
+        return Err((
+            target_ctx,
+            Error::Inference(format!("MTP probe roundtrip failed: {probe_err}")),
+        ));
+    }
+    Ok(SlotInferenceMode::Speculative {
+        target_ctx,
+        draft_ctx,
+        session,
+        n_draft_max,
+    })
+}
 
 struct ModelSlot {
     model: Arc<LlamaModel>,
@@ -105,6 +499,75 @@ fn inference_deadline_secs() -> u64 {
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(300)
     })
+}
+
+/// Operator-declared primary-slot sibling count.
+///
+/// Set `SOVEREIGN_PRIMARY_SIBLINGS=N` with N≥2 to eager-load N
+/// independent primary `LlamaContext`s sharing one `Arc<LlamaModel>`
+/// (weights are not duplicated; each sibling pays only its own KV
+/// cache). Non-streaming chat-completion dispatch then round-robins
+/// across siblings so two callers can actually generate in parallel
+/// instead of serialising on the lazy slot's single `Mutex<Context>`.
+///
+/// Returns `None` for absent / unparseable / `0` / `1` — in any of
+/// those cases the daemon keeps its single-context lazy behaviour
+/// and the change is a no-op.
+///
+/// Scope (intentional, experimental):
+///   - Sibling pool covers `SlotTarget::Primary` non-streaming
+///     completion only. Streaming, embed, rerank, and the lazy
+///     warm-load helper continue to use the single lazy slot.
+///   - Incompatible with `code_path`: the Code specialist relies on
+///     hot-swapping the lazy slot's one resident model. Mixing the
+///     two would require hot-swapping every sibling on a hint
+///     transition. Startup fails with a clear message when both are
+///     configured.
+fn parse_primary_siblings(raw: Option<&str>) -> Option<std::num::NonZeroU32> {
+    let n: u32 = raw?.trim().parse().ok()?;
+    if n <= 1 {
+        return None;
+    }
+    std::num::NonZeroU32::new(n)
+}
+
+fn primary_siblings_env() -> Option<std::num::NonZeroU32> {
+    parse_primary_siblings(std::env::var("SOVEREIGN_PRIMARY_SIBLINGS").ok().as_deref())
+}
+
+/// Eager-loaded pool of primary contexts. All siblings share one
+/// `Arc<LlamaModel>` (no weight duplication); each owns its own
+/// `LlamaContext` + `Mutex<SlotContext>` + `inflight` permit, so
+/// `pool.len()` callers can be in `generate_sync` concurrently.
+///
+/// Memory cost is therefore additive in KV cache only — for a
+/// 35B-A3B Q4 at `n_ctx=32768`, that's a few GB per sibling on top
+/// of the one-time ~22 GB weight load. On Strix Halo Vulkan
+/// (124 GiB GTT) 2–4 siblings is comfortable; tighter hardware
+/// should keep N low and watch resident-size in `daemon.out`.
+///
+/// Dispatch picks siblings round-robin. A more sophisticated
+/// "least-loaded" policy could read each sibling's
+/// `inflight.available_permits()`, but for the SEP-ingest workload
+/// (uniform per-call cost) round-robin is already optimal and the
+/// atomic counter is wait-free.
+struct PrimarySiblingPool {
+    slots: Vec<Arc<ModelSlot>>,
+    next: std::sync::atomic::AtomicUsize,
+}
+
+impl PrimarySiblingPool {
+    fn pick(&self) -> (usize, Arc<ModelSlot>) {
+        let i = self
+            .next
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            % self.slots.len();
+        (i, Arc::clone(&self.slots[i]))
+    }
+
+    fn len(&self) -> usize {
+        self.slots.len()
+    }
 }
 
 impl ModelSlot {
@@ -178,8 +641,74 @@ impl ModelSlot {
                  model weights and ops stay on CPU"
             );
         }
+        // **MTP detection.** The Unsloth + community MTP-augmented
+        // ggufs (e.g. Qwen3.6-A3B-MTP-Q6_K) pack base layers + MTP
+        // prediction heads into a single file. Detect by `MTP`
+        // substring in the gguf filename — matches the community
+        // naming convention. False positives are non-fatal: the
+        // draft-context constructor returns an error when the gguf
+        // lacks MTP heads, we log + leave `draft_ctx = None`, and the
+        // slot falls back to single-token decode for every request.
+        //
+        // The target context needs `with_n_rs_seq(>= n_draft_max)`
+        // alongside the draft, otherwise partial KV rollback after
+        // rejected drafts fails inside the target's recurrent layers
+        // (Qwen3.6-A3B is hybrid Mamba/attention) and the next verify
+        // batch hits an M-RoPE position assert. n_draft_max=3 is the
+        // sweet spot per upstream; we set n_rs_seq=4 (one slot of
+        // headroom) on both contexts.
+        // MTP candidacy combines two signals:
+        //
+        // 1. Filename substring "MTP" — community naming convention
+        //    for Unsloth + similar ggufs that pack draft heads into
+        //    the file. Stable across architectures, no metadata
+        //    required, but misses MTP-bearing ggufs the operator
+        //    renamed or sourced from a vendor that doesn't follow
+        //    the convention.
+        //
+        // 2. Architecture signal — `general.architecture` set to a
+        //    recurrent-bearing family (qwen*moe / mamba / deltanet /
+        //    rwkv / ssm). These are the families that ship with MTP
+        //    draft heads in practice. Reading the arch metadata is
+        //    cheap (one llama_model_meta_val_str call); the result
+        //    also feeds `SlotContext.arch` for the prefix-cache gate.
+        //
+        // Either signal qualifies the slot as an MTP candidate. The
+        // draft-context build below is the definitive probe: it
+        // succeeds only if the model genuinely has MTP heads. False
+        // positives are graceful (logged + fall back to single-token
+        // decode), so we err on the side of attempting.
+        let slot_arch = read_gguf_arch(&model);
+        let mtp_by_name = model_id.to_lowercase().contains("mtp");
+        let mtp_by_arch = is_recurrent_arch(&slot_arch);
+        // `SOVEREIGN_MTP_DISABLE=1` short-circuits MTP at slot
+        // construction (not just at dispatch). The runtime check at
+        // `generate_sync` lower down also reads the same env var, but
+        // skipping it here too means `common_speculative_init` never
+        // runs — i.e. the `set_embeddings_pre_norm(true)` hook
+        // doesn't get installed on the target ctx in the first place.
+        // Pre-2026-05-20 the env var was dispatch-only, which left
+        // arch-mis-detected slots stuck with the hook on the target
+        // and dispatch routing around the (still-broken) draft path —
+        // result: every target decode failed `rc=-3` because the
+        // pre-norm consumer the hook expects was never wired up.
+        // Slot-time gate is the correct boundary.
+        let mtp_disabled_at_load = std::env::var("SOVEREIGN_MTP_DISABLE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let is_mtp_model = !mtp_disabled_at_load && (mtp_by_name || mtp_by_arch);
+        tracing::info!(
+            model_id = %model_id,
+            arch = %slot_arch,
+            mtp_by_name,
+            mtp_by_arch,
+            mtp_disabled_at_load,
+            is_mtp_candidate = is_mtp_model,
+            "MTP candidacy decided — draft-ctx build will confirm or fall back"
+        );
+        let mtp_n_rs_seq: u32 = 4;
         let build_ctx_params = |gpu: bool| {
-            LlamaContextParams::default()
+            let mut p = LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
                 // Chat slots are serial: a Mutex<SlotContext> guards the
                 // single context and generate_sync builds LlamaBatch with
@@ -189,14 +718,22 @@ impl ModelSlot {
                 // so the full context_size is the usable per-request
                 // window. (EmbedSlot keeps its own n_seq_max=16 — it
                 // genuinely batches.)
-                .with_n_seq_max(1)
+                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
                 // n_batch = context_size so the full context window is available
                 // for prompt processing. llama.cpp automatically splits the batch
                 // into n_ubatch=512 micro-batches for GPU/CPU kernel calls, so
                 // memory pressure is unchanged — only the Rust-side assertion limit
                 // is relaxed.
                 .with_n_batch(context_size)
-                .with_n_ubatch(512)
+                .with_n_ubatch(512);
+            if is_mtp_model {
+                // Only the target context type stays Default here; the
+                // draft context flips to Mtp below. `n_rs_seq` is what
+                // enables partial seq_rm on recurrent layers — see
+                // [[project_mtp_invariants]].
+                p = p.with_n_rs_seq(mtp_n_rs_seq);
+            }
+            p
                 // llama-cpp-2 defaults both thread counts to 4, which
                 // caps matmul at four cores regardless of machine
                 // size. Embedding prefill and chat prompt processing
@@ -210,7 +747,16 @@ impl ModelSlot {
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                .with_op_offload(gpu)
+                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
+                // **2026-05-17 KV-Q8 experiment (REVERTED).** Tried
+                // `with_type_k(Q8_0)` + `with_type_v(Q8_0)` to halve
+                // KV bandwidth. SEP profile: total wall -5.6% (within
+                // run variance), Phase 1 -9% throughput regression
+                // (the dominant phase). Net negative on the workload
+                // that matters. Likely the per-token quant/dequant
+                // overhead on Vulkan eats the bandwidth savings.
+                // Reverted to F16 KV. See git history for the
+                // experiment.
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
@@ -222,7 +768,7 @@ impl ModelSlot {
                     .map(|c| (c, true))
             }
         } else {
-            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+            Err(crate::llama::cpp::LlamaContextLoadError::NullReturn)
         } {
             Ok(pair) => pair,
             Err(e) => {
@@ -252,6 +798,102 @@ impl ModelSlot {
             embed_compute_backend_label()
         };
 
+        // **Speculative-mode upgrade — probed at construction.**
+        //
+        // For an MTP-candidate slot, we try to upgrade the freshly-
+        // built target into a `Speculative` mode by attaching a draft
+        // context + `MtpSession` AND verifying the path actually
+        // round-trips end-to-end. The probe (a 1-token synthetic
+        // prefill through `target.decode → session.process →
+        // session.begin`) is what catches "gguf is MTP-named but
+        // lacks head tensors" — pre-2026-05-20 that case slipped
+        // through `MtpSession::new` and only blew up at first real
+        // request, leaving the target ctx with an orphaned
+        // `set_embeddings_pre_norm(true)` hook and `Decode Error -3`
+        // for the rest of the slot's life.
+        //
+        // On any Err path inside `try_upgrade_to_speculative`, the
+        // contract is: the (now-possibly-mutated) target ctx is
+        // returned via the Err payload, the caller drops it, and we
+        // rebuild a fresh target for `SingleToken` mode. That's the
+        // structural fix for the "no upstream
+        // `common_speculative_uninit`" problem — we never reuse a
+        // ctx that may have been touched by a failed
+        // `common_speculative_init`.
+        //
+        // n_draft_max = 3 matches upstream's Qwen3.6-A3B-MTP sweet
+        // spot. Overridable via `SOVEREIGN_MTP_DRAFT_MAX` for
+        // measurement passes; n_rs_seq=4 on both contexts gives one
+        // slot of headroom for partial KV rollback.
+        let n_draft_max: i32 = std::env::var("SOVEREIGN_MTP_DRAFT_MAX")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .filter(|n: &i32| *n >= 1 && *n < (mtp_n_rs_seq as i32))
+            .unwrap_or(3);
+        let rebuild_params = MtpRebuildParams {
+            backend: Arc::clone(backend),
+            context_size,
+            n_threads: n_threads as i32,
+            n_batch: context_size,
+            n_ubatch: 512,
+            n_rs_seq: if is_mtp_model { Some(mtp_n_rs_seq) } else { None },
+            used_gpu,
+        };
+        let mode: SlotInferenceMode = if is_mtp_model {
+            let draft_params = LlamaContextParams::default()
+                .with_n_ctx(NonZeroU32::new(context_size))
+                .with_ctx_type(LlamaContextType::Mtp)
+                .with_n_rs_seq(mtp_n_rs_seq)
+                .with_n_batch(context_size)
+                .with_n_ubatch(512)
+                .with_n_threads(n_threads as i32)
+                .with_n_threads_batch(n_threads as i32)
+                .with_offload_kqv(used_gpu);
+            match try_upgrade_to_speculative(
+                ctx,
+                &model,
+                backend,
+                draft_params,
+                n_draft_max,
+            ) {
+                Ok(mode) => {
+                    tracing::info!(
+                        model_id = %model_id,
+                        n_rs_seq = mtp_n_rs_seq,
+                        n_draft_max,
+                        "MTP speculative mode active — draft ctx + session built and probe \
+                         round-trip succeeded"
+                    );
+                    mode
+                }
+                Err((bad_target, e)) => {
+                    // Drop the (possibly mutated) target. The
+                    // type-system contract on `try_upgrade_to_speculative`
+                    // is what makes this branch the only safe place
+                    // to do so — the bad target cannot leak into a
+                    // SingleToken slot.
+                    drop(bad_target);
+                    tracing::warn!(
+                        model_id = %model_id,
+                        error = %e,
+                        "MTP upgrade probe failed — rebuilding a fresh target ctx and \
+                         falling back to single-token decode for this slot. (gguf likely \
+                         lacks MTP heads, or upstream rejected the pairing at \
+                         common_speculative_init.)"
+                    );
+                    let fresh = build_target_ctx_for_slot(&model, &rebuild_params)
+                        .map_err(|e| {
+                            Error::Inference(format!(
+                                "Failed to rebuild target ctx after MTP upgrade failure: {e}"
+                            ))
+                        })?;
+                    SlotInferenceMode::SingleToken { ctx: fresh }
+                }
+            }
+        } else {
+            SlotInferenceMode::SingleToken { ctx }
+        };
+
         tracing::info!(
             model_id = %model_id,
             params = model.n_params(),
@@ -259,6 +901,7 @@ impl ModelSlot {
             size_mb = model.size() / (1024 * 1024),
             n_threads,
             compute_backend,
+            mtp = matches!(&mode, SlotInferenceMode::Speculative { .. }),
             "ModelSlot::load — slot ready"
         );
 
@@ -283,8 +926,15 @@ impl ModelSlot {
         Ok(Self {
             model: model.clone(),
             context: Mutex::new(SlotContext {
-                ctx,
+                mode,
                 _model: model,
+                cached_tokens: Vec::new(),
+                arch: slot_arch,
+                mtp_rebuild: if is_mtp_model {
+                    Some(rebuild_params)
+                } else {
+                    None
+                },
             }),
             model_id,
             size_bytes,
@@ -328,13 +978,19 @@ impl ModelSlot {
         let build_ctx_params = |gpu: bool| {
             LlamaContextParams::default()
                 .with_n_ctx(NonZeroU32::new(context_size))
+                // Re-introduced in the sovereign vendor of llama-cpp-4
+                // (see workspace `[patch.crates-io]`). Without this the
+                // C-side context defaults to n_seq_max=1 and the
+                // continuous-batched coalescer fails with "Decode
+                // Error -1: n_tokens == 0" the moment a batch carries
+                // a second sequence — forensic trace 2026-05-18.
                 .with_n_seq_max(n_seq_max)
                 .with_n_batch(context_size)
                 .with_n_ubatch(n_ubatch)
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                .with_op_offload(gpu)
+                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
@@ -346,7 +1002,7 @@ impl ModelSlot {
                     .map(|c| (c, true))
             }
         } else {
-            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+            Err(crate::llama::cpp::LlamaContextLoadError::NullReturn)
         } {
             Ok(pair) => pair,
             Err(e) => {
@@ -381,11 +1037,23 @@ impl ModelSlot {
             "FastShort slot ready — continuous-batched short-call companion to Fast"
         );
 
+        let arch = read_gguf_arch(&model);
         Ok(Self {
             model: Arc::clone(&model),
             context: Mutex::new(SlotContext {
-                ctx,
+                // Sibling slots (FastShort) are built off the primary
+                // model with different `n_seq_max`/`n_ubatch` for
+                // continuous-batched short calls. MTP is gguf-specific
+                // and only meaningful for serial decode on the primary
+                // slot, so the sibling stays vanilla — fixed at
+                // `SingleToken` for life, no `mtp_rebuild` params
+                // captured because demotion can never fire on this
+                // shape.
+                mode: SlotInferenceMode::SingleToken { ctx },
                 _model: model,
+                cached_tokens: Vec::new(),
+                arch,
+                mtp_rebuild: None,
             }),
             model_id,
             size_bytes,
@@ -397,17 +1065,195 @@ impl ModelSlot {
     fn generate_sync(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        slot_ctx: &mut SlotContext,
         request: &CompletionRequest,
         quirks: &ModelQuirks,
     ) -> Result<(String, usize, usize)> {
-        // Clear KV cache before each new inference sequence.
-        // `clear_kv_cache()` is also called at the end of a successful run, but
-        // if a prior call failed mid-decode the cache is left dirty. Pre-clearing
-        // guarantees a clean slate regardless of the prior exit path, preventing
-        // M-RoPE position mismatch errors ("X = 830, Y = 0: X < Y required").
-        ctx.clear_kv_cache();
+        // **MTP dispatch (Phase A widened 2026-05-17).** Route to
+        // MTP when the slot has a draft context AND the request has
+        // no tools. Tools stay gated out because the tool-call
+        // JSON-depth tracker that stops generation at the close
+        // brace lives in the single-token path; MTP would emit
+        // unbounded text.
+        //
+        // `structured_output` is intentionally NOT gated. The
+        // `ConstrainedSampler::sample()` applies the JsonConstraint
+        // mask at every verify position, and the FSM state machine
+        // advances in lockstep with what we emit (accepted drafts +
+        // bonus next_token, never rejected drafts). The likely cost
+        // is reduced acceptance rate — the MTP head proposes drafts
+        // without seeing the schema, so masked-out drafts get
+        // rejected at the target's masked sample step. That's a
+        // graceful degradation we want to MEASURE, not avoid.
+        // See `has_schema` / `has_tools` fields on the MTP
+        // end-of-generation log to decompose acceptance rate by
+        // request shape.
+        //
+        // Disable via SOVEREIGN_MTP_DISABLE=1 for A/B measurement.
+        let mtp_disabled = std::env::var("SOVEREIGN_MTP_DISABLE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if !mtp_disabled
+            && slot_ctx.is_speculative()
+            && request.tools.as_ref().is_none_or(|t| t.is_empty())
+        {
+            // Try MTP. On prefill-decode failure, quarantine MTP for
+            // this slot's lifetime and fall through to single-token
+            // decode. The fallback is self-healing without bench-side
+            // intervention: chat traffic auto-recovers, batched
+            // workloads (entity_extraction, atlas Phase 1b) finish
+            // their run on the non-MTP path.
+            //
+            // Failure mode this catches: observed 2026-05-20 on
+            // conversations-anthropic ingest, the Qwopus3.5-9B-MTP
+            // slot failed every Phase 1b batch after the first with
+            // `MTP prefill decode failed: Decode Error -3: unknown`.
+            // First call succeeded; all subsequent calls failed at
+            // prefill. The MtpSession rebuild + common_speculative_init
+            // cycle isn't idempotent across reused contexts under
+            // repeated short-prompt calls — upstream-side bug we
+            // can't reach from Rust. Quarantining the slot's MTP
+            // turns the 99.96% loss into a non-issue (single-token
+            // decode is ~10% slower than MTP, still serves traffic).
+            //
+            // The quarantine is per-slot, per-process: operator
+            // restart restores MTP. Add the env var
+            // `SOVEREIGN_MTP_QUARANTINE_DISABLE=1` to opt out
+            // (debugging MTP-stability work).
+            match Self::generate_sync_mtp(model, model_id, slot_ctx, request, quirks) {
+                Ok(r) => return Ok(r),
+                Err(e) => {
+                    let msg = e.to_string();
+                    // The three error sites that signal "MTP draft side
+                    // is broken on this slot, single-token decode still
+                    // works": target prefill decode, prefill batch add,
+                    // and `session.process(&prefill)` (the post-prefill
+                    // hook into the draft side). The original two were
+                    // caught here on 2026-05-17; `process(prefill)` was
+                    // missed and caused the 2026-05-20 conversations-
+                    // anthropic Phase 2b cluster-labeling cascade —
+                    // every cluster failed, the loop logged + retried
+                    // every 2-3s for hours, no surfacing to the
+                    // operator. Add it to the set so the slot
+                    // quarantines on the first failure instead.
+                    let is_prefill_error = msg.contains("MTP prefill decode failed")
+                        || msg.contains("MTP prefill batch add failed")
+                        || msg.contains("MTP process(prefill) failed");
+                    let quarantine_disabled = std::env::var("SOVEREIGN_MTP_QUARANTINE_DISABLE")
+                        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                        .unwrap_or(false);
+                    if is_prefill_error && !quarantine_disabled {
+                        tracing::warn!(
+                            model_id = %model_id,
+                            error = %msg,
+                            "MTP prefill failed — quarantining MTP on this slot and \
+                             falling through to single-token decode. Restart the daemon \
+                             to re-enable; set SOVEREIGN_MTP_QUARANTINE_DISABLE=1 to \
+                             surface the error instead."
+                        );
+                        // Demote structurally: drop session + draft +
+                        // mutated-target and rebuild a fresh target
+                        // for SingleToken mode. The pre-2026-05-20
+                        // path just did `mtp_session = None` and left
+                        // the target ctx in place — but
+                        // `common_speculative_init` had already
+                        // installed `set_embeddings_pre_norm(true)`
+                        // on it, with no upstream uninit, so every
+                        // subsequent decode returned `Decode Error -3`
+                        // for the rest of the slot's lifetime.
+                        // `demote_to_single_token` is the only safe
+                        // transition. Defence-in-depth: probe at
+                        // construction catches most cases, this
+                        // catches the surprise mid-life ones.
+                        slot_ctx.demote_to_single_token(model_id)?;
+                        // Fall through to the non-MTP path below.
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
+        }
 
+        // Capability gate: the prefix-cache partial-keep path
+        // (clear_kv_cache_seq(lcp, None) + tail-prefill) does not
+        // work on hybrid Mamba/SSM models. `clear_kv_cache_seq`
+        // succeeds against the attention layers but doesn't rewind
+        // the recurrent layers' position-by-position hidden state,
+        // so the subsequent tail decode is rejected upstream
+        // (llama_decode returns -1; the Rust binding statically
+        // labels this "n_tokens == 0" even though the batch has
+        // tokens — verified 2026-05-19 with batch_n_tokens=1 and
+        // batch_n_tokens=50 both failing identically). The bug is
+        // general to any partial-keep on this model class, not an
+        // edge case of small tails.
+        //
+        // Detector: a successfully-built MtpSession on the slot.
+        // MTP requires `with_n_rs_seq > 1`, which means the model
+        // has recurrent layers; the inverse is also true in our
+        // build (mtp_session is Some iff the slot was constructed
+        // with the MTP gguf and the speculative init succeeded).
+        // Pure-attention slots (mtp_session is None) keep the
+        // partial-keep path — they were the original target of the
+        // 2026-05-17 SEP-pipeline tuning and the bug doesn't affect
+        // them.
+        //
+        // Non-MTP hybrid families (Qwen3-MoE Gated DeltaNet,
+        // Mamba+MoE variants without MTP draft heads) hit the same
+        // recurrent-state bug — their gguf has recurrent layers but
+        // the slot was constructed without an MTP draft, so the MTP
+        // dispatch above doesn't catch them. Confirmed 2026-05-20 on
+        // Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX:
+        // every 2nd request failed `Decode Error -1: n_tokens == 0`
+        // at the post-cache tail decode; disabling partial-keep
+        // restored throughput.
+        //
+        // Detection ladder (data first, ARCH §6):
+        // 1. The slot's gguf `general.architecture` metadata, read
+        //    once at construction and stored on `SlotContext.arch`.
+        // 2. `ModelQuirks::has_recurrent_layers` — the per-family
+        //    declaration in `model_family.rs`. Used when arch
+        //    metadata is empty (older gguf exports strip the field,
+        //    etc). Replaced the pre-2026-05-20 name-substring
+        //    heuristic that pattern-matched "qwen3.5" / "qwen3.6" /
+        //    "qwopus" — those decisions are now declared once on the
+        //    family, not re-derived from filenames at every dispatch.
+        let arch_says_recurrent = is_recurrent_arch(&slot_ctx.arch);
+        let quirks_say_recurrent =
+            slot_ctx.arch.is_empty() && quirks.has_recurrent_layers;
+        let speculative_active = slot_ctx.is_speculative();
+        let prefix_cache_safe =
+            !speculative_active && !arch_says_recurrent && !quirks_say_recurrent;
+        tracing::debug!(
+            model = %model_id,
+            arch = %slot_ctx.arch,
+            arch_says_recurrent,
+            quirks_say_recurrent,
+            mtp_session = speculative_active,
+            prefix_cache_safe,
+            "prefix_cache: gate decision"
+        );
+
+        // Split-borrow `ctx_mut()` + `cached_tokens` via an inline
+        // destructuring match on `&mut slot_ctx.mode`. The function
+        // body uses both as `&mut` simultaneously, which Rust's
+        // split-borrow rules permit on direct field access but NOT
+        // through method calls (which take `&mut self` on the whole
+        // SlotContext). We do the split here so the rest of the
+        // body can keep its prior shape.
+        //
+        // For mode = Speculative we still surface only the target
+        // context — the draft is unused on this path (the dispatcher
+        // gate above already routed any Speculative-eligible request
+        // out to `generate_sync_mtp`).
+        let SlotContext {
+            mode,
+            cached_tokens,
+            ..
+        } = slot_ctx;
+        let ctx = match mode {
+            SlotInferenceMode::SingleToken { ctx } => ctx,
+            SlotInferenceMode::Speculative { target_ctx, .. } => target_ctx,
+        };
         let full_prompt = format_prompt(model, model_id, request, quirks)?;
 
         let tokens = model
@@ -422,16 +1268,104 @@ impl ModelSlot {
             n_ctx,
         )?;
 
-        let mut batch = LlamaBatch::new(n_batch, 1);
-        let last_idx = tokens.len() - 1;
-        for (i, &token) in tokens.iter().enumerate() {
-            batch
-                .add(token, i as i32, &[0], i == last_idx)
-                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+        // **Prefix caching.** Compute the longest common prefix
+        // between what's currently in the KV cache (cached_tokens)
+        // and the new prompt's tokens. Keep the LCP portion of the
+        // cache and only prefill the new tail starting at position
+        // lcp. When lcp == 0 (first call or different prompt), this
+        // degrades to a full clear + full prefill — identical to
+        // the previous unconditional behaviour.
+        //
+        // Defensive full-clear-on-error: cached_tokens is emptied
+        // BEFORE the decode call, then repopulated AFTER success.
+        // A mid-decode failure leaves the cache in an unknown state
+        // but cached_tokens=[] forces the next call to full-clear
+        // first, preventing M-RoPE position mismatches.
+        //
+        // 2026-05-17 SEP-pipeline tuning. See SlotContext.cached_tokens
+        // for the workload justification.
+        let cached_len_at_entry = cached_tokens.len();
+        let raw_lcp = cached_tokens
+            .iter()
+            .zip(tokens.iter())
+            // Reserve the last position for fresh decode — the model
+            // needs at least one token of new context to produce
+            // logits. If the new prompt is *identical* to the cached
+            // one, force a 1-token re-prefill so the sampler still
+            // has a fresh logit distribution to draw from.
+            .take(tokens.len().saturating_sub(1))
+            .take_while(|(a, b)| a == b)
+            .count();
+        // Apply the capability gate (see prefix_cache_safe rationale
+        // at top of generate_sync). Hybrid recurrent models force
+        // full prefill; pure-attention slots use the raw LCP.
+        let lcp = if prefix_cache_safe { raw_lcp } else { 0 };
+        // Clear cached_tokens before any cache mutation — restored on
+        // success path below. If we crash between here and the
+        // post-decode update, next call sees cached_tokens=[] and
+        // does a defensive full clear.
+        cached_tokens.clear();
+        if lcp == 0 {
+            ctx.clear_kv_cache();
+        } else {
+            // Partial keep: drop positions [lcp, end) from the
+            // single sequence we use (seq_id=0). Positions [0, lcp)
+            // stay resident; the new tail decode below starts at
+            // position lcp.
+            if let Err(e) = ctx.clear_kv_cache_seq(Some(0), Some(lcp as u32), None) {
+                tracing::warn!(
+                    error = ?e,
+                    lcp,
+                    new_prompt_len = tokens.len(),
+                    "prefix_cache: partial clear failed — falling back to full clear"
+                );
+                ctx.clear_kv_cache();
+            }
         }
 
-        ctx.decode(&mut batch)
-            .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
+        let mut batch = LlamaBatch::new(n_batch, 1);
+        let tail = &tokens[lcp..];
+        let last_idx = tail.len() - 1;
+        for (j, &token) in tail.iter().enumerate() {
+            let absolute_pos = (lcp + j) as i32;
+            batch
+                .add(token, absolute_pos, &[0], j == last_idx)
+                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+        }
+        // **TEMPORARY instrumentation (Phase 3c, 2026-05-19).**
+        // Promoted to info so we can correlate prefix-cache state
+        // with the n_tokens==0 decode failures observed in the gym.
+        // Revert to debug-level once root cause is identified.
+        tracing::info!(
+            cache_hit_tokens = lcp,
+            raw_lcp,
+            new_prefill_tokens = tail.len(),
+            new_prompt_len = tokens.len(),
+            cached_len_at_entry,
+            batch_n_tokens = batch.n_tokens(),
+            "prefix_cache: prefill scope"
+        );
+
+        if let Err(e) = ctx.decode(&mut batch) {
+            tracing::warn!(
+                error = %e,
+                cache_hit_tokens = lcp,
+                raw_lcp,
+                new_prefill_tokens = tail.len(),
+                new_prompt_len = tokens.len(),
+                cached_len_at_entry,
+                batch_n_tokens = batch.n_tokens(),
+                "prefix_cache: decode failed — state at failure"
+            );
+            return Err(Error::Inference(format!("Prompt decode failed: {e}")));
+        }
+        // Decode succeeded — record the new cached sequence so the
+        // next call can compute its LCP against this one. The decode
+        // loop below mutates `ctx` (KV grows by `n_generated` after
+        // each token), but we DON'T add generated tokens to
+        // cached_tokens because they're not part of the *prompt* the
+        // next request will share. Only the prompt is comparable.
+        *cached_tokens = tokens.clone();
 
         let mut sampler = build_sampler(model, request, quirks);
         let mut output = String::new();
@@ -481,6 +1415,17 @@ impl ModelSlot {
         // past the close `}` was wasted on a grammar mask cycling
         // through whitespace / preferred-but-masked tokens.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        // Brace-balance stop (shape B) only fires when grammar is
+        // actively constraining output to the tool envelope shape —
+        // i.e., `request.structured_output` is set. Without that
+        // gate, the tracker counts literal `{...}` in prose (LaTeX,
+        // markdown, code fences) and stops generation mid-thought.
+        // Repro: Qwopus3.5-9B-Coder emitting "x_{r,c}" inside a
+        // markdown bullet → false-positive stop at n_generated=87,
+        // observed 2026-05-21. The marker stop (`</tool_call>`,
+        // shape A) stays unconditional below.
+        let tools_grammar_locked =
+            tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -495,6 +1440,47 @@ impl ModelSlot {
         let mut role_content_n = 0usize;
         let mut tokens_in_string_n = 0usize;
         let role_trace_on = std::env::var("SOVEREIGN_TRACE_SAMPLER_ROLES").is_ok();
+
+        // **Jump-forward decoding.** After each sampled token, ask
+        // the constraint whether the FSM has exactly one legal next
+        // token (Tier 1, mask-cache) or a deterministic byte run that
+        // longest-matches into one or more vocab tokens (Tier 2,
+        // FSM-byte-walk + VocabTrie). Forced tokens are emitted
+        // without paying their own forward pass — their KV entries
+        // ride into the next batched decode alongside the sampled
+        // token. The mechanism turns N sequential 1-token decodes
+        // into one wider decode at the next ambiguous position; on
+        // batched-decode-friendly hardware (Strix Halo Vulkan, Metal)
+        // a 5-token batch is ~2-3× faster than 5 sequential
+        // singletons.
+        //
+        // **On by default** as of 2026-05-17. Measured ~15% tok/s lift
+        // on the non-MTP path with the Twin Earth extraction schema
+        // (Tier 1 alone captured 0% on Qwen3 BPE — see notes from that
+        // day for the empirical finding). Opt out via
+        // `SOVEREIGN_JUMP_FWD_DISABLE=1` for A/B or emergency
+        // rollback. Both tiers default on independently:
+        //   `SOVEREIGN_JUMP_FWD_DISABLE=1`   — kills the whole walk
+        //   `SOVEREIGN_JUMP_FWD_T2_DISABLE=1` — keeps Tier 1, kills Tier 2
+        //
+        // Active only when the request has `structured_output` (the
+        // constraint is what produces forced tokens) AND we're not
+        // inside a `<think>` block.
+        //
+        // `MAX_JUMP_FWD_RUN` caps the per-iteration batch width so a
+        // pathological forced-byte cycle can't run the verify batch
+        // beyond `n_batch_max`. 32 is well under typical n_batch
+        // (2048+) and covers all realistic JSON-skeleton runs we've
+        // measured (typically 3-15 tokens).
+        let jump_fwd_enabled = jump_fwd_enabled_from_env(|k| std::env::var(k).ok());
+        let jump_fwd_t2_enabled =
+            jump_fwd_t2_enabled_from_env(|k| std::env::var(k).ok());
+        const MAX_JUMP_FWD_RUN: usize = 32;
+        const MAX_FORCED_BYTES: usize = 64;
+        let mut jump_fwd_n: usize = 0;
+        let mut jump_fwd_runs: usize = 0;
+        let mut jump_fwd_max: usize = 0;
+        let mut jump_fwd_bytes_n: usize = 0;
 
         while n_generated < max_tokens {
             if Instant::now() > deadline {
@@ -571,12 +1557,14 @@ impl ModelSlot {
 
                 output.push_str(&piece);
 
-                // Tool-emission stop. Two cases, both unconditional
-                // once detected (no `!in_think` guard — see fn-scope
-                // comment): marker-wrapped close-tag, or grammar-
-                // locked balanced JSON envelope. Track brace depth
-                // incrementally on the piece bytes, ignoring braces
-                // inside JSON strings.
+                // Tool-emission stop. Marker-wrapped close-tag fires
+                // whenever tools were requested (shape A — works on
+                // any model whose chat template wraps tool calls in
+                // `<tool_call>...</tool_call>`). Brace-balance stop
+                // (shape B — bare JSON envelope) only fires when
+                // grammar is actively constraining output to the
+                // envelope schema; without that gate the tracker
+                // matches any `{...}` in prose. See `tools_grammar_locked`.
                 if tools_present {
                     if tail.contains("</tool_call>") {
                         tracing::info!(
@@ -588,7 +1576,27 @@ impl ModelSlot {
                         n_generated += 1;
                         break;
                     }
-                    if !in_think {
+                    // llguidance grammar-stop: when the schema-driven
+                    // constraint reports `is_stopped() == true`, the
+                    // JSON envelope has closed. Without this break, the
+                    // chat template's post-tool tail (`</think>`,
+                    // `</tool_call>`) leaks into the response content
+                    // and the model can keep generating free-form prose
+                    // until token cap. Distinct from the brace-balance
+                    // stop below (which is gated on `tools_grammar_locked`
+                    // i.e. legacy JsonConstraint) — both close the same
+                    // class but llguidance is the authoritative signal
+                    // when it's the active constraint.
+                    if sampler.grammar_is_stopped() {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on llguidance grammar accept"
+                        );
+                        n_generated += 1;
+                        break;
+                    }
+                    if tools_grammar_locked && !in_think {
                         for b in piece.bytes() {
                             if tc_json_escape_next {
                                 tc_json_escape_next = false;
@@ -627,14 +1635,199 @@ impl ModelSlot {
 
             n_generated += 1;
 
+            // **Jump-forward walk.** When the constraint is active and
+            // we're outside the `<think>` block, ask the FSM whether
+            // the next legal token is uniquely determined. If so, emit
+            // it now and accumulate it into the next decode batch.
+            // Each forced token gets the same per-token bookkeeping
+            // (output, tail, tool-call JSON tracker, n_generated) the
+            // sampled token just ran — minus the think-tag detection
+            // since we're gated on `!in_think`.
+            //
+            // **Two-tier walk.** Tier 1 (`forced_next_token`) returns
+            // the unique vocab token whose mask leaves it as the lone
+            // survivor — O(1) on a warm cache. Tier 2
+            // (`forced_next_run`) walks the FSM at byte level and
+            // longest-matches the resulting forced byte run against
+            // the vocab trie — catches BPE-skeleton transitions where
+            // many tokens share a leading byte but only one or two
+            // multi-byte tokens cover the deterministic stretch.
+            // A pending queue smooths over the difference: Tier 1
+            // produces 1 token per call, Tier 2 produces N. Both feed
+            // into the same per-token bookkeeping below.
+            //
+            // Stops on: both tiers miss, MAX_JUMP_FWD_RUN cap, EOG
+            // token (defensive — tier methods already filter), or
+            // hitting `max_tokens`.
+            let mut forced_run: Vec<LlamaToken> = Vec::new();
+            let mut forced_hit_break = false;
+            let mut pending: std::collections::VecDeque<LlamaToken> =
+                std::collections::VecDeque::new();
+            if jump_fwd_enabled && !in_think && n_generated < max_tokens {
+                while forced_run.len() < MAX_JUMP_FWD_RUN && n_generated < max_tokens {
+                    if pending.is_empty() {
+                        // Try Tier 1 first — cheap O(1) on warm cache.
+                        if let Some(t) = sampler.forced_next_token() {
+                            pending.push_back(t);
+                        } else if jump_fwd_t2_enabled {
+                            // Tier 1 miss; fall through to Tier 2's
+                            // byte-walk + longest-match. Returns ALL
+                            // forced tokens up to the next ambiguity
+                            // in one call, all already cleared by the
+                            // probe FSM (caller still must `accept`
+                            // each via the sampler).
+                            let run = sampler.forced_next_run(MAX_FORCED_BYTES);
+                            if run.is_empty() {
+                                break;
+                            }
+                            pending.extend(run);
+                        } else {
+                            break;
+                        }
+                    }
+                    // Safe: we either populated pending above or hit a
+                    // break. If pending is somehow still empty here
+                    // (defensive against a Tier 2 race that returns an
+                    // empty Vec but reaches this point), bail.
+                    let Some(ftok) = pending.pop_front() else {
+                        break;
+                    };
+                    if model.is_eog_token(ftok) {
+                        // forced_next_token should not return EOG (it
+                        // guards on buffer_is_complete), but be safe:
+                        // hand control back to the sampler loop so the
+                        // existing EOG path runs cleanly.
+                        break;
+                    }
+                    sampler.accept(ftok);
+                    if let Ok(piece) = model.token_to_piece(ftok, &mut decoder, true, None) {
+                        if role_trace_on && tools_present {
+                            tracing::info!(
+                                role = ?SamplerRole::Explore,
+                                in_string = tc_json_in_string,
+                                depth = tc_json_depth,
+                                piece = %piece.replace('\n', "\\n"),
+                                "sampler_trace token (jump_fwd)"
+                            );
+                        }
+                        // Tail buffer + structural tag tracking. We're
+                        // outside <think> by construction here, but
+                        // keep the tail in sync so a subsequent
+                        // sampled token's tag detection sees the right
+                        // context.
+                        tail.push_str(&piece);
+                        if tail.len() > 32 {
+                            let mut drain_to = tail.len() - 32;
+                            while drain_to > 0 && !tail.is_char_boundary(drain_to) {
+                                drain_to -= 1;
+                            }
+                            tail.drain(..drain_to);
+                        }
+                        // tail can't open <think> here (forced bytes
+                        // are FSM-dictated JSON content, never the
+                        // open tag); a stray close-tag would only
+                        // appear in non-structured generation, which
+                        // doesn't reach this path.
+
+                        output.push_str(&piece);
+                        jump_fwd_bytes_n += piece.len();
+
+                        // Tool-call JSON tracker. Forced tokens
+                        // contribute bytes to a tool-call envelope
+                        // when one's active; if the envelope balances
+                        // on a forced byte, stop here so the loop's
+                        // existing close detection still fires on the
+                        // next iteration's check. Brace tracker is
+                        // gated on `tools_grammar_locked` per the
+                        // fn-scope note; marker stop stays unconditional.
+                        if tools_present {
+                            if tail.contains("</tool_call>") {
+                                tracing::info!(
+                                    model = %model_id,
+                                    n_generated,
+                                    tail = %tail,
+                                    "inference: stopping on </tool_call> marker (jump_fwd)"
+                                );
+                                forced_run.push(ftok);
+                                n_generated += 1;
+                                forced_hit_break = true;
+                                break;
+                            }
+                            if tools_grammar_locked {
+                                for b in piece.bytes() {
+                                    if tc_json_escape_next {
+                                        tc_json_escape_next = false;
+                                        continue;
+                                    }
+                                    if tc_json_in_string {
+                                        match b {
+                                            b'\\' => tc_json_escape_next = true,
+                                            b'"' => tc_json_in_string = false,
+                                            _ => {}
+                                        }
+                                        continue;
+                                    }
+                                    match b {
+                                        b'"' => tc_json_in_string = true,
+                                        b'{' => {
+                                            tc_json_depth += 1;
+                                            tc_json_ever_opened = true;
+                                        }
+                                        b'}' => tc_json_depth -= 1,
+                                        _ => {}
+                                    }
+                                }
+                                if tc_json_ever_opened && tc_json_depth == 0 {
+                                    tracing::info!(
+                                        model = %model_id,
+                                        n_generated,
+                                        "inference: stopping on balanced JSON envelope (jump_fwd)"
+                                    );
+                                    forced_run.push(ftok);
+                                    n_generated += 1;
+                                    forced_hit_break = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    forced_run.push(ftok);
+                    n_generated += 1;
+                }
+                if !forced_run.is_empty() {
+                    jump_fwd_runs += 1;
+                    jump_fwd_n += forced_run.len();
+                    if forced_run.len() > jump_fwd_max {
+                        jump_fwd_max = forced_run.len();
+                    }
+                }
+            }
+
             batch.clear();
-            let pos = (tokens.len() + n_generated - 1) as i32;
+            // Batched decode: [token, ...forced_run]. Sequential
+            // positions starting at `base_pos`; logits=true only on
+            // the final position, since the next iteration's
+            // `sampler.sample(ctx, -1, ...)` reads only the last logit.
+            // Saves softmax compute on intermediate positions when
+            // jump-forward fires.
+            let base_pos = (tokens.len() + n_generated - forced_run.len() - 1) as i32;
+            let want_sampled_logits = forced_run.is_empty();
             batch
-                .add(token, pos, &[0], true)
+                .add(token, base_pos, &[0], want_sampled_logits)
                 .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
+            for (i, &ftok) in forced_run.iter().enumerate() {
+                let is_last = i + 1 == forced_run.len();
+                batch
+                    .add(ftok, base_pos + 1 + i as i32, &[0], is_last)
+                    .map_err(|e| Error::Inference(format!("Batch add (jump_fwd) failed: {e}")))?;
+            }
 
             ctx.decode(&mut batch)
                 .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
+
+            if forced_hit_break {
+                break;
+            }
 
             // Budget forcing: inject </think> if the think block runs too long.
             if in_think && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET) && !think_budget_fired {
@@ -659,7 +1852,31 @@ impl ModelSlot {
             }
         }
 
-        ctx.clear_kv_cache();
+        // Intentionally do NOT clear KV here. The prefix-cache
+        // machinery at the top of generate_sync (cached_tokens +
+        // LCP partial-clear, ~line 756) is designed to preserve KV
+        // across requests so the next prompt's shared prefix re-uses
+        // the current generation's KV positions. Clearing here was an
+        // uncommented copy-paste survivor that silently defeated the
+        // cache — and worse, desynchronised it: cached_tokens (set
+        // ~line 814 below) kept tracking the prompt while KV was
+        // zeroed, so the next request computed LCP > 0 against an
+        // empty KV, partial-cleared a no-op, prefilled only the
+        // one-token tail at position lcp, and the model generated
+        // from missing-context state. Observable symptom in the
+        // search-gym 2026-05-19: replay 1 of every fixture produced
+        // a coherent reply (LCP=0 path); replays 2-5 produced
+        // raw-corpus-like gibberish unrelated to the prompt.
+        //
+        // TODO: generate_stream_sync still has an end-of-fn unconditional
+        // clear at ~line 2381. Streaming-only sequences are
+        // self-consistent because that path doesn't touch
+        // cached_tokens, but a streaming→non-streaming sequence on
+        // the same slot will re-introduce the desync (cached_tokens
+        // stale from the last non-streaming call, KV empty from the
+        // streaming clear). The fix is to have streaming take
+        // &mut SlotContext and clear cached_tokens at start. Tracking
+        // separately; the gym is non-streaming so this fix unblocks it.
 
         // Sampler-role summary: emitted once per generation so the
         // operator can spot when Content (greedy) didn't engage.
@@ -690,8 +1907,580 @@ impl ModelSlot {
             output = format!("<think>{output}");
         }
 
+        // End-of-generation telemetry — mirrors the MTP path's
+        // `mtp: end-of-generation` line so a single log analyzer can
+        // bucket per-request behaviour by path. Always emitted (no
+        // guard) so the operator can decompose throughput by
+        // `has_schema` / `jump_fwd_enabled`.
+        let elapsed_ms = started_at.elapsed().as_millis();
+        let tok_per_s = if elapsed_ms > 0 {
+            n_generated as f64 * 1000.0 / elapsed_ms as f64
+        } else {
+            0.0
+        };
+        let has_schema = request.structured_output.is_some();
+        let has_tools = tools_present;
+        let jump_fwd_ratio = if n_generated > 0 {
+            jump_fwd_n as f64 / n_generated as f64
+        } else {
+            0.0
+        };
+        tracing::info!(
+            model = %model_id,
+            prompt_tokens = tokens.len(),
+            n_generated,
+            elapsed_ms,
+            tok_per_s = format!("{tok_per_s:.1}"),
+            has_schema,
+            has_tools,
+            jump_fwd_enabled,
+            jump_fwd_t2_enabled,
+            jump_fwd_n,
+            jump_fwd_runs,
+            jump_fwd_max,
+            jump_fwd_bytes_n,
+            jump_fwd_ratio = format!("{jump_fwd_ratio:.3}"),
+            "inference: end-of-generation"
+        );
+
         Ok((output, tokens.len(), n_generated))
     }
+
+    /// **MTP speculative-decoding loop (Phase A).** Direct port of the
+    /// upstream `examples/mtp` example with our `ConstrainedSampler` in
+    /// place of upstream's bare `LlamaSampler` so per-request sampling
+    /// params (temperature, top-p, …) are honoured. Active only when
+    /// `slot_ctx.draft_ctx.is_some()` — the dispatcher in `generate_sync`
+    /// gates on (no structured_output) AND (no tools), keeping the loop
+    /// free of the JsonConstraint mask + tool-call JSON tracker that
+    /// the single-token path runs.
+    ///
+    /// **Sequence of API calls is load-bearing.** See
+    /// [[project_mtp_invariants]] for the why behind each call; the
+    /// short version:
+    /// 1. Both contexts must be built with `with_n_rs_seq(>= n_draft_max)`.
+    ///    Without it, partial `clear_kv_cache_seq` on rejected drafts
+    ///    fails inside the target's recurrent layers and the next
+    ///    verify batch hits an M-RoPE position assert.
+    /// 2. After prefill decode: `session.process(&prefill)` then
+    ///    `session.begin(seq_id, &tokens)`. `process` injects target's
+    ///    pre-norm h into the draft side; `begin` initialises per-seq
+    ///    MTP state.
+    /// 3. Each loop iteration: `draft` → roll-back draft KV to `n_past`
+    ///    (drops draft()'s AR pre-advancement) → verify decode →
+    ///    `session.process(&verify)` → sample at each position and
+    ///    find longest matching prefix → roll back rejected suffix on
+    ///    BOTH ctxs → `session.accept(seq_id, n_accepted)`.
+    ///
+    /// **Phase A intentionally excludes:**
+    /// - Prefix caching. KVs are cleared at entry; SEP-pipeline phases
+    ///   that benefit most from prefix reuse all run on
+    ///   `generate_sync_batched` via FastShort, not on MTP.
+    /// - JsonConstraint mask, tool-call JSON tracker, think-block
+    ///   budget, sampler-role tracing — Phase B.
+    ///
+    /// **Telemetry:** end-of-generation log with `accept_rate` and
+    /// `tok_per_s` so the value of MTP per request is observable.
+    /// Upstream measured 52% acceptance + 32 tok/s on Strix Halo
+    /// Vulkan with Qwen3.6-A3B-MTP-Q6_K (2026-05-17 validation).
+    fn generate_sync_mtp(
+        model: &LlamaModel,
+        model_id: &str,
+        slot_ctx: &mut SlotContext,
+        request: &CompletionRequest,
+        quirks: &ModelQuirks,
+    ) -> Result<(String, usize, usize)> {
+        // **Rebuild the MTP session at the request boundary.** The
+        // session that ModelSlot::load constructed is reused across
+        // every request; KV cache clear (below) resets the contexts'
+        // token state but does NOT touch the session's internal
+        // draft-scheduler state. After 1-2 sequential requests that
+        // residual state desynchronises with the fresh prompt and the
+        // draft head proposes tokens from stale branches — observed
+        // as garbage output ("Python sorting algorithm" responses to
+        // unrelated questions) once the search-gym started running
+        // --replays > 1.
+        //
+        // `rebuild_session_in_place` enforces the dispatcher contract
+        // (slot must be `Speculative`) and uses `mem::replace` so we
+        // never hold two sessions referencing the same contexts
+        // simultaneously — upstream documents that as UB inside
+        // `common_speculative_*`. Errors here (rare; would indicate
+        // the session re-init refused for some new reason) propagate
+        // up and the outer quarantine logic in `generate_sync` can
+        // demote the slot to SingleToken.
+        slot_ctx.rebuild_session_in_place(model_id)?;
+
+        // Split-borrow target + draft + session via the
+        // `speculative_mut` accessor. The MtpSession holds raw
+        // pointers internally and is not tracked by the borrow
+        // checker; the accessor returns three disjoint mutable
+        // references into the enum variant, which together with
+        // `cached_tokens` cover everything this function needs.
+        //
+        // The accessor's `None` branch is a panic-grade contract
+        // violation (dispatcher gate routed us here even though the
+        // slot isn't speculative). Convert to a proper error rather
+        // than panicking so the caller can fall back gracefully.
+        let SlotContext {
+            mode,
+            cached_tokens,
+            ..
+        } = slot_ctx;
+        let (target_ctx, draft_ctx, session, n_draft_max) = match mode {
+            SlotInferenceMode::Speculative {
+                target_ctx,
+                draft_ctx,
+                session,
+                n_draft_max,
+            } => (target_ctx, draft_ctx, session, *n_draft_max),
+            SlotInferenceMode::SingleToken { .. } => {
+                return Err(Error::Inference(
+                    "generate_sync_mtp: slot is in SingleToken mode — dispatcher contract violated"
+                        .into(),
+                ));
+            }
+        };
+
+        // Phase A clears both KVs and starts fresh — no prefix cache
+        // integration on this path yet. The non-MTP path keeps
+        // cached_tokens for itself; we clear it here so a return to
+        // the non-MTP path doesn't reuse a stale fingerprint.
+        target_ctx.clear_kv_cache();
+        draft_ctx.clear_kv_cache();
+        cached_tokens.clear();
+
+        let full_prompt = format_prompt(model, model_id, request, quirks)?;
+        let tokens = model
+            .str_to_token(&full_prompt, AddBos::Always)
+            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+        if tokens.is_empty() {
+            return Err(Error::Inference("MTP: empty prompt".into()));
+        }
+
+        let n_ctx = target_ctx.n_ctx() as usize;
+        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
+
+        // Prefill: decode the entire prompt as one batch with
+        // logits=true on every position. MTP needs that flag set
+        // throughout so pre-norm embeddings can be extracted for the
+        // draft context (`get_embeddings_pre_norm_ith` errors with
+        // `batch.logits[N] != true` otherwise — upstream invariant).
+        //
+        // The MTP session's `set_embeddings_pre_norm(true)` hook was
+        // installed on both contexts at slot-load time (see
+        // ModelSlot::load), so this prefill decode will compute and
+        // store the pre-norm hidden state that `session.process` reads
+        // back below.
+        let n_batch_max = target_ctx.n_batch() as usize;
+        let prefill_capacity = tokens.len().max(n_batch_max);
+        let mut prefill = LlamaBatch::new(prefill_capacity, 1);
+        for (i, &tok) in tokens.iter().enumerate() {
+            prefill
+                .add(tok, i as i32, &[0], true)
+                .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
+        }
+        target_ctx
+            .decode(&mut prefill)
+            .map_err(|e| Error::Inference(format!("MTP prefill decode failed: {e}")))?;
+
+        // `process(&prefill)` after every target decode is what injects
+        // target's pre-norm h into the draft side. `begin(seq_id,
+        // &tokens)` then resets per-seq pending-h state for THIS
+        // request (the session itself persists across requests). Both
+        // calls are load-bearing: skipping either makes the draft run
+        // uncalibrated and acceptance collapses.
+        session
+            .process(&prefill)
+            .map_err(|e| Error::Inference(format!("MTP process(prefill) failed: {e:?}")))?;
+        session
+            .begin(0, &tokens)
+            .map_err(|e| Error::Inference(format!("MTP begin failed: {e:?}")))?;
+
+        // Sample the first token from prefill's last logit position.
+        // Use ConstrainedSampler::Explore — no JSON-schema mask is
+        // installed on this path (dispatcher filtered structured
+        // requests out), so the sampler behaves as a plain chain
+        // of {temp/top-p/top-k/penalties} per the request quirks.
+        let mut sampler = build_sampler(model, request, quirks);
+        let mut last_token = sampler.sample(
+            &*target_ctx,
+            prefill.n_tokens() - 1,
+            SamplerRole::Explore,
+        );
+        sampler.accept(last_token);
+
+        let mut output = String::new();
+        let mut decoder = encoding_rs::UTF_8.new_decoder();
+        if let Ok(piece) = model.token_to_piece(last_token, &mut decoder, true, None) {
+            output.push_str(&piece);
+        }
+
+        let mut n_generated: usize = 1;
+        let mut n_past = tokens.len() as i32;
+        let mut n_drafts_total: u64 = 0;
+        let mut n_accepted_total: u64 = 0;
+        let mut n_draft_calls: u64 = 0;
+
+        // Jump-forward state. Reads same env gates as generate_sync so
+        // the MTP path picks up the operating default automatically.
+        let jump_fwd_enabled = jump_fwd_enabled_from_env(|k| std::env::var(k).ok());
+        let jump_fwd_t2_enabled =
+            jump_fwd_t2_enabled_from_env(|k| std::env::var(k).ok());
+        const MAX_JUMP_FWD_RUN: usize = 32;
+        const MAX_FORCED_BYTES: usize = 64;
+        let mut jump_fwd_n: usize = 0;
+        let mut jump_fwd_runs: usize = 0;
+        let mut jump_fwd_max: usize = 0;
+        let mut jump_fwd_bytes_n: usize = 0;
+
+        // Verification batch holds [last_token, drafts...] OR
+        // [last_token, ...forced_run] on jump-forward iterations. Cap
+        // at max(n_draft_max + 1, MAX_JUMP_FWD_RUN + 1, n_batch_max).
+        // Allocation is one-shot, reused via `clear()`.
+        let verify_cap = (n_draft_max as usize + 1)
+            .max(MAX_JUMP_FWD_RUN + 1)
+            .max(n_batch_max);
+        let mut verify = LlamaBatch::new(verify_cap, 1);
+
+        let deadline_secs = inference_deadline_secs();
+        let deadline = Instant::now() + std::time::Duration::from_secs(deadline_secs);
+        let started_at = Instant::now();
+
+        while n_generated < max_tokens {
+            if model.is_eog_token(last_token) {
+                break;
+            }
+            if Instant::now() > deadline {
+                let elapsed = started_at.elapsed().as_secs();
+                tracing::warn!(
+                    model = %model_id,
+                    elapsed_s = elapsed,
+                    deadline_s = deadline_secs,
+                    n_generated,
+                    "mtp:deadline exceeded — clearing KV caches"
+                );
+                target_ctx.clear_kv_cache();
+                draft_ctx.clear_kv_cache();
+                return Err(Error::Inference(format!(
+                    "MTP inference deadline exceeded after {elapsed}s ({n_generated} tokens)"
+                )));
+            }
+
+            // === Jump-forward peek (Tier 2 byte-walk) ===
+            //
+            // **Peek-then-commit**, threshold-gated. Unlike the
+            // non-MTP path where we accept forced tokens incrementally
+            // (T1 + T2 chained), MTP's per-iteration cost model wants
+            // a yes/no decision on forced-only vs draft-with-MTP.
+            //
+            // `forced_next_run` returns all forced tokens up to the
+            // next ambiguity via a probe clone of the FSM — it does
+            // NOT mutate `sampler` state, so we can peek freely and
+            // discard if the run is too short to be worth a forced-
+            // only verify round.
+            //
+            // **Threshold motivation.** Draft iterations emit
+            // `1 + accept_rate × n_draft_max ≈ 1 + 0.73 × 3 ≈ 3.19`
+            // tokens on average. A forced-only iteration with K
+            // forced tokens emits `K + 1` (forced + bonus). Forced
+            // only beats the draft average at `K ≥ 3`. Smaller runs
+            // (K=1, K=2) are throughput-negative — the draft path's
+            // mask-constrained sampling will catch the same forced
+            // bytes as part of its 3-token speculation, and the
+            // overhead of a separate forced verify is uncompensated.
+            //
+            // T1 (mask-single-survivor) is implicit in T2's byte
+            // walk: any state where the mask has exactly one legal
+            // token is also a state where the FSM has a forced byte
+            // run terminating at that token. We use the byte walk
+            // exclusively here since on the MTP path we need the
+            // full run length to make the threshold call.
+            const MIN_FORCED_RUN_FOR_MTP: usize = 3;
+            let forced_peek: Vec<LlamaToken> = if jump_fwd_enabled
+                && jump_fwd_t2_enabled
+                && n_generated < max_tokens
+            {
+                sampler.forced_next_run(MAX_FORCED_BYTES)
+            } else {
+                Vec::new()
+            };
+            // Commit only when the run clears the threshold. Cap at
+            // MAX_JUMP_FWD_RUN so the verify batch stays bounded.
+            let mut forced_run: Vec<LlamaToken> = Vec::new();
+            if forced_peek.len() >= MIN_FORCED_RUN_FOR_MTP {
+                let cap = forced_peek.len().min(MAX_JUMP_FWD_RUN);
+                for &ftok in &forced_peek[..cap] {
+                    if model.is_eog_token(ftok) {
+                        break;
+                    }
+                    sampler.accept(ftok);
+                    let piece = model
+                        .token_to_piece(ftok, &mut decoder, true, None)
+                        .unwrap_or_default();
+                    output.push_str(&piece);
+                    jump_fwd_bytes_n += piece.len();
+                    forced_run.push(ftok);
+                    n_generated += 1;
+                    if n_generated >= max_tokens {
+                        break;
+                    }
+                }
+                if !forced_run.is_empty() {
+                    jump_fwd_runs += 1;
+                    jump_fwd_n += forced_run.len();
+                    if forced_run.len() > jump_fwd_max {
+                        jump_fwd_max = forced_run.len();
+                    }
+                }
+            }
+
+            // Forced-only verify round. No drafts; only commits the
+            // forced run + advances session state. Skips the regular
+            // draft-verify-accept block for this iteration.
+            if !forced_run.is_empty() {
+                verify.clear();
+                let k = forced_run.len();
+                // [last_token, forced_run[0], ..., forced_run[K-1]] at
+                // positions n_past..n_past+K. logits=true on every
+                // position so `session.process(&verify)` can inject
+                // pre-norm h uniformly — same invariant the draft path
+                // depends on.
+                verify
+                    .add(last_token, n_past, &[0], true)
+                    .map_err(|e| Error::Inference(format!("MTP forced verify add: {e}")))?;
+                for (i, &f) in forced_run.iter().enumerate() {
+                    verify
+                        .add(f, n_past + 1 + i as i32, &[0], true)
+                        .map_err(|e| Error::Inference(format!("MTP forced verify add: {e}")))?;
+                }
+                target_ctx
+                    .decode(&mut verify)
+                    .map_err(|e| Error::Inference(format!("MTP forced decode failed: {e}")))?;
+                session
+                    .process(&verify)
+                    .map_err(|e| Error::Inference(format!("MTP forced process failed: {e:?}")))?;
+                // **No `session.accept` here.** Upstream's
+                // `common_speculative_accept` asserts on the
+                // speculative impl pointer (`GGML_ASSERT(impl)`)
+                // which only gets set inside `session.draft`. On the
+                // forced-only path we skip drafting, so impl is null,
+                // and calling accept aborts the process. The session's
+                // internal positional reasoning is driven by the
+                // `position` arg of the next `session.draft` call —
+                // skipping accept here doesn't desync the head, it
+                // just means we didn't tell the speculative subsystem
+                // about positions it never proposed drafts for.
+                //
+                // **Bonus sample at idx k.** Mirrors the draft path's
+                // idx 0 bonus: the logit at position `n_past + k`
+                // (last forced token's logit-after) predicts what
+                // comes next in the still-ambiguous part of the
+                // schema. Sampling it here produces the next
+                // iteration's `last_token`. Without this sample we'd
+                // carry `last_token = forced_run[k-1]` into the next
+                // iteration, but that token's KV slot is already
+                // filled (by this verify) — the draft path's
+                // `verify.add(last_token, n_past, ...)` would then
+                // try to add a token at a position libllama already
+                // owns, surfacing as `Decode Error -1: n_tokens == 0`.
+                let next_token = sampler.sample(
+                    &*target_ctx,
+                    k as i32,
+                    SamplerRole::Explore,
+                );
+                sampler.accept(next_token);
+                if !model.is_eog_token(next_token) {
+                    let piece = model
+                        .token_to_piece(next_token, &mut decoder, true, None)
+                        .unwrap_or_default();
+                    output.push_str(&piece);
+                }
+                n_generated += 1;
+                last_token = next_token;
+                // Position arithmetic: the K forced tokens filled KV
+                // at n_past+1..n_past+k. last_token (next_token) is
+                // not yet in the KV — it'll be added by the next
+                // iteration's verify at position n_past + k + 1.
+                n_past += k as i32 + 1;
+                if n_generated >= max_tokens {
+                    break;
+                }
+                if model.is_eog_token(last_token) {
+                    break;
+                }
+                continue;
+            }
+
+            // Draft phase: ask the MTP head for up to n_draft_max
+            // candidate tokens given position + last accepted token.
+            // Returned vec can be shorter than n_draft_max if the head
+            // short-circuits on its own confidence drop.
+            let drafts = session
+                .draft(0, n_past, last_token)
+                .map_err(|e| Error::Inference(format!("MTP draft phase failed: {e:?}")))?;
+            n_draft_calls += 1;
+            n_drafts_total += drafts.len() as u64;
+
+            // Build verify batch: [last_token, drafts...], all with
+            // logits=true so the target produces per-position logits
+            // we can sample at to find the longest accepted prefix.
+            verify.clear();
+            verify
+                .add(last_token, n_past, &[0], true)
+                .map_err(|e| Error::Inference(format!("MTP verify batch add: {e}")))?;
+            for (i, d) in drafts.iter().enumerate() {
+                verify
+                    .add(*d, n_past + 1 + i as i32, &[0], true)
+                    .map_err(|e| Error::Inference(format!("MTP verify batch add: {e}")))?;
+            }
+            let n_verify = verify.n_tokens();
+
+            // Roll back draft KV to drop draft()'s AR pre-advancement.
+            // process(verify) below will re-decode the same positions
+            // on the draft side, this time with target's pre-norm h
+            // injected. Without this rollback the draft side's M-RoPE
+            // positions clash on the second pass.
+            draft_ctx
+                .clear_kv_cache_seq(Some(0), Some(n_past as u32), None)
+                .map_err(|e| Error::Inference(format!("MTP draft KV pre-verify rollback failed: {e:?}")))?;
+
+            target_ctx
+                .decode(&mut verify)
+                .map_err(|e| Error::Inference(format!("MTP verify decode failed: {e}")))?;
+            session
+                .process(&verify)
+                .map_err(|e| Error::Inference(format!("MTP process(verify) failed: {e:?}")))?;
+
+            // Sample at each output position; accept the longest prefix
+            // of the drafts where the target's sample equals the draft.
+            // Output index 0 corresponds to the logit AFTER last_token
+            // (predicts draft[0]). On a mismatch, the sampled token is
+            // the bonus (target's correction at the first mismatch
+            // position) — one free correct token per step regardless
+            // of draft acceptance.
+            let mut n_accepted: usize = 0;
+            let mut next_token = sampler.sample(&*target_ctx, 0, SamplerRole::Explore);
+            sampler.accept(next_token);
+            for (i, draft) in drafts.iter().enumerate() {
+                if next_token == *draft {
+                    n_accepted = i + 1;
+                    if (i + 1) < n_verify as usize {
+                        next_token = sampler.sample(
+                            &*target_ctx,
+                            (i + 1) as i32,
+                            SamplerRole::Explore,
+                        );
+                        sampler.accept(next_token);
+                    }
+                } else {
+                    break;
+                }
+            }
+            n_accepted_total += n_accepted as u64;
+
+            // After this step, positions [n_past, n_past + n_accepted]
+            // are committed (last_token + n_accepted drafts); next_token
+            // is the new generated token but its KV entry won't exist
+            // until we use it as last_token next iteration.
+            let new_n_past = n_past + 1 + n_accepted as i32;
+
+            // Roll back rejected suffix on BOTH contexts. After verify
+            // the target and draft both reach [0..n_past+drafts.len()];
+            // keep only up to position new_n_past - 1. Both rollbacks
+            // require n_rs_seq > 0 on their context.
+            if (n_accepted as i32) < drafts.len() as i32 {
+                target_ctx
+                    .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
+                    .map_err(|e| Error::Inference(format!("MTP target KV rollback failed: {e:?}")))?;
+                draft_ctx
+                    .clear_kv_cache_seq(Some(0), Some(new_n_past as u32), None)
+                    .map_err(|e| Error::Inference(format!("MTP draft KV rollback failed: {e:?}")))?;
+            }
+
+            session
+                .accept(0, n_accepted as u16)
+                .map_err(|e| Error::Inference(format!("MTP session.accept failed: {e:?}")))?;
+
+            // Emit accepted drafts + next_token. Each is checked for
+            // EOG independently; we cap at max_tokens and bail at EOG.
+            let mut hit_eos = false;
+            for &tok in &drafts[..n_accepted] {
+                if n_generated >= max_tokens {
+                    break;
+                }
+                let piece = model
+                    .token_to_piece(tok, &mut decoder, true, None)
+                    .unwrap_or_default();
+                output.push_str(&piece);
+                n_generated += 1;
+                if model.is_eog_token(tok) {
+                    hit_eos = true;
+                    break;
+                }
+            }
+            if hit_eos || n_generated >= max_tokens {
+                break;
+            }
+            let piece = model
+                .token_to_piece(next_token, &mut decoder, true, None)
+                .unwrap_or_default();
+            output.push_str(&piece);
+            n_generated += 1;
+            last_token = next_token;
+            n_past = new_n_past;
+        }
+
+        let elapsed_ms = started_at.elapsed().as_millis();
+        let accept_rate = if n_drafts_total > 0 {
+            n_accepted_total as f64 / n_drafts_total as f64
+        } else {
+            0.0
+        };
+        let tok_per_s = if elapsed_ms > 0 {
+            n_generated as f64 * 1000.0 / elapsed_ms as f64
+        } else {
+            0.0
+        };
+        // Per-request shape — lets a log analyzer compute "average
+        // accept_rate when has_schema=true" vs "false" to test the
+        // hypothesis that schema-masked drafts get rejected more
+        // often than unconstrained drafts. Similarly for has_tools
+        // (which currently shouldn't fire — dispatcher gates tools
+        // out — but logging it costs nothing and catches dispatch
+        // bugs).
+        let has_schema = request.structured_output.is_some();
+        let has_tools = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let jump_fwd_ratio = if n_generated > 0 {
+            jump_fwd_n as f64 / n_generated as f64
+        } else {
+            0.0
+        };
+        tracing::info!(
+            model = %model_id,
+            n_draft_calls,
+            drafts_proposed = n_drafts_total,
+            drafts_accepted = n_accepted_total,
+            accept_rate = format!("{accept_rate:.3}"),
+            prompt_tokens = tokens.len(),
+            n_generated,
+            elapsed_ms,
+            tok_per_s = format!("{tok_per_s:.1}"),
+            has_schema,
+            has_tools,
+            jump_fwd_enabled,
+            jump_fwd_t2_enabled,
+            jump_fwd_n,
+            jump_fwd_runs,
+            jump_fwd_max,
+            jump_fwd_bytes_n,
+            jump_fwd_ratio = format!("{jump_fwd_ratio:.3}"),
+            "mtp: end-of-generation"
+        );
+
+        Ok((output, tokens.len(), n_generated))
+    }
+
 
     /// Multi-sequence batched autoregressive decode for short-call
     /// enrichment phases routed to the FastShort slot. Caller supplies
@@ -719,7 +2508,7 @@ impl ModelSlot {
     fn generate_sync_batched(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         requests: &[&CompletionRequest],
         quirks: &ModelQuirks,
     ) -> Result<Vec<(String, usize, usize)>> {
@@ -732,13 +2521,34 @@ impl ModelSlot {
         // Tokenize every request up-front. `format_prompt` runs the
         // production chat-template renderer (system + user + thinking
         // injection per `quirks`).
+        let forensic = std::env::var("SOVEREIGN_FORENSIC").ok().as_deref() == Some("1");
         let tokenized: Vec<Vec<LlamaToken>> = requests
             .iter()
-            .map(|r| {
+            .enumerate()
+            .map(|(idx, r)| {
                 let prompt = format_prompt(model, model_id, r, quirks)?;
-                model
+                let toks = model
                     .str_to_token(&prompt, AddBos::Always)
-                    .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))
+                    .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
+                if forensic && toks.is_empty() {
+                    // Forensic for the n_tokens==0 batched-prefill bug
+                    // (root cause: llama-cpp-4 0.2.x retired
+                    // `with_n_seq_max`; fixed via vendor crate, see
+                    // workspace `[patch.crates-io]`). Kept as opt-in
+                    // diagnostic for any future batched-prefill
+                    // failure mode. Gated by SOVEREIGN_FORENSIC=1.
+                    let mut end = prompt.len().min(400);
+                    while end > 0 && !prompt.is_char_boundary(end) { end -= 1; }
+                    tracing::warn!(
+                        slot_idx = idx,
+                        prompt_chars = prompt.len(),
+                        prompt_head = %&prompt[..end],
+                        system_message_present = r.system_message.is_some(),
+                        user_prompt_chars = r.prompt.len(),
+                        "batched-prefill: request tokenized to zero tokens — will fail the batch"
+                    );
+                }
+                Ok(toks)
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -778,8 +2588,35 @@ impl ModelSlot {
                 batch_pos += 1;
             }
         }
+        // Forensic: count tokens that actually made it into the
+        // batch. Original use: distinguish "we never added tokens"
+        // (upstream bug — empty tokenization or skipped add) from
+        // "we added tokens but llama_cpp reports 0" (FFI-side bug).
+        // Root cause for the historical n_tokens == 0 failure was
+        // llama-cpp-4 0.2.x retiring `with_n_seq_max`; fixed in the
+        // vendored crate. Counter still feeds the error message
+        // below (cheap, always-on). Verbose pre-decode warning is
+        // opt-in via SOVEREIGN_FORENSIC=1 for future regressions.
+        let batch_n_tokens = batch.n_tokens();
+        if forensic && batch_n_tokens == 0 {
+            let prompt_summaries: Vec<(usize, usize)> = tokenized
+                .iter()
+                .zip(requests.iter())
+                .map(|(t, r)| (t.len(), r.prompt.len()))
+                .collect();
+            tracing::warn!(
+                n_requests = requests.len(),
+                batch_capacity = batch.n_tokens(),
+                tokenized_lens = ?tokenized.iter().map(|t| t.len()).collect::<Vec<_>>(),
+                prompt_summaries = ?prompt_summaries,
+                "batched prefill: about to decode with 0 tokens — root-cause for n_tokens == 0 error"
+            );
+        }
         ctx.decode(&mut batch).map_err(|e| {
-            Error::Inference(format!("Batched prefill decode failed: {e}"))
+            Error::Inference(format!(
+                "Batched prefill decode failed: {e} (batch_n_tokens={batch_n_tokens}, n_requests={})",
+                requests.len()
+            ))
         })?;
 
         // ── Per-seq decode state ────────────────────────────────────
@@ -886,7 +2723,7 @@ impl ModelSlot {
     fn generate_stream_sync(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         request: &CompletionRequest,
         tx: &tokio::sync::mpsc::Sender<Result<String>>,
         quirks: &ModelQuirks,
@@ -947,8 +2784,12 @@ impl ModelSlot {
 
         // See generate_sync: stop on `</tool_call>` (marker) or
         // balanced JSON envelope (grammar-locked) when tools were
-        // requested.
+        // requested. Shape-B tracker gated on `structured_output` to
+        // avoid false-positive stops on prose `{...}` — see fn-scope
+        // note on the sync path.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let tools_grammar_locked =
+            tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -1026,9 +2867,10 @@ impl ModelSlot {
 
                 // Tool-emission JSON-balance bookkeeping — done BEFORE
                 // the send so we don't need to re-borrow piece bytes
-                // after the move into the channel.
+                // after the move into the channel. Gated on
+                // `tools_grammar_locked` per the sync-path note.
                 let mut json_envelope_complete = false;
-                if tools_present && !in_think {
+                if tools_grammar_locked && !in_think {
                     for b in piece.bytes() {
                         if tc_json_escape_next {
                             tc_json_escape_next = false;
@@ -1073,6 +2915,14 @@ impl ModelSlot {
                             n_generated,
                             tail = %tail,
                             "inference: stopping on </tool_call> marker (stream)"
+                        );
+                        break;
+                    }
+                    if sampler.grammar_is_stopped() {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on llguidance grammar accept (stream)"
                         );
                         break;
                     }
@@ -1150,7 +3000,7 @@ impl ModelSlot {
     fn generate_stream_sync_with_finish(
         model: &LlamaModel,
         model_id: &str,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         request: &CompletionRequest,
         tx: &tokio::sync::mpsc::Sender<StreamFrame>,
         quirks: &ModelQuirks,
@@ -1199,8 +3049,12 @@ impl ModelSlot {
 
         // See generate_sync: stop on `</tool_call>` (marker) or
         // balanced JSON envelope (grammar-locked) when tools were
-        // requested.
+        // requested. Shape-B tracker gated on `structured_output` to
+        // avoid false-positive stops on prose `{...}` — see fn-scope
+        // note on the sync path.
         let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
+        let tools_grammar_locked =
+            tools_present && request.structured_output.is_some();
         let mut tc_json_depth = 0i32;
         let mut tc_json_in_string = false;
         let mut tc_json_escape_next = false;
@@ -1259,9 +3113,10 @@ impl ModelSlot {
                 }
 
                 // JSON-balance bookkeeping BEFORE the send so we don't
-                // need to re-borrow piece bytes after the move.
+                // need to re-borrow piece bytes after the move. Gated
+                // on `tools_grammar_locked` per the sync-path note.
                 let mut json_envelope_complete = false;
-                if tools_present && !in_think {
+                if tools_grammar_locked && !in_think {
                     for b in piece.bytes() {
                         if tc_json_escape_next {
                             tc_json_escape_next = false;
@@ -1308,6 +3163,15 @@ impl ModelSlot {
                             n_generated,
                             tail = %tail,
                             "inference: stopping on </tool_call> marker (stream-finish)"
+                        );
+                        reason = FinishReason::Stop;
+                        break;
+                    }
+                    if sampler.grammar_is_stopped() {
+                        tracing::info!(
+                            model = %model_id,
+                            n_generated,
+                            "inference: stopping on llguidance grammar accept (stream-finish)"
                         );
                         reason = FinishReason::Stop;
                         break;
@@ -1425,7 +3289,7 @@ struct EmbedSlot {
 }
 
 struct EmbedSlotContext {
-    ctx: llama_cpp_2::context::LlamaContext<'static>,
+    ctx: crate::llama::cpp::context::LlamaContext<'static>,
     _model: Arc<LlamaModel>,
 }
 
@@ -1485,12 +3349,31 @@ impl EmbedSlot {
         let n_seq_max: u32 = 16;
         let model = Arc::new(model);
 
-        let pooling_type = match embed_quirks.as_ref().map(|q| &q.pooling) {
-            Some(PoolingStrategy::Last) => LlamaPoolingType::Last,
-            Some(PoolingStrategy::Cls)  => LlamaPoolingType::Cls,
-            _                           => LlamaPoolingType::Mean,
-        };
-
+        // **Pooling: gguf-driven.** We deliberately do NOT call
+        // `with_pooling_type(...)` here. The context default is
+        // `LLAMA_POOLING_TYPE_UNSPECIFIED`, which libllama interprets
+        // as "use the model's intrinsic pooling from gguf metadata"
+        // (`<arch>.pooling_type`, e.g. `qwen3.pooling_type=3` for
+        // Qwen3-Embedding → Last). See llama-context.cpp:158-164.
+        //
+        // History: an earlier attempt forced `LlamaPoolingType::Last`
+        // explicitly to match the gguf, which provoked a `ggml_abort`
+        // in `llama_init_from_model` on the bundled 0.2.x libllama
+        // — apparently the explicit-set path on top of `embeddings=true`
+        // hits a code path the bundled tree miscompiles. A second
+        // attempt forced `LlamaPoolingType::None` and tried to do
+        // Mean/Last/Cls in Rust against `embeddings_ith` reads, but
+        // 0.2.x `embeddings_ith` returns null for the matching index
+        // when the embeddings buffer is laid out for a pooled run,
+        // so that path can't read what it needs either.
+        //
+        // Letting libllama do the pooling sidesteps both: it reads
+        // the gguf's `pooling_type` (the author's stated intent), and
+        // `embeddings_seq_ith(seq_id)` returns the pooled vector
+        // exactly as it did on the previous binding. Family-specific
+        // text prep — instruction prefix, EOS append, normalisation
+        // — stays in `EmbedQuirks`, where it belongs; libllama only
+        // owns the math.
         let n_threads = llama_threads_for_host();
         let wants_gpu =
             cfg!(any(target_os = "macos", target_os = "linux")) && requested_gpu_layers > 0;
@@ -1499,11 +3382,14 @@ impl EmbedSlot {
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
                 .with_n_ubatch(2048)
-                .with_n_seq_max(n_seq_max)
+                // EmbedSlot genuinely batches across sequences. The
+                // vendored llama-cpp-4 (workspace `[patch.crates-io]`)
+                // re-introduces `with_n_seq_max` so seq_id > 0 doesn't
+                // hit "Decode Error -1: n_tokens == 0".
+                .with_n_seq_max(16)
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_embeddings(true)
-                .with_pooling_type(pooling_type)
                 // GPU offload toggles. `with_offload_kqv(true)` puts
                 // the KV cache in GPU memory; `with_op_offload(true)`
                 // lets the GGML scheduler route compute ops to the GPU.
@@ -1512,7 +3398,7 @@ impl EmbedSlot {
                 // disables both explicitly so the scheduler keeps every
                 // tensor in main memory.
                 .with_offload_kqv(gpu)
-                .with_op_offload(gpu)
+                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         // Try GPU first if compiled in; fall back to CPU on any
@@ -1529,7 +3415,7 @@ impl EmbedSlot {
                     .map(|c| (c, true))
             }
         } else {
-            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+            Err(crate::llama::cpp::LlamaContextLoadError::NullReturn)
         } {
             Ok(pair) => pair,
             Err(e) => {
@@ -1554,18 +3440,19 @@ impl EmbedSlot {
             }
         };
 
-        let pooling_name = match embed_quirks.as_ref().map(|q| &q.pooling) {
+        let quirks_pooling = match embed_quirks.as_ref().map(|q| &q.pooling) {
             Some(PoolingStrategy::Last) => "last-token",
             Some(PoolingStrategy::Cls)  => "cls",
             _                           => "mean",
         };
-        // Report the actual backend so logs show whether GPU
-        // took (33 seq/sec on M2 Max Metal, measured; ~40+ seq/sec
-        // on Strix Halo Vulkan) or we fell back to CPU (2.8 seq/sec
-        // peak on M2 Max, 3.7-4.9 chunks/s on Strix Halo).
-        // Key diagnostic — a silent CPU fallback is the exact class
-        // of regression that triggered the benchmark-driven
-        // investigation of this path.
+        // libllama-reported pooling type at runtime — sourced from the
+        // gguf's `<arch>.pooling_type` after the UNSPECIFIED → hparams
+        // resolution in `llama_init_from_model`. Surfacing it next to
+        // the family-declared quirks pooling lets one log line catch
+        // the case where the gguf author and the family card disagree
+        // (which silently bakes the wrong embedding into chunks.lance
+        // without any other signal).
+        let runtime_pooling = format!("{:?}", ctx.pooling_type());
         let compute_backend = if used_gpu {
             gpu_backend_label()
         } else {
@@ -1575,7 +3462,8 @@ impl EmbedSlot {
             dims = n_embd,
             layers = model.n_layer(),
             size_mb = model.size() / (1024 * 1024),
-            pooling = pooling_name,
+            quirks_pooling,
+            runtime_pooling = %runtime_pooling,
             n_ctx = ctx_tokens,
             n_seq_max,
             max_input_tokens,
@@ -1602,7 +3490,7 @@ impl EmbedSlot {
     /// and EOS token from the embed quirks (when configured).
     fn embed_sync(
         model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         text: &str,
         n_embd: usize,
         max_input_tokens: usize,
@@ -1625,7 +3513,7 @@ impl EmbedSlot {
     /// and EOS token from the embed quirks (when configured).
     fn embed_query_sync(
         model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         query: &str,
         n_embd: usize,
         max_input_tokens: usize,
@@ -1650,7 +3538,7 @@ impl EmbedSlot {
     /// would be pure overhead.
     fn run_embed_sync(
         model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         input: &str,
         n_embd: usize,
         max_input_tokens: usize,
@@ -1673,6 +3561,19 @@ impl EmbedSlot {
                 .add(token, i as i32, &[0], true)
                 .map_err(|e| Error::Inference(format!("Embed batch add failed: {e}")))?;
         }
+        // **Per-decode `set_embeddings(true)` is load-bearing.** The
+        // `with_embeddings(true)` on context params *should* persist
+        // for the lifetime of the context, but on the bundled
+        // llama-cpp-4 0.2.x libllama the `cparams.embeddings` flag
+        // ends up `false` by the time `output_reserve` runs at
+        // decode — `ctx->embd.data` never gets allocated and every
+        // read (`embeddings_seq_ith`, `embeddings_ith`,
+        // `get_embeddings`) returns null. Calling
+        // `llama_set_embeddings(true)` immediately before `decode`
+        // mirrors what llama-server does per request and is what
+        // unblocks the pooled-vector read. Don't remove without
+        // re-running the embed probe.
+        ctx.set_embeddings(true);
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Embed decode failed: {e}")))?;
 
@@ -1821,6 +3722,9 @@ impl EmbedSlot {
             // and we skip the decode entirely.
             if seqs_in_batch > 0 {
                 ctx_lock.ctx.clear_kv_cache();
+                // See run_embed_sync for why this per-decode toggle
+                // is load-bearing on llama-cpp-4 0.2.x.
+                ctx_lock.ctx.set_embeddings(true);
                 ctx_lock
                     .ctx
                     .decode(&mut batch)
@@ -1830,7 +3734,8 @@ impl EmbedSlot {
             // Walk the inputs that belonged to this sub-batch and
             // emit one embedding per input, mapping local seq_id
             // back to the original input slot. Empty inputs get
-            // zero vectors of the right length.
+            // zero vectors of the right length. Non-empty inputs
+            // read the libllama-pooled vector via `embeddings_seq_ith`.
             let mut local_seq: i32 = 0;
             for local_idx in sub_start..cursor {
                 if prepared[local_idx].is_empty() {
@@ -1954,7 +3859,7 @@ fn jina_v3_prompt_fragments() -> (String, String, String) {
 }
 
 struct RerankSlotContext {
-    ctx: llama_cpp_2::context::LlamaContext<'static>,
+    ctx: crate::llama::cpp::context::LlamaContext<'static>,
     _model: Arc<LlamaModel>,
 }
 
@@ -2006,11 +3911,11 @@ impl RerankSlot {
                 .with_n_ctx(NonZeroU32::new(ctx_tokens))
                 .with_n_batch(ctx_tokens)
                 .with_n_ubatch(ctx_tokens.min(2048))
-                .with_n_seq_max(1)
+                // MIGRATION 2026-05-17: .with_n_seq_max(...) retired in llama-cpp-4 0.2.x — see crate::llama
                 .with_n_threads(n_threads as i32)
                 .with_n_threads_batch(n_threads as i32)
                 .with_offload_kqv(gpu)
-                .with_op_offload(gpu)
+                // MIGRATION 2026-05-17: .with_op_offload(...) retired in llama-cpp-4 0.2.x — see crate::llama
         };
 
         let (ctx, used_gpu) = match if wants_gpu {
@@ -2022,7 +3927,7 @@ impl RerankSlot {
                     .map(|c| (c, true))
             }
         } else {
-            Err(llama_cpp_2::LlamaContextLoadError::NullReturn)
+            Err(crate::llama::cpp::LlamaContextLoadError::NullReturn)
         } {
             Ok(pair) => pair,
             Err(e) => {
@@ -2162,7 +4067,7 @@ impl RerankSlot {
     #[allow(clippy::too_many_arguments)]
     fn score_pair_sync(
         model: &LlamaModel,
-        ctx: &mut llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
         query: &str,
         doc: &str,
         max_input_tokens: usize,
@@ -2399,6 +4304,24 @@ pub(crate) const FAST_SHORT_N_SEQ_MAX: u32 = 8;
 pub(crate) const FAST_SHORT_N_CTX: u32 = 16_384;
 pub(crate) const FAST_SHORT_N_UBATCH: u32 = 2_048;
 
+/// Conservative chars→tokens estimate the slot picker uses before
+/// tokenization is available. The FastShort per-sequence KV budget
+/// is `FAST_SHORT_N_CTX / FAST_SHORT_N_SEQ_MAX = 2048` tokens; any
+/// request whose tokenized prompt exceeds that overflows the slot
+/// and fails with `NoKvCacheSlot` at decode time. 4 chars/token is
+/// conservative for Llama-family BPE vocabularies (real ratio is
+/// typically 3.5–4 for English, lower for code-dense prompts) so a
+/// 1500-token budget maps to ~6000 chars. Headroom for output cap
+/// (≤512 tokens) is the remaining 500 tokens of slot budget. A
+/// prompt above this threshold falls through to the Fast slot
+/// (n_seq_max=1, full n_ctx) where it has the whole window. See
+/// `pick_slot` for the gate. Forensic 2026-05-19 trace surfaced
+/// `prompt_chars=9272, max_tokens=16` (a small-output Fast call
+/// with a large conversation-context prompt) routing here and
+/// blowing up — title/scope classifiers see full conversation
+/// context even when they emit ~16 tokens.
+pub(crate) const FAST_SHORT_MAX_INPUT_CHARS: usize = 6_000;
+
 /// Time the coalescer waits between accepting the first request and
 /// firing the batched decode. Concurrent enrichment-phase callers
 /// (Phase 1b/3/5/6 dispatched via `buffer_unordered` or `try_join_all`)
@@ -2510,7 +4433,7 @@ impl FastShortCoalescer {
                 ModelSlot::generate_sync_batched(
                     &slot.model,
                     &model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &requests_refs,
                     &quirks,
                 )
@@ -2683,6 +4606,17 @@ pub struct EmbeddedLlamaCpp {
     /// hot-swap and generation. See `ModelSlot::inflight` for the
     /// rationale.
     lazy_inflight: Arc<tokio::sync::Semaphore>,
+    /// Optional eager-loaded sibling pool for `SlotTarget::Primary`
+    /// non-streaming completion. `None` (the default) leaves
+    /// dispatch on the single-context lazy path — behaviour is
+    /// byte-identical to pre-sibling builds. `Some(pool)` short-
+    /// circuits the lazy path: each call picks a sibling round-
+    /// robin and acquires that sibling's own per-slot `inflight`
+    /// permit, so two callers can be in `generate_sync` at once.
+    /// Built only when `SOVEREIGN_PRIMARY_SIBLINGS=N` (N≥2) is set
+    /// at process start. See `primary_siblings_env` for the
+    /// rationale and incompatibility with `code_path`.
+    primary_pool: Option<Arc<PrimarySiblingPool>>,
 }
 
 /// Internal state for the operator-declared extras lineup. Held
@@ -2786,20 +4720,39 @@ fn pick_slot(
 
     // FastShort routing: when the FastShort companion slot is built
     // and the request fits its envelope (small output budget, fast
-    // latency), route there. The OICP scheduler at the daemon edge
-    // already does the analogous selection between FastShort /
-    // FastLong claims; this is the local-dispatch mirror so a
-    // sovereign daemon serving its own request can also benefit
-    // without the round-trip through the mesh router.
+    // latency, prompt fits the per-seq KV slice), route there. The
+    // OICP scheduler at the daemon edge already does the analogous
+    // selection between FastShort / FastLong claims; this is the
+    // local-dispatch mirror so a sovereign daemon serving its own
+    // request can also benefit without the round-trip through the
+    // mesh router.
     //
-    // Threshold is the FastShort claim's `max_output` (512 — see
-    // `synthesize_slot_claims`). Phase 1b/3/5/6 composers set their
-    // `max_output_tokens` to ≤512 (some at 256 / 1024 — note: 1024
-    // would overflow this gate and fall through to Fast, which is
-    // correct: those phases prefer per-call window over batching).
+    // Three gates, all required:
+    //   1. `max_tokens ≤ 512` — matches the FastShort claim's
+    //      `max_output` (see `synthesize_slot_claims`). Phase 1b/3/5/6
+    //      composers set ≤512 (some at 256/1024; 1024 falls through to
+    //      Fast, which is correct: those phases prefer per-call
+    //      window over batching).
+    //   2. `preferred_speed == Fast` — the slot exists to soak up
+    //      Fast traffic concurrently; Medium/Slow want the Primary
+    //      pool.
+    //   3. `prompt_chars ≤ FAST_SHORT_MAX_INPUT_CHARS` — each
+    //      FastShort sequence's KV slice is `n_ctx/n_seq_max = 2048`
+    //      tokens, so a large prompt overflows even when the output
+    //      cap is tiny. Title/scope/coarse classifiers issue Fast +
+    //      `max_tokens=16` calls but see full conversation context
+    //      in the prompt (~9k chars at session-restoration time).
+    //      Without this gate they land on FastShort and decode fails
+    //      with `NoKvCacheSlot` mid-prefill. Forensic 2026-05-19.
     let max_out = request.max_tokens.unwrap_or(usize::MAX);
+    let prompt_chars = request.prompt.chars().count()
+        + request
+            .system_message
+            .as_ref()
+            .map_or(0, |s| s.chars().count());
     let fits_fast_short = max_out <= 512
-        && request.preferred_speed == Speed::Fast;
+        && request.preferred_speed == Speed::Fast
+        && prompt_chars <= FAST_SHORT_MAX_INPUT_CHARS;
     if has_fast_short && fits_fast_short {
         return SlotTarget::FastShort;
     }
@@ -3012,18 +4965,146 @@ impl EmbeddedLlamaCpp {
             );
         }
 
+        // Optional primary-slot sibling pool — see
+        // `primary_siblings_env` for the rationale. Build at most
+        // once, eagerly, before assembling the struct so any failure
+        // surfaces during daemon startup rather than on first
+        // chat-completion.
+        let primary_pool = if let Some(n) = primary_siblings_env() {
+            let n = n.get() as usize;
+            // Guard rails: siblings only make sense with a real
+            // primary GGUF, and they don't compose with the Code
+            // specialist's hot-swap (which expects to mutate one
+            // resident model).
+            let primary_path = primary_model_path.ok_or_else(|| {
+                Error::Inference(
+                    "SOVEREIGN_PRIMARY_SIBLINGS set but no primary model configured \
+                     — siblings pool requires a primary GGUF to share weights from."
+                        .into(),
+                )
+            })?;
+            if code_model_path.is_some() {
+                return Err(Error::Inference(
+                    "SOVEREIGN_PRIMARY_SIBLINGS is incompatible with a configured \
+                     code specialist (the code slot relies on hot-swapping the lazy \
+                     primary slot, which a sibling pool can't satisfy without \
+                     swapping every sibling at once). Unset one of the two."
+                        .into(),
+                ));
+            }
+            tracing::info!(
+                slot = "primary",
+                siblings = n,
+                path = %primary_path.display(),
+                "building primary sibling pool — loading weights once + N contexts"
+            );
+            let primary_0 = ModelSlot::load(
+                &backend,
+                primary_path,
+                context_size,
+                n_gpu_layers,
+            )?;
+            let shared_model = Arc::clone(&primary_0.model);
+            let shared_id = primary_0.model_id.clone();
+            let shared_size = primary_0.size_bytes;
+            let mut slots: Vec<Arc<ModelSlot>> = Vec::with_capacity(n);
+            slots.push(Arc::new(primary_0));
+            for i in 1..n {
+                let sibling = ModelSlot::from_existing_model(
+                    &backend,
+                    Arc::clone(&shared_model),
+                    shared_id.clone(),
+                    shared_size,
+                    context_size,
+                    /* n_seq_max */ 1,
+                    /* n_ubatch */ 512,
+                )?;
+                tracing::info!(
+                    slot = "primary",
+                    sibling_idx = i,
+                    "primary sibling context ready"
+                );
+                slots.push(Arc::new(sibling));
+            }
+            Some(Arc::new(PrimarySiblingPool {
+                slots,
+                next: std::sync::atomic::AtomicUsize::new(0),
+            }))
+        } else {
+            None
+        };
+
+        // ─── Primary-slot alias when fast_path == primary_path ───────
+        // sovereign-core's ModelsSection::fast_path() returns the
+        // primary GGUF when no distinct fast is configured. That
+        // means the loader receives the same `&Path` for both
+        // arguments, the fast slot is eagerly loaded above, and a
+        // naive lazy-primary path would re-load the same weights
+        // into VRAM on the first /v1/chat/completions to primary —
+        // doubling the model's resident footprint and breaking the
+        // VRAM-tight pods that asked for the subsume in the first
+        // place.
+        //
+        // When the alias is detected and a primary-sibling pool is
+        // NOT configured (the pool builds its own primary slots
+        // from primary_path and would conflict with this
+        // pre-population), build a primary ModelSlot from the
+        // already-loaded fast model via `from_existing_model`. That
+        // call shares the `Arc<LlamaModel>` (one VRAM weights
+        // allocation across both slots) and allocates only a fresh
+        // context — a separate KV cache so primary and fast don't
+        // contend on the same llama_decode state.
+        let primary_is_alias = matches!(
+            primary_model_path,
+            Some(p) if p == fast_model_path
+        ) && primary_pool.is_none();
+        let (primary_preloaded, primary_preloaded_path): (Option<ModelSlot>, Option<PathBuf>) =
+            if primary_is_alias {
+                let primary_p = primary_model_path.unwrap();
+                tracing::info!(
+                    slot = "primary",
+                    path = %primary_p.display(),
+                    "fast and primary share a GGUF; aliasing primary slot to fast's loaded weights (one VRAM copy, separate KV)"
+                );
+                match ModelSlot::from_existing_model(
+                    &backend,
+                    Arc::clone(&fast.model),
+                    fast.model_id.clone(),
+                    fast.size_bytes,
+                    context_size,
+                    /* n_seq_max */ 1,
+                    /* n_ubatch */ 512,
+                ) {
+                    Ok(slot) => (Some(slot), Some(primary_p.to_path_buf())),
+                    Err(e) => {
+                        // Fall back to lazy-load. Logged so operators
+                        // notice the missed optimisation, but the
+                        // daemon still works — just with the extra
+                        // VRAM cost on first primary use.
+                        tracing::warn!(
+                            slot = "primary",
+                            error = %e,
+                            "fast/primary alias setup failed; primary will lazy-load and double VRAM"
+                        );
+                        (None, None)
+                    }
+                }
+            } else {
+                (None, None)
+            };
+
         Ok(Self {
             backend: Arc::clone(&backend),
             fast,
             fast_short,
             fast_short_coalescer,
-            primary: Arc::new(Mutex::new(None)),
+            primary: Arc::new(Mutex::new(primary_preloaded)),
             primary_path: primary_model_path.map(|p| p.to_path_buf()),
             primary_ctx_size: context_size,
             gpu_layers: n_gpu_layers,
             primary_backend: backend,
             last_primary_use: Arc::new(Mutex::new(None)),
-            primary_loaded_path: Arc::new(Mutex::new(None)),
+            primary_loaded_path: Arc::new(Mutex::new(primary_preloaded_path)),
             code_path: code_model_path.map(|p| p.to_path_buf()),
             code_quirks,
             embed_slot,
@@ -3033,6 +5114,7 @@ impl EmbeddedLlamaCpp {
             primary_quirks,
             extras: Arc::new(std::sync::RwLock::new(ExtrasState::new())),
             lazy_inflight: Arc::new(tokio::sync::Semaphore::new(1)),
+            primary_pool,
         })
     }
 
@@ -3818,7 +5900,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
                 let mut ctx_lock = slot.context.blocking_lock();
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
                 let (text, prompt_tokens, completion_tokens) = match result {
                     Ok(Ok(r)) => r,
@@ -3889,6 +5971,101 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 );
             }
             return result;
+        }
+
+        // Primary sibling pool — opt-in via `SOVEREIGN_PRIMARY_SIBLINGS`.
+        // When present, short-circuits the lazy slot entirely for
+        // `SlotTarget::Primary`: each call picks a sibling round-
+        // robin and runs against its own `Mutex<SlotContext>`, so
+        // `pool.len()` calls can be in `generate_sync` at once.
+        // Construction guarantees the pool is `None` whenever
+        // `code_path` is configured (see `load_full_with_families`),
+        // so `SlotTarget::Code` is never observed on this branch.
+        if matches!(target, SlotTarget::Primary) {
+            if let Some(pool) = self.primary_pool.as_ref() {
+                let (sibling_idx, slot) = pool.pick();
+                let pool_size = pool.len();
+                let quirks = self.primary_quirks.clone();
+                tracing::debug!(
+                    slot = "primary",
+                    sibling_idx,
+                    pool_size,
+                    "dispatching to primary sibling"
+                );
+                let _permit = slot
+                    .inflight
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .map_err(|e| {
+                        Error::Inference(format!("primary sibling permit closed: {e}"))
+                    })?;
+                let request = request.clone();
+                let result: Result<CompletionResponse> = tokio::task::spawn_blocking(move || {
+                    let _permit = _permit;
+                    let start = Instant::now();
+                    slot.last_used
+                        .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+                    let mut ctx_lock = slot.context.blocking_lock();
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        ModelSlot::generate_sync(
+                            &slot.model,
+                            &slot.model_id,
+                            &mut *ctx_lock,
+                            &request,
+                            &quirks,
+                        )
+                    }));
+                    let (text, prompt_tokens, completion_tokens) = match result {
+                        Ok(Ok(r)) => r,
+                        Ok(Err(e)) => {
+                            tracing::warn!(
+                                slot = "primary",
+                                sibling_idx,
+                                error = %e,
+                                "inference error"
+                            );
+                            return Err(e);
+                        }
+                        Err(_) => {
+                            tracing::error!(
+                                slot = "primary",
+                                sibling_idx,
+                                "inference panicked — likely context overflow"
+                            );
+                            return Err(Error::Inference(
+                                "Model inference failed: prompt may exceed the model's context window. \
+                                 Try a shorter message or reduce conversation history."
+                                    .to_string(),
+                            ));
+                        }
+                    };
+                    let latency_ms = start.elapsed().as_millis() as u64;
+                    Ok(CompletionResponse {
+                        text,
+                        tokens_used: prompt_tokens + completion_tokens,
+                        prompt_tokens,
+                        model_id: slot.model_id.clone(),
+                        latency_ms,
+                        oicp_meta: None,
+                    })
+                })
+                .await
+                .map_err(|e| Error::Inference(format!("Inference task failed: {e}")))?;
+                if let Ok(ref resp) = result {
+                    tracing::info!(
+                        slot = "primary",
+                        sibling_idx,
+                        pool_size,
+                        model = %resp.model_id,
+                        latency_ms = resp.latency_ms,
+                        tokens_used = resp.tokens_used,
+                        response_chars = resp.text.len(),
+                        "inference.complete: done"
+                    );
+                }
+                return result;
+            }
         }
 
         // Primary + Code share the lazy slot (hot-swap). Fast uses
@@ -3965,7 +6142,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
 
                 let (text, prompt_tokens, completion_tokens) = match result {
@@ -4040,7 +6217,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 
                 // Catch panics from llama.cpp (e.g., context overflow assertions).
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &quirks)
+                    ModelSlot::generate_sync(&slot.model, &slot.model_id, &mut *ctx_lock, &request, &quirks)
                 }));
 
                 let (text, prompt_tokens, completion_tokens) = match result {
@@ -4152,7 +6329,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) = ModelSlot::generate_stream_sync(
                     &slot.model,
                     &slot.model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &request,
                     &tx,
                     &quirks,
@@ -4253,7 +6430,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let mut ctx_lock = slot.context.blocking_lock();
                 *last_use.blocking_lock() = Some(Instant::now());
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
+                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, ctx_lock.ctx_mut(), &request, &tx, &quirks, None)
                 {
                     tracing::warn!(slot = slot_label, error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
@@ -4280,7 +6457,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 let start = Instant::now();
                 let mut ctx_lock = slot.context.blocking_lock();
                 if let Err(e) =
-                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, &mut ctx_lock.ctx, &request, &tx, &quirks, None)
+                    ModelSlot::generate_stream_sync(&slot.model, &slot.model_id, ctx_lock.ctx_mut(), &request, &tx, &quirks, None)
                 {
                     tracing::warn!(slot = "fast", error = %e, "stream error");
                     let _ = tx.blocking_send(Err(e));
@@ -4350,7 +6527,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
                     &slot.model,
                     &slot.model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &request,
                     &tx,
                     &quirks,
@@ -4451,7 +6628,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
                     &slot.model,
                     &slot.model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &request,
                     &tx,
                     &quirks,
@@ -4486,7 +6663,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                 if let Err(e) = ModelSlot::generate_stream_sync_with_finish(
                     &slot.model,
                     &slot.model_id,
-                    &mut ctx_lock.ctx,
+                    ctx_lock.ctx_mut(),
                     &request,
                     &tx,
                     &quirks,
@@ -4814,6 +6991,64 @@ impl InferenceProvider for EmbeddedLlamaCpp {
 ///
 /// Errors only when the prompt itself doesn't fit. That's a real
 /// "your input is too big" — no clamping can recover.
+/// Read the `general.architecture` metadata field from a loaded gguf.
+/// Returns the raw arch string ("qwen3", "qwen3_moe", "mamba",
+/// "deltanet", "gemma3", etc.) or an empty string when the metadata
+/// read fails. The caller treats empty as "unknown" and falls back
+/// to the name-pattern heuristic.
+///
+/// Cheap: a single `llama_model_meta_val_str(model, "general.architecture", buf, 256)`
+/// call. Done once at slot construction; the result lives on
+/// `SlotContext.arch` for the lifetime of the slot.
+fn read_gguf_arch(model: &LlamaModel) -> String {
+    match model.meta_val_str("general.architecture", 256) {
+        Ok(s) => {
+            tracing::info!(arch = %s, "gguf arch: read from general.architecture");
+            s
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "gguf arch read failed — falling back to name-pattern heuristic"
+            );
+            String::new()
+        }
+    }
+}
+
+/// Is a gguf architecture string known to have recurrent layers
+/// (Mamba / Gated DeltaNet / RWKV / hybrid SSM+MoE)?
+///
+/// Source of truth for the `prefix_cache_safe` gate when the slot
+/// carries arch metadata. Empty string is "unknown" — caller falls
+/// back to `ModelQuirks::has_recurrent_layers` declared per-family
+/// in `model_family.rs`.
+pub(crate) fn is_recurrent_arch(arch: &str) -> bool {
+    if arch.is_empty() {
+        return false;
+    }
+    let lower = arch.to_lowercase();
+    // Qwen MoE families (Qwen3-MoE, Qwen3.5-MoE, Qwen3.6-MoE) carry
+    // Gated DeltaNet layers in the gguf attention stack. Same
+    // recurrent-state hazard as Mamba — partial-keep prefix-cache
+    // returns -1 on tail decode. Observed gguf arch values include
+    // `qwen3moe`, `qwen35moe`, `qwen3_moe`, `qwen36moe`. The shape
+    // is "qwen<version>moe", so we substring-match `moe` after a
+    // qwen prefix.
+    if lower.starts_with("qwen") && lower.contains("moe") {
+        return true;
+    }
+    // Explicit recurrent architectures published in gguf metadata.
+    // Substring match catches version suffixes (mamba2, rwkv6, etc.).
+    for marker in ["mamba", "rwkv", "deltanet", "ssm"] {
+        if lower.contains(marker) {
+            return true;
+        }
+    }
+    false
+}
+
+
 pub(crate) fn clamp_max_tokens(
     requested: Option<usize>,
     prompt_tokens: usize,
@@ -4846,6 +7081,49 @@ pub(crate) fn clamp_max_tokens(
 }
 
 fn format_prompt(
+    model: &LlamaModel,
+    model_id: &str,
+    request: &CompletionRequest,
+    quirks: &ModelQuirks,
+) -> Result<String> {
+    // Compute the rendered prompt via the inner tier dispatch, then
+    // append `request.assistant_prefix` if present. The prefix lands
+    // *after* the chat template's generation-position marker
+    // (`<|turn>model\n`, `<|im_start|>assistant\n`, `<start_of_turn>model\n`,
+    // …) and *before* the model's first generated token — letting
+    // upstream nudges (frontdoor's read-attractor, failure-recovery)
+    // commit the model to a known-good response prefix structurally
+    // rather than via instruction. Family-agnostic: every chat
+    // template the inner dispatch handles ends at the generation
+    // marker, so the append point is consistent.
+    let rendered = format_prompt_inner(model, model_id, request, quirks)?;
+    Ok(append_assistant_prefix(rendered, request.assistant_prefix.as_deref()))
+}
+
+/// Append a non-empty `assistant_prefix` to the rendered prompt.
+/// Empty / None prefixes pass through unchanged so the historical
+/// behaviour (no prefill) is preserved for callers that don't set
+/// the field.
+fn append_assistant_prefix(mut prompt: String, prefix: Option<&str>) -> String {
+    if let Some(p) = prefix {
+        if !p.is_empty() {
+            // The rendered prompt always ends at the generation
+            // marker with no trailing whitespace contract — append
+            // directly. If a future template renders trailing
+            // whitespace, the prefix still composes; the model's
+            // tokenizer absorbs the whitespace into the prefix's
+            // first token.
+            prompt.push_str(p);
+            tracing::debug!(
+                prefix_len = p.len(),
+                "format_prompt: assistant_prefix appended"
+            );
+        }
+    }
+    prompt
+}
+
+fn format_prompt_inner(
     model: &LlamaModel,
     model_id: &str,
     request: &CompletionRequest,
@@ -4931,112 +7209,264 @@ fn format_prompt(
     //    until `max_tokens`. We loud-warn so operators see this is
     //    happening — it was a silent fallback up until 2026-04-26
     //    (gemma-4-31B atlas bench debugging session).
-    let template = match model.chat_template(None) {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::warn!(
-                model_id = %model_id,
-                error = ?e,
-                "model.chat_template(None) returned no template — model gguf has no \
-                 tokenizer.chat_template metadata. Falling back to plain-text concat; \
-                 model output may include hallucinated role markers and may not stop \
-                 at the right place."
-            );
-            return Ok(plain_text_prompt(&system_with_thinking, &request.prompt));
-        }
+    // Retrieve the chat template stored in the model's gguf metadata
+    // (`tokenizer.chat_template`). Pre-2026-05-17 this returned a
+    // `LlamaChatTemplate` struct; post-migration to llama-cpp-4 0.2.x
+    // it returns an `Option<String>`. `None` ⇒ no chat-template
+    // metadata in the gguf, so plain-text concat is the only path.
+    let Some(template) = crate::llama::chat_template(model) else {
+        tracing::warn!(
+            model_id = %model_id,
+            "chat_template lookup returned None — model gguf has no \
+             tokenizer.chat_template metadata. Falling back to plain-text concat; \
+             model output may include hallucinated role markers and may not stop \
+             at the right place."
+        );
+        return Ok(plain_text_prompt(&system_with_thinking, &request.prompt));
     };
 
-    // Templates that use Jinja2 macros (`{%- macro ... -%}`),
-    // `{% set ... %}` blocks, conditional includes, or other
-    // constructs beyond the llama.cpp built-in parser's subset
-    // need to skip tier 1 entirely — `apply_chat_template` would
-    // return `FfiError(-1)` for every call, wasting work and
-    // logging noise. Gemma 3 / Gemma 4 / Llama 3.1+ templates all
-    // qualify. Detect once at the call site and route directly.
+    // **Migration note (2026-05-17 llama-cpp-2 → llama-cpp-4):** the
+    // `openai`-shaped `apply_chat_template_oaicompat` path (with its
+    // `OpenAIChatTemplateParams` and `use_jinja=true` knob) was
+    // retired upstream. The remaining path is `apply_chat_template`,
+    // which uses llama.cpp's built-in template parser. Two
+    // consequences for callers:
+    //
+    //   1. Templates that need full Jinja2 (Gemma 3/4 macros, e.g.)
+    //      will fail at `apply_chat_template` and fall through to
+    //      plain-text concat (loud warn). The MTP bench target
+    //      (Qwen3.6-A3B) uses a template the built-in parser
+    //      accepts, so this regression is acceptable on this branch.
+    //
+    //   2. Per-request `enable_thinking` is now spliced into the
+    //      system message (`/no_think` / `/think`) rather than
+    //      passed as a separate flag, because the binding's chat
+    //      surface no longer exposes thinking control. Most callers
+    //      pass `None` / `false`; the few that pin `true` (e.g. the
+    //      witness path) get a `<think>` wrapper from the prefix.
+    //
+    //   3. `template_needs_jinja` is retained as documentation of
+    //      which templates were Gemma-shaped; calling it just routes
+    //      to the same `apply_chat_template` call now, but tracing
+    //      the boolean preserves the diagnostic surface.
     let needs_jinja = template_needs_jinja(&template);
-
-    // Tier 1: built-in subset (skipped for Jinja-only templates).
-    if !needs_jinja {
-        let mut messages = Vec::new();
-        if !system_with_thinking.is_empty() {
-            messages.push(
-                LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
-                    .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
-            );
-        }
-        messages.push(
-            LlamaChatMessage::new("user".to_string(), request.prompt.clone())
-                .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+    if needs_jinja {
+        tracing::debug!(
+            model_id = %model_id,
+            "chat template needs full Jinja2 (macros/sets/includes detected); \
+             routing through the Rust-side minijinja renderer instead of \
+             llama.cpp's limited-subset parser."
         );
-        match model.apply_chat_template(&template, &messages, true) {
-            Ok(formatted) => return Ok(formatted),
+        match apply_chat_template_minijinja(
+            &template,
+            &system_with_thinking,
+            &request.prompt,
+            request.enable_thinking.unwrap_or(false),
+        ) {
+            Ok(rendered) => return Ok(rendered),
             Err(e) => {
-                tracing::debug!(
+                tracing::warn!(
                     model_id = %model_id,
-                    error = ?e,
-                    "apply_chat_template (built-in subset) failed; retrying via Jinja2 path"
+                    error = %e,
+                    template_head = %template_head_for_log(&template),
+                    "minijinja render failed — falling back to llama.cpp \
+                     apply_chat_template, then plain-text concat."
                 );
             }
         }
     }
+    if request.enable_thinking.unwrap_or(false) {
+        tracing::warn!(
+            model_id = %model_id,
+            "request.enable_thinking=true requested, but the llama-cpp-4 binding \
+             dropped chat-template thinking control. Output may not be wrapped in \
+             <think>...</think>; downstream strip_thinking_tags will pass through. \
+             TODO: splice /think hint into system message."
+        );
+    }
 
-    // Tier 2: Jinja2 via oaicompat path. Build an OpenAI-style
-    // messages JSON array — simpler than allocating
-    // `LlamaChatMessage` again because the oaicompat ABI takes
-    // raw JSON anyway.
-    let messages_json = build_oai_messages_json(&system_with_thinking, &request.prompt)?;
-    let params = OpenAIChatTemplateParams {
-        messages_json: &messages_json,
-        tools_json: None,
-        tool_choice: None,
-        json_schema: None,
-        grammar: None,
-        reasoning_format: None,
-        chat_template_kwargs: None,
-        add_generation_prompt: true,
-        use_jinja: true,
-        parallel_tool_calls: false,
-        // Per-request override (`request.enable_thinking`) wins over
-        // the historical default-false. Callers that pin this — the
-        // relational/witness path in particular — get the chat
-        // template to wrap planning in `<think>...</think>` so the
-        // post-process strip can drop it cleanly. Default-false is
-        // preserved for every other call site.
-        enable_thinking: request.enable_thinking.unwrap_or(false),
-        // BOS/EOS handling: the caller (generate_sync /
-        // generate_stream_sync) tokenises with `AddBos::Always`,
-        // which prepends the model's BOS at tokenisation time. If
-        // we also asked the template renderer to emit BOS, we'd
-        // double-prepend and the first decode position would be
-        // off by one. EOS is never wanted on a generation prompt.
-        add_bos: false,
-        add_eos: false,
-        parse_tool_calls: false,
-    };
-    match model.apply_chat_template_oaicompat(&template, &params) {
-        Ok(result) => {
-            tracing::trace!(
-                model_id = %model_id,
-                jinja_required = needs_jinja,
-                prompt_chars = result.prompt.len(),
-                "apply_chat_template_oaicompat (Jinja2) ok"
-            );
-            return Ok(result.prompt);
-        }
+    let mut messages = Vec::new();
+    if !system_with_thinking.is_empty() {
+        messages.push(
+            LlamaChatMessage::new("system".to_string(), system_with_thinking.clone())
+                .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+        );
+    }
+    messages.push(
+        LlamaChatMessage::new("user".to_string(), request.prompt.clone())
+            .map_err(|e| Error::Inference(format!("Chat message error: {e}")))?,
+    );
+    match model.apply_chat_template(Some(&template), &messages, true) {
+        Ok(formatted) => return Ok(formatted),
         Err(e) => {
             tracing::warn!(
                 model_id = %model_id,
                 error = ?e,
                 template_head = %template_head_for_log(&template),
-                "apply_chat_template_oaicompat (Jinja2) failed — minja rejected the \
-                 gguf's chat template. Falling back to plain-text concat; model output \
-                 may include hallucinated role markers."
+                jinja_required = needs_jinja,
+                "apply_chat_template failed — model's gguf template likely needs \
+                 a Jinja construct the built-in parser doesn't support, and the \
+                 0.2.x binding dropped the oaicompat Jinja2 path. Falling back to \
+                 plain-text concat; model output may include hallucinated role markers."
             );
         }
     }
 
-    // Tier 3: plain-text concat.
+    // Final fallback: plain-text concat.
     Ok(plain_text_prompt(&system_with_thinking, &request.prompt))
+}
+
+/// Render a `tokenizer.chat_template` (Jinja2 source) using the
+/// Rust-side `minijinja` engine. Handles macros, `set` blocks, and
+/// other constructs the llama.cpp built-in parser rejects.
+///
+/// Returns the formatted prompt the tokenizer feeds the model.
+/// `add_generation_prompt=true` matches what llama.cpp's
+/// `apply_chat_template` does — appends the assistant's turn-start
+/// marker so the model picks up where the template left off.
+///
+/// `enable_thinking` toggles the `/think` vs `/no_think` hint that
+/// Qwen3-family templates honour as a Jinja variable. Models that
+/// ignore the flag are unaffected.
+fn apply_chat_template_minijinja(
+    template: &str,
+    system: &str,
+    user: &str,
+    enable_thinking: bool,
+) -> Result<String> {
+    use minijinja::{context, Environment, Value};
+
+    // Build the messages list the template iterates over.
+    let mut messages: Vec<Value> = Vec::with_capacity(2);
+    if !system.is_empty() {
+        messages.push(Value::from_serialize(&serde_json::json!({
+            "role": "system",
+            "content": system,
+        })));
+    }
+    messages.push(Value::from_serialize(&serde_json::json!({
+        "role": "user",
+        "content": user,
+    })));
+
+    let mut env = Environment::new();
+    // Match Hugging Face's `Jinja2 Templates` behaviour: keep the
+    // raise_exception filter available — some templates call it
+    // (`{{ raise_exception("…") }}`) to halt on bad input.
+    env.add_function(
+        "raise_exception",
+        |msg: String| -> std::result::Result<String, minijinja::Error> {
+            Err(minijinja::Error::new(
+                minijinja::ErrorKind::InvalidOperation,
+                msg,
+            ))
+        },
+    );
+    // Python-compat method shim. HF templates routinely call
+    // `.get(key)`, `.get(key, default)`, `.split(sep)`,
+    // `.startswith(prefix)`, `.endswith(suffix)`, `.upper()`,
+    // `.lower()`, `.strip()` — methods that exist on Python's
+    // `dict`/`str`/`list` but aren't in stock minijinja. Without
+    // this shim, Gemma 4's template (which calls
+    // `message.get('reasoning')`, `message.get('tool_calls')`,
+    // `value['type'] | upper`, `part.split('<|channel>')`, …) fails
+    // at the first unknown method and we fall through to plain-text
+    // concat. The pycompat surface in `minijinja-contrib` would
+    // also do this, but pulling in another workspace dep for a
+    // half-dozen methods is excessive — handle them inline.
+    env.set_unknown_method_callback(|_state, value, method, args| {
+        use minijinja::value::{from_args, ValueKind};
+        use minijinja::{Error, ErrorKind, Value};
+        match method {
+            "get" => {
+                // dict.get(key) or dict.get(key, default)
+                if value.kind() != ValueKind::Map {
+                    return Err(Error::from(ErrorKind::UnknownMethod));
+                }
+                let (key, default): (Value, Option<Value>) = from_args(args)?;
+                let key_str: String = key
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| key.to_string());
+                match value.get_attr(&key_str) {
+                    Ok(v) if !v.is_undefined() => Ok(v),
+                    _ => Ok(default.unwrap_or(Value::from(())))
+                }
+            }
+            "split" => {
+                // str.split(sep) — sep is required in HF templates we've
+                // seen (no zero-arg whitespace split path needed yet).
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "split on non-string")
+                })?;
+                let (sep,): (String,) = from_args(args)?;
+                let parts: Vec<Value> =
+                    s.split(&sep).map(|p| Value::from(p.to_string())).collect();
+                Ok(Value::from(parts))
+            }
+            "startswith" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "startswith on non-string")
+                })?;
+                let (prefix,): (String,) = from_args(args)?;
+                Ok(Value::from(s.starts_with(&prefix)))
+            }
+            "endswith" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "endswith on non-string")
+                })?;
+                let (suffix,): (String,) = from_args(args)?;
+                Ok(Value::from(s.ends_with(&suffix)))
+            }
+            "upper" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "upper on non-string")
+                })?;
+                let _: () = from_args(args)?;
+                Ok(Value::from(s.to_uppercase()))
+            }
+            "lower" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "lower on non-string")
+                })?;
+                let _: () = from_args(args)?;
+                Ok(Value::from(s.to_lowercase()))
+            }
+            "strip" => {
+                let s = value.as_str().ok_or_else(|| {
+                    Error::new(ErrorKind::InvalidOperation, "strip on non-string")
+                })?;
+                let _: () = from_args(args)?;
+                Ok(Value::from(s.trim().to_string()))
+            }
+            _ => Err(Error::from(ErrorKind::UnknownMethod)),
+        }
+    });
+    env.add_template("chat", template).map_err(|e| {
+        Error::Inference(format!("minijinja: compile chat template: {e}"))
+    })?;
+    let tmpl = env
+        .get_template("chat")
+        .map_err(|e| Error::Inference(format!("minijinja: load chat template: {e}")))?;
+
+    // Variables every reasonable chat template touches. Most
+    // templates don't use every key — providing them all is safe
+    // (Jinja2 is forgiving of unused globals). Templates that
+    // reference unknown vars produce empty strings, which is the
+    // same behaviour as the llama.cpp path.
+    let ctx = context! {
+        messages => messages,
+        add_generation_prompt => true,
+        enable_thinking => enable_thinking,
+        bos_token => "",
+        eos_token => "",
+        // Qwen3-family hint surfaced via a context variable on some
+        // template revisions. Most templates inspect the system
+        // message text instead.
+        thinking_mode => if enable_thinking { "think" } else { "no_think" },
+    };
+    tmpl.render(ctx)
+        .map_err(|e| Error::Inference(format!("minijinja: render chat template: {e}")))
 }
 
 /// Cheap heuristic for whether a chat template requires the full
@@ -5052,17 +7482,13 @@ fn format_prompt(
 /// returns FfiError, tier 2 takes over). The win here is a clean
 /// fast path for known-Jinja templates so we don't log a
 /// debug-level noise line on every chat call.
-fn template_needs_jinja(template: &llama_cpp_2::model::LlamaChatTemplate) -> bool {
-    let s = match template.to_str() {
-        Ok(s) => s,
-        Err(_) => return true, // non-utf8 — punt to the safer renderer
-    };
-    s.contains("{%- macro")
-        || s.contains("{% macro")
-        || s.contains("{%- set")
-        || s.contains("{% set")
-        || s.contains("{%- include")
-        || s.contains("{% include")
+fn template_needs_jinja(template: &str) -> bool {
+    template.contains("{%- macro")
+        || template.contains("{% macro")
+        || template.contains("{%- set")
+        || template.contains("{% set")
+        || template.contains("{%- include")
+        || template.contains("{% include")
 }
 
 /// Final-fallback prompt when no chat-template path works. Just
@@ -5095,9 +7521,8 @@ fn build_oai_messages_json(system: &str, user: &str) -> Result<String> {
 /// log output. Lets operators identify which template format is
 /// hitting the fallback path without dumping a full multi-KB
 /// macro definition into the daemon log.
-fn template_head_for_log(template: &llama_cpp_2::model::LlamaChatTemplate) -> String {
-    let s = template.to_str().unwrap_or("<non-utf8>");
-    let head: String = s.chars().take(80).collect();
+fn template_head_for_log(template: &str) -> String {
+    let head: String = template.chars().take(80).collect();
     head.replace('\n', "\\n")
 }
 
@@ -5134,6 +7559,180 @@ const THINK_BUDGET: usize = 512;
 /// (without any grammar sampler), and optionally owns a
 /// `JsonConstraint` that masks token logits in pure Rust before the
 /// chain runs. No call into `llama-grammar.cpp` ever fires.
+
+/// Resolve the jump-forward enable gate from an env-getter. Returns
+/// `true` (jump-forward active) by default; only an explicit
+/// `SOVEREIGN_JUMP_FWD_DISABLE` value of `"1"` or `"true"`
+/// (case-insensitive) turns it off. Generic over the env-getter so
+/// tests can pin behaviour without mutating process-global env (which
+/// races against parallel test execution).
+fn jump_fwd_enabled_from_env<F>(env_get: F) -> bool
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match env_get("SOVEREIGN_JUMP_FWD_DISABLE") {
+        Some(v) => !(v == "1" || v.eq_ignore_ascii_case("true")),
+        None => true,
+    }
+}
+
+/// Same shape as `jump_fwd_enabled_from_env` but for the Tier 2 gate.
+/// Independent of the master gate so an operator can keep Tier 1 on
+/// while disabling Tier 2 (e.g. to A/B the marginal Tier 2 lift on a
+/// running daemon).
+fn jump_fwd_t2_enabled_from_env<F>(env_get: F) -> bool
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match env_get("SOVEREIGN_JUMP_FWD_T2_DISABLE") {
+        Some(v) => !(v == "1" || v.eq_ignore_ascii_case("true")),
+        None => true,
+    }
+}
+
+#[cfg(test)]
+mod chat_template_minijinja_tests {
+    use super::apply_chat_template_minijinja;
+
+    /// Smoke test on a Qwen3-shape `{% for %}` template — the
+    /// built-in parser handles this too, so the minijinja path
+    /// must produce equivalent output (not byte-equivalent — we
+    /// only check the role markers + body land in the right slots).
+    #[test]
+    fn renders_simple_for_loop_template() {
+        let template = "\
+{%- for m in messages -%}\
+<|im_start|>{{ m.role }}\n{{ m.content }}<|im_end|>\n\
+{%- endfor -%}\
+{%- if add_generation_prompt -%}<|im_start|>assistant\n{%- endif -%}";
+        let out = apply_chat_template_minijinja(
+            template,
+            "you are a helpful assistant",
+            "hello",
+            false,
+        )
+        .expect("renders cleanly");
+        assert!(out.contains("<|im_start|>system"));
+        assert!(out.contains("you are a helpful assistant"));
+        assert!(out.contains("<|im_start|>user"));
+        assert!(out.contains("hello"));
+        assert!(out.contains("<|im_start|>assistant"));
+    }
+
+    /// Pinned regression: templates that declare a Jinja `{% macro %}`
+    /// were the exact construct llama.cpp's built-in parser
+    /// rejected (Gemma 3/4, Qwen3.5-9B-vOP). minijinja must handle
+    /// them.
+    #[test]
+    fn renders_template_with_macro() {
+        let template = "\
+{%- macro render(m) -%}\
+[{{ m.role }}] {{ m.content }}\n\
+{%- endmacro -%}\
+{%- for m in messages -%}{{ render(m) }}{%- endfor -%}\
+{%- if add_generation_prompt -%}[assistant]\n{%- endif -%}";
+        let out = apply_chat_template_minijinja(template, "sys", "ask", false).unwrap();
+        assert!(out.contains("[system] sys"));
+        assert!(out.contains("[user] ask"));
+        // Whitespace control (`{%- -%}`) strips the trailing `\n`
+        // inside the {%- if -%} block — match real Jinja2 behaviour.
+        assert!(out.trim_end().ends_with("[assistant]"));
+    }
+
+    /// Templates that use `{% set %}` blocks were the other
+    /// construct the built-in parser rejected.
+    #[test]
+    fn renders_template_with_set_block() {
+        let template = "\
+{%- set bos = '<bos>' -%}\
+{{ bos }}\
+{%- for m in messages -%}<{{ m.role }}>{{ m.content }}</{{ m.role }}>{%- endfor -%}";
+        let out = apply_chat_template_minijinja(template, "", "q", false).unwrap();
+        assert!(out.starts_with("<bos>"));
+        assert!(out.contains("<user>q</user>"));
+    }
+
+    /// `enable_thinking` is exposed to the template so Qwen3-family
+    /// templates can branch on it. Verify the variable is wired.
+    #[test]
+    fn renders_template_branching_on_enable_thinking() {
+        let template = "\
+{%- if enable_thinking -%}/think{%- else -%}/no_think{%- endif -%}";
+        assert_eq!(
+            apply_chat_template_minijinja(template, "", "", true).unwrap(),
+            "/think"
+        );
+        assert_eq!(
+            apply_chat_template_minijinja(template, "", "", false).unwrap(),
+            "/no_think"
+        );
+    }
+
+    /// `raise_exception` is the canonical Hugging Face escape hatch
+    /// for templates that want to halt on bad input. Forward it as a
+    /// minijinja error so the caller falls through to the
+    /// llama.cpp built-in tier rather than producing a malformed
+    /// prompt.
+    #[test]
+    fn raise_exception_is_propagated_as_error() {
+        let template = "{{ raise_exception('nope') }}";
+        let err = apply_chat_template_minijinja(template, "", "", false).unwrap_err();
+        assert!(format!("{err}").contains("nope"), "error chain: {err}");
+    }
+
+    /// Empty system message is dropped (template iterates only the
+    /// user message). Pinned because some real templates assume
+    /// every message has non-empty content.
+    #[test]
+    fn empty_system_dropped_from_messages() {
+        let template = "\
+{%- for m in messages -%}{{ m.role }}\n{%- endfor -%}";
+        let out = apply_chat_template_minijinja(template, "", "q", false).unwrap();
+        // Only user role present; no leading "system". `{%- endfor -%}`
+        // strips the trailing newline, so the body is just "user".
+        assert_eq!(out, "user");
+    }
+}
+
+#[cfg(test)]
+mod jump_fwd_env_tests {
+    use super::*;
+
+    #[test]
+    fn jump_fwd_default_is_on() {
+        assert!(jump_fwd_enabled_from_env(|_| None));
+        assert!(jump_fwd_t2_enabled_from_env(|_| None));
+    }
+
+    #[test]
+    fn jump_fwd_disabled_only_on_truthy() {
+        // Explicit truthy values disable.
+        assert!(!jump_fwd_enabled_from_env(|_| Some("1".to_string())));
+        assert!(!jump_fwd_enabled_from_env(|_| Some("true".to_string())));
+        assert!(!jump_fwd_enabled_from_env(|_| Some("TRUE".to_string())));
+        // Other values keep jump-forward on — "0", garbage, empty all
+        // mean "no, you're not disabling me".
+        assert!(jump_fwd_enabled_from_env(|_| Some("0".to_string())));
+        assert!(jump_fwd_enabled_from_env(|_| Some("false".to_string())));
+        assert!(jump_fwd_enabled_from_env(|_| Some("".to_string())));
+        assert!(jump_fwd_enabled_from_env(|_| Some("yes".to_string())));
+    }
+
+    #[test]
+    fn jump_fwd_t2_disable_independent_of_master_gate() {
+        // The two gates read different env vars; disabling one must
+        // not affect the other.
+        let only_t2_disabled =
+            |k: &str| if k == "SOVEREIGN_JUMP_FWD_T2_DISABLE" {
+                Some("1".to_string())
+            } else {
+                None
+            };
+        assert!(jump_fwd_enabled_from_env(only_t2_disabled));
+        assert!(!jump_fwd_t2_enabled_from_env(only_t2_disabled));
+    }
+}
+
 /// Which "role" the sampler is currently filling. The same primary
 /// slot serves multiple cognitive tasks per turn — picking the next
 /// tool and authoring its arguments behave very differently from
@@ -5165,7 +7764,41 @@ pub struct ConstrainedSampler {
     /// produced any given token.
     inner_explore: LlamaSampler,
     inner_content: LlamaSampler,
-    constraint: Option<crate::json_constraint::JsonConstraint>,
+    /// Sole schema/grammar constraint engine. Replaces the in-house
+    /// `JsonConstraint` retired 2026-05-22 (see
+    /// `LLGUIDANCE_MIGRATION_AUDIT.md`). `build_sampler` builds this
+    /// from either `request.lark_grammar` (lark + JSON-Schema +
+    /// top-level alternation, used for tool envelopes) or
+    /// `request.structured_output` (JSON Schema body run through the
+    /// `additionalProperties:false` walker before serialising).
+    llg_constraint: Option<crate::llguidance_constraint::LlguidanceConstraint>,
+    /// URL-allowlist constraint. When `Some`, every sampled token's
+    /// bytes are simulated against a byte-trie of allowed URLs; tokens
+    /// whose bytes would start or extend a URL outside the allowlist
+    /// get clamped to `-INFINITY`. Prose tokens (anything that doesn't
+    /// look like the start of an `http://` / `https://` sequence) pass
+    /// through unchanged.
+    ///
+    /// Skipped when the JSON-schema `constraint` above is also active:
+    /// tool-call argument URLs are validated by the schema instead,
+    /// and stacking the two state machines would deadlock the byte
+    /// stream (the JSON FSM emits braces and quotes that the URL FSM
+    /// would treat as URL terminators).
+    url_constraint: Option<crate::url_constraint::UrlAllowlistConstraint>,
+    /// Evidence-id allowlist constraint (Tier 2 of the tool-framework
+    /// expansion). When `Some`, every sampled token's bytes are
+    /// simulated against a byte-trie of allowed `ev-Tn-NNNN` handles;
+    /// tokens that would extend `[ev-T…` into a non-existent id get
+    /// clamped to `-INFINITY`. Prose tokens (anything that doesn't
+    /// look like the start of an `[ev-T` citation) pass through
+    /// unchanged.
+    ///
+    /// Skipped when the JSON-schema `constraint` above is also
+    /// active — same byte-stream-deadlock rationale as the URL
+    /// constraint (JSON FSM emits `]` which the citation FSM would
+    /// treat as a terminator).
+    evidence_id_constraint:
+        Option<crate::evidence_id_constraint::EvidenceIdAllowlistConstraint>,
     /// Vocab-sized bitmap of tokens whose rendered bytes contain a
     /// 3+ byte UTF-8 leading byte (CJK / Devanagari / Hangul / etc.).
     /// When `Some`, `sample()` clamps those tokens' logits to
@@ -5191,7 +7824,7 @@ impl ConstrainedSampler {
     /// Until that lands, the slower-but-correct mask stays.
     pub fn sample(
         &mut self,
-        ctx: &llama_cpp_2::context::LlamaContext<'_>,
+        ctx: &crate::llama::cpp::context::LlamaContext<'_>,
         idx: i32,
         role: SamplerRole,
     ) -> LlamaToken {
@@ -5200,8 +7833,22 @@ impl ConstrainedSampler {
         } else {
             ctx.token_data_array_ith(idx)
         };
-        if let Some(c) = self.constraint.as_mut() {
-            c.mask(&mut data);
+        // Constraint dispatch: llguidance claims the byte stream when
+        // active (lark grammar or schema). URL + evidence-id FSMs are
+        // skipped when llg owns the mask — stacking the state machines
+        // would deadlock (each engine rejects tokens the other allows).
+        // When no schema/grammar is active, URL + citation FSMs compose
+        // freely since `http(s)://` and `[ev-T` live in disjoint byte
+        // patterns.
+        if let Some(llg) = self.llg_constraint.as_mut() {
+            llg.mask(&mut data);
+        } else {
+            if let Some(uc) = self.url_constraint.as_ref() {
+                uc.mask(&mut data);
+            }
+            if let Some(eic) = self.evidence_id_constraint.as_ref() {
+                eic.mask(&mut data);
+            }
         }
         // Non-Latin denylist: independent of the JSON-schema mask, so
         // it covers free-form chat and non-`structured_output` paths
@@ -5215,9 +7862,15 @@ impl ConstrainedSampler {
                 }
             }
         }
+        // MIGRATION 2026-05-17: llama-cpp-4 0.2.x's `apply_sampler`
+        // takes `&mut LlamaSampler` (was `&LlamaSampler` in 0.1.x).
+        // The mutability moved because samplers now carry per-call
+        // state (e.g. DRY's repetition history) that the previous
+        // API hid behind `&self`. Take &mut via match — the parent
+        // struct's wrapping `Mutex` already serialises access.
         let inner = match role {
-            SamplerRole::Explore => &self.inner_explore,
-            SamplerRole::Content => &self.inner_content,
+            SamplerRole::Explore => &mut self.inner_explore,
+            SamplerRole::Content => &mut self.inner_content,
         };
         data.apply_sampler(inner);
         data.selected_token()
@@ -5230,9 +7883,83 @@ impl ConstrainedSampler {
     pub fn accept(&mut self, token: LlamaToken) {
         self.inner_explore.accept(token);
         self.inner_content.accept(token);
-        if let Some(c) = self.constraint.as_mut() {
-            c.accept(token);
+        // Constraint accept mirrors `sample`'s mask dispatch.
+        // URL + evidence-id FSMs always advance below — their cursor
+        // must stay synchronised with emitted bytes even when the
+        // schema/grammar mask was the gating constraint.
+        if let Some(llg) = self.llg_constraint.as_mut() {
+            llg.accept_llama(token);
         }
+        // Advance URL FSM unconditionally (even when JSON constraint
+        // is active and the URL mask was skipped) so the cursor stays
+        // synchronised with the actual emitted byte stream. The state
+        // machine only matters once an `http://` / `https://` marker
+        // appears in prose, and feeding it every token costs ~1 lookup.
+        if let Some(uc) = self.url_constraint.as_mut() {
+            uc.accept(token);
+        }
+        // Same synchronisation discipline for the evidence-id FSM —
+        // cursor must track every emitted token, masked or not.
+        if let Some(eic) = self.evidence_id_constraint.as_mut() {
+            eic.accept(token);
+        }
+    }
+
+    /// True when the active llguidance grammar has reached its accept
+    /// state — generation can stop because the schema is satisfied.
+    /// Returns `false` when no llguidance constraint is active OR the
+    /// grammar still has open requirements (e.g. unclosed braces).
+    ///
+    /// The generation loop polls this after every `accept` to know
+    /// when to break out cleanly. Without this check, the chat
+    /// template's post-JSON tail (`</think>`, `</tool_call>`) gets
+    /// emitted as free-text content because the mask becomes a no-op
+    /// once `is_stopped` flips (see `LlguidanceConstraint::mask`'s
+    /// short-circuit). Net effect was 5+ KiB of post-JSON prose
+    /// inflating tokens past the per-turn cap; observed 2026-05-22
+    /// in the agent-bench scaffolded run on Qwen 3.6-A3B.
+    ///
+    /// JsonConstraint has no equivalent — the brace-balance tracker
+    /// in the generation loop is its stop signal. This method is
+    /// scoped to llguidance only.
+    pub fn grammar_is_stopped(&self) -> bool {
+        self.llg_constraint
+            .as_ref()
+            .map(|llg| llg.is_stopped())
+            .unwrap_or(false)
+    }
+
+    /// Tier 1 jump-forward — single-token shortcut when the FSM has
+    /// exactly one legal continuation. Always returns `None` after the
+    /// JsonConstraint retirement: llguidance's `compute_ff_tokens`
+    /// covers the same ground as `forced_next_run` below (Tier 2),
+    /// and `ApproximateTokEnv` empties out for non-canonical BPE
+    /// tokenisations anyway (audit §3.C). Callers still call this for
+    /// API symmetry — keeping the method preserves the original
+    /// two-tier shape and lets a custom `TokenizerEnv` future-PR add
+    /// a real Tier 1 hook here without a caller diff.
+    pub fn forced_next_token(&mut self) -> Option<LlamaToken> {
+        None
+    }
+
+    /// **Tier 2 jump-forward.** Returns deterministic-prefix tokens
+    /// from `Matcher::compute_ff_tokens`. Tokens are NOT pre-consumed;
+    /// the caller must `accept(token)` per emit to advance both the
+    /// DRY trackers and the llguidance matcher. `max_bytes` is a soft
+    /// cap on the returned token count. Empty when no llguidance
+    /// constraint is active OR no deterministic prefix exists at the
+    /// current parser state. `ApproximateTokEnv` returns empty on
+    /// non-canonical BPE tokenisations; that's expected — the Tier 2
+    /// path falls through to ordinary sampling.
+    pub fn forced_next_run(&mut self, max_bytes: usize) -> Vec<LlamaToken> {
+        let Some(llg) = self.llg_constraint.as_mut() else {
+            return Vec::new();
+        };
+        llg.forced_ff_tokens()
+            .into_iter()
+            .take(max_bytes)
+            .map(|id| LlamaToken(id as i32))
+            .collect()
     }
 }
 
@@ -5252,35 +7979,98 @@ fn build_sampler(
     request: &CompletionRequest,
     quirks: &ModelQuirks,
 ) -> ConstrainedSampler {
-    // Schema-driven constraint (pure Rust, bypasses llama-grammar.cpp
-    // entirely). Compiled at request time from the OpenAI-style
-    // response_format → CompletionRequest.structured_output. Failure
-    // to compile is a real schema problem; warn loudly and fall back
-    // to unconstrained sampling so the request doesn't hard-fail.
-    let constraint = request.structured_output.as_ref().and_then(|schema| {
-        match crate::json_constraint::JsonConstraint::new(schema, model) {
+    // Two ways to engage llguidance:
+    //   1. `request.lark_grammar` — pre-built Lark string (tool envelope
+    //      + alternation, set by `sovereign-mesh::inference_adapter`
+    //      when tools are present).
+    //   2. `request.structured_output` — JSON Schema body; the schema
+    //      runs through `default_additional_properties_false` before
+    //      serialising so the in-house JsonConstraint's non-spec
+    //      strictness (`additionalProperties: false`) is preserved at
+    //      the engine boundary.
+    //
+    // Compile failure on either path warns and falls back to free-form
+    // sampling so the request still produces output rather than
+    // 503'ing. See `LLGUIDANCE_MIGRATION_AUDIT.md` for the rollout
+    // history.
+    let llg_constraint = if let Some(lark) = request.lark_grammar.as_deref() {
+        match crate::llguidance_constraint::LlguidanceConstraint::new(lark, model) {
             Ok(c) => {
-                tracing::info!("grammar-constrained decoding enabled (in-house mask, no llama-grammar.cpp)");
+                tracing::info!(
+                    grammar_bytes = lark.len(),
+                    "grammar-constrained decoding enabled (llguidance, lark)"
+                );
                 Some(c)
             }
             Err(e) => {
                 tracing::warn!(
                     error = %e,
-                    "JsonConstraint compile failed — falling back to free-form sampling"
+                    "LlguidanceConstraint compile failed (lark) — falling back to free-form sampling"
                 );
                 None
             }
         }
+    } else if let Some(schema) = request.structured_output.as_ref() {
+        match crate::llguidance_constraint::LlguidanceConstraint::from_schema_value(
+            schema, model,
+        ) {
+            Ok(c) => {
+                tracing::info!(
+                    "grammar-constrained decoding enabled (llguidance, schema)"
+                );
+                Some(c)
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "LlguidanceConstraint compile failed (schema) — falling back to free-form sampling"
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // URL-allowlist constraint: built when the caller declares a
+    // non-empty allowlist on the request. Shares vocab_bytes storage
+    // via `vocab_cache::vocab_bytes_for` so URL + evidence-id +
+    // llguidance all observe the same per-model byte mapping.
+    let url_constraint = request.url_allowlist.as_deref().and_then(|urls| {
+        let vocab_bytes = crate::vocab_cache::vocab_bytes_for(model);
+        let constraint = crate::url_constraint::UrlAllowlistConstraint::new(urls, vocab_bytes);
+        tracing::info!(
+            url_count = urls.len(),
+            constructed = constraint.is_some(),
+            "url_allowlist constraint constructed"
+        );
+        constraint
     });
 
-    // Non-Latin token denylist: opt-in via env var. Built once per
-    // model and cached for the daemon's lifetime. Applies on every
-    // inference path (chat, completion, structured) so callers don't
-    // have to remember to set `x-asciiExtended` on every schema.
-    // Default OFF — some corpora (Confucian-philosophy articles,
-    // multilingual chat) legitimately need CJK tokens.
+    // Evidence-id allowlist constraint (Tier 2 of tool-framework
+    // expansion). Same per-request shape as the URL constraint —
+    // built when `CompletionRequest.evidence_id_allowlist` is
+    // non-empty. Shares the per-model vocab_bytes cache.
+    let evidence_id_constraint =
+        request.evidence_id_allowlist.as_deref().and_then(|ids| {
+            let vocab_bytes = crate::vocab_cache::vocab_bytes_for(model);
+            let constraint =
+                crate::evidence_id_constraint::EvidenceIdAllowlistConstraint::new(
+                    ids, vocab_bytes,
+                );
+            tracing::info!(
+                ev_id_count = ids.len(),
+                constructed = constraint.is_some(),
+                "evidence_id_allowlist constraint constructed"
+            );
+            constraint
+        });
+
+    // Non-Latin token denylist: opt-in via `SOVEREIGN_BLOCK_NON_LATIN`.
+    // Built once per model and cached for the daemon's lifetime.
+    // Default OFF — some corpora legitimately need CJK tokens.
     let non_latin_denylist = if non_latin_block_enabled() {
-        Some(crate::json_constraint::non_latin_denylist_for(model))
+        Some(crate::vocab_cache::non_latin_denylist_for(model))
     } else {
         None
     };
@@ -5416,7 +8206,25 @@ fn build_sampler(
 
     let build_chain = |params: &ResolvedSampling, chain_temp: f32| {
         let mut samplers: Vec<LlamaSampler> = Vec::new();
-        samplers.push(LlamaSampler::dry(model, 0.8, 1.75, 2, -1, breakers.iter().copied()));
+        // MIGRATION 2026-05-17: llama-cpp-4 0.2.x reshaped DRY:
+        //   * Added `n_ctx_train` as the second positional arg — scopes
+        //     DRY's repetition-detection window; querying the model
+        //     gives us the model's actual training span instead of a
+        //     hard-coded guess.
+        //   * `dry` became a method on `&LlamaSampler` rather than a
+        //     free constructor. Chain off `greedy()` (a no-op identity
+        //     sampler at this position in the chain) to get a base we
+        //     can call `.dry(...)` against. Semantically equivalent to
+        //     the old constructed-fresh form.
+        samplers.push(LlamaSampler::greedy().dry(
+            model,
+            model.n_ctx_train() as i32,
+            0.8,
+            1.75,
+            2,
+            -1,
+            breakers.iter().copied(),
+        ));
         samplers.push(LlamaSampler::penalties(128, rep_pen, freq_pen, params.presence_pen));
         if chain_temp < 0.01 {
             samplers.push(LlamaSampler::greedy());
@@ -5433,7 +8241,9 @@ fn build_sampler(
     ConstrainedSampler {
         inner_explore: build_chain(&explore, explore.temp),
         inner_content: build_chain(&content, content_temp),
-        constraint,
+        llg_constraint,
+        url_constraint,
+        evidence_id_constraint,
         non_latin_denylist,
     }
 }
@@ -5655,6 +8465,12 @@ pub fn parse_tool_calls_from_text(text: &str) -> Vec<ParsedToolCall> {
                 let fixed =
                     escape_unescaped_control_chars_in_string_values(&body);
                 serde_json::from_str::<serde_json::Value>(&fixed)
+            })
+            .or_else(|_| {
+                let stripped = strip_orphan_close_brackets(&body);
+                let fixed =
+                    escape_unescaped_control_chars_in_string_values(&stripped);
+                serde_json::from_str::<serde_json::Value>(&fixed)
             });
         match parsed {
             Ok(obj) => {
@@ -5715,10 +8531,20 @@ pub fn parse_tool_calls_with_errors(text: &str) -> (Vec<ParsedToolCall>, Vec<Str
 
         // Same retry-on-normalized-body pattern as the non-with-errors
         // variant (Qwen3-Coder emits raw \n inside a content string).
+        // Plus a third retry that strips orphan `]` chars Qwen3.5-9B
+        // observed emitting mid-envelope (2026-05-21): model duplicated
+        // a key after a runaway content-string and inserted `}]}` at the
+        // tail, breaking serde.
         let parsed = serde_json::from_str::<serde_json::Value>(body)
             .or_else(|_| {
                 let fixed =
                     escape_unescaped_control_chars_in_string_values(body);
+                serde_json::from_str::<serde_json::Value>(&fixed)
+            })
+            .or_else(|_| {
+                let stripped = strip_orphan_close_brackets(body);
+                let fixed =
+                    escape_unescaped_control_chars_in_string_values(&stripped);
                 serde_json::from_str::<serde_json::Value>(&fixed)
             });
         match parsed {
@@ -5741,6 +8567,61 @@ pub fn parse_tool_calls_with_errors(text: &str) -> (Vec<ParsedToolCall>, Vec<Str
         }
     }
     (out, errors)
+}
+
+/// Walk a JSON candidate and drop any `]` that doesn't match an open
+/// `[`. Used as a last-ditch repair when a tool-call body has been
+/// damaged by mid-stream prose drift (model wrote `}]}` where it
+/// meant `}}`). Mirror-image `[` are NOT dropped — that would create
+/// new orphan `]` later in the stream and the repair has to stay
+/// idempotent under retry.
+///
+/// String contents pass through verbatim (we don't want to touch
+/// `]` inside JSON strings). Escape sequences within strings are
+/// honoured so a `\"` doesn't prematurely close the string.
+pub fn strip_orphan_close_brackets(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut bracket_depth: i32 = 0;
+    let mut in_str = false;
+    let mut esc = false;
+    for c in s.chars() {
+        if esc {
+            out.push(c);
+            esc = false;
+            continue;
+        }
+        if in_str {
+            if c == '\\' {
+                esc = true;
+                out.push(c);
+                continue;
+            }
+            if c == '"' {
+                in_str = false;
+            }
+            out.push(c);
+            continue;
+        }
+        match c {
+            '"' => {
+                in_str = true;
+                out.push(c);
+            }
+            '[' => {
+                bracket_depth += 1;
+                out.push(c);
+            }
+            ']' => {
+                if bracket_depth > 0 {
+                    bracket_depth -= 1;
+                    out.push(c);
+                }
+                // else: orphan close, skip
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Handles the subset of JSON schema used by tool descriptors:
@@ -5842,6 +8723,54 @@ fn prop_type_rule(schema: &serde_json::Value) -> &'static str {
 }
 
 #[cfg(test)]
+mod primary_siblings_env_tests {
+    //! Pin `SOVEREIGN_PRIMARY_SIBLINGS` parsing — env access is split
+    //! out so this test is pure (no process-env mutation that would
+    //! race with other tests).
+    use super::parse_primary_siblings;
+
+    #[test]
+    fn absent_returns_none() {
+        assert!(parse_primary_siblings(None).is_none());
+    }
+
+    #[test]
+    fn empty_returns_none() {
+        assert!(parse_primary_siblings(Some("")).is_none());
+    }
+
+    #[test]
+    fn zero_and_one_are_treated_as_disabled() {
+        // 0 and 1 both mean "no parallel siblings" — caller stays on
+        // the single-context lazy path. Anything else would be a
+        // confusing footgun for operators who type "1".
+        assert!(parse_primary_siblings(Some("0")).is_none());
+        assert!(parse_primary_siblings(Some("1")).is_none());
+    }
+
+    #[test]
+    fn n_two_and_above_returns_count() {
+        let two = parse_primary_siblings(Some("2")).expect("N=2 should parse");
+        assert_eq!(two.get(), 2);
+        let four = parse_primary_siblings(Some("4")).expect("N=4 should parse");
+        assert_eq!(four.get(), 4);
+    }
+
+    #[test]
+    fn whitespace_is_trimmed() {
+        let n = parse_primary_siblings(Some("  3  ")).expect("N=3 with padding");
+        assert_eq!(n.get(), 3);
+    }
+
+    #[test]
+    fn garbage_returns_none() {
+        assert!(parse_primary_siblings(Some("two")).is_none());
+        assert!(parse_primary_siblings(Some("-1")).is_none());
+        assert!(parse_primary_siblings(Some("3.5")).is_none());
+    }
+}
+
+#[cfg(test)]
 mod parse_tool_calls_tests {
     //! Lock the parser's behaviour against the two real-world model
     //! emission failure modes:
@@ -5904,6 +8833,55 @@ mod parse_tool_calls_tests {
     }
 
     #[test]
+    fn orphan_close_bracket_inside_envelope_recovers_via_repair() {
+        // Qwen3.5-9B-HighIQ observed 2026-05-21 (run r): model
+        // emitted a runaway `content` string ending with `","path":"src/lib.rs"}]}`.
+        // The trailing `]` is orphan — no matching `[` open — and
+        // serde rejects the body. The repair pass strips the orphan
+        // close bracket so the call survives.
+        let body = r#"{"name":"write","arguments":{"path":"src/lib.rs","content":"// short","path":"src/lib.rs"}]}"#;
+        let text = format!("<tool_call>{}</tool_call>", body);
+        let calls = parse_tool_calls_from_text(&text);
+        assert_eq!(
+            calls.len(),
+            1,
+            "orphan-bracket repair should rescue the call"
+        );
+        assert_eq!(calls[0].name, "write");
+        assert!(calls[0].arguments.contains("src/lib.rs"));
+
+        let (out, errors) = parse_tool_calls_with_errors(&text);
+        assert_eq!(out.len(), 1);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn strip_orphan_close_brackets_idempotent_on_valid_input() {
+        let s = r#"{"a":1,"b":[2,3],"c":"x]y"}"#;
+        assert_eq!(super::strip_orphan_close_brackets(s), s);
+    }
+
+    #[test]
+    fn strip_orphan_close_brackets_drops_lone_close() {
+        let s = r#"{"a":1}]}"#;
+        // Only the `]` is orphan; the outer braces balance. The
+        // surrounding `}` after `]` is also at depth 0 here, but the
+        // repair only touches brackets.
+        let repaired = super::strip_orphan_close_brackets(s);
+        assert!(!repaired.contains(']'));
+        assert!(repaired.starts_with('{'));
+    }
+
+    #[test]
+    fn strip_orphan_close_brackets_leaves_bracketed_inside_strings_alone() {
+        // `]` inside a JSON string should NOT be stripped — it isn't
+        // structural. Repair only touches characters at depth 0 of
+        // string nesting.
+        let s = r#"{"a":"x]y","b":"]"}"#;
+        assert_eq!(super::strip_orphan_close_brackets(s), s);
+    }
+
+    #[test]
     fn raw_newlines_inside_string_value_recover_via_normalization() {
         // Qwen3-Coder-30B observed 2026-05-08: balanced JSON envelope
         // but raw `\n` (0x0A) bytes inside the `content` string value
@@ -5947,7 +8925,7 @@ mod pick_slot_tests {
     //! with fast, GPU-free table tests so a regression in routing
     //! is caught by `cargo test` long before it reaches a live
     //! llama.cpp load.
-    use super::{pick_slot, SlotTarget};
+    use super::{pick_slot, SlotTarget, FAST_SHORT_MAX_INPUT_CHARS};
     use sovereign_core::oicp::{CapabilityHint, InferenceRequirements};
     use sovereign_core::types::{CompletionRequest, Speed};
 
@@ -6012,6 +8990,40 @@ mod pick_slot_tests {
         assert_eq!(
             pick_slot(&r, true, false, true, None),
             SlotTarget::Fast
+        );
+    }
+
+    #[test]
+    fn fast_short_skipped_when_prompt_exceeds_per_seq_budget() {
+        // 2026-05-19 desktop trace: a Fast+max_tokens=16 call from
+        // (likely) the title/scope classifier carried a 9272-char
+        // conversation-context prompt; pick_slot routed it to
+        // FastShort whose per-seq KV slice is only 2048 tokens, and
+        // decode failed with `NoKvCacheSlot (batch_n_tokens=2328,
+        // n_requests=1)`. The fix gates FastShort on prompt size in
+        // addition to output budget.
+        let mut r = req(Speed::Fast, None);
+        r.max_tokens = Some(16);
+        r.prompt = "x".repeat(FAST_SHORT_MAX_INPUT_CHARS + 1);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::Fast,
+            "oversized prompt must fall through to Fast even when max_tokens is tiny"
+        );
+        // Right at the boundary — still allowed.
+        r.prompt = "x".repeat(FAST_SHORT_MAX_INPUT_CHARS);
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::FastShort
+        );
+        // system_message counts too — a long system + tiny user
+        // prompt should also fall through.
+        r.prompt = "x".repeat(100);
+        r.system_message = Some("y".repeat(FAST_SHORT_MAX_INPUT_CHARS));
+        assert_eq!(
+            pick_slot(&r, true, false, true, None),
+            SlotTarget::Fast,
+            "system+prompt combined must respect the FastShort input budget"
         );
     }
 

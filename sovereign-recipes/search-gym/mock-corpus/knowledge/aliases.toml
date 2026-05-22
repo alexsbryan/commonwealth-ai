@@ -1,0 +1,54 @@
+# Knowledge-corpus alias index — local Wikipedia / encyclopedia /
+# scholarly references the user has installed locally. Same shape
+# as web/aliases.toml: each entry binds a response file to multiple
+# query phrasings. Lookup is substring-match (case-insensitive,
+# whitespace-collapsed), so an alias "photosynthesis" matches
+# "what is photosynthesis", "photosynthesis explanation", etc.
+
+[[entry]]
+file    = "photosynthesis.json"
+aliases = [
+  "photosynthesis",
+  "photosynthesis overview",
+  "how plants make food",
+  "plant photosynthesis",
+]
+
+[[entry]]
+file    = "spacex.json"
+aliases = [
+  "spacex",
+  "spacex starship",
+  "starship booster catch",
+  "super heavy booster",
+  "spacex starship test flight",
+]
+
+[[entry]]
+file    = "nvidia.json"
+aliases = [
+  "nvidia",
+  "nvda",
+  "nvidia corporation",
+  "nvidia stock",
+  "jensen huang",
+]
+
+[[entry]]
+file    = "decorator-pattern.json"
+aliases = [
+  "decorator",
+  "python decorator",
+  "decorator pattern",
+  "design pattern",
+]
+
+[[entry]]
+file    = "water-intake.json"
+aliases = [
+  "water intake",
+  "daily water",
+  "how much water",
+  "recommended water",
+  "hydration",
+]

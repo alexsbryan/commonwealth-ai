@@ -385,6 +385,7 @@ mod tests {
 
                 embed_model: None,
                 benchmark: None,
+                current_in_flight: None,
             },
             addresses: vec!["192.168.1.10:9742".parse().unwrap()],
         };

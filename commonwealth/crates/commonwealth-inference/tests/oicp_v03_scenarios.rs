@@ -40,6 +40,7 @@ fn node_caps(availability: f32) -> NodeCapabilities {
         loaded_models: vec![],
         embed_model: None,
         benchmark: None,
+        current_in_flight: None,
     }
 }
 

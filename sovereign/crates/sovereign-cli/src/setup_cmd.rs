@@ -559,11 +559,17 @@ async fn run_repair() -> i32 {
     // catch the common HTML-stub failure mode.
     let manifest = &*sovereign_core::models_manifest::DEFAULT_MANIFEST;
 
-    let slots: [(&str, &std::path::Path); 3] = [
+    // Validate the on-disk size of each slot's GGUF. When fast
+    // subsumes primary, primary is checked once — there's no separate
+    // file to validate for the fast role. has_explicit_fast() gates
+    // adding it to the sweep.
+    let mut slots: Vec<(&str, &std::path::Path)> = vec![
         ("primary", cfg.models.primary.as_path()),
-        ("fast",    cfg.models.fast.as_path()),
         ("embed",   cfg.models.embed.as_path()),
     ];
+    if cfg.models.has_explicit_fast() {
+        slots.push(("fast", cfg.models.fast_path()));
+    }
 
     let mut removed = 0usize;
     let mut kept = 0usize;
@@ -669,7 +675,11 @@ async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
     let cfg = SetupConfig {
         models: ModelsSection {
             primary: paths.primary,
-            fast: paths.fast,
+            // `sovereign setup` always prompts for an explicit fast
+            // GGUF (BYOM is committed; no blank-to-use-default).
+            // Optional-fast is for non-interactive callers (pod
+            // entrypoint, tests).
+            fast: Some(paths.fast),
             embed: paths.embed,
             code: paths.code,
             context_size: None,

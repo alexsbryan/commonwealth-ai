@@ -306,92 +306,180 @@ Return JSON:
         Some(format!(
             r#"You are reading conversations between one person (the user) and an
 AI assistant. Your job is named-entity extraction: identify the
-*people*, *organizations*, and *initiatives* the user discusses. The
-user is the speaker — do not extract them.
+*people*, *organizations*, *initiatives*, *works*, and *concepts*
+the user discusses across whatever they choose to bring to the
+conversation. The user is the speaker — do not extract them. The
+assistant is a text-generation surface — do not extract it.
+
+People talk to AI assistants about every part of life: work, yes,
+but also family, friendships, neighbors, health, faith, grief,
+hobbies, creative projects, cooking, gardening, parenting, pets,
+travel, learning languages, fixing things around the house,
+spiritual practice, politics, finances, the news, the weather,
+what to cook tonight. Read the actual conversations without
+presuming the domain. Extract what the user actually mentioned,
+in whatever shape it appears.
 
 Definitions:
-- **Person**: a named individual the user mentions ("Sarah Chen",
-  "Mike from engineering"). Capture organizational affiliation and
-  role if the conversation states them.
-- **Organization**: a named company, institution, or team. Capture
-  the relationship to the user (client, employer, vendor, partner,
-  internal team) if the conversation implies one.
-- **Initiative**: a concrete project, strategic priority, or piece
-  of ongoing work the user is organizing effort around ("API
-  migration", "Q3 enterprise push", "reduce churn to 5%"). An
-  initiative implies *active effort toward a future state* —
-  distinguish from topics the user is merely thinking about. The
-  rule of thumb: if the user could say "we're working on X" or "I
-  committed to X", it's an initiative; if they could only say "I
-  think about X", it's not.
 
-  Tactics, milestones, sub-strategies, implementation paths, or
-  work artifacts *within* an initiative are NOT separate initiatives
-  — they belong to the parent. Example: "API migration" is an
-  initiative; the "parallel migration path" the user agreed to ship
-  is a tactic inside it, not a separate initiative.
+- **Person**: a named human individual the user mentions. Could be
+  a co-founder, a sister, a kindergarten teacher, a neighbor, a
+  therapist, a referenced author, a historical figure, a friend's
+  cousin, a child's classmate — anyone the user names. Capture
+  whatever the conversation says about who they are: relationship
+  to the user (spouse, advisor, doctor, friend), role
+  (pediatrician, contractor, choir director, CEO), or affiliation
+  (their employer, their school, their congregation). Omit fields
+  the conversation doesn't support — don't invent.
 
-  Single-conversation work products and deliverables are NOT
-  initiatives — they're artifacts inside an initiative or client
-  engagement. Things that are NOT initiatives, even when the user
-  is actively working on them: "the migration plan revision",
-  "the SOC2 crosswalk", "the SOW reformat", "the discovery scope",
-  "usage-based pricing alternative", "a SOW", "a draft", "a
-  scoping doc". An initiative has a stable name the user uses
-  *across multiple conversations*; if the phrase only appears in
-  one conversation and reads like a task title, it's an artifact,
-  not an initiative.
+- **Organization**: any named institution, company, group, or
+  place that organizes a body of people. Workplaces, schools,
+  hospitals, churches, mosques, community centers, government
+  agencies, sports clubs, nonprofits, bands, restaurants, brands,
+  museums, libraries, the local PTA, a book club, a mutual-aid
+  group, a band the user follows. Capture the relationship to the
+  user when the conversation implies one (employer, client,
+  vendor, school the user attends or whose parent they are,
+  congregation, regular hangout, the brand they buy).
+
+- **Work**: a named piece of created content the user mentions,
+  reads, watches, listens to, cites, or is making. Books, papers,
+  blog posts, essays, articles, recipes, songs, albums, films,
+  plays, novels, poems, podcasts, talks, sermons, comics, games,
+  internal docs, RFCs, ADRs, design memos, sermons, scriptures.
+  When the user mentions an author and the work together, emit
+  both — the Work as a Work, the author as a Person if the
+  conversation discusses them beyond just citing them.
+
+- **Concept**: a named idea, mechanism, tradition, technique,
+  condition, framework, or load-bearing term the user is
+  *thinking with*. Concepts are the spine of cross-conversation
+  linkage — they enable trend retrieval ("how has my view on X
+  shifted"). Whole range of human life qualifies. A non-exhaustive
+  span: `circadian rhythm`, `attachment style`, `the via
+  negativa`, `mutual aid`, `sourdough starter`, `executive
+  function`, `chord substitution`, `metta practice`, `dollar-cost
+  averaging`, `the bus driver problem`, `tech debt`, `restorative
+  justice`, `grief wave`. A Concept is *what the conversation
+  thinks with*, not *what the conversation is about generally*.
+  Distinguish sharply from Claim: "attachment style" is a Concept
+  (the named framework); "her avoidant attachment is making
+  reconciliation harder" is a Claim that uses the framework. Lift
+  Concepts generously — when in doubt, include.
+
+- **Initiative**: a concrete ongoing effort the user is organizing
+  attention or action around. The rule is *active effort toward a
+  future state*, NOT *professional project*. Examples across the
+  range of what people bring to conversations:
+    - work projects ("API migration", "Q3 enterprise push")
+    - learning efforts ("learning Spanish", "rebuilding piano
+      practice", "training for the half-marathon")
+    - home / domestic ("kitchen renovation", "redoing the
+      backyard", "potty training")
+    - health & wellbeing ("recovering from ACL surgery",
+      "managing my anxiety", "weight loss after the baby")
+    - relational ("rebuilding trust with my dad", "couples
+      counseling", "the move-in plan")
+    - creative ("writing the novel", "the documentary on
+      grandparents", "the wedding album")
+    - civic / community ("the rezoning fight", "starting the
+      neighborhood book exchange")
+    - financial ("paying off the credit card", "the down-payment
+      plan", "starting the 529s")
+    - spiritual / inner ("the daily meditation practice",
+      "studying Torah", "grief work after Mom")
+
+  An initiative implies the user could naturally say "I'm working
+  on X" or "we committed to X" or "I've been doing X for a while".
+  If they could only say "I think about X" or "I wonder about X",
+  it's not an initiative — it might surface as a question or a
+  topic for clustering, but not here.
+
+  Tactics, milestones, single-session deliverables, or sub-steps
+  *within* an initiative are NOT separate initiatives — they
+  belong to the parent. "Learning Spanish" is an initiative; "the
+  Duolingo streak" is a tactic inside it. "Kitchen renovation" is
+  an initiative; "the granite quote from Acme Stone" is an
+  artifact inside it. An initiative carries a stable name the
+  user uses *across multiple conversations*; if the phrase appears
+  only once and reads like a task title, it's an artifact, not an
+  initiative.
 
   Use the canonical name without possessive prefixes or scope
-  suffixes — write "Q3 enterprise push", not "Meridian's Q3
-  enterprise push" or "Acme's API migration"; write "Architecture
-  refresh", not "Architecture refresh discovery" or "Architecture
-  refresh kickoff". Capture organizational ownership through
-  `participants` (the org's atom appears there), not in the name;
-  capture phase or status through the `status` field.
+  suffixes. Capture ownership / participants in the `participants`
+  field; capture phase or status through `status`.
 
-When the same person, organization, or initiative is referenced both
-by short form ("Mike", "Acme") and long form ("Mike Torres",
-"Acme Corp") across conversations, emit the long form once — the
-post-extraction merger will resolve short-form references to it.
+When the same person, organization, or initiative is referenced
+both by short form ("Mike", "Acme", "the choir") and long form
+("Mike Torres", "Acme Corp", "Westside Community Choir") across
+conversations, emit the long form once — the post-extraction
+merger resolves short-form references to it.
 
-Use the [Conversation N] labels to record where each entity appeared
-in `mentions`. If you list a person as a participant on an initiative,
-make sure that person also appears in the `persons` array.
+Use the [Conversation N] labels to record where each entity
+appeared in `mentions`. If you list a person as a participant on
+an initiative, make sure that person also appears in the `persons`
+array.
 
 Conversations:
 {passages}
 
-Return ONLY a JSON object:
+Return ONLY a JSON object. The example below is illustrative ONLY
+— its entities are deliberately drawn from domains (12th-century
+mysticism, baroque festival programming, antique instrument
+restoration) chosen so they could not plausibly appear in real
+chat content. **DO NOT echo any of the example names below in
+your output.** They exist solely to show the JSON shape; every
+entity in your output must come from the actual conversation text:
+
 {{
   "persons": [
     {{
-      "name": "Sarah Chen",
-      "affiliation": "Acme Corp",
-      "role": "VP Engineering",
+      "name": "Hildegard of Bingen",
+      "affiliation": "Disibodenberg Abbey",
+      "role": "prioress",
       "mentions": ["Conversation 1"]
     }}
   ],
   "organizations": [
     {{
-      "name": "Acme Corp",
-      "relationship": "client",
+      "name": "the Salzburg Festival",
+      "relationship": "the user attends every August",
+      "mentions": ["Conversation 1"]
+    }}
+  ],
+  "works": [
+    {{
+      "name": "Scivias",
+      "kind": "book",
+      "creator": "Hildegard of Bingen",
+      "mentions": ["Conversation 1"]
+    }}
+  ],
+  "concepts": [
+    {{
+      "name": "apophatic theology",
+      "description": "12th-century mystical approach of describing the divine by negation; the user is using it as a frame for reading Hildegard.",
       "mentions": ["Conversation 1"]
     }}
   ],
   "initiatives": [
     {{
-      "name": "API migration",
-      "status": "phase 2 of 4, on track for Q2",
-      "participants": ["Mike Torres"],
+      "name": "restoring a 1920s clavichord",
+      "status": "cleaning the soundboard, week three",
+      "participants": [],
       "mentions": ["Conversation 2"]
     }}
   ]
 }}
 
-Empty arrays for any kind that didn't appear. Omit affiliation, role,
-status, or relationship fields when the conversation doesn't support
-them — do not invent. Skip first-person pronouns and the AI assistant."#,
+Empty arrays for any kind that didn't appear. Omit affiliation,
+role, status, creator, kind, description, or relationship fields
+when the conversation doesn't support them — do not invent. Skip
+first-person pronouns and the AI assistant. If you find yourself
+about to emit `Hildegard of Bingen`, `Disibodenberg Abbey`, `the
+Salzburg Festival`, `Scivias`, `apophatic theology`, or `restoring
+a 1920s clavichord`, stop — those are example names, not corpus
+content."#,
             passages = passages
         ))
     }

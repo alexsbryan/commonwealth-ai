@@ -83,6 +83,70 @@ pub struct ChatCompletionRequest {
     /// `sovereign_core::types::SamplingMode` via serde rename.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampling_mode: Option<sovereign_core::types::SamplingMode>,
+    /// Commonwealth extension: prefill text appended after the
+    /// rendered chat-template prompt, before the model's first
+    /// generation token. Used by frontdoor nudges (read-attractor,
+    /// failure-recovery) that need to *structurally* commit the model
+    /// to a known-good response prefix rather than nudge it via
+    /// instruction. Family-agnostic — every chat template ends with
+    /// a generation-position marker (`<|turn>model\n`,
+    /// `<|im_start|>assistant\n`, `<start_of_turn>model\n`, …) and
+    /// the prefix lands after that marker.
+    ///
+    /// Threaded into `sovereign_core::types::CompletionRequest`
+    /// via `inference_adapter::build_completion_request`; consumed
+    /// in `embedded::build_chat_prompt` after the chat template
+    /// renders.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assistant_prefix: Option<String>,
+    /// Commonwealth extension: structural cmd-prefix constraint (R2).
+    /// When set, the inference layer's tool-envelope schema injects a
+    /// `pattern: "^<literal-prefix>"` on the `cmd` parameter of any
+    /// `exec_command` tool so the grammar mask forces the literal
+    /// prefix as the start of the cmd string. Frontdoor nudges set
+    /// this to commit the model to a known-good action shape.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cmd_prefix: Option<String>,
+    /// Commonwealth extension: URL allowlist for grammar-constrained
+    /// URL emission. When non-empty, the inference sampler installs a
+    /// logit-mask constraint that prevents the model from emitting any
+    /// HTTP/HTTPS URL outside this list — byte-by-byte, via the
+    /// trie-walking state machine in
+    /// `sovereign_inference::url_constraint::UrlAllowlistConstraint`.
+    /// Used by tool-result rendering paths (search-gym runner,
+    /// production SearchTool) to make URL fabrication structurally
+    /// impossible: prose tokens pass through, URL-shaped tokens that
+    /// don't match the trie get clamped to `-INFINITY`. Wire path:
+    /// extracted here, threaded onto `CompletionRequest.url_allowlist`
+    /// by `build_completion_request`, consumed by `embedded::build_sampler`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url_allowlist: Option<Vec<String>>,
+    /// Commonwealth extension (Tier 2 of tool-framework expansion):
+    /// evidence-id allowlist for sampler-side citation faithfulness.
+    /// Same architecture as `url_allowlist` applied to `ev-Tn-NNNN`
+    /// handles. When non-empty, tokens that would extend `[ev-T…`
+    /// into an id not in the list are clamped to `-INFINITY`. Wire
+    /// path: extracted here, threaded onto
+    /// `CompletionRequest.evidence_id_allowlist` by
+    /// `build_completion_request`, consumed by
+    /// `embedded::build_sampler`. Populated upstream by
+    /// `apply_evidence_id_allowlist_from_tool_results` (frontdoor).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_id_allowlist: Option<Vec<String>>,
+    /// Commonwealth extension: raw Lark grammar source forwarded to
+    /// llguidance for grammar-constrained decoding. Strictly more
+    /// expressive than `response_format` (regex tokens, recursion,
+    /// custom productions, alternations like `"BREAK" | "CONTINUE"`)
+    /// — the escape hatch for non-JSON-Schema constraints. When
+    /// present, takes precedence over `response_format` (both engines
+    /// mask the same logit chain; layering would deadlock — see
+    /// `embedded::build_sampler` comment at line ~7964). Wire path:
+    /// HTTP body field `lark_grammar` (raw string) → here →
+    /// `inference_adapter::build_completion_request` →
+    /// `CompletionRequest.lark_grammar` → `embedded::build_sampler`
+    /// instantiates `LlguidanceConstraint::new(lark, model)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lark_grammar: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

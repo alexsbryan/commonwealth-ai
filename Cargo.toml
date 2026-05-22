@@ -21,6 +21,8 @@ members = [
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-pipeline",
     "sovereign/crates/sovereign-work-atlas",
+    "sovereign/crates/sovereign-agent-bench",
+    "sovereign/crates/commonwealth-agent-tools",
 
     # Commonwealth — symmetric mesh daemon.
     "commonwealth/crates/commonwealth-core",
@@ -55,6 +57,8 @@ sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
+sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }
+commonwealth-agent-tools = { path = "sovereign/crates/commonwealth-agent-tools" }
 commonwealth-core = { path = "commonwealth/crates/commonwealth-core" }
 commonwealth-discovery = { path = "commonwealth/crates/commonwealth-discovery" }
 commonwealth-inference = { path = "commonwealth/crates/commonwealth-inference" }
@@ -86,6 +90,17 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 axum = { version = "0.8", features = ["ws", "macros"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors"] }
+
+# Chat-template rendering (Gemma 3/4 macros, Qwen3.5-9B macros/sets/
+# includes). The llama-cpp-4 0.2.x binding dropped the
+# `apply_chat_template_oaicompat` path that previously routed full-
+# Jinja2 templates through llama.cpp's bundled minja renderer. We
+# re-implement that path in Rust with minijinja so models whose
+# `tokenizer.chat_template` uses macros/sets/includes don't fall
+# through to plain-text concat (lossy: role markers hallucinate,
+# stop tokens drift). Lean — no GIL, no JSON serialisation step
+# between Rust and the renderer.
+minijinja = { version = "2", features = ["loader"] }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
@@ -125,9 +140,31 @@ lancedb = "0.27"
 # Markdown (sovereign-atos charter parsing)
 pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
 
+# Grammar-constrained sampling: llguidance is the upstream
+# Microsoft/Guidance constraint engine. We re-adopt it (after the
+# 2026-04 dismissal that traced to the llama-cpp-4 binding dropping
+# its `LlamaSampler::llguidance` shim) by using llguidance directly
+# from Rust — bypasses llama-cpp's grammar API entirely, same
+# pattern as our existing in-house `JsonConstraint` mask but with
+# Lark + JSON-Schema + top-level alternation support out of the
+# box. Lets us pin a `tool_envelope | plain_text` grammar so the
+# model can either emit a parseable tool call OR plain text "done"
+# — closes the parse_failed_envelope + loop_trap failure classes
+# surfaced by the agent-bench sweep on 2026-05-21.
+llguidance = "1.7"
+
 # ── Build profile ────────────────────────────────────────────────────────
 # Skip debug symbols on dev builds — biggest single speedup for `cargo
 # check` per the prior sub-workspace settings; preserved here so
 # consolidating into one workspace doesn't slow incremental builds.
 [profile.dev]
 debug = 0
+
+# ── Patches ──────────────────────────────────────────────────────────────
+# Vendored `llama-cpp-4` re-introduces the `LlamaContextParams::with_n_seq_max`
+# builder method that upstream 0.2.x retired. The underlying C field is still
+# load-bearing — without it the FastShort continuous-batched decode fails
+# with "Decode Error -1: n_tokens == 0" the moment a batch carries seq_id > 0.
+# Forensically traced in the marathon bench, 2026-05-18.
+[patch.crates-io]
+llama-cpp-4 = { path = "vendor/llama-cpp-4" }

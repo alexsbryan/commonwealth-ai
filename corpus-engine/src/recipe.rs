@@ -214,6 +214,39 @@ pub struct Recipe {
     /// file declares only the schema, not user values.
     #[serde(skip, default)]
     pub resolved_parameters: ResolvedParameters,
+
+    /// Presentation hints for UI surfaces (Atlas View rail grouping,
+    /// Settings → Knowledge tile icons, etc.). Pure UI metadata —
+    /// retrieval and ingest ignore this block. Drives the
+    /// "Conversations" group in the Atlas View when corpora declare
+    /// `category = "conversation"`.
+    ///
+    /// `#[serde(default)]` so recipes pre-dating this block still
+    /// parse — see the back-compat policy at the top of this module.
+    #[serde(default)]
+    pub display: Option<DisplayMeta>,
+}
+
+/// Presentation hints for a recipe. See [`Recipe::display`].
+///
+/// Pure UI metadata: the retrieval layer reads `category` to decide
+/// whether to render a chunk under "From your conversations" rather
+/// than the corpus_id slug (see `format_scored_chunks_with_kinds`),
+/// and the Atlas View rail groups corpora that share a category under
+/// one header. No semantic meaning is attached to category strings —
+/// add new ones as needed.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct DisplayMeta {
+    /// Logical group this corpus belongs to. Example values:
+    /// `"conversation"`, `"reference"`, `"argument"`, `"personal"`.
+    /// `None` means "ungrouped" — UI buckets these as "Other".
+    pub category: Option<String>,
+    /// Optional icon hint for desktop tiles. Free-form string; the
+    /// frontend maps known values (`"chat-bubble"`, `"book"`, …) onto
+    /// its icon set and falls back to a generic glyph for unknown
+    /// values.
+    pub icon: Option<String>,
 }
 
 /// Sidecar TOML table for [`Recipe::filter_mode`]. Splitting this from
@@ -1475,6 +1508,20 @@ pub enum ExtractorConfig {
     /// directory walk for the canonical subset.
     #[serde(rename = "alignment_workspace")]
     AlignmentWorkspace {},
+    /// Anthropic claude.ai chat-export extractor. Parses the
+    /// `conversations.json` file produced by claude.ai's "Export
+    /// data" download and emits one
+    /// [`ExtractedDoc`](crate::extractors::ExtractedDoc) per
+    /// conversation (`source_id = conv_uuid`) with content rendered
+    /// as a sequence of `### [YYYY-MM-DD HH:MM] {user|assistant}`
+    /// turn blocks. Empty conversations and non-text content blocks
+    /// are dropped; messages flatten by `created_at` (branch handling
+    /// via `parent_message_uuid` is a v2 concern). Pair with
+    /// [`ChunkerConfig::ThreadedTurns`] so each retrieval unit is a
+    /// user-question + assistant-reply pair. See
+    /// [`crate::extractors::anthropic_export::AnthropicExportExtractor`].
+    #[serde(rename = "anthropic_export")]
+    AnthropicExport {},
 }
 
 fn default_code_context_lines() -> usize {
@@ -1528,6 +1575,21 @@ pub enum ChunkerConfig {
         #[serde(default = "default_portal_bullet_max_chars")]
         max_chars: usize,
     },
+    /// Chunker for chat-transcript content rendered by the
+    /// `anthropic_export` extractor (or any future extractor that
+    /// emits `### [YYYY-MM-DD HH:MM] {user|assistant}` turn blocks).
+    /// Groups each user turn with the immediately-following
+    /// assistant reply into one chunk; dangling user turns and
+    /// leading assistant turns become standalone chunks. Preserves
+    /// turn headers in chunk content so downstream phases can read
+    /// timestamps + first-person signals (meta-atlas trace axis) and
+    /// so the plain-text chunk reads naturally in retrieval surfaces.
+    /// Per-span authorship is surfaced through
+    /// [`crate::chunkers::threaded_turns::AttributedChunk`] for code
+    /// paths that consume attribution (atlas extraction,
+    /// attribution-filtered retrieval, bench scoring).
+    #[serde(rename = "threaded_turns")]
+    ThreadedTurns,
 }
 
 fn default_portal_bullet_max_chars() -> usize {

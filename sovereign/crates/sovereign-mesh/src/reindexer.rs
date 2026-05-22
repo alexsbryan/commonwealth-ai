@@ -31,7 +31,7 @@ use arc_swap::ArcSwap;
 use corpus_engine::ScipGraph;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
-use tokio::sync::{mpsc, watch, RwLock};
+use tokio::sync::{mpsc, watch, RwLock, Semaphore};
 
 use tokio::sync::oneshot;
 
@@ -147,6 +147,18 @@ pub struct Reindexer {
     /// — production daemons configure it; minimal test setups
     /// don't have to.
     commit_harvester: Option<Arc<corpus_engine::NoteStore>>,
+    /// Global serializer for `rust-analyzer scip` invocations across
+    /// every registered project. SCIP export is an
+    /// O(workspace-size) cargo + rust-analyzer pass — running four
+    /// of them in parallel (one per registered project) saturated
+    /// 4 cores at daemon startup, blocked anything else trying to
+    /// use the build cache, and kept the user staring at idle UIs.
+    /// One permit means at most one project rebuilds at a time;
+    /// the others queue on the semaphore. Cross-project parallelism
+    /// gave zero throughput because they all hit the same cargo
+    /// target dir anyway. Shared via Arc so it can be cloned into
+    /// every `WorkerCtx` without leaking the Reindexer Arc.
+    rebuild_permits: Arc<Semaphore>,
 }
 
 impl Reindexer {
@@ -161,6 +173,7 @@ impl Reindexer {
             projects: RwLock::new(HashMap::new()),
             merged,
             commit_harvester: None,
+            rebuild_permits: Arc::new(Semaphore::new(1)),
         })
     }
 
@@ -237,16 +250,31 @@ impl Reindexer {
             indexes_dir: self.indexes_dir.clone(),
             shutdown_rx,
             commit_harvester: self.commit_harvester.clone(),
+            rebuild_permits: Arc::clone(&self.rebuild_permits),
         };
 
         let worker = tokio::spawn(run_worker(ctx));
 
-        // Kick the startup catch-up signal so the worker performs
-        // its first rebuild before any tool call arrives.
-        let _ = rebuild_tx.send(Some(RebuildRequest {
-            reason: RebuildReason::Startup,
-            enqueued_at: Instant::now(),
-        }));
+        // Kick the startup catch-up signal — but only if the on-disk
+        // graph isn't already current. Cold-starting four corpora and
+        // rebuilding all of them OOM'd the box once: the daemon
+        // restart for a model swap fired Startup on every project
+        // even though nothing had changed since the last rebuild
+        // five minutes earlier. The git_poll loop already does the
+        // right freshness check (HEAD drift + working-tree state);
+        // mirror that decision here so the startup catch-up only
+        // fires when there's something to catch up on.
+        if needs_startup_rebuild(&entry, &graph.load()).await {
+            let _ = rebuild_tx.send(Some(RebuildRequest {
+                reason: RebuildReason::Startup,
+                enqueued_at: Instant::now(),
+            }));
+        } else {
+            tracing::info!(
+                corpus = %corpus_id,
+                "startup rebuild skipped — graph fresh at HEAD with clean working tree"
+            );
+        }
 
         let handle = Arc::new(ProjectHandle {
             entry,
@@ -312,6 +340,8 @@ struct WorkerCtx {
     /// git-HEAD poll calls into [`crate::commit_harvest`] for the
     /// `old_head..new_head` range alongside the SCIP rebuild.
     commit_harvester: Option<Arc<corpus_engine::NoteStore>>,
+    /// Cross-project rebuild serializer. See [`Reindexer::rebuild_permits`].
+    rebuild_permits: Arc<Semaphore>,
 }
 
 /// Per-rebuild context. Separated from [`WorkerCtx`] because the
@@ -325,6 +355,10 @@ struct RebuildCtx {
     graph: ScipGraphHandle,
     merged: ScipGraphHandle,
     indexes_dir: PathBuf,
+    /// Acquired around the rust-analyzer scip subprocess inside
+    /// `run_one_rebuild` so cross-project rebuilds serialize. See
+    /// [`Reindexer::rebuild_permits`].
+    rebuild_permits: Arc<Semaphore>,
 }
 
 async fn run_worker(ctx: WorkerCtx) {
@@ -339,6 +373,7 @@ async fn run_worker(ctx: WorkerCtx) {
         indexes_dir,
         shutdown_rx,
         commit_harvester,
+        rebuild_permits,
     } = ctx;
 
     state.set(WatcherKind::Scip, WatcherStatus::Idle).await;
@@ -350,6 +385,7 @@ async fn run_worker(ctx: WorkerCtx) {
         graph: Arc::clone(&graph),
         merged,
         indexes_dir,
+        rebuild_permits,
     };
 
     // Filesystem watcher. Held for the lifetime of the task so
@@ -494,6 +530,27 @@ async fn run_one_rebuild(ctx: &RebuildCtx, req: RebuildRequest) {
 
     ctx.state.set(WatcherKind::Scip, WatcherStatus::Active).await;
     let start = Instant::now();
+    // Cross-project semaphore — at most one project rebuilds at a
+    // time, monorepo-wide. SCIP export is a full cargo + rust-
+    // analyzer pass; running four in parallel saturates the
+    // machine and gives zero speed-up because they all share one
+    // target dir. Permit acquire is async and cancellable; on
+    // shutdown the worker tasks abort cleanly without leaking the
+    // permit (the SemaphorePermit RAII guard drops with the
+    // future). Errors here mean the semaphore was closed —
+    // impossible in normal flow, but we degrade to "rebuild
+    // without serialization" rather than skip the rebuild
+    // entirely.
+    let _permit = match ctx.rebuild_permits.acquire().await {
+        Ok(p) => Some(p),
+        Err(_) => {
+            tracing::warn!(
+                corpus = %ctx.entry.corpus_id,
+                "rebuild_permits closed; falling back to unserialized rebuild"
+            );
+            None
+        }
+    };
     let outcome = execute_rebuild(ctx, &req).await;
     match &outcome {
         Ok(summary) => {
@@ -766,6 +823,69 @@ fn build_ignore_filter(root: &Path) -> IgnoreFilter {
     IgnoreFilter { matcher }
 }
 
+/// Decide whether the startup catch-up rebuild should fire for
+/// `entry`. Returns `true` (must rebuild) whenever any freshness
+/// signal is missing or stale; returns `false` only when we have
+/// positive evidence the on-disk graph already reflects the current
+/// source tree.
+///
+/// Conservative on purpose: any uncertainty (no git, no recorded
+/// HEAD, can't run `git status`) returns `true` so a misconfigured
+/// project still gets indexed once on startup. The win is the
+/// common case — daemon restart for an inference-side change with
+/// nothing touched in the source tree — which used to fan out N
+/// full SCIP rebuilds and OOM the box.
+async fn needs_startup_rebuild(
+    entry: &ProjectEntry,
+    graph: &ScipGraph,
+) -> bool {
+    // 1. The on-disk graph must have a recorded HEAD. Placeholder
+    //    in-memory graphs (from a corrupt-DB recovery path) and
+    //    legacy DBs without the `last_indexed_head` row return
+    //    `None` here → always rebuild.
+    let Some(indexed_head) = graph.last_indexed_head().await else {
+        return true;
+    };
+    if indexed_head.is_empty() {
+        return true;
+    }
+    // 2. Current HEAD must match what was indexed.
+    let Some(current_head) = read_git_head(&entry.root) else {
+        // No git — we have no cheap freshness primitive. Rebuild
+        // to stay safe; non-git projects are rare on this daemon.
+        return true;
+    };
+    if current_head != indexed_head {
+        return true;
+    }
+    // 3. Working tree must be clean. The git_poll signal only
+    //    catches HEAD drift, so without this check uncommitted
+    //    edits made while the daemon was down would never trigger
+    //    a startup rebuild. `git status --porcelain` is cheap (a
+    //    single git invocation, no diff content) and reports both
+    //    modified-tracked and untracked files.
+    if working_tree_dirty(&entry.root) {
+        return true;
+    }
+    false
+}
+
+/// `true` iff `git status --porcelain` produces any output.
+/// Failure to spawn or non-zero exit returns `true` (treat as
+/// dirty) so a broken git invocation doesn't silently skip a
+/// rebuild we needed to do.
+fn working_tree_dirty(root: &Path) -> bool {
+    let out = std::process::Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(root)
+        .output();
+    match out {
+        Ok(o) if o.status.success() => !o.stdout.is_empty(),
+        _ => true,
+    }
+}
+
 /// Read the current `HEAD` SHA of the repository at `root`.
 /// `None` when `root` isn't a git repository or `git` isn't on
 /// PATH (in which case the git-poll signal becomes a no-op and
@@ -848,6 +968,83 @@ mod tests {
     fn read_git_head_returns_none_for_non_repo() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(read_git_head(tmp.path()).is_none());
+    }
+
+    /// Initialise a git repo with one commit; return (entry, current_head).
+    /// Used by the `needs_startup_rebuild` cases below.
+    fn init_repo_with_commit(corpus_id: &str) -> (tempfile::TempDir, ProjectEntry, String) {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let run = |args: &[&str]| {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .expect("git invocation");
+            assert!(status.success(), "git {:?} failed", args);
+        };
+        run(&["init", "-q", "-b", "main"]);
+        run(&["config", "user.email", "test@example.com"]);
+        run(&["config", "user.name", "test"]);
+        std::fs::write(root.join("src.rs"), "fn main() {}\n").unwrap();
+        run(&["add", "."]);
+        run(&["commit", "-q", "-m", "initial"]);
+        let head = read_git_head(root).expect("HEAD after commit");
+        let entry = sample_entry(corpus_id, root.to_path_buf());
+        (tmp, entry, head)
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_true_when_graph_has_no_recorded_head() {
+        let (_tmp, entry, _head) = init_repo_with_commit("no-head");
+        // Fresh in-memory graph — never had `record_rebuild` called,
+        // so `last_indexed_head()` returns None.
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        assert!(needs_startup_rebuild(&entry, &graph).await);
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_true_when_root_is_not_a_repo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let entry = sample_entry("no-git", tmp.path().to_path_buf());
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        // Pretend the graph was indexed at some prior HEAD, but the
+        // directory isn't a git repo — we can't verify freshness.
+        graph
+            .record_rebuild("startup", Some("deadbeef"), None)
+            .await;
+        assert!(needs_startup_rebuild(&entry, &graph).await);
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_true_when_head_drifted() {
+        let (_tmp, entry, _head) = init_repo_with_commit("drift");
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        graph
+            .record_rebuild("startup", Some("0000000000000000000000000000000000000000"), None)
+            .await;
+        assert!(needs_startup_rebuild(&entry, &graph).await);
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_true_when_working_tree_dirty() {
+        let (tmp, entry, head) = init_repo_with_commit("dirty");
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        graph.record_rebuild("startup", Some(&head), None).await;
+        // Touch a tracked file so `git status --porcelain` is non-empty.
+        std::fs::write(tmp.path().join("src.rs"), "fn main() { let _ = (); }\n").unwrap();
+        assert!(needs_startup_rebuild(&entry, &graph).await);
+    }
+
+    #[tokio::test]
+    async fn needs_startup_rebuild_false_when_head_matches_and_tree_clean() {
+        let (_tmp, entry, head) = init_repo_with_commit("fresh");
+        let graph = ScipGraph::open_in_memory(&entry.corpus_id).unwrap();
+        graph.record_rebuild("startup", Some(&head), None).await;
+        assert!(
+            !needs_startup_rebuild(&entry, &graph).await,
+            "graph indexed at current HEAD with clean tree must not trigger a rebuild"
+        );
     }
 
     #[tokio::test]

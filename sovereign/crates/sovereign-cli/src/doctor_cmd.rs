@@ -245,28 +245,90 @@ fn check_scip_indexed() -> CheckResult {
     }
 }
 
-fn check_code_indexed() -> CheckResult {
+async fn check_code_indexed() -> CheckResult {
+    // Distinguishes three states for each code corpus:
+    //   - SCIP SQLite present AND `CorpusIndex::open` succeeds → healthy
+    //   - SCIP SQLite present but `CorpusIndex::open` fails → Lance corrupt
+    //   - neither present → not a code corpus (skipped silently)
+    //
+    // The previous version only checked that the parent indexes
+    // directory had any entries at all, which silently passed when
+    // every code corpus had lost its Lance table — `symbols`,
+    // `code_search`, and `recent_changes` would return empty while
+    // doctor reported all-green. (`callers` / `callees` / `blast`
+    // still worked off the SCIP SQLite, which is what made the
+    // failure mode look like a tool bug instead of a data outage.)
     let indexes_dir = home_dir().join(".sovereign").join("indexes");
-    let has_index = std::fs::read_dir(&indexes_dir)
-        .ok()
-        .map(|mut d| d.next().is_some())
-        .unwrap_or(false);
-    if has_index {
-        CheckResult {
-            name: "code_indexed",
-            layer: Layer::Sovereign,
-            status: CheckStatus::Passed,
-            message: format!("code indexes present at {}", indexes_dir.display()),
-            repair: Repair::None,
-        }
-    } else {
-        CheckResult {
+    let Ok(entries) = std::fs::read_dir(&indexes_dir) else {
+        return CheckResult {
             name: "code_indexed",
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "no code indexes found — semantic code search unavailable".into(),
             repair: Repair::Executable("sovereign code index .".into()),
+        };
+    };
+    let mut healthy = Vec::new();
+    let mut broken = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
         }
+        let has_scip = path.join("scip_graph.db").exists();
+        if !has_scip {
+            continue;
+        }
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        match corpus_engine::CorpusIndex::open(&path).await {
+            Ok(_) => healthy.push(name),
+            Err(_) => broken.push(name),
+        }
+    }
+    if !broken.is_empty() {
+        // Lance is missing for at least one code corpus. The symbol /
+        // code_search / recent_changes tools query Lance; without it
+        // they silently return empty. Surfacing the corpus list +
+        // remediation is the whole point of this check.
+        let list = broken.join(", ");
+        let example = broken.first().cloned().unwrap_or_else(|| "<corpus>".into());
+        return CheckResult {
+            name: "code_indexed",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "Lance chunk index missing or unreadable for {} corpus(es): {list}. \
+                 Symbol lookup / code search / recent changes return empty. \
+                 SCIP call graph is unaffected.",
+                broken.len()
+            ),
+            repair: Repair::Executable(format!(
+                "sovereign code index <path> --corpus-id {example}"
+            )),
+        };
+    }
+    if healthy.is_empty() {
+        return CheckResult {
+            name: "code_indexed",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: "no code indexes found — semantic code search unavailable".into(),
+            repair: Repair::Executable("sovereign code index .".into()),
+        };
+    }
+    CheckResult {
+        name: "code_indexed",
+        layer: Layer::Sovereign,
+        status: CheckStatus::Passed,
+        message: format!(
+            "Lance chunk index readable for {} corpus(es): {}",
+            healthy.len(),
+            healthy.join(", "),
+        ),
+        repair: Repair::None,
     }
 }
 
@@ -944,7 +1006,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     results.push(check_server_running().await);
     results.push(check_server_tools().await);
     results.push(check_scip_indexed());
-    results.push(check_code_indexed());
+    results.push(check_code_indexed().await);
     results.push(check_project_indexed());
     results.push(check_notes_db());
     results.push(check_test_runner(sovereign_dir));

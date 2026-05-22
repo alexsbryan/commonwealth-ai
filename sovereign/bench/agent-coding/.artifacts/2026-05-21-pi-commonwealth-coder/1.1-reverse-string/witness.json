@@ -1,0 +1,10 @@
+{
+  "bucketed_score": 3,
+  "failed": 0,
+  "failed_names": [],
+  "pass_fraction": 1.0,
+  "passed": 12,
+  "stdout_tail": "\nrunning 12 tests\n............\ntest result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+  "total": 12,
+  "verify_exit_ok": true
+}

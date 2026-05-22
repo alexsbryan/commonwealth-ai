@@ -1,0 +1,15 @@
+{
+  "query": "photosynthesis",
+  "results": [
+    {
+      "title": "Photosynthesis — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Photosynthesis",
+      "snippet": "Photosynthesis is the process by which plants, algae, and some bacteria use light energy to convert carbon dioxide and water into glucose and oxygen. In plants, photosynthesis takes place primarily in the chloroplasts of leaf cells, using the green pigment chlorophyll to absorb light energy. The process has two stages: the light-dependent reactions in the thylakoid membranes, and the light-independent Calvin cycle in the stroma."
+    },
+    {
+      "title": "Chloroplast — Wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Chloroplast",
+      "snippet": "Chloroplasts are the organelles in plant and algal cells where photosynthesis occurs. They contain chlorophyll and are responsible for the conversion of light energy into chemical energy stored in glucose."
+    }
+  ]
+}

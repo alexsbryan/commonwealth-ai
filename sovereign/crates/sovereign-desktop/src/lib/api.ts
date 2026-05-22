@@ -181,6 +181,45 @@ export async function submitInformationResponse(
   return invoke("submit_information_response", { key, content });
 }
 
+/** Returned by `submit_information_search` so the frontend can stash
+ *  the search provenance and attach it to the matching refined
+ *  bubble when the post-stream refinement completes. Mirrors the
+ *  Rust-side `SearchAugmentation` struct in `commands.rs`. */
+export interface SearchAugmentation {
+  query: string;
+  backend_id: string;
+  sources: Array<{ title: string; url: string }>;
+  /** `false` iff the runtime had already resolved the pending
+   *  request between the existence-probe and the resolve call.
+   *  The UI should ignore the augmentation in that case rather
+   *  than render orphaned provenance. */
+  accepted: boolean;
+}
+
+/** Resolve a pending information-request by running a web search and
+ *  feeding the formatted results back as if the user had pasted them.
+ *  Errors when the search returns zero results (DDG bot-block etc.)
+ *  so the UI can surface that without resolving the request — the
+ *  card stays live for the user to paste / skip / retry.
+ *
+ *  `conversationId` is optional but recommended: the runtime writes
+ *  a `tool_decision` outcome (Tool-Mastery Layer 3) keyed by it so
+ *  the next turn's dossier surfaces the fact that the prior
+ *  in-conversation lookup didn't satisfy. Without it, the outcome
+ *  lands in the global tail and won't filter into this
+ *  conversation's per-turn dossier pre-pass. */
+export async function submitInformationSearch(
+  key: string,
+  query: string,
+  conversationId?: string | null,
+): Promise<SearchAugmentation> {
+  return invoke("submit_information_search", {
+    key,
+    query,
+    conversationId: conversationId ?? null,
+  });
+}
+
 export async function listSkills(): Promise<SkillEntry[]> {
   return invoke("list_skills");
 }
@@ -661,6 +700,52 @@ export async function corpusInstallWithParameters(
     request: { corpus_id: corpusId, parameters },
   });
 }
+
+// ─── Settings → Imports ─────────────────────────────────────
+
+/** Outcome of `importAnthropicZip`. Tagged on `kind` — `started`
+ *  means the install POST was accepted (subscribe to
+ *  `corpusProgressStore.byId[corpus_id]` from here);
+ *  `partial_index_exists` means the user must confirm a destructive
+ *  reset before proceeding (re-invoke with `resetPartial: true`). */
+export type ImportStartResponse =
+  | {
+      kind: "started";
+      corpus_id: string;
+      total_messages: number;
+      estimated_minutes: number;
+      canonical_path: string;
+    }
+  | {
+      kind: "partial_index_exists";
+      corpus_id: string;
+      index_path: string;
+      total_messages: number;
+      estimated_minutes: number;
+      canonical_path: string;
+    };
+
+/** Settings → Imports: unpack the Anthropic export `.zip` the user
+ *  picks, drop its `conversations.json` at the canonical landing
+ *  path the `conversations-anthropic` recipe reads from, and
+ *  trigger ingest. v1 ships Anthropic only — ChatGPT + Gemini
+ *  land as sibling commands once their extractors exist
+ *  (SYSTEM_OVERVIEW §10.1).
+ *
+ *  Pass `resetPartial: true` after the user confirms the
+ *  destructive-reset prompt. Without it, an existing partial
+ *  `conversations-anthropic` index dir blocks the install and the
+ *  response carries `kind: "partial_index_exists"` so the UI can
+ *  show the confirmation banner. */
+export async function importAnthropicZip(
+  zipPath: string,
+  resetPartial = false,
+): Promise<ImportStartResponse> {
+  return invoke("import_anthropic_zip", {
+    request: { zip_path: zipPath, reset_partial: resetPartial },
+  });
+}
+
 
 // ─── Insights ──────────────────────────────────────────────
 
@@ -1266,4 +1351,91 @@ export async function atlasGetAtomDetail(
   atomId: string,
 ): Promise<AtomDetail | null> {
   return invoke("atlas_get_atom_detail", { corpusId, atomId });
+}
+
+// ─── Contribution controls (W2/W3) ───────────────────────────
+
+export interface ContributionStatus {
+  /** Max concurrent peer requests; `Number.MAX_SAFE_INTEGER`-ish
+   *  values mean unlimited. Compare `ceiling >= 9_000_000_000` for
+   *  "no cap" UX rather than displaying a giant number. */
+  ceiling: number;
+  in_flight: number;
+  /** Unix-seconds expiry of the active pause, or null. */
+  paused_until: number | null;
+  pause_remaining_secs: number | null;
+  yield_peers_to_foreground: boolean;
+  /** Seconds remaining in the active foreground-yield window, or null. */
+  yielding_secs_remaining: number | null;
+}
+
+export interface LedgerEventDto {
+  /** Hex-encoded NodeId of the origin (this node when serving). */
+  node_id: unknown;
+  timestamp: number;
+  /** Tagged union — branch on `kind.type`:
+   *  "InferenceServed" | "InferenceReceived" | "KnowledgeQueryServed"
+   *  | "ShardTransferred" | "StorageSnapshot". */
+  kind: { type: string; [k: string]: unknown };
+}
+
+export async function getContributionStatus(): Promise<ContributionStatus> {
+  return invoke("get_contribution_status");
+}
+
+export async function setContributionCeiling(
+  max: number | null,
+): Promise<ContributionStatus> {
+  return invoke("set_contribution_ceiling", { max });
+}
+
+export async function pauseContributions(
+  durationSecs: number,
+): Promise<ContributionStatus> {
+  return invoke("pause_contributions", { durationSecs });
+}
+
+export async function resumeContributions(): Promise<ContributionStatus> {
+  return invoke("resume_contributions");
+}
+
+export async function getRecentContributions(
+  limit?: number,
+): Promise<LedgerEventDto[]> {
+  return invoke("get_recent_contributions", { limit: limit ?? null });
+}
+
+// ─── First-mesh-join consent (W4) ────────────────────────────
+
+export interface FirstMeshConsent {
+  share_gpu: boolean;
+  ceiling: number;
+  recorded_at_unix: number;
+}
+
+/** Returns null when the user hasn't been prompted yet — App.svelte
+ *  gates the main UI on this. */
+export async function getFirstMeshConsent(): Promise<FirstMeshConsent | null> {
+  return invoke("get_first_mesh_consent");
+}
+
+export async function recordFirstMeshConsent(
+  shareGpu: boolean,
+): Promise<FirstMeshConsent> {
+  return invoke("record_first_mesh_consent", { shareGpu });
+}
+
+// ─── Crash report (W6) ───────────────────────────────────────
+
+export interface CrashReportInfo {
+  /** Absolute path of the markdown report on the user's Desktop. */
+  report_path: string;
+  /** Pre-filled `mailto:` URL — open with tauri-plugin-shell. */
+  mailto_url: string;
+}
+
+/** Bundles the latest supervisor crash log + redacted config into a
+ *  markdown file the user can review before sending. NO auto-upload. */
+export async function prepareCrashReport(): Promise<CrashReportInfo> {
+  return invoke("prepare_crash_report");
 }

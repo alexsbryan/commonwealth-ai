@@ -24,6 +24,21 @@ pub struct Report {
     pub elapsed_ms_total: u64,
     pub elapsed_ms_p50: u64,
     pub elapsed_ms_p95: u64,
+    /// Throughput aggregate. `None` when no outcome reported tokens
+    /// (e.g. provider doesn't emit `usage`). Sum of completion tokens
+    /// across all items / sum of elapsed_ms / 1000.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tokens_total: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_total: Option<u64>,
+    /// Aggregate throughput in completion-tokens-per-second. Derived
+    /// from `completion_tokens_total / (sum of per-item elapsed_ms / 1000)`.
+    /// Computed at build time so consumers don't re-derive.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tok_per_s: Option<f32>,
+    /// Median completion-tok/s across items (filters items missing usage).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_tok_per_s_p50: Option<f32>,
     pub per_category: BTreeMap<String, CategoryAggregate>,
     pub outcomes: Vec<Outcome>,
 }
@@ -88,6 +103,46 @@ pub fn build(opts: BuildOpts<'_>, outcomes: Vec<Outcome>) -> Report {
     let elapsed_ms_p50 = percentile(&elapsed, 0.50);
     let elapsed_ms_p95 = percentile(&elapsed, 0.95);
 
+    // Throughput aggregate. Only include items that reported tokens.
+    // If NONE did (provider opaque), aggregates land as None.
+    let usage_items: Vec<&Outcome> = outcomes
+        .iter()
+        .filter(|o| o.completion_tokens.is_some() && o.elapsed_ms > 0)
+        .collect();
+    let (completion_tokens_total, prompt_tokens_total, completion_tok_per_s, completion_tok_per_s_p50) =
+        if usage_items.is_empty() {
+            (None, None, None, None)
+        } else {
+            let comp_total: u64 = usage_items
+                .iter()
+                .map(|o| o.completion_tokens.unwrap_or(0) as u64)
+                .sum();
+            let prompt_total: u64 = usage_items
+                .iter()
+                .map(|o| o.prompt_tokens.unwrap_or(0) as u64)
+                .sum();
+            let elapsed_total_ms_used: u64 = usage_items.iter().map(|o| o.elapsed_ms).sum();
+            let aggregate_tps = if elapsed_total_ms_used > 0 {
+                Some(comp_total as f32 * 1000.0 / elapsed_total_ms_used as f32)
+            } else {
+                None
+            };
+            let mut per_item_tps: Vec<f32> = usage_items
+                .iter()
+                .map(|o| {
+                    let c = o.completion_tokens.unwrap_or(0) as f32;
+                    c * 1000.0 / o.elapsed_ms as f32
+                })
+                .collect();
+            per_item_tps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let p50 = if per_item_tps.is_empty() {
+                None
+            } else {
+                Some(per_item_tps[(per_item_tps.len() - 1) / 2])
+            };
+            (Some(comp_total), Some(prompt_total), aggregate_tps, p50)
+        };
+
     Report {
         run_id: opts.run_id.to_string(),
         started_at: opts.started_at.to_string(),
@@ -102,6 +157,10 @@ pub fn build(opts: BuildOpts<'_>, outcomes: Vec<Outcome>) -> Report {
         elapsed_ms_total,
         elapsed_ms_p50,
         elapsed_ms_p95,
+        completion_tokens_total,
+        prompt_tokens_total,
+        completion_tok_per_s,
+        completion_tok_per_s_p50,
         per_category,
         outcomes,
     }
@@ -185,6 +244,15 @@ pub fn render_text(report: &Report, diff: Option<&BaselineDiff>) -> String {
         "  elapsed      : {} ms total · p50 {} ms · p95 {} ms",
         report.elapsed_ms_total, report.elapsed_ms_p50, report.elapsed_ms_p95
     );
+    if let (Some(tps), Some(p50)) = (report.completion_tok_per_s, report.completion_tok_per_s_p50) {
+        let comp_total = report.completion_tokens_total.unwrap_or(0);
+        let prompt_total = report.prompt_tokens_total.unwrap_or(0);
+        let _ = writeln!(
+            out,
+            "  throughput   : {:.1} tok/s aggregate · {:.1} tok/s p50  ({} completion, {} prompt)",
+            tps, p50, comp_total, prompt_total
+        );
+    }
     let _ = writeln!(out, "  per-category :");
     for (cat, agg) in &report.per_category {
         let _ = writeln!(
@@ -237,6 +305,8 @@ mod tests {
             response_raw: String::new(),
             elapsed_ms: 100,
             model: "m".into(),
+            prompt_tokens: None,
+            completion_tokens: None,
         }
     }
 

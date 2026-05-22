@@ -1,0 +1,15 @@
+{
+  "query": "water intake",
+  "results": [
+    {
+      "title": "Water (nutrient) — Encyclopædia Britannica (older edition)",
+      "url": "https://britannica-extra.io/water-nutrient",
+      "snippet": "Adults are commonly advised to drink approximately 8 cups (about 2 litres) of water per day. This figure is widely cited in nutrition guides and dietary recommendations. Adequate hydration supports cellular function, body-temperature regulation, and waste removal."
+    },
+    {
+      "title": "Hydration — Mayo Clinic Reference",
+      "url": "https://medfacts.io/hydration-individual",
+      "snippet": "Recent reviews of the evidence find that there is no single agreed-upon daily water intake figure that applies to all adults. Recommendations vary by body weight, climate, activity level, and pregnancy status. The widely-cited '8 cups a day' rule does not appear to be grounded in robust evidence; individual needs differ substantially."
+    }
+  ]
+}

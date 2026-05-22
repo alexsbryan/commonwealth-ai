@@ -65,6 +65,26 @@ pub struct NodeCapabilities {
     /// payloads deserialize cleanly with `benchmark = None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub benchmark: Option<BenchmarkResult>,
+
+    /// This peer's own observed concurrent in-flight inference count
+    /// at the moment this capability snapshot was built.
+    ///
+    /// **Why this must be gossiped.** A remote scheduler's view of
+    /// `in_flight` is structurally blind to traffic the peer served
+    /// to its own local user (e.g. a workstation running both a
+    /// Claude-desktop client and the sovereign daemon). The founder's
+    /// `peer_observations[name].in_flight` only counts requests it
+    /// dispatched itself, so a peer can be serving 10 local requests
+    /// and still look idle to remote scoring. Gossiping the peer's
+    /// own count closes that gap and lets `load_penalty` actually
+    /// reflect the peer's total load.
+    ///
+    /// `None` for older peers, storage-only nodes, and tests that
+    /// don't wire a counter through. Scoring falls back to the
+    /// founder's local view of the peer in that case — the legacy
+    /// behavior, which was wrong but at least never worse than now.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_in_flight: Option<u32>,
 }
 
 fn default_inference_availability() -> f32 {
@@ -305,12 +325,53 @@ mod tests {
                 normalization: NormalizationStrategy::Application,
             }),
             benchmark: None,
+            current_in_flight: None,
         };
         let json = serde_json::to_string(&caps).unwrap();
         let back: NodeCapabilities = serde_json::from_str(&json).unwrap();
         let em = back.embed_model.expect("embed_model survives");
         assert_eq!(em.model_id, "qwen3-embedding-0.6b");
         assert_eq!(em.dimensions, 1024);
+    }
+
+    #[test]
+    fn current_in_flight_defaults_to_none_when_absent() {
+        // Old peers (pre-field) don't include current_in_flight. Must
+        // deserialize to None — scoring then falls back to the
+        // founder's local view of the peer.
+        let json = minimal_capabilities_json(None, None);
+        let caps: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert!(
+            caps.current_in_flight.is_none(),
+            "old peers without current_in_flight must default to None"
+        );
+    }
+
+    #[test]
+    fn current_in_flight_round_trips_hot_value() {
+        let mut caps: NodeCapabilities =
+            serde_json::from_str(&minimal_capabilities_json(None, None)).unwrap();
+        caps.current_in_flight = Some(7);
+        let json = serde_json::to_string(&caps).unwrap();
+        assert!(
+            json.contains("\"current_in_flight\":7"),
+            "current_in_flight Some(7) must serialize: {json}"
+        );
+        let back: NodeCapabilities = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.current_in_flight, Some(7));
+    }
+
+    #[test]
+    fn current_in_flight_none_skipped_on_serialize() {
+        // Wire-economy + symmetry with the other Optional fields:
+        // None must not occupy bytes on the wire.
+        let caps: NodeCapabilities =
+            serde_json::from_str(&minimal_capabilities_json(None, None)).unwrap();
+        let json = serde_json::to_string(&caps).unwrap();
+        assert!(
+            !json.contains("current_in_flight"),
+            "current_in_flight: None must be skipped: {json}"
+        );
     }
 
     #[test]

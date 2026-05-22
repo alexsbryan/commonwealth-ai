@@ -72,6 +72,11 @@ impl HybridProvider {
                                 model_id: None,
                                 enable_thinking: None,
                     sampling_mode: None,
+                    assistant_prefix: None,
+                    cmd_prefix: None,
+                    url_allowlist: None,
+                    evidence_id_allowlist: None,
+                    lark_grammar: None,
                     };
 
                     match provider.complete(&probe).await {
@@ -190,6 +195,55 @@ impl InferenceProvider for HybridProvider {
         Err(Error::NotImplemented(
             "No backend supports embeddings".to_string(),
         ))
+    }
+
+    // Runtime slot management delegates to the first local backend.
+    // Without this override the trait's default-impl returns a generic
+    // "this inference provider does not support runtime slot load"
+    // error — confirmed 2026-05-20: `POST /internal/models/load`
+    // failed with the default error even though the daemon had a
+    // working EmbeddedLlamaCpp behind the HybridProvider, because the
+    // hybrid wrapper didn't delegate. Mesh peers can't load extras
+    // into a remote node anyway; local is the only meaningful target.
+    fn load_extra_slot(
+        &self,
+        slot_name: String,
+        path: std::path::PathBuf,
+        context_size: u32,
+    ) -> Result<String> {
+        for (idx, entry) in self.entries.iter().enumerate() {
+            if entry.is_local {
+                return self.providers[idx]
+                    .load_extra_slot(slot_name, path, context_size);
+            }
+        }
+        Err(Error::Inference(
+            "hybrid provider has no local backend — runtime slot load \
+             requires an embedded llama.cpp provider on this node"
+                .to_string(),
+        ))
+    }
+
+    fn unload_extra_slot(&self, slot_name: &str) -> Result<Option<String>> {
+        for (idx, entry) in self.entries.iter().enumerate() {
+            if entry.is_local {
+                return self.providers[idx].unload_extra_slot(slot_name);
+            }
+        }
+        Err(Error::Inference(
+            "hybrid provider has no local backend — runtime slot unload \
+             requires an embedded llama.cpp provider on this node"
+                .to_string(),
+        ))
+    }
+
+    fn extras_inventory(&self) -> Vec<(String, String)> {
+        for (idx, entry) in self.entries.iter().enumerate() {
+            if entry.is_local {
+                return self.providers[idx].extras_inventory();
+            }
+        }
+        Vec::new()
     }
 
     fn capabilities(&self) -> ProviderCapabilities {

@@ -133,6 +133,9 @@ fn empty_context(conv_id: &str) -> ConversationContext {
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     }
 }
 
