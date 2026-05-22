@@ -299,6 +299,77 @@ fn build_tok_env(model: &LlamaModel) -> TokEnv {
 }
 
 // ---------------------------------------------------------------------------
+// Schema preprocessing.
+// ---------------------------------------------------------------------------
+
+/// Walk a JSON-Schema document and inject `additionalProperties: false`
+/// on every typed-object node that does not already set the field.
+///
+/// **Why this exists.** The in-house `JsonConstraint::compile_schema`
+/// defaults `additionalProperties` to `false` for `type: object`
+/// (non-spec — JSON Schema spec defaults to `true`). Callers across
+/// `sovereign-core` rely on this implicit strictness: zero of the 11
+/// `structured_output: Some(schema)` sites set `additionalProperties`
+/// explicitly. `llguidance`'s `TopLevelGrammar::from_json_schema`
+/// follows the spec, so a naive migration would let the model emit
+/// trailing fields the JsonConstraint mask used to forbid.
+///
+/// Rather than touch all 11 call sites, this walker preserves the
+/// in-house default at the engine boundary. Apply it to the schema
+/// **before** passing to `LlguidanceConstraint::new`. Object subtrees
+/// that explicitly set `additionalProperties: true` are left alone —
+/// callers that genuinely want extensibility keep it.
+///
+/// Recurses into: `properties[*]`, `items`, `additionalProperties`
+/// (when itself a schema object), `anyOf[*]`, `oneOf[*]`, `allOf[*]`,
+/// `$defs[*]`, `definitions[*]`. Non-object values pass through
+/// unchanged.
+///
+/// See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.A.
+pub fn default_additional_properties_false(schema: &mut serde_json::Value) {
+    use serde_json::Value;
+    let Some(obj) = schema.as_object_mut() else { return };
+
+    let is_typed_object = obj
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|s| s == "object")
+        .unwrap_or(false);
+
+    if is_typed_object && !obj.contains_key("additionalProperties") {
+        obj.insert("additionalProperties".to_string(), Value::Bool(false));
+    }
+
+    if let Some(props) = obj.get_mut("properties").and_then(|v| v.as_object_mut()) {
+        for (_k, sub) in props.iter_mut() {
+            default_additional_properties_false(sub);
+        }
+    }
+    if let Some(items) = obj.get_mut("items") {
+        default_additional_properties_false(items);
+    }
+    if let Some(ap) = obj.get_mut("additionalProperties") {
+        if ap.is_object() {
+            default_additional_properties_false(ap);
+        }
+    }
+    for key in ["anyOf", "oneOf", "allOf"] {
+        if let Some(arr) = obj.get_mut(key).and_then(|v| v.as_array_mut()) {
+            for sub in arr.iter_mut() {
+                default_additional_properties_false(sub);
+            }
+        }
+    }
+    for key in ["$defs", "definitions"] {
+        if let Some(defs) = obj.get_mut(key).and_then(|v| v.as_object_mut()) {
+            for (_k, sub) in defs.iter_mut() {
+                default_additional_properties_false(sub);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Lark grammar builders.
 // ---------------------------------------------------------------------------
 
