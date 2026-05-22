@@ -49,6 +49,9 @@ function payloadToState(
       },
     };
   }
+  if (p.type === "MultiHopReady") {
+    return "MultiHopReady";
+  }
   if (p.type === "Ready") {
     return "Ready";
   }

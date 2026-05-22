@@ -12979,6 +12979,17 @@ impl Runtime {
     /// then runs without a briefing, which is degraded but still
     /// correct (the model just queries blind).
     ///
+    /// **Tier-gating is implicit** via the per-section emptiness
+    /// checks (`skeleton.overview.trim().is_empty()`,
+    /// `skeleton.segments.is_empty()`, `raptor_nodes.is_empty()`,
+    /// `distinctive.is_empty()`, etc.). At `MultiHopReady`, T3-only
+    /// fields (overview, segments, RAPTOR nodes, motifs) are still
+    /// empty so their sections skip themselves; T2 fields
+    /// (main_entities, entity_index, action_atoms,
+    /// structural_moments) are populated and surface normally. As T3
+    /// completes mid-conversation each new turn picks up a richer
+    /// briefing — no explicit state-check needed in this function.
+    ///
     /// Why this matters: the chunks the tool retrieves use the
     /// document's vocabulary (character names, concept terms), not
     /// the question's vocabulary. The book-report bench (2026-05-21)

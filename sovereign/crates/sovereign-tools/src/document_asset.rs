@@ -18,7 +18,9 @@
 //! pattern for the synthesis and aggregation executors.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+use futures::stream::{self, StreamExt};
 use serde::Deserialize;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore};
@@ -27,6 +29,13 @@ use sovereign_core::types::*;
 use crate::rag::chunk::{chunk_text, TextChunk};
 use crate::rag::parse::parse_file;
 use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
+
+/// Concurrency cap for parallel per-batch LLM calls in the T2 entity
+/// extraction phase. The mesh load balancer sees `buffered(6)` simultaneous
+/// requests and fans them across peers; on single-machine deployments the
+/// Slow slot queues them. 6 was tuned earlier in the RAPTOR work where the
+/// same value showed good throughput without overwhelming a 2-peer mesh.
+const T2_BATCH_CONCURRENCY: usize = 6;
 
 // ─── Self-reference detection ────────────────────────────────
 
@@ -255,11 +264,17 @@ pub enum IngestProgress {
     },
     /// Embedding chunks into the vector store.
     Indexing { done: usize, total: usize },
-    /// Embedding complete. RAG queries now available.
+    /// Embedding complete. RAG queries now available. (T1 done)
     RagAvailable { asset_id: String },
-    /// Skeleton extraction in progress.
+    /// Skeleton enrichment in progress. The same variant fires for
+    /// both the T2 (entity extraction) and T3 (RAPTOR + segments +
+    /// overview) phases; the `MultiHopReady` event between them
+    /// signals the phase boundary.
     BuildingSkeleton { done: usize, total: usize },
-    /// Fully ready. All operations available.
+    /// T2 done. Entity index + action atoms available; PPR
+    /// multi-hop retrieval works while T3 continues.
+    MultiHopReady { asset_id: String },
+    /// T3 done. All operations available.
     Ready {
         asset_id: String,
         main_entities: usize,
@@ -467,7 +482,30 @@ impl DocumentAssetManager {
             }
         };
 
-        // ── Skeleton future ─────────────────────────────────
+        // ── Tiered enrichment future (T2 → MultiHopReady → T3) ──
+        //
+        // Splits the prior monolithic skeleton phase into the two
+        // tiered states defined in the proper-curried-peach plan:
+        //
+        //   T2: lean entity extraction + action atoms — yields a
+        //       partial skeleton (entity_index + main_entities +
+        //       actions + sections + structural_moments). Asset
+        //       transitions to MultiHopReady. PPR multi-hop
+        //       retrieval becomes available at this point.
+        //
+        //   T3: TextTiling segments + RAPTOR atlas + motif index +
+        //       overview generation — fills in the remaining
+        //       skeleton fields (segments, overview) AND populates
+        //       the raptor_nodes + asset_motifs tables. Asset
+        //       transitions to Ready. Full briefing-driven synthesis
+        //       becomes available.
+        //
+        // Both phases run in the SAME future (not parallel with
+        // embedding — they depend on chunks being persisted). The
+        // foreground T3 is a deliberate change from the prior
+        // background spawn: we want Ready to actually mean "all
+        // enrichment landed," not "skeleton landed and RAPTOR is
+        // still cooking."
         let skeleton_future = {
             let inference = Arc::clone(&self.inference);
             let store = Arc::clone(&self.store);
@@ -476,9 +514,9 @@ impl DocumentAssetManager {
             let on_progress = Arc::clone(&on_progress);
 
             async move {
-                // Detect document type from the opening chunks.
                 let doc_type = detect_document_type(&inference, &text_chunks).await;
 
+                // ── T2 — entity extraction + action atoms ──────
                 store
                     .update_asset_state(
                         &asset_id,
@@ -489,7 +527,7 @@ impl DocumentAssetManager {
                     )
                     .await?;
 
-                let skeleton = build_skeleton(
+                let mut skeleton = build_skeleton(
                     &inference,
                     &store,
                     &asset_id,
@@ -499,13 +537,67 @@ impl DocumentAssetManager {
                 )
                 .await?;
 
+                // Persist partial skeleton + transition to
+                // MultiHopReady so queries arriving in the
+                // T3-window can use PPR.
+                store
+                    .save_asset_skeleton(&asset_id, &skeleton, &doc_type)
+                    .await?;
+                store
+                    .update_asset_state(&asset_id, &AssetState::MultiHopReady)
+                    .await?;
+                on_progress(IngestProgress::MultiHopReady {
+                    asset_id: asset_id.clone(),
+                });
+
+                // ── T3 — RAPTOR atlas + motifs + segments + overview ──
+                // Re-emit BuildingSkeleton state so the UI's progress
+                // bar reactivates for the T3 enrichment phase. The
+                // chunks_done counter resets at this milestone — by
+                // design (the visual reset signals a real capability
+                // checkpoint, not just continuous work).
+                store
+                    .update_asset_state(
+                        &asset_id,
+                        &AssetState::BuildingSkeleton {
+                            chunks_done: 0,
+                            chunks_total: chunk_count,
+                        },
+                    )
+                    .await?;
+
+                // Segments (TextTiling) + overview run concurrently —
+                // both touch all chunks, neither depends on the other.
+                let segments_future =
+                    extract_segments(&inference, &text_chunks, &skeleton.main_entities, doc_type.clone());
+                let overview_future =
+                    generate_overview(&inference, &text_chunks, &doc_type);
+                let (segments, overview) = tokio::join!(segments_future, overview_future);
+                skeleton.segments = segments;
+                skeleton.overview = overview;
+
+                // RAPTOR + motif build. Failures are logged inside
+                // the helper and degrade quality without breaking
+                // ingest — the partial skeleton from T2 is still a
+                // valid retrieval surface.
+                let source_key = format!("asset:{asset_id}");
+                build_and_persist_raptor_atlas(
+                    &inference,
+                    &store,
+                    &asset_id,
+                    &source_key,
+                    doc_type.clone(),
+                )
+                .await;
+
+                // Final skeleton save (with overview + segments now
+                // populated) + Ready transition.
                 store
                     .save_asset_skeleton(&asset_id, &skeleton, &doc_type)
                     .await?;
                 store
                     .update_asset_state(&asset_id, &AssetState::Ready)
                     .await?;
-
                 on_progress(IngestProgress::Ready {
                     asset_id: asset_id.clone(),
                     main_entities: skeleton.main_entities.len(),
@@ -518,42 +610,18 @@ impl DocumentAssetManager {
             }
         };
 
-        // Run both concurrently. Embedding typically finishes first
-        // (pure computation), unlocking RAG while skeleton keeps going.
+        // Embedding + tiered enrichment run concurrently. Embedding
+        // typically finishes first (pure computation), flipping the
+        // asset to PartiallyReady (T1 done) so cosine retrieval works
+        // immediately. The enrichment future then walks T2 → T3.
         let (embed_result, skeleton_result) = tokio::join!(embed_future, skeleton_future);
 
         embed_result?;
         let (skeleton, doc_type) = skeleton_result?;
 
-        // ── RAPTOR atlas + motif index (background) ─────────────
-        //
-        // Spawned post-Ready so the user's attach-document call
-        // returns as soon as the (smaller) skeleton is in place.
-        // Queries arriving before RAPTOR completes fall back to
-        // the skeleton-based briefing path; queries arriving
-        // after get the richer evidence-linked structure.
-        //
-        // Failures here are logged and dropped — the legacy
-        // skeleton remains as the durable retrieval surface, so
-        // a RAPTOR build error degrades quality but never breaks
-        // the attach flow.
-        {
-            let inference = Arc::clone(&self.inference);
-            let store = Arc::clone(&self.store);
-            let asset_id_bg = asset_id.clone();
-            let source_key = format!("asset:{asset_id}");
-            let doc_type_bg = doc_type.clone();
-            tokio::spawn(async move {
-                build_and_persist_raptor_atlas(
-                    &inference,
-                    &store,
-                    &asset_id_bg,
-                    &source_key,
-                    doc_type_bg,
-                )
-                .await;
-            });
-        }
+        // (T3 used to be a tokio::spawn background task here. It
+        // now runs inside skeleton_future above, so Ready means
+        // *all* enrichment has landed.)
 
         Ok(DocumentAsset {
             id: asset_id,
@@ -1523,9 +1591,20 @@ async fn detect_document_type(
     detected
 }
 
-/// Build the structural skeleton by processing chunks in batches
-/// through the LLM. Extracts sections, entities (with kind), and
-/// structural moments.
+/// Build the T2 (entity-tier) skeleton by processing chunks in
+/// parallel through the LLM. Extracts sections, entities (with
+/// kind), and structural moments. Returns a *partial* skeleton —
+/// `overview` is empty and `segments` is empty; those are T3
+/// outputs, filled in by `build_and_persist_raptor_atlas`.
+///
+/// Parallelism: per-batch tasks fan out across the mesh via
+/// `futures::stream::iter(...).buffered(T2_BATCH_CONCURRENCY)`. On a
+/// 2-peer mesh, this gives near-linear speedup over the previous
+/// sequential `for batch in chunks.chunks(4)` loop; on a single-machine
+/// deployment, the Slow slot serialises them but the async overhead
+/// is no worse than the sequential version. The May-21 lean-grammar
+/// probe measured 1.4s/batch; with concurrency=6 on a 250-batch
+/// document that projects to ~60s for the entity-extraction phase.
 async fn build_skeleton(
     inference: &Arc<dyn InferenceProvider>,
     store: &Arc<dyn StateStore>,
@@ -1535,159 +1614,167 @@ async fn build_skeleton(
     on_progress: &Arc<dyn Fn(IngestProgress) + Send + Sync>,
 ) -> Result<DocumentSkeleton> {
     let chunk_count = chunks.len();
+
+    // Process chunks in batches of 4 for coherence. Each batch produces
+    // a `Vec<SkeletonBatchEntry>` (defined in the lean parser). After
+    // the parallel stream completes, we merge entries sequentially into
+    // the shared accumulators — merge is cheap (HashMap insertion).
+    let batch_size = 4;
+    let batches: Vec<(usize, Vec<TextChunk>)> = chunks
+        .chunks(batch_size)
+        .enumerate()
+        .map(|(idx, b)| (idx, b.to_vec()))
+        .collect();
+    let total_batches = batches.len();
+    let completed = Arc::new(AtomicUsize::new(0));
+
+    let inference_arc = Arc::clone(inference);
+    let store_arc = Arc::clone(store);
+    let on_progress_arc = Arc::clone(on_progress);
+    let asset_id_owned = asset_id.to_string();
+    let doc_type_owned = doc_type.clone();
+    let chunk_count_for_progress = chunk_count;
+
+    let batch_results: Vec<(usize, Option<Vec<SkeletonBatchEntry>>)> = stream::iter(batches)
+        .map(|(batch_idx, batch)| {
+            let inference = Arc::clone(&inference_arc);
+            let store = Arc::clone(&store_arc);
+            let on_progress = Arc::clone(&on_progress_arc);
+            let asset_id = asset_id_owned.clone();
+            let doc_type = doc_type_owned.clone();
+            let completed = Arc::clone(&completed);
+            async move {
+                let batch_start = batch_idx * batch_size;
+                let passage: String = batch
+                    .iter()
+                    .map(|c| c.content.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n\n---\n\n");
+
+                // Lean entity-only schema with llguidance grammar
+                // enforcement (May-21 wire-format landing). Model
+                // emits exactly batch.len() newline-separated lines,
+                // each an optional comma-separated capitalized name
+                // list. Grammar guarantees alignment.
+                let prompt = format!(
+                    "Extract named entities mentioned in each of the {batch_size} chunks below \
+                     from this {doc_type} document — characters, organizations, places, key \
+                     concepts — using their canonical names as they appear in the text. \
+                     Output EXACTLY {batch_size} lines, one per chunk in order. Each line is a \
+                     comma-separated list of names. Use an empty line for a chunk with no \
+                     notable named entities. No prose, no JSON, no headers, no chunk indices.\n\n\
+                     Chunks (starting at section {batch_start}):\n\n{passage}\n\nAnswer ({batch_size} lines):",
+                    doc_type = doc_type.label(),
+                    batch_size = batch.len(),
+                );
+                let mut start_rhs = String::from("line");
+                for _ in 1..batch.len() {
+                    start_rhs.push_str(" \"\\n\" line");
+                }
+                let lark_grammar = format!(
+                    "start: {start_rhs}\n\
+                     line: (entity (\",\" \" \"? entity)*)?\n\
+                     entity: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/\n",
+                );
+
+                let response = inference
+                    .complete(&CompletionRequest {
+                        prompt,
+                        system_message: None,
+                        preferred_speed: Speed::Slow,
+                        max_tokens: Some(120),
+                        temperature: Some(0.1),
+                        think_budget: Some(0),
+                        structured_output: None,
+                        top_k: None,
+                        top_p: None,
+                        oicp: None,
+                        tools: None,
+                        tool_choice: None,
+                        model_id: None,
+                        enable_thinking: None,
+                        sampling_mode: None,
+                        assistant_prefix: None,
+                        cmd_prefix: None,
+                        url_allowlist: None,
+                        evidence_id_allowlist: None,
+                        lark_grammar: Some(lark_grammar),
+                    })
+                    .await;
+                let parsed = response
+                    .ok()
+                    .map(|resp| parse_lean_skeleton_batch(&resp.text, batch_start, batch.len()));
+
+                // Per-batch progress tick. Atomic counter is the only
+                // way to give the UI monotonic progress when batches
+                // complete out of order under buffered().
+                let done_now = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                let chunks_done =
+                    (done_now * batch_size).min(chunk_count_for_progress);
+                on_progress(IngestProgress::BuildingSkeleton {
+                    done: chunks_done,
+                    total: chunk_count_for_progress,
+                });
+                let _ = store
+                    .update_asset_state(
+                        &asset_id,
+                        &AssetState::BuildingSkeleton {
+                            chunks_done,
+                            chunks_total: chunk_count_for_progress,
+                        },
+                    )
+                    .await;
+
+                (batch_idx, parsed)
+            }
+        })
+        .buffered(T2_BATCH_CONCURRENCY)
+        .collect()
+        .await;
+
+    let _ = total_batches; // referenced for future progress assertions; kept silent
+
+    // Merge results sequentially after the parallel stream completes.
+    // Order by batch_idx so the resulting sections list is in document
+    // order — some downstream code reads sections in order.
+    let mut sorted_results = batch_results;
+    sorted_results.sort_by_key(|(idx, _)| *idx);
     let mut sections = Vec::new();
-    // Track entity mentions and the kinds the LLM assigned.
     let mut entity_mentions: std::collections::HashMap<String, Vec<usize>> =
         std::collections::HashMap::new();
     let mut entity_kinds: std::collections::HashMap<String, EntityKind> =
         std::collections::HashMap::new();
     let mut structural_moments = Vec::new();
-
-    // Process chunks in batches of 4 for coherence.
-    let batch_size = 4;
-    for (batch_idx, batch) in chunks.chunks(batch_size).enumerate() {
-        let batch_start = batch_idx * batch_size;
-        let passage: String = batch
-            .iter()
-            .map(|c| c.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n---\n\n");
-
-        let entity_kinds_hint = match doc_type {
-            DocumentTypeTag::Narrative => "Character, Theme, Event, Concept",
-            DocumentTypeTag::Argument => "Argument, Claim, Concept, Person",
-            DocumentTypeTag::Evidence => "Claim, Evidence, Person, Concept",
-            DocumentTypeTag::Chronicle => "Person, Event, Theme, Concept",
-            DocumentTypeTag::Technical => "Concept, Theme, Person, Event",
-            DocumentTypeTag::Unknown => "Character, Argument, Concept, Claim, Evidence, Theme, Person, Event",
-        };
-
-        // Lean entity-only schema with llguidance grammar
-        // enforcement. The HTTP wire-format wiring for
-        // `lark_grammar` shipped 2026-05-21 (see
-        // `remote.rs::build_request` line ~206 +
-        // `inference_adapter::build_completion_request`); without
-        // it this code path was a no-op. Now the grammar is
-        // enforced end-to-end, so the model must emit exactly
-        // batch.len() newline-separated lines, each containing
-        // an optional comma-separated list of capitalized entity
-        // names.
-        //
-        // Probe validation: shape compliance 5/5 batches with
-        // grammar (was 1/3 without); per-batch latency 1.4s vs
-        // 8s baseline (5.8× faster); projected skeleton total
-        // 6 min vs 33 min. Accuracy ~66% literal substring
-        // match against chunk content — most "hallucinations"
-        // are encoding artefacts (apostrophe variants) or
-        // paraphrases ("The Boy" for Stevie), which downstream
-        // embedding lookup handles fine.
-        let _ = entity_kinds_hint; // unused in lean schema
-        let prompt = format!(
-            "Extract named entities mentioned in each of the {batch_size} chunks below \
-             from this {doc_type} document — characters, organizations, places, key \
-             concepts — using their canonical names as they appear in the text. \
-             Output EXACTLY {batch_size} lines, one per chunk in order. Each line is a \
-             comma-separated list of names. Use an empty line for a chunk with no \
-             notable named entities. No prose, no JSON, no headers, no chunk indices.\n\n\
-             Chunks (starting at section {batch_start}):\n\n{passage}\n\nAnswer ({batch_size} lines):",
-            doc_type = doc_type.label(),
-            batch_size = batch.len(),
-        );
-
-        // Per-batch grammar (built dynamically because the final
-        // batch may have fewer than batch_size chunks). The
-        // structure forces exactly batch.len() lines, each
-        // optional comma-separated capitalized names.
-        let mut start_rhs = String::from("line");
-        for _ in 1..batch.len() {
-            start_rhs.push_str(" \"\\n\" line");
-        }
-        let lark_grammar = format!(
-            "start: {start_rhs}\n\
-             line: (entity (\",\" \" \"? entity)*)?\n\
-             entity: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/\n",
-        );
-
-        let response = inference
-            .complete(&CompletionRequest {
-                prompt,
-                system_message: None,
-                preferred_speed: Speed::Slow,
-                // Lean output: ~10-15 tokens per chunk × batch + slack.
-                max_tokens: Some(120),
-                temperature: Some(0.1),
-                think_budget: Some(0),
-                structured_output: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: Some(lark_grammar),
-            })
-            .await;
-
-        if let Ok(resp) = response {
-            let parsed = parse_lean_skeleton_batch(&resp.text, batch_start, batch.len());
-            {
-                for entry in parsed {
-                    for (name, kind) in &entry.entity_names_and_kinds {
-                        entity_mentions
-                            .entry(name.clone())
-                            .or_default()
-                            .push(entry.chunk_index);
-                        // Keep the first assigned kind (most likely correct
-                        // since early mentions are usually introductory).
-                        entity_kinds.entry(name.clone()).or_insert_with(|| kind.clone());
-                    }
-                    if let Some(ref desc) = entry.moment_description {
-                        structural_moments.push(StructuralMoment {
-                            chunk_index: entry.chunk_index,
-                            description: desc.clone(),
-                            salience: 0.8,
-                        });
-                    }
-                    sections.push(SectionAnnotation {
-                        chunk_index: entry.chunk_index,
-                        function: entry.function,
-                        key_entities: entry
-                            .entity_names_and_kinds
-                            .iter()
-                            .map(|(n, _)| n.clone())
-                            .collect(),
-                        // `establishes` was dropped from the
-                        // extraction schema (2026-05-21) to save
-                        // ~60K decode tokens per ingest; nothing
-                        // downstream read it. Placeholder kept here
-                        // so serialised skeletons from before the
-                        // change still deserialise cleanly.
-                        establishes: String::new(),
-                    });
-                }
+    for (_, parsed_opt) in sorted_results {
+        let Some(parsed) = parsed_opt else { continue };
+        for entry in parsed {
+            for (name, kind) in &entry.entity_names_and_kinds {
+                entity_mentions
+                    .entry(name.clone())
+                    .or_default()
+                    .push(entry.chunk_index);
+                entity_kinds
+                    .entry(name.clone())
+                    .or_insert_with(|| kind.clone());
             }
+            if let Some(ref desc) = entry.moment_description {
+                structural_moments.push(StructuralMoment {
+                    chunk_index: entry.chunk_index,
+                    description: desc.clone(),
+                    salience: 0.8,
+                });
+            }
+            sections.push(SectionAnnotation {
+                chunk_index: entry.chunk_index,
+                function: entry.function,
+                key_entities: entry
+                    .entity_names_and_kinds
+                    .iter()
+                    .map(|(n, _)| n.clone())
+                    .collect(),
+                establishes: String::new(),
+            });
         }
-
-        let done = ((batch_idx + 1) * batch_size).min(chunk_count);
-        on_progress(IngestProgress::BuildingSkeleton {
-            done,
-            total: chunk_count,
-        });
-        let _ = store
-            .update_asset_state(
-                asset_id,
-                &AssetState::BuildingSkeleton {
-                    chunks_done: done,
-                    chunks_total: chunk_count,
-                },
-            )
-            .await;
     }
 
     // ── Build entity ranking ────────────────────────────────
@@ -1740,44 +1827,33 @@ async fn build_skeleton(
         })
         .collect();
 
-    // ── Build overview ──────────────────────────────────────
-    let overview = generate_overview(inference, chunks, doc_type).await;
-
     structural_moments.truncate(40);
 
     // ── Action atoms (atlas-light) ──────────────────────────
     // For each top-N entity, run a Fast-slot pass over the entity's
     // appearance chunks and extract verb-object pairs anchored to
-    // chunk_index. Cap N at 6 so the per-document cost stays bounded
-    // (6 entities × 1 LLM call each = 6 extra Fast-slot calls).
-    //
-    // Why this matters for retrieval (book-report 2026-05-21
-    // findings): embedding RAG plateaus around top-K=16 because the
-    // chunks that hold load-bearing actions ("Winnie stitched the
-    // address label into the lapel") don't embed close to the
-    // model's question-shaped queries ("Greenwich Park bomber
-    // identification"). Action atoms route around the semantic gap
-    // — the model queries by entity name, the tool consults the
-    // atom index, and the original chunk surfaces by structural
-    // lookup rather than embedding similarity.
+    // chunk_index. Cap N at 6 so the per-document cost stays bounded.
+    // Action atoms route around the embedding-similarity gap — the
+    // model queries by entity name, the tool consults the atom index,
+    // and the original chunk surfaces by structural lookup rather
+    // than embedding similarity.
     let actions = extract_action_atoms(inference, chunks, &main_entities, &entity_index).await;
 
-    // ── Document segments ──────────────────────────────────
-    // Two-pass LLM-judged grouping of adjacent chunks into
-    // coherent multi-chunk units. Replaces retrieval-time
-    // mechanical ±1 expansion with structurally-judged ranges
-    // the ingest LLM picked while it had the document in
-    // hand. See `extract_segments` for the protocol.
-    let segments = extract_segments(inference, chunks, &main_entities, doc_type.clone()).await;
-
+    // T2-phase skeleton is partial — `overview` and `segments` are
+    // empty placeholders. T3 (`build_and_persist_raptor_atlas` called
+    // from `ingest`) fills them in: `overview` from the RAPTOR root
+    // summary, `segments` from `extract_segments` (TextTiling).
+    // This split is what powers the tiered state machine — the asset
+    // transitions to `MultiHopReady` after this function returns,
+    // before T3 enrichment starts.
     Ok(DocumentSkeleton {
         sections,
         main_entities,
         entity_index,
         structural_moments,
-        overview,
+        overview: String::new(),
         actions,
-        segments,
+        segments: Vec::new(),
         built_at: chrono::Utc::now(),
     })
 }

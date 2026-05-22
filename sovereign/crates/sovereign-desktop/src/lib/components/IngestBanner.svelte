@@ -41,6 +41,7 @@
               0.5
         : 0.5;
     }
+    if (s === "MultiHopReady") return 0.7;
     return 0;
   }
 
@@ -74,6 +75,12 @@
       );
       return remaining * SECS_PER_CHUNK_SKELETON;
     }
+    if (s === "MultiHopReady") {
+      // T2 done, T3 (RAPTOR + segments + overview) starting. Hard
+      // to estimate precisely without progress feedback; conservative
+      // ~4 min remaining based on observed RAPTOR build time.
+      return 4 * 60;
+    }
     return 0;
   }
 
@@ -97,6 +104,9 @@
     if (typeof s === "object" && "BuildingSkeleton" in s) {
       return `Searchable now — character recognition ${s.BuildingSkeleton.chunks_done} of ${s.BuildingSkeleton.chunks_total} sections`;
     }
+    if (s === "MultiHopReady") {
+      return "Multi-hop ready — searchable across entities. Building scene structure…";
+    }
     return "";
   }
 
@@ -110,6 +120,9 @@
     }
     if (typeof s === "object" && "BuildingSkeleton" in s) {
       return "Ask anything. Cross-scene questions are getting more accurate as character recognition catches up.";
+    }
+    if (s === "MultiHopReady") {
+      return "Ask anything — multi-hop questions across entities work now. Scene-level synthesis quality continues to improve as structural enrichment lands.";
     }
     return "";
   }
