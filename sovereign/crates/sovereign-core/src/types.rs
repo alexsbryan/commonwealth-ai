@@ -2766,6 +2766,91 @@ pub struct StructuralMoment {
     pub salience: f32,
 }
 
+// ─── RAPTOR Atlas ─────────────────────────────────────────────
+//
+// RAPTOR (Recursive Abstractive Processing for Tree-Organized
+// Retrieval) replaces per-chunk LLM skeleton extraction with a
+// cluster-summarize-recurse tree. Each node carries a summary
+// (signpost), evidence chunk IDs (for tool retrieval), and verbatim
+// quote spans (for hallucination-safe quotation).
+//
+// Load-bearing contract: a node's `summary` must NOT contain `"`.
+// Enforced at generation by lark_grammar so downstream tools can
+// rely on "anything inside double quotes in a model answer came
+// from a quote_span or a fetched chunk — never from a summary."
+
+/// A node in the RAPTOR tree. Level 0 nodes cluster raw document
+/// chunks; level N+1 nodes cluster level N node summaries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RaptorNode {
+    /// Stable UUID — primary key + child reference from the level
+    /// above.
+    pub node_id: String,
+    /// 0 = clusters of raw chunks. Higher = clusters of summaries.
+    pub level: u8,
+    /// LLM-generated paraphrase. By contract free of `"` characters.
+    pub summary: String,
+    /// Embedding of `summary` — used to match user queries against
+    /// nodes at this level.
+    pub summary_embedding: Vec<f32>,
+    /// GMM centroid in the *input* embedding space (chunk embeddings
+    /// for level 0; child summary embeddings for level > 0).
+    /// Persisted so incremental updates can re-score new members
+    /// without re-clustering the whole document.
+    pub centroid_embedding: Vec<f32>,
+    /// Child node IDs. Empty at level 0.
+    pub children_node_ids: Vec<String>,
+    /// Chunks directly in this cluster. Populated only at level 0.
+    pub direct_member_chunk_ids: Vec<u32>,
+    /// Transitive union of all chunks under this subtree. Used for
+    /// scoped chunk retrieval ("search within this node's evidence").
+    pub evidence_chunk_ids: Vec<u32>,
+    /// 3-5 verbatim spans pulled from member chunks at build time,
+    /// chosen for highest cosine similarity to the cluster centroid.
+    /// This is the model's hallucination-safe quotable surface for
+    /// the node.
+    pub quote_spans: Vec<QuoteSpan>,
+    /// Primary entities active in this cluster. Union of GLiNER
+    /// tags on member chunks and entities the summarization prompt
+    /// explicitly identified.
+    pub primary_entities: Vec<String>,
+    /// Cluster tightness in [0,1]. Higher = members more similar to
+    /// centroid. Drives the briefing's coherence-weighted budget so
+    /// tight clusters earn their slot in the prompt.
+    pub cluster_coherence: f32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A verbatim span from a source chunk — safe to quote without
+/// triggering the bench's hallucination detector. `text` is stored
+/// redundantly so the briefing can ship it inline without a
+/// round-trip to the chunk store.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuoteSpan {
+    pub chunk_id: u32,
+    pub char_start: u32,
+    pub char_end: u32,
+    pub text: String,
+}
+
+/// A recurring word or phrase that distinguishes this document from
+/// a general-English corpus baseline. The motif index gives the
+/// model a direct retrieval handle for lexical recurrences that
+/// RAPTOR's abstraction loses ("incurious" repeating five times
+/// across chapters is invisible to an embedding cluster but
+/// load-bearing for thematic-tier questions).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssetMotif {
+    pub term: String,
+    /// TF-IDF score against an English-baseline IDF.
+    pub tf_idf_score: f32,
+    /// Chunk indices where `term` appears.
+    pub occurrence_chunk_ids: Vec<u32>,
+    /// True when the LLM motif-classifier judged this a recurring
+    /// motif vs incidental rare-word noise.
+    pub is_distinctive: bool,
+}
+
 // ─── Document Operations ──────────────────────────────────────
 //
 // The operation the router selected for a user's request. Stored

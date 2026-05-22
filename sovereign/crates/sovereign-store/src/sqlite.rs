@@ -66,6 +66,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Document session migration failed: {e}")))?;
         migrations::run_document_asset_migration(&conn)
             .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
+        migrations::run_raptor_atlas_migration(&conn)
+            .map_err(|e| Error::Storage(format!("RAPTOR atlas migration failed: {e}")))?;
         migrations::run_knowledge_view_migrations(&conn)
             .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
         migrations::run_inner_work_memory_wall_migrations(&conn)
@@ -205,6 +207,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Document session migration failed: {e}")))?;
         migrations::run_document_asset_migration(&conn)
             .map_err(|e| Error::Storage(format!("Document asset migration failed: {e}")))?;
+        migrations::run_raptor_atlas_migration(&conn)
+            .map_err(|e| Error::Storage(format!("RAPTOR atlas migration failed: {e}")))?;
         migrations::run_knowledge_view_migrations(&conn)
             .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
         migrations::run_inner_work_memory_wall_migrations(&conn)
@@ -1934,6 +1938,244 @@ impl DocumentAssetStore for SqliteStateStore {
         .map_err(map_db)?;
         Ok(())
     }
+
+    async fn save_raptor_nodes(
+        &self,
+        asset_id: &str,
+        nodes: &[RaptorNode],
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM raptor_nodes WHERE asset_id = ?1",
+            rusqlite::params![asset_id],
+        )
+        .map_err(map_db)?;
+        for node in nodes {
+            let children = serde_json::to_string(&node.children_node_ids)
+                .map_err(|e| Error::Storage(e.to_string()))?;
+            let direct_members: Option<String> = if node.direct_member_chunk_ids.is_empty() {
+                None
+            } else {
+                Some(
+                    serde_json::to_string(&node.direct_member_chunk_ids)
+                        .map_err(|e| Error::Storage(e.to_string()))?,
+                )
+            };
+            let evidence = serde_json::to_string(&node.evidence_chunk_ids)
+                .map_err(|e| Error::Storage(e.to_string()))?;
+            let quotes = serde_json::to_string(&node.quote_spans)
+                .map_err(|e| Error::Storage(e.to_string()))?;
+            let entities = serde_json::to_string(&node.primary_entities)
+                .map_err(|e| Error::Storage(e.to_string()))?;
+            tx.execute(
+                "INSERT INTO raptor_nodes
+                 (node_id, asset_id, level, summary,
+                  summary_embedding, centroid_embedding,
+                  children_node_ids, direct_member_chunk_ids,
+                  evidence_chunk_ids, quote_spans, primary_entities,
+                  cluster_coherence, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                rusqlite::params![
+                    node.node_id,
+                    asset_id,
+                    node.level as i64,
+                    node.summary,
+                    encode_f32_vec(&node.summary_embedding),
+                    encode_f32_vec(&node.centroid_embedding),
+                    children,
+                    direct_members,
+                    evidence,
+                    quotes,
+                    entities,
+                    node.cluster_coherence as f64,
+                    node.created_at.timestamp(),
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn list_raptor_nodes(&self, asset_id: &str) -> Result<Vec<RaptorNode>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT node_id, level, summary, summary_embedding, centroid_embedding,
+                        children_node_ids, direct_member_chunk_ids, evidence_chunk_ids,
+                        quote_spans, primary_entities, cluster_coherence, created_at
+                 FROM raptor_nodes
+                 WHERE asset_id = ?1
+                 ORDER BY level ASC, node_id ASC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![asset_id], |row| {
+                Ok(row_to_raptor_node(row))
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)??);
+        }
+        Ok(out)
+    }
+
+    async fn get_raptor_node(&self, node_id: &str) -> Result<Option<RaptorNode>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT node_id, level, summary, summary_embedding, centroid_embedding,
+                        children_node_ids, direct_member_chunk_ids, evidence_chunk_ids,
+                        quote_spans, primary_entities, cluster_coherence, created_at
+                 FROM raptor_nodes
+                 WHERE node_id = ?1",
+            )
+            .map_err(map_db)?;
+        let mut rows = stmt
+            .query_map(rusqlite::params![node_id], |row| {
+                Ok(row_to_raptor_node(row))
+            })
+            .map_err(map_db)?;
+        match rows.next() {
+            Some(row) => Ok(Some(row.map_err(map_db)??)),
+            None => Ok(None),
+        }
+    }
+
+    async fn save_asset_motifs(
+        &self,
+        asset_id: &str,
+        motifs: &[AssetMotif],
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM asset_motifs WHERE asset_id = ?1",
+            rusqlite::params![asset_id],
+        )
+        .map_err(map_db)?;
+        for motif in motifs {
+            let occurrences = serde_json::to_string(&motif.occurrence_chunk_ids)
+                .map_err(|e| Error::Storage(e.to_string()))?;
+            tx.execute(
+                "INSERT INTO asset_motifs
+                 (asset_id, term, tf_idf_score, occurrence_chunk_ids, is_distinctive)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![
+                    asset_id,
+                    motif.term,
+                    motif.tf_idf_score as f64,
+                    occurrences,
+                    if motif.is_distinctive { 1 } else { 0 },
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn list_asset_motifs(&self, asset_id: &str) -> Result<Vec<AssetMotif>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT term, tf_idf_score, occurrence_chunk_ids, is_distinctive
+                 FROM asset_motifs
+                 WHERE asset_id = ?1
+                 ORDER BY is_distinctive DESC, tf_idf_score DESC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![asset_id], |row| {
+                let term: String = row.get(0)?;
+                let tf_idf_score: f64 = row.get(1)?;
+                let occurrences: String = row.get(2)?;
+                let is_distinctive: i64 = row.get(3)?;
+                Ok((term, tf_idf_score, occurrences, is_distinctive))
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (term, score, occurrences_json, is_distinctive) = row.map_err(map_db)?;
+            let occurrence_chunk_ids: Vec<u32> =
+                serde_json::from_str(&occurrences_json).map_err(|e| Error::Storage(e.to_string()))?;
+            out.push(AssetMotif {
+                term,
+                tf_idf_score: score as f32,
+                occurrence_chunk_ids,
+                is_distinctive: is_distinctive != 0,
+            });
+        }
+        Ok(out)
+    }
+}
+
+/// Encode a vector of f32s as little-endian bytes for BLOB storage.
+fn encode_f32_vec(v: &[f32]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(v.len() * 4);
+    for x in v {
+        bytes.extend_from_slice(&x.to_le_bytes());
+    }
+    bytes
+}
+
+/// Decode a little-endian f32 BLOB into a vector. Trailing bytes that
+/// don't form a complete f32 are silently dropped — embeddings are
+/// fixed-width per model so this only triggers on a corrupted row.
+fn decode_f32_vec(bytes: &[u8]) -> Vec<f32> {
+    bytes
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect()
+}
+
+fn row_to_raptor_node(row: &rusqlite::Row) -> Result<RaptorNode> {
+    let node_id: String = row.get(0).map_err(map_db)?;
+    let level: i64 = row.get(1).map_err(map_db)?;
+    let summary: String = row.get(2).map_err(map_db)?;
+    let summary_embedding_blob: Vec<u8> = row.get(3).map_err(map_db)?;
+    let centroid_embedding_blob: Vec<u8> = row.get(4).map_err(map_db)?;
+    let children_json: String = row.get(5).map_err(map_db)?;
+    let direct_members_json: Option<String> = row.get(6).map_err(map_db)?;
+    let evidence_json: String = row.get(7).map_err(map_db)?;
+    let quotes_json: String = row.get(8).map_err(map_db)?;
+    let entities_json: String = row.get(9).map_err(map_db)?;
+    let cluster_coherence: f64 = row.get(10).map_err(map_db)?;
+    let created_at_unix: i64 = row.get(11).map_err(map_db)?;
+
+    let children_node_ids: Vec<String> = serde_json::from_str(&children_json)
+        .map_err(|e| Error::Storage(format!("raptor_nodes.children_node_ids: {e}")))?;
+    let direct_member_chunk_ids: Vec<u32> = match direct_members_json {
+        Some(json) => serde_json::from_str(&json)
+            .map_err(|e| Error::Storage(format!("raptor_nodes.direct_member_chunk_ids: {e}")))?,
+        None => Vec::new(),
+    };
+    let evidence_chunk_ids: Vec<u32> = serde_json::from_str(&evidence_json)
+        .map_err(|e| Error::Storage(format!("raptor_nodes.evidence_chunk_ids: {e}")))?;
+    let quote_spans: Vec<QuoteSpan> = serde_json::from_str(&quotes_json)
+        .map_err(|e| Error::Storage(format!("raptor_nodes.quote_spans: {e}")))?;
+    let primary_entities: Vec<String> = serde_json::from_str(&entities_json)
+        .map_err(|e| Error::Storage(format!("raptor_nodes.primary_entities: {e}")))?;
+
+    let created_at = chrono::DateTime::<chrono::Utc>::from_timestamp(created_at_unix, 0)
+        .unwrap_or_else(chrono::Utc::now);
+
+    Ok(RaptorNode {
+        node_id,
+        level: level as u8,
+        summary,
+        summary_embedding: decode_f32_vec(&summary_embedding_blob),
+        centroid_embedding: decode_f32_vec(&centroid_embedding_blob),
+        children_node_ids,
+        direct_member_chunk_ids,
+        evidence_chunk_ids,
+        quote_spans,
+        primary_entities,
+        cluster_coherence: cluster_coherence as f32,
+        created_at,
+    })
 }
 
 fn row_to_document_asset(row: &rusqlite::Row) -> DocumentAsset {

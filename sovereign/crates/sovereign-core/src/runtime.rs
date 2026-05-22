@@ -12491,6 +12491,17 @@ impl Runtime {
         let (briefing, briefing_entity_names) =
             self.build_attached_doc_briefing(conversation_id).await;
 
+        // Fetch the asset's full chunk content + RAPTOR verbatim
+        // spans up-front. Used by `verify_quotes_in_answer` below to
+        // demote any quoted span in the model's final answer that
+        // isn't substring-present in the document. The pre-fetch keeps
+        // the verification path hot — we never want to skip it for
+        // perf reasons. Best-effort: failures leave the verification
+        // surface empty, which means the model's answer is returned
+        // unchanged (graceful degradation).
+        let (verification_chunks, verification_verbatim_spans) =
+            self.fetch_quote_verification_surface(conversation_id).await;
+
         // Question-conditional RAG-into-briefing was tested and
         // *hurt* the bench score on book-report Tier 1 (28% vs
         // 71% baseline). Embedding the full user question with
@@ -12545,8 +12556,24 @@ impl Runtime {
             tool_descs = tool_descs.join("\n"),
         );
 
-        let mut conversation =
+        // Conversation is held as a typed segment list rather than a
+        // raw String so we can compress superseded tool results out
+        // of every prefill after the first. Prefill cost dominates
+        // per-question latency (~120s of 150s on the book-report
+        // bench); keeping all four tool results verbatim in every
+        // iteration's prompt is mostly wasted compute, since the
+        // model issues refined queries on the same tool by turn 3-4
+        // and the early result becomes dead weight.
+        //
+        // Compression rule: for each `tool_id`, keep the most recent
+        // `MAX_TOOL_RESULTS_KEPT_PER_TOOL` results in full; replace
+        // older ones with a one-line `(superseded — N passages, content
+        // dropped)` marker. The model still sees that it queried,
+        // sees the query text, and sees how much came back — it just
+        // doesn't re-prefill the chunk content on every turn.
+        let conversation_header =
             format!("{system_prompt}\n\n---\n\nUser: {message}\n\nAssistant:");
+        let mut conversation_segments: Vec<AttachedDocSegment> = Vec::new();
         let mut iterations: usize = 0;
         let mut tool_ids_invoked: std::collections::BTreeSet<String> =
             std::collections::BTreeSet::new();
@@ -12584,8 +12611,10 @@ impl Runtime {
             .unwrap_or_default();
 
         loop {
+            let conversation =
+                render_attached_doc_conversation(&conversation_header, &conversation_segments);
             let request = CompletionRequest {
-                prompt: conversation.clone(),
+                prompt: conversation,
                 system_message: None,
                 preferred_speed: Speed::Slow,
                 max_tokens: Some(self.inference_config.max_tokens),
@@ -12739,19 +12768,26 @@ impl Runtime {
                     .split("<tool_call>")
                     .next()
                     .unwrap_or("")
-                    .trim();
-                conversation.push_str(&format!(
-                    " {thinking}\n\n[{tool_id} results for \"{query}\"]:\n{tool_result_text}\n\nAssistant:",
-                ));
+                    .trim()
+                    .to_string();
+                let passage_count = tool_result_text.matches("[Source").count();
+                conversation_segments.push(AttachedDocSegment::ToolCall {
+                    thinking,
+                    tool_id: tool_id.clone(),
+                    query: query.clone(),
+                    result: tool_result_text,
+                    passage_count,
+                });
 
                 iterations += 1;
                 if iterations >= MAX_ITERATIONS {
-                    conversation.push_str(
+                    conversation_segments.push(AttachedDocSegment::FinalCue(
                         " You've used all available searches. Synthesize the final \
                          answer from what you have. Cite passages with [Source]; mark \
                          anything you couldn't verify against retrieved text as \
-                         [unverified].\n\nAssistant:",
-                    );
+                         [unverified].\n\nAssistant:"
+                            .to_string(),
+                    ));
                     break;
                 }
                 continue;
@@ -12775,10 +12811,12 @@ impl Runtime {
                     iterations,
                     "attached_doc: model emitted final answer with 0 retrieved chunks — forcing another query"
                 );
-                let thinking = response_text.trim();
-                conversation.push_str(&format!(
-                    " {thinking}\n\n[gate] You have NOT retrieved any passages from the attached document yet. Citing passages or stating document-specific facts without retrieval is exactly the pretraining-fallback failure the user asked you to avoid. You MUST either: (a) emit another <tool_call> using an entity name from the briefing, or (b) state plainly that you could not find this in the attached document. Do not fabricate `[passage N]` or `[Source: …]` markers. Try again now.\n\nAssistant:",
-                ));
+                conversation_segments.push(AttachedDocSegment::Gate {
+                    thinking: response_text.trim().to_string(),
+                    gate_text:
+                        "You have NOT retrieved any passages from the attached document yet. Citing passages or stating document-specific facts without retrieval is exactly the pretraining-fallback failure the user asked you to avoid. You MUST either: (a) emit another <tool_call> using an entity name from the briefing, or (b) state plainly that you could not find this in the attached document. Do not fabricate `[passage N]` or `[Source: …]` markers. Try again now."
+                            .to_string(),
+                });
                 iterations += 1;
                 continue;
             }
@@ -12824,20 +12862,35 @@ impl Runtime {
                         unused_entities.join(", "),
                     )
                 };
-                let thinking = response_text.trim();
-                conversation.push_str(&format!(
-                    " {thinking}\n\n[gate] You've explored {n} angle(s) so far ({required} required) and your queries all use question-vocabulary, not document-vocabulary. The chunks holding the answer use the document's own entity names — querying \"identification evidence\" again will return the same chunks; you need to try a name.{unused_hint}\n\nAssistant:",
-                    n = distinct_queries.len(),
-                    required = MIN_DISTINCT_QUERIES,
-                ));
+                conversation_segments.push(AttachedDocSegment::Gate {
+                    thinking: response_text.trim().to_string(),
+                    gate_text: format!(
+                        "You've explored {n} angle(s) so far ({required} required) and your queries all use question-vocabulary, not document-vocabulary. The chunks holding the answer use the document's own entity names — querying \"identification evidence\" again will return the same chunks; you need to try a name.{unused_hint}",
+                        n = distinct_queries.len(),
+                        required = MIN_DISTINCT_QUERIES,
+                    ),
+                });
                 iterations += 1;
                 continue;
             }
 
+            let verified = crate::quote_verification::verify_quotes(
+                &response_text,
+                &verification_chunks,
+                &verification_verbatim_spans,
+                crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
+            );
+            if verified.demoted_count > 0 {
+                tracing::warn!(
+                    demoted = verified.demoted_count,
+                    verified = verified.verified_count,
+                    "attached_doc: post-generation guardrail demoted unverified quotations"
+                );
+            }
             return self
                 .package_attached_doc_response(
                     conversation_id,
-                    &response_text,
+                    &verified.rewritten,
                     &completion,
                     &tool_ids_invoked,
                     total_chunks,
@@ -12848,8 +12901,10 @@ impl Runtime {
         }
 
         // ── Cap hit: force one more completion to synthesize ────
+        let final_conversation =
+            render_attached_doc_conversation(&conversation_header, &conversation_segments);
         let final_request = CompletionRequest {
-            prompt: conversation,
+            prompt: final_conversation,
             system_message: None,
             preferred_speed: Speed::Slow,
             max_tokens: Some(self.inference_config.max_tokens),
@@ -12891,9 +12946,22 @@ impl Runtime {
                  If you think the answer is in there, try rephrasing the question using a character name, place, or specific phrase you recall from the text, and I'll search again.",
             );
         }
+        let verified = crate::quote_verification::verify_quotes(
+            &final_text,
+            &verification_chunks,
+            &verification_verbatim_spans,
+            crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
+        );
+        if verified.demoted_count > 0 {
+            tracing::warn!(
+                demoted = verified.demoted_count,
+                verified = verified.verified_count,
+                "attached_doc: post-generation guardrail (cap-hit path) demoted unverified quotations"
+            );
+        }
         self.package_attached_doc_response(
             conversation_id,
-            &final_text,
+            &verified.rewritten,
             &final_completion,
             &tool_ids_invoked,
             total_chunks,
@@ -12919,6 +12987,51 @@ impl Runtime {
     /// "Stevie". Putting ranked entities in the system prompt fixes
     /// the vocabulary mismatch at the source: the model now formulates
     /// queries with the words the chunks actually contain.
+    /// Pre-fetch the verification surface for `verify_quotes` calls
+    /// at the end of `handle_attached_doc_turn`. Returns
+    /// `(chunk_contents, raptor_verbatim_spans)`.
+    ///
+    /// The chunk contents are every chunk for the attached asset's
+    /// source key; verification matches answer quotes against
+    /// substring presence anywhere in the document. RAPTOR quote_spans
+    /// are passed as `extra_verbatim_spans` so spans that cross
+    /// chunk boundaries (or live in RAPTOR node text not directly
+    /// chunked) still verify.
+    ///
+    /// Failures fall back to empty vecs — the verification function
+    /// then becomes a no-op, leaving the answer unchanged. Better to
+    /// ship an unmodified answer than to crash on a transient store
+    /// read.
+    async fn fetch_quote_verification_surface(
+        &self,
+        conversation_id: &str,
+    ) -> (Vec<String>, Vec<String>) {
+        let session = match self
+            .store
+            .get_document_session_by_conversation(conversation_id)
+            .await
+        {
+            Ok(Some(s)) => s,
+            _ => return (Vec::new(), Vec::new()),
+        };
+        let asset = match self.store.get_document_asset(&session.source).await {
+            Ok(Some(a)) => a,
+            _ => return (Vec::new(), Vec::new()),
+        };
+        let chunks = self
+            .store
+            .get_chunks_by_source(&asset.source_key())
+            .await
+            .unwrap_or_default();
+        let chunk_contents: Vec<String> = chunks.into_iter().map(|c| c.content).collect();
+        let raptor_nodes = self.store.list_raptor_nodes(&asset.id).await.unwrap_or_default();
+        let verbatim_spans: Vec<String> = raptor_nodes
+            .iter()
+            .flat_map(|n| n.quote_spans.iter().map(|q| q.text.clone()))
+            .collect();
+        (chunk_contents, verbatim_spans)
+    }
+
     async fn build_attached_doc_briefing(
         &self,
         conversation_id: &str,
@@ -13176,6 +13289,185 @@ impl Runtime {
                 }
             }
         }
+
+        // ── RAPTOR atlas section (briefing v2 augmentation) ─────
+        //
+        // Appended to (not replacing) the skeleton-based briefing
+        // during the transition. When raptor_nodes are populated
+        // for this asset, surface:
+        //   1. Mid-level node summaries with their evidence chunk
+        //      ranges — these are scene/section-scale signposts
+        //      RAPTOR built by clustering chunks then summarizing.
+        //      Each node carries verbatim quote_spans (hallucination-
+        //      detector-safe) and a transitive list of evidence
+        //      chunks the model can fetch via attached_doc_search.
+        //   2. Distinctive motifs from the TF-IDF + LLM-classified
+        //      index — direct retrieval handles for recurring
+        //      words/phrases (e.g. "incurious" in Conrad) that the
+        //      RAPTOR abstraction loses but the bench's T4 tier
+        //      relies on.
+        //   3. Tool-usage guidance for the granularity contract.
+        //
+        // The legacy skeleton section above stays in place as the
+        // fallback path: it's load-bearing today, and RAPTOR is
+        // additive while the new path proves itself against the
+        // bench. Once Phase 7 validates, the legacy section can be
+        // trimmed in a follow-up.
+        // ── Position pointers ───────────────────────────────────
+        //
+        // Deterministic retrieval handles independent of clustering
+        // quality. Embedding clusters carve by topic similarity, not
+        // by document position; a question about "how does it end"
+        // or "what is the document's premise" wants a position-
+        // anchored handle that clustering doesn't reliably provide.
+        // Position pointers give the model a deterministic "the
+        // opening/conclusion lives HERE" range regardless of the
+        // cluster shape and regardless of document type.
+        //
+        // The shape of "opening" and "ending" generalises:
+        //   - narrative: setup vs resolution
+        //   - argument: thesis vs conclusion
+        //   - paper: introduction+methodology vs results+discussion
+        //   - chronicle: earliest vs latest entries
+        //   - manual: overview vs appendices+references
+        // The model is left to interpret in context — the briefing
+        // describes positions, not document-type-specific roles.
+        let total_chunks = asset.chunk_count as u32;
+        if total_chunks > 20 {
+            let opening_end = (total_chunks / 20).clamp(5, 50);
+            let ending_start = total_chunks.saturating_sub((total_chunks / 10).clamp(10, 100));
+            s.push_str(&format!(
+                "\n**Position pointers.** Opening: chunks 0..{opening_end}. Ending: chunks {ending_start}..{}.\n",
+                total_chunks - 1,
+            ));
+        }
+
+        let raptor_nodes = self
+            .store
+            .list_raptor_nodes(&asset.id)
+            .await
+            .unwrap_or_default();
+        if !raptor_nodes.is_empty() {
+            // Pick the mid-level layer to surface. Heuristic:
+            // - If we have nodes at level ≥ 1, the highest non-empty
+            //   level is the "root layer" — skip it (it'll just be
+            //   1-4 nodes summarising the whole doc).
+            // - One level below the root is the scene/section layer
+            //   the briefing wants.
+            // - If only level-0 nodes exist (degenerate small doc),
+            //   surface them directly.
+            let max_level = raptor_nodes.iter().map(|n| n.level).max().unwrap_or(0);
+            let target_level = if max_level >= 2 {
+                max_level - 1
+            } else if max_level == 1 {
+                1
+            } else {
+                0
+            };
+
+            // Coherence-weighted ordering — tight clusters earn their
+            // briefing slot ahead of looser ones.
+            let mut surfaceable: Vec<&crate::types::RaptorNode> = raptor_nodes
+                .iter()
+                .filter(|n| n.level == target_level)
+                .collect();
+            surfaceable.sort_by(|a, b| {
+                b.cluster_coherence
+                    .partial_cmp(&a.cluster_coherence)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            if !surfaceable.is_empty() {
+                // Bench run #2 (2026-05-22) surfaced the failure mode
+                // this section's wording fixes: rendering the
+                // LLM-generated `node.summary` as a top-level claim
+                // ("Winnie flees with Ossipon to Paris...") led the
+                // model to treat the paraphrase as ground truth,
+                // anchor on its (sometimes wrong) details, and query
+                // down false leads. T1 `winnie_fate` regressed 100% →
+                // 0% on this exact failure: the briefing's
+                // post-Verloc-murder summary mentioned a train/wedding
+                // ring path that doesn't exist in Conrad's text, so
+                // the model queried for "wedding ring Winnie" and
+                // missed the actual chunk 957 newspaper-notice.
+                //
+                // Fix: the section now surfaces only *verifiable*
+                // signal — chunk range, primary entities, and a
+                // single verbatim quote span per cluster. The
+                // LLM-generated `summary` is dropped from the
+                // briefing entirely. Summaries still drive
+                // node-level *query matching* (their embeddings sit
+                // in raptor_nodes.summary_embedding for tool-side
+                // retrieval), but the model never sees their text
+                // in the system prompt, so it can't misread a
+                // paraphrase as a fact.
+                s.push_str("\n**Cluster signposts** — embedding-grouped passage ranges in the document. Use the chunk ranges and entity hints to formulate `attached_doc_search` queries; the inline `>` snippets are verbatim and safe to quote:\n");
+                for node in surfaceable.iter().take(8) {
+                    let chunk_min = node.evidence_chunk_ids.iter().min().copied().unwrap_or(0);
+                    let chunk_max = node.evidence_chunk_ids.iter().max().copied().unwrap_or(0);
+                    let entities_label = if node.primary_entities.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            " — entities: {}",
+                            node.primary_entities
+                                .iter()
+                                .take(4)
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                        )
+                    };
+                    s.push_str(&format!(
+                        "- chunks {chunk_min}..{chunk_max}{entities_label}\n",
+                    ));
+                    if let Some(q) = node.quote_spans.first() {
+                        let trimmed: String = q.text.chars().take(180).collect();
+                        s.push_str(&format!("    > [chunk {}] {trimmed}…\n", q.chunk_id));
+                    }
+                }
+            }
+        }
+
+        let motifs = self
+            .store
+            .list_asset_motifs(&asset.id)
+            .await
+            .unwrap_or_default();
+        let distinctive: Vec<&crate::types::AssetMotif> =
+            motifs.iter().filter(|m| m.is_distinctive).collect();
+        if !distinctive.is_empty() {
+            s.push_str("\n**Recurring motifs** (distinctive lexical recurrences — query `attached_doc_search` with the exact term to retrieve all occurrences):\n");
+            for m in distinctive.iter().take(12) {
+                let chunks_preview: Vec<String> = m
+                    .occurrence_chunk_ids
+                    .iter()
+                    .take(5)
+                    .map(|c| c.to_string())
+                    .collect();
+                let more = if m.occurrence_chunk_ids.len() > 5 {
+                    format!(", +{} more", m.occurrence_chunk_ids.len() - 5)
+                } else {
+                    String::new()
+                };
+                s.push_str(&format!(
+                    "- \"{}\" — chunks {}{}\n",
+                    m.term,
+                    chunks_preview.join(", "),
+                    more,
+                ));
+            }
+        }
+
+        if !raptor_nodes.is_empty() || !distinctive.is_empty() || total_chunks > 20 {
+            s.push_str(
+                "\n**Briefing is pointers, not facts.** Only the inline `>` lines are verbatim. \
+                 Quote only from retrieved chunks. If a query is thin, also try: a verbatim \
+                 motif term, a distinctive word you remember from the chunks, or a query \
+                 aimed at the OPENING/ENDING range.\n",
+            );
+        }
+
         (s, entity_names)
     }
 
@@ -13366,6 +13658,96 @@ impl Runtime {
 }
 
 /// Parse `<tool_call>{"tool":"...","query":"..."}</tool_call>` out of
+/// A single step in the `handle_attached_doc_turn` ReasonWithTools
+/// loop. Held as a typed list so the conversation can be re-rendered
+/// each iteration with superseded tool results compressed out of
+/// the prefill.
+#[derive(Debug)]
+enum AttachedDocSegment {
+    /// One tool dispatch + its result. The renderer keeps the most
+    /// recent N results per tool_id verbatim and compresses older
+    /// ones to a one-line marker.
+    ToolCall {
+        thinking: String,
+        tool_id: String,
+        query: String,
+        result: String,
+        passage_count: usize,
+    },
+    /// A forcing gate (no-retrieval, triangulation). Always rendered
+    /// in full — gate text is short and load-bearing for the next
+    /// turn's reasoning.
+    Gate {
+        thinking: String,
+        gate_text: String,
+    },
+    /// The "you've used all your searches — synthesize" cue that
+    /// closes the iteration loop. Always rendered in full.
+    FinalCue(String),
+}
+
+/// Cap on how many tool results per tool_id to keep verbatim in the
+/// prefill. Older results on the same tool collapse to a one-line
+/// `(superseded — N passages, content dropped)` marker. Two is enough
+/// to let the model cross-reference its two most recent angles while
+/// preventing the prefill from doubling on each iteration.
+const MAX_TOOL_RESULTS_KEPT_PER_TOOL: usize = 2;
+
+/// Render the attached-doc conversation as a single string for the
+/// next inference call. Compresses older tool results on the same
+/// tool to bound prefill cost.
+fn render_attached_doc_conversation(
+    header: &str,
+    segments: &[AttachedDocSegment],
+) -> String {
+    use std::collections::{HashMap, HashSet};
+
+    // Per tool_id, collect segment indices; keep the most recent N.
+    let mut per_tool: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, seg) in segments.iter().enumerate() {
+        if let AttachedDocSegment::ToolCall { tool_id, .. } = seg {
+            per_tool.entry(tool_id.as_str()).or_default().push(i);
+        }
+    }
+    let mut keep_full: HashSet<usize> = HashSet::new();
+    for indices in per_tool.values() {
+        for &i in indices.iter().rev().take(MAX_TOOL_RESULTS_KEPT_PER_TOOL) {
+            keep_full.insert(i);
+        }
+    }
+
+    let mut out = String::with_capacity(header.len() + segments.len() * 2048);
+    out.push_str(header);
+    for (i, seg) in segments.iter().enumerate() {
+        match seg {
+            AttachedDocSegment::ToolCall {
+                thinking,
+                tool_id,
+                query,
+                result,
+                passage_count,
+            } => {
+                if keep_full.contains(&i) {
+                    out.push_str(&format!(
+                        " {thinking}\n\n[{tool_id} results for \"{query}\"]:\n{result}\n\nAssistant:",
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        " {thinking}\n\n[{tool_id} results for \"{query}\" — {passage_count} passage(s); content dropped from this prefill, superseded by a later query on the same tool. The evidence informed the queries you issued after it.]\n\nAssistant:",
+                    ));
+                }
+            }
+            AttachedDocSegment::Gate { thinking, gate_text } => {
+                out.push_str(&format!(" {thinking}\n\n[gate] {gate_text}\n\nAssistant:"));
+            }
+            AttachedDocSegment::FinalCue(text) => {
+                out.push_str(text);
+            }
+        }
+    }
+    out
+}
+
 /// arbitrary model output. Returns `(tool_id, query)` or `None`.
 /// Mirrors `executor::parse_tool_call` — see comment there. Kept
 /// runtime-local rather than pub-cratifying so the executor's tool-call

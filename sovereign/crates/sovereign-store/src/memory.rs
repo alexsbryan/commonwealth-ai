@@ -472,6 +472,29 @@ impl DocumentAssetStore for InMemoryStateStore {
     ) -> Result<()> {
         Ok(())
     }
+    async fn save_raptor_nodes(
+        &self,
+        _asset_id: &str,
+        _nodes: &[RaptorNode],
+    ) -> Result<()> {
+        Ok(())
+    }
+    async fn list_raptor_nodes(&self, _asset_id: &str) -> Result<Vec<RaptorNode>> {
+        Ok(Vec::new())
+    }
+    async fn get_raptor_node(&self, _node_id: &str) -> Result<Option<RaptorNode>> {
+        Ok(None)
+    }
+    async fn save_asset_motifs(
+        &self,
+        _asset_id: &str,
+        _motifs: &[AssetMotif],
+    ) -> Result<()> {
+        Ok(())
+    }
+    async fn list_asset_motifs(&self, _asset_id: &str) -> Result<Vec<AssetMotif>> {
+        Ok(Vec::new())
+    }
 }
 
 impl StateStore for InMemoryStateStore {}

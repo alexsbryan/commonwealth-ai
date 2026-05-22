@@ -171,10 +171,28 @@ impl WikipediaGraph {
              PRAGMA synchronous = NORMAL;
              PRAGMA temp_store = MEMORY;",
         );
-        // 8 GiB mmap; harmless on smaller hosts (mmap is lazy).
-        let _ = conn.execute_batch("PRAGMA mmap_size = 8589934592;");
-        // 2 GiB page cache (negative = KiB).
-        let _ = conn.execute_batch("PRAGMA cache_size = -2097152;");
+        // mmap window + page cache sized for the file shape we
+        // actually see in production. The previous 8 GiB mmap +
+        // 2 GiB cache reservation (rationale: "harmless on smaller
+        // hosts — mmap is lazy") was wrong on hosts where the
+        // daemon and a CLI process both open the same DB: each
+        // process reserves its own address space and the page-
+        // cache pressure compounds. On Strix Halo (125 GiB unified
+        // memory shared with GPU), two opens of the wiki graph
+        // were claiming 20 GiB of usage between them — enough to
+        // OOM-kill the bench process during bootstrap when the
+        // GPU pinned memory + daemon model weights were already in
+        // residence.
+        //
+        // Empirical file size: ~2.3 GiB for the full Wikipedia
+        // graph (50k articles, 7M edges). 1.5 GiB mmap is generous
+        // headroom for current shape + growth and still slack
+        // against the file. 64 MiB page cache is a standard sane
+        // default — graph queries are small-result reads, not
+        // table scans; cranking the cache to 2 GiB never helped a
+        // measurable workload.
+        let _ = conn.execute_batch("PRAGMA mmap_size = 1610612736;");
+        let _ = conn.execute_batch("PRAGMA cache_size = -65536;");
     }
 
     fn init_schema(conn: &Connection) -> Result<()> {

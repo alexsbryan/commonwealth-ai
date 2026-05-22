@@ -26,6 +26,7 @@ use sovereign_core::types::*;
 
 use crate::rag::chunk::{chunk_text, TextChunk};
 use crate::rag::parse::parse_file;
+use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
 
 // ─── Self-reference detection ────────────────────────────────
 
@@ -524,6 +525,36 @@ impl DocumentAssetManager {
         embed_result?;
         let (skeleton, doc_type) = skeleton_result?;
 
+        // ── RAPTOR atlas + motif index (background) ─────────────
+        //
+        // Spawned post-Ready so the user's attach-document call
+        // returns as soon as the (smaller) skeleton is in place.
+        // Queries arriving before RAPTOR completes fall back to
+        // the skeleton-based briefing path; queries arriving
+        // after get the richer evidence-linked structure.
+        //
+        // Failures here are logged and dropped — the legacy
+        // skeleton remains as the durable retrieval surface, so
+        // a RAPTOR build error degrades quality but never breaks
+        // the attach flow.
+        {
+            let inference = Arc::clone(&self.inference);
+            let store = Arc::clone(&self.store);
+            let asset_id_bg = asset_id.clone();
+            let source_key = format!("asset:{asset_id}");
+            let doc_type_bg = doc_type.clone();
+            tokio::spawn(async move {
+                build_and_persist_raptor_atlas(
+                    &inference,
+                    &store,
+                    &asset_id_bg,
+                    &source_key,
+                    doc_type_bg,
+                )
+                .await;
+            });
+        }
+
         Ok(DocumentAsset {
             id: asset_id,
             title: asset.title,
@@ -639,6 +670,39 @@ impl DocumentAssetManager {
         );
 
         Ok(skeleton)
+    }
+
+    /// Rebuild ONLY the RAPTOR atlas + motif index for an existing
+    /// Ready asset, leaving the legacy skeleton untouched. Used by
+    /// the bench (`--rebuild-raptor`) and by future admin paths to
+    /// populate the new atlas on documents ingested before the
+    /// RAPTOR pipeline shipped — without paying for a full ~20-min
+    /// skeleton rebuild.
+    ///
+    /// Returns `Ok(())` on success. Errors propagate from the store
+    /// (no chunks, write failure) or the inference layer (embed /
+    /// summarize failures). Per `build_and_persist_raptor_atlas`'s
+    /// own contract, internal failures inside RAPTOR or motif
+    /// extraction are logged + swallowed; this entry point only
+    /// errors on upfront preconditions.
+    pub async fn rebuild_raptor_atlas(&self, asset_id: &str) -> Result<()> {
+        tracing::info!(asset_id = %asset_id, "rebuild_raptor_atlas — begin");
+        let asset = self
+            .store
+            .get_document_asset(asset_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("document asset {asset_id}")))?;
+        let source_key = asset.source_key();
+        let doc_type = asset.document_type.clone();
+        build_and_persist_raptor_atlas(
+            &self.inference,
+            &self.store,
+            asset_id,
+            &source_key,
+            doc_type,
+        )
+        .await;
+        Ok(())
     }
 
     /// Route a user's question to the right operation type, then
@@ -1751,86 +1815,47 @@ async fn extract_segments(
         return Vec::new();
     }
 
-    let doc_type_cue = match doc_type {
-        DocumentTypeTag::Narrative => {
-            "Boundaries land where setting, time, or active characters change."
-        }
-        DocumentTypeTag::Argument => {
-            "Boundaries land where the argument shifts or a new claim is introduced."
-        }
-        DocumentTypeTag::Evidence => {
-            "Boundaries land at Method / Result / Discussion / Limitation transitions."
-        }
-        DocumentTypeTag::Technical => {
-            "Boundaries land at procedure starts or topic changes."
-        }
-        DocumentTypeTag::Chronicle => {
-            "Boundaries land at time-skip or new event onset."
-        }
-        DocumentTypeTag::Unknown => {
-            "Boundaries land where the topic, mode, or subject changes."
+    // ── Pass A — boundary detection via TextTiling ─────────
+    //
+    // Replaces the original per-pair LLM Pass A (one Speed::Slow
+    // call per adjacent chunk pair, N-1 sequential calls for N
+    // chunks — ~17 min on the Conrad 1006-chunk doc). TextTiling
+    // (Hearst 1997, embedding variant) computes adjacent-chunk
+    // cosine similarity, smooths it, scores each gap by its
+    // "depth" (how far it dips below the surrounding peaks), and
+    // thresholds at mean + k·std. Zero LLM calls; ~30s for
+    // embedding + sub-second for the boundary detection.
+    //
+    // The earlier batched-LLM Pass A failed validation 2026-05-21
+    // (template-shaped output, 5% precision). TextTiling has none
+    // of that failure mode — boundaries fall out of arithmetic on
+    // numbers the embedding model already produced for the chunk
+    // store. The per-document-type cue is gone because the
+    // similarity signal is doc-type-agnostic; doc-type-aware
+    // naming still happens in Pass B.
+    let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+    let embeddings = match inference.embed_batch(&texts).await {
+        Ok(e) if e.len() == chunks.len() => e,
+        _ => {
+            // Embedding failure or count mismatch — fall back to one
+            // segment per chunk so the rest of the pipeline still
+            // makes progress.
+            tracing::warn!(
+                "extract_segments — embed_batch failed or returned wrong count; treating doc as one segment per chunk"
+            );
+            vec![]
         }
     };
-
-    // ── Pass A — boundary detection ─────────────────────────
-    let mut breaks: Vec<bool> = vec![false; chunks.len().saturating_sub(1)];
-    // Pass A is one LLM call per adjacent chunk pair. We tried
-    // window-batched (8 chunks per call → 7 decisions per call) on
-    // 2026-05-21 expecting ~6× speedup; pre-flight probe against
-    // single-pair ground truth showed the batched prompt produced
-    // template-shaped output (`BCBBBBB` appeared on 3 unrelated
-    // document regions) with 5% precision and 27% over-emission
-    // of breaks. The model can't reason about 7 pairs independently
-    // in one context. Reverted; sequential per-pair stays.
-    //
-    // Future paths: chain-of-thought per pair before the answer,
-    // a llguidance grammar plus per-pair reasoning, or a smaller-
-    // window batched variant (3 chunks → 2 decisions). All would
-    // need pre-flight accuracy validation against the single-pair
-    // baseline before being committed.
-    for i in 0..chunks.len().saturating_sub(1) {
-        let a = chunks[i].content.chars().take(550).collect::<String>();
-        let b = chunks[i + 1].content.chars().take(550).collect::<String>();
-        let prompt = format!(
-            "You are tagging segment boundaries in a {doc_type} document. \
-             {cue} Below are two adjacent chunks. Decide whether a NEW SEGMENT BEGINS \
-             with the second chunk (BREAK) or whether the second chunk continues the \
-             current segment (CONTINUE). Respond with ONLY one word: BREAK or CONTINUE.\n\n\
-             [chunk {i}]\n{a}\n\n[chunk {ip1}]\n{b}\n\nAnswer:",
-            doc_type = doc_type.label(),
-            cue = doc_type_cue,
-            i = i,
-            ip1 = i + 1,
-        );
-        let resp = inference
-            .complete(&CompletionRequest {
-                prompt,
-                system_message: None,
-                preferred_speed: Speed::Slow,
-                max_tokens: Some(4),
-                temperature: Some(0.0),
-                think_budget: Some(0),
-                structured_output: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-                tools: None,
-                tool_choice: None,
-                model_id: None,
-                enable_thinking: None,
-                sampling_mode: None,
-                assistant_prefix: None,
-                cmd_prefix: None,
-                url_allowlist: None,
-                evidence_id_allowlist: None,
-                lark_grammar: None,
-            })
-            .await;
-        if let Ok(r) = resp {
-            let trimmed = r.text.trim().to_uppercase();
-            breaks[i] = trimmed.starts_with('B');
-        }
-    }
+    let breaks: Vec<bool> = if embeddings.is_empty() {
+        vec![false; chunks.len().saturating_sub(1)]
+    } else {
+        detect_segment_boundaries(&embeddings, /* window = */ 3, /* depth_k = */ 1.0)
+    };
+    tracing::info!(
+        chunks = chunks.len(),
+        breaks = breaks.iter().filter(|b| **b).count(),
+        "extract_segments — TextTiling complete"
+    );
 
     // Derive segment ranges from break decisions.
     let mut ranges: Vec<(usize, usize)> = Vec::new();
@@ -1845,8 +1870,9 @@ async fn extract_segments(
     // Close the final segment, which runs to the last chunk.
     ranges.push((seg_start, chunks.len() - 1));
 
-    // Cap segment count so a pathological "every chunk is a break"
-    // response from a misbehaving model can't blow up Pass B.
+    // Cap segment count so a very-low depth_k or a pathological
+    // embedding signal that fires breaks on every gap can't blow
+    // up Pass B with hundreds of single-chunk segments.
     if ranges.len() > 200 {
         return Vec::new();
     }
@@ -1938,6 +1964,432 @@ async fn extract_segments(
     }
 
     segments
+}
+
+/// Build the RAPTOR atlas + motif index for an asset and persist them.
+/// Runs after the legacy skeleton has finished so chunks-with-embeddings
+/// are guaranteed to be in the store.
+///
+/// Errors are logged and swallowed: the legacy skeleton is the durable
+/// retrieval surface, and RAPTOR is additive. A RAPTOR build failure
+/// degrades briefing quality but never breaks attach.
+async fn build_and_persist_raptor_atlas(
+    inference: &Arc<dyn InferenceProvider>,
+    store: &Arc<dyn StateStore>,
+    asset_id: &str,
+    source_key: &str,
+    doc_type: DocumentTypeTag,
+) {
+    let started = std::time::Instant::now();
+    tracing::info!(asset_id, "raptor_atlas: starting background build");
+
+    // Fetch chunks (which carry embeddings from the embed phase).
+    let chunks = match store.get_chunks_by_source(source_key).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(asset_id, error = %e, "raptor_atlas: get_chunks_by_source failed");
+            return;
+        }
+    };
+    let total = chunks.len();
+    let mut raptor_chunks: Vec<ChunkInput> = Vec::with_capacity(total);
+    let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(total);
+    for c in &chunks {
+        if let Some(emb) = c.embedding.as_ref() {
+            raptor_chunks.push(ChunkInput {
+                chunk_id: c.chunk_index as u32,
+                content: c.content.clone(),
+            });
+            embeddings.push(emb.clone());
+        }
+    }
+    if raptor_chunks.is_empty() {
+        tracing::warn!(asset_id, total, "raptor_atlas: no embedded chunks; skipping");
+        return;
+    }
+
+    // ── RAPTOR tree ─────────────────────────────────────────
+    let nodes = match build_raptor_atlas(inference, &raptor_chunks, &embeddings, doc_type.clone())
+        .await
+    {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::warn!(asset_id, error = %e, "raptor_atlas: build_raptor_atlas failed");
+            return;
+        }
+    };
+    let node_count = nodes.len();
+    if let Err(e) = store.save_raptor_nodes(asset_id, &nodes).await {
+        tracing::warn!(asset_id, error = %e, "raptor_atlas: save_raptor_nodes failed");
+        return;
+    }
+
+    // ── Motif index ─────────────────────────────────────────
+    let text_chunks: Vec<TextChunk> = raptor_chunks
+        .iter()
+        .map(|c| TextChunk {
+            content: c.content.clone(),
+            index: c.chunk_id as usize,
+        })
+        .collect();
+    // Wider candidate pool (was 100) since the df>=1 floor lets
+    // rare-but-distinctive scene markers reach the LLM classifier.
+    // Most of the extra 100 will be filtered out as noise; that's
+    // the classifier's job. Cost: one extra Slow call with a
+    // marginally longer prompt — bounded.
+    let candidates = extract_motif_candidates(&text_chunks, 200);
+    let motif_count = candidates.len();
+    let motifs = classify_motifs(inference, candidates, doc_type).await;
+    let distinctive_count = motifs.iter().filter(|m| m.is_distinctive).count();
+    if let Err(e) = store.save_asset_motifs(asset_id, &motifs).await {
+        tracing::warn!(asset_id, error = %e, "raptor_atlas: save_asset_motifs failed");
+        return;
+    }
+
+    tracing::info!(
+        asset_id,
+        chunks = raptor_chunks.len(),
+        nodes = node_count,
+        motif_candidates = motif_count,
+        distinctive_motifs = distinctive_count,
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "raptor_atlas: background build complete"
+    );
+}
+
+/// Stoplist of the most common English function words. Used by motif
+/// extraction to filter out conjunctions, prepositions, pronouns, and
+/// other words that recur frequently in every English document and
+/// therefore can't distinguish one document from another. Kept short
+/// and curated (~110 entries) rather than exhaustive — the TF-IDF +
+/// LLM classifier downstream catches anything this misses.
+const MOTIF_STOPLIST: &[&str] = &[
+    "the", "and", "for", "are", "but", "not", "you", "all", "can", "had",
+    "her", "was", "one", "our", "out", "day", "get", "has", "him", "his",
+    "how", "man", "new", "now", "old", "see", "two", "way", "who", "boy",
+    "did", "its", "let", "put", "say", "she", "too", "use", "any", "every",
+    "from", "have", "into", "like", "more", "much", "must", "only", "over",
+    "said", "some", "such", "than", "that", "them", "they", "this", "very",
+    "want", "well", "were", "what", "when", "with", "your", "their", "there",
+    "these", "those", "would", "could", "should", "about", "after", "again",
+    "before", "being", "below", "doing", "going", "having", "still", "while",
+    "where", "which", "whose", "until", "under", "above", "across", "almost",
+    "another", "because", "between", "however", "without", "through", "though",
+    "perhaps", "rather", "seemed", "though", "toward", "upon", "whom",
+    "indeed", "least", "much", "often", "since", "thus", "yet", "even",
+    "made", "make", "down", "back", "come", "came", "took", "look", "good",
+    "great", "long", "last", "first", "right", "left", "thing", "things",
+    "those", "time", "times", "year", "years", "place", "world",
+];
+
+/// Candidate term for the motif index. Pure-Rust extraction pass —
+/// no LLM. Returns up to `top_n` terms ranked by chunk-presence
+/// breadth (terms appearing in 3+ chunks but not in every chunk are
+/// the most likely motif candidates). Caller passes the result to
+/// `classify_motifs` for the LLM motif-vs-noise judgment.
+fn extract_motif_candidates(
+    chunks: &[TextChunk],
+    top_n: usize,
+) -> Vec<MotifCandidate> {
+    use std::collections::HashMap;
+
+    let stoplist: std::collections::HashSet<&str> = MOTIF_STOPLIST.iter().copied().collect();
+
+    // term → (total_count, set_of_chunk_indices)
+    let mut term_stats: HashMap<String, (u32, std::collections::BTreeSet<u32>)> =
+        HashMap::new();
+
+    for (idx, chunk) in chunks.iter().enumerate() {
+        let mut seen_this_chunk: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for raw in chunk.content.split(|c: char| !c.is_alphabetic() && c != '\'') {
+            let lower = raw.to_lowercase();
+            // Length + stoplist filters. Drop possessives and contractions
+            // by stripping a trailing 's or ' before the length check.
+            let trimmed = lower
+                .trim_end_matches("'s")
+                .trim_end_matches('\'')
+                .to_string();
+            if trimmed.len() < 4 || trimmed.len() > 20 {
+                continue;
+            }
+            if stoplist.contains(trimmed.as_str()) {
+                continue;
+            }
+            if !trimmed.chars().any(|c| c.is_alphabetic()) {
+                continue;
+            }
+            let entry = term_stats
+                .entry(trimmed.clone())
+                .or_insert_with(|| (0, std::collections::BTreeSet::new()));
+            entry.0 += 1;
+            if seen_this_chunk.insert(trimmed) {
+                entry.1.insert(idx as u32);
+            }
+        }
+    }
+
+    let total_chunks = chunks.len().max(1) as f32;
+    let mut candidates: Vec<MotifCandidate> = term_stats
+        .into_iter()
+        .filter_map(|(term, (count, chunk_set))| {
+            let df = chunk_set.len();
+            // Drop topical terms (>60% of doc — generic vocabulary).
+            // Keep low-df hapax-and-near-hapax terms: a Conrad word
+            // like "coruscations" (df=2) IS the load-bearing scene
+            // marker, not noise. The LLM motif classifier downstream
+            // separates real motifs from incidental rarities; we
+            // only need to keep the candidate pool wide enough that
+            // the rare-but-distinctive ones reach it.
+            if df < 1 || df as f32 / total_chunks > 0.6 {
+                return None;
+            }
+            let occurrences: Vec<u32> = chunk_set.into_iter().collect();
+            // TF-IDF style score: higher when a term is moderately
+            // frequent in absolute count but distributed across
+            // relatively few chunks.
+            let tf = count as f32;
+            let idf = ((total_chunks + 1.0) / (df as f32 + 1.0)).ln();
+            let score = tf * idf;
+            Some(MotifCandidate {
+                term,
+                tf_idf_score: score,
+                occurrence_chunk_ids: occurrences,
+            })
+        })
+        .collect();
+
+    candidates.sort_by(|a, b| {
+        b.tf_idf_score
+            .partial_cmp(&a.tf_idf_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    candidates.truncate(top_n);
+    candidates
+}
+
+/// A pre-classification motif candidate. Identical shape to
+/// `AssetMotif` minus `is_distinctive`, which the LLM classifier
+/// fills in.
+#[derive(Debug, Clone)]
+struct MotifCandidate {
+    term: String,
+    tf_idf_score: f32,
+    occurrence_chunk_ids: Vec<u32>,
+}
+
+/// Ask the model which of the candidate terms are genuine recurring
+/// motifs vs incidental rare words. One Slow-slot call; grammar
+/// forces a JSON array of motif terms drawn from the input set.
+///
+/// Returns a Vec<AssetMotif> with `is_distinctive` set per the
+/// model's judgment. Falls back to "all distinctive" on LLM failure
+/// — over-inclusive is safer than empty (the briefing has its own
+/// budget cap).
+async fn classify_motifs(
+    inference: &Arc<dyn InferenceProvider>,
+    candidates: Vec<MotifCandidate>,
+    doc_type: DocumentTypeTag,
+) -> Vec<AssetMotif> {
+    if candidates.is_empty() {
+        return Vec::new();
+    }
+
+    let terms_csv = candidates
+        .iter()
+        .map(|c| c.term.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let doc_cue = match doc_type {
+        DocumentTypeTag::Narrative => {
+            "recurring motifs are images, gestures, character tics, or refrains the author returns to"
+        }
+        DocumentTypeTag::Argument => {
+            "recurring motifs are key concepts or terms-of-art the argument turns on"
+        }
+        DocumentTypeTag::Evidence => {
+            "recurring motifs are central variables, methods, or claims the paper threads through"
+        }
+        DocumentTypeTag::Chronicle => {
+            "recurring motifs are people, places, or patterns that recur across the timeline"
+        }
+        DocumentTypeTag::Technical => {
+            "recurring motifs are protocols, components, or recurring procedures"
+        }
+        DocumentTypeTag::Unknown => {
+            "recurring motifs are terms the document returns to deliberately, not incidentally"
+        }
+    };
+
+    let prompt = format!(
+        "You are picking out genuine recurring motifs from a {doc_type} document. \
+         The candidates below were extracted by frequency; some are real motifs the \
+         document returns to deliberately, others are incidental rare vocabulary. \
+         For this document type, {doc_cue}.\n\n\
+         CANDIDATES: {terms_csv}\n\n\
+         Reply with a JSON array of just the motif terms — only terms from the \
+         candidate list, lowercase, no explanation. Example: [\"incurious\", \"circles\"].",
+        doc_type = doc_type.label(),
+    );
+
+    let resp = inference
+        .complete(&CompletionRequest {
+            prompt,
+            system_message: None,
+            preferred_speed: Speed::Slow,
+            max_tokens: Some(400),
+            temperature: Some(0.1),
+            think_budget: Some(0),
+            structured_output: None,
+            top_k: None,
+            top_p: None,
+            oicp: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
+        })
+        .await;
+
+    let distinctive_set: std::collections::HashSet<String> = match resp {
+        Ok(r) => parse_motif_classification(&r.text),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "classify_motifs — LLM call failed; treating all candidates as distinctive"
+            );
+            candidates.iter().map(|c| c.term.clone()).collect()
+        }
+    };
+
+    candidates
+        .into_iter()
+        .map(|c| AssetMotif {
+            is_distinctive: distinctive_set.contains(&c.term),
+            term: c.term,
+            tf_idf_score: c.tf_idf_score,
+            occurrence_chunk_ids: c.occurrence_chunk_ids,
+        })
+        .collect()
+}
+
+/// Parse the model's motif-classification response. Accepts JSON
+/// arrays of strings, ignoring anything outside the first `[...]`
+/// span. Returns the set of distinctive terms (lowercased). On
+/// parse failure returns an empty set — caller decides the fallback.
+fn parse_motif_classification(text: &str) -> std::collections::HashSet<String> {
+    let start = match text.find('[') {
+        Some(i) => i,
+        None => return std::collections::HashSet::new(),
+    };
+    let end = match text[start..].find(']') {
+        Some(i) => start + i + 1,
+        None => return std::collections::HashSet::new(),
+    };
+    let json_slice = &text[start..end];
+    serde_json::from_str::<Vec<String>>(json_slice)
+        .map(|v| v.into_iter().map(|s| s.to_lowercase()).collect())
+        .unwrap_or_default()
+}
+
+/// TextTiling-style boundary detection on adjacent-chunk embedding
+/// similarity. Returns a `Vec<bool>` of length `embeddings.len() - 1`
+/// where `true` at index `i` means a segment break falls between
+/// chunk `i` and chunk `i+1`.
+///
+/// Algorithm (Hearst 1997, modern embedding variant):
+/// 1. Compute cosine similarity between each adjacent pair.
+/// 2. For each gap `i`, compute a "depth score" — how far this
+///    similarity dips below the maximum similarity in the
+///    `window`-sized neighborhood on either side. A high depth
+///    score means the gap is a deep valley between two coherent
+///    regions.
+/// 3. Threshold: `depth > mean(depth) + depth_k * std(depth)`.
+///
+/// Parameters:
+/// - `window`: how many gaps to scan on each side when computing
+///   left/right peaks. 3 works well for ~700-char chunks; smaller
+///   for noisier signals, larger for sentence-level tiling.
+/// - `depth_k`: standard-deviation multiplier for the threshold.
+///   1.0 gives a "moderately confident" boundary. 0.5 is more
+///   permissive; 1.5 is stricter. The bench will tune this.
+///
+/// Returns no breaks (all `false`) if `embeddings.len() < 2` or
+/// if the depth signal has no variance (e.g. identical embeddings).
+fn detect_segment_boundaries(
+    embeddings: &[Vec<f32>],
+    window: usize,
+    depth_k: f32,
+) -> Vec<bool> {
+    let n = embeddings.len();
+    if n < 2 {
+        return Vec::new();
+    }
+
+    // Cosine similarity for each gap (n-1 gaps for n chunks).
+    let sims: Vec<f32> = (0..n - 1)
+        .map(|i| cosine_similarity(&embeddings[i], &embeddings[i + 1]))
+        .collect();
+
+    // Depth score for each gap. The left/right peak is the max
+    // similarity in the window-sized neighborhood; the depth is
+    // how far the current similarity drops below the average of
+    // the two peaks. Higher depth = stronger boundary candidate.
+    let depths: Vec<f32> = (0..sims.len())
+        .map(|i| {
+            let left_start = i.saturating_sub(window);
+            let right_end = (i + window + 1).min(sims.len());
+            let left_peak = sims[left_start..=i]
+                .iter()
+                .copied()
+                .fold(f32::NEG_INFINITY, f32::max);
+            let right_peak = sims[i..right_end]
+                .iter()
+                .copied()
+                .fold(f32::NEG_INFINITY, f32::max);
+            ((left_peak - sims[i]) + (right_peak - sims[i])).max(0.0)
+        })
+        .collect();
+
+    // Adaptive threshold: mean + depth_k * std. If std == 0 the
+    // signal is flat and no boundaries should fire.
+    let mean = depths.iter().sum::<f32>() / depths.len() as f32;
+    let variance = depths.iter().map(|d| (d - mean).powi(2)).sum::<f32>()
+        / depths.len() as f32;
+    let std = variance.sqrt();
+    if std < f32::EPSILON {
+        return vec![false; depths.len()];
+    }
+    let threshold = mean + depth_k * std;
+
+    depths.iter().map(|d| *d > threshold).collect()
+}
+
+/// Cosine similarity between two equal-length f32 vectors.
+/// Returns 0.0 if either vector is empty or has zero magnitude.
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.is_empty() || a.len() != b.len() {
+        return 0.0;
+    }
+    let mut dot = 0.0f32;
+    let mut na = 0.0f32;
+    let mut nb = 0.0f32;
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    if na <= f32::EPSILON || nb <= f32::EPSILON {
+        return 0.0;
+    }
+    dot / (na.sqrt() * nb.sqrt())
 }
 
 /// Parse the lean skeleton-extraction response (one line per chunk,
@@ -2661,5 +3113,211 @@ mod tests {
 
         let xform = parse_route_response(r#"{"op":"transformation"}"#, "orig").unwrap();
         assert!(matches!(xform, DocumentAssetOperation::Transformation));
+    }
+
+    // ── TextTiling boundary detection ───────────────────────────
+
+    /// Build a synthetic embedding sequence: `cluster_count` clusters
+    /// of `per_cluster` chunks each, where within-cluster chunks share
+    /// a near-identical embedding and between-cluster chunks are
+    /// near-orthogonal. The expected break pattern is "false ×
+    /// (per_cluster-1), true, false × (per_cluster-1), true, ..."
+    fn synthetic_clusters(cluster_count: usize, per_cluster: usize) -> Vec<Vec<f32>> {
+        let mut out = Vec::new();
+        for c in 0..cluster_count {
+            let mut base = vec![0.01; 8];
+            base[c % 8] = 1.0;
+            for k in 0..per_cluster {
+                // Tiny within-cluster jitter so cosine isn't exactly 1.0.
+                let mut v = base.clone();
+                v[(c + k + 1) % 8] += 0.02;
+                out.push(v);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn texttiling_fires_breaks_at_cluster_transitions() {
+        // 3 clusters × 4 chunks = 12 chunks, 11 gaps. Expected:
+        // breaks at gaps 3 and 7 (between cluster 0/1 and 1/2).
+        let embeddings = synthetic_clusters(3, 4);
+        let breaks = detect_segment_boundaries(&embeddings, 3, 0.5);
+        assert_eq!(breaks.len(), 11);
+
+        // The two cluster-transition gaps should be flagged.
+        assert!(breaks[3], "expected break at gap 3 (cluster 0→1)");
+        assert!(breaks[7], "expected break at gap 7 (cluster 1→2)");
+
+        // Within-cluster gaps should be quiet. We allow one or two
+        // false positives in the noisy jitter — the test checks the
+        // signal-to-noise floor, not perfection.
+        let within_breaks = breaks.iter().enumerate()
+            .filter(|(i, b)| **b && *i != 3 && *i != 7)
+            .count();
+        assert!(
+            within_breaks <= 1,
+            "too many false-positive within-cluster breaks: {within_breaks}"
+        );
+    }
+
+    #[test]
+    fn texttiling_flat_embeddings_emit_no_breaks() {
+        // All identical embeddings → similarity is uniformly high,
+        // depth signal is flat, no breaks should fire.
+        let embeddings = vec![vec![0.5, 0.5, 0.5, 0.5]; 10];
+        let breaks = detect_segment_boundaries(&embeddings, 3, 1.0);
+        assert_eq!(breaks.len(), 9);
+        assert!(breaks.iter().all(|b| !b), "flat signal should produce no breaks");
+    }
+
+    #[test]
+    fn texttiling_short_input_returns_empty() {
+        assert!(detect_segment_boundaries(&[], 3, 1.0).is_empty());
+        assert!(
+            detect_segment_boundaries(&[vec![1.0, 0.0]], 3, 1.0).is_empty(),
+            "single chunk has no gaps"
+        );
+    }
+
+    #[test]
+    fn texttiling_strict_threshold_silences_marginal_breaks() {
+        // Same clusters as before but with a stricter k. The
+        // cluster-transition gaps still fire (their depth is much
+        // larger than within-cluster noise), but anything marginal
+        // gets filtered out.
+        let embeddings = synthetic_clusters(3, 4);
+        let lax = detect_segment_boundaries(&embeddings, 3, 0.3);
+        let strict = detect_segment_boundaries(&embeddings, 3, 1.5);
+        let lax_count = lax.iter().filter(|b| **b).count();
+        let strict_count = strict.iter().filter(|b| **b).count();
+        assert!(
+            strict_count <= lax_count,
+            "stricter threshold must not produce more breaks (lax {lax_count} vs strict {strict_count})"
+        );
+    }
+
+    // ── Motif extraction ─────────────────────────────────────────
+
+    fn chunk(content: &str) -> TextChunk {
+        TextChunk {
+            content: content.to_string(),
+            index: 0,
+        }
+    }
+
+    #[test]
+    fn motif_candidates_surface_recurring_word_across_many_chunks() {
+        // "incurious" appears in 5 of 20 chunks (25%, well within
+        // the 60% topicality ceiling) → must surface.
+        // "hat" appears in 1 chunk → must not surface (df < 3 floor).
+        // "the" appears in many chunks → must not surface (stoplisted).
+        let mut chunks = vec![
+            chunk("Winnie was incurious about the matter and went on with her work."),
+            chunk("The professor walked alone, carrying his frail explosive device."),
+            chunk("Stevie drew his circles, oblivious to the world around him."),
+            chunk("Mrs Verloc remained incurious during the long evening at home."),
+            chunk("The cab horse was whipped and Stevie's hat fell to the pavement."),
+            chunk("Winnie's incurious eyes lighted on the broken figure of her brother."),
+            chunk("The narrator notes Mrs Verloc was an incurious person by nature."),
+            chunk("An incurious silence settled over the parlour after the explosion."),
+        ];
+        // Pad with topically-distinct chunks so the document is large
+        // enough that "incurious" sits comfortably under the 60% ceiling.
+        for i in 0..12 {
+            chunks.push(chunk(&format!(
+                "Topic {i} unrelated paragraph about unconnected events and \
+                 separate matters with totally distinct vocabulary."
+            )));
+        }
+        let cands = extract_motif_candidates(&chunks, 20);
+        let terms: Vec<&str> = cands.iter().map(|c| c.term.as_str()).collect();
+        assert!(
+            terms.contains(&"incurious"),
+            "expected 'incurious' in candidates; got {terms:?}"
+        );
+        assert!(!terms.contains(&"hat"), "single-chunk term must not surface");
+        assert!(!terms.contains(&"the"), "stoplisted word must not surface");
+    }
+
+    #[test]
+    fn motif_candidates_drop_words_in_too_many_chunks() {
+        // A word in >60% of chunks is topical not motivic. Build a
+        // doc where "rust" appears in 8/10 chunks — should NOT surface
+        // even though it's frequent.
+        let mut chunks = Vec::new();
+        for _ in 0..8 {
+            chunks.push(chunk("This passage talks about rust programming."));
+        }
+        chunks.push(chunk("This passage talks about Python programming."));
+        chunks.push(chunk("This passage talks about Java programming."));
+        let cands = extract_motif_candidates(&chunks, 20);
+        let terms: Vec<&str> = cands.iter().map(|c| c.term.as_str()).collect();
+        assert!(
+            !terms.contains(&"rust"),
+            "topical term in 80% of chunks must be excluded; got {terms:?}"
+        );
+    }
+
+    #[test]
+    fn motif_candidates_handle_possessives_and_contractions() {
+        // "winnie's" should normalize to "winnie" via the 's strip.
+        // Need ≥10 chunks total so 3 occurrences stay under the 60% ceiling.
+        let mut chunks = vec![
+            chunk("Winnie's act was deliberate. Winnie's eyes were closed."),
+            chunk("This is about Winnie's life and Winnie's choice."),
+            chunk("The novel turns on Winnie's transformation through trauma."),
+        ];
+        for i in 0..8 {
+            chunks.push(chunk(&format!(
+                "Topic {i} unrelated paragraph with separate distinct vocabulary."
+            )));
+        }
+        let cands = extract_motif_candidates(&chunks, 20);
+        let terms: Vec<&str> = cands.iter().map(|c| c.term.as_str()).collect();
+        assert!(
+            terms.contains(&"winnie"),
+            "possessive strip should normalise 'winnie's' → 'winnie'; got {terms:?}"
+        );
+        assert!(
+            !terms.iter().any(|t| t.ends_with('\'')),
+            "no candidate should retain a trailing apostrophe; got {terms:?}"
+        );
+    }
+
+    #[test]
+    fn parse_motif_classification_extracts_array_from_noisy_response() {
+        // Model often wraps the JSON in extra text — parser must
+        // skip prose and find the [...] span.
+        let resp = r#"Sure! Here are the motifs: ["incurious", "circles", "professor"] — let me know if you want more."#;
+        let set = parse_motif_classification(resp);
+        assert_eq!(set.len(), 3);
+        assert!(set.contains("incurious"));
+        assert!(set.contains("circles"));
+        assert!(set.contains("professor"));
+    }
+
+    #[test]
+    fn parse_motif_classification_returns_empty_on_no_array() {
+        let set = parse_motif_classification("the model refused to comply");
+        assert!(set.is_empty());
+    }
+
+    #[test]
+    fn parse_motif_classification_lowercases() {
+        let set = parse_motif_classification(r#"["Incurious", "CIRCLES"]"#);
+        assert!(set.contains("incurious"));
+        assert!(set.contains("circles"));
+    }
+
+    #[test]
+    fn cosine_similarity_basic_cases() {
+        assert!((cosine_similarity(&[1.0, 0.0], &[1.0, 0.0]) - 1.0).abs() < 1e-6);
+        assert!((cosine_similarity(&[1.0, 0.0], &[0.0, 1.0])).abs() < 1e-6);
+        assert!((cosine_similarity(&[1.0, 0.0], &[-1.0, 0.0]) + 1.0).abs() < 1e-6);
+        // Mismatched length → 0.0 sentinel.
+        assert_eq!(cosine_similarity(&[1.0], &[1.0, 0.0]), 0.0);
+        // Zero magnitude → 0.0 sentinel.
+        assert_eq!(cosine_similarity(&[0.0, 0.0], &[1.0, 1.0]), 0.0);
     }
 }
