@@ -103,6 +103,28 @@ impl LlguidanceConstraint {
         })
     }
 
+    /// Build a constraint from a JSON Schema value. Applies
+    /// `default_additional_properties_false` to preserve the in-house
+    /// `JsonConstraint` default before serialising and delegating to
+    /// `new` (which routes through `TopLevelGrammar::from_json_schema`
+    /// when the leading byte is `{`).
+    ///
+    /// This is the canonical entry point for migrating the 11
+    /// `structured_output: Some(schema)` call sites that don't set
+    /// `additionalProperties` explicitly. See
+    /// `LLGUIDANCE_MIGRATION_AUDIT.md` §3.A.
+    pub fn from_schema_value(
+        schema: &serde_json::Value,
+        model: &LlamaModel,
+    ) -> Result<Self, LlgError> {
+        let mut walked = schema.clone();
+        default_additional_properties_false(&mut walked);
+        let serialised = serde_json::to_string(&walked).map_err(|e| {
+            LlgError::ParserCreate(format!("serialise walked schema: {e}"))
+        })?;
+        Self::new(&serialised, model)
+    }
+
     /// Compute the next-token mask. Call once per sampling step
     /// before any `allows()` queries.
     pub fn step(&mut self) -> Result<(), LlgError> {
@@ -288,7 +310,7 @@ fn factory_for(model: &LlamaModel) -> Arc<ParserFactory> {
 /// (`compute_ff_tokens`) returns empty when tokenisation isn't
 /// canonical, but the mask path — what we actually need — is exact.
 fn build_tok_env(model: &LlamaModel) -> TokEnv {
-    let vocab_bytes = crate::json_constraint::vocab_bytes_for(model);
+    let vocab_bytes = crate::vocab_cache::vocab_bytes_for(model);
     let n_vocab = model.n_vocab();
     // TokRxInfo carries vocab size + EOS id (and optionally BOS / PAD).
     // We only need vocab_size + EOS to drive the mask; the rest stays
@@ -296,6 +318,77 @@ fn build_tok_env(model: &LlamaModel) -> TokEnv {
     let info = TokRxInfo::new(n_vocab as u32, model.token_eos().0 as u32);
     let trie = TokTrie::from(&info, vocab_bytes.as_ref());
     Arc::new(ApproximateTokEnv::new(trie))
+}
+
+// ---------------------------------------------------------------------------
+// Schema preprocessing.
+// ---------------------------------------------------------------------------
+
+/// Walk a JSON-Schema document and inject `additionalProperties: false`
+/// on every typed-object node that does not already set the field.
+///
+/// **Why this exists.** The in-house `JsonConstraint::compile_schema`
+/// defaults `additionalProperties` to `false` for `type: object`
+/// (non-spec — JSON Schema spec defaults to `true`). Callers across
+/// `sovereign-core` rely on this implicit strictness: zero of the 11
+/// `structured_output: Some(schema)` sites set `additionalProperties`
+/// explicitly. `llguidance`'s `TopLevelGrammar::from_json_schema`
+/// follows the spec, so a naive migration would let the model emit
+/// trailing fields the JsonConstraint mask used to forbid.
+///
+/// Rather than touch all 11 call sites, this walker preserves the
+/// in-house default at the engine boundary. Apply it to the schema
+/// **before** passing to `LlguidanceConstraint::new`. Object subtrees
+/// that explicitly set `additionalProperties: true` are left alone —
+/// callers that genuinely want extensibility keep it.
+///
+/// Recurses into: `properties[*]`, `items`, `additionalProperties`
+/// (when itself a schema object), `anyOf[*]`, `oneOf[*]`, `allOf[*]`,
+/// `$defs[*]`, `definitions[*]`. Non-object values pass through
+/// unchanged.
+///
+/// See `LLGUIDANCE_MIGRATION_AUDIT.md` §3.A.
+pub fn default_additional_properties_false(schema: &mut serde_json::Value) {
+    use serde_json::Value;
+    let Some(obj) = schema.as_object_mut() else { return };
+
+    let is_typed_object = obj
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|s| s == "object")
+        .unwrap_or(false);
+
+    if is_typed_object && !obj.contains_key("additionalProperties") {
+        obj.insert("additionalProperties".to_string(), Value::Bool(false));
+    }
+
+    if let Some(props) = obj.get_mut("properties").and_then(|v| v.as_object_mut()) {
+        for (_k, sub) in props.iter_mut() {
+            default_additional_properties_false(sub);
+        }
+    }
+    if let Some(items) = obj.get_mut("items") {
+        default_additional_properties_false(items);
+    }
+    if let Some(ap) = obj.get_mut("additionalProperties") {
+        if ap.is_object() {
+            default_additional_properties_false(ap);
+        }
+    }
+    for key in ["anyOf", "oneOf", "allOf"] {
+        if let Some(arr) = obj.get_mut(key).and_then(|v| v.as_array_mut()) {
+            for sub in arr.iter_mut() {
+                default_additional_properties_false(sub);
+            }
+        }
+    }
+    for key in ["$defs", "definitions"] {
+        if let Some(defs) = obj.get_mut(key).and_then(|v| v.as_object_mut()) {
+            for (_k, sub) in defs.iter_mut() {
+                default_additional_properties_false(sub);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

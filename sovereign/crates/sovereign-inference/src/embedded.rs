@@ -7764,19 +7764,13 @@ pub struct ConstrainedSampler {
     /// produced any given token.
     inner_explore: LlamaSampler,
     inner_content: LlamaSampler,
-    constraint: Option<crate::json_constraint::JsonConstraint>,
-    /// llguidance-driven constraint, parallel to `constraint`.
-    /// Mutually exclusive in practice — `build_sampler` picks ONE of
-    /// `constraint` or `llg_constraint` based on the request:
-    /// `request.lark_grammar` wins when set (Lark + JSON-Schema +
-    /// top-level alternation via `LlguidanceConstraint`); otherwise
-    /// `request.structured_output` selects the in-house mask.
-    ///
-    /// Wired 2026-05-21 to close the `parse_failed_envelope` +
-    /// `loop_trap` failure classes the agent-bench scanner surfaced
-    /// the same day. The lark path lets the model emit either a
-    /// parseable tool envelope OR plain text (no parser leniency
-    /// retry chain needed; no force-tool-call loop trap).
+    /// Sole schema/grammar constraint engine. Replaces the in-house
+    /// `JsonConstraint` retired 2026-05-22 (see
+    /// `LLGUIDANCE_MIGRATION_AUDIT.md`). `build_sampler` builds this
+    /// from either `request.lark_grammar` (lark + JSON-Schema +
+    /// top-level alternation, used for tool envelopes) or
+    /// `request.structured_output` (JSON Schema body run through the
+    /// `additionalProperties:false` walker before serialising).
     llg_constraint: Option<crate::llguidance_constraint::LlguidanceConstraint>,
     /// URL-allowlist constraint. When `Some`, every sampled token's
     /// bytes are simulated against a byte-trie of allowed URLs; tokens
@@ -7839,21 +7833,16 @@ impl ConstrainedSampler {
         } else {
             ctx.token_data_array_ith(idx)
         };
-        // Constraint dispatch: llguidance (lark + alternation) wins
-        // over the in-house JsonConstraint mask when both are set.
-        // build_sampler enforces mutual exclusion; this dispatch is
-        // defensive should that invariant ever drift.
+        // Constraint dispatch: llguidance claims the byte stream when
+        // active (lark grammar or schema). URL + evidence-id FSMs are
+        // skipped when llg owns the mask — stacking the state machines
+        // would deadlock (each engine rejects tokens the other allows).
+        // When no schema/grammar is active, URL + citation FSMs compose
+        // freely since `http(s)://` and `[ev-T` live in disjoint byte
+        // patterns.
         if let Some(llg) = self.llg_constraint.as_mut() {
             llg.mask(&mut data);
-        } else if let Some(c) = self.constraint.as_mut() {
-            c.mask(&mut data);
         } else {
-            // URL + evidence-id constraints are mutually exclusive
-            // with the JSON constraint (deadlock rationale per the
-            // field doc-comments) but compose freely with each
-            // other — URLs and citations live in disjoint byte
-            // patterns (`http(s)://` vs `[ev-T`). Apply both when
-            // JSON isn't claiming the byte stream.
             if let Some(uc) = self.url_constraint.as_ref() {
                 uc.mask(&mut data);
             }
@@ -7894,15 +7883,12 @@ impl ConstrainedSampler {
     pub fn accept(&mut self, token: LlamaToken) {
         self.inner_explore.accept(token);
         self.inner_content.accept(token);
-        // Constraint accept dispatch mirrors `sample`'s mask dispatch.
-        // llguidance wins when set; otherwise the in-house JSON
-        // constraint advances. URL + evidence-id FSMs always advance
-        // (their state has to stay synchronised with emitted bytes
-        // even when the JSON mask was the gating constraint).
+        // Constraint accept mirrors `sample`'s mask dispatch.
+        // URL + evidence-id FSMs always advance below — their cursor
+        // must stay synchronised with emitted bytes even when the
+        // schema/grammar mask was the gating constraint.
         if let Some(llg) = self.llg_constraint.as_mut() {
             llg.accept_llama(token);
-        } else if let Some(c) = self.constraint.as_mut() {
-            c.accept(token);
         }
         // Advance URL FSM unconditionally (even when JSON constraint
         // is active and the URL mask was skipped) so the cursor stays
@@ -7943,30 +7929,37 @@ impl ConstrainedSampler {
             .unwrap_or(false)
     }
 
-    /// Returns `Some(token)` iff the active JSON-schema constraint has
-    /// exactly one legal token in its current state — the read surface
-    /// for jump-forward decoding. Returns `None` whenever no constraint
-    /// is active (free-form chat, completion without `structured_output`)
-    /// since there is nothing to short-circuit. Callers that emit the
-    /// returned token MUST follow with `accept(token)` to keep the FSM,
-    /// DRY, and penalty trackers in sync — same contract as
-    /// post-`sample` token handling.
+    /// Tier 1 jump-forward — single-token shortcut when the FSM has
+    /// exactly one legal continuation. Always returns `None` after the
+    /// JsonConstraint retirement: llguidance's `compute_ff_tokens`
+    /// covers the same ground as `forced_next_run` below (Tier 2),
+    /// and `ApproximateTokEnv` empties out for non-canonical BPE
+    /// tokenisations anyway (audit §3.C). Callers still call this for
+    /// API symmetry — keeping the method preserves the original
+    /// two-tier shape and lets a custom `TokenizerEnv` future-PR add
+    /// a real Tier 1 hook here without a caller diff.
     pub fn forced_next_token(&mut self) -> Option<LlamaToken> {
-        self.constraint.as_mut().and_then(|c| c.forced_next_token())
+        None
     }
 
-    /// **Tier 2 jump-forward.** Returns a sequence of tokens covering
-    /// the FSM's deterministic byte run via vocab longest-match. Each
-    /// returned token has already been `accept`-ed on the constraint
-    /// (FSM is advanced), so callers MUST also call `accept(token)` on
-    /// the sampler itself per token to keep DRY/penalty trackers in
-    /// sync. Returns empty when no constraint is active or no run is
-    /// available.
+    /// **Tier 2 jump-forward.** Returns deterministic-prefix tokens
+    /// from `Matcher::compute_ff_tokens`. Tokens are NOT pre-consumed;
+    /// the caller must `accept(token)` per emit to advance both the
+    /// DRY trackers and the llguidance matcher. `max_bytes` is a soft
+    /// cap on the returned token count. Empty when no llguidance
+    /// constraint is active OR no deterministic prefix exists at the
+    /// current parser state. `ApproximateTokEnv` returns empty on
+    /// non-canonical BPE tokenisations; that's expected — the Tier 2
+    /// path falls through to ordinary sampling.
     pub fn forced_next_run(&mut self, max_bytes: usize) -> Vec<LlamaToken> {
-        self.constraint
-            .as_mut()
-            .map(|c| c.forced_next_run(max_bytes))
-            .unwrap_or_default()
+        let Some(llg) = self.llg_constraint.as_mut() else {
+            return Vec::new();
+        };
+        llg.forced_ff_tokens()
+            .into_iter()
+            .take(max_bytes)
+            .map(|id| LlamaToken(id as i32))
+            .collect()
     }
 }
 
@@ -7986,19 +7979,21 @@ fn build_sampler(
     request: &CompletionRequest,
     quirks: &ModelQuirks,
 ) -> ConstrainedSampler {
-    // Schema-driven constraint (pure Rust, bypasses llama-grammar.cpp
-    // entirely). Compiled at request time from the OpenAI-style
-    // response_format → CompletionRequest.structured_output. Failure
-    // to compile is a real schema problem; warn loudly and fall back
-    // to unconstrained sampling so the request doesn't hard-fail.
-    // llguidance-driven constraint takes precedence when set. The
-    // request carries a pre-built Lark grammar string
-    // (`request.lark_grammar`); the adapter (`sovereign-mesh::
-    // inference_adapter::build_completion_request`) sets this when
-    // tools are present and `SOVEREIGN_ALTERNATION_GRAMMAR` is on.
-    // Compile failure warns and falls back to free-form sampling so
-    // the request still produces output rather than 503'ing.
-    let llg_constraint = request.lark_grammar.as_deref().and_then(|lark| {
+    // Two ways to engage llguidance:
+    //   1. `request.lark_grammar` — pre-built Lark string (tool envelope
+    //      + alternation, set by `sovereign-mesh::inference_adapter`
+    //      when tools are present).
+    //   2. `request.structured_output` — JSON Schema body; the schema
+    //      runs through `default_additional_properties_false` before
+    //      serialising so the in-house JsonConstraint's non-spec
+    //      strictness (`additionalProperties: false`) is preserved at
+    //      the engine boundary.
+    //
+    // Compile failure on either path warns and falls back to free-form
+    // sampling so the request still produces output rather than
+    // 503'ing. See `LLGUIDANCE_MIGRATION_AUDIT.md` for the rollout
+    // history.
+    let llg_constraint = if let Some(lark) = request.lark_grammar.as_deref() {
         match crate::llguidance_constraint::LlguidanceConstraint::new(lark, model) {
             Ok(c) => {
                 tracing::info!(
@@ -8010,44 +8005,39 @@ fn build_sampler(
             Err(e) => {
                 tracing::warn!(
                     error = %e,
-                    "LlguidanceConstraint compile failed — falling back to free-form sampling"
+                    "LlguidanceConstraint compile failed (lark) — falling back to free-form sampling"
                 );
                 None
             }
         }
-    });
-
-    // In-house JSON-Schema mask. Skipped when llguidance is already
-    // claiming the constraint slot — both engines mask the same logit
-    // chain; layering them would deadlock (each one would reject any
-    // token the other allowed). When `lark_grammar` is set,
-    // `structured_output` is intentionally ignored.
-    let constraint = if llg_constraint.is_some() {
-        None
-    } else {
-        request.structured_output.as_ref().and_then(|schema| {
-            match crate::json_constraint::JsonConstraint::new(schema, model) {
-                Ok(c) => {
-                    tracing::info!("grammar-constrained decoding enabled (in-house mask, no llama-grammar.cpp)");
-                    Some(c)
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        "JsonConstraint compile failed — falling back to free-form sampling"
-                    );
-                    None
-                }
+    } else if let Some(schema) = request.structured_output.as_ref() {
+        match crate::llguidance_constraint::LlguidanceConstraint::from_schema_value(
+            schema, model,
+        ) {
+            Ok(c) => {
+                tracing::info!(
+                    "grammar-constrained decoding enabled (llguidance, schema)"
+                );
+                Some(c)
             }
-        })
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "LlguidanceConstraint compile failed (schema) — falling back to free-form sampling"
+                );
+                None
+            }
+        }
+    } else {
+        None
     };
 
     // URL-allowlist constraint: built when the caller declares a
     // non-empty allowlist on the request. Shares vocab_bytes storage
-    // with `JsonConstraint::new` via the per-model cache, so two
-    // constraints over the same model don't double-walk the vocab.
+    // via `vocab_cache::vocab_bytes_for` so URL + evidence-id +
+    // llguidance all observe the same per-model byte mapping.
     let url_constraint = request.url_allowlist.as_deref().and_then(|urls| {
-        let vocab_bytes = crate::json_constraint::vocab_bytes_for(model);
+        let vocab_bytes = crate::vocab_cache::vocab_bytes_for(model);
         let constraint = crate::url_constraint::UrlAllowlistConstraint::new(urls, vocab_bytes);
         tracing::info!(
             url_count = urls.len(),
@@ -8063,7 +8053,7 @@ fn build_sampler(
     // non-empty. Shares the per-model vocab_bytes cache.
     let evidence_id_constraint =
         request.evidence_id_allowlist.as_deref().and_then(|ids| {
-            let vocab_bytes = crate::json_constraint::vocab_bytes_for(model);
+            let vocab_bytes = crate::vocab_cache::vocab_bytes_for(model);
             let constraint =
                 crate::evidence_id_constraint::EvidenceIdAllowlistConstraint::new(
                     ids, vocab_bytes,
@@ -8076,14 +8066,11 @@ fn build_sampler(
             constraint
         });
 
-    // Non-Latin token denylist: opt-in via env var. Built once per
-    // model and cached for the daemon's lifetime. Applies on every
-    // inference path (chat, completion, structured) so callers don't
-    // have to remember to set `x-asciiExtended` on every schema.
-    // Default OFF — some corpora (Confucian-philosophy articles,
-    // multilingual chat) legitimately need CJK tokens.
+    // Non-Latin token denylist: opt-in via `SOVEREIGN_BLOCK_NON_LATIN`.
+    // Built once per model and cached for the daemon's lifetime.
+    // Default OFF — some corpora legitimately need CJK tokens.
     let non_latin_denylist = if non_latin_block_enabled() {
-        Some(crate::json_constraint::non_latin_denylist_for(model))
+        Some(crate::vocab_cache::non_latin_denylist_for(model))
     } else {
         None
     };
@@ -8254,7 +8241,6 @@ fn build_sampler(
     ConstrainedSampler {
         inner_explore: build_chain(&explore, explore.temp),
         inner_content: build_chain(&content, content_temp),
-        constraint,
         llg_constraint,
         url_constraint,
         evidence_id_constraint,
