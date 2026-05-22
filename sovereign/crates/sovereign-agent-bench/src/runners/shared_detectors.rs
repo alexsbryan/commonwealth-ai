@@ -178,3 +178,211 @@ mod tests {
         assert_eq!(t.same_path_writes(), 1);
     }
 }
+
+// ── VerifyStuckTracker ────────────────────────────────────────────────
+//
+// Closes loop classes L5 (same compiler error N cycles) and L6 (same
+// smoke failure N cycles) — and most instances of L4 (alternating
+// non-convergent Implementer↔Evaluator). Mechanism: hash the
+// stdout_tail of each FAILING verification; when the same hash
+// repeats `VERIFY_STUCK_THRESHOLD` times in a row, the model isn't
+// learning from the error and the next iteration won't either.
+//
+// Successful verifications RESET the counter — the agent earned
+// forward progress and shouldn't pay for the prior failures.
+//
+// Distinct from L1 (same-primitive-in-role): a model can call build
+// → handoff → write → build (with a flip between each build) and
+// L1 never trips because consecutive_same_primitive resets on role
+// flip. VerifyStuck is role-flip-invariant by design.
+//
+// Universal across languages: rustc, go vet, tsc, pytest all produce
+// deterministic stdout for deterministic inputs. Hash collisions
+// across different errors are astronomically unlikely.
+
+/// Same failing verification this many times in a row → kill.
+/// Tuning: 2 is too aggressive (a model that's making 1-line fixes
+/// to a multi-error file may see the same first error twice while
+/// productively whittling); 4 wastes a cycle. 3 is the sweet spot.
+pub const VERIFY_STUCK_THRESHOLD: u32 = 3;
+
+#[derive(Debug, Default, Clone)]
+pub struct VerifyStuckTracker {
+    last_failing_hash: Option<u64>,
+    consecutive_same: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VerifySignal {
+    Continue,
+    Kill { hash_repeats: u32 },
+}
+
+impl VerifyStuckTracker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Observe one Build or Smoke result. `ok=true` resets the
+    /// counter (forward progress). `ok=false` hashes the stdout_tail
+    /// and increments / resets the same-hash counter.
+    pub fn observe(&mut self, ok: bool, stdout_tail: &str) -> VerifySignal {
+        if ok {
+            self.last_failing_hash = None;
+            self.consecutive_same = 0;
+            return VerifySignal::Continue;
+        }
+        let hash = hash_stdout(stdout_tail);
+        match self.last_failing_hash {
+            Some(prev) if prev == hash => {
+                self.consecutive_same = self.consecutive_same.saturating_add(1);
+            }
+            _ => {
+                self.consecutive_same = 1;
+                self.last_failing_hash = Some(hash);
+            }
+        }
+        if self.consecutive_same >= VERIFY_STUCK_THRESHOLD {
+            VerifySignal::Kill {
+                hash_repeats: self.consecutive_same,
+            }
+        } else {
+            VerifySignal::Continue
+        }
+    }
+
+    pub fn consecutive_same(&self) -> u32 {
+        self.consecutive_same
+    }
+}
+
+fn hash_stdout(s: &str) -> u64 {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h = DefaultHasher::new();
+    s.hash(&mut h);
+    h.finish()
+}
+
+// ── HandoffCycleCounter ───────────────────────────────────────────────
+//
+// Closes loop class L4/L7/L17 — non-convergent Implementer↔Evaluator
+// alternation. Hard ceiling regardless of whether the model varies
+// its output. A productive 2.1-class problem converges in 1-3
+// cycles; cap=6 leaves headroom for genuinely hard recovery while
+// preventing the 30+ turn token-burn shape.
+
+/// Maximum complete Implementer↔Evaluator round-trips (counted on
+/// `handoff_to_implementer` — Evaluator giving up on this attempt)
+/// before the run terminates as non-convergent. Tuned on the
+/// 58-turn 2026-05-21 observation: 13 handoffs before token_cap.
+/// 6 fires at turn ~14, saves ~40 turns and a budget refund.
+pub const HANDOFF_CYCLE_CAP: u32 = 6;
+
+#[derive(Debug, Default, Clone)]
+pub struct HandoffCycleCounter {
+    cycles: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CycleSignal {
+    Continue,
+    Kill { cycles: u32 },
+}
+
+impl HandoffCycleCounter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Increment on every `handoff_to_implementer` (Evaluator
+    /// concluding "not done yet — Implementer retry").
+    pub fn observe_handoff_to_implementer(&mut self) -> CycleSignal {
+        self.cycles = self.cycles.saturating_add(1);
+        if self.cycles >= HANDOFF_CYCLE_CAP {
+            CycleSignal::Kill {
+                cycles: self.cycles,
+            }
+        } else {
+            CycleSignal::Continue
+        }
+    }
+
+    pub fn cycles(&self) -> u32 {
+        self.cycles
+    }
+}
+
+#[cfg(test)]
+mod verify_stuck_tests {
+    use super::*;
+
+    #[test]
+    fn ok_verification_resets_counter() {
+        let mut v = VerifyStuckTracker::new();
+        v.observe(false, "error A");
+        v.observe(false, "error A");
+        assert_eq!(v.consecutive_same(), 2);
+        let sig = v.observe(true, "");
+        assert_eq!(sig, VerifySignal::Continue);
+        assert_eq!(v.consecutive_same(), 0);
+    }
+
+    #[test]
+    fn same_failure_three_times_fires() {
+        let mut v = VerifyStuckTracker::new();
+        assert_eq!(v.observe(false, "error A"), VerifySignal::Continue);
+        assert_eq!(v.observe(false, "error A"), VerifySignal::Continue);
+        let sig = v.observe(false, "error A");
+        assert!(matches!(sig, VerifySignal::Kill { hash_repeats: 3 }));
+    }
+
+    #[test]
+    fn distinct_failures_reset_counter() {
+        let mut v = VerifyStuckTracker::new();
+        v.observe(false, "error A");
+        v.observe(false, "error B");
+        assert_eq!(v.consecutive_same(), 1);
+    }
+
+    #[test]
+    fn alternating_distinct_failures_never_fire() {
+        // Genuine convergent fixing: each fix changes the error.
+        let mut v = VerifyStuckTracker::new();
+        for i in 0..20 {
+            let msg = format!("error {i}");
+            assert_eq!(v.observe(false, &msg), VerifySignal::Continue);
+        }
+    }
+}
+
+#[cfg(test)]
+mod cycle_tests {
+    use super::*;
+
+    #[test]
+    fn under_cap_continues() {
+        let mut c = HandoffCycleCounter::new();
+        for _ in 0..(HANDOFF_CYCLE_CAP - 1) {
+            assert_eq!(
+                c.observe_handoff_to_implementer(),
+                CycleSignal::Continue
+            );
+        }
+    }
+
+    #[test]
+    fn at_cap_fires() {
+        let mut c = HandoffCycleCounter::new();
+        for _ in 0..(HANDOFF_CYCLE_CAP - 1) {
+            let _ = c.observe_handoff_to_implementer();
+        }
+        let sig = c.observe_handoff_to_implementer();
+        assert!(matches!(
+            sig,
+            CycleSignal::Kill {
+                cycles: HANDOFF_CYCLE_CAP,
+            }
+        ));
+    }
+}

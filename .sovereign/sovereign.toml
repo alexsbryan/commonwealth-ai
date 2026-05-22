@@ -1,22 +1,19 @@
 [commonwealth]
 url = "http://localhost:9741"
 
-[test_runner]
-command = "scripts/sovereign-test.sh"
-working_dir = "."
-# Three-workspace parallel `cargo test` (corpus-engine + sovereign +
-# commonwealth) runs cold-cache in 60-180s. 120s left commonwealth
-# truncated mid-run and `test_status` looked stuck. Mirror the lint
-# runner's 240s headroom so the slowest workspace finishes cleanly.
-timeout_secs = 240
-debounce_ms = 2000
-
-[lint_runner]
-command = "scripts/sovereign-lint.sh"
-working_dir = "."
-# 60s wasn't enough — the parallel `cargo check` fan over
-# corpus-engine + sovereign + commonwealth consistently timed
-# out at the boundary, leaving lint_runs rows with exit_code=-2
-# and `watcher_active`-feeling-off symptoms (2026-05-06).
-timeout_secs = 240
-debounce_ms = 800
+# Watchers paused during agent-bench iteration (2026-05-21). The
+# 3-workspace-parallel cargo check/test invocations stacked on top
+# of the 35B-A3B primary slot crossed the 36GB jetsam threshold
+# repeatedly. Restore by copying back .sovereign/sovereign.toml.with-watchers.
+#
+# [test_runner]
+# command = "scripts/sovereign-test.sh"
+# working_dir = "."
+# timeout_secs = 240
+# debounce_ms = 2000
+#
+# [lint_runner]
+# command = "scripts/sovereign-lint.sh"
+# working_dir = "."
+# timeout_secs = 240
+# debounce_ms = 800

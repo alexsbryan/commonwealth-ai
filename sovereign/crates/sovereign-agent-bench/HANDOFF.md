@@ -146,6 +146,36 @@ construction. The new gap surfaced — *Evaluator can't decide to
 call agent_done after smoke passes* — is the next iteration's
 target.
 
+**3-way A/B/C on 2.1 (N=3, primary, 2026-05-21 night):**
+
+| Agent | Mean ± stdev | Trials | Dominant exit |
+|---|---|---|---|
+| pi | 5.0 ± 1.41 | (4, 4, 7) | write_thrash × 2, completed × 1 |
+| native-monolithic | 3.67 ± 1.89 | (1, 5, 5) | write_thrash × 2, no_progress × 1 |
+| native (role-aware) | 1.0 ± 0.0 | (1, 1, 1) | same-primitive build-loop × 3 |
+
+The architectural read (honest, per methodology):
+
+- **Write-thrash class closed**: 0/3 thrash in role-aware vs 2/3 in
+  pi and 2/3 in mono. The verify-discipline structural commitment
+  held — Implementer cannot iterate without verify because its
+  tool subset doesn't include build/smoke.
+- **Evaluator-can't-decide class surfaced**: all 3 role-aware
+  trials died to `same-primitive build-loop` — model emits
+  build → build → build after a single write, never advances to
+  smoke / handoff / done. The role split exchanged one failure
+  class for another. The new class is named, measurable, and
+  closeable (Terminator role candidate; see next session §B).
+- **Net score lower** because the build-loop detector fires
+  sooner (3 same primitive) than the write-thrash detector
+  (3 same-path write) and cuts off any chance of iteration
+  recovery. This is a tuning artifact of detector aggressiveness,
+  not a verdict on the role architecture.
+
+The methodology held. The role layer's purpose was to close
+write-thrash; it did. The new gap is the next iteration's
+target, not a regression.
+
 **File map (PR 2 additions):**
 
 - `sovereign/crates/commonwealth-agent-tools/src/role/mod.rs` —

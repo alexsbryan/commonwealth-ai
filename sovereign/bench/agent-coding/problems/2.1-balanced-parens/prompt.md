@@ -28,8 +28,8 @@ Examples:
 
 - O(n) time, single pass through `s`.
 - `s` is guaranteed to contain only the six bracket characters.
-- Crate name is `is_balanced`. The grader rebinds
-  `is_balanced::is_balanced` exactly as declared.
+- Crate name is `balanced_parens`. The grader binds
+  `balanced_parens::is_balanced` exactly as declared.
 
 ## How to deliver
 

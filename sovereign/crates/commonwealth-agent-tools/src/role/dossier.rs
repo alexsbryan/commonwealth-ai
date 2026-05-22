@@ -19,6 +19,15 @@ pub const MAX_DOSSIER_OUTCOMES: usize = 8;
 /// list).
 pub const MAX_SUMMARY_LEN: usize = 200;
 
+/// Cap on the full verification (build/smoke) stdout_tail carried
+/// from Evaluator to Implementer across role flips. The 200-char
+/// summary in `recent_outcomes` loses line numbers, source-line
+/// context, and compiler caret pointers — Implementer cannot fix
+/// what it cannot see. 4 KiB carries a typical rustc / cargo test
+/// failure with full caret + secondary spans without bloating
+/// prompts.
+pub const MAX_VERIFICATION_OUTPUT_LEN: usize = 4 * 1024;
+
 /// Ambient state packet threaded into each role's system message.
 /// Built incrementally by the native runner as role calls happen.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -47,6 +56,17 @@ pub struct RoleDossier {
     pub writes_since_last_verify: u32,
     /// Recent outcomes (most recent last), capped.
     pub recent_outcomes: Vec<RoleDossierOutcome>,
+    /// Full stdout_tail from the most recent build/smoke. Set on
+    /// every Evaluator verify so the Implementer who picks up after
+    /// a `handoff_to_implementer` sees the compiler's actual line +
+    /// caret + source context — not just the 200-char "build
+    /// FAILED" summary. Capped at `MAX_VERIFICATION_OUTPUT_LEN`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_verification_output: Option<String>,
+    /// Which primitive produced `last_verification_output` (Build or
+    /// Smoke). Used to label the rendered block.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_verification_kind: Option<PrimitiveKind>,
 }
 
 /// One row of `recent_outcomes` — a frozen one-line view of a
@@ -107,6 +127,19 @@ impl RoleDossier {
         self.writes_since_last_verify = 0;
     }
 
+    /// Capture the full stdout_tail of a build/smoke call so the
+    /// next Implementer turn (after `handoff_to_implementer`) sees
+    /// the compiler's line + caret + source context. Capped.
+    pub fn set_verification_output(&mut self, primitive: PrimitiveKind, output: &str) {
+        // Only meaningful for the verifier primitives.
+        debug_assert!(matches!(
+            primitive,
+            PrimitiveKind::Build | PrimitiveKind::Smoke
+        ));
+        self.last_verification_output = Some(cap_str(output, MAX_VERIFICATION_OUTPUT_LEN));
+        self.last_verification_kind = Some(primitive);
+    }
+
     /// Render the dossier as a context block for the next role's
     /// system message. Returns an empty string when the dossier is
     /// fresh (no prior activity).
@@ -127,6 +160,25 @@ impl RoleDossier {
             "Verification staleness: {} writes since last build/smoke.\n",
             self.writes_since_last_verify
         ));
+        // Implementer-only: full stdout_tail of the last build/smoke
+        // so the model receives the compiler's structured output
+        // (line numbers, caret, source spans), not just the
+        // Evaluator's prose paraphrase via `diagnosis`. Other roles
+        // don't need this: Planner doesn't fix code; Evaluator just
+        // ran the verifier and has the result in chat history.
+        if matches!(for_role, Role::Implementer) {
+            if let (Some(out_text), Some(kind)) = (
+                self.last_verification_output.as_deref(),
+                self.last_verification_kind,
+            ) {
+                out.push_str(&format!(
+                    "\nLast {} output (verbatim, capped {} bytes):\n```\n{}\n```\n",
+                    kind.id(),
+                    MAX_VERIFICATION_OUTPUT_LEN,
+                    out_text
+                ));
+            }
+        }
         if !self.recent_outcomes.is_empty() {
             out.push_str("Recent actions:\n");
             for o in &self.recent_outcomes {
@@ -378,5 +430,42 @@ mod tests {
         let mut d = RoleDossier::new();
         d.set_diagnosis("x".repeat(2000));
         assert!(d.diagnosis.as_deref().unwrap().len() < 1100);
+    }
+
+    #[test]
+    fn verification_output_renders_for_implementer() {
+        // Closes class: "Implementer cannot fix compiler errors
+        // because structured stdout_tail is lost on role flip."
+        let mut d = RoleDossier::new();
+        d.set_verification_output(
+            PrimitiveKind::Build,
+            "error: unexpected closing delimiter: `}`\n  --> src/lib.rs:14:1",
+        );
+        let s = d.render(Role::Implementer);
+        assert!(s.contains("Last build output"));
+        assert!(s.contains("error: unexpected closing delimiter"));
+        assert!(s.contains("--> src/lib.rs:14:1"));
+    }
+
+    #[test]
+    fn verification_output_does_not_render_for_evaluator_or_planner() {
+        // Evaluator just ran the verifier — sees it in chat history.
+        // Planner doesn't fix code. Rendering the block for them
+        // would waste tokens.
+        let mut d = RoleDossier::new();
+        d.set_verification_output(PrimitiveKind::Build, "error: ...");
+        assert!(!d.render(Role::Evaluator).contains("Last build output"));
+        assert!(!d.render(Role::Planner).contains("Last build output"));
+    }
+
+    #[test]
+    fn verification_output_is_capped() {
+        let mut d = RoleDossier::new();
+        let huge = "X".repeat(10_000);
+        d.set_verification_output(PrimitiveKind::Smoke, &huge);
+        assert!(
+            d.last_verification_output.as_deref().unwrap().len()
+                <= MAX_VERIFICATION_OUTPUT_LEN + 80
+        );
     }
 }

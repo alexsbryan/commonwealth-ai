@@ -47,6 +47,19 @@ pub enum ExitReason {
         consecutive_writes: u32,
         threshold: u32,
     },
+    /// Build / smoke produced the same failing stdout_tail
+    /// `hash_repeats` times in a row — the model cannot fix the
+    /// error it keeps hitting. Closes the L5/L6 loop class (same
+    /// compiler error or same test failure repeating across cycles).
+    /// Successful verifications reset the counter, so a 1-line fix
+    /// that re-surfaces the same error twice while productively
+    /// whittling never trips this.
+    VerifyStuck { hash_repeats: u32, threshold: u32 },
+    /// Role-aware native runner observed `cycles` complete
+    /// Implementer↔Evaluator round-trips (counted on
+    /// `handoff_to_implementer`) without an `agent_done`. Hard
+    /// ceiling on non-convergent alternation (L4 / L7 / L17).
+    CycleLimit { cycles: u32, cap: u32 },
 }
 
 impl Default for ExitReason {
@@ -65,6 +78,8 @@ impl ExitReason {
             ExitReason::Crashed { .. } => "crashed",
             ExitReason::ToolDenied { .. } => "tool_denied",
             ExitReason::WriteThrash { .. } => "write_thrash",
+            ExitReason::VerifyStuck { .. } => "verify_stuck",
+            ExitReason::CycleLimit { .. } => "cycle_limit",
         }
     }
 
@@ -81,6 +96,30 @@ pub struct TokenCounts {
     /// Sum of output tokens (new generation only) — the canonical
     /// "thinking" measure used by the budget enforcement path.
     pub output: u64,
+}
+
+/// One full chat-completion request + response captured during a
+/// run. Persisted to `requests.jsonl` so the operator can replay a
+/// specific turn through the `replay` subcommand with overrides
+/// (different temperature, different model, edited messages, etc.).
+/// The bench's iteration loop is fast, but replaying a single turn
+/// is much faster — and lets you settle "is it the prompt or the
+/// model?" debates without rerunning the whole bench.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatRequestRecord {
+    pub turn: u32,
+    /// Active role (e.g. "planner", "implementer", "evaluator") for
+    /// role-aware runners; `None` for monolithic / pi runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// Full POST body sent to /v1/chat/completions (messages, tools,
+    /// tool_choice, sampling overrides).
+    pub request: serde_json::Value,
+    /// Full response body received from the daemon. Captured even on
+    /// HTTP error (status + text recorded).
+    pub response: serde_json::Value,
+    /// Wall-clock time spent on this single request.
+    pub elapsed_ms: u64,
 }
 
 /// One tool invocation observed during the run.
@@ -159,6 +198,12 @@ pub struct AgentRunArtifact {
     /// stdout line, no newline. Persisted to `agent.jsonl` by the
     /// artifact sink.
     pub raw_stdout_lines: Vec<String>,
+    /// Captured chat-completion requests + responses, one per turn.
+    /// Empty for runners that don't drive the daemon directly (pi).
+    /// Persisted to `requests.jsonl` by the artifact sink so the
+    /// `replay` subcommand can pick any turn and re-send it with
+    /// overrides.
+    pub request_records: Vec<ChatRequestRecord>,
 }
 
 impl AgentRunArtifact {

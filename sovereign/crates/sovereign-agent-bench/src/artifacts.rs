@@ -73,6 +73,19 @@ impl ArtifactSink {
         // dig past 32 KiB if needed.
         fs::write(self.root.join("agent.stderr.txt"), &artifact.stderr_tail)?;
 
+        // Per-turn chat-completion requests + responses. Empty for
+        // runners that don't drive the daemon directly (pi). One
+        // JSON object per line so the `replay` subcommand can pick
+        // and re-send any individual turn with overrides.
+        if !artifact.request_records.is_empty() {
+            let mut requests_jsonl = String::new();
+            for r in &artifact.request_records {
+                requests_jsonl.push_str(&serde_json::to_string(r).unwrap_or_default());
+                requests_jsonl.push('\n');
+            }
+            fs::write(self.root.join("requests.jsonl"), requests_jsonl)?;
+        }
+
         // Deep-copy workdir (filtered).
         let workdir_dst = self.root.join("workdir");
         fs::create_dir_all(&workdir_dst)?;
@@ -204,6 +217,7 @@ mod tests {
                 r#"{"type":"message_end","message":{"usage":{"input_tokens":100,"output_tokens":50}}}"#.to_string(),
                 r#"{"type":"some_event","payload":{}}"#.to_string(),
             ],
+            request_records: Vec::new(),
         }
     }
 

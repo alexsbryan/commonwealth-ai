@@ -36,16 +36,39 @@ use commonwealth_agent_tools::role::{
 use commonwealth_agent_tools::{summarize_for_dossier, PrimitiveKind};
 
 use crate::runner::{
-    AgentRunArtifact, AgentRunContext, AgentRunError, AgentRunner, ExitReason, TokenCounts,
-    ToolCallRecord,
+    AgentRunArtifact, AgentRunContext, AgentRunError, AgentRunner, ChatRequestRecord, ExitReason,
+    TokenCounts, ToolCallRecord,
 };
 use crate::runners::shared_detectors::{
-    ThrashSignal, ThrashTracker, SAME_PATH_WRITE_THRESHOLD,
+    CycleSignal, HandoffCycleCounter, ThrashSignal, ThrashTracker, VerifySignal,
+    VerifyStuckTracker, HANDOFF_CYCLE_CAP, SAME_PATH_WRITE_THRESHOLD,
+    VERIFY_STUCK_THRESHOLD,
 };
 
 const DEFAULT_PROVIDER_URL: &str = "http://localhost:9741/v1";
 const NO_PROGRESS_TOOL_CALLS_THRESHOLD: u32 = 8;
 const STDERR_TAIL_CAP_BYTES: usize = 32 * 1024;
+/// Cap on max_tokens passed to a single chat completion request.
+/// Without this, the runner hands the model the entire remaining
+/// token budget on the first turn — under alternation-grammar mode
+/// the model can emit a 6000-token content-only response (one
+/// observed shape: JSON-formatted "name: agent_plan" written in
+/// prose because the alternation grammar picked the plain-text
+/// branch) and exhaust the budget before any tool call lands.
+/// 1024 is well above the typical 50-200 tokens per productive
+/// turn (envelopes are small; agent_plan is 100-300 tokens of
+/// prose; write_file's content is 200-800 tokens).
+const PER_TURN_MAX_TOKENS: u64 = 1024;
+/// Consecutive turns with `tool_calls.is_empty()` before exit.
+/// Closes loop class L18 — model emits content-only responses (no
+/// tool envelope) under alternation grammar's plain-text path.
+/// Distinct from `no_progress` (workdir-hash-based, threshold 8):
+/// empty-tool-call doesn't necessarily leave the workdir unchanged
+/// (the model COULD claim it wrote a file in prose), but the agent
+/// loop has no observable forward motion. 3 is aggressive enough to
+/// save tokens while letting one no-tool-call turn slide as a
+/// thinking pause.
+const EMPTY_TOOL_CALL_STREAK_THRESHOLD: u32 = 3;
 
 /// Operating mode for the native runner.
 /// - `RoleAware` (default v1) — Planner → Implementer ↔ Evaluator
@@ -471,6 +494,10 @@ async fn run_native_monolithic(
         stderr_tail: String::new(),
         final_assistant_text,
         raw_stdout_lines: cap_raw_lines(raw_lines),
+        // Mono path doesn't capture yet — TODO if we need replay on
+        // monolithic baselines. Role-aware is where debate-settling
+        // happens.
+        request_records: Vec::new(),
     })
 }
 
@@ -503,12 +530,16 @@ async fn run_native_role_aware(
 
     let mut tool_calls_record: Vec<ToolCallRecord> = Vec::new();
     let mut raw_lines: Vec<String> = Vec::new();
+    let mut request_records: Vec<ChatRequestRecord> = Vec::new();
     let mut tokens = TokenCounts::default();
     let mut final_assistant_text = String::new();
 
     let mut thrash = ThrashTracker::new();
+    let mut verify_stuck = VerifyStuckTracker::new();
+    let mut handoff_cycles = HandoffCycleCounter::new();
     let mut last_workdir_hash = hash_workdir(workdir.path());
     let mut consecutive_no_progress: u32 = 0;
+    let mut empty_tool_call_streak: u32 = 0;
     let mut turn: u32 = 0;
     let mut total_role_calls: u32 = 0;
 
@@ -524,6 +555,15 @@ async fn run_native_role_aware(
     let mut last_primitive_in_role: Option<PrimitiveKind> = None;
     let mut consecutive_same_primitive: u32 = 0;
     let initial_user_msg = format_initial_prompt(workdir.path(), &ctx.prompt);
+    // Per-tenure chat history. Closes the "role-aware Evaluator can't
+    // react to its own build failure because every turn starts fresh"
+    // class: assistant + tool_result messages accumulate within a
+    // role's tenure so the model sees its own prior call (won't loop
+    // on `build`) and the full tool_result payload (full stdout_tail,
+    // not the 200-char dossier summary). Cleared on every role flip
+    // — the next role starts fresh with only system + initial user +
+    // rendered dossier.
+    let mut role_chat_history: Vec<Value> = Vec::new();
 
     let exit_reason: ExitReason = 'outer: loop {
         turn = turn.saturating_add(1);
@@ -547,21 +587,23 @@ async fn run_native_role_aware(
             &profile,
             &role_dossier,
             &initial_user_msg,
+            &role_chat_history,
         );
         let role_tools = filter_descriptors(&adapter, &profile);
         let force_tool = force_first_tool_pending.take();
 
-        let resp = match send_chat_completion_role(
-            runner,
+        let remaining_budget = token_budget.saturating_sub(tokens.output).max(64);
+        let per_turn_max = remaining_budget.min(PER_TURN_MAX_TOKENS);
+        let request_body = build_role_request_body(
             &model_handle,
             &role_messages,
             &role_tools,
-            token_budget.saturating_sub(tokens.output).max(64),
+            per_turn_max,
             &profile,
             force_tool,
-        )
-        .await
-        {
+        );
+        let req_started = Instant::now();
+        let resp = match post_chat_completion(runner, &request_body).await {
             Ok(r) => r,
             Err(e) => {
                 tracing::warn!(
@@ -570,11 +612,28 @@ async fn run_native_role_aware(
                     error = %e,
                     "native_runner: role chat completion failed"
                 );
+                // Capture the failed request so replay can reproduce
+                // it offline. Persist error text as the response body.
+                request_records.push(ChatRequestRecord {
+                    turn,
+                    role: Some(active_role.id().to_string()),
+                    request: request_body,
+                    response: json!({"error": e}),
+                    elapsed_ms: req_started.elapsed().as_millis() as u64,
+                });
                 break 'outer ExitReason::Crashed {
                     stderr_tail: format!("chat completion ({}): {e}", active_role.id()),
                 };
             }
         };
+        let req_elapsed_ms = req_started.elapsed().as_millis() as u64;
+        request_records.push(ChatRequestRecord {
+            turn,
+            role: Some(active_role.id().to_string()),
+            request: request_body,
+            response: resp.clone(),
+            elapsed_ms: req_elapsed_ms,
+        });
 
         raw_lines.push(serde_json::to_string(&resp).unwrap_or_default());
 
@@ -620,12 +679,27 @@ async fn run_native_role_aware(
             .unwrap_or_default();
 
         if tool_calls.is_empty() {
+            empty_tool_call_streak = empty_tool_call_streak.saturating_add(1);
             tracing::info!(
                 problem = %problem_id,
                 role = active_role.id(),
                 turn,
+                empty_streak = empty_tool_call_streak,
                 "native_runner: assistant turn had no tool calls"
             );
+            if empty_tool_call_streak >= EMPTY_TOOL_CALL_STREAK_THRESHOLD {
+                tracing::warn!(
+                    problem = %problem_id,
+                    empty_streak = empty_tool_call_streak,
+                    threshold = EMPTY_TOOL_CALL_STREAK_THRESHOLD,
+                    "native_runner: empty_tool_call_streak kill — model emitted {} content-only turns",
+                    empty_tool_call_streak,
+                );
+                break 'outer ExitReason::NoProgress {
+                    consecutive_tool_calls: empty_tool_call_streak,
+                    threshold: EMPTY_TOOL_CALL_STREAK_THRESHOLD,
+                };
+            }
             // Implicit transition rule fires.
             let next = transition_after(active_role, TransitionTrigger::NoToolCall);
             match next {
@@ -642,15 +716,42 @@ async fn run_native_role_aware(
                     );
                     active_role = r;
                     force_first_tool_pending = default_profile_for(r).forced_first_tool;
+                    role_chat_history.clear();
+                    tracing::debug!(
+                        problem = %problem_id,
+                        to_role = r.id(),
+                        "native_runner: chat-history reset on no-tool-call flip"
+                    );
                 }
             }
         }
+
+        // Per-turn assistant message we'll persist into chat history
+        // iff we stay in the active role at end-of-turn. OpenAI shape:
+        // the assistant message carries content + tool_calls; tool
+        // result messages reference each tool_call id. The daemon's
+        // strict deserializer requires `content` to be present on
+        // assistant messages even when the model emitted only
+        // tool_calls — use empty string as the canonical "no prose
+        // this turn" sentinel.
+        let mut assistant_for_history = json!({
+            "role": "assistant",
+            "content": assistant_text,
+        });
+        if let Some(tc) = msg.get("tool_calls") {
+            assistant_for_history["tool_calls"] = tc.clone();
+        }
+        let mut this_turn_tool_results: Vec<Value> = Vec::new();
+
+        // Tool calls non-empty — reset the EmptyToolCallStreak
+        // detector. The model is actively driving the workdir.
+        empty_tool_call_streak = 0;
 
         // Process tool calls. Each call: translate, dispatch,
         // append result, possibly transition.
         let mut transitioned_this_turn = false;
         for tc in &tool_calls {
-            let _id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let fn_obj = tc.get("function").cloned().unwrap_or(Value::Null);
             let name = fn_obj
                 .get("name")
@@ -699,6 +800,13 @@ async fn run_native_role_aware(
                     canonical_kind.unwrap_or(PrimitiveKind::AgentDone),
                     format!("rejected: `{}` not allowed in {} role", name, active_role.id()),
                 );
+                let body = json!({
+                    "error": "tool not allowed in current role",
+                    "tool": name,
+                    "role": active_role.id(),
+                })
+                .to_string();
+                this_turn_tool_results.push(tool_result_message(&id, &body));
                 continue;
             }
 
@@ -706,7 +814,26 @@ async fn run_native_role_aware(
             // agent_done which terminates).
             let canonical = match outcome {
                 TranslateOutcome::Canonical { canonical, .. } => canonical,
-                _ => continue,
+                TranslateOutcome::Unrecognized { tool_name, args_summary, reason } => {
+                    let body = json!({
+                        "error": "unrecognized tool call",
+                        "tool": tool_name,
+                        "args_summary": args_summary,
+                        "reason": reason,
+                    })
+                    .to_string();
+                    this_turn_tool_results.push(tool_result_message(&id, &body));
+                    continue;
+                }
+                TranslateOutcome::Unknown { tool_name } => {
+                    let body = json!({
+                        "error": "unknown tool",
+                        "tool": tool_name,
+                    })
+                    .to_string();
+                    this_turn_tool_results.push(tool_result_message(&id, &body));
+                    continue;
+                }
             };
             let kind = canonical_kind.unwrap();
 
@@ -768,9 +895,74 @@ async fn run_native_role_aware(
                         kind,
                         format!("error: {e}"),
                     );
+                    let body = json!({"error": e.to_string()}).to_string();
+                    this_turn_tool_results.push(tool_result_message(&id, &body));
                     continue;
                 }
             };
+            // Persist the real result content as a tool message so
+            // the next turn (within this role) sees the full payload
+            // — stdout_tail, pass/fail counts, etc. — instead of just
+            // the dossier's 200-char summary.
+            let result_body = serde_json::to_string(&result.payload).unwrap_or_default();
+            this_turn_tool_results.push(tool_result_message(&id, &result_body));
+
+            // For Build/Smoke: also stash the stdout_tail in the
+            // dossier so the next Implementer (after a
+            // handoff_to_implementer) sees the compiler output even
+            // though role_chat_history clears on flip. Also feed the
+            // VerifyStuck detector — same failing output 3x → kill.
+            if matches!(kind, PrimitiveKind::Build | PrimitiveKind::Smoke) {
+                let tail = result
+                    .payload
+                    .get("stdout_tail")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let ok = result
+                    .payload
+                    .get("ok")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                role_dossier.set_verification_output(kind, tail);
+                if let VerifySignal::Kill { hash_repeats } =
+                    verify_stuck.observe(ok, tail)
+                {
+                    tracing::warn!(
+                        problem = %problem_id,
+                        role = active_role.id(),
+                        primitive = kind.id(),
+                        hash_repeats,
+                        threshold = VERIFY_STUCK_THRESHOLD,
+                        "native_runner: verify_stuck kill — same failing verification output {} times",
+                        hash_repeats,
+                    );
+                    break 'outer ExitReason::VerifyStuck {
+                        hash_repeats,
+                        threshold: VERIFY_STUCK_THRESHOLD,
+                    };
+                }
+            }
+
+            // HandoffToImplementer increments the cycle counter
+            // (Evaluator concluding "Implementer retry"). Cap closes
+            // L4/L7/L17 unbounded-alternation classes.
+            if matches!(kind, PrimitiveKind::HandoffToImplementer) {
+                if let CycleSignal::Kill { cycles } =
+                    handoff_cycles.observe_handoff_to_implementer()
+                {
+                    tracing::warn!(
+                        problem = %problem_id,
+                        cycles,
+                        cap = HANDOFF_CYCLE_CAP,
+                        "native_runner: cycle_limit kill — Implementer↔Evaluator alternated {} times",
+                        cycles,
+                    );
+                    break 'outer ExitReason::CycleLimit {
+                        cycles,
+                        cap: HANDOFF_CYCLE_CAP,
+                    };
+                }
+            }
 
             // Special updates from transition primitives.
             match (&canonical, kind) {
@@ -853,6 +1045,13 @@ async fn run_native_role_aware(
                     last_primitive_in_role = None;
                     consecutive_same_primitive = 0;
                     transitioned_this_turn = true;
+                    role_chat_history.clear();
+                    tracing::debug!(
+                        problem = %problem_id,
+                        to_role = r.id(),
+                        triggering_primitive = kind.id(),
+                        "native_runner: chat-history reset on role flip"
+                    );
                     // Clear the diagnosis once the receiving role
                     // has been set up (the next request renders
                     // it; subsequent requests in the same role
@@ -866,6 +1065,15 @@ async fn run_native_role_aware(
                     break;
                 }
             }
+        }
+
+        // Persist this turn's assistant + tool_result messages into
+        // per-tenure chat history iff we stayed in the active role.
+        // On Flip the role_chat_history was cleared above; the next
+        // role's first turn starts fresh.
+        if !transitioned_this_turn && !tool_calls.is_empty() {
+            role_chat_history.push(assistant_for_history);
+            role_chat_history.extend(this_turn_tool_results);
         }
 
         // No-progress detector: skip while in Planner (planner
@@ -916,6 +1124,11 @@ async fn run_native_role_aware(
             active_role = Role::Implementer;
             force_first_tool_pending = default_profile_for(Role::Implementer).forced_first_tool;
             total_role_calls = 0;
+            role_chat_history.clear();
+            tracing::debug!(
+                problem = %problem_id,
+                "native_runner: chat-history reset on planner force-transition"
+            );
         }
         let _ = transitioned_this_turn;
     };
@@ -930,6 +1143,7 @@ async fn run_native_role_aware(
         stderr_tail: String::new(),
         final_assistant_text,
         raw_stdout_lines: cap_raw_lines(raw_lines),
+        request_records,
     })
 }
 
@@ -960,6 +1174,7 @@ fn build_role_messages(
     profile: &RoleProfile,
     dossier: &RoleDossier,
     initial_user_msg: &str,
+    role_chat_history: &[Value],
 ) -> Vec<Value> {
     let mut messages: Vec<Value> = Vec::new();
     // System message = profile prompt + rendered dossier.
@@ -971,18 +1186,24 @@ fn build_role_messages(
     };
     messages.push(json!({"role": "system", "content": system_content}));
     messages.push(json!({"role": "user", "content": initial_user_msg}));
+    // Per-tenure chat history (assistant + tool result pairs from
+    // prior turns within the active role). Empty on the first turn
+    // of a role; populated turn-by-turn while the role stays.
+    messages.extend(role_chat_history.iter().cloned());
     messages
 }
 
-async fn send_chat_completion_role(
-    runner: &NativeRunner,
+/// Build the chat-completion request body for the active role.
+/// Pure: no I/O. Returned body is captured into `ChatRequestRecord`
+/// so the `replay` subcommand can re-send it with overrides.
+fn build_role_request_body(
     model: &str,
     messages: &[Value],
     tools: &[Value],
     max_tokens: u64,
     profile: &RoleProfile,
     force_tool: Option<PrimitiveKind>,
-) -> Result<Value, String> {
+) -> Value {
     let mut body = json!({
         "model": model,
         "messages": messages,
@@ -990,7 +1211,6 @@ async fn send_chat_completion_role(
         "stream": false,
         "max_tokens": max_tokens,
     });
-    // Forced first tool — OpenAI shape.
     if let Some(force) = force_tool {
         body["tool_choice"] = json!({
             "type": "function",
@@ -999,18 +1219,26 @@ async fn send_chat_completion_role(
     } else {
         body["tool_choice"] = json!("auto");
     }
-    // Sampling overrides from profile.
     if let Some(t) = profile.sampling.temperature {
         body["temperature"] = json!(t);
     }
     if let Some(p) = profile.sampling.top_p {
         body["top_p"] = json!(p);
     }
+    body
+}
+
+/// POST a pre-built request body to the daemon. Returns the parsed
+/// response on success, or `Err(text)` on HTTP / parse failure.
+async fn post_chat_completion(
+    runner: &NativeRunner,
+    body: &Value,
+) -> Result<Value, String> {
     let url = format!("{}/chat/completions", runner.provider_url);
     let resp = runner
         .http
         .post(&url)
-        .json(&body)
+        .json(body)
         .send()
         .await
         .map_err(|e| format!("send: {e}"))?;
@@ -1214,5 +1442,50 @@ mod tests {
         let h1 = hash_workdir(tmp.path());
         let h2 = hash_workdir(tmp.path());
         assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn build_role_messages_threads_chat_history_after_system_and_user() {
+        // Closes class: "role-aware loop can't act on its own prior
+        // tool calls because chat history isn't threaded into the
+        // next request." If this test ever softens, the build-loop
+        // class re-opens.
+        let profile = default_profile_for(Role::Evaluator);
+        let dossier = RoleDossier::new();
+        let history = vec![
+            json!({"role": "assistant", "tool_calls": [{"id": "c1", "function": {"name": "build"}}]}),
+            json!({"role": "tool", "tool_call_id": "c1", "content": "{\"ok\":false}"}),
+        ];
+        let msgs = build_role_messages(
+            Role::Evaluator,
+            &profile,
+            &dossier,
+            "INITIAL USER MESSAGE",
+            &history,
+        );
+        assert_eq!(msgs.len(), 4, "system + user + assistant + tool_result");
+        assert_eq!(msgs[0].get("role").and_then(|v| v.as_str()), Some("system"));
+        assert_eq!(msgs[1].get("role").and_then(|v| v.as_str()), Some("user"));
+        assert_eq!(msgs[2].get("role").and_then(|v| v.as_str()), Some("assistant"));
+        assert_eq!(msgs[3].get("role").and_then(|v| v.as_str()), Some("tool"));
+        // History payload preserved verbatim.
+        assert_eq!(
+            msgs[3].get("content").and_then(|v| v.as_str()),
+            Some("{\"ok\":false}")
+        );
+    }
+
+    #[test]
+    fn build_role_messages_empty_history_is_just_system_and_user() {
+        let profile = default_profile_for(Role::Implementer);
+        let dossier = RoleDossier::new();
+        let msgs = build_role_messages(
+            Role::Implementer,
+            &profile,
+            &dossier,
+            "INITIAL",
+            &[],
+        );
+        assert_eq!(msgs.len(), 2);
     }
 }
