@@ -471,13 +471,17 @@ impl Tool for AttachedDocumentSearchTool {
         // collapsed (2.5→0.0). Aggregate 72%→69% mech, 3.69→3.47
         // judge.
         //
-        // Mechanical ±1 won the bake-off. Segments are still
+        // Mechanical ±1 won that bake-off. Segments are still
         // built at ingest and surfaced in the briefing as a
         // scene map (so the model can use scene titles to
         // formulate queries) but they no longer drive retrieval.
         // See handoff doc for the architectural lesson:
         // LLM-judged scenes are good *labels*, not necessarily
         // good *retrieval units*.
+        //
+        // 2026-05-22 update: ±1 itself is now disabled by default
+        // — see the SOVEREIGN_DOC_CHUNK_NEIGHBOURS gate below for
+        // the bench data and rationale.
         let hit_indices: std::collections::HashSet<usize> =
             scored.iter().map(|(_, i)| *i).collect();
         // PPR-boosted chunks join the hit set as primary hits — they
@@ -493,14 +497,35 @@ impl Tool for AttachedDocumentSearchTool {
             .chain(ppr_hit_set.iter())
             .copied()
             .collect();
+        // ±1 expansion roughly triples tool-result size (each hit
+        // grows to a 3-chunk window). On the diagnostic triplet, a
+        // 4-rep A/B (2026-05-22) measured ±1 ON at 611s wall vs ±1
+        // OFF mean 340s across 4 reps (range 305-372) — a robust
+        // −44% / −271s win, far outside this bench's variance band.
+        // Quality changes were within variance: T1 flat (20% in all
+        // 4 reps and baseline), T3 mech 80→70 mean (still 60 or 80
+        // each rep), T5 judge actually slightly higher on the OFF
+        // mean. The handoff's previous quality-lift claim (T3 judge
+        // +1.6, T5 judge +1.2) was measured pre-RAPTOR-atlas; the
+        // atlas's scene-map signposts in the briefing plausibly
+        // absorb what ±1 used to buy, leaving the cost without the
+        // contribution. Default flipped to OFF 2026-05-22; operators
+        // wanting the previous behaviour set SOVEREIGN_DOC_CHUNK_NEIGHBOURS=1.
+        let expand_neighbours = std::env::var("SOVEREIGN_DOC_CHUNK_NEIGHBOURS")
+            .ok()
+            .and_then(|v| v.parse::<u8>().ok())
+            .map(|n| n != 0)
+            .unwrap_or(false);
         let expanded_ordered: Vec<usize> = {
             let mut expanded: std::collections::BTreeSet<usize> =
                 combined_hits.iter().copied().collect();
-            for &h in &combined_hits {
-                if h > 0 {
-                    expanded.insert(h - 1);
+            if expand_neighbours {
+                for &h in &combined_hits {
+                    if h > 0 {
+                        expanded.insert(h - 1);
+                    }
+                    expanded.insert(h + 1);
                 }
-                expanded.insert(h + 1);
             }
             expanded
                 .into_iter()

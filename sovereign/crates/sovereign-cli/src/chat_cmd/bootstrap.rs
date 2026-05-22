@@ -852,6 +852,19 @@ async fn load_wikipedia_graph(
     engine: &corpus_engine::CorpusEngine,
     indexes_dir: &std::path::Path,
 ) -> Option<Arc<corpus_engine::WikipediaGraph>> {
+    // Memory-pressure escape hatch. The graph is a 7M-edge sqlite
+    // mmap; on a host already running the daemon, loading it twice
+    // (daemon + bench) has tipped past available RAM in practice. Set
+    // SOVEREIGN_DISABLE_WIKI_GRAPH=1 for retrieval workflows that
+    // don't need the Layer 0 link graph (e.g. attached-document
+    // benches that only exercise the doc-local index).
+    if std::env::var("SOVEREIGN_DISABLE_WIKI_GRAPH")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        eprintln!("Wiki graph:  disabled via SOVEREIGN_DISABLE_WIKI_GRAPH");
+        return None;
+    }
     let infos = engine.installed_indexes().await.ok()?;
     for info in infos {
         let db_path = corpus_engine::WikipediaGraph::default_db_path(
