@@ -1733,6 +1733,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn chunks_by_source_doc_ids_filters_on_lance() {
+        // Move 6 P5.a.1 contract: only chunks whose source_doc_id is
+        // in the requested set come back, in any order. Empty input
+        // short-circuits without a database round-trip.
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+
+        let one = idx
+            .chunks_by_source_doc_ids(&["https://rust-lang.org".to_string()])
+            .await
+            .unwrap();
+        assert_eq!(one.len(), 1);
+        assert_eq!(one[0].source_doc_id.as_deref(), Some("https://rust-lang.org"));
+
+        let both = idx
+            .chunks_by_source_doc_ids(&[
+                "https://rust-lang.org".to_string(),
+                "https://sqlite.org".to_string(),
+            ])
+            .await
+            .unwrap();
+        let mut got: Vec<String> = both
+            .iter()
+            .filter_map(|c| c.source_doc_id.clone())
+            .collect();
+        got.sort();
+        assert_eq!(got, vec!["https://rust-lang.org", "https://sqlite.org"]);
+
+        let empty = idx.chunks_by_source_doc_ids(&[]).await.unwrap();
+        assert!(empty.is_empty(), "empty input must short-circuit");
+
+        let unknown = idx
+            .chunks_by_source_doc_ids(&["https://example.invalid".to_string()])
+            .await
+            .unwrap();
+        assert!(unknown.is_empty(), "unknown id returns empty");
+    }
+
+    #[tokio::test]
+    async fn chunks_by_source_doc_ids_escapes_quotes() {
+        // The IN-list builder must double-escape single quotes so a
+        // doc_id like `O'Brien` doesn't break the SQL fragment.
+        // Smoke-test: send a quote-containing id; expect no panic and
+        // a clean empty result (no chunk in the fixture matches).
+        let dir = tempdir().unwrap();
+        let idx = create_test_index(dir.path()).await;
+        idx.insert_batch(&sample_chunks()).await.unwrap();
+        let got = idx
+            .chunks_by_source_doc_ids(&["O'Brien".to_string()])
+            .await
+            .unwrap();
+        assert!(got.is_empty());
+    }
+
+    #[tokio::test]
     async fn fetch_chunks_by_title_unknown_title_returns_empty() {
         let dir = tempdir().unwrap();
         let idx = create_test_index(dir.path()).await;
