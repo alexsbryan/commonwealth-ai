@@ -169,6 +169,13 @@ pub struct AgentRunContext {
     /// test --quiet --test integration`). Same threading as
     /// build_cmd.
     pub verify_cmd: String,
+    /// Optional pre-build syntax validator. Bench plugs in a
+    /// language-appropriate impl (`RustSyntaxValidator` for
+    /// `language = "Rust"`, etc.) at context construction. Native
+    /// runner threads it into `ExecCtx.syntax_validator` so
+    /// `exec_build` can short-circuit on broken syntax with cargo-
+    /// shape feedback in <50ms instead of the full subprocess.
+    pub syntax_validator: Option<commonwealth_agent_tools::syntax::DynSyntaxValidator>,
 }
 
 impl AgentRunContext {
@@ -254,6 +261,18 @@ pub fn context_for(
     token_budget_override: Option<u64>,
     wall_seconds_override: Option<u64>,
 ) -> AgentRunContext {
+    use commonwealth_agent_tools::syntax::{DynSyntaxValidator, RustSyntaxValidator};
+    use std::sync::Arc;
+    let syntax_validator: Option<DynSyntaxValidator> = match problem.witness.language {
+        crate::problem::WitnessLanguage::Rust => {
+            Some(Arc::new(RustSyntaxValidator::new()) as DynSyntaxValidator)
+        }
+        // New languages plug their SyntaxValidator impl here. None
+        // skips pre-build check; build subprocess still runs.
+        crate::problem::WitnessLanguage::Go => None,
+        crate::problem::WitnessLanguage::TypeScript => None,
+        crate::problem::WitnessLanguage::Python => None,
+    };
     AgentRunContext {
         problem_id: problem.meta.id.clone(),
         prompt: problem.prompt_text.clone(),
@@ -264,6 +283,7 @@ pub fn context_for(
         model_handle,
         build_cmd: problem.witness.resolved_build_cmd(),
         verify_cmd: problem.witness.verify_cmd.clone(),
+        syntax_validator,
     }
 }
 

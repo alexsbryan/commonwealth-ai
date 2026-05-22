@@ -1711,8 +1711,10 @@ name = "commonwealth-agent-tools"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "proc-macro2",
  "serde",
  "serde_json",
+ "syn 2.0.117",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

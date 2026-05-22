@@ -28,6 +28,13 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
+# Used by `RustSyntaxValidator` for the pre-build syntax check. `full`
+# enables parsing of full Rust syntax; `parsing` enables `parse_file`.
+syn = { version = "2.0", features = ["full", "parsing"] }
+# `span-locations` enables `Span::start()` for line/column reporting
+# on syn parse errors. Without this feature, `Span::start` returns a
+# placeholder and the validator can't report useful line numbers.
+proc-macro2 = { version = "1", features = ["span-locations"] }
 
 [dev-dependencies]
 tempfile = "3"

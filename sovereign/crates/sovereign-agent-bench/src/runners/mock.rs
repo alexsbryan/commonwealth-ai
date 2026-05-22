@@ -132,6 +132,7 @@ mod tests {
             model_handle: "commonwealth/coder".into(),
             build_cmd: "cargo build".into(),
             verify_cmd: "cargo test".into(),
+            syntax_validator: None,
         };
         let artifact = runner.run(ctx).await.unwrap();
         assert_eq!(artifact.tokens.output, 80);

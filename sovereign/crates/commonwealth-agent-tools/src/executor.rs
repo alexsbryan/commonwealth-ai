@@ -19,6 +19,7 @@ use crate::primitive::{
     InspectIntent, Primitive, SmokeArgs, WriteFileArgs,
 };
 use crate::result::{ToolError, ToolResult};
+use crate::syntax::DynSyntaxValidator;
 
 /// Bound execution context. Every primitive is workdir-relative;
 /// nothing escapes the directory by design.
@@ -29,7 +30,7 @@ use crate::result::{ToolError, ToolResult};
 /// Python's build is a no-op string and the executor returns
 /// success immediately. The primitive holds the verb; the problem
 /// config holds the command.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ExecCtx {
     pub workdir: PathBuf,
     /// Wall-clock cap for subprocess primitives (`build`, `smoke`).
@@ -41,6 +42,27 @@ pub struct ExecCtx {
     /// Shell command for the `smoke` primitive. The bench reads
     /// this from `problem.witness.verify_cmd`.
     pub verify_cmd: String,
+    /// Optional pre-build syntax validator. When set, `exec_build`
+    /// walks the workdir, parses every source file matching the
+    /// validator's language extensions, and short-circuits the
+    /// subprocess invocation if any parse-level error is found.
+    /// Closes "model emits broken syntax → wastes 5-30s `cargo
+    /// build` cycle on something a static parser catches in <50ms"
+    /// faster-feedback class. Language-agnostic: bench wires a
+    /// language-appropriate impl per problem.
+    pub syntax_validator: Option<DynSyntaxValidator>,
+}
+
+impl std::fmt::Debug for ExecCtx {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ExecCtx")
+            .field("workdir", &self.workdir)
+            .field("subprocess_wall_cap", &self.subprocess_wall_cap)
+            .field("build_cmd", &self.build_cmd)
+            .field("verify_cmd", &self.verify_cmd)
+            .field("syntax_validator", &self.syntax_validator.as_ref().map(|_| "<set>"))
+            .finish()
+    }
 }
 
 impl ExecCtx {
@@ -52,6 +74,7 @@ impl ExecCtx {
             // arrive via builders below.
             build_cmd: "cargo build 2>&1".to_string(),
             verify_cmd: "cargo test --quiet --test integration 2>&1".to_string(),
+            syntax_validator: None,
         }
     }
 
@@ -67,6 +90,11 @@ impl ExecCtx {
 
     pub fn with_verify_cmd(mut self, cmd: impl Into<String>) -> Self {
         self.verify_cmd = cmd.into();
+        self
+    }
+
+    pub fn with_syntax_validator(mut self, v: DynSyntaxValidator) -> Self {
+        self.syntax_validator = Some(v);
         self
     }
 }
@@ -270,6 +298,31 @@ async fn exec_build(ctx: &ExecCtx) -> Result<ToolResult, ToolError> {
             "note": "no-op build (interpreted language)",
             "stdout_tail": "",
         })));
+    }
+    // Pre-build syntax check (language-agnostic; one impl per
+    // language plugged in via `with_syntax_validator`). When a
+    // validator is bound and any source file fails to parse,
+    // short-circuit the subprocess invocation and return a
+    // cargo-shape error envelope. This gives the model the same
+    // feedback texture as a real `cargo build` failure (caret,
+    // line:col, file path) but in <50ms instead of 5-30s — and
+    // catches a class of model failure (placeholder-comment
+    // abandonments, missing-brace half-writes) that would otherwise
+    // burn the full build cycle's tokens + wall.
+    if let Some(validator) = ctx.syntax_validator.as_ref() {
+        let errors = validator.check_workdir(&ctx.workdir);
+        if !errors.is_empty() {
+            let stdout_tail = validator.render_errors(&errors);
+            tracing::info!(
+                error_count = errors.len(),
+                "commonwealth_agent_tools::executor: pre-build syntax check rejected workdir"
+            );
+            return Ok(ToolResult::ok(json!({
+                "ok": false,
+                "stdout_tail": stdout_tail,
+                "pre_build_syntax_check": true,
+            })));
+        }
     }
     let (status_ok, stdout_tail) = run_shell(
         &ctx.workdir,
