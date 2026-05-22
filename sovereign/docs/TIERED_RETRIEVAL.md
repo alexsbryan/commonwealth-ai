@@ -105,6 +105,16 @@ Default `cluster_weight = 0.0` — byte-identical baseline. The block early-retu
 
 The pattern descends from the SEP rerank experiment's `atlas_weight` blend (`sovereign/docs/RERANK_EXPERIMENT.md`), which lifted SEP sources 40 → 65 of 66 on the canonical bench. Spec, failure-mode analysis, and bench-validation plan: `sovereign/docs/specs/CLUSTER_SCORE_BLEND.md`. The blend is observable via `tracing::debug!` events under the name `attached_doc_search: cluster-score blend applied`.
 
+## Chunk-neighbour expansion (now OFF by default)
+
+The attached-doc retrieval tool used to expand every HIT chunk to its ±1 chunk-index neighbours, producing 3-chunk windows in the tool result. That landed on 2026-05-21 with a quality claim of T3 judge +1.6 / T5 judge +1.2 (handoff memo), at a measured cost of +75s per question.
+
+Re-measured on 2026-05-22 after RAPTOR atlas landed in the briefing: a 4-rep A/B on the diagnostic triplet (`winnie_fate`, `stevie_circles_to_winnies_eyes`, `professor_menace_vs_impact`) showed ±1 ON at 611s wall vs OFF mean 340s across 4 reps (range 305-372s) — a robust **−44% / −271s win**, far outside this bench's variance band. Quality changes were within variance: T1 stable at 20% (4/4 reps), T3 mech 80%→70% mean (each rep 60 or 80), T5 judge mean *higher* on OFF (driven by one 5/5 outlier).
+
+Working hypothesis: the RAPTOR atlas's scene-map signposts and the motif index now in the briefing absorb what ±1 was previously buying — the model gets thematic neighbourhood context through the briefing without paying the prefill tax for raw neighbour chunks on every tool-loop iteration.
+
+Default flipped to OFF 2026-05-22. Operators wanting the prior behaviour set `SOVEREIGN_DOC_CHUNK_NEIGHBOURS=1`. The flag remains in place so a future full-20 bench A/B can flip back if the question-class breakdown shows ±1 still earning its keep on questions outside the diagnostic triplet.
+
 ## Storage shape
 
 | Tier | Tables / fields |
