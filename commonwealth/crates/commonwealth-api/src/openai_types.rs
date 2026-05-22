@@ -133,6 +133,20 @@ pub struct ChatCompletionRequest {
     /// `apply_evidence_id_allowlist_from_tool_results` (frontdoor).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_id_allowlist: Option<Vec<String>>,
+    /// Commonwealth extension: raw Lark grammar source forwarded to
+    /// llguidance for grammar-constrained decoding. Strictly more
+    /// expressive than `response_format` (regex tokens, recursion,
+    /// custom productions, alternations like `"BREAK" | "CONTINUE"`)
+    /// — the escape hatch for non-JSON-Schema constraints. When
+    /// present, takes precedence over `response_format` (both engines
+    /// mask the same logit chain; layering would deadlock — see
+    /// `embedded::build_sampler` comment at line ~7964). Wire path:
+    /// HTTP body field `lark_grammar` (raw string) → here →
+    /// `inference_adapter::build_completion_request` →
+    /// `CompletionRequest.lark_grammar` → `embedded::build_sampler`
+    /// instantiates `LlguidanceConstraint::new(lark, model)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lark_grammar: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
