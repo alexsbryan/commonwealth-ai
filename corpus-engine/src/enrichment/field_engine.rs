@@ -642,6 +642,20 @@ impl FieldModelEngine {
         progress: &(dyn Fn(EnrichmentProgress) + Send + Sync),
     ) -> Result<ClusterResult> {
         let total = clusters.clusters.len();
+        // Stuck detection. The pre-2026-05-20 loop logged each
+        // inference failure at `warn!` and continued; one persistently
+        // failing inference path (e.g. the MTP-quarantine bug fixed
+        // in embedded.rs) would silently retry every cluster, every
+        // 2-3s, indefinitely, with no surfacing to the operator.
+        // Track consecutive failures and bail when they exceed the
+        // threshold. Per-cluster progress is emitted on every
+        // iteration so the daemon's HTTP progress endpoint can
+        // describe the stall to a watching operator.
+        const STUCK_THRESHOLD: usize = 16;
+        let mut clusters_done = 0usize;
+        let mut clusters_failed = 0usize;
+        let mut consecutive_failures = 0usize;
+        let mut last_error: Option<String> = None;
 
         for cluster in &mut clusters.clusters {
             let chunks = index.get_chunks(&cluster.central_chunks).await?;
@@ -652,15 +666,52 @@ impl FieldModelEngine {
                 Ok(response) => {
                     let json_str = extract_json_from_response(&response);
                     match serde_json::from_str(json_str) {
-                        Ok(label) => cluster.label = Some(label),
+                        Ok(label) => {
+                            cluster.label = Some(label);
+                            consecutive_failures = 0;
+                            last_error = None;
+                        }
                         Err(e) => {
                             tracing::warn!(cluster = cluster.id, error = %e, "Cluster label parse failed");
+                            clusters_failed += 1;
+                            consecutive_failures += 1;
+                            last_error = Some(format!("parse: {e}"));
                         }
                     }
                 }
                 Err(e) => {
                     tracing::warn!(cluster = cluster.id, error = %e, "Cluster label inference failed");
+                    clusters_failed += 1;
+                    consecutive_failures += 1;
+                    last_error = Some(e.to_string());
                 }
+            }
+
+            clusters_done += 1;
+            progress(EnrichmentProgress::Phase2bProgress {
+                clusters_done,
+                clusters_total: total,
+                clusters_failed,
+                consecutive_failures,
+                last_error: last_error.clone(),
+            });
+
+            if consecutive_failures >= STUCK_THRESHOLD {
+                let err_msg = last_error.clone().unwrap_or_else(|| "<no error>".into());
+                tracing::error!(
+                    cluster = cluster.id,
+                    consecutive_failures,
+                    threshold = STUCK_THRESHOLD,
+                    last_error = %err_msg,
+                    "label_clusters_phase: bailing — {STUCK_THRESHOLD} consecutive failures. \
+                     Likely upstream inference issue (e.g. MTP-quarantine on the chat slot). \
+                     Restart the daemon to reset slot state, then resume enrichment."
+                );
+                return Err(Error::Embed(format!(
+                    "label_clusters_phase stuck: {consecutive_failures} consecutive inference \
+                     failures (last: {err_msg}). Resolve the upstream inference issue \
+                     (e.g. restart the daemon to clear MTP quarantine) and resume enrichment."
+                )));
             }
         }
 

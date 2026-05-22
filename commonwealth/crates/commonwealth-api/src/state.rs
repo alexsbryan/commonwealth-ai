@@ -288,6 +288,37 @@ pub struct AppStateInner {
     /// relaxed atomic load.
     pub mesh_quiesced: std::sync::atomic::AtomicBool,
 
+    /// Maximum concurrent peer-served inference requests this node
+    /// admits at once. The admission middleware (see `crate::admission`)
+    /// reads this on every peer request and 503s when the count is
+    /// at-or-above the cap. `usize::MAX` (default) disables the cap;
+    /// `0` rejects all peer work (equivalent to
+    /// `SOVEREIGN_DISABLE_PEER_INFERENCE=1`, but with a runtime
+    /// toggle). Set via `POST /internal/contribution/ceiling`.
+    pub contribution_max_peer_inflight: std::sync::atomic::AtomicUsize,
+
+    /// Currently in-flight peer requests gated by the admission
+    /// middleware. Incremented at admit time, decremented when the
+    /// response future drops (RAII via `PeerInflightGuard`). Reads
+    /// are relaxed: the count is approximate under contention but
+    /// monotonically converges and the worst-case race is one extra
+    /// peer request admitted past the cap — acceptable.
+    pub peer_inflight_count: std::sync::atomic::AtomicUsize,
+
+    /// Unix-seconds expiry for a runtime contribution pause. `0`
+    /// means not paused. `now >= paused_until` means the pause has
+    /// expired; the middleware simply compares without writing the
+    /// field. Settable via `POST /internal/contribution/pause`.
+    pub contribution_paused_until: std::sync::atomic::AtomicI64,
+
+    /// When `true`, peer-served requests honour the foreground-yield
+    /// window just like ingest workers do — a peer chat that lands
+    /// during the window after a local turn 503s with `Retry-After`
+    /// rather than competing with the user for the GPU. Default
+    /// `true`; the setting is exposed via the same Settings surface
+    /// as the foreground-yield window itself.
+    pub yield_peers_to_foreground: std::sync::atomic::AtomicBool,
+
     /// Per-batch ingest throttle. Encoded as fixed-point ‰ (parts
     /// per thousand) so we can represent fractional levels without
     /// floats. `1000` = full speed (no post-batch sleep — the legacy
@@ -342,6 +373,31 @@ pub struct AppStateInner {
     /// invariants. The manifest endpoint reads this on every
     /// fetch to apply per-requester affinity multipliers.
     pub peer_preferences: PeerPreferenceStore,
+
+    /// Shared in-flight counter for local-serve inference. Installed
+    /// once by the daemon bootstrap after `MeshInferenceProvider::new`
+    /// returns. Read by the gossip emitter
+    /// (`sovereign-mesh::capabilities::build_local_capabilities`) on
+    /// every tick to populate
+    /// [`commonwealth_core::capabilities::NodeCapabilities::current_in_flight`].
+    ///
+    /// Lifecycle:
+    /// * Cold start: MIP creates its own private `Arc<AtomicU32>`,
+    ///   then the bootstrap calls
+    ///   [`AppState::install_in_flight_publisher`] with that Arc.
+    ///   `OnceLock::set` succeeds on the first call.
+    /// * Hot reload (`replace_models_and_reload`): the new MIP is
+    ///   constructed via [`MeshInferenceProvider::with_in_flight_publisher`]
+    ///   passing the *already-installed* Arc back in. The OnceLock
+    ///   is unchanged; old MIP guards and new MIP guards share the
+    ///   same atomic, so the counter stays accurate across the swap.
+    ///
+    /// Empty in tests and on storage-only nodes that never construct
+    /// a `MeshInferenceProvider`; gossip then emits
+    /// `current_in_flight: None`, which is the legacy / "no signal"
+    /// behaviour every scoring path handles correctly.
+    pub local_in_flight_publisher:
+        std::sync::OnceLock<Arc<std::sync::atomic::AtomicU32>>,
 }
 
 impl AppState {
@@ -512,6 +568,23 @@ impl AppState {
                 // overrides this from `SOVEREIGN_DISABLE_AUTO_COLLAB`
                 // when set, preserving the env-var escape hatch.
                 mesh_quiesced: std::sync::atomic::AtomicBool::new(false),
+                // usize::MAX = unlimited. The desktop overwrites this
+                // at boot with the user's persisted setting (default
+                // matched to their consent-dialog choice in W4);
+                // headless / CLI daemons leave it unlimited so they
+                // don't surprise their operators.
+                contribution_max_peer_inflight: std::sync::atomic::AtomicUsize::new(
+                    usize::MAX,
+                ),
+                peer_inflight_count: std::sync::atomic::AtomicUsize::new(0),
+                // 0 = not paused. Wall-clock unix-seconds expiry when
+                // a user-initiated pause is active.
+                contribution_paused_until: std::sync::atomic::AtomicI64::new(0),
+                // Default on: foreground-yield gates peer requests
+                // too, not just ingest. The "press send mid-chat and
+                // the GPU is pinned by a peer's enrich job" failure
+                // mode is exactly what this prevents.
+                yield_peers_to_foreground: std::sync::atomic::AtomicBool::new(true),
                 // 1000 ‰ = full speed; ingest pipeline pays one atomic
                 // load per batch and otherwise behaves identically to
                 // the pre-throttle build.
@@ -525,8 +598,45 @@ impl AppState {
                 storage_used_bytes: std::sync::atomic::AtomicU64::new(0),
                 contribution_emitter,
                 peer_preferences,
+                local_in_flight_publisher: std::sync::OnceLock::new(),
             }),
         }
+    }
+
+    /// Install the local MIP's in-flight publisher. One-shot: if the
+    /// OnceLock is already set, the new `publisher` is dropped and
+    /// the existing Arc stays in place. This is the load-bearing
+    /// invariant the hot-reload path relies on — it must NOT clobber
+    /// the publisher the cold-start path installed, or live guards
+    /// from the old MIP would decrement an Arc nobody reads.
+    pub fn install_in_flight_publisher(
+        &self,
+        publisher: Arc<std::sync::atomic::AtomicU32>,
+    ) {
+        let _ = self.inner.local_in_flight_publisher.set(publisher);
+    }
+
+    /// Borrow the installed in-flight publisher Arc. Hot-reload path
+    /// calls this to pass the same Arc into
+    /// `MeshInferenceProvider::with_in_flight_publisher`. `None` when
+    /// the bootstrap hasn't run an install yet (test harnesses,
+    /// storage-only nodes).
+    pub fn in_flight_publisher(
+        &self,
+    ) -> Option<Arc<std::sync::atomic::AtomicU32>> {
+        self.inner.local_in_flight_publisher.get().cloned()
+    }
+
+    /// Read the current local in-flight count if a publisher has been
+    /// installed. `None` on nodes that never wired one through
+    /// (storage-only, test harnesses without `MeshInferenceProvider`).
+    /// Gossip serialises this directly into
+    /// `NodeCapabilities.current_in_flight`.
+    pub fn current_local_in_flight(&self) -> Option<u32> {
+        self.inner
+            .local_in_flight_publisher
+            .get()
+            .map(|p| p.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     /// Spawn the coordinator's pull-based work-queue reaper. Must be called
@@ -788,6 +898,143 @@ impl AppState {
         self.inner
             .mesh_quiesced
             .store(quiesced, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Set the maximum concurrent peer-served inference requests this
+    /// node will admit. `usize::MAX` disables the cap. `0` rejects all
+    /// peer work. Settings UI / `/internal/contribution/ceiling`.
+    pub fn set_contribution_max_peer_inflight(&self, max: usize) {
+        self.inner
+            .contribution_max_peer_inflight
+            .store(max, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Read the configured peer-inflight ceiling.
+    pub fn contribution_max_peer_inflight(&self) -> usize {
+        self.inner
+            .contribution_max_peer_inflight
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Read the current in-flight peer request count (approximate
+    /// under contention — see field docs).
+    pub fn peer_inflight_count(&self) -> usize {
+        self.inner
+            .peer_inflight_count
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Set a runtime contribution pause that expires at the given
+    /// unix-seconds timestamp. `0` clears any active pause. Caller
+    /// (the Settings UI / `/internal/contribution/pause`) is
+    /// responsible for computing the expiry — the admission layer
+    /// just compares against `now()` on each peer request.
+    pub fn set_contribution_paused_until(&self, expiry_unix: i64) {
+        self.inner
+            .contribution_paused_until
+            .store(expiry_unix, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Read the contribution-pause expiry (unix seconds). `0` means
+    /// not paused.
+    pub fn contribution_paused_until(&self) -> i64 {
+        self.inner
+            .contribution_paused_until
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Seconds until the active pause expires. `Some(0)` is never
+    /// returned — `None` means "not currently paused."
+    pub fn seconds_until_unpaused(&self) -> Option<u64> {
+        let expiry = self.contribution_paused_until();
+        if expiry == 0 {
+            return None;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let remaining = expiry.saturating_sub(now);
+        if remaining <= 0 {
+            None
+        } else {
+            Some(remaining as u64)
+        }
+    }
+
+    /// When `true`, peer-served requests respect the foreground-yield
+    /// window. Default `true` — this is the load-bearing setting for
+    /// "the user pressed send and the GPU isn't pinned by peer work."
+    pub fn yield_peers_to_foreground(&self) -> bool {
+        self.inner
+            .yield_peers_to_foreground
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Toggle whether peer-served requests respect the foreground-
+    /// yield window.
+    pub fn set_yield_peers_to_foreground(&self, on: bool) {
+        self.inner
+            .yield_peers_to_foreground
+            .store(on, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Try to admit a peer-served request. Returns a `PeerInflightGuard`
+    /// that increments `peer_inflight_count` for the caller and
+    /// decrements it on drop. Returns an `AdmissionRejection` (mapped
+    /// to 503 by the middleware) when the request shouldn't be served
+    /// right now — pause active, foreground yield, or ceiling reached.
+    ///
+    /// Order matters: pause checked first (the most explicit "no"),
+    /// then yield (user is actively using their machine), then
+    /// ceiling (we're already serving as much as configured). The
+    /// `retry_after_secs` field is the requester's hint for how long
+    /// to wait before trying another peer; the load balancer will
+    /// usually pick a different peer immediately anyway.
+    pub fn admit_peer_request(
+        &self,
+    ) -> Result<crate::admission::PeerInflightGuard, crate::admission::AdmissionRejection>
+    {
+        use crate::admission::{AdmissionReason, AdmissionRejection, PeerInflightGuard};
+        use std::sync::atomic::Ordering;
+
+        if let Some(remaining) = self.seconds_until_unpaused() {
+            return Err(AdmissionRejection {
+                error: "contribution paused".into(),
+                reason: AdmissionReason::Paused,
+                retry_after_secs: remaining.max(1),
+            });
+        }
+        if self.yield_peers_to_foreground() {
+            if let Some(remaining) = self.seconds_until_foreground_idle() {
+                return Err(AdmissionRejection {
+                    error: "local user active".into(),
+                    reason: AdmissionReason::YieldedToLocal,
+                    retry_after_secs: remaining.max(1),
+                });
+            }
+        }
+        let cap = self.contribution_max_peer_inflight();
+        // Pre-increment then check — atomic-correct against
+        // concurrent admit calls. Overshoot is bounded by the number
+        // of racers and corrected by the saturating decrement below.
+        let previous = self
+            .inner
+            .peer_inflight_count
+            .fetch_add(1, Ordering::Relaxed);
+        if previous >= cap {
+            self.inner
+                .peer_inflight_count
+                .fetch_sub(1, Ordering::Relaxed);
+            return Err(AdmissionRejection {
+                error: "peer concurrency ceiling reached".into(),
+                reason: AdmissionReason::CeilingExceeded,
+                // Short backoff; capacity may free as soon as one
+                // in-flight request completes.
+                retry_after_secs: 2,
+            });
+        }
+        Ok(PeerInflightGuard::new(std::sync::Arc::clone(&self.inner)))
     }
 
     /// Read the per-batch ingest throttle factor as a normalised

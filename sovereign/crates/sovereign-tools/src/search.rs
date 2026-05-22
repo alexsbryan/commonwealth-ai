@@ -7,7 +7,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
 use sovereign_core::types::*;
 
-use crate::web::search::SearchBackend;
+use crate::web::search::{SearchBackend, SearchOrchestrator};
 use crate::web::WebSearchTool;
 
 // ─── Thresholds ──────────────────────────────────────────────
@@ -36,7 +36,9 @@ impl SearchTool {
         }
     }
 
-    /// Create a search tool with web fallback.
+    /// Create a search tool with web fallback (legacy direct-
+    /// backend constructor). Kept for the eight existing call
+    /// sites; new code should prefer `with_orchestrator()`.
     pub fn with_web(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
@@ -51,7 +53,46 @@ impl SearchTool {
             inference,
         }
     }
+
+    /// Create a search tool with web fallback routed through the
+    /// trait-based orchestrator. Per the Phase 6 migration in
+    /// `sovereign/docs/PRODUCTION_SEARCH_INTEGRATION.md`, production
+    /// callers should reach for this constructor to pick up the
+    /// orchestrator's privacy + budget + fallback chain.
+    pub fn with_orchestrator(
+        store: Arc<dyn StateStore>,
+        inference: Arc<dyn InferenceProvider>,
+        orchestrator: Arc<SearchOrchestrator>,
+    ) -> Self {
+        Self {
+            web: Some(WebSearchTool::with_orchestrator(
+                Arc::clone(&inference),
+                orchestrator,
+            )),
+            store,
+            inference,
+        }
+    }
 }
+
+/// Canonical model-facing description of the `search` tool. Loaded
+/// from an asset file (data, not program — per ARCH_PRINCIPLES §6.2)
+/// so the gym harness can pin alignment via the same file. Edit the
+/// .md file when you want to change what the model sees; running
+/// the search-gym after any edit catches regressions in tool-call
+/// judiciousness or citation faithfulness before production users
+/// see drift.
+pub const SEARCH_TOOL_DESCRIPTION: &str =
+    include_str!("../assets/search_tool_description.md");
+
+/// Canonical system prompt for chats where the search tool is
+/// enabled. Mirrors SEARCH_TOOL_DESCRIPTION's rules but framed as a
+/// direct instruction to the model rather than a tool description.
+/// Models anchor more heavily on the system message than on tool
+/// metadata, so the same shape rules need to appear in both — kept
+/// in lockstep via the gym's alignment test.
+pub const SEARCH_SYSTEM_PROMPT: &str =
+    include_str!("../assets/search_system_prompt.md");
 
 #[async_trait]
 impl Tool for SearchTool {
@@ -59,10 +100,7 @@ impl Tool for SearchTool {
         ToolDescriptor {
             id: "search".to_string(),
             name: "Search".to_string(),
-            description: "Search across local knowledge bases (Wikipedia, scholarly abstracts, \
-                          encyclopedias, expert Q&A) and optionally the web. Local knowledge \
-                          bases are always available. Web search requires an API key."
-                .to_string(),
+            description: SEARCH_TOOL_DESCRIPTION.trim().to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -312,6 +350,11 @@ impl SearchTool {
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let response = self.inference.complete(&request).await?;
@@ -575,6 +618,35 @@ mod tests {
         assert!(needs_current_info("latest news about AI"));
         assert!(!needs_current_info("What is recursion?"));
         assert!(!needs_current_info("Explain photosynthesis"));
+    }
+
+    #[test]
+    fn search_tool_description_is_loaded_from_asset() {
+        // Pins the load-bearing prompt assertions we validated in
+        // the search-gym fixtures (Phase 2). If anyone changes the
+        // asset, this test still passes — but the search-gym's
+        // alignment test (in sovereign-cli) will catch drift between
+        // the asset and the fixtures' tool descriptions.
+        let desc = SEARCH_TOOL_DESCRIPTION;
+        // Cost-awareness — proven to reduce reflexive search in the
+        // multi-corpus archetype fixtures (06–10).
+        assert!(
+            desc.contains("budget") || desc.contains("monthly"),
+            "description should signal cost awareness"
+        );
+        // Shape-level guidance for "when to search" — validated
+        // against fixtures 01/02 (should search) and 03 (should
+        // skip).
+        assert!(desc.contains("current") || desc.contains("changes"));
+        assert!(desc.contains("stable") || desc.contains("definitions"));
+        // Verbatim-URL guidance — the URL-fabrication failure mode
+        // surfaced by fixture 02 isolated runs.
+        assert!(
+            desc.contains("verbatim")
+                || desc.contains("exact")
+                || desc.contains("character-for-character"),
+            "description should require verbatim URL copy"
+        );
     }
 
     #[test]

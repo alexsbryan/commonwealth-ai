@@ -1,10 +1,11 @@
-# sovereign-mesh worker container, ROCm flavor.
+# syntax=docker/dockerfile:1.7
+# sovereign ephemeral-worker container, ROCm flavor.
 #
-# Builds an image that joins your tailnet, pulls Darwin GGUFs from R2,
-# and runs `sovereign-cli daemon run` with the mesh advertising
-# whatever slots fit on the host GPU. Designed for ad-hoc spin-up on
-# RunPod MI300X (gfx942) instances; same image with AMDGPU_TARGETS
-# adjusted works on MI250X (gfx90a) or MI100 (gfx908).
+# Builds an image that runs `sovereign-cli daemon run --worker-mode`.
+# The pod becomes a single-owner ephemeral worker — see
+# sovereign/docs/EPHEMERAL_WORKER_PODS.md. No Tailscale, no R2, no
+# mesh gossip; the owner connects directly to :9742 over a
+# seed-derived TLS pin.
 #
 # ── build (from commonwealth-ai/ workspace root, NOT from sovereign/):
 #     cd ~/dev/commonwealth-ai
@@ -13,27 +14,24 @@
 #
 # `podman` is the recommended builder on Fedora / RHEL / Toolbox
 # hosts (rootless, daemonless). `docker build -f Containerfile` works
-# identically — both consume Dockerfile syntax and emit OCI-compliant
-# images that any registry (ghcr, Docker Hub, RunPod) accepts.
+# identically.
 #
 # The build context is the commonwealth-ai/ monorepo root because the
-# workspace Cargo.toml at that root declares every crate (corpus-engine,
-# oicp-types, commonwealth/crates/*, sovereign/crates/*) as a path-dep
-# member. Building from sovereign/ alone would not see those manifests.
+# workspace Cargo.toml at that root declares every crate as a
+# path-dep member.
 #
 # ── run locally (rootful podman, AMD GPU passthrough):
 #     podman run --rm \
 #       --device=/dev/kfd --device=/dev/dri --group-add video \
-#       -e TS_AUTHKEY=tskey-... \
-#       -e MESH_SEED_ADDR=100.x.y.z:9742 \
-#       -e R2_ENDPOINT=... -e R2_ACCESS_KEY=... -e R2_SECRET_KEY=... \
-#       -e PRIMARY_COPIES=1 \
-#       -p 9741:9741 -p 9742:9742 \
+#       -e SOVEREIGN_BOOTSTRAP="$(sovereign worker-pod mint-blob …)" \
+#       -p 9742:9742 \
 #       ghcr.io/<you>/sovereign-rocm:latest
 #
-# (RunPod's runtime adds GPU device passthrough automatically; the
-# --device / --group-add flags above are only needed for direct
-# rootful local runs.)
+# In production the owner doesn't run the pod locally — Vast/RunPod
+# does, and the owner ships `SOVEREIGN_BOOTSTRAP` via the provider's
+# onstart-cmd env. (RunPod's runtime adds GPU device passthrough
+# automatically; the --device / --group-add flags above are only
+# needed for direct rootful local runs.)
 
 # ─── Build stage ─────────────────────────────────────────────────────
 FROM docker.io/rocm/dev-ubuntu-22.04:7.2 AS build
@@ -50,9 +48,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake git curl ca-certificates pkg-config libssl-dev \
       protobuf-compiler libprotobuf-dev \
-      clang libclang-dev llvm-dev python3 \
+      clang libclang-dev llvm-dev lld python3 \
       hipblas-dev rocblas-dev \
  && rm -rf /var/lib/apt/lists/*
+
+# sccache caches rustc + hipcc + cc/c++ output keyed by content hash.
+# Same wiring as Containerfile.cuda — see that file for rationale.
+RUN curl -L https://github.com/mozilla/sccache/releases/download/v0.8.2/sccache-v0.8.2-x86_64-unknown-linux-musl.tar.gz \
+      | tar xz -C /tmp \
+ && mv /tmp/sccache-*/sccache /usr/local/bin/sccache \
+ && chmod +x /usr/local/bin/sccache \
+ && rm -rf /tmp/sccache-*
 
 # Where prost-build / lance-* find the well-known google/protobuf/*.proto
 # imports. `libprotobuf-dev` installs them under /usr/include.
@@ -96,7 +102,20 @@ ENV hipblaslt_ROOT=/opt/rocm
 # (`R_X86_64_32`), which the default linux x86_64 PIE link rejects with
 # "recompile with -fPIC". Drop PIE for this binary — analogous to the
 # `-lnccl` link-arg in Containerfile.cuda.
-ENV RUSTFLAGS="-C link-arg=-no-pie"
+#
+# `-fuse-ld=lld` swaps the slow GNU bfd linker for LLVM lld on the
+# final sovereign-cli link.
+ENV RUSTFLAGS="-C link-arg=-no-pie -C link-arg=-fuse-ld=lld"
+
+# sccache wiring. CARGO_INCREMENTAL=0 mandatory — see Containerfile.cuda.
+# CMAKE_HIP_COMPILER_LAUNCHER routes ggml-hip's hipcc compiles through
+# sccache; biggest single win for ROCm rebuilds.
+ENV RUSTC_WRAPPER=sccache
+ENV CARGO_INCREMENTAL=0
+ENV SCCACHE_DIR=/root/.cache/sccache
+ENV CMAKE_C_COMPILER_LAUNCHER=sccache
+ENV CMAKE_CXX_COMPILER_LAUNCHER=sccache
+ENV CMAKE_HIP_COMPILER_LAUNCHER=sccache
 
 # Build context = commonwealth-ai/ workspace root. Post-monorepo (May
 # 2026) the single workspace Cargo.toml + Cargo.lock live here; each
@@ -126,7 +145,18 @@ COPY sovereign/crates/    ./sovereign/crates/
 COPY sovereign/contrib/   ./sovereign/contrib/
 COPY sovereign/.opencode/ ./sovereign/.opencode/
 
-RUN cargo build --release --bin sovereign-cli
+# BuildKit cache mounts persist the cargo registry, git checkouts,
+# target dir, and sccache across rebuilds. See Containerfile.cuda for
+# the full explanation. Binary copied out of the cached target dir into
+# /usr/local/bin so the runtime stage's COPY --from=build pulls from a
+# real image layer (cache mounts don't survive across stages).
+RUN --mount=type=cache,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,target=/root/.cache/sccache,sharing=locked \
+    --mount=type=cache,target=/workspace/target \
+    cargo build --release --bin sovereign-cli \
+ && cp /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli \
+ && sccache --show-stats
 
 # ─── Runtime stage ───────────────────────────────────────────────────
 FROM docker.io/rocm/dev-ubuntu-22.04:7.2
@@ -134,33 +164,34 @@ FROM docker.io/rocm/dev-ubuntu-22.04:7.2
 ENV DEBIAN_FRONTEND=noninteractive
 # Runtime math libs (hipblas, rocblas) — the binary dlopen's these on
 # slot load; without them the daemon segfaults when llama.cpp tries to
-# init a ROCm device. iproute2/iptables are required by tailscaled's
-# userspace networking mode.
+# init a ROCm device.
+#
+# Worker-mode pods no longer install Tailscale or rclone — uploads
+# arrive over the owner's pinned-TLS connection, and the pod never
+# joins a tailnet. See EPHEMERAL_WORKER_PODS.md "Deleted (when
+# full-mesh-pods go away)".
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates iproute2 iptables unzip \
+    curl ca-certificates unzip \
     hipblas rocblas \
     libgomp1 \
- && curl -fsSL https://tailscale.com/install.sh | sh \
- && curl -fsSL https://rclone.org/install.sh | bash \
  && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /workspace/target/release/sovereign-cli /usr/local/bin/sovereign-cli
+COPY --from=build /usr/local/bin/sovereign-cli /usr/local/bin/sovereign-cli
 
 # Workspace volume — RunPod mounts /workspace by default; our entrypoint
-# arranges /workspace/models for GGUFs and /workspace/data for atlases.
+# arranges /workspace/models for owner uploads and /workspace/data for
+# the worker daemon's local state.
 WORKDIR /workspace
-RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign /root/.config/rclone
+RUN mkdir -p /workspace/models /workspace/data /root/.config/sovereign
 
-COPY sovereign/container/entrypoint.sh           /entrypoint.sh
-COPY sovereign/container/entrypoint-tailscale.sh /entrypoint-tailscale.sh
-RUN chmod +x /entrypoint.sh /entrypoint-tailscale.sh
+COPY sovereign/container/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# Daemon's external HTTP + internal mesh gossip ports.
-EXPOSE 9741 9742
+# Worker daemon's owner-only TLS surface. No client port (9741) — pods
+# don't serve /v1/chat/* in worker mode.
+EXPOSE 9742
 
 ENV SOVEREIGN_DATA_DIR=/workspace/data
 ENV SOVEREIGN_MODELS_DIR=/workspace/models
-ENV PRIMARY_COPIES=1
-ENV CONTEXT_SIZE=32768
 
 ENTRYPOINT ["/entrypoint.sh"]

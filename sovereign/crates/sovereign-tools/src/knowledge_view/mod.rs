@@ -21,6 +21,7 @@
 //! institutional}.rs` and `corpus-engine/src/recipe.rs`.
 
 pub mod acquirers;
+pub mod atlas_digest;
 pub mod cross_view;
 pub mod debouncer;
 pub mod digest;

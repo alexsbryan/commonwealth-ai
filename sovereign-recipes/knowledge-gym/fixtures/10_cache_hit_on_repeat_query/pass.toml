@@ -1,0 +1,39 @@
+# Knowledge-gym fixture 10 — cache hit on repeat query (Tier 4).
+#
+# Shape: Turn 0 the user asks about confidence decay; the model
+# calls knowledge_lookup with a representative query and cites
+# the rows. Turn 1 the user explicitly asks to re-check the same
+# query. The model SHOULD call knowledge_lookup again (the user
+# asked for a re-check, not a paraphrase); the gym's
+# mock_evidence_turn_1.json carries `cached: true` simulating
+# the Tier 4 cache having served the second invocation.
+#
+# Mechanism: the runner's tool dispatch reads `payload.cached`
+# from mock_evidence and threads the boolean onto
+# ToolCallRecord.cached. The expect_cache_hit predicate (Phase B)
+# checks ≥1 tool call in scope returned cached=true.
+#
+# This fixture validates the END-TO-END plumbing: cache-aware
+# dispatch path → runner detection → predicate evaluation.
+# It does NOT validate the live daemon cache (which would need
+# the gym to skip mocking and run the real corpus); that's a
+# separate integration check.
+
+[turn_0]
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+must_not_cite_evidence_id_outside_returned = true
+
+[turn_1]
+# Re-check requested → the model should re-issue the lookup.
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+
+# Cross-turn cache hit observable from the runner's vantage.
+expect_cache_hit = true
+
+# Same citation faithfulness on the second turn — cached or
+# not, fabrication discipline still applies.
+must_not_cite_evidence_id_outside_returned = true

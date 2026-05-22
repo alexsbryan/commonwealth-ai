@@ -894,6 +894,14 @@ async fn fetch_hf_archive_attempt(url: &str, part: &Path) -> std::result::Result
     if existing_len > 0 {
         req = req.header("Range", format!("bytes={existing_len}-"));
     }
+    // Private/gated HF datasets require a bearer token. Same env-var
+    // convention used by the model-download path
+    // (sovereign-inference/src/setup_planner.rs).
+    if let Ok(tok) = std::env::var("HF_TOKEN") {
+        if !tok.is_empty() {
+            req = req.bearer_auth(tok);
+        }
+    }
     let resp = req.send().await.map_err(|e| format!("GET {url}: {e}"))?;
     let status = resp.status();
     // 200 OK = fresh full body; 206 Partial Content = Range honoured.

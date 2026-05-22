@@ -1,0 +1,12 @@
+# 04_skip_search_already_in_context
+#
+# The answer is two turns above. A model that reaches for search here
+# isn't reading its own context. The semantic predicate also catches
+# the harder failure mode: skips search but then hallucinates a
+# different figure than what the user stated.
+
+should_call_search = false
+
+final_message_satisfies = [
+  "The response repeats the unified-memory figure the user stated earlier in this conversation, and does not state a different number.",
+]

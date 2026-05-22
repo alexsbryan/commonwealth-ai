@@ -17,11 +17,23 @@ use crate::state::AppState;
 
 /// Build the client-facing API router (port 9741).
 pub fn client_router(state: AppState) -> Router {
+    // Per-route admission gate applied to peer-reachable inference
+    // endpoints. Local requests (no `X-Node-Id`) pass through; peer
+    // requests are checked against pause / foreground-yield / ceiling
+    // and 503 with structured body + Retry-After when gated. See
+    // `crate::admission`.
+    let admission = || {
+        axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::admission::peer_admission_layer,
+        )
+    };
+
     Router::new()
         // OpenAI-compatible inference endpoints.
         .route(
             "/v1/chat/completions",
-            post(routes_inference::chat_completions),
+            post(routes_inference::chat_completions).layer(admission()),
         )
         // OpenAI Responses API — adapter over /v1/chat/completions.
         // Required by `codex` and the OpenAI agents libraries since
@@ -51,6 +63,17 @@ pub fn client_router(state: AppState) -> Router {
 
 /// Build the internal mesh API router (port 9742).
 pub fn internal_router(state: AppState) -> Router {
+    // Same admission gate as the client router — applied to peer-
+    // fan-out routes so a busy operator's machine 503s knowledge
+    // searches from peers rather than starving local chat. See
+    // `crate::admission`.
+    let admission = || {
+        axum::middleware::from_fn_with_state(
+            state.clone(),
+            crate::admission::peer_admission_layer,
+        )
+    };
+
     Router::new()
         .route("/internal/gossip", post(routes_internal::gossip))
         .route("/internal/join", post(routes_internal::join))
@@ -85,7 +108,7 @@ pub fn internal_router(state: AppState) -> Router {
         )
         .route(
             "/internal/knowledge/search",
-            post(routes_internal::knowledge_search),
+            post(routes_internal::knowledge_search).layer(admission()),
         )
         .route(
             "/internal/atlas/status",
@@ -179,6 +202,37 @@ pub fn internal_router(state: AppState) -> Router {
         .route(
             "/internal/inference/warmup",
             post(routes_internal::inference_warmup),
+        )
+        // Contribution controls (W2). Read by the Settings panel and
+        // the tray status chip; mutated by the pause/ceiling controls.
+        // Loopback-only — the same guard that protects /internal/*.
+        .route(
+            "/internal/contribution/status",
+            get(routes_internal::contribution_status),
+        )
+        .route(
+            "/internal/contribution/ceiling",
+            post(routes_internal::contribution_ceiling_set),
+        )
+        .route(
+            "/internal/contribution/pause",
+            post(routes_internal::contribution_pause),
+        )
+        .route(
+            "/internal/contribution/resume",
+            post(routes_internal::contribution_resume),
+        )
+        .route(
+            "/internal/contribution/recent",
+            get(routes_internal::contribution_recent),
+        )
+        // Dimensional per-node ledger view (Mesh Health Members panel).
+        // Read-only aggregation over the default 30-day window. Attach-
+        // mode desktops hit this so they can render Members without an
+        // in-process AppState.
+        .route(
+            "/internal/contribution/view",
+            get(routes_internal::contribution_view),
         )
         // Foreground-yield introspection — read-only snapshot of the
         // atomics that decide whether ingest workers are pausing for

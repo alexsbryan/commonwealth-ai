@@ -161,6 +161,100 @@ pub struct CompletionRequest {
     /// in `build_sampler`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sampling_mode: Option<SamplingMode>,
+
+    /// Prefill text to append after the rendered chat-template prompt,
+    /// before the model's first generation token. Used to "continue"
+    /// an assistant turn from a known-good prefix — e.g. when the
+    /// read-attractor nudge fires, the frontdoor sets this to the
+    /// canonical `<tool_call>{"name":"exec_command","arguments":{"cmd":"apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: "`
+    /// opener and the model has to sample continuations of a literal
+    /// known-good prefix rather than choosing between read-vs-write
+    /// from scratch.
+    ///
+    /// Structural lever over prompt-only nudging. Family-agnostic:
+    /// works for any backend whose chat-template path emits a
+    /// generation-position marker (`<|turn>model\n`, `<|im_start|>assistant\n`,
+    /// `<start_of_turn>model\n`, etc.) — we append after that marker.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assistant_prefix: Option<String>,
+
+    /// Structural constraint on the `cmd` field of `exec_command` tool
+    /// calls (R2). When set, `inference_adapter::tool_envelope_schema_for`
+    /// decorates the `cmd` parameter schema with a `pattern: "^<literal-prefix>"`
+    /// and `JsonConstraint`'s string-body walker masks any byte that
+    /// wouldn't extend the literal prefix until it is fully emitted.
+    /// After the prefix point, normal string-body sampling resumes.
+    ///
+    /// Set by frontdoor's `apply_read_attractor_nudge_chat` when it
+    /// fires — the model's only legal continuation is the canonical
+    /// `apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: ` opener
+    /// followed by free-form body. Doesn't compose with
+    /// `assistant_prefix` — pick one mechanism per turn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cmd_prefix: Option<String>,
+    /// URL allowlist for grammar-constrained URL emission. When
+    /// `Some`, the inference sampler installs a logit-mask constraint
+    /// that prevents the model from emitting any HTTP/HTTPS URL outside
+    /// this list — byte-by-byte, via the trie-walking state machine in
+    /// `sovereign_inference::url_constraint::UrlAllowlistConstraint`.
+    ///
+    /// Used by tool-call result-rendering paths (search_gym runner,
+    /// future production `SearchTool` integration) to make URL
+    /// fabrication structurally impossible: the model literally cannot
+    /// sample a token that would extend the cursor past a valid trie
+    /// edge. Prose tokens pass through; URL-shaped tokens that don't
+    /// match the trie get clamped to `-INFINITY`.
+    ///
+    /// `None` (default) leaves URL emission unconstrained. Empty list
+    /// is treated as "no URLs allowed" — useful for tool-result
+    /// renderings that contained zero URLs and where any URL emission
+    /// is automatically a fabrication.
+    ///
+    /// Wire path: extracted from the OpenAI request body's
+    /// `url_allowlist` field in `routes_inference.rs`; consumed by
+    /// `embedded::build_sampler` which constructs the constraint and
+    /// attaches it to `ConstrainedSampler`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url_allowlist: Option<Vec<String>>,
+    /// Evidence-id allowlist for sampler-side citation faithfulness
+    /// (Tier 2 of tool-framework expansion). Same architecture as
+    /// `url_allowlist` — a byte-trie of valid `ev-Tn-NNNN` handles
+    /// gets attached to the sampler; tokens that would extend
+    /// `[ev-T…` into a non-existent id get clamped to `-INFINITY`.
+    /// Prose tokens pass through. Combined with Tier 1's payload
+    /// memory, this makes cross-turn citation fabrication
+    /// structurally impossible, not just discouraged by prompt.
+    ///
+    /// `None` leaves citation emission unconstrained. Empty list
+    /// is treated as "no citations allowed" — useful for synthesis
+    /// turns where no prior tool returned evidence and any
+    /// `[ev-T…` emission would be a fabrication.
+    ///
+    /// Wire path: extracted from the OpenAI request body's
+    /// `evidence_id_allowlist` field in `routes_inference.rs`
+    /// (populated by `apply_evidence_id_allowlist_from_tool_results`
+    /// in `frontdoor.rs`); consumed by `embedded::build_sampler`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_id_allowlist: Option<Vec<String>>,
+    /// Lark grammar that constrains the model's per-turn output.
+    /// Mutually exclusive with `structured_output`: when both are
+    /// set the lark path wins (this is the newer mechanism).
+    ///
+    /// Set by `sovereign_mesh::inference_adapter::build_completion_request`
+    /// when `tools.is_some()` and `tool_choice != Some("none")` AND
+    /// the `SOVEREIGN_ALTERNATION_GRAMMAR` env var is truthy. The
+    /// rendered grammar is the alternation shape
+    /// `start: text_branch | tool_envelope`, which lets the model
+    /// emit either a parseable tool-call envelope OR plain text;
+    /// closes the `parse_failed_envelope` + `loop_trap` failure
+    /// classes the agent-bench scanner surfaced on 2026-05-21.
+    ///
+    /// Built via `llguidance_constraint::build_tool_alternation_grammar`.
+    /// Consumed by `embedded::build_sampler`, which constructs a
+    /// `LlguidanceConstraint` and attaches it to `ConstrainedSampler`
+    /// in place of the usual `JsonConstraint`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lark_grammar: Option<String>,
 }
 
 /// Sampler-profile selector. Mirrored in the inference layer's
@@ -211,6 +305,11 @@ impl CompletionRequest {
             model_id: None,
             enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 
@@ -257,6 +356,11 @@ impl CompletionRequest {
             model_id: None,
             enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 }
@@ -589,6 +693,15 @@ pub struct ToolContext {
     /// contexts decode cleanly.
     #[serde(default)]
     pub agent_session_token: Option<String>,
+    /// Zero-based count of prior user turns in this conversation
+    /// (Tier 1 result memory). Tools that return citation-shaped
+    /// evidence call `EvidenceId::from_index_with_turn(idx,
+    /// turn_index)` so the resulting handles are unique across
+    /// the conversation's history. `#[serde(default)]` means
+    /// pre-Tier-1 serialized contexts decode as turn 0 — degraded
+    /// but valid (handles render as `ev-T0-NNNN`).
+    #[serde(default)]
+    pub turn_index: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -912,6 +1025,142 @@ pub struct ConversationContext {
     /// pre-pass failed soft (it must never block a turn).
     #[serde(default)]
     pub temporal_tensions: Vec<TemporalTension>,
+    /// Compacted summary of conversation turns that fell outside the
+    /// rolling visible-history window. Populated by the runtime via
+    /// a Fast-slot summarization call when `conversation.messages`
+    /// exceeds `CONV_HISTORY_TURNS` (see `runtime.rs`). `None` when
+    /// the conversation is still short enough that every turn fits
+    /// in the visible window — no compaction needed.
+    ///
+    /// Consumed by `build_system_message` → `format_conversation_history`
+    /// to prepend an "Earlier in the conversation:" block before the
+    /// verbatim recent turns. Surfaced by
+    /// `sovereign/bench/wikipedia_learn` 2026-05-17 marathon thread:
+    /// turn 11's callback to "Babbage's original vision" (introduced
+    /// in turn 0) fails when T0 has rolled off the visible window
+    /// without a compacted anchor.
+    #[serde(default)]
+    pub compacted_history: Option<String>,
+    /// Tool-Mastery framework dossier: ambient context block listing
+    /// the tools narrowed for the active skill on this turn, the
+    /// recent tool-decision outcomes scoped to this conversation,
+    /// and (placeholder) workspace freshness signals. Populated by
+    /// `dossier::compute_tool_dossier` as a Fast-slot pre-pass and
+    /// spliced into the system message by `build_system_message`.
+    /// `None` on relational skills (inner-work) and when the active
+    /// skill hasn't been resolved (CLI / test harness paths).
+    #[serde(default)]
+    pub tool_dossier: Option<ToolDossier>,
+    /// Per-turn IntentPolicy computed at dispatch time from
+    /// (intent, register, active_mode). Carries the effective
+    /// register and the post-override effective intent so every
+    /// downstream consumer reads from a single source of truth
+    /// rather than re-querying `SkillRegistry::primary_skill_register()`
+    /// independently at ~16 sites.
+    ///
+    /// `#[serde(skip)]` because the policy is rebuilt from
+    /// in-memory state at every dispatch; never persisted, never
+    /// restored. Legacy callers that construct a context without
+    /// going through dispatch see `None` and fall back to factual
+    /// defaults via [`Self::turn_register`].
+    #[serde(skip)]
+    pub intent_policy: Option<crate::intent_policy::IntentPolicy>,
+}
+
+impl ConversationContext {
+    /// Return the per-turn voice register, falling back to
+    /// `Factual` when no policy has been computed yet (test
+    /// harnesses, headless boot, or any code path that built a
+    /// context outside `handle_message_stream` / `handle_turn`).
+    /// Replaces scattered `SkillRegistry::primary_skill_register()`
+    /// queries throughout `runtime.rs`.
+    pub fn turn_register(&self) -> crate::skills::SkillRegister {
+        self.intent_policy
+            .as_ref()
+            .map(|p| p.register)
+            .unwrap_or(crate::skills::SkillRegister::Factual)
+    }
+
+    /// Return the policy's `effective_intent` if available. Useful
+    /// at dispatch-time when the caller has just bound the policy
+    /// and wants the post-override intent for the handler call.
+    pub fn turn_effective_intent(&self) -> Option<&crate::types::Intent> {
+        self.intent_policy
+            .as_ref()
+            .and_then(|p| p.effective_intent.as_ref())
+    }
+}
+
+/// Tool-Mastery dossier. Three sections per the Phase 3 plan:
+/// 1. Tools available this turn (from the narrowed catalog).
+/// 2. Outcome history this conversation (from `tool_decision` notes).
+/// 3. Ambient workspace state (lint/test freshness; placeholder for now).
+///
+/// Stored on `ConversationContext` so multiple call sites
+/// (`build_system_message` + the routing-footer renderer) can
+/// consume the same computed value without re-running the
+/// NoteStore read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDossier {
+    /// Resolved id of the active skill at the time the dossier was
+    /// computed — drives the per-skill "narrowed by" label in the
+    /// routing footer. `None` when no skill was active.
+    pub active_skill_id: Option<String>,
+    /// One entry per tool the model can call this turn. Carries the
+    /// canonical id + descriptor.description (no new asset — the
+    /// descriptors are the source of truth per ARCH §6.2).
+    pub tools_available: Vec<ToolDossierEntry>,
+    /// Recent tool-decision outcomes (`useful` / `stale` /
+    /// `wrong-tool` / `no-results`) scoped to this conversation.
+    /// Capped at `MAX_DOSSIER_OUTCOMES` (see `dossier.rs`).
+    pub outcome_history: Vec<ToolDossierOutcome>,
+    /// Ambient-workspace freshness signals. Phase-3 plan punt — left
+    /// as `None`; future PRs splice `lint_status` / `test_status`
+    /// here without touching this struct.
+    #[serde(default)]
+    pub ambient_state: Option<String>,
+}
+
+/// One row of `ToolDossier.tools_available`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDossierEntry {
+    pub tool_id: String,
+    pub description: String,
+}
+
+/// One row of `ToolDossier.outcome_history` — a frozen view of a
+/// past `ToolDecisionPayload` keyed to this conversation. Separate
+/// from the payload type so the splice format is stable even if the
+/// stored payload schema grows fields.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolDossierOutcome {
+    pub tool_id: String,
+    /// Canonical wire-form: `"useful"` / `"stale"` / `"wrong-tool"`
+    /// / `"no-results"`. String here (not the enum) so this type
+    /// stays Serde-friendly without pulling the
+    /// `ToolDecisionOutcome` enum into the public types module.
+    pub outcome: String,
+    pub reasoning: String,
+    pub applied_at_unix: i64,
+    /// Tier 1 result memory — one-line summary of what the tool
+    /// actually returned (top-1 evidence title for knowledge_lookup,
+    /// first matched symbol for code-intel, etc.). `None` for
+    /// pre-Tier-1 payloads or sites that don't have the data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Tier 1 result memory — per-call ev-Tn-NNNN handles the
+    /// model may cite cross-turn. Empty when the underlying tool
+    /// doesn't return citation-shaped evidence (or when the call
+    /// pre-dates Tier 1). The renderer surfaces these as
+    /// `[ev-T2-0000..0003]` ranges so the model can address past
+    /// evidence without re-fetching.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_ids: Vec<String>,
+    /// Tier 1 result memory — zero-based turn index this outcome
+    /// was recorded against. Lets the renderer disambiguate when
+    /// two outcomes are from the same tool: `T2` vs `T4` ids.
+    #[serde(default)]
+    pub turn_index: usize,
 }
 
 /// A pairwise tension between a prior memory the user expressed
@@ -1479,6 +1728,15 @@ pub struct RouterClassification {
     /// the LLM-backed router so the runtime can roll the slice into
     /// the response metrics.
     pub timing: Option<RoutingTiming>,
+    /// Optional scope hint sourced from the nearest router exemplar.
+    /// Orthogonal to `primary.intent`; consumed downstream by
+    /// retrieval to bias corpus selection. Today's only value is
+    /// `Some("personal")` — set when the matched exemplar is tagged
+    /// with `scope = "personal"` in `sovereign/router/exemplars.toml`
+    /// (conversation-history / personal-vault shapes). `None` =
+    /// no scope hint (current default), retrieval uses every
+    /// installed knowledge corpus.
+    pub scope: Option<String>,
 }
 
 /// Iter6: per-call routing latency slice. Surfaces the cost of the
@@ -1661,6 +1919,42 @@ pub enum NarrationPhase {
     StageError {
         stage: String,
         error: String,
+    },
+
+    // ── Tool-invocation frames (table-stakes "Searching for X…" UX) ──
+    //
+    // Unlike the pipeline-stage frames above (Routing → Retrieval →
+    // Curation → Drafting → Presentation, which fire at most once each),
+    // tool invocations can fan out — a single turn may call web_search +
+    // knowledge_search in parallel, then web_fetch on a follow-up. The
+    // `call_id` correlates Start with Complete so the desktop can resolve
+    // out-of-order arrivals back into per-call cards.
+    //
+    // These frames intentionally bypass the 3-event narration cap and
+    // 5s-elapsed suppression in `QuerySession`: the user needs to see
+    // tool activity *immediately* (within 200ms) for the "feels alive"
+    // contract. Emit via `emit_turn_narration` directly, not via
+    // `try_emit_narration`.
+    /// A tool call has started. `tool_id` is the canonical id
+    /// (`web_search`, `knowledge_search`, `web_fetch`, `document`, etc.);
+    /// `summary` is a one-line user-facing description ("Searching the
+    /// web for *quantum entanglement*", "Reading docs.python.org") that
+    /// the desktop chip can render without re-interpreting tool args.
+    ToolInvocationStart {
+        call_id: String,
+        tool_id: String,
+        summary: String,
+    },
+    /// A tool call has finished. `ok` distinguishes success (chip turns
+    /// done-coloured) from failure (chip turns muted, paired with the
+    /// graceful-failure prompt rule). `result_summary` is a short
+    /// user-facing outcome ("Retrieved 4 results", "No matches found",
+    /// "404 Not Found") — never the raw tool output.
+    ToolInvocationComplete {
+        call_id: String,
+        tool_id: String,
+        ok: bool,
+        result_summary: String,
     },
 }
 
@@ -1958,6 +2252,18 @@ pub struct ResponseProvenance {
     /// `None` when not applicable or for old messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub self_assessment: Option<String>,
+    /// Human-readable rationale for the coarse classification — set
+    /// by the router itself (e.g. `"current/time-sensitive signal →
+    /// external tool"`, `"factual-lookup shape (what/who/when/where)
+    /// → knowledge query"`, `"first-person + content-discourse verb
+    /// → personal-corpus lookup"`). Surfaced in the desktop
+    /// RoutingMeta footer so the operator can tell whether a
+    /// surprising route came from a heuristic shortcut or the LLM
+    /// classifier, without having to scrape the daemon logs. `None`
+    /// when no rationale was emitted (rare: usually only on errors)
+    /// or for old messages that predate this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_trigger: Option<String>,
     /// Folder-ingest v1 §6.3: per-turn coverage assessment over the
     /// user's watched-folder corpora. `None` for turns where no
     /// folder corpus contributed retrieval (the common "talked to a
@@ -2146,6 +2452,25 @@ impl DocumentAsset {
 
 /// Processing state of a document asset. Drives the UI's progress
 /// display and determines which operations are available.
+///
+/// Tiered retrieval surface (proper-curried-peach plan, 2026-05-22):
+/// the state machine exposes three discrete capability tiers between
+/// `Pending` and `Ready`. Each tier unlocks a specific retrieval mode
+/// without waiting for the next.
+///
+/// - **PartiallyReady** (T1): chunks + embeddings persisted → cosine
+///   top-K retrieval works.
+/// - **MultiHopReady** (T2): entity index + action atoms built →
+///   personalised-PageRank multi-hop retrieval works.
+/// - **Ready** (T3): RAPTOR atlas + motifs + structural metadata
+///   built → full briefing-driven synthesis with scene-scale
+///   signposts.
+///
+/// `BuildingSkeleton` is reused as the "in-flight enrichment" state
+/// for both the T2 and T3 phases. The progress counter rises through
+/// each phase; a `MultiHopReady` milestone fires between them. The
+/// progress bar may briefly reset at the milestone — by design (it
+/// signals a real capability checkpoint, not just continuous work).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AssetState {
     /// File accepted. Processing not yet started.
@@ -2155,15 +2480,20 @@ pub enum AssetState {
         chunks_done: usize,
         chunks_total: usize,
     },
-    /// Embedding done. RAG available. Skeleton extraction running.
-    /// Synthesis and coherent analysis available with degraded quality.
+    /// T1 done. Embeddings persisted; cosine retrieval works. T2
+    /// enrichment running (entity extraction + action atoms).
     PartiallyReady,
-    /// Skeleton extraction in progress.
+    /// T2 or T3 enrichment in progress. Reused variant — the phase
+    /// is implicit in the surrounding state-machine flow (T2 fires
+    /// before MultiHopReady; T3 fires after).
     BuildingSkeleton {
         chunks_done: usize,
         chunks_total: usize,
     },
-    /// Fully ready. All operations available.
+    /// T2 done. Entity index + action atoms available; PPR multi-hop
+    /// retrieval works. T3 enrichment (RAPTOR + motifs) running.
+    MultiHopReady,
+    /// T3 done. All operations available.
     Ready,
     /// Ingest failed.
     Failed { reason: String },
@@ -2171,13 +2501,15 @@ pub enum AssetState {
 
 impl AssetState {
     /// True when the document has enough indexed data to answer
-    /// RAG queries — embedding is complete even if the skeleton
-    /// is still building.
+    /// retrieval queries. All three tiers (T1, T2, T3) qualify —
+    /// only the *quality* differs. Pending / Indexing return false
+    /// because chunks aren't in the store yet.
     pub fn is_queryable(&self) -> bool {
         matches!(
             self,
             AssetState::PartiallyReady
                 | AssetState::BuildingSkeleton { .. }
+                | AssetState::MultiHopReady
                 | AssetState::Ready
         )
     }
@@ -2189,13 +2521,20 @@ impl AssetState {
             AssetState::Indexing { .. } => "Indexing",
             AssetState::PartiallyReady => "Partially ready",
             AssetState::BuildingSkeleton { .. } => "Building structure",
+            AssetState::MultiHopReady => "Multi-hop ready",
             AssetState::Ready => "Ready",
             AssetState::Failed { .. } => "Failed",
         }
     }
 
-    /// Progress as a 0.0–1.0 fraction. Indexing is the first half,
-    /// skeleton extraction is the second half.
+    /// Progress as a 0.0–1.0 fraction.
+    ///
+    /// `MultiHopReady` returns 0.7 — between PartiallyReady's 0.5
+    /// and Ready's 1.0, signalling that the second enrichment tier
+    /// has landed. `BuildingSkeleton`'s fraction continues to span
+    /// 0.5 → 1.0 in both T2 and T3 phases; the bar visually resets
+    /// at the MultiHopReady checkpoint, which is intentional — that
+    /// reset *is* the visual milestone.
     pub fn progress_fraction(&self) -> Option<f32> {
         match self {
             AssetState::Indexing {
@@ -2209,6 +2548,7 @@ impl AssetState {
             } if *chunks_total > 0 => {
                 Some(0.5 + *chunks_done as f32 / *chunks_total as f32 * 0.5)
             }
+            AssetState::MultiHopReady => Some(0.7),
             AssetState::Ready => Some(1.0),
             _ => None,
         }
@@ -2275,7 +2615,93 @@ pub struct DocumentSkeleton {
     /// One-paragraph overview used by the router to decide
     /// operation type without reading the full document.
     pub overview: String,
+    /// Atlas-light: per-entity action atoms with chunk-level evidence.
+    /// Each atom captures *what an entity does*, anchored to a chunk
+    /// so retrieval can be entity-action lookup, not just embedding
+    /// similarity. Built optionally during ingest. Empty for pre-atlas
+    /// ingests (`#[serde(default)]` keeps old `skeleton_json` rows
+    /// deserialising cleanly).
+    ///
+    /// The book-report bench (2026-05-21) surfaced the failure this
+    /// addresses: even with K=16 embedding RAG + entity-name queries
+    /// from the briefing, the chunk containing "Winnie stitched the
+    /// address label into the lapel" never surfaced. Conrad's
+    /// chapter-5 family-drama passages don't embed close to
+    /// "Greenwich Park bomber identification" queries. Action atoms
+    /// bridge that semantic gap: query "what did Winnie do?" →
+    /// atom lookup → chunk_index 11 → return Conrad's actual prose.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub actions: Vec<ActionAtom>,
+    /// Document-type-agnostic multi-chunk units the LLM grouped at
+    /// ingest. Each Segment is a contiguous chunk_range with a
+    /// title + summary + function label, capturing whatever
+    /// "coherent unit larger than a chunk, smaller than the whole
+    /// document" means for this doc_type (scene in fiction, section
+    /// in a paper, procedure in a manual, episode in a chronicle).
+    ///
+    /// Retrieval-time use: when a chunk K is hit by cosine K-NN,
+    /// look up the Segment containing K and return the whole
+    /// segment together. Replaces the runtime ±1 mechanical
+    /// neighbour expansion with LLM-judged structural boundaries.
+    ///
+    /// Empty for pre-segment ingests; `#[serde(default)]` keeps
+    /// old `skeleton_json` rows deserialising cleanly.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub segments: Vec<DocumentSegment>,
     pub built_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A coherent multi-chunk unit the LLM grouped at ingest time.
+/// Generic across document types — the `function` enum reuses the
+/// same `SectionFunction` codes the per-chunk SectionAnnotation
+/// uses, so the same vocabulary serves both per-chunk and per-
+/// segment annotations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentSegment {
+    /// Stable id within this document — `seg-<chunk_start>`.
+    pub id: String,
+    /// Inclusive range of chunk_indices this segment spans.
+    /// `[start, end]` (both endpoints inclusive) — segments are
+    /// guaranteed to be at least 1 chunk.
+    pub chunk_start: usize,
+    pub chunk_end: usize,
+    /// Short, doc-type-aware title in the document's own
+    /// register. Free-form so a narrative gets "Heat searches
+    /// the wreckage" while a paper gets "Method — fMRI protocol".
+    pub title: String,
+    /// 1-3 sentence neutral summary of what the segment covers.
+    pub summary: String,
+    /// Main entities active in this segment (subset of skeleton's
+    /// main_entities, scoped to this range).
+    pub key_entities: Vec<String>,
+    /// Structural function — reuses the existing chunk-scope
+    /// SectionFunction enum so retrieval code doesn't branch on
+    /// segment-vs-chunk distinction.
+    pub function: SectionFunction,
+}
+
+/// What an entity does in the document, anchored to a chunk so the
+/// passage is recoverable as evidence. Atlas-light — one notch above
+/// the entity_index quote_samples (which are just first-200-chars
+/// of chunks where the entity appears) and one notch below the full
+/// atlas Atom schema (with typed Entity/Event/Relation IDs).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionAtom {
+    /// Canonical entity name from `main_entities`.
+    pub entity: String,
+    /// Action verb the LLM extracted ("stitched", "discovers",
+    /// "killed"). Lowercase, no surrounding whitespace.
+    pub verb: String,
+    /// What the verb acts on or modifies — short noun phrase.
+    pub object: String,
+    /// The chunk this action lives in. Used by retrieval to
+    /// surface the original passage when the model queries
+    /// the entity name.
+    pub chunk_index: usize,
+    /// Verbatim ~140-char snippet from the chunk that grounds
+    /// the atom. Lets the model see the document's actual
+    /// phrasing without re-querying the chunk.
+    pub evidence: String,
 }
 
 /// A chunk annotated with its structural role in the document.
@@ -2374,6 +2800,91 @@ pub struct StructuralMoment {
     pub salience: f32,
 }
 
+// ─── RAPTOR Atlas ─────────────────────────────────────────────
+//
+// RAPTOR (Recursive Abstractive Processing for Tree-Organized
+// Retrieval) replaces per-chunk LLM skeleton extraction with a
+// cluster-summarize-recurse tree. Each node carries a summary
+// (signpost), evidence chunk IDs (for tool retrieval), and verbatim
+// quote spans (for hallucination-safe quotation).
+//
+// Load-bearing contract: a node's `summary` must NOT contain `"`.
+// Enforced at generation by lark_grammar so downstream tools can
+// rely on "anything inside double quotes in a model answer came
+// from a quote_span or a fetched chunk — never from a summary."
+
+/// A node in the RAPTOR tree. Level 0 nodes cluster raw document
+/// chunks; level N+1 nodes cluster level N node summaries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RaptorNode {
+    /// Stable UUID — primary key + child reference from the level
+    /// above.
+    pub node_id: String,
+    /// 0 = clusters of raw chunks. Higher = clusters of summaries.
+    pub level: u8,
+    /// LLM-generated paraphrase. By contract free of `"` characters.
+    pub summary: String,
+    /// Embedding of `summary` — used to match user queries against
+    /// nodes at this level.
+    pub summary_embedding: Vec<f32>,
+    /// GMM centroid in the *input* embedding space (chunk embeddings
+    /// for level 0; child summary embeddings for level > 0).
+    /// Persisted so incremental updates can re-score new members
+    /// without re-clustering the whole document.
+    pub centroid_embedding: Vec<f32>,
+    /// Child node IDs. Empty at level 0.
+    pub children_node_ids: Vec<String>,
+    /// Chunks directly in this cluster. Populated only at level 0.
+    pub direct_member_chunk_ids: Vec<u32>,
+    /// Transitive union of all chunks under this subtree. Used for
+    /// scoped chunk retrieval ("search within this node's evidence").
+    pub evidence_chunk_ids: Vec<u32>,
+    /// 3-5 verbatim spans pulled from member chunks at build time,
+    /// chosen for highest cosine similarity to the cluster centroid.
+    /// This is the model's hallucination-safe quotable surface for
+    /// the node.
+    pub quote_spans: Vec<QuoteSpan>,
+    /// Primary entities active in this cluster. Union of GLiNER
+    /// tags on member chunks and entities the summarization prompt
+    /// explicitly identified.
+    pub primary_entities: Vec<String>,
+    /// Cluster tightness in [0,1]. Higher = members more similar to
+    /// centroid. Drives the briefing's coherence-weighted budget so
+    /// tight clusters earn their slot in the prompt.
+    pub cluster_coherence: f32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// A verbatim span from a source chunk — safe to quote without
+/// triggering the bench's hallucination detector. `text` is stored
+/// redundantly so the briefing can ship it inline without a
+/// round-trip to the chunk store.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuoteSpan {
+    pub chunk_id: u32,
+    pub char_start: u32,
+    pub char_end: u32,
+    pub text: String,
+}
+
+/// A recurring word or phrase that distinguishes this document from
+/// a general-English corpus baseline. The motif index gives the
+/// model a direct retrieval handle for lexical recurrences that
+/// RAPTOR's abstraction loses ("incurious" repeating five times
+/// across chapters is invisible to an embedding cluster but
+/// load-bearing for thematic-tier questions).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssetMotif {
+    pub term: String,
+    /// TF-IDF score against an English-baseline IDF.
+    pub tf_idf_score: f32,
+    /// Chunk indices where `term` appears.
+    pub occurrence_chunk_ids: Vec<u32>,
+    /// True when the LLM motif-classifier judged this a recurring
+    /// motif vs incidental rare-word noise.
+    pub is_distinctive: bool,
+}
+
 // ─── Document Operations ──────────────────────────────────────
 //
 // The operation the router selected for a user's request. Stored
@@ -2438,6 +2949,9 @@ mod knowledge_view_digest_tests {
             topic_context: None,
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
         }
     }
 
@@ -2536,6 +3050,7 @@ mod routing_policy_tests {
             coarse_intent: Some("SIMPLE".into()),
             self_assessment: None,
             timing: None,
+            scope: None,
         }
     }
 

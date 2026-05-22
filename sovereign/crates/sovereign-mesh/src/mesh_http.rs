@@ -118,6 +118,14 @@ pub struct MemberDto {
     /// `"online"` | `"busy"` | `"away"` | `"offline"` — matches the
     /// `MemberStatus` serde rename in `crate::types`.
     pub status: String,
+    /// Routable addresses (typically tailnet `host:port`) advertised
+    /// by this member. Empty until the first gossip round populates
+    /// them. Consumed by `sovereign mesh status` to render the per-
+    /// member address row and to power `--self --addr-only` for
+    /// scripting the SOVEREIGN_FOUNDER_ADDR capture pattern in
+    /// pod-deployment workflows.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub addresses: Vec<String>,
 }
 
 fn default_node_name(override_name: Option<String>) -> String {
@@ -177,6 +185,7 @@ async fn mesh_status(
                 crate::types::MemberStatus::Offline => "offline",
             }
             .to_string(),
+            addresses: m.addresses.clone(),
         })
         .collect();
 

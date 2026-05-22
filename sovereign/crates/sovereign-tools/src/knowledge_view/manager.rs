@@ -34,6 +34,7 @@ use sovereign_core::types::{ConversationContext, LandscapeDigest};
 use tokio::sync::{mpsc, RwLock};
 
 use super::acquirers::register_sqlite;
+use super::atlas_digest;
 use super::cross_view;
 use super::debouncer::{spawn_debouncer, ViewEntry, ViewEvent};
 use super::digest::format_landscape;
@@ -336,17 +337,29 @@ impl KnowledgeViewManager {
         budget_tokens: usize,
     ) -> CorpusResult<String> {
         // Fast path: return the cached formatted body when the
-        // skeleton file hasn't been modified since we last formatted
-        // it. splice_into fires on every turn; an enrichment run
-        // happens every few minutes at most — so the cache hit rate
-        // is effectively 100% on hot paths.
+        // skeleton (v1) or atoms.json (v2 atlas) file hasn't been
+        // modified since we last formatted it. splice_into fires on
+        // every turn; an enrichment run happens every few minutes at
+        // most — so the cache hit rate is effectively 100% on hot
+        // paths.
         let index = self.engine.open_index_for_corpus(view_id).await?;
-        let skeleton_path = index.path().join("field_skeleton.json");
-        let skeleton_mtime = std::fs::metadata(&skeleton_path)
+        let index_dir = index.path();
+        // `conversation-history` was migrated to the v2 atlas pipeline
+        // (`conversation_atlas`) in the conversation-imports landing;
+        // its digest source is `atlas/atoms.json` rather than
+        // `field_skeleton.json`. The other two views still run v1
+        // `field_model` enrichment.
+        let use_atlas = view_id == ViewKind::Conversational.id();
+        let source_path = if use_atlas {
+            index_dir.join("atlas").join("atoms.json")
+        } else {
+            index_dir.join("field_skeleton.json")
+        };
+        let source_mtime = std::fs::metadata(&source_path)
             .and_then(|m| m.modified())
             .ok();
 
-        if let Some(mtime) = skeleton_mtime {
+        if let Some(mtime) = source_mtime {
             let cache = self.digest_cache.read().await;
             if let Some(entry) = cache.get(&(view_id.to_string(), budget_tokens)) {
                 if entry.skeleton_mtime == mtime {
@@ -355,18 +368,30 @@ impl KnowledgeViewManager {
             }
         }
 
-        let Some(skeleton) = index.load_field_skeleton()? else {
-            let title = ViewKind::from_id(view_id)
-                .map(|k| k.title())
-                .unwrap_or("Knowledge view");
-            return Ok(format!("{title}: not yet enriched."));
+        let body = if use_atlas {
+            let atlas_dir = index_dir.join("atlas");
+            let rendered = atlas_digest::render_atlas_digest(&atlas_dir, budget_tokens);
+            if rendered.is_empty() {
+                let title = ViewKind::from_id(view_id)
+                    .map(|k| k.title())
+                    .unwrap_or("Knowledge view");
+                return Ok(format!("{title}: not yet enriched."));
+            }
+            rendered
+        } else {
+            let Some(skeleton) = index.load_field_skeleton()? else {
+                let title = ViewKind::from_id(view_id)
+                    .map(|k| k.title())
+                    .unwrap_or("Knowledge view");
+                return Ok(format!("{title}: not yet enriched."));
+            };
+            format_landscape(&skeleton, view_id, budget_tokens)
         };
-        let body = format_landscape(&skeleton, view_id, budget_tokens);
 
         // Insert into cache only if we managed to read the mtime —
         // without it we can't detect staleness, so falling through to
         // re-format next time is safer than caching blind.
-        if let Some(mtime) = skeleton_mtime {
+        if let Some(mtime) = source_mtime {
             let mut cache = self.digest_cache.write().await;
             cache.insert(
                 (view_id.to_string(), budget_tokens),
@@ -998,6 +1023,9 @@ mod tests {
             topic_context: None,
             knowledge_view_digests: None,
             temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
         }
     }
 

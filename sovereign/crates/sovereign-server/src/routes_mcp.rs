@@ -366,6 +366,7 @@ pub(crate) async fn handle_tools_call(
         working_directory: None,
         in_reasoning_loop: false,
         agent_session_token: None,
+        turn_index: 0,
     };
 
     match tool.execute(&arguments, &ctx).await {
@@ -432,6 +433,7 @@ mod tests {
         let mut registry = ToolRegistry::new();
         registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
             Arc::clone(&engine),
+            Arc::clone(&graph),
         )));
         registry.register(Box::new(sovereign_tools::CodeSearchTool::new(
             Arc::clone(&engine),

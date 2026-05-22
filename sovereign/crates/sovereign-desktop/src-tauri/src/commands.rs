@@ -102,6 +102,13 @@ pub struct SetupConfig {
     /// than silently defaulting to `false`.
     #[serde(default)]
     pub enable_recipe_authoring: Option<bool>,
+    /// Tier 3 of tool-framework expansion — opt-in for the
+    /// `knowledge_lookup` tool's automatic web-escalation path.
+    /// Same `None`-preserves-existing semantics as
+    /// `enable_recipe_authoring`. See the field of the same name
+    /// on `state::DesktopConfig` for behaviour details.
+    #[serde(default)]
+    pub auto_escalate_to_web: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -1049,6 +1056,221 @@ pub async fn submit_information_response(
         .await)
 }
 
+/// Per-source provenance row returned to the desktop when the search
+/// affordance succeeds. The frontend stashes the list on the message
+/// that's about to be refined so the post-refine bubble can render
+/// "Augmented via web search: <query> (N sources)" with each URL
+/// clickable. Mirrors `SearchResult` minus the snippet, which the
+/// model already absorbs through the formatted-results paste.
+#[derive(Serialize, Clone)]
+pub struct SearchAugmentationSource {
+    pub title: String,
+    pub url: String,
+}
+
+/// What `submit_information_search` returns when the search succeeds
+/// AND the runtime accepts the resolution. The frontend correlates
+/// this with the next `message-refined` event for the same
+/// conversation to attach search provenance to the refined bubble.
+#[derive(Serialize, Clone)]
+pub struct SearchAugmentation {
+    pub query: String,
+    pub backend_id: String,
+    pub sources: Vec<SearchAugmentationSource>,
+    /// Whether the runtime accepted the resolution. `false` here
+    /// means the channel was already resolved between the
+    /// `has_pending_information` probe and the resolve call (rare
+    /// race — the frontend should ignore the augmentation in that
+    /// case rather than render orphaned provenance).
+    pub accepted: bool,
+}
+
+/// Resolve a pending information-request by running a web search and
+/// feeding the formatted results back as if the user had pasted them.
+/// Powers the InformationRequest "Search the web" affordance — the
+/// user is operator-vouching that the search itself is acceptable
+/// evidence for re-synthesis, mirroring the paste flow's contract.
+///
+/// Returns `SearchAugmentation` on success so the frontend can render
+/// the search provenance on the refined bubble; the runtime itself
+/// still sees an `Option<String>` (the formatted paste-shaped block)
+/// and runs the existing post-stream refinement path. Splitting the
+/// metadata out as a Tauri return value avoids changing the
+/// `ApprovalChannel` trait or the runtime's refinement contract
+/// just to surface "this refine was search-sourced" in the UI.
+///
+/// Builds a fresh `SearchOrchestrator` per call from the persisted
+/// `config.search_backend`. This mirrors `state.rs` build-tools
+/// logic intentionally — the orchestrator is cheap to construct
+/// (wraps stateless backend trait objects) and rebuilding here
+/// keeps the affordance live against config edits without needing
+/// to thread a long-lived handle through `AppState`.
+///
+/// Returns an error string when:
+///   - no pending information request matches `key` (stale UI)
+///   - the search backend returns zero results (don't fabricate a
+///     "search succeeded" signal back to the runtime)
+///   - the search backend errors entirely (network / API failure)
+// `conversation_id` (Option<String>) is the active conversation for
+// the Tool-Mastery `tool_decision` write. When `Some`, the runtime's
+// per-conversation dossier pre-pass surfaces the prior unsuccessful
+// lookup on the next turn. `None` falls back to a global write that
+// won't filter into any single conversation's dossier.
+#[tauri::command]
+pub async fn submit_information_search(
+    state: State<'_, Arc<AppState>>,
+    key: String,
+    query: String,
+    conversation_id: Option<String>,
+) -> Result<SearchAugmentation, String> {
+    use sovereign_tools::web::search::{
+        BraveBackendImpl, BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator,
+        SearchPrivacy, SelectInputs, TavilyBackendImpl, WebSearchBackend,
+        WebSearchRegistry,
+    };
+
+    let query = query.trim();
+    if query.is_empty() {
+        return Err("query must not be empty".to_string());
+    }
+
+    if !state.approval.has_pending_information(&key).await {
+        // Stale submission — the request was already resolved
+        // (paste / skip / timed out). Don't spend a search budget.
+        return Err("no pending information request for this key".to_string());
+    }
+
+    // Tool-Mastery Layer 3 — the click itself IS the user telling
+    // us the prior tool didn't satisfy. Write that outcome BEFORE
+    // the web search runs (regardless of whether the search will
+    // succeed) so the next turn's dossier surfaces "the
+    // in-conversation lookup came up short and the user reached
+    // for the external escape hatch." Soft-fail: missing NoteStore
+    // is silently skipped. See `dossier::record_tool_outcome`.
+    {
+        let notes_guard = state.notes.read().await;
+        let notes_ref: Option<&corpus_engine::NoteStore> =
+            notes_guard.as_ref().map(|arc| arc.as_ref());
+        sovereign_core::dossier::record_tool_outcome(
+            notes_ref,
+            // `key` is a per-conversation-turn opaque id (see
+            // approval::TauriApprovalChannel) — using it as the
+            // session-id proxy keeps the audit trail traceable
+            // back to the originating INFORMATION REQUEST card.
+            &key,
+            conversation_id.as_deref(),
+            "knowledge_lookup",
+            sovereign_core::memory::ToolDecisionOutcome::NoResults,
+            "user clicked Search-the-web on the INFORMATION REQUEST card \
+             — prior in-conversation lookup did not satisfy",
+            // Tier 1: no summary/evidence_ids/turn_index — this
+            // write fires from a USER click, not a tool-result
+            // post-stream hook. The originating turn's baseline
+            // write (from the runtime's KQ dispatch) already
+            // carries those fields; this is an audit overlay.
+            sovereign_core::memory::ToolDecisionExtras::none(),
+        )
+        .await;
+    }
+
+    let config_snapshot = state.config.read().await.clone();
+
+    let mut registry = WebSearchRegistry::new();
+    // DuckDuckGo is always available — the zero-config fallback.
+    // Registered first so even a missing operator key still has
+    // a backend to dispatch to.
+    registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
+    let preferred: Box<dyn WebSearchBackend> =
+        match config_snapshot.search_backend.provider.as_str() {
+            "tavily" => config_snapshot.search_backend.api_key.as_ref().map(
+                |k| -> Box<dyn WebSearchBackend> {
+                    Box::new(TavilyBackendImpl::new(k.clone()))
+                },
+            ),
+            "brave" => config_snapshot.search_backend.api_key.as_ref().map(
+                |k| -> Box<dyn WebSearchBackend> {
+                    Box::new(BraveBackendImpl::new(k.clone()))
+                },
+            ),
+            _ => None,
+        }
+        .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
+    registry.register(Arc::from(preferred));
+
+    let orchestrator = SearchOrchestrator::new(Arc::new(registry));
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("reqwest client build: {e}"))?;
+    let budget = BudgetView::new();
+    let prefer = match config_snapshot.search_backend.provider.as_str() {
+        "tavily" => &["tavily", "duckduckgo"][..],
+        "brave" => &["brave", "duckduckgo"][..],
+        _ => &["duckduckgo"][..],
+    };
+    let out = orchestrator
+        .search(
+            &client,
+            SelectInputs {
+                query,
+                max_results: 5,
+                max_privacy: SearchPrivacy::External {
+                    provider: "duckduckgo",
+                },
+                budget: &budget,
+                prefer,
+            },
+        )
+        .await;
+
+    if out.results.is_empty() {
+        // Treat as a soft failure surfaced to the UI. The pending
+        // request stays open so the user can paste / skip / retry
+        // with a tighter query without rebuilding the card.
+        return Err(format!(
+            "web search returned 0 results via {} (DDG may be bot-blocking; \
+             try a tighter query or paste a source instead)",
+            out.backend_id,
+        ));
+    }
+
+    // Format as a paste-shaped block so the runtime's re-synthesis
+    // path treats this identically to user-pasted content. Each
+    // entry is numbered (matches the gym runner's tool-result shape
+    // that the URL-allowlist constraint was trained against).
+    let mut formatted = format!(
+        "Web search results for \"{}\" (via {}):\n\n",
+        query, out.backend_id
+    );
+    for (i, r) in out.results.iter().enumerate() {
+        formatted.push_str(&format!("[{}] {}\n    {}\n", i + 1, r.title, r.url));
+        if !r.snippet.is_empty() {
+            formatted.push_str(&format!("    {}\n", r.snippet));
+        }
+        formatted.push('\n');
+    }
+
+    let sources: Vec<SearchAugmentationSource> = out
+        .results
+        .iter()
+        .map(|r| SearchAugmentationSource {
+            title: r.title.clone(),
+            url: r.url.clone(),
+        })
+        .collect();
+    let accepted = state
+        .approval
+        .submit_information_response(&key, Some(formatted))
+        .await;
+    Ok(SearchAugmentation {
+        query: query.to_string(),
+        backend_id: out.backend_id,
+        sources,
+        accepted,
+    })
+}
+
 /// Trigger memory extraction on a finished inner-work conversation.
 ///
 /// Until 2026-05-05 the desktop had no path to invoke memory
@@ -1259,7 +1481,9 @@ async fn mirror_to_setup_config(
                 .primary_model_path
                 .clone()
                 .unwrap_or_else(|| desktop.model_path.clone()),
-            fast: desktop.model_path.clone(),
+            // Desktop config always carries a model_path (the
+            // wizard requires one). Map it to an explicit fast.
+            fast: Some(desktop.model_path.clone()),
             embed: desktop
                 .embed_model_path
                 .clone()
@@ -1275,31 +1499,89 @@ async fn mirror_to_setup_config(
         watched_folders: Default::default(),
     });
 
+    let cli_primary_before = cli.models.primary.clone();
+    let cli_fast_before = cli.models.fast.clone();
+    let cli_embed_before = cli.models.embed.clone();
+    let cli_data_before = cli.data.dir.clone();
+
     let mut changed = false;
-    if cli.models.fast != desktop.model_path {
-        cli.models.fast = desktop.model_path.clone();
+    let mut changed_fields: Vec<&'static str> = Vec::new();
+    // Desktop's `model_path` is the operator's chosen fast slot; if it
+    // differs from what we have, write it back as an explicit fast.
+    // Comparing against fast_path() handles the subsumed case
+    // naturally — when the desktop set the same path as primary, we
+    // leave `fast` as None so the subsume relationship stays clean
+    // instead of materialising a redundant explicit entry.
+    let desktop_path = desktop.model_path.as_path();
+    if desktop_path != cli.models.fast_path() {
+        cli.models.fast = if desktop_path == cli.models.primary {
+            None
+        } else {
+            Some(desktop.model_path.clone())
+        };
         changed = true;
+        changed_fields.push("fast");
     }
     if let Some(p) = &desktop.primary_model_path {
         if &cli.models.primary != p {
             cli.models.primary = p.clone();
             changed = true;
+            changed_fields.push("primary");
         }
     }
     if let Some(e) = &desktop.embed_model_path {
         if &cli.models.embed != e {
             cli.models.embed = e.clone();
             changed = true;
+            changed_fields.push("embed");
         }
     }
     if cli.data.dir != desktop.data_dir {
         cli.data.dir = desktop.data_dir.clone();
         changed = true;
+        changed_fields.push("data_dir");
     }
 
     if changed {
-        cli.save()?;
-        tracing::info!("save_config: mirrored shared fields into SetupConfig");
+        tracing::info!(
+            fields = ?changed_fields,
+            new_primary = %cli.models.primary.display(),
+            new_fast = ?cli.models.fast.as_ref().map(|p| p.display().to_string()),
+            new_embed = %cli.models.embed.display(),
+            new_data_dir = %cli.data.dir.display(),
+            "save_config: mirroring DesktopConfig → SetupConfig"
+        );
+        match cli.save() {
+            Ok(path) => {
+                tracing::info!(
+                    target = %path.display(),
+                    "save_config: SetupConfig written to disk"
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "save_config: SetupConfig write FAILED — the desktop model \
+                     pick will not propagate to the daemon on next start"
+                );
+                return Err(e);
+            }
+        }
+    } else {
+        // Surface the no-op decision too — if the user reports
+        // "setting didn't sync" but mirror logs no-op, the bug is
+        // upstream (Settings UI didn't push the new field).
+        tracing::info!(
+            cli_primary = %cli_primary_before.display(),
+            cli_fast = ?cli_fast_before.as_ref().map(|p| p.display().to_string()),
+            cli_embed = %cli_embed_before.display(),
+            cli_data_dir = %cli_data_before.display(),
+            desktop_primary = ?desktop.primary_model_path.as_ref().map(|p| p.display().to_string()),
+            desktop_fast = %desktop.model_path.display(),
+            desktop_embed = ?desktop.embed_model_path.as_ref().map(|p| p.display().to_string()),
+            desktop_data_dir = %desktop.data_dir.display(),
+            "save_config: mirror no-op — all shared fields already match SetupConfig"
+        );
     }
     Ok(())
 }
@@ -1444,7 +1726,11 @@ pub async fn complete_setup(
     if !setup.model_path.is_empty() {
         config.model_path = setup.model_path.into();
     } else if let Some(c) = cli_cfg.as_ref() {
-        config.model_path = c.models.fast.clone();
+        // Desktop tracks one model_path that surfaces in the UI as
+        // "the model loaded in the fast role". fast_path() returns
+        // primary when fast is subsumed, so the same field is right
+        // in either case — no separate branch needed.
+        config.model_path = c.models.fast_path().to_path_buf();
     }
     config.primary_model_path = setup
         .primary_model_path
@@ -1471,10 +1757,25 @@ pub async fn complete_setup(
     if let Some(flag) = setup.enable_recipe_authoring {
         config.enable_recipe_authoring = flag;
     }
+    if let Some(flag) = setup.auto_escalate_to_web {
+        config.auto_escalate_to_web = flag;
+    }
     config.setup_complete = true;
 
     config.save()?;
+    // Mirror into `~/.sovereign/config.toml` so the CLI-side daemon
+    // sees the wizard's model picks. Without this, the wizard could
+    // complete but the daemon at next start would read stale paths
+    // (or the bare defaults `sovereign setup` last wrote). Same
+    // best-effort + warn-log pattern as `save_config`.
+    let config_for_mirror = config.clone();
     drop(config);
+    if let Err(e) = mirror_to_setup_config(&config_for_mirror).await {
+        tracing::warn!("complete_setup: could not mirror to SetupConfig: {e}");
+    }
+    if let Err(e) = request_daemon_reload().await {
+        tracing::warn!("complete_setup: admin/reload failed: {e}");
+    }
 
     state::bootstrap(&state).await?;
 
@@ -1535,6 +1836,7 @@ pub async fn search_web(
         working_directory: None,
         in_reasoning_loop: false,
         agent_session_token: None,
+        turn_index: 0,
     };
 
     let output = tool
@@ -2053,6 +2355,29 @@ fn ingest_progress_to_payload(
                 "Retraining vector index over {} chunks",
                 pretty_count(*current_chunks)
             )),
+        },
+        IngestProgress::Enriching {
+            phase,
+            detail,
+            fraction,
+        } => CorpusProgressPayload {
+            corpus_id: corpus_id.into(),
+            // Prefix with `enriching_` so frontend selectors can
+            // distinguish enrichment sub-phases from the embed/index
+            // phases above. The full sub-phase token (e.g.
+            // `skeleton-extraction`, `clustering`,
+            // `cluster-labeling-complete`) is carried verbatim so
+            // the UI can render specific copy without parsing
+            // `detail`.
+            phase: format!("enriching_{phase}"),
+            // Fraction lands on the bar when the underlying phase
+            // reports it (Phase 1b batch progress, clustering
+            // milestones). Otherwise 0% — the UI is expected to
+            // show a spinner-mode rendering when phase is
+            // `enriching_*`.
+            percent: fraction.map(|f| (f * 100.0).clamp(0.0, 100.0)).unwrap_or(0.0),
+            chunks_processed: 0,
+            message: Some(detail.clone()),
         },
         IngestProgress::Complete {
             total_chunks,
@@ -2625,6 +2950,7 @@ pub async fn ask_document(
         tokens_used: output.tokens_used,
         coarse_intent: None,
         self_assessment: None,
+        routing_trigger: None,
         coverage: None,
     };
 
@@ -3364,6 +3690,11 @@ fn status_entry_to_payload(entry: &CorpusStatusEntry) -> CorpusProgressPayload {
             "complete".to_string(),
             *total_chunks,
             Some(format!("Done in {duration_secs}s")),
+        ),
+        Some(P::Enriching { phase, detail, .. }) => (
+            format!("enriching_{phase}"),
+            0,
+            Some(detail.clone()),
         ),
         None => {
             // No IngestProgress event yet this session — this is the
@@ -4895,6 +5226,268 @@ async fn start_tier_installs(
             }
         });
     }
+}
+
+// ─── Contribution controls (W3) ──────────────────────────────
+//
+// Tauri wrappers around the daemon's `/internal/contribution/*` HTTP
+// routes (commonwealth-api::routes_internal::mesh_admin). The Svelte
+// settings panel + tray menu call these; the daemon process owns the
+// authoritative state.
+//
+// Local DTOs mirror the daemon shapes byte-for-byte so the desktop
+// crate doesn't depend on commonwealth-api just for these types
+// (same pattern as MeshQuiesceState above).
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ContributionStatus {
+    pub ceiling: usize,
+    pub in_flight: usize,
+    pub paused_until: Option<i64>,
+    pub pause_remaining_secs: Option<u64>,
+    pub yield_peers_to_foreground: bool,
+    pub yielding_secs_remaining: Option<u64>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LedgerEventDto {
+    /// `node_id` is hex-string-encoded by serde (NodeId derives that)
+    /// so the frontend can do friendly-name lookup without parsing.
+    pub node_id: serde_json::Value,
+    pub timestamp: u64,
+    /// Wire kind: serialized with `#[serde(tag = "type")]` so the
+    /// frontend can branch on `kind.type`.
+    pub kind: serde_json::Value,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct RecentContributionsResp {
+    pub events: Vec<LedgerEventDto>,
+}
+
+#[tauri::command]
+pub async fn get_contribution_status() -> Result<ContributionStatus, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/status");
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/contribution/status: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/status returned {status}: {body}"
+        ));
+    }
+    resp.json::<ContributionStatus>()
+        .await
+        .map_err(|e| format!("decode /internal/contribution/status: {e}"))
+}
+
+#[tauri::command]
+pub async fn set_contribution_ceiling(max: Option<usize>) -> Result<ContributionStatus, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/ceiling");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "max": max }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/contribution/ceiling: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/ceiling returned {status}: {body}"
+        ));
+    }
+    resp.json::<ContributionStatus>()
+        .await
+        .map_err(|e| format!("decode /internal/contribution/ceiling: {e}"))
+}
+
+#[tauri::command]
+pub async fn pause_contributions(duration_secs: u64) -> Result<ContributionStatus, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/pause");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({ "duration_secs": duration_secs }))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/contribution/pause: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/pause returned {status}: {body}"
+        ));
+    }
+    resp.json::<ContributionStatus>()
+        .await
+        .map_err(|e| format!("decode /internal/contribution/pause: {e}"))
+}
+
+#[tauri::command]
+pub async fn resume_contributions() -> Result<ContributionStatus, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/resume");
+    let resp = client
+        .post(&url)
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("POST /internal/contribution/resume: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/resume returned {status}: {body}"
+        ));
+    }
+    resp.json::<ContributionStatus>()
+        .await
+        .map_err(|e| format!("decode /internal/contribution/resume: {e}"))
+}
+
+#[tauri::command]
+pub async fn get_recent_contributions(
+    limit: Option<usize>,
+) -> Result<Vec<LedgerEventDto>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("build daemon client: {e}"))?;
+    let url = format!("{DAEMON_INTERNAL_URL}/internal/contribution/recent");
+    let mut req = client.get(&url);
+    if let Some(n) = limit {
+        req = req.query(&[("limit", n.to_string())]);
+    }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("GET /internal/contribution/recent: {e}"))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!(
+            "daemon /internal/contribution/recent returned {status}: {body}"
+        ));
+    }
+    resp.json::<RecentContributionsResp>()
+        .await
+        .map(|r| r.events)
+        .map_err(|e| format!("decode /internal/contribution/recent: {e}"))
+}
+
+// ─── First-mesh consent (W4) ─────────────────────────────────
+//
+// One-time dialog shown after setup completes, before the user
+// joins a multi-peer mesh: "Share idle GPU with the mesh?" The
+// answer drives the daemon's peer-inflight ceiling and persists in
+// DesktopConfig so we don't re-prompt on every launch.
+//
+// The Svelte side calls get_first_mesh_consent on boot; None means
+// "show the modal". After the user decides, record_first_mesh_consent
+// persists the choice AND applies the ceiling at the daemon, so the
+// next peer-served inference request is gated correctly.
+
+#[tauri::command]
+pub async fn get_first_mesh_consent(
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+) -> Result<Option<crate::state::FirstMeshConsent>, String> {
+    Ok(state.config.read().await.first_mesh_consent.clone())
+}
+
+#[tauri::command]
+pub async fn record_first_mesh_consent(
+    state: tauri::State<'_, std::sync::Arc<crate::state::AppState>>,
+    share_gpu: bool,
+) -> Result<crate::state::FirstMeshConsent, String> {
+    // 1 concurrent peer request is the "Yes, share idle GPU" default
+    // — matches the plan's 25% bucket. The user can lift this later
+    // in Settings without re-prompting consent.
+    let ceiling = if share_gpu { 1 } else { 0 };
+    let recorded_at_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let decision = crate::state::FirstMeshConsent {
+        share_gpu,
+        ceiling,
+        recorded_at_unix,
+    };
+
+    // Persist FIRST so even if the daemon call fails the decision
+    // survives a restart (and we won't re-prompt the user).
+    {
+        let mut cfg = state.config.write().await;
+        cfg.first_mesh_consent = Some(decision.clone());
+        cfg.save().map_err(|e| format!("save desktop config: {e}"))?;
+    }
+
+    // Apply the ceiling at the daemon. Best-effort: if the daemon
+    // isn't reachable yet (early-boot race), the cfg already records
+    // the user's intent and a follow-up apply_first_mesh_consent at
+    // boot can re-issue. For v1 we just log + continue.
+    if let Err(e) = set_contribution_ceiling(Some(ceiling)).await {
+        tracing::warn!(
+            error = %e,
+            ceiling,
+            "consent recorded but daemon ceiling apply failed; \
+             will be re-applied on next boot"
+        );
+    }
+
+    Ok(decision)
+}
+
+// ─── Crash report (W6) ───────────────────────────────────────
+//
+// Bundles the latest supervisor-written crash log + redacted config
+// into a single markdown file on Desktop, returns a mailto URL the
+// frontend opens via tauri-plugin-shell. NO auto-upload — the user
+// reads the file and attaches it manually. See crash_bundle.rs.
+
+#[derive(Debug, serde::Serialize)]
+pub struct CrashReportInfo {
+    /// Absolute path of the report file on disk. UI shows this so
+    /// the user can copy/open it.
+    pub report_path: String,
+    /// `mailto:` URL pre-filled with subject + body. Frontend passes
+    /// this to `tauri-plugin-shell.open(url)`.
+    pub mailto_url: String,
+}
+
+#[tauri::command]
+pub async fn prepare_crash_report() -> Result<CrashReportInfo, String> {
+    let cfg = sovereign_core::setup_config::SetupConfig::load().ok();
+    let app_version = env!("CARGO_PKG_VERSION");
+    let data_dir = cfg
+        .as_ref()
+        .map(|c| c.data.dir.clone())
+        .or_else(|| dirs::home_dir().map(|h| h.join(".sovereign")))
+        .ok_or_else(|| "could not resolve data dir".to_string())?;
+    let prepared =
+        crate::crash_bundle::prepare_report(&data_dir, cfg.as_ref(), app_version)?;
+    Ok(CrashReportInfo {
+        report_path: prepared.report_path.to_string_lossy().into_owned(),
+        mailto_url: prepared.mailto_url,
+    })
 }
 
 // ─── Tests ───────────────────────────────────────────────────

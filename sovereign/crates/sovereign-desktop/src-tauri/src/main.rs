@@ -2,8 +2,10 @@ mod approval;
 mod atlas_commands;
 mod bootstrap;
 mod commands;
+mod crash_bundle;
 mod enrich_commands;
 mod friendly_names;
+mod import_commands;
 mod insight_commands;
 mod local_corpus_commands;
 mod watched_folder_commands;
@@ -14,6 +16,8 @@ mod routing_events;
 mod setup_flow;
 mod smoketest;
 mod state;
+mod supervisor;
+mod supervisor_setup;
 mod tray;
 
 use std::process::ExitCode;
@@ -137,10 +141,29 @@ fn main() -> ExitCode {
                 tauri::async_runtime::block_on(bootstrap::detect());
             tracing::info!(?bootstrap_mode, "bootstrap mode resolved");
 
+            // If `SOVEREIGN_USE_SUPERVISOR=1`, try to bring the daemon
+            // up as a child process and switch to Attach against it.
+            // Returns the original mode + None when the feature is off
+            // or supervision fails to come up healthy. This is the
+            // PR-2 dogfood path; PR-3 will flip the default. See
+            // supervisor_setup.rs.
+            let (bootstrap_mode, supervisor) =
+                tauri::async_runtime::block_on(supervisor_setup::maybe_start(
+                    bootstrap_mode,
+                    handle.clone(),
+                ));
+            if supervisor.is_some() {
+                tracing::info!(
+                    ?bootstrap_mode,
+                    "supervisor: bootstrap mode after supervision"
+                );
+            }
+
             // Create app state (loads config, no Runtime yet).
             let app_state = AppState::new_with_mode(
                 Arc::clone(&approval),
                 bootstrap_mode,
+                supervisor,
             );
             let app_state = Arc::new(app_state);
             app.manage(app_state.clone());
@@ -214,6 +237,35 @@ fn main() -> ExitCode {
                             Arc::clone(&state_clone),
                         );
 
+                        // Re-apply the W4 consent ceiling at boot so a
+                        // daemon restart doesn't silently revert to
+                        // unlimited peer inference. No-op when the
+                        // user hasn't recorded consent yet (the
+                        // ConsentGate is about to render).
+                        let consent_ceiling = state_clone
+                            .config
+                            .read()
+                            .await
+                            .first_mesh_consent
+                            .as_ref()
+                            .map(|c| c.ceiling);
+                        if let Some(ceiling) = consent_ceiling {
+                            if let Err(e) =
+                                commands::set_contribution_ceiling(Some(ceiling)).await
+                            {
+                                tracing::warn!(
+                                    error = %e,
+                                    ceiling,
+                                    "boot: failed to re-apply first_mesh_consent ceiling"
+                                );
+                            } else {
+                                tracing::info!(
+                                    ceiling,
+                                    "boot: re-applied first_mesh_consent ceiling"
+                                );
+                            }
+                        }
+
                         // Install OCR context if the manager came up
                         // and the Tesseract sidecar is bundled. No-op
                         // when not available — `lc_ocr_available`
@@ -284,6 +336,7 @@ fn main() -> ExitCode {
             commands::submit_approval,
             commands::submit_input,
             commands::submit_information_response,
+            commands::submit_information_search,
             commands::list_skills,
             commands::toggle_skill,
             commands::get_last_turn_provenance,
@@ -313,6 +366,14 @@ fn main() -> ExitCode {
             commands::set_ingest_budget,
             commands::get_mesh_quiesced,
             commands::set_mesh_quiesced,
+            commands::get_contribution_status,
+            commands::set_contribution_ceiling,
+            commands::pause_contributions,
+            commands::resume_contributions,
+            commands::get_recent_contributions,
+            commands::prepare_crash_report,
+            commands::get_first_mesh_consent,
+            commands::record_first_mesh_consent,
             commands::get_storage_budget,
             commands::set_storage_budget,
             commands::build_corpus_index,
@@ -341,6 +402,7 @@ fn main() -> ExitCode {
             recipe_commands::corpus_import_recipe,
             recipe_commands::corpus_get_recipe_parameters,
             recipe_commands::corpus_install_with_parameters,
+            import_commands::import_anthropic_zip,
             recipe_author_commands::recipe_author_list_projects,
             recipe_author_commands::recipe_author_new_project,
             recipe_author_commands::recipe_author_dashboard_state,

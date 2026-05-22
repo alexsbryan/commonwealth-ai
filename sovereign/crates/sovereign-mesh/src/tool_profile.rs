@@ -382,6 +382,11 @@ mod tests {
             think_budget: None,
             tool_profile: profile.map(String::from),
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         }
     }
 
@@ -551,6 +556,11 @@ allow_tools = ["write"]
             think_budget: None,
             tool_profile: Some("rust-edit".into()),
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         };
         apply(&r, &mut req);
         assert!(req.tools.is_none());

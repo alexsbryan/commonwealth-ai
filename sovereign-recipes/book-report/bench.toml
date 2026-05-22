@@ -1,0 +1,733 @@
+# book-report — end-to-end attach-document benchmark
+#
+# Tests the user-facing attach flow on a single literary work: download
+# a Gutenberg text, attach via DocumentAssetManager (same code path as
+# the desktop's upload_document_asset Tauri command), then ask 20
+# questions across 5 tiers as the asset state transitions from Pending
+# → Indexing → PartiallyReady → BuildingSkeleton → Ready.
+#
+# Two axes scored:
+#   - speed:    latency from attach to first acceptable answer per tier
+#   - quality:  per-question score against rubric (mechanical for Tier 1,
+#               LLM-judge for Tier 2-5, hallucination check on all quoted
+#               passages)
+#
+# Run:  sovereign bench book-report
+#
+# v1   (2026-05-20): 5 seed questions covering all 5 tiers.
+# v1.1 (2026-05-21): scaled to 20 questions at the 3/5/5/4/3
+#   distribution. Each new question grounded in verified line ranges
+#   from pg974.txt (greps recorded in the line-range comments).
+#   `expected_facts` use only words that appear as substrings in the
+#   source; references point at the actual page locations. This is
+#   the bench size the bench runner was built for — multi-question
+#   scoring lowers the per-tier variance bound from N=1 to N=3-5.
+
+[bench]
+name = "book-report-v1.1"
+description = """
+Attach-document benchmark on Conrad's The Secret Agent. Exercises the
+swiss-army-knife document ingest (no pre-selected atlas), tests time-
+to-quality across five tiers, and surfaces hallucination via passage-
+citation verification against the source text.
+"""
+
+[bench.source]
+type = "gutenberg"
+id = 974
+title = "The Secret Agent: A Simple Tale"
+author = "Joseph Conrad"
+url = "https://www.gutenberg.org/cache/epub/974/pg974.txt"
+# SHA-256 of the cached text. Pinned so a future Gutenberg refresh
+# doesn't silently invalidate the line-range reference passages. Updated
+# only via deliberate `--refresh-source` flag on the runner.
+sha256 = ""  # filled by first run; checked thereafter
+
+# When each tier's questions are dispatched. The runner fires every
+# question whose tier matches the current asset state. Questions are
+# re-asked at later gates only with --reask-on-promote (off by default
+# to keep runs reproducible).
+[bench.readiness_gates]
+tier_1 = "PartiallyReady"     # plot facts retrievable from chunks
+tier_2 = "PartiallyReady"     # local inference within retrieved span
+tier_3 = "BuildingSkeleton"   # cross-chapter — skeleton helps
+tier_4 = "Ready"              # thematic motif requires multi-passage anchor
+tier_5 = "Ready"              # contamination test needs full atlas signal
+
+# Latency budgets per tier — exceeded budgets surface as warnings, not
+# failures. Calibrated to the M-class hardware running the daemon.
+[bench.latency_budget]
+tier_1 = { p50_ms = 8000, p95_ms = 20000 }
+tier_2 = { p50_ms = 15000, p95_ms = 35000 }
+tier_3 = { p50_ms = 25000, p95_ms = 60000 }
+tier_4 = { p50_ms = 35000, p95_ms = 80000 }
+tier_5 = { p50_ms = 35000, p95_ms = 80000 }
+
+# Canonical critical-consensus phrases. A Tier 5 answer that hits one
+# of these WITHOUT a verifiable passage quotation gets the contamination
+# flag — the model is leaning on received opinion instead of the text.
+[bench.contamination_traps]
+tier_5_phrases = [
+    "the Professor is the novel's true threat",
+    "Conrad's most chilling moment",
+    "the embodiment of nihilistic terror",
+    "anticipates modern terrorism",
+    "a portrait of revolutionary fanaticism",
+]
+
+# ─── Tier 1 — Factual recall (3 questions in v1.1; 1 seed here) ──
+
+[[questions]]
+id = "stevie_address_label"
+tier = 1
+prompt = """
+What physical evidence allows the police to identify the bomber killed
+at Greenwich Park, and where in his clothing was it discovered? Who
+placed it there, and when?
+"""
+# Substring-match against response. Case-insensitive, whitespace-folded.
+expected_facts = [
+    "address",
+    "label",
+    "sewn",
+    "coat",
+    "lapel",
+    "Winnie",
+    "Stevie",
+]
+# Line ranges in pg974.txt — passages the model SHOULD anchor to. Used
+# both for the hallucination detector and as ground-truth excerpts in
+# the rubric markdown.
+reference_passages = [
+    { lines = "3838-3871", note = "Heat inspects the singed cloth; address found stitched on lapel" },
+    { lines = "4526-4528", note = "The address-sewn overcoat as evidence" },
+    { lines = "6415-6418", note = "Verloc realizes — 'a label sewn on the inside with your address'" },
+]
+notes = """
+Tests pure plot-detail retrieval. The dramatic irony — Winnie's act of
+care unraveling the entire investigation — is the answer's load-bearing
+piece. A summary-trained model that skips chain-of-evidence detail will
+miss it.
+"""
+
+# ─── Tier 2 — Local inference (5 questions in v1.1; 1 seed here) ──
+
+[[questions]]
+id = "vladimir_pure_science_target"
+tier = 2
+prompt = """
+In his conversation with Verloc at the embassy, Vladimir rejects political
+assassination and attacks on religious sites in favor of bombing the
+Greenwich Observatory. What is his stated reasoning, and what assumption
+about the British middle class does the choice rest on?
+"""
+expected_facts = [
+    "pure mathematics",
+    "astronomy",
+    "Greenwich",
+    "science",
+    "middle class",       # or "bourgeoisie"
+    "religion",           # the substitute-religion premise
+]
+reference_passages = [
+    { lines = "990-1050", note = "Vladimir: bomb into pure mathematics → astronomy" },
+    { lines = "1020-1045", note = "'against astronomy' — the boot-blacks know Greenwich" },
+]
+notes = """
+The reasoning is on the page: science as the bourgeoisie's substitute
+religion makes an attack on pure mathematics more shocking than another
+political crime. Tests retrieval of Vladimir's monologue + articulation
+of the underlying premise. A model that paraphrases without the
+science-as-religion frame is missing the inference.
+"""
+
+# ─── Tier 3 — Cross-chapter synthesis (5 questions in v1.1; 1 seed) ──
+
+[[questions]]
+id = "stevie_cab_to_bomb"
+tier = 3
+prompt = """
+Compare the cab ride scene in which Stevie reacts to the cabman's whipping
+of the horse with the later sequence in which Verloc enlists Stevie to
+carry the bomb. What does the juxtaposition reveal about Stevie's moral
+perception, and how do the adults around him exploit it differently?
+"""
+expected_facts = [
+    "Don't whip",
+    "Poor brute",       # or "Shame"
+    "horse",
+    "Verloc",
+    "bomb",
+    "sympathy",         # or "pity"
+    "exploit",          # or "manipulate" / "weaponize" / "use"
+]
+reference_passages = [
+    { lines = "4820-4900", note = "Cab ride: 'Don't whip' / 'You mustn't... It hurts'" },
+    { lines = "5260-5290", note = "Stevie's 'Shame!' — distress at injustice" },
+    { lines = "7500-7700", note = "Verloc walking Stevie toward the bomb errand" },
+]
+notes = """
+The juxtaposition is the load-bearing point: Stevie's undiscriminating
+moral sympathy ('Bad world for poor people' — the conflation of the
+suffering horse and the suffering driver) is exactly what Verloc
+weaponizes. A hand-wave at 'Stevie is innocent' doesn't earn points;
+the answer must anchor both scenes and name the exploitation
+mechanism.
+"""
+
+# ─── Tier 4 — Thematic with textual anchor (4 questions in v1.1; 1 seed) ──
+
+[[questions]]
+id = "winnie_incurious_motif"
+tier = 4
+prompt = """
+Conrad's narrator repeatedly characterizes Winnie Verloc as 'incurious'
+and at one point as 'a person disinclined to look under the surface of
+things.' Identify at least two passages where this motif appears and
+trace how it evolves between the early domestic chapters and the moment
+she kills Verloc. What is Conrad arguing about consciousness, willed
+ignorance, and complicity?
+"""
+expected_facts = [
+    "incurious",
+    "surface",
+    "Winnie",
+    # The thematic synthesis — looser fuzzy match:
+    "willed",          # or "deliberate" / "chosen"
+    "ignorance",       # or "not knowing"
+    "complicity",      # or "implication"
+    "marriage",
+]
+reference_passages = [
+    { lines = "4934", note = "'the men would become suddenly incurious' — early register" },
+    { lines = "5704", note = "'a person disinclined to look under the surface of things' — Winnie defined" },
+    { lines = "6138", note = "'Mrs Verloc's steady, incurious gaze' — at Verloc, post-Stevie" },
+    { lines = "6189", note = "'incurious eyes lighted up with a flash of abhorrence' — the crack" },
+    { lines = "7479-7551", note = "'incurious person remains always partly mysterious'" },
+]
+notes = """
+The motif is much richer in actual word ('incurious') than in
+recollection ('beneath the surface' — that phrase appears once at
+line 5704). A model that bluffs at 'themes of marriage' without the
+specific word 'incurious' (or close paraphrase) is missing the textual
+anchor Conrad provides. Trace evolution: early shorthand → the crack
+in the murder scene → Conrad's argument that the not-looking is what
+made the marriage tolerable and the murder inevitable.
+"""
+
+# ─── Tier 5 — Anti-canonical (3 questions in v1.1; 1 seed here) ──
+
+[[questions]]
+id = "professor_menace_vs_impact"
+tier = 5
+prompt = """
+The novel's closing image of the Professor walking through London
+'unsuspected and deadly, like a pest in the street full of men' is often
+quoted as Conrad's most chilling moment — evidence that the Professor
+is the novel's true threat. Quote at least two earlier passages that
+complicate this reading. What does the Professor actually accomplish
+over the course of the novel, and what might Conrad be suggesting about
+the gap between his self-image and his impact?
+"""
+expected_facts = [
+    "Professor",
+    "frail",            # or "shabby" / "insignificant"
+    "explosives",       # or "detonator"
+    "monologue",        # or "talks" / "speaks"
+    # The anti-canonical insight:
+    "gap",              # or "irony" / "deflation" / "self-image"
+]
+reference_passages = [
+    { lines = "9784-9787", note = "Closing — 'frail, insignificant, shabby... unsuspected and deadly'" },
+    { lines = "3580-3700", note = "Professor with Ossipon — monologue without action" },
+    { lines = "7100-7250", note = "Professor in the beer-shop — talks, sells, walks; accomplishes nothing" },
+]
+# Tier 5 specifically scores against the contamination_traps list. An
+# answer that cites the closing image as evidence of menace without
+# complicating it = lower score even if technically accurate.
+critique_traps = [
+    "if the answer treats the closing image as straightforward menace without irony",
+    "if the answer cites 'the novel's true threat' framing without textual pushback",
+    "if the Professor's accomplishments aren't enumerated (sells explosives, monologues, walks)",
+]
+notes = """
+Pushback against canonical reception. The closing image is widely
+quoted; what's elided is that the Professor accomplishes essentially
+nothing. The horror is partly Conrad's irony about a figure who exists
+at the level of menace without effect. A model leaning on critical
+consensus will treat him as terrifying; a model reading the text will
+see Conrad's deflation. Tests whether retrieval beat training data.
+"""
+
+# ─── Tier 1 — additional factual recall ────────────────────────
+
+[[questions]]
+id = "stevie_circles"
+tier = 1
+prompt = """
+What does Stevie obsessively draw on paper when left alone, and what
+does Conrad's narrator say this drawing visually suggests?
+"""
+expected_facts = [
+    "circles",
+    "compass",
+    "pencil",
+    "chaos",
+    "eternity",
+]
+reference_passages = [
+    { lines = "275-282", note = "First sight of Stevie at the table drawing circles with compass and pencil" },
+    { lines = "1355-1362", note = "'circles, concentric, eccentric; a coruscating whirl of circles ... chaos and eternity'" },
+    { lines = "7466-7470", note = "Winnie's later recall: 'coruscations of innumerable circles suggesting chaos and eternity'" },
+]
+notes = """
+Pure factual recall + the narrator's gloss. Conrad spells the
+significance out twice — once at Stevie's introduction and once
+through Winnie's memory. A model retrieving only one of the two
+passages still hits all five facts.
+"""
+
+[[questions]]
+id = "winnie_fate"
+tier = 1
+prompt = """
+After killing Verloc, Winnie sets out for the Thames intending to
+drown herself but is intercepted. How does she ultimately die, and
+what is the source of the information that confirms her death?
+"""
+expected_facts = [
+    "Passenger",
+    "cross-Channel",
+    "Boat",
+    "drown",
+    "newspaper",
+]
+reference_passages = [
+    { lines = "8408-8425", note = "'resolution to drown herself in the Thames' — the abandoned plan" },
+    { lines = "9638-9645", note = "'Passenger from a cross-Channel Boat' — Ossipon reads the newspaper notice" },
+]
+notes = """
+The two-step recall — Winnie's stated intent, then the displaced
+fulfilment via the newspaper notice Ossipon reads — is the structural
+joke. Tests whether the model traces the plot through to the final
+chapter rather than synthesising 'she drowns in the Thames' from the
+mid-novel moment.
+"""
+
+# ─── Tier 2 — additional local inference ───────────────────────
+
+[[questions]]
+id = "professor_perfect_detonator"
+tier = 2
+prompt = """
+The Professor carries a detonating device on his person at all times.
+Describe the mechanism — what triggers it, where is it kept, and what
+is the time-delay? What does the Professor claim this device gives him
+in his confrontations with the police?
+"""
+expected_facts = [
+    "india-rubber",
+    "ball",
+    "pocket",
+    "explosion",
+    "twenty seconds",
+    "police",
+]
+reference_passages = [
+    { lines = "2010-2055", note = "Detailed description: india-rubber ball in trouser pocket, tube to the device" },
+    { lines = "2510-2540", note = "'lightly the india-rubber ball, the supreme guarantee of his sinister freedom'" },
+]
+notes = """
+A pure-mechanism question: every fact is on the page in the
+Professor-Ossipon dialogue. Tests retrieval of a specific technical
+description across two pages. A model paraphrasing 'he has a bomb'
+without the india-rubber-ball detail misses the point — the point
+of Conrad's description is the *banality* of the device.
+"""
+
+[[questions]]
+id = "verloc_double_role"
+tier = 2
+prompt = """
+What is Mr Verloc's cover occupation in Brett Street, and what is his
+actual paid role for the foreign embassy? Identify both — and explain
+what the embassy demands of him at the opening of the novel that he
+has been failing to deliver.
+"""
+expected_facts = [
+    "seller",
+    "shady wares",
+    "secret agent",
+    "embassy",
+    "Greenwich",
+    "outrage",
+]
+reference_passages = [
+    { lines = "130-145", note = "'business of a seller of shady wares' — the shop cover" },
+    { lines = "800-820", note = "'famous and trusty secret agent' — the actual role" },
+    { lines = "960-975", note = "Vladimir demands an outrage; mentions Greenwich attack" },
+]
+notes = """
+Two-track identification + a forward-pointing inference (the demand
+sets up the whole plot). Each fact is directly retrievable; the
+inference is which embassy demand the rest of the novel turns on.
+"""
+
+[[questions]]
+id = "mother_almshouse_move"
+tier = 2
+prompt = """
+Winnie's elderly mother moves out of the Verloc household into an
+almshouse. What practical motive does the narrator attribute to her,
+and what does she sacrifice in making the move?
+"""
+expected_facts = [
+    "almshouse",
+    "Stevie",
+    "mother",
+    "Verloc",
+    "secure",
+]
+reference_passages = [
+    { lines = "4665-4685", note = "'secured her admission to certain almshouses' — the move" },
+    { lines = "4700-4760", note = "The motive: reducing the household so Stevie isn't a burden Verloc resents" },
+]
+notes = """
+The mother's reasoning is presented obliquely — she is removing
+herself so Stevie remains the only 'extra' in Verloc's house, on
+the gamble that fewer dependents makes Stevie's place more secure.
+Tests whether the model traces a quiet motive across the chapter.
+"""
+
+[[questions]]
+id = "yundt_reputation_vs_action"
+tier = 2
+prompt = """
+Karl Yundt is repeatedly called 'the terrorist' or 'the famous
+terrorist' in the novel. What does the narrator parenthetically
+disclose about his actual record of action, and how does this gap
+characterise him?
+"""
+expected_facts = [
+    "Yundt",
+    "terrorist",
+    "never",
+    "raised",
+    "hand",
+]
+reference_passages = [
+    { lines = "1430-1445", note = "'The famous terrorist had never in his life raised personally as much as...'" },
+    { lines = "1280-1320", note = "Physical decrepitude: 'toothless mouth', 'skinny neck', leaning on stick" },
+]
+notes = """
+The gap-between-reputation-and-deed is a recurring Conrad pattern
+(it shapes the Professor question and the Verloc-as-agent question
+too). For Yundt the gap is most explicit because the narrator
+directly punctures him. Tests recall of a sharp parenthetical that
+defines the character.
+"""
+
+# ─── Tier 3 — additional cross-chapter synthesis ───────────────
+
+[[questions]]
+id = "yundt_vs_michaelis"
+tier = 3
+prompt = """
+Yundt and Michaelis sit in Verloc's parlour and articulate sharply
+contrasting visions. Yundt wants the suffering of the proletariat
+inflamed and weaponised; Michaelis sees a different mechanism by
+which capitalism produces its own end. Quote or paraphrase each
+position, then explain what Conrad does with the contrast — does he
+adjudicate between them, and if not, what is he showing about the
+revolutionary scene as a whole?
+"""
+expected_facts = [
+    "Yundt",
+    "Michaelis",
+    "suffering",
+    "proletariat",
+    "capitalism",
+    "pessimism",
+]
+reference_passages = [
+    { lines = "1230-1290", note = "Michaelis speaks: capitalism produces its own conditions, gentle voice" },
+    { lines = "1280-1330", note = "Yundt's rejoinder, snarling 'rotten pessimism'" },
+    { lines = "1380-1410", note = "Verloc + the room — neither speaker is taken seriously by Conrad's frame" },
+]
+notes = """
+Cross-chapter (the same scene but separate retrievals). The Conrad
+point is the equal exposure of both — neither Yundt's frothy
+incitement nor Michaelis's serene determinism survives the narrator's
+deflationary frame. A model that picks a winner has misread; the
+right answer names the symmetric deflation.
+"""
+
+[[questions]]
+id = "heat_vs_assistant_commissioner"
+tier = 3
+prompt = """
+Chief Inspector Heat and the Assistant Commissioner approach the
+Greenwich investigation from very different positions. Compare their
+methods, their attitudes toward Michaelis, and what each is actually
+trying to protect. What does Conrad reveal about the police
+bureaucracy through this contrast?
+"""
+expected_facts = [
+    "Heat",
+    "Assistant Commissioner",
+    "Michaelis",
+    "department",
+    "ticket-of-leave",
+]
+reference_passages = [
+    { lines = "3180-3280", note = "AC's interest in Michaelis — the social-personal tie via his wife and the Lady Patroness" },
+    { lines = "3360-3430", note = "Heat's professional view — collar already 'jumped off the rope'" },
+    { lines = "3838-3900", note = "The address-label scene — Heat handing intel he's already filtered" },
+]
+notes = """
+The contrast is about the personal vs professional stake in the case.
+Heat protects his department's prestige; the AC protects Michaelis
+(by proxy his wife's social standing). Both compromise the
+investigation. Conrad's irony is that the 'investigation' is mostly
+internal politics. A model that frames this as 'good cops vs bad
+cops' missed it.
+"""
+
+[[questions]]
+id = "stevie_circles_to_winnies_eyes"
+tier = 3
+prompt = """
+The motif of circles — Stevie's compulsive drawings of 'circles,
+circles, circles, innumerable circles' — recurs at a critical moment
+later in the novel involving Winnie. Where does the image return,
+and what does its reappearance signify about Winnie's state after
+Stevie's death?
+"""
+expected_facts = [
+    "circles",
+    "Winnie",
+    "Stevie",
+    "chaos",
+    "eternity",
+]
+reference_passages = [
+    { lines = "1355-1362", note = "Original motif: 'a coruscating whirl of circles'" },
+    { lines = "7465-7480", note = "Recall: Winnie's mind 'visited by coruscations of innumerable circles'" },
+]
+notes = """
+Cross-chapter motif-tracking. The reappearance is Conrad's way of
+collapsing Winnie's interior state into Stevie's compulsion — she
+inherits his mode of seeing at the precise moment she becomes
+capable of his sympathy-fuelled violence. Tests whether the model
+notices image-recurrence as a structural device, not just narrated
+content.
+"""
+
+[[questions]]
+id = "winnie_realises_verloc_role"
+tier = 3
+prompt = """
+Winnie does not learn at once how her brother died. Trace the
+sequence by which she realises Verloc's role in Stevie's death —
+the address-label scene, what Verloc says (and doesn't say) to
+her, and the moment her view of him decisively shifts. What
+narrative effect does Conrad achieve by staging the realisation
+gradually rather than as a single shock?
+"""
+expected_facts = [
+    "Verloc",
+    "Stevie",
+    "address",
+    "label",
+    "incurious",
+    "abhorrence",
+]
+reference_passages = [
+    { lines = "6680-6730", note = "Winnie sees the label fragment shown by Heat" },
+    { lines = "6180-6200", note = "'incurious eyes lighted up with a flash of abhorrence' — the crack" },
+    { lines = "7900-8050", note = "Verloc's self-pitying monologue across the table from her" },
+]
+notes = """
+A pacing question — Conrad uses several pages to land what could
+have been a single revelation. The structural effect is to expose
+both Verloc's narcissism (he keeps talking, oblivious) and Winnie's
+slow internal pivot from 'a good husband' to 'the man who killed
+my brother'. A model summarising 'she finds out and kills him'
+misses the architecture.
+"""
+
+# ─── Tier 4 — additional thematic with textual anchor ───────────
+
+[[questions]]
+id = "deflation_of_revolutionaries"
+tier = 4
+prompt = """
+Conrad consistently undercuts the dignity of his revolutionary
+characters — Yundt the toothless 'terrorist', the obese
+ticket-of-leave Michaelis, the Professor's 'frail' and 'insignificant'
+appearance. Identify at least three concrete passages where physical
+description deflates a political claim, and trace what Conrad is
+arguing about the gap between revolutionary self-image and
+revolutionary effect.
+"""
+expected_facts = [
+    "Yundt",
+    "toothless",
+    "Michaelis",
+    "Professor",
+    "frail",
+    "insignificant",
+]
+reference_passages = [
+    { lines = "1255-1320", note = "Yundt: toothless mouth, skinny neck, leaning on stick" },
+    { lines = "1232-1280", note = "Michaelis: even voice, blue eyes, obesity" },
+    { lines = "9780-9790", note = "Professor closing: 'frail, insignificant, shabby, miserable'" },
+]
+notes = """
+The motif is consistent — Conrad's revolutionaries are rendered
+physically impotent in proportion to their political pretensions.
+This is a thematic question: not just *what's there* but what the
+device adds up to. Hand-waving at 'Conrad's irony' without specific
+passages doesn't earn the score.
+"""
+
+[[questions]]
+id = "marriage_as_compact"
+tier = 4
+prompt = """
+Conrad presents the Verloc marriage less as an emotional bond than as
+a transaction structured around mutual exchange. What does Winnie
+understand herself to be exchanging? What does Verloc understand he
+has bought? Anchor your answer in at least two passages and explain
+what Conrad is doing with this view of marriage.
+"""
+expected_facts = [
+    "Verloc",
+    "Winnie",
+    "Stevie",
+    "good husband",
+    "shop",
+]
+reference_passages = [
+    { lines = "5380-5395", note = "'Mr Verloc was a very good husband' — the careful narratorial register" },
+    { lines = "5870-5885", note = "'But he was a good husband, and she had a loyal respect for his...'" },
+    { lines = "7660-7675", note = "Winnie's calculus: 'seven years' security for Stevie'" },
+]
+notes = """
+The point is the framing register, not a dramatic accusation. Conrad
+keeps writing 'a very good husband' as if to test how much weight the
+phrase can carry. Winnie's bargain is: marry the dull older shopkeeper,
+secure a home for Stevie, accept that as the deal. Verloc's bargain
+is: marry the young woman, gain the domestic frame his secret-agent
+life requires. Tests whether the model can read register, not just
+content.
+"""
+
+[[questions]]
+id = "stevie_moral_perception_central"
+tier = 4
+prompt = """
+Stevie is often read as a peripheral character — the victim whose
+death triggers the plot. Make the contrary case: identify passages in
+which Stevie's moral perception is presented as the novel's clearest
+ethical vision, and trace how Conrad uses Stevie's reactions
+(the cab horse, the policeman, his drawings) to indict the surrounding
+adult world.
+"""
+expected_facts = [
+    "Stevie",
+    "horse",
+    "Don't whip",
+    "Shame",
+    "Bad world",
+]
+reference_passages = [
+    { lines = "4820-4900", note = "'Don't whip', 'Poor brute' — cab ride" },
+    { lines = "5260-5295", note = "Stevie's 'Shame!' at the cab-driver scene" },
+    { lines = "5300-5340", note = "'Bad world for poor people' — Stevie's verdict" },
+]
+notes = """
+A genuinely available alternative reading the novel rewards. Stevie's
+inability to compartmentalise (the horse suffers, the man suffers,
+both are 'bad') is the only undivided moral position in the book.
+A model defaulting to 'tragic innocent' rather than 'undivided ethical
+witness' has taken the easier interpretation.
+"""
+
+# ─── Tier 5 — additional anti-canonical ────────────────────────
+
+[[questions]]
+id = "yundt_as_threat_check"
+tier = 5
+prompt = """
+Karl Yundt is repeatedly named 'the famous terrorist' and a 'delegate'
+of revolutionary committees, and is sometimes cited as a chilling
+portrait of the violent extremist. Quote at least two passages that
+complicate this reading. What is the gap between Yundt's title and
+his actual capacity, and what is Conrad suggesting by emphasising it?
+"""
+expected_facts = [
+    "Yundt",
+    "terrorist",
+    "never",
+    "raised",
+    "toothless",
+    "skinny",
+]
+reference_passages = [
+    { lines = "1430-1445", note = "'The famous terrorist had never in his life raised personally as much as...'" },
+    { lines = "1255-1295", note = "Physical decrepitude: 'toothless', 'skinny', leaning on stick" },
+    { lines = "1520-1540", note = "'venomous spluttering of the old terrorist without teeth'" },
+]
+# Same shape as professor_menace_vs_impact: critique reception that
+# treats the figure as straightforwardly menacing.
+critique_traps = [
+    "if the answer treats Yundt's title as evidence of capacity",
+    "if the answer doesn't enumerate the deflation — toothlessness, frailty, no record of action",
+    "if the answer reaches for 'embodiment of nihilism' without textual pushback",
+]
+notes = """
+A sibling test to professor_menace_vs_impact. The pattern recurs:
+Conrad's most-titled revolutionaries are also his most ostentatiously
+impotent. Tests whether the model can apply the deflationary frame to
+a second figure once the first is in view, or whether it can only
+recite canonical readings.
+"""
+
+[[questions]]
+id = "novel_politics_check"
+tier = 5
+prompt = """
+The Secret Agent is sometimes shelved as a 'conservative' or
+'anti-revolutionary' novel — a portrait of revolutionary fanaticism
+serving the social order. Cite passages that complicate that placement.
+How does Conrad treat the police, the embassy, the great personage,
+and middle-class respectability? Where does his deflation cut both ways?
+"""
+expected_facts = [
+    "police",
+    "department",
+    "embassy",
+    "Vladimir",
+    "respectability",
+    "Sir Ethelred",
+]
+reference_passages = [
+    { lines = "510-565", note = "Vladimir at the embassy — cynical foreign manipulation" },
+    { lines = "3180-3280", note = "AC and the Lady Patroness — social ties shaping the investigation" },
+    { lines = "3360-3430", note = "Heat's department-prestige logic" },
+    { lines = "5380-5395", note = "'a very good husband' — the bourgeois respectability frame" },
+]
+critique_traps = [
+    "if the answer reads the novel as straightforwardly conservative",
+    "if the answer doesn't note Conrad's deflation of state actors alongside revolutionaries",
+    "if the answer treats 'respectability' as the novel's positive value",
+]
+notes = """
+The deflation pattern that hits the revolutionaries also hits the
+state. Vladimir is a cynical manipulator; the AC bends the
+investigation to protect his wife's social circle; Heat hides
+evidence to control the narrative; the great personage (Sir Ethelred)
+treats the affair as an inconvenience. A 'Conrad is conservative'
+reading misses that he satirises *everyone*.
+"""

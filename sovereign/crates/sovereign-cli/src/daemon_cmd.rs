@@ -121,6 +121,25 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
 };
 
 async fn run_daemon(args: &[String]) -> i32 {
+    // ── Worker-mode branch (ephemeral pod) ────────────────────────
+    //
+    // `sovereign daemon run --worker-mode` runs an ephemeral worker
+    // daemon (see `sovereign/docs/EPHEMERAL_WORKER_PODS.md`) instead
+    // of a full persistent peer. The worker boots with a bootstrap
+    // blob (env `SOVEREIGN_BOOTSTRAP` or `--bootstrap-blob <file>`),
+    // serves the four owner-only routes on `:9742` over a
+    // seed-derived self-signed TLS cert, and exits when the owner
+    // sends `DELETE /internal/worker/job` (or process is signalled).
+    //
+    // Worker mode skips every persistent-peer surface: no SetupConfig
+    // (no inference models), no mesh state machine, no
+    // /v1/chat/completions exposure. The binary is the same, but the
+    // wiring branches here and stays in worker_daemon.rs from this
+    // point forward.
+    if args.iter().any(|a| a == "--worker-mode") {
+        return run_worker_daemon(args).await;
+    }
+
     // ── Phase 4 flag parsing ──────────────────────────────────────
     //
     // `--setup-only` runs the wizard and exits without binding the
@@ -131,6 +150,30 @@ async fn run_daemon(args: &[String]) -> i32 {
     // the command line, only via the config file).
     let setup_only = args.iter().any(|a| a == "--setup-only");
 
+    // `--config <path>` overrides the default `~/.sovereign/config.toml`
+    // path. Phase 2 of EPHEMERAL_WORKER_PODS uses this to point the
+    // child daemon spawned by `SubprocessRunner` at the auto-generated
+    // pod-side config (written by `worker_http::write_child_daemon_config`).
+    // Production launchd/systemd units don't pass `--config`; they
+    // continue to use the canonical path. The wizard short-circuit
+    // above still checks `exists()` at the canonical path even when
+    // `--config` is set — that's intentional: if the operator passes
+    // `--config` they're telling us they have a config, so we skip
+    // the wizard entirely and surface a clean error if the file is
+    // missing.
+    let config_override: Option<std::path::PathBuf> = {
+        let mut path: Option<std::path::PathBuf> = None;
+        let mut it = args.iter();
+        while let Some(a) = it.next() {
+            if a == "--config" {
+                if let Some(p) = it.next() {
+                    path = Some(std::path::PathBuf::from(p));
+                }
+            }
+        }
+        path
+    };
+
     // ── Phase 4 first-boot wizard ─────────────────────────────────
     //
     // Pre-Phase-4 the daemon refused to start with a "run sovereign
@@ -140,7 +183,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // launchd-spawned daemon with no config will fall through to
     // the same hint as before, since `is_terminal()` returns false
     // in that environment.
-    if !sovereign_core::setup_config::SetupConfig::exists() {
+    // When `--config <path>` is passed, the operator owns the config
+    // file's existence — skip both the `exists()` short-circuit and
+    // the interactive wizard. Otherwise fall through to the
+    // canonical-path checks.
+    if config_override.is_none() && !sovereign_core::setup_config::SetupConfig::exists() {
         if !std::io::stdin().is_terminal() {
             eprintln!("error: no config at {}", SetupConfig::default_path().display());
             eprintln!(
@@ -201,15 +248,27 @@ async fn run_daemon(args: &[String]) -> i32 {
     );
 
     // ── Load config ───────────────────────────────────────────────
-    let config = match SetupConfig::load() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: {e}");
-            eprintln!(
-                "hint: run `sovereign daemon --setup-only` to (re-)create the config."
-            );
-            return 1;
-        }
+    let config = match config_override.as_ref() {
+        Some(path) => match SetupConfig::load_from(path) {
+            Ok(c) => {
+                eprintln!("[daemon] loaded config from {}", path.display());
+                c
+            }
+            Err(e) => {
+                eprintln!("error: --config {}: {e}", path.display());
+                return 1;
+            }
+        },
+        None => match SetupConfig::load() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("error: {e}");
+                eprintln!(
+                    "hint: run `sovereign daemon --setup-only` to (re-)create the config."
+                );
+                return 1;
+            }
+        },
     };
 
     // ── VRAM capacity preflight ───────────────────────────────────
@@ -227,6 +286,13 @@ async fn run_daemon(args: &[String]) -> i32 {
     // model is lazy-loaded behind a high idle_secs gate). The
     // report still prints in that case so the diagnosis stays
     // visible in logs.
+    // Route llama.cpp's internal log into our tracing layer. Without
+    // this, gguf load failures and ggml backend diagnostics print to a
+    // dropped stderr (the daemon's child-style stdio capture swallows
+    // them) — the operator gets a bare "null result from llama cpp"
+    // with no actionable detail. Installed exactly once per process.
+    sovereign_inference::llama::install_log_tracing();
+
     {
         let hardware = sovereign_inference::hardware::HardwareProfile::detect();
         let slots = sovereign_inference::capacity::build_slots_from_config(&config);
@@ -280,12 +346,58 @@ async fn run_daemon(args: &[String]) -> i32 {
         );
     }
 
+    // ── Alternation-grammar config → process env ──────────────────
+    //
+    // Same propagation pattern as force_tool_calls. The inference
+    // adapter reads `SOVEREIGN_ALTERNATION_GRAMMAR` per request to
+    // route tool-envelope requests through llguidance's canonical
+    // `TopLevelGrammar::from_json_schema` path instead of the
+    // in-house `JsonConstraint` mask. Caller-supplied env wins so
+    // operators can A/B test (`SOVEREIGN_ALTERNATION_GRAMMAR=0
+    // sovereign daemon run` ignores the config).
+    //
+    // launchd-spawned daemons don't inherit caller env, so flipping
+    // this in setup_config.toml is the load-bearing path on macOS
+    // hosts running the daemon via `sovereign daemon start`.
+    if config.daemon.alternation_grammar
+        && std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR").is_err()
+    {
+        std::env::set_var("SOVEREIGN_ALTERNATION_GRAMMAR", "1");
+        tracing::info!(
+            "daemon: alternation_grammar=true — llguidance schema path \
+             engaged on tools-using requests (set via setup_config.toml)"
+        );
+    }
+
     // ── Inference provider ────────────────────────────────────────
     // Build the embedded llama.cpp provider from the three GGUF slots.
     // Synchronous — load happens inline; model files are mmapped so
     // cold-start latency is dominated by disk I/O on first reference.
+    //
+    // **Family resolution.** The embed slot's family identity decides
+    // its app-side pooling strategy, normalisation, and the document /
+    // query instruction prefixes via `EmbedQuirks`. After the
+    // llama-cpp-4 0.2.x migration the C-side pooling type is forced
+    // to `None` in `EmbedSlot::load` (the binding returns null from
+    // `embeddings_seq_ith` on every gguf whose header says NONE, and
+    // setting any other type ggml_aborts the context constructor for
+    // Qwen3-Embedding); pooling moved into Rust against the per-token
+    // `embeddings_ith` reads. The family lookup is therefore what
+    // selects the right strategy (Last for Qwen3-Embedding, Mean for
+    // BERT-style) and the right text prep on the input — keeping it
+    // resolved here means the slot loader and the mesh-advertisement
+    // path read from a single source of truth.
+    let resolved_embed_family = config
+        .models
+        .embed
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(|name| {
+            sovereign_core::models_manifest::DEFAULT_MANIFEST.embed_family_for_file(name)
+        })
+        .unwrap_or(ModelFamily::Unknown);
     let provider: Arc<dyn InferenceProvider> = match EmbeddedLlamaCpp::load_full_with_families(
-        &config.models.fast,
+        config.models.fast_path(),
         Some(&config.models.primary),
         Some(&config.models.embed),
         // PR-E2: optional Code specialist. When set, `code`-hinted
@@ -307,7 +419,13 @@ async fn run_daemon(args: &[String]) -> i32 {
         None, // gpu_layers — auto-detect
         ModelFamily::Unknown,
         ModelFamily::Unknown,
-        ModelFamily::Unknown,
+        // Manifest-resolved embed family: drives app-side pooling
+        // strategy + document/query instruction prefixes. The C-side
+        // pooling is fixed to `None` inside `EmbedSlot::load` (see
+        // the rationale there) so passing a non-Unknown family no
+        // longer triggers the ggml_abort that motivated the earlier
+        // hard-coded `Unknown` here.
+        resolved_embed_family.clone(),
         // code slot is Qwen3-Coder-30B-A3B-Instruct (the only code
         // GGUF we ship today). Pinning the family to Qwen3 picks up
         // Qwen's recommended sampling defaults — top_k=20 (vs the
@@ -783,10 +901,25 @@ async fn run_daemon(args: &[String]) -> i32 {
         // registry URL — the wikipedia-catalog dev variant could never
         // be installed because its data URL is not yet hosted.
         let recipes_dir = data_dir.join("recipes");
+        // Recipe enrichment (`[enrichment] enabled = true, type = "atlas"`)
+        // requires an InferenceFn — without one, `engine.ingest` logs
+        // "no InferenceFn was provided to CorpusEngine — skipping" and
+        // silently degrades to chunks-only ingest. The embedded daemon
+        // was the lone holdout (every other call site —
+        // `sovereign-server/src/main.rs:224`,
+        // `sovereign-desktop/src-tauri/src/state.rs:1053`,
+        // `sovereign-cli/src/main.rs:865`,
+        // `chat_cmd/bootstrap.rs:242` — wires this); surface symptom
+        // was conversations-personal landing 180 embedded chunks with
+        // no atlas/atoms.json. Same provider already drives embed +
+        // batch_embed above.
+        let inference_fn =
+            sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
         Arc::new(
             CorpusEngine::new(recipes_dir, indexes_dir, embed)
                 .with_embedding_model(&embed_model_name)
                 .with_batch_embed_fn(batch_embed)
+                .with_inference_fn(inference_fn)
                 .with_self_node_id(self_node_id.to_string()),
         )
     };
@@ -848,10 +981,88 @@ async fn run_daemon(args: &[String]) -> i32 {
     // populated `AppState.slot_aliases`. The trait-object form is
     // what the daemon needs; the typed form is what the alias
     // installer needs.
+    // Compose the gossiped-mesh source with any pinned worker pod
+    // snapshots persisted on disk. `pod up` writes one snapshot per
+    // pod into `~/.sovereign/worker-pods/`; this loop loads them at
+    // daemon startup and registers each with the inference scheduler
+    // so subsequent `chat/completions` calls can route to them.
+    // Empty when no pods are configured (the common case) —
+    // pinned_source.peer_inference_endpoints() returns an empty Vec
+    // and the composite degrades to mesh-only.
+    // Spec: docs/PINNED_WORKER_AS_INFERENCE_PEER.md.
+    let pinned_source = Arc::new(
+        sovereign_mesh::pinned_worker_source::PinnedWorkerEndpointSource::new(),
+    );
+    if let Some(dir) = sovereign_mesh::pinned_pod_snapshot::default_snapshot_dir() {
+        let snapshots = sovereign_mesh::pinned_pod_snapshot::load_all_snapshots(&dir);
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        // 2026-05-18: silently expired tokens caused a 6h SEP-on-Vast
+        // outage. Registering an already-expired snapshot means every
+        // routed inference call gets `token expired` from the pod and
+        // is retried via mesh fallback — wasteful and confusing. Skip
+        // expired snapshots loudly here so the operator sees the
+        // problem at daemon start, not after burning a night of GPU.
+        const NEAR_EXPIRY_WARN_SECS: u64 = 4 * 3600; // 4h
+        for snap in snapshots {
+            let expires_unix = snap.bootstrap_blob.expires_unix;
+            if expires_unix <= now_unix {
+                tracing::error!(
+                    vast_id = %snap.vast_id,
+                    expires_unix,
+                    expired_secs_ago = now_unix.saturating_sub(expires_unix),
+                    "daemon_cmd: pinned-pod snapshot token EXPIRED — \
+                     skipping (tear down with `sovereign pipeline pod down {id}` \
+                     or relaunch with `--ttl-hours <N>` to refresh)",
+                    id = snap.vast_id,
+                );
+                continue;
+            }
+            let remaining = expires_unix.saturating_sub(now_unix);
+            if remaining < NEAR_EXPIRY_WARN_SECS {
+                tracing::warn!(
+                    vast_id = %snap.vast_id,
+                    expires_unix,
+                    remaining_secs = remaining,
+                    "daemon_cmd: pinned-pod snapshot token near expiry \
+                     (<4h remaining) — plan a fresh `pipeline pod up` if \
+                     your run will outlast it"
+                );
+            }
+            match snap.to_pinned_pod() {
+                Ok(pod) => {
+                    tracing::info!(
+                        vast_id = %snap.vast_id,
+                        host = %snap.host,
+                        port = snap.port,
+                        node_id = %pod.node_id,
+                        expires_in_h = remaining as f64 / 3600.0,
+                        "daemon_cmd: registered pinned worker pod with inference scheduler"
+                    );
+                    pinned_source.register(pod).await;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        vast_id = %snap.vast_id,
+                        error = %e,
+                        "daemon_cmd: pinned-pod snapshot rejected — skipping"
+                    );
+                }
+            }
+        }
+    }
+    let composite_source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> = Arc::new(
+        sovereign_mesh::pinned_worker_source::CompositeEndpointSource::new(
+            Arc::clone(&daemon) as Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource>,
+            Arc::clone(&pinned_source),
+        ),
+    );
     let mesh_provider = Arc::new(
-        sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+        sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
             Arc::clone(&provider),
-            Arc::clone(&daemon),
+            composite_source,
         ),
     );
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
@@ -866,6 +1077,11 @@ async fn run_daemon(args: &[String]) -> i32 {
     // for mesh routing) never lands on a real slot. Done on a
     // spawned task because `daemon.app_state()` only returns
     // `Some` after `start()` transitions DaemonState to Running.
+    //
+    // Same spawned task also installs MIP's in-flight publisher Arc
+    // onto AppState — feeds the gossip-load-awareness path so peers
+    // see this node's true serving load instead of phantom-idle.
+    // See `sovereign/docs/MESH_LOAD_AWARENESS.md` for the design.
     {
         let daemon_for_alias_push = Arc::clone(&daemon);
         let mesh_for_alias_push = mesh_provider.clone();
@@ -876,8 +1092,19 @@ async fn run_daemon(args: &[String]) -> i32 {
             // this spawn.
             let deadline =
                 tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            let mut publisher_installed = false;
             loop {
                 if let Some(state) = daemon_for_alias_push.app_state().await {
+                    if !publisher_installed {
+                        state.install_in_flight_publisher(
+                            mesh_for_alias_push.in_flight_publisher(),
+                        );
+                        publisher_installed = true;
+                        tracing::info!(
+                            "daemon_cmd: installed in-flight publisher on AppState \
+                             — gossip will now advertise this node's actual load"
+                        );
+                    }
                     let snapshot = state.inner.slot_aliases.load();
                     let map: std::collections::HashMap<String, String> = snapshot
                         .iter()
@@ -1024,15 +1251,11 @@ async fn run_daemon(args: &[String]) -> i32 {
             // BYOM paths that don't match any manifest row fall
             // through to `ModelFamily::Unknown` → Mean + Application
             // (safe default for generic mean-pool BERT embedders).
-            let embed_filename = config
-                .models
-                .embed
-                .file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
-            let embed_family = sovereign_core::models_manifest::DEFAULT_MANIFEST
-                .embed_family_for_file(embed_filename)
-                .unwrap_or(ModelFamily::Unknown);
+            // Reuse `resolved_embed_family` from provider construction
+            // (above) — same manifest lookup, same answer. Keeping a
+            // single source of truth prevents the slot loader and the
+            // mesh advertiser drifting apart on pooling defaults.
+            let embed_family = resolved_embed_family;
             let embed_quirks = embed_family.default_quirks().embed;
             let pooling = embed_quirks
                 .as_ref()
@@ -1373,6 +1596,58 @@ async fn run_daemon(args: &[String]) -> i32 {
             work_atlas_cfg.clone(),
         )
         .spawn();
+
+    // ── Foreground back-pressure for lint/test watchers ─────────────
+    //
+    // The lint and test runners burst memory (workspace cargo check
+    // ≈ 2-4 GB peak; 22-crate `cargo test` higher) and historically
+    // ran without coordination with the chat slot. Combined with a
+    // 35B chat slot ≈ 30 GB resident, that crosses jetsam threshold
+    // on memory-tight boxes and SIGTERMs the daemon mid-request.
+    //
+    // Install `AppStateYieldHook` on each watcher so its subprocess
+    // runner waits until `should_yield()` returns false before
+    // spawning cargo. Late-bind: daemon_cmd builds the watchers
+    // earlier in this function (before EmbeddedDaemon exists);
+    // `daemon.app_state()` returns Some only after start_daemon
+    // completes. Poll with the same deadline pattern as the
+    // work-atlas broadcaster wire-up above.
+    if lint_watcher.is_some() || test_watcher.is_some() {
+        let daemon_for_hook = Arc::clone(&daemon);
+        let lint_for_hook = lint_watcher.clone();
+        let test_for_hook = test_watcher.clone();
+        tokio::spawn(async move {
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+            loop {
+                if let Some(hook) = daemon_for_hook.build_yield_hook().await {
+                    if let Some(w) = lint_for_hook.as_ref() {
+                        w.set_yield_hook(Arc::clone(&hook));
+                        tracing::info!(
+                            "foreground-yield: hook installed on lint watcher"
+                        );
+                    }
+                    if let Some(w) = test_for_hook.as_ref() {
+                        w.set_yield_hook(Arc::clone(&hook));
+                        tracing::info!(
+                            "foreground-yield: hook installed on test watcher"
+                        );
+                    }
+                    return;
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    tracing::warn!(
+                        "foreground-yield: watcher hook wire-up timed out \
+                         — lint/test will not yield to chat (memory \
+                         contention possible)"
+                    );
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+        });
+    }
+
     eprintln!(
         "sovereign daemon running — http://localhost:{}/v1 + /mcp",
         config.daemon.client_port
@@ -1428,7 +1703,54 @@ async fn run_daemon(args: &[String]) -> i32 {
     }
 
     eprintln!("sovereign daemon stopped");
-    0
+
+    // macOS-specific: bypass C++ static destructors at process exit
+    // to dodge a known `ggml-metal-device.m:618 GGML_ASSERT` firing
+    // inside `__cxa_finalize_ranges → ggml_metal_device_free`. The
+    // assertion checks Metal resource-set drain; our llama contexts
+    // are owned by `Arc<EmbeddedLlamaCpp>` references scattered
+    // across AppState, MeshInferenceProvider, the inference adapter,
+    // and several background tasks. Drop ordering is non-trivial,
+    // and even one straggling reference (e.g., a slot guard held
+    // briefly by a closing in-flight request) leaves a non-empty
+    // resource set when `exit()` walks the destructor table —
+    // SIGABRT, misleading "daemon crashed" log.
+    //
+    // We've already run the graceful shutdown path:
+    //   - `daemon.shutdown().await` persisted mesh.json
+    //   - axum::serve drained in-flight requests
+    //   - the pidfile is removed
+    //   - tracing-subscriber writes line-buffered to stderr
+    //
+    // Everything else (Metal devices, KV caches, mmap'd ggufs) is
+    // reclaimed by the kernel on `_exit`. Confirmed 2026-05-20: this
+    // is the same shutdown shape `llama-server` uses (`_Exit` from
+    // its signal handler) and matches the pattern from
+    // <https://github.com/ggml-org/llama.cpp/issues/...>.
+    //
+    // Linux + other targets keep the standard return path — Metal is
+    // macOS-only, so the assertion only fires on darwin.
+    #[cfg(target_os = "macos")]
+    unsafe {
+        fast_exit_skip_destructors(0);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        0
+    }
+}
+
+/// macOS shutdown helper — see `run_daemon` for rationale. Calls
+/// `_exit(2)` to skip libc's `__cxa_finalize_ranges` chain so the
+/// ggml-metal device sweeper never gets a chance to assert on
+/// still-resident llama-context resources.
+#[cfg(target_os = "macos")]
+unsafe fn fast_exit_skip_destructors(code: i32) -> ! {
+    extern "C" {
+        #[link_name = "_exit"]
+        fn libc_exit_no_finalize(status: i32) -> !;
+    }
+    libc_exit_no_finalize(code)
 }
 
 /// Build the tool registry that serves `/mcp/*`. Mirrors the subset of
@@ -1457,27 +1779,39 @@ async fn build_tool_registry(
 ) -> ToolRegistry {
     let indexes_dir = data_dir.join("indexes");
 
-    let mut tools = ToolRegistry::new();
-
-    // Code intelligence — scoped to discovered corpora under indexes_dir.
-    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(Arc::clone(
-        &engine,
-    ))));
-    tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
-        &engine,
-    ))));
-    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(Arc::clone(
-        &engine,
-    ))));
+    // Tier 4 — shared tool-result cache. The daemon's registry
+    // serves both HTTP API requests AND in-process Runtime calls;
+    // per-conversation scoping in `CacheKey` keeps the slices
+    // isolated even when two clients hit different conversations
+    // simultaneously.
+    let tool_cache = std::sync::Arc::new(
+        sovereign_core::tool_result_cache::ToolResultCache::new(),
+    );
+    let mut tools = ToolRegistry::new().with_cache(std::sync::Arc::clone(&tool_cache));
 
     // Call-graph tools. Merge every `scip_graph.db` under the indexes
     // directory into a single in-memory graph, then register
     // find_callers / find_callees / blast_radius. Without this step
     // agents can't trace references through the daemon — project_serve
     // had these, the daemon didn't.
+    //
+    // The graph also backs `symbols`/exact-name lookup, so build it
+    // BEFORE registering the code-intel tools below.
     let merged_graph = build_merged_scip_graph(&indexes_dir).await;
     let graph_handle: sovereign_tools::ScipGraphHandle =
         std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(merged_graph));
+
+    // Code intelligence — scoped to discovered corpora under indexes_dir.
+    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+        Arc::clone(&engine),
+        Arc::clone(&graph_handle),
+    )));
+    tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
+        &engine,
+    ))));
+    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(Arc::clone(
+        &engine,
+    ))));
     let health_checker = Arc::new(
         sovereign_tools::IndexHealthChecker::new(Arc::clone(&graph_handle)),
     );
@@ -1586,6 +1920,14 @@ async fn build_tool_registry(
             Arc::clone(w),
         )));
     }
+
+    // NOTE: knowledge_lookup (Tool-Mastery Phase 5) is wired in
+    // chat_cmd/bootstrap.rs where the `inference` + `store`
+    // handles are available. The daemon's MCP-only tool registry
+    // intentionally does not expose it — the unified knowledge
+    // envelope only makes sense inside an active chat
+    // conversation (the consumer is the model's synthesis path,
+    // not arbitrary MCP clients).
 
     // Notes tools work regardless of indexing state.
     tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
@@ -1922,6 +2264,36 @@ async fn start_daemon() -> i32 {
         return 0;
     }
 
+    // Bind-collision detector (added 2026-05-20).
+    //
+    // Failure mode this prevents: a stale process holds 127.0.0.1:9741
+    // but doesn't answer our readiness probe (wrong build, half-shut
+    // state, debug binary from an earlier session). `wait_for_ready`
+    // returns false, we then spawn a fresh daemon which successfully
+    // binds *:9741 — but the kernel routes loopback traffic to the
+    // address-specific listener (the orphan), and every localhost
+    // call silently goes to the dead listener. Confirmed 2026-05-20
+    // with a stale `sovereign-cli serve` (debug build) holding
+    // 127.0.0.1:9741 while a fresh `daemon start` bound *:9741. The
+    // operator saw nothing in the new daemon's log because the new
+    // daemon wasn't getting any traffic.
+    //
+    // Detect by asking lsof / ss who owns the port. If it's NOT our
+    // pidfile owner, refuse loudly with a kill-the-orphan hint rather
+    // than start a second listener.
+    if let Some(holder_pid) = find_daemon_pid_by_port(9741) {
+        let our_pid = read_daemon_pid();
+        if our_pid != Some(holder_pid) {
+            eprintln!(
+                "✗ :9741 is held by pid {holder_pid} but the readiness probe failed.\n  \
+                 something else owns the port (stale debug build, half-shut daemon, foreign process).\n  \
+                 Stop it first: `kill {holder_pid}` (or `sovereign daemon stop` if it's a managed sovereign),\n  \
+                 then re-run `sovereign daemon start`."
+            );
+            return 1;
+        }
+    }
+
     let exe = match std::env::current_exe() {
         Ok(p) => p,
         Err(e) => {
@@ -2119,6 +2491,9 @@ fn home_dir_buf() -> std::path::PathBuf {
 /// configured" (with a warning log so the misconfiguration is
 /// visible in the daemon log without breaking startup).
 fn resolve_workspace_dir() -> Option<PathBuf> {
+    // 1. Explicit env override — preferred for launchd / systemd /
+    //    container setups where the daemon doesn't know its own
+    //    repo path at build time.
     if let Ok(val) = std::env::var("SOVEREIGN_WORKSPACE_DIR") {
         let trimmed = val.trim();
         if !trimmed.is_empty() {
@@ -2133,6 +2508,10 @@ fn resolve_workspace_dir() -> Option<PathBuf> {
             }
         }
     }
+
+    // 2. User-pinned path written to `~/.sovereign/workspace`.
+    //    Honoured when the user wants a non-default location (e.g.
+    //    multi-checkout dev with switching).
     let workspace_file = home_dir_buf().join(".sovereign").join("workspace");
     if let Ok(contents) = std::fs::read_to_string(&workspace_file) {
         let trimmed = contents.trim();
@@ -2149,7 +2528,75 @@ fn resolve_workspace_dir() -> Option<PathBuf> {
             }
         }
     }
+
+    // 3. **Auto-detect** — works on a fresh checkout on any machine
+    //    without per-host configuration. Two sources, in order:
+    //      a. The daemon binary's own location. When sovereign-cli
+    //         was built from this repo at `<repo>/target/release/sovereign-cli`,
+    //         walking up from `current_exe()` finds the repo root.
+    //         Robust across host paths because it doesn't hard-code
+    //         a username or home dir.
+    //      b. Walk up from the daemon's CWD looking for the
+    //         sovereign-workspace signature. Lets a developer run
+    //         `cargo run --bin sovereign-cli` from anywhere inside
+    //         the tree.
+    //    The signature is `scripts/sovereign-lint.sh` + a
+    //    workspace-shaped `Cargo.toml` at the same root — strict
+    //    enough that a generic Cargo workspace in `$HOME` doesn't
+    //    accidentally trip the lint runner.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(found) = ascend_for_sovereign_workspace(&exe) {
+            tracing::info!(
+                workspace = %found.display(),
+                source = "current_exe",
+                "resolve_workspace_dir: auto-detected from daemon binary"
+            );
+            return Some(found);
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        if let Some(found) = ascend_for_sovereign_workspace(&cwd) {
+            tracing::info!(
+                workspace = %found.display(),
+                source = "current_dir",
+                "resolve_workspace_dir: auto-detected from cwd"
+            );
+            return Some(found);
+        }
+    }
+
     None
+}
+
+/// Walk up from `start` looking for a directory that holds both
+/// `scripts/sovereign-lint.sh` and a workspace-shaped `Cargo.toml`.
+/// Returns the directory when found. Bounded ascent (12 hops) so
+/// we don't sweep `/` on weird CWDs.
+fn ascend_for_sovereign_workspace(start: &std::path::Path) -> Option<PathBuf> {
+    let mut cur: Option<&std::path::Path> = Some(start);
+    for _ in 0..12 {
+        let dir = cur?;
+        if looks_like_sovereign_workspace(dir) {
+            return Some(dir.to_path_buf());
+        }
+        cur = dir.parent();
+    }
+    None
+}
+
+fn looks_like_sovereign_workspace(dir: &std::path::Path) -> bool {
+    let lint_script = dir.join("scripts").join("sovereign-lint.sh");
+    if !lint_script.is_file() {
+        return false;
+    }
+    let cargo_toml = dir.join("Cargo.toml");
+    let Ok(contents) = std::fs::read_to_string(&cargo_toml) else {
+        return false;
+    };
+    // Cheap shape check — a `[workspace]` table is the load-bearing
+    // signal for "this is the monorepo root", not a single-crate
+    // Cargo.toml that happens to live next to a `scripts/` dir.
+    contents.contains("[workspace]")
 }
 
 /// `sovereign daemon restart` — stop the running daemon (whichever
@@ -2365,7 +2812,7 @@ impl ProviderFactory for LlamaCppFactory {
         // idle timeout from `cfg` for the same reason: a hot-reload
         // shouldn't drop the operator's tuned values.
         let provider = EmbeddedLlamaCpp::load_full_with_families(
-            &cfg.models.fast,
+            cfg.models.fast_path(),
             Some(&cfg.models.primary),
             Some(&cfg.models.embed),
             cfg.models.code.as_deref(),
@@ -2397,18 +2844,52 @@ impl ProviderFactory for LlamaCppFactory {
         // `run_daemon`. See the comment on the cold-start wiring
         // for why a bare `EmbeddedLlamaCpp` here would re-introduce
         // the silent-substitution bug.
-        let mesh_provider = Arc::new(
-            sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-                raw,
-                Arc::clone(&self.daemon),
-            ),
-        );
+        //
+        // Hot-reload load-awareness invariant: the new MIP must
+        // share the SAME `Arc<AtomicU32>` publisher as the old MIP
+        // (held by AppState's OnceLock). Live `LocalTotalGuard`s
+        // from the old MIP have already captured a clone of that
+        // Arc and will continue to decrement it as their requests
+        // drain. If we let the new MIP create a fresh publisher,
+        // the old guards would write to an Arc nobody reads, and
+        // gossip would see a counter that snaps to zero on reload
+        // and stays there until new traffic flows. See
+        // `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+        let app_state_opt = self.daemon.app_state().await;
+        let mesh_provider = if let Some(state) = app_state_opt.as_ref() {
+            match state.in_flight_publisher() {
+                Some(publisher) => Arc::new(
+                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_in_flight_publisher(
+                        raw,
+                        Arc::clone(&self.daemon),
+                        publisher,
+                    ),
+                ),
+                // OnceLock not yet set means cold-start's spawned
+                // task hasn't run; reload still installs the new
+                // MIP, and the spawned task will install its
+                // publisher when it next polls.
+                None => Arc::new(
+                    sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+                        raw,
+                        Arc::clone(&self.daemon),
+                    ),
+                ),
+            }
+        } else {
+            Arc::new(
+                sovereign_mesh::peer_inference::MeshInferenceProvider::new(
+                    raw,
+                    Arc::clone(&self.daemon),
+                ),
+            )
+        };
         // Push current slot aliases into the freshly-built mesh
         // provider so a reload preserves the deferred-resolution
         // wiring. Mirrors the cold-start spawned task in
         // `run_daemon`; here we run inline because the daemon is
         // already in the Running state at reload time.
-        if let Some(state) = self.daemon.app_state().await {
+        if let Some(state) = app_state_opt {
             let snapshot = state.inner.slot_aliases.load();
             let map: std::collections::HashMap<String, String> = snapshot
                 .iter()
@@ -2426,27 +2907,110 @@ impl ProviderFactory for LlamaCppFactory {
 /// Wait for SIGINT (Ctrl-C) or SIGTERM (systemd/launchd shutdown).
 /// Returns when either arrives so the caller can run teardown.
 async fn wait_for_shutdown() {
+    // Glassbox: shutdown forensics. A 2026-05-20 incident left the
+    // daemon abort-crashing in ggml-metal's `__cxa_finalize_ranges`
+    // path with no breadcrumb naming the trigger — was it SIGINT
+    // from a stray Ctrl-C, SIGTERM from a peer `sovereign daemon
+    // stop`, launchd OOM, or something else? Without a log, the
+    // post-mortem stalls. Emit the signal source + process context
+    // (PID, PPID, peak RSS, jetsam hint) so the next incident
+    // surfaces the trigger immediately.
+    //
+    // We can't get the sender PID — `tokio::signal::unix::signal`
+    // abstracts away `SA_SIGINFO`, so siginfo.si_pid is unreachable
+    // without dropping to raw `sigaction()`. Logging local context
+    // is the practical second-best: if RSS is in the jetsam danger
+    // zone (>~24 GiB on a 64 GiB host) and the signal was SIGTERM,
+    // the operator gets a strong hint to inspect Console for a
+    // "low memory" jetsam event.
     #[cfg(unix)]
     {
         let mut sigterm = match tokio::signal::unix::signal(
             tokio::signal::unix::SignalKind::terminate(),
         ) {
             Ok(s) => s,
-            Err(_) => {
-                // If we can't listen for SIGTERM, fall back to just SIGINT.
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "sigterm handler install failed — falling back to SIGINT-only"
+                );
                 let _ = tokio::signal::ctrl_c().await;
+                log_shutdown_context("SIGINT", "fallback");
                 return;
             }
         };
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => {}
-            _ = sigterm.recv() => {}
+            _ = tokio::signal::ctrl_c() => {
+                log_shutdown_context("SIGINT", "primary");
+            }
+            _ = sigterm.recv() => {
+                log_shutdown_context("SIGTERM", "primary");
+            }
         }
     }
 
     #[cfg(not(unix))]
     {
         let _ = tokio::signal::ctrl_c().await;
+        tracing::info!(signal = "ctrl_c", "daemon: shutdown signal received");
+    }
+}
+
+/// One-line shutdown-receipt log with forensic context. Field names
+/// are stable so `grep "daemon: shutdown signal received"` walks the
+/// trail across runs.
+#[cfg(unix)]
+fn log_shutdown_context(signal: &'static str, path: &'static str) {
+    let pid = std::process::id();
+    let ppid: i64 = unsafe { libc::getppid() } as i64;
+    let rss_mb = peak_rss_mb();
+    let jetsam_risk = rss_mb.map(|mb| mb >= 24 * 1024).unwrap_or(false);
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if jetsam_risk && signal == "SIGTERM" {
+        tracing::warn!(
+            signal,
+            path,
+            pid,
+            ppid,
+            rss_mb = rss_mb.unwrap_or(0),
+            at_unix = now_unix,
+            "daemon: shutdown signal received — peak RSS suggests possible jetsam/OOM trigger; inspect Console.app for 'low memory' or 'memorystatus' around this timestamp"
+        );
+    } else {
+        tracing::info!(
+            signal,
+            path,
+            pid,
+            ppid,
+            rss_mb = rss_mb.unwrap_or(0),
+            at_unix = now_unix,
+            "daemon: shutdown signal received"
+        );
+    }
+}
+
+/// Peak resident-set size in MiB via `getrusage(RUSAGE_SELF)`.
+/// On macOS, `ru_maxrss` is in *bytes*; on Linux it's in *kilobytes*.
+/// `None` on platforms / failures.
+#[cfg(unix)]
+fn peak_rss_mb() -> Option<u64> {
+    // SAFETY: getrusage with a properly-zeroed `rusage` struct is safe.
+    let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+    let rc = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
+    if rc != 0 {
+        return None;
+    }
+    let raw = ru.ru_maxrss as u64;
+    #[cfg(target_os = "macos")]
+    {
+        Some(raw / (1024 * 1024)) // bytes → MiB
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Some(raw / 1024) // kilobytes → MiB
     }
 }
 
@@ -2510,5 +3074,231 @@ fn warn_orphaned_indexes(
          point the FS watcher at the wrong directory.)"
     );
     eprintln!();
+}
+
+/// Worker-mode entry — runs the ephemeral pod daemon. Skips every
+/// persistent-peer surface (no config, no models, no mesh) and serves
+/// only the four owner-only routes documented in
+/// `sovereign/docs/EPHEMERAL_WORKER_PODS.md`.
+///
+/// Triggered by `sovereign daemon run --worker-mode`. The bootstrap
+/// blob is read from `SOVEREIGN_BOOTSTRAP` env or `--bootstrap-blob
+/// <file>`. Falls through to the foreground worker daemon; exits when
+/// the owner sends `DELETE /internal/worker/job` (TBD: wire shutdown
+/// from the worker state's flag) or the process receives SIGTERM.
+async fn run_worker_daemon(args: &[String]) -> i32 {
+    // Parse `--bootstrap-blob <path>` if supplied. The env-var path
+    // is the production default (Vast injects it via `onstart_cmd`);
+    // the file-path mode is for local testing where shell quoting a
+    // 500-byte blob is painful.
+    let mut blob_path: Option<std::path::PathBuf> = None;
+    let mut iter = args.iter().enumerate();
+    while let Some((_, a)) = iter.next() {
+        if a == "--bootstrap-blob" {
+            if let Some((_, p)) = iter.next() {
+                blob_path = Some(std::path::PathBuf::from(p));
+            }
+        }
+    }
+
+    let (blob, source) = match sovereign_mesh::worker_daemon::load_bootstrap_blob(
+        "SOVEREIGN_BOOTSTRAP",
+        blob_path.as_deref(),
+    ) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("worker daemon: {e}");
+            return 2;
+        }
+    };
+    eprintln!(
+        "[worker-daemon] bootstrap loaded from {source}; job_id={} expected_uploads={}",
+        blob.job_id,
+        blob.expected_uploads.len()
+    );
+
+    // Pod models dir — the disk-dump watcher writes uploaded bytes
+    // here, and the SubprocessRunner spawns a child daemon against
+    // the config the watcher writes one level up.
+    let models_dir = std::env::var("SOVEREIGN_MODELS_DIR")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/workspace/models"));
+    let config_path = models_dir
+        .parent()
+        .map(|p| p.join("config.toml"))
+        .unwrap_or_else(|| models_dir.join("config.toml"));
+
+    // Pre-build the disk-dump signals so the runner can share them
+    // with the WorkerState. Without this the runner would never
+    // observe the dump completing (it'd hold a different Notify
+    // than the watcher fires).
+    let signals = sovereign_mesh::worker_daemon::new_disk_dump_signals();
+
+    // `SOVEREIGN_WORKER_RUNNER=echo` falls back to the stub used
+    // during early integration testing — useful when validating the
+    // wire protocol against a real Vast pod before the child daemon
+    // is known-good. Production default is `subprocess`.
+    let runner_kind = std::env::var("SOVEREIGN_WORKER_RUNNER")
+        .unwrap_or_else(|_| "subprocess".to_string());
+    // Keep the runner as both `Arc<dyn WorkerRunner>` (for the worker
+    // daemon entrypoint) and — in the subprocess case — as a typed
+    // `Arc<SubprocessRunner>` so we can call `child_ready_signal()`
+    // to wire the pod-side inference proxy. Without this typed
+    // sibling the proxy can never be enabled because the trait
+    // object hides the readiness flag.
+    let (runner, inference_proxy): (
+        Arc<dyn sovereign_mesh::worker_http::WorkerRunner>,
+        Option<Arc<sovereign_mesh::worker_inference_proxy::InferenceProxyConfig>>,
+    ) = match runner_kind.as_str() {
+        "echo" => {
+            eprintln!("[worker-daemon] runner: echo (stub — no inference will run)");
+            // Echo runner has no child daemon — leave the proxy
+            // disabled. The /v1/* routes return 404 and the wire
+            // protocol stays at /internal/worker/*.
+            (Arc::new(sovereign_mesh::worker_daemon::EchoRunner), None)
+        }
+        other => {
+            if other != "subprocess" {
+                eprintln!(
+                    "[worker-daemon] unrecognised SOVEREIGN_WORKER_RUNNER={other:?}; \
+                     falling back to subprocess"
+                );
+            }
+            eprintln!(
+                "[worker-daemon] runner: subprocess (child daemon will spawn against {})",
+                config_path.display()
+            );
+            let cfg = sovereign_mesh::worker_subprocess_runner::SubprocessRunnerConfig {
+                config_path: config_path.clone(),
+                ..Default::default()
+            };
+            let child_port = cfg.child_client_port;
+            let subprocess =
+                Arc::new(sovereign_mesh::worker_subprocess_runner::SubprocessRunner::new(
+                    cfg,
+                    signals.0.clone(),
+                    signals.1.clone(),
+                ));
+            // Build the proxy config from the same readiness atomic
+            // the subprocess runner flips when `/v1/models` first
+            // returns 200. The proxy reads it on every request so
+            // owner-side scheduler calls naturally 503 during the
+            // ~90s model warmup instead of seeing ECONNREFUSED.
+            let proxy = Arc::new(
+                sovereign_mesh::worker_inference_proxy::InferenceProxyConfig::for_local_child(
+                    format!("http://127.0.0.1:{child_port}"),
+                    subprocess.child_ready_signal(),
+                ),
+            );
+            eprintln!(
+                "[worker-daemon] inference proxy enabled (→ http://127.0.0.1:{child_port}) — \
+                 owner-side mesh scheduler can now route /v1/chat/completions to this pod"
+            );
+            let trait_obj: Arc<dyn sovereign_mesh::worker_http::WorkerRunner> = subprocess;
+            (trait_obj, Some(proxy))
+        }
+    };
+
+    if let Err(e) = sovereign_mesh::worker_daemon::run_worker_mode_with_signals(
+        blob,
+        runner,
+        None,
+        Some(models_dir),
+        Some(signals),
+        inference_proxy,
+    )
+    .await
+    {
+        eprintln!("worker daemon: serve failed: {e}");
+        return 1;
+    }
+    0
+}
+
+#[cfg(test)]
+mod workspace_autodetect_tests {
+    use super::{ascend_for_sovereign_workspace, looks_like_sovereign_workspace};
+    use std::fs;
+    use tempfile::TempDir;
+
+    fn make_workspace(root: &std::path::Path) {
+        fs::create_dir_all(root.join("scripts")).unwrap();
+        fs::write(
+            root.join("scripts").join("sovereign-lint.sh"),
+            "#!/usr/bin/env bash\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nresolver = \"2\"\nmembers = []\n",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn looks_like_workspace_accepts_workspace_with_lint_script() {
+        let tmp = TempDir::new().unwrap();
+        make_workspace(tmp.path());
+        assert!(looks_like_sovereign_workspace(tmp.path()));
+    }
+
+    #[test]
+    fn looks_like_workspace_rejects_single_crate_cargo_toml() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join("scripts")).unwrap();
+        fs::write(
+            tmp.path().join("scripts").join("sovereign-lint.sh"),
+            "#!/usr/bin/env bash\n",
+        )
+        .unwrap();
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[package]\nname = \"lone\"\nversion = \"0.0.1\"\n",
+        )
+        .unwrap();
+        assert!(!looks_like_sovereign_workspace(tmp.path()));
+    }
+
+    #[test]
+    fn looks_like_workspace_rejects_workspace_without_lint_script() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[workspace]\nmembers = []\n",
+        )
+        .unwrap();
+        assert!(!looks_like_sovereign_workspace(tmp.path()));
+    }
+
+    #[test]
+    fn ascend_finds_workspace_from_nested_path() {
+        let tmp = TempDir::new().unwrap();
+        make_workspace(tmp.path());
+        let deep = tmp
+            .path()
+            .join("target")
+            .join("release")
+            .join("sovereign-cli");
+        fs::create_dir_all(deep.parent().unwrap()).unwrap();
+        fs::write(&deep, "binary").unwrap();
+        // Canonicalise both sides — macOS' /var ↔ /private/var
+        // symlink makes the raw paths differ even though they
+        // resolve to the same inode.
+        let found = ascend_for_sovereign_workspace(&deep).unwrap();
+        assert_eq!(
+            fs::canonicalize(&found).unwrap(),
+            fs::canonicalize(tmp.path()).unwrap()
+        );
+    }
+
+    #[test]
+    fn ascend_returns_none_when_no_workspace_above() {
+        let tmp = TempDir::new().unwrap();
+        let plain = tmp.path().join("not-a-workspace").join("nested");
+        fs::create_dir_all(&plain).unwrap();
+        assert!(ascend_for_sovereign_workspace(&plain).is_none());
+    }
 }
 

@@ -97,6 +97,7 @@
   function isQueryable(s: AssetState): boolean {
     return (
       s === "PartiallyReady" ||
+      s === "MultiHopReady" ||
       s === "Ready" ||
       (typeof s === "object" && "BuildingSkeleton" in s)
     );
@@ -105,6 +106,7 @@
   function stateLabel(s: AssetState): string {
     if (s === "Pending") return "Waiting";
     if (s === "PartiallyReady") return "Partially ready";
+    if (s === "MultiHopReady") return "Multi-hop ready";
     if (s === "Ready") return "Ready";
     if (typeof s === "object") {
       if ("Indexing" in s) return "Indexing";
@@ -128,6 +130,7 @@
               0.5
         : 0.5;
     }
+    if (s === "MultiHopReady") return 0.7;
     if (s === "Ready") return 1.0;
     return 0;
   }

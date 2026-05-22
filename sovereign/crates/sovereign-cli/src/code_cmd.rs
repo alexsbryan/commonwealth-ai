@@ -41,6 +41,7 @@ pub async fn run_code(args: &[String]) -> i32 {
 
     match args[0].as_str() {
         "index" => cmd_index(&args[1..]).await,
+        "finalize" => cmd_finalize(&args[1..]).await,
         "watch" => cmd_watch(&args[1..]).await,
         "mcp-status" => cmd_mcp_status(&args[1..]).await,
         "search" => cmd_search(&args[1..]).await,
@@ -49,6 +50,60 @@ pub async fn run_code(args: &[String]) -> i32 {
         other => {
             eprintln!("Unknown code subcommand: {other}");
             crate::util::help::print(&HELP);
+            1
+        }
+    }
+}
+
+// ─── finalize ─────────────────────────────────────────────────
+// Recovery hook for ingests that wrote a `<corpus>-partition-local/`
+// chunk index but never promoted it into `<corpus>/`. Pre-fix, this
+// would silently strand behind a SCIP sidecar; the engine now does
+// the right thing on its own, but pre-existing stranded partitions
+// need a manual nudge.
+async fn cmd_finalize(args: &[String]) -> i32 {
+    if args.is_empty() || matches!(args[0].as_str(), "--help" | "-h" | "help") {
+        eprintln!(
+            "Usage: sovereign code finalize <corpus_id>\n\n\
+             Promote a stranded `<corpus>-partition-local/` Lance \
+             index into the canonical `<corpus>/` location. Safe to \
+             rerun; no-ops when there is nothing to promote."
+        );
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    let corpus_id = args[0].clone();
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => {
+            eprintln!("Cannot resolve home directory");
+            return 1;
+        }
+    };
+    let data_dir = home.join(".sovereign").join("indexes");
+    let recipes_dir = home.join(".sovereign").join("recipes");
+
+    // `finalise_solo_ingest` only inspects the filesystem — no embed
+    // calls. A noop EmbedFn keeps the engine constructable without
+    // booting the daemon.
+    let noop_embed: corpus_engine::EmbedFn = Arc::new(|_text: &str| {
+        Box::pin(async move { Ok(vec![0.0_f32; 1]) })
+    });
+    let engine = corpus_engine::CorpusEngine::new(recipes_dir, data_dir, noop_embed);
+    match engine.finalise_solo_ingest(&corpus_id) {
+        Ok(true) => {
+            eprintln!("Promoted {corpus_id}-partition-local/ → {corpus_id}/");
+            0
+        }
+        Ok(false) => {
+            eprintln!(
+                "Nothing to do for '{corpus_id}': either no partition-local dir, \
+                 a peer partition is present (use `coordinate_merge`), or canonical \
+                 Lance is already finalized."
+            );
+            0
+        }
+        Err(e) => {
+            eprintln!("finalize failed: {e}");
             1
         }
     }
@@ -658,6 +713,7 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Usage("sovereign code <subcommand> [args]"),
         crate::util::help::HelpSection::Subcommands(&[
             ("index <path>",       "Index a local repository with tree-sitter"),
+            ("finalize <id>",      "Promote a stranded <id>-partition-local/ to canonical"),
             ("watch <corpus-id>",  "Run a filesystem watcher that re-indexes on save"),
             ("mcp-status",         "Ping the local MCP server and list exposed tools"),
             ("search <query>",     "(placeholder) Use the Sovereign chat or MCP for now"),

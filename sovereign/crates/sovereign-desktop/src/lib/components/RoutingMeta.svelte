@@ -23,6 +23,13 @@
       oicp_match?: string;
       coarse_intent?: string;
       self_assessment?: string;
+      /// Human-readable rationale for the coarse classification
+      /// from the router (e.g. "current/time-sensitive signal →
+      /// external tool", "factual-lookup shape (what/who/when/where)
+      /// → knowledge query"). Surfaced beneath the Routing line so
+      /// the operator can tell heuristic-shortcut from LLM-Pass-1
+      /// from fallback paths without scraping daemon logs.
+      routing_trigger?: string;
     };
     retrievedChunks?: Array<{
       title: string;
@@ -106,6 +113,11 @@
           &rarr; {provenance.intent}
         {/if}
       </div>
+      {#if provenance.routing_trigger}
+        <div class="trigger-line">
+          <strong>Why:</strong> {provenance.routing_trigger}
+        </div>
+      {/if}
       <div>
         <strong>Corpora:</strong>
         {#if corporaDetail.length > 0}
@@ -200,6 +212,14 @@
     font-size: 0.75rem;
     color: var(--text-secondary);
     line-height: 1.55;
+  }
+
+  .trigger-line {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    margin-top: -2px;
+    margin-bottom: 2px;
+    padding-left: 4px;
   }
 
   .sources-section {

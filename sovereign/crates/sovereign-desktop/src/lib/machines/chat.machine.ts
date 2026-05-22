@@ -45,6 +45,7 @@ import { produce } from "immer";
 import type {
   MessageEntry,
   InformationRequestPayload,
+  SearchAugmentation,
 } from "../types";
 
 type Metadata = Record<string, unknown>;
@@ -127,7 +128,24 @@ export type ChatEvent =
   /** User submitted content or skipped. Either way the card goes
    *  away; the submission itself is a Tauri command run by the
    *  component, not the machine. */
-  | { type: "CLEAR_INFO" };
+  | { type: "CLEAR_INFO" }
+  /** Fired the moment the user submits a paste or kicks off a
+   *  search from the InformationRequestCard. The bubble identified
+   *  by `messageId` gets a `refining: true` flag so AssistantMessage
+   *  can render a "Refining…" overlay until the corresponding
+   *  MESSAGE_REFINED arrives. `messageId` is the most-recent
+   *  assistant message at the moment the card was dismissed —
+   *  resolved by ChatView from `messages[messages.length-1]`. */
+  | { type: "MESSAGE_REFINING"; messageId: string }
+  /** Fired after `submit_information_search` returns with the search
+   *  metadata. Stashes the augmentation on the targeted message so
+   *  the post-refine bubble can render the "Augmented via web
+   *  search" footer with clickable source URLs. */
+  | {
+      type: "SEARCH_AUGMENTED";
+      messageId: string;
+      augmentation: SearchAugmentation;
+    };
 
 // Helper: structurally-shared update of a single message by id. Used
 // by every transition that rewrites assistant content. Returns the new
@@ -210,6 +228,40 @@ export const chatMachine = setup({
       actions: assign(({ context, event }) => ({
         messages: updateMessageById(context.messages, event.messageId, (m) => {
           m.content = event.newContent;
+          // Clear the refining-in-progress flag set by
+          // MESSAGE_REFINING. The bubble's CSS transition fires off
+          // the `refining` → falsy edge so the new content fades in
+          // rather than slamming over the old one. `searchAugmentation`
+          // (if any) was stashed by SEARCH_AUGMENTED earlier and is
+          // intentionally NOT cleared here — the post-refine bubble
+          // keeps the augmentation footer permanently.
+          m.refining = false;
+        }),
+      })),
+    },
+    MESSAGE_REFINING: {
+      // Set by ChatView the moment the user dismisses the
+      // InformationRequestCard via paste-submit or search. Drives the
+      // "Refining…" overlay so the user sees the in-place rewrite
+      // coming. Tolerant of unknown messageId (no-op) so a stray
+      // event from a stale card doesn't crash the machine.
+      actions: assign(({ context, event }) => ({
+        messages: updateMessageById(context.messages, event.messageId, (m) => {
+          m.refining = true;
+        }),
+      })),
+    },
+    SEARCH_AUGMENTED: {
+      // Stash search provenance on the targeted message so the
+      // post-refine bubble can render the "Augmented via web search"
+      // footer. Order vs MESSAGE_REFINED is intentionally undefined
+      // — both transitions are idempotent under either order: this
+      // event sets `searchAugmentation` without touching `content`
+      // or `refining`, and MESSAGE_REFINED rewrites `content`
+      // without touching `searchAugmentation`.
+      actions: assign(({ context, event }) => ({
+        messages: updateMessageById(context.messages, event.messageId, (m) => {
+          m.searchAugmentation = event.augmentation;
         }),
       })),
     },

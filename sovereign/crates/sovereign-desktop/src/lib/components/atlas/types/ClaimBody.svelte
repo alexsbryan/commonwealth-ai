@@ -63,5 +63,4 @@
   .fields dt { color: var(--text-muted); font-size: 0.78rem; letter-spacing: 0.02em; }
   .fields dd { margin: 0; }
   .kind { text-transform: capitalize; }
-  .mono { font-family: var(--font-mono, monospace); font-size: 0.78rem; }
 </style>

@@ -592,6 +592,34 @@ impl WikipediaNewsworthyWatcher {
     /// One pass of the reconciliation loop. Public so tests can drive
     /// it without involving the spawn machinery.
     pub async fn tick(&self, now: DateTime<Utc>) -> Result<TickReport> {
+        // ── Foreground back-pressure ──────────────────────────────
+        //
+        // The newsworthy tick triggers per-article wikipedia API
+        // fetches, reindex_by_source_doc_id, and (when any article
+        // refreshes) an atlas_rebuild_dispatch. Atlas rebuilds stream
+        // the full corpus through enrichment — 1.88M chunks on the
+        // English Wikipedia, peaking at ~45 GB RSS. On a 64 GB Mac
+        // with a 35B chat slot loaded, that crosses jetsam threshold
+        // and SIGTERMs the daemon mid-request.
+        //
+        // The engine's `YieldHook` (set by the daemon) reports true
+        // when a foreground inference request fired within the last
+        // `yield_window_secs` window. Skipping the tick under that
+        // condition delivers the design promise: background freshness
+        // work runs on idle cycles, never in contention with user-
+        // facing inference. The next interval tick will retry.
+        if let Some(hook) = self.engine.yield_hook() {
+            if hook.should_yield() {
+                tracing::info!(
+                    "newsworthy.tick_skipped — foreground inference active; yielding to user-facing work"
+                );
+                let mut report = TickReport::default();
+                report.role_leader = self.host.is_leader().await;
+                report.elapsed_ms = 0;
+                return Ok(report);
+            }
+        }
+
         let started = std::time::Instant::now();
         let mut report = TickReport::default();
         report.role_leader = self.host.is_leader().await;
@@ -1448,5 +1476,69 @@ mod tests {
         // it's a unit test, the OS reclaims on process exit.
         std::mem::forget(dir);
         Arc::new(CorpusEngine::new(recipes_dir, index_dir, embed))
+    }
+
+    /// Stub yield hook used by the foreground-back-pressure test.
+    /// Returns the configured `should_yield` value verbatim.
+    struct StubYieldHook {
+        yield_now: bool,
+    }
+    impl crate::yield_hook::YieldHook for StubYieldHook {
+        fn should_yield(&self) -> bool {
+            self.yield_now
+        }
+        fn throttle_factor(&self) -> f32 {
+            1.0
+        }
+    }
+
+    #[tokio::test]
+    async fn tick_skips_when_yield_hook_active() {
+        // When the engine's yield hook reports `should_yield == true`,
+        // the newsworthy tick must return immediately without
+        // contacting MediaWiki or scanning tracked articles. This is
+        // the back-pressure rule: background freshness work yields
+        // to foreground inference.
+        let host: Arc<dyn NewsworthyHost> = Arc::new(StubHost::new("self", true).own_all());
+        let engine = make_dummy_engine();
+        engine.set_yield_hook(Arc::new(StubYieldHook { yield_now: true }));
+        let watcher = WikipediaNewsworthyWatcher::new(
+            host.clone(),
+            engine,
+            Arc::new(NoopMediaWikiClient),
+            NewsworthyConfig::default(),
+        );
+        // NoopMediaWikiClient errors on every call — if the tick
+        // reaches the batch-revisions step the test will fail with a
+        // non-empty `errors` count. Yield-skip path must short-circuit
+        // before any media client touch.
+        let report = watcher.tick(Utc::now()).await.expect("tick must succeed");
+        assert_eq!(report.tracked_total, 0);
+        assert_eq!(report.owned_total, 0);
+        assert_eq!(report.errors, 0);
+        assert_eq!(report.refreshed, 0);
+    }
+
+    #[tokio::test]
+    async fn tick_proceeds_when_yield_hook_idle() {
+        // Inverse: yield hook says "no foreground activity"; the tick
+        // proceeds through its normal path. With no tracked articles
+        // and a leader=true stub, we expect tracked_total=0 and no
+        // errors (leader step exits without portal data).
+        let host: Arc<dyn NewsworthyHost> = Arc::new(StubHost::new("self", false).own_all());
+        let engine = make_dummy_engine();
+        engine.set_yield_hook(Arc::new(StubYieldHook { yield_now: false }));
+        let watcher = WikipediaNewsworthyWatcher::new(
+            host.clone(),
+            engine,
+            Arc::new(NoopMediaWikiClient),
+            NewsworthyConfig::default(),
+        );
+        let report = watcher.tick(Utc::now()).await.expect("tick must succeed");
+        // Tick ran the tracked-load path (returned 0). Distinguishes
+        // from the yield-skip case which short-circuits before
+        // load_tracked.
+        assert_eq!(report.tracked_total, 0);
+        assert!(report.elapsed_ms < 5_000);
     }
 }

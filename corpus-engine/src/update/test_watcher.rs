@@ -42,6 +42,7 @@ use tokio::task::JoinHandle;
 
 use crate::test_results::{TestResultKind, TestResultStore};
 use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
+use crate::yield_hook::YieldHook;
 
 /// Default cooldown after a subprocess completes before consuming a
 /// queued rerun. See `lint_watcher::DEFAULT_RERUN_COOLDOWN_MS` for
@@ -66,6 +67,11 @@ pub struct TestWatcher {
     /// compound memory pressure.
     run_slot: Option<Arc<Semaphore>>,
     cooldown_ms: u64,
+    /// Optional foreground back-pressure hook. When set, the
+    /// subprocess runner waits until `should_yield()` returns false
+    /// before spawning cargo. Same rationale as LintWatcher — a
+    /// workspace cargo-test mid-inference can push RSS past jetsam.
+    yield_hook: Arc<std::sync::RwLock<Option<Arc<dyn YieldHook>>>>,
 }
 
 impl TestWatcher {
@@ -84,6 +90,16 @@ impl TestWatcher {
             rerun_pending: Arc::new(AtomicBool::new(false)),
             run_slot: None,
             cooldown_ms: DEFAULT_RERUN_COOLDOWN_MS,
+            yield_hook: Arc::new(std::sync::RwLock::new(None)),
+        }
+    }
+
+    /// Wire in a foreground back-pressure hook. Late-binding via
+    /// interior mutability — daemon_cmd builds the watcher before
+    /// EmbeddedDaemon, then installs the hook after startup.
+    pub fn set_yield_hook(&self, hook: Arc<dyn YieldHook>) {
+        if let Ok(mut guard) = self.yield_hook.write() {
+            *guard = Some(hook);
         }
     }
 
@@ -126,6 +142,7 @@ impl TestWatcher {
         let rerun_pending = Arc::clone(&self.rerun_pending);
         let run_slot = self.run_slot.clone();
         let cooldown_ms = self.cooldown_ms;
+        let yield_hook_shared = Arc::clone(&self.yield_hook);
 
         let handle = tokio::spawn(async move {
             // Loop: run the test subprocess, then check whether any file
@@ -148,6 +165,34 @@ impl TestWatcher {
                     },
                     None => None,
                 };
+
+                // Foreground back-pressure (mirrors LintWatcher).
+                // Re-read the hook each iteration so a late-installed
+                // hook activates on the next cargo invocation.
+                let mut logged_wait = false;
+                loop {
+                    let hook_now = yield_hook_shared
+                        .read()
+                        .ok()
+                        .and_then(|g| g.clone());
+                    match hook_now {
+                        Some(h) if h.should_yield() => {
+                            if !logged_wait {
+                                tracing::info!(
+                                    "TestWatcher: yielding to foreground inference; deferring cargo run"
+                                );
+                                logged_wait = true;
+                            }
+                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                        }
+                        _ => break,
+                    }
+                }
+                if logged_wait {
+                    tracing::info!(
+                        "TestWatcher: foreground idle — proceeding with cargo run"
+                    );
+                }
 
                 if let Err(e) =
                     run_subprocess(command.clone(), working_dir.clone(), timeout_secs, Arc::clone(&store)).await

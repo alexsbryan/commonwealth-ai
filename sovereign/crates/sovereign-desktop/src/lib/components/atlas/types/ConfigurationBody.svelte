@@ -65,6 +65,5 @@
   }
   .fields dt { color: var(--text-muted); font-size: 0.78rem; letter-spacing: 0.02em; }
   .fields dd { margin: 0; }
-  .mono { font-family: var(--font-mono, monospace); font-size: 0.78rem; }
   .atom-link-list { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 </style>

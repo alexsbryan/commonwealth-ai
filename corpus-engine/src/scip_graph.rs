@@ -104,6 +104,12 @@ pub struct ScipGraphStats {
 /// references.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct SymbolRow {
+    /// Corpus the row was ingested under. Stable across all rows
+    /// returned by a per-corpus method (matches `self.corpus_id`);
+    /// varies across rows when the graph was opened as the merged
+    /// in-memory union of multiple corpora (see [`Self::merged_graph`]
+    /// in the reindexer).
+    pub corpus_id: String,
     pub name: String,
     /// Full SCIP descriptor; empty for legacy or non-rust-analyzer
     /// rows. Use this axis for cross-crate disambiguation.
@@ -731,6 +737,86 @@ impl ScipGraph {
         Ok(None)
     }
 
+    /// Look up symbols by exact name (and optional kind filter)
+    /// across every corpus this graph has ingested. The Symbol Lookup
+    /// MCP tool uses this as the authoritative source — Lance carried
+    /// the same data redundantly until the move to SCIP-as-truth, but
+    /// the SQLite path here doesn't depend on the chunk index being
+    /// fresh and survives a corrupt Lance corpus.
+    ///
+    /// `limit` is a hard cap on the row count; pass `8` for the
+    /// default tool contract. `kind` is matched verbatim against the
+    /// schema's `kind` column when `Some`; pass `None` to skip the
+    /// filter.
+    pub async fn find_symbols_by_name(
+        &self,
+        name: &str,
+        kind: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<SymbolRow>> {
+        let limit_clamped: i64 = limit.clamp(1, 256) as i64;
+        let conn = self.conn.lock().await;
+        let map_row = |row: &rusqlite::Row| -> rusqlite::Result<SymbolRow> {
+            Ok(SymbolRow {
+                corpus_id: row.get(0)?,
+                name: row.get(1)?,
+                qualified_name: row.get(2)?,
+                kind: row.get(3)?,
+                file_path: row.get(4)?,
+                line_start: row.get(5)?,
+                line_end: row.get(6)?,
+                language: row.get(7)?,
+            })
+        };
+        // Collect inside the same scope as `stmt` / `conn`. Returning
+        // a MappedRows out of a sub-block drops `stmt` before the
+        // iterator is consumed — recorded as an invariant in repo
+        // memory.
+        let rows: Vec<SymbolRow> = match kind {
+            Some(k) => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT corpus_id, name, qualified_name, kind, file_path, \
+                                line_start, line_end, language \
+                         FROM symbols \
+                         WHERE name = ?1 AND kind = ?2 \
+                         ORDER BY corpus_id, file_path, line_start \
+                         LIMIT ?3",
+                    )
+                    .map_err(|e| {
+                        Error::Database(format!("find_symbols_by_name prepare: {e}"))
+                    })?;
+                let iter = stmt
+                    .query_map(params![name, k, limit_clamped], map_row)
+                    .map_err(|e| {
+                        Error::Database(format!("find_symbols_by_name query: {e}"))
+                    })?;
+                iter.filter_map(|r| r.ok()).collect()
+            }
+            None => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT corpus_id, name, qualified_name, kind, file_path, \
+                                line_start, line_end, language \
+                         FROM symbols \
+                         WHERE name = ?1 \
+                         ORDER BY corpus_id, file_path, line_start \
+                         LIMIT ?2",
+                    )
+                    .map_err(|e| {
+                        Error::Database(format!("find_symbols_by_name prepare: {e}"))
+                    })?;
+                let iter = stmt
+                    .query_map(params![name, limit_clamped], map_row)
+                    .map_err(|e| {
+                        Error::Database(format!("find_symbols_by_name query: {e}"))
+                    })?;
+                iter.filter_map(|r| r.ok()).collect()
+            }
+        };
+        Ok(rows)
+    }
+
     /// Find all symbols that the given symbol calls.
     pub async fn find_callees(
         &self,
@@ -879,7 +965,7 @@ impl ScipGraph {
         let conn = self.conn.lock().await;
         let mut stmt = conn
             .prepare(
-                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                "SELECT corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language
                  FROM symbols
                  WHERE corpus_id = ? AND file_path = ?
                  ORDER BY line_start, name",
@@ -888,13 +974,14 @@ impl ScipGraph {
         let rows: Vec<SymbolRow> = stmt
             .query_map(params![self.corpus_id, file_path], |row| {
                 Ok(SymbolRow {
-                    name: row.get(0)?,
-                    qualified_name: row.get(1)?,
-                    kind: row.get(2)?,
-                    file_path: row.get(3)?,
-                    line_start: row.get(4)?,
-                    line_end: row.get(5)?,
-                    language: row.get(6)?,
+                    corpus_id: row.get(0)?,
+                    name: row.get(1)?,
+                    qualified_name: row.get(2)?,
+                    kind: row.get(3)?,
+                    file_path: row.get(4)?,
+                    line_start: row.get(5)?,
+                    line_end: row.get(6)?,
+                    language: row.get(7)?,
                 })
             })
             .map_err(|e| Error::Database(format!("symbols_in_file query: {e}")))?
@@ -920,7 +1007,7 @@ impl ScipGraph {
         let file_pattern = format!("{}%", file_path_prefix);
         let mut stmt = conn
             .prepare(
-                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                "SELECT corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language
                  FROM symbols
                  WHERE corpus_id = ?
                    AND (name LIKE ? OR file_path LIKE ?)
@@ -932,13 +1019,14 @@ impl ScipGraph {
                 params![self.corpus_id, name_pattern, file_pattern],
                 |row| {
                     Ok(SymbolRow {
-                        name: row.get(0)?,
-                        qualified_name: row.get(1)?,
-                        kind: row.get(2)?,
-                        file_path: row.get(3)?,
-                        line_start: row.get(4)?,
-                        line_end: row.get(5)?,
-                        language: row.get(6)?,
+                        corpus_id: row.get(0)?,
+                        name: row.get(1)?,
+                        qualified_name: row.get(2)?,
+                        kind: row.get(3)?,
+                        file_path: row.get(4)?,
+                        line_start: row.get(5)?,
+                        line_end: row.get(6)?,
+                        language: row.get(7)?,
                     })
                 },
             )
@@ -959,20 +1047,21 @@ impl ScipGraph {
         let conn = self.conn.lock().await;
         let row = conn
             .query_row(
-                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                "SELECT corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language
                  FROM symbols
                  WHERE corpus_id = ? AND name = ?
                  LIMIT 1",
                 params![self.corpus_id, name],
                 |row| {
                     Ok(SymbolRow {
-                        name: row.get(0)?,
-                        qualified_name: row.get(1)?,
-                        kind: row.get(2)?,
-                        file_path: row.get(3)?,
-                        line_start: row.get(4)?,
-                        line_end: row.get(5)?,
-                        language: row.get(6)?,
+                        corpus_id: row.get(0)?,
+                        name: row.get(1)?,
+                        qualified_name: row.get(2)?,
+                        kind: row.get(3)?,
+                        file_path: row.get(4)?,
+                        line_start: row.get(5)?,
+                        line_end: row.get(6)?,
+                        language: row.get(7)?,
                     })
                 },
             )
@@ -992,20 +1081,21 @@ impl ScipGraph {
         let conn = self.conn.lock().await;
         let row = conn
             .query_row(
-                "SELECT name, qualified_name, kind, file_path, line_start, line_end, language
+                "SELECT corpus_id, name, qualified_name, kind, file_path, line_start, line_end, language
                  FROM symbols
                  WHERE corpus_id = ? AND qualified_name = ?
                  LIMIT 1",
                 params![self.corpus_id, qualified_name],
                 |row| {
                     Ok(SymbolRow {
-                        name: row.get(0)?,
-                        qualified_name: row.get(1)?,
-                        kind: row.get(2)?,
-                        file_path: row.get(3)?,
-                        line_start: row.get(4)?,
-                        line_end: row.get(5)?,
-                        language: row.get(6)?,
+                        corpus_id: row.get(0)?,
+                        name: row.get(1)?,
+                        qualified_name: row.get(2)?,
+                        kind: row.get(3)?,
+                        file_path: row.get(4)?,
+                        line_start: row.get(5)?,
+                        line_end: row.get(6)?,
+                        language: row.get(7)?,
                     })
                 },
             )

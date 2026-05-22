@@ -384,6 +384,12 @@ fn print_ingest_event(evt: &CatalogIngestEvent) {
             IngestProgress::OptimizingIndex { current_chunks } => {
                 println!("  ↳ optimize ({current_chunks} chunks)…");
             }
+            IngestProgress::Enriching { detail, fraction, .. } => {
+                match fraction {
+                    Some(f) => println!("  ↳ enrich: {detail} ({:.0}%)", f * 100.0),
+                    None => println!("  ↳ enrich: {detail}"),
+                }
+            }
             IngestProgress::Complete { total_chunks, duration_secs } => {
                 println!(
                     "  ↳ complete: {total_chunks} chunks in {duration_secs}s"

@@ -199,6 +199,8 @@ async fn peer_routed_stream_emits_inference_received_on_drop() {
         base_urls: vec![base_url],
         system_ram_gb: 64,
         benchmark: None,
+        current_in_flight: None,
+        transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource {
         peers,
@@ -323,6 +325,8 @@ async fn peer_route_failure_without_chunks_does_not_emit_ledger_event() {
         base_urls: vec!["http://127.0.0.1:1/v1".into()],
         system_ram_gb: 64,
         benchmark: None,
+        current_in_flight: None,
+        transport: None,
     }];
     let peer_source: Arc<dyn PeerEndpointSource> = Arc::new(StubPeerSource {
         peers: dead_peer,

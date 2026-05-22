@@ -1,20 +1,65 @@
 <script lang="ts">
-  import { submitInformationResponse } from "../api";
-  import type { InformationRequestPayload } from "../types";
+  import {
+    submitInformationResponse,
+    submitInformationSearch,
+  } from "../api";
+  import type {
+    InformationRequestPayload,
+    SearchAugmentation,
+  } from "../types";
 
   interface Props {
     request: InformationRequestPayload | null;
     onHandled: () => void;
+    /** Active conversation id — threaded through to
+     *  `submit_information_search` so the runtime's `tool_decision`
+     *  write keys against this conversation. The next turn's Tool-
+     *  Mastery dossier then surfaces the prior unsuccessful lookup.
+     *  `null` falls back to a global write that won't filter into
+     *  any single conversation's per-turn dossier. */
+    conversationId?: string | null;
+    /** Fired the moment the user kicks off a refinement (paste-submit
+     *  or search-submit). ChatView uses this to mark the targeted
+     *  assistant bubble as `refining: true` so AssistantMessage can
+     *  render a "Refining…" overlay until the corresponding
+     *  MESSAGE_REFINED event arrives. Optional — leaving it unset
+     *  preserves the original no-indicator behaviour. */
+    onRefiningStarted?: () => void;
+    /** Fired after a successful `submitInformationSearch` so the
+     *  ChatView can stash the search provenance on the targeted
+     *  message. The post-refine bubble then renders the
+     *  "Augmented via web search" footer. */
+    onSearchAugmented?: (augmentation: SearchAugmentation) => void;
   }
 
-  let { request, onHandled }: Props = $props();
+  let {
+    request,
+    onHandled,
+    conversationId = null,
+    onRefiningStarted,
+    onSearchAugmented,
+  }: Props = $props();
 
   let pasteValue = $state("");
   let submitting = $state(false);
+  /// Reflects the loading state of the web-search affordance.
+  /// Separate from `submitting` because a failed search leaves the
+  /// card live (user can paste / skip / retry); we want the spinner
+  /// off and the other buttons re-enabled while the gap text stays.
+  let searching = $state(false);
+  /// Surfaced inline when a search affordance fails (zero results,
+  /// network error). Cleared on the next interaction.
+  let searchError = $state("");
 
   async function handleSubmit() {
     if (!request || submitting || !pasteValue.trim()) return;
     submitting = true;
+    // Mark the targeted bubble as refining BEFORE the Tauri call so
+    // the UI swaps to the "Refining…" state immediately rather than
+    // after the round-trip. The runtime's post-stream refinement
+    // fires once the channel resolves, so the indicator covers the
+    // entire wait.
+    onRefiningStarted?.();
     try {
       await submitInformationResponse(request.key, pasteValue.trim());
     } catch (e) {
@@ -36,6 +81,45 @@
     submitting = false;
     pasteValue = "";
     onHandled();
+  }
+
+  /// Run a web search against the gap text. On success the daemon
+  /// resolves the same pending channel that `handleSubmit` would
+  /// resolve, so the runtime gets identical re-synthesis input — no
+  /// new wire path for the search result. On failure (zero results
+  /// from a bot-blocked DDG fallback, or a backend error), surface
+  /// the message inline and leave the card live.
+  ///
+  /// The returned `SearchAugmentation` is forwarded to ChatView so
+  /// the post-refine bubble can render an "Augmented via web search:
+  /// <query> (N sources)" footer with the source URLs clickable.
+  async function handleSearch() {
+    if (!request || submitting || searching) return;
+    searchError = "";
+    searching = true;
+    // Same pre-call indicator-on as `handleSubmit` — the bubble
+    // shows "Refining…" the moment the user commits to the action.
+    onRefiningStarted?.();
+    try {
+      const augmentation = await submitInformationSearch(
+        request.key,
+        request.gap,
+        conversationId,
+      );
+      if (augmentation.accepted) {
+        onSearchAugmented?.(augmentation);
+      }
+      // Daemon resolved the pending channel; tear down the card.
+      onHandled();
+    } catch (e) {
+      // Tauri command-handler errors arrive as strings.
+      searchError =
+        typeof e === "string"
+          ? e
+          : (e as { message?: string })?.message || "Web search failed";
+      console.error("Web search affordance failed:", e);
+    }
+    searching = false;
   }
 </script>
 
@@ -93,18 +177,30 @@
       ></textarea>
     </section>
 
+    {#if searchError}
+      <div class="search-error" role="alert">{searchError}</div>
+    {/if}
+
     <div class="info-actions">
       <button
         class="btn skip"
         onclick={handleSkip}
-        disabled={submitting}
+        disabled={submitting || searching}
       >
         Skip — proceed with current knowledge
       </button>
       <button
+        class="btn search"
+        onclick={handleSearch}
+        disabled={submitting || searching}
+        title="Run a web search using the gap text and feed results back to the agent"
+      >
+        {searching ? "Searching…" : "Search the web"}
+      </button>
+      <button
         class="btn submit"
         onclick={handleSubmit}
-        disabled={submitting || !pasteValue.trim()}
+        disabled={submitting || searching || !pasteValue.trim()}
       >
         Submit
       </button>
@@ -244,6 +340,26 @@
   .skip:hover:not(:disabled) {
     color: var(--text-secondary);
     border-color: var(--border-bright);
+  }
+
+  .search {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+  .search:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  .search-error {
+    margin: 0 16px 8px;
+    padding: 8px 12px;
+    background: color-mix(in srgb, crimson 6%, transparent);
+    border: 1px solid color-mix(in srgb, crimson 30%, transparent);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.45;
   }
 
   .submit {

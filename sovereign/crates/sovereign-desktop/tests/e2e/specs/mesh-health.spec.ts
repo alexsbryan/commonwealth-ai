@@ -320,7 +320,7 @@ async function openMeshTab(
 ): Promise<void> {
   await bootToChat(page, chat);
   await primeMeshFixture(page, fixture);
-  await page.locator(".settings-btn").first().click();
+  await page.getByTestId("nav-settings").click();
   // Click the Mesh nav item by its visible label.
   await page.getByRole("button", { name: /^Mesh$/ }).click();
   // The members card renders only when meshIsRunning resolves true,

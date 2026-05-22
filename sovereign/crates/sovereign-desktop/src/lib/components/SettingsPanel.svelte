@@ -18,10 +18,12 @@
     StarterQuestion,
   } from "../types";
   import EnrichmentPanel from "./EnrichmentPanel.svelte";
+  import ImportsTab from "./settings/ImportsTab.svelte";
   import KnowledgeStatus from "./KnowledgeStatus.svelte";
   import LocalKnowledgeSection from "./local-knowledge/LocalKnowledgeSection.svelte";
   import MeshSettings from "./MeshSettings.svelte";
-  import SkillManager from "./SkillManager.svelte";
+  import SharingSection from "./SharingSection.svelte";
+  import ConnectSection from "./ConnectSection.svelte";
   import ModelSelector from "../setup/ModelSelector.svelte";
   import RecipeTestingPanel from "./RecipeTestingPanel.svelte";
 
@@ -36,10 +38,13 @@
   type Tab =
     | "models"
     | "knowledge"
+    | "imports"
     | "enrichment"
     | "local-knowledge"
     | "mesh"
+    | "sharing"
     | "tools"
+    | "connect"
     | "paths"
     | "recipes";
   let activeTab: Tab = $state("models");
@@ -203,7 +208,10 @@
   }
 
   let needsSave = $derived(
-    activeTab === "models" || activeTab === "paths" || activeTab === "knowledge",
+    activeTab === "models"
+      || activeTab === "paths"
+      || activeTab === "knowledge"
+      || activeTab === "tools",
   );
 
   // ── Semantic preset detection ──────────────────────────────────
@@ -324,10 +332,13 @@
   const ALL_TABS: { id: Tab; label: string; keywords: string[] }[] = [
     { id: "models",          label: "Models",          keywords: ["model", "creativity", "reasoning", "length", "context", "temperature", "token", "gguf"] },
     { id: "knowledge",       label: "Knowledge",        keywords: ["knowledge", "corpus", "storage", "budget", "ingest", "throttle", "disk", "knowledgeview"] },
+    { id: "imports",         label: "Imports",          keywords: ["import", "claude", "anthropic", "chatgpt", "gemini", "conversation", "export", "zip"] },
     { id: "enrichment",      label: "Enrichment",       keywords: ["atlas", "enrich", "graph", "entity", "knowledge graph"] },
     { id: "local-knowledge", label: "Local Knowledge",  keywords: ["local", "folder", "obsidian", "document", "file", "vault"] },
     { id: "mesh",            label: "Mesh",             keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
-    { id: "tools",           label: "Skills",           keywords: ["skill", "tool", "search", "web", "duck", "brave", "tavily"] },
+    { id: "sharing",         label: "Sharing",          keywords: ["share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield"] },
+    { id: "tools",           label: "Web Search",       keywords: ["tool", "search", "web", "duck", "brave", "tavily"] },
+    { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
     { id: "paths",           label: "Paths",            keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
     { id: "recipes",         label: "Recipes",          keywords: ["recipe", "corpus", "acquire", "pipeline", "toml"] },
   ];
@@ -904,6 +915,15 @@
         </section>
       {/if}
 
+      <!-- ──────────── IMPORTS ──────────── -->
+      {#if activeTab === "imports"}
+        <section class="doc-section">
+          <h2 class="doc-h2">Imports</h2>
+          <p class="doc-intro">Import your conversation history from Claude, ChatGPT, or Gemini. Sovereign builds an atlas you can traverse — see threads, people, and recurring topics in the Atlas tab.</p>
+          <ImportsTab />
+        </section>
+      {/if}
+
       <!-- ──────────── ENRICHMENT ──────────── -->
       {#if activeTab === "enrichment"}
         <section class="doc-section">
@@ -931,19 +951,26 @@
         </section>
       {/if}
 
-      <!-- ──────────── TOOLS / SKILLS ──────────── -->
+      <!-- ──────────── SHARING (W3) ──────────── -->
+      {#if activeTab === "sharing"}
+        <section class="doc-section">
+          <h2 class="doc-h2">Sharing</h2>
+          <p class="doc-intro">Control how much of your machine the mesh can use, and pause it whenever you want every cycle for yourself.</p>
+          <SharingSection />
+        </section>
+      {/if}
+
+      <!-- ──────────── WEB SEARCH ──────────── -->
+      <!-- Tab used to host both the Skills picker and Web Search
+           config; the skills-as-menu UI was retired (intent-keyed
+           policy in sovereign_core::intent_policy now drives tool
+           selection). Web Search settings remain because the
+           provider + API key are operator concerns that don't
+           belong to any single mode. -->
       {#if activeTab === "tools" && config}
         <section class="doc-section">
-          <h2 class="doc-h2">Skills</h2>
-          <p class="doc-intro">Skills extend what Sovereign can do in a conversation. Drop a skill folder into your skills directory to make it available here.</p>
-
-          <!-- Skills list first — it's what the tab is named -->
-          <SkillManager />
-
-          <!-- Web search — a system tool, secondary to the skills list -->
-          <div class="doc-divider"></div>
-          <h3 class="doc-h3">Web search</h3>
-          <p class="doc-body">
+          <h2 class="doc-h2">Web search</h2>
+          <p class="doc-intro">
             Queries go directly to the provider you choose — not through Sovereign's servers. Used when the model needs something beyond its local knowledge.
           </p>
 
@@ -992,6 +1019,15 @@
       {:else if activeTab === "tools"}
         <section class="doc-section">
           <p class="doc-loading">Loading…</p>
+        </section>
+      {/if}
+
+      <!-- ──────────── CONNECT (W5) ──────────── -->
+      {#if activeTab === "connect"}
+        <section class="doc-section">
+          <h2 class="doc-h2">Connect</h2>
+          <p class="doc-intro">Point Codex, Claude Code, or any OpenAI-compatible client at your local daemon. Everything stays on this machine.</p>
+          <ConnectSection />
         </section>
       {/if}
 

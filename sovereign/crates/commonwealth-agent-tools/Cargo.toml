@@ -1,0 +1,40 @@
+[package]
+name = "commonwealth-agent-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# The Commonwealth canonical tool layer — essential primitives that
+# agent runners (pi, codex, opencode, native) translate to/from via
+# crate-local adapters. Per the methodology established in
+# `~/.claude/plans/autonomous-loop-tick-tingly-clock.md`:
+#
+# 1. Each primitive corresponds to a NAMED CLASS of model behavior
+#    (inspect-before-mutate, atomic state mutation, type-check
+#    verification, semantic verification, clean termination).
+# 2. The set is small + composable. Heavier discipline (write +
+#    build + smoke) lives in agent loops, not in tool contracts.
+# 3. Adapter pi.rs is observer-only: pi keeps its tools, we
+#    normalize the telemetry to canonical shape for apples-to-apples
+#    cross-agent measurement.
+# 4. Adapter native.rs is passthrough: a native runner driving the
+#    daemon directly exposes only the canonical set — the model
+#    literally cannot run arbitrary shell, by construction.
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+# Used by `RustSyntaxValidator` for the pre-build syntax check. `full`
+# enables parsing of full Rust syntax; `parsing` enables `parse_file`.
+syn = { version = "2.0", features = ["full", "parsing"] }
+# `span-locations` enables `Span::start()` for line/column reporting
+# on syn parse errors. Without this feature, `Span::start` returns a
+# placeholder and the validator can't report useful line numbers.
+proc-macro2 = { version = "1", features = ["span-locations"] }
+
+[dev-dependencies]
+tempfile = "3"

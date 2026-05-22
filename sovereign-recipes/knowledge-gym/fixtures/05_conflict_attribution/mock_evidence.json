@@ -1,0 +1,24 @@
+{
+  "query": "default confidence decay rate",
+  "evidence": [
+    {
+      "id": "ev-T0-0000",
+      "source_kind": "corpus",
+      "source_id": "project-docs::memory_module",
+      "title": "Memory module documentation",
+      "content": "The default uniform decay rate is 10 percent per month. This is the value the runtime applies to every memory unless a per-mode override is declared.",
+      "confidence": 0.92,
+      "retrieval_context": "corpus chunk (score 0.92)"
+    },
+    {
+      "id": "ev-T0-0001",
+      "source_kind": "note",
+      "source_id": "note-tuning-revision",
+      "title": "Tuning revision note",
+      "content": "Decision: the default confidence decay rate should be 5 percent per month, half of the previously-shipped 10 percent. Rationale: long-lived research conversations were losing relevant context too quickly.",
+      "confidence": 0.81,
+      "retrieval_context": "note (kind=decision)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 1, "memory": 0, "note": 1, "web": 0 }
+}

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Thin wrapper around podman that works inside the sovereign toolbox.
+#
+# The default `podman` invocation fails with
+#   "cannot re-exec process to join the existing user namespace"
+# because the toolbox is itself a rootless podman container — running
+# podman in there needs explicit isolation + storage knobs.
+#
+# This wrapper applies those knobs and keeps state under
+# `$HOME/.local/share/pod-in-toolbox/{root,runroot}` so it survives
+# across sessions without conflicting with the host's podman state.
+#
+# Usage: same as `podman` — `scripts/pod build -t … -f …`, `scripts/pod
+# run …`, etc.
+#
+# IMPORTANT: every isolation knob below is passed via CLI flags, NOT
+# via `~/.config/containers/{containers,storage}.conf` — those files
+# are SHARED between the toolbox and the host (same `$HOME`), and a
+# stray `driver = "vfs"` line in storage.conf will silently break the
+# host's rootless podman the next time the user runs a plain
+# `podman build`. Keep all toolbox-specific overrides on the command
+# line so the host stays uncontaminated.
+set -euo pipefail
+
+POD_ROOT="${POD_ROOT:-$HOME/.local/share/pod-in-toolbox/root}"
+POD_RUNROOT="${POD_RUNROOT:-$HOME/.local/share/pod-in-toolbox/runroot}"
+mkdir -p "$POD_ROOT" "$POD_RUNROOT"
+
+# crun is the standard rootless OCI runtime; bypasses some of the
+# cgroups-v2 setup that runc trips on inside a nested namespace.
+# `vfs` storage avoids the overlay layer which doesn't work in the
+# nested namespace.
+# Build / run subcommands take a `--userns=host` to disable the
+# extra UID-mapping layer — inside a toolbox the host user is
+# already mapped to root in the toolbox namespace; trying to do it
+# again fails because there are no subuid ranges to draw from.
+# `--userns=host` keeps everything in the current namespace.
+SUB=""
+case "${1:-}" in
+  build|run|create) SUB="--userns=host" ;;
+esac
+
+exec env BUILDAH_ISOLATION=chroot podman \
+  --runtime=crun \
+  --storage-driver=vfs \
+  --storage-opt vfs.ignore_chown_errors=true \
+  --root "$POD_ROOT" \
+  --runroot "$POD_RUNROOT" \
+  --cgroup-manager=cgroupfs \
+  "$1" \
+  ${SUB} \
+  "${@:2}"

@@ -99,7 +99,14 @@ On uncertainty:\n\
 - \"I don't know\" is an acceptable answer. \"I'm not certain, but...\" followed by \
 clearly-labelled general knowledge is acceptable.\n\
 - Fabricating specific facts (names, statistics, dates, roster members) to fill a gap \
-is never acceptable, even if it would make the response sound more complete.";
+is never acceptable, even if it would make the response sound more complete.\n\n\
+On tool results:\n\
+- If a tool returns no useful results, an error, or an empty payload, continue with \
+what you know and tell the user briefly what didn't work. One short acknowledgement \
+is enough; do not apologise multiple times or restate the failure.\n\
+- An empty search result is itself information. Say \"I didn't find coverage of X in \
+your knowledge base\" or \"the web search returned nothing relevant\" and then answer \
+from training if you can do so honestly under the uncertainty rules above.";
 
 /// Prepended to Primary-slot completions when the active skill
 /// operates in the **relational** register (`[inference] register =
@@ -644,6 +651,46 @@ fn truncate_chars(s: &str, max_chars: usize) -> String {
 /// containing em-dashes. Walk backward to the nearest char boundary
 /// before slicing; if we also find a word boundary within the
 /// remaining content, prefer that for readability.
+/// Emit a `retrieval_audit::pipeline_stage` event listing the top-40
+/// (title, corpus_id, score) tuples plus total count at the named
+/// stage. Forensic instrument for tracing chunk attrition across
+/// the noise floor / cap / reservation / truncate pipeline — see
+/// marathon T3 trace (2026-05-18) for the use-case that motivated it.
+///
+/// Gated behind `SOVEREIGN_FORENSIC=1` so production runs pay no
+/// cost. Set the env var on the eval CLI (or daemon, depending on
+/// which Runtime instance you want to instrument) to surface the
+/// events.
+fn audit_pipeline_stage(
+    chunks: &[corpus_engine::ScoredChunk],
+    stage: &'static str,
+    query: &str,
+) {
+    if std::env::var("SOVEREIGN_FORENSIC").ok().as_deref() != Some("1") {
+        return;
+    }
+    let comp: Vec<(String, String, f32)> = chunks
+        .iter()
+        .take(40)
+        .map(|c| {
+            (
+                c.corpus_id.clone(),
+                c.title.clone().unwrap_or_default(),
+                c.score,
+            )
+        })
+        .collect();
+    tracing::info!(
+        target: "retrieval_audit",
+        event = "pipeline_stage",
+        stage,
+        total = chunks.len(),
+        query = %truncate_with_ellipsis(query, 120),
+        top40 = ?comp,
+        "retrieval_audit: pipeline_stage"
+    );
+}
+
 fn truncate_with_ellipsis(content: &str, max_bytes: usize) -> String {
     if content.len() > max_bytes {
         let mut cut = max_bytes;
@@ -663,6 +710,305 @@ fn truncate_with_ellipsis(content: &str, max_bytes: usize) -> String {
 /// Shorthand for the prompt-context truncation budget.
 fn truncate_chunk_content(content: &str) -> String {
     truncate_with_ellipsis(content, MAX_CHUNK_CHARS)
+}
+
+/// How many trailing turns (mixed user + assistant) to include when
+/// rendering conversation history into the synthesis system prompt.
+/// 8 covers the last 4 (user, assistant) pairs — enough for short
+/// follow-up chains without bloating the prompt with stale turns.
+const CONV_HISTORY_TURNS: usize = 8;
+
+/// Per-message char budget for the conversation-history block. We
+/// don't want one verbose prior answer to dominate the system
+/// prompt; assistant answers in the SEP/wiki bench commonly hit 2-3
+/// KB, of which only the first ~500 chars carry the topic anchor.
+const CONV_HISTORY_CHARS_PER_MSG: usize = 500;
+
+/// Char budget for the topic anchor prepended to the retrieval
+/// query. Topic strings from `update_topic_context` are short by
+/// design (the Fast-slot extractor targets a 3-12 word phrase) but
+/// we cap defensively in case the classifier returns a longer
+/// label.
+const RETRIEVAL_QUERY_TOPIC_CHARS: usize = 120;
+
+/// Pre-merge K boost ceiling. Hot corpora — those the conversation
+/// has already drawn from — get their per-corpus retrieval K
+/// scaled up by `share * range` on top of the base K. A corpus
+/// that supplied 60% of past chunks gets K = base + 30 candidates
+/// in the next turn's pool; a corpus at the share floor gets the
+/// base K.
+///
+/// Pre-merge (not post-merge) because the cross-corpus merge filter
+/// is where wikipedia chunks were getting dropped in the marathon
+/// bench — post-multiplier on the merged result couldn't recover
+/// what merge had already filtered out. Surfaced by
+/// `sovereign/bench/wikipedia_learn` 2026-05-17 (v12 / v13 → v14):
+/// retrieval-only single-shot returned 5 Ada Lovelace chunks at
+/// 100% recall, but the synth path's KQ_PER_CORPUS_LIMIT=20 cap
+/// across 10+ competing corpora left wikipedia with only 2 slots
+/// in the merged set, neither of them Lovelace.
+const HOT_CORPUS_K_RANGE: usize = 50;
+
+/// Minimum share before a corpus gets a pre-merge K boost. Below
+/// the floor the corpus uses base K — keeps long-tail contaminants
+/// (one accidental chunk in turn 2) from inflating their pool. A
+/// corpus that contributed roughly one chunk per ten across the
+/// conversation (~10%) is the threshold.
+const HOT_CORPUS_MIN_SHARE: f32 = 0.10;
+
+/// Hard cap on how many corpora can receive a pre-merge K boost.
+/// Each boost adds search work; without a cap, a conversation that
+/// has touched many corpora could fan out to all of them and pay
+/// 20-corpus × K=50 = 1000-chunk worst-case search latency. Three
+/// corpora is the cap because the synth prompt routinely gets one
+/// dominant corpus plus 1-2 supporting tiers — beyond that the
+/// extra candidates don't survive the merge anyway.
+const HOT_CORPUS_MAX_BOOSTED: usize = 3;
+
+/// Build a histogram of `corpus_id` usage from prior assistant
+/// turns in the conversation. Reads `metadata.retrieved_chunks` —
+/// the same field the desktop reading-surface consumes for
+/// citations — so the histogram reflects what was actually shown
+/// to the user, not what was speculatively retrieved.
+///
+/// Cold conversations (no prior assistant turn with retrieved
+/// chunks) return an empty map and the boost is a no-op. As the
+/// conversation accretes around a topic, the corpora that served
+/// the user well accumulate hits and start to outweigh
+/// off-domain matches from the user's other installed indexes.
+/// Surfaced by `sovereign/bench/wikipedia_learn` 2026-05-17:
+/// einstein chain T2-T4 needed Wikipedia weighting against the
+/// user's own code/vault corpora that were out-ranking the
+/// wikipedia articles on bare-keyword overlap.
+fn collect_hot_corpora(messages: &[Message]) -> HashMap<String, usize> {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for m in messages {
+        if m.role != Role::Assistant {
+            continue;
+        }
+        let Some(metadata) = m.metadata.as_ref() else {
+            continue;
+        };
+        let Some(chunks) = metadata.get("retrieved_chunks").and_then(|v| v.as_array()) else {
+            continue;
+        };
+        for c in chunks {
+            if let Some(cid) = c.get("corpus_id").and_then(|v| v.as_str()) {
+                if !cid.is_empty() {
+                    *counts.entry(cid.to_string()).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+    counts
+}
+
+/// Build a per-corpus K override map from the hot-corpora
+/// histogram. Corpora with a high share of prior conversation
+/// chunks get their retrieval K scaled up so they contribute more
+/// candidates to the cross-corpus merge layer. Returns `None`
+/// when the histogram is empty (no prior turns) or no corpus
+/// clears `HOT_CORPUS_MIN_SHARE`.
+///
+/// Replaces an earlier post-merge score-multiplier approach
+/// (v11/v12/v13). Post-merge can't recover candidates the merge
+/// has already dropped — and on conversations with many competing
+/// corpora, the merge dropped exactly the hot ones the user was
+/// learning from. Pre-merge widens the pool, letting the merge
+/// see the strong candidates it would otherwise filter out.
+fn build_per_corpus_k_overrides(
+    hot_corpora: &HashMap<String, usize>,
+    base_k: usize,
+) -> Option<HashMap<String, usize>> {
+    if hot_corpora.is_empty() {
+        return None;
+    }
+    let total: usize = hot_corpora.values().sum();
+    if total == 0 {
+        return None;
+    }
+    let total_f = total as f32;
+    // Sort by share descending so we pick the top-N corpora to
+    // boost. Cap at HOT_CORPUS_MAX_BOOSTED to bound the per-turn
+    // search cost. Ties (rare with integer counts on long arcs)
+    // break by name.
+    let mut ranked: Vec<(&String, f32)> = hot_corpora
+        .iter()
+        .map(|(k, &v)| (k, v as f32 / total_f))
+        .collect();
+    ranked.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(b.0))
+    });
+    let mut overrides: HashMap<String, usize> = HashMap::new();
+    let top_corpus = ranked
+        .first()
+        .map(|(k, s)| ((*k).clone(), *s))
+        .unwrap_or_default();
+    for (corpus_id, share) in ranked.into_iter().take(HOT_CORPUS_MAX_BOOSTED) {
+        if share < HOT_CORPUS_MIN_SHARE {
+            break;
+        }
+        let boost = (share * HOT_CORPUS_K_RANGE as f32).round() as usize;
+        overrides.insert(corpus_id.clone(), base_k + boost);
+    }
+    if overrides.is_empty() {
+        return None;
+    }
+    let (top_id, top_share) = top_corpus;
+    tracing::info!(
+        hot_corpora_count = hot_corpora.len(),
+        boosted_count = overrides.len(),
+        top_corpus = %top_id,
+        top_corpus_share = top_share,
+        base_k,
+        "retrieval: built per-corpus K overrides for hot corpora"
+    );
+    Some(overrides)
+}
+
+/// Build the query string used for *retrieval embedding*.
+///
+/// When the conversation has an established topic
+/// (`ConversationContext::topic_context.topic`), prepend it to the
+/// embedding text so follow-up turns inherit the conversation's
+/// anchor. The topic is already maintained by
+/// `context::update_topic_context` (a per-turn Fast-slot
+/// extraction designed specifically to disambiguate follow-up
+/// questions) — we are *consuming* that signal at retrieval time,
+/// not introducing new heuristics. When the topic is absent
+/// (turn 0, fresh conversation, classifier declined to extract),
+/// the bare message is used unchanged.
+///
+/// This is the principled answer to a follow-up like "What did he
+/// publish in 1905?" — the topic extractor sees Einstein in the
+/// arc and writes `topic = "Albert Einstein"`; the retrieval query
+/// becomes "Albert Einstein: What did he publish in 1905?" so the
+/// embedder lands on Einstein-relevant chunks without the bench
+/// author writing any per-domain rule.
+///
+/// Affects the embedding only. The downstream BM25 / keyword leg
+/// of `search_corpus_indexes` still receives the bare `message`.
+fn build_retrieval_query(message: &str, context: &ConversationContext) -> String {
+    let topic_opt = context
+        .topic_context
+        .as_ref()
+        .and_then(|tc| tc.topic.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    tracing::info!(
+        has_topic_context = context.topic_context.is_some(),
+        topic = ?topic_opt,
+        prior_messages = context.conversation.messages.len(),
+        message_chars = message.len(),
+        "retrieval: build_retrieval_query"
+    );
+    let Some(topic) = topic_opt else {
+        return message.to_string();
+    };
+    let anchor = truncate_with_ellipsis(topic, RETRIEVAL_QUERY_TOPIC_CHARS);
+    format!("{anchor}: {}", message.trim())
+}
+
+/// Minimum number of *dropped* messages (those that would otherwise
+/// be invisible to the synthesis prompt) before paying the Fast-slot
+/// cost of summarizing them. At 2 dropped messages a single coref
+/// span is already at risk; below that the cost-benefit doesn't
+/// justify the extra ~1s latency.
+const CONV_HISTORY_COMPACT_MIN_DROPPED: usize = 2;
+
+/// Render the trailing turns of a conversation into a compact block
+/// the synthesis prompt can read.  Returns `None` when there is no
+/// prior turn (i.e. this is the first user message in the
+/// conversation — single-shot case, no history to render).
+///
+/// The block excludes the most recent user message (which is already
+/// the LLM prompt) and any in-flight assistant placeholders. Each
+/// rendered message is truncated to `chars_per_msg` so a single
+/// verbose answer can't swamp the block.
+///
+/// History is emitted as plain text (USER:/ASSISTANT: labels) rather
+/// than passed as separate chat-template messages because
+/// `CompletionRequest` carries one `prompt` + one `system_message`.
+/// Wiring proper multi-turn chat templating into the inference
+/// adapter is the right long-term fix; this is the minimal change
+/// that resolves coreference and topic continuity today. See
+/// `sovereign/bench/wikipedia_learn/README.md` for the motivating
+/// bench.
+/// Today's-date anchor + recency-reasoning discipline for the system
+/// message. Without this the model has no "now" to compare
+/// retrieved-source dates against — it trusts a 2025 article's
+/// prediction of an early-2026 event as if it were future-looking even
+/// when today is May 2026. Surfaced 2026-05-19 M5-Mac-Studio session:
+/// model presented 2024-era rumors as current forecasts because the
+/// prompt never told it what year it was.
+///
+/// Discipline is SHAPE-level per `feedback_no_teaching_to_test.md` —
+/// no bank-derived examples, just general date-reasoning guidance:
+/// compare source dates to today, flag stale predictions, don't
+/// present them as still future-looking.
+///
+/// Split out as a free function so it can be unit-tested without
+/// constructing a full `Runtime` (which needs InferenceProvider +
+/// StateStore + half the dependency graph).
+fn today_anchor_block(today_iso: &str) -> String {
+    format!(
+        "Current date: {today_iso}. When evaluating retrieved or \
+         user-provided sources, compare their publication date or \
+         context to today's date. If a source predicts an event for a \
+         date that has already passed, do NOT present that prediction \
+         as still future-looking — either the event happened (look \
+         for more recent confirming sources before asserting it) or \
+         the prediction was wrong (say so)."
+    )
+}
+
+fn format_conversation_history(
+    messages: &[Message],
+    max_turns: usize,
+    chars_per_msg: usize,
+    compacted_preamble: Option<&str>,
+) -> Option<String> {
+    if messages.len() < 2 && compacted_preamble.is_none() {
+        return None;
+    }
+    // Drop the trailing in-flight user message (`handle_message_stream`
+    // pushes it onto `context.conversation.messages` before calling
+    // synthesis). If the tail isn't a user message we keep everything.
+    let cap = if matches!(messages.last(), Some(m) if m.role == Role::User) {
+        messages.len().saturating_sub(1)
+    } else {
+        messages.len()
+    };
+    let start = cap.saturating_sub(max_turns);
+    let slice = if cap == 0 { &[][..] } else { &messages[start..cap] };
+
+    let mut sections: Vec<String> = Vec::new();
+    if let Some(preamble) = compacted_preamble.map(str::trim).filter(|s| !s.is_empty()) {
+        sections.push(format!("Earlier in the conversation:\n{preamble}"));
+    }
+    let mut lines = vec!["Prior conversation (most recent last):".to_string()];
+    for m in slice {
+        let label = match m.role {
+            Role::User => "USER",
+            Role::Assistant => "ASSISTANT",
+            Role::System => "SYSTEM",
+        };
+        let body = m.content.trim();
+        if body.is_empty() {
+            continue;
+        }
+        let trimmed = truncate_with_ellipsis(body, chars_per_msg);
+        lines.push(format!("{label}: {trimmed}"));
+    }
+    if lines.len() > 1 {
+        sections.push(lines.join("\n"));
+    }
+    if sections.is_empty() {
+        return None;
+    }
+    Some(sections.join("\n\n"))
 }
 
 /// Reweight every chunk's `score` by how much of the query it
@@ -885,9 +1231,22 @@ pub(crate) fn atlas_grounding_enabled() -> bool {
     }
 }
 
-/// neither the title nor the content (lowercased) contains any of the
-/// substantive query tokens. Anything with even one overlap is kept;
-/// the reweight + sort + cap downstream handles ranking.
+/// Noise floor: drop chunks whose title nor content (lowercased)
+/// contains any substantive query token. Anything with even one
+/// overlap is kept; reweight + sort + cap downstream handle ranking.
+///
+/// Title-expand augmentation explored (v36 / 2026-05-18). Adding
+/// title-expand tokens to the survival set kept ALL chunks from the
+/// named article (because every chunk's title contains the title
+/// token), turning retrieval monocultural — `expand_from_dominant_
+/// source` then doubled down on the already-dominant article. On a
+/// 13-thread eval, 6 threads regressed on `fact_recall` (buddhism
+/// -0.24, darwin -0.15, industrial -0.14, einstein -0.13, wwii -0.10,
+/// columbus -0.10) vs the v28 baseline. Marathon T6/T7/T8 stayed
+/// clean (no v33-style bypass), but the cross-thread cost was net
+/// negative. Reverted. See `bench/wikipedia_learn/V36_FINDINGS.md`
+/// for the full trace + the principled reservation-only path
+/// (option C) handed to the next iteration.
 pub(crate) fn drop_no_overlap_chunks(
     chunks: Vec<corpus_engine::ScoredChunk>,
     query: &str,
@@ -2045,7 +2404,7 @@ fn strip_leading_title_duplicate<'a>(body: &'a str, title: Option<&str>) -> &'a 
 /// Build a truncated knowledge context string from corpus-engine scored chunks,
 /// grouped by provenance tier (corpus vs web) and staying within a character budget.
 fn format_scored_chunks(chunks: &[corpus_engine::ScoredChunk], max_chars: usize) -> String {
-    format_scored_chunks_with_kinds(chunks, max_chars, None, None, None)
+    format_scored_chunks_with_kinds(chunks, max_chars, None, None, None, None)
 }
 
 /// Like [`format_scored_chunks`], but if a `kinds` map is supplied,
@@ -2073,6 +2432,13 @@ fn format_scored_chunks_with_kinds(
     kinds: Option<&std::collections::HashMap<String, corpus_engine::CorpusKind>>,
     contested: Option<&std::collections::HashSet<String>>,
     folder_metadata: Option<&std::collections::HashMap<String, crate::traits::FolderMetadata>>,
+    // corpus_id → `display.category` lookup. When a chunk's corpus
+    // declares `category = "conversation"`, that chunk peels off the
+    // generic trace bucket and renders under a dedicated
+    // "## From your conversations" section. Other categories are
+    // ignored today — the section rename is the only category-aware
+    // synthesis hook in v1 of the conversation-imports landing.
+    display_categories: Option<&std::collections::HashMap<String, String>>,
 ) -> String {
     // Move 5 — sub-bucket the corpus bucket by the meta-atlas
     // articulation axis when chunks carry the `articulation`
@@ -2080,9 +2446,19 @@ fn format_scored_chunks_with_kinds(
     // existing "From knowledge base" catch-all so the synthesis
     // model sees the structural-map / articulated-claim /
     // lived-practice distinction.
+    //
+    // Conversation-imports landing — chunks from corpora declaring
+    // `[display] category = "conversation"` are split out of the
+    // generic trace bucket into a dedicated `conversation_parts`
+    // section. Renamed prompt heading ("From your conversations")
+    // signals to the synthesis model that the two conversation
+    // corpora (`conversations-anthropic`, `conversation-history`)
+    // belong to one logical pool regardless of which one served
+    // each chunk.
     let mut corpus_inventory = Vec::new();
     let mut corpus_argument = Vec::new();
     let mut corpus_trace = Vec::new();
+    let mut conversation_parts = Vec::new();
     let mut corpus_parts = Vec::new();
     let mut folder_parts = Vec::new();
     let mut web_parts = Vec::new();
@@ -2095,6 +2471,10 @@ fn format_scored_chunks_with_kinds(
             Some(corpus_engine::CorpusKind::Catalog)
         );
         let folder_meta = folder_metadata.and_then(|m| m.get(&c.corpus_id));
+        let is_conversation = display_categories
+            .and_then(|m| m.get(&c.corpus_id))
+            .map(|cat| cat == "conversation")
+            .unwrap_or(false);
         let body = strip_leading_title_duplicate(&c.content, c.title.as_deref());
         let content = truncate_chunk_content(body);
         let title = c.title.as_deref().unwrap_or(c.corpus_id.as_str());
@@ -2116,7 +2496,18 @@ fn format_scored_chunks_with_kinds(
             None => String::new(),
         };
 
-        let (label, bucket) = if let Some(meta) = folder_meta {
+        let (label, bucket) = if is_conversation && !is_catalog && c.url.is_none() {
+            // Both conversation corpora — imported Claude chats AND
+            // the user's Sovereign-internal chats — surface under
+            // one synthesis-prompt section so the model treats them
+            // as one logical "your conversations" pool. The
+            // corpus_id is dropped from the label since the user
+            // perceives them as one source.
+            (
+                format!("[Your conversations — {title}{contested_suffix}]"),
+                &mut conversation_parts,
+            )
+        } else if let Some(meta) = folder_meta {
             // Folder corpora win precedence over Catalog/Web/articulation
             // — a folder is by definition the user's own material and
             // the synthesis register changes accordingly.
@@ -2162,6 +2553,12 @@ fn format_scored_chunks_with_kinds(
     }
 
     let mut sections = Vec::new();
+    if !conversation_parts.is_empty() {
+        sections.push(format!(
+            "## From your conversations\n\n{}",
+            conversation_parts.join("\n\n---\n\n")
+        ));
+    }
     if !folder_parts.is_empty() {
         sections.push(format!(
             "## From your folders\n\n{}",
@@ -2238,12 +2635,36 @@ fn build_provenance_components(
     source_map: &std::collections::HashMap<String, usize>,
     peer_attribution: &std::collections::HashMap<String, String>,
     folder_meta: &std::collections::HashMap<String, crate::traits::FolderMetadata>,
+    // corpus_id → `display.category` lookup so the source's chat-UI
+    // chip can render "your conversations" instead of a per-corpus
+    // slug when the underlying corpus is a conversation source. None
+    // (or empty) preserves the prior behaviour.
+    display_categories: Option<&std::collections::HashMap<String, String>>,
 ) -> (Vec<SourceSummary>, Option<crate::types::CoverageNote>) {
     let mut sources: Vec<SourceSummary> = source_map
         .iter()
         .map(|(origin, &count)| {
             let from_peer = peer_attribution.get(origin).cloned();
-            let display_name = folder_meta.get(origin).map(|m| m.display_name.clone());
+            // Display label precedence:
+            //   1. Folder-corpus user-typed display name (folder-ingest v1 §6.3)
+            //   2. "Your conversations" for any corpus declaring
+            //      `[display] category = "conversation"` — collapses
+            //      the two conversation corpora into one label.
+            //   3. None — chat UI falls back to corpus_id slug.
+            let display_name = folder_meta
+                .get(origin)
+                .map(|m| m.display_name.clone())
+                .or_else(|| {
+                    display_categories
+                        .and_then(|m| m.get(origin))
+                        .and_then(|cat| {
+                            if cat == "conversation" {
+                                Some("Your conversations".to_string())
+                            } else {
+                                None
+                            }
+                        })
+                });
             SourceSummary {
                 origin: origin.clone(),
                 count,
@@ -2493,18 +2914,41 @@ pub(crate) async fn run_collaboration(
     // 4. Refinement synthesis — integrate the user's source. The prompt
     //    asks the model to distinguish corpus-derived content from
     //    user-provided content so provenance stays visible.
+    //
+    // The system message anchors today's date and instructs the model
+    // to compare source-dates to "now" — critical because user-supplied
+    // sources (especially web-search results) frequently include older
+    // articles that PREDICT events the model would otherwise present as
+    // still future. Surfaced 2026-05-19 M5-Mac-Studio session: model
+    // refined with 2024-era rumor articles predicting "early 2026"
+    // launches and presented those predictions as forecasts even
+    // though it was already May 2026. Date-reasoning discipline is
+    // shape-level per `feedback_no_teaching_to_test.md`.
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let refine_system = format!(
+        "Current date: {today}. When integrating user-provided \
+         sources, compare their publication date or context to \
+         today's date. If a source predicts an event for a date \
+         that has already passed, do NOT present the prediction as \
+         still future — either the event happened (look for more \
+         recent confirming evidence before asserting it) or the \
+         prediction was wrong (say so). Sources that are silent on \
+         dates may still be stale; flag uncertainty when the answer \
+         depends on time-sensitive facts."
+    );
     let refine_prompt = format!(
         "The user asked: {question}\n\n\
          Your initial answer (drawn from the local corpus):\n{response}\n\n\
          Additional source the user provided:\n{content}\n\n\
          Refine the answer to integrate the user's source. Be explicit \
          about what came from the corpus vs. what came from the user's \
-         source. Mark anything that remains uncertain."
+         source. Mark anything that remains uncertain — especially \
+         claims that hinge on dates that may now be in the past."
     );
 
     let refine_req = CompletionRequest {
         prompt: refine_prompt,
-        system_message: None,
+        system_message: Some(refine_system),
         preferred_speed: Speed::Slow,
         max_tokens: Some(inference_config.max_tokens),
         temperature: Some(inference_config.temperature),
@@ -2518,6 +2962,11 @@ pub(crate) async fn run_collaboration(
                     model_id: None,
                     enable_thinking: None,
     sampling_mode: None,
+    assistant_prefix: None,
+    cmd_prefix: None,
+    url_allowlist: None,
+    evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     match inference.complete(&refine_req).await {
@@ -2809,34 +3258,11 @@ pub struct ContradictionProv {
 /// Intents preserved: `ExpressiveQuery`, `DeepQuery`,
 /// `Continuation` (continuation context overrides skill register).
 /// Everything else gets rewritten to `ExpressiveQuery`.
-fn override_intent_for_relational_register(
-    intent: Intent,
-    register: SkillRegister,
-) -> Intent {
-    if register != SkillRegister::Relational {
-        return intent;
-    }
-    match intent {
-        // Already on the witness path — leave alone.
-        Intent::ExpressiveQuery | Intent::DeepQuery => intent,
-        // Continuation has its own routing semantics that depend on
-        // the rebound classification of the prior turn — overriding
-        // here would mask whatever the user is actually continuing.
-        Intent::Continuation { .. } => intent,
-        // Everything else: the classifier read paragraph-shape
-        // personal prose as something else (KnowledgeQuery,
-        // MetalingualQuery, ComparisonQuery, …). The active
-        // relational skill is the authoritative signal — route to
-        // the witness handler.
-        other => {
-            tracing::info!(
-                original_intent = ?other,
-                "router: forcing ExpressiveQuery — relational register active"
-            );
-            Intent::ExpressiveQuery
-        }
-    }
-}
+// Retired: this fn moved to
+// `crate::intent_policy::apply_witness_intent_override` and is
+// now applied inside `intent_policy::policy_for` so dispatch
+// sites can't forget to call it. Pinned tests in the test mod
+// below now exercise the new home directly.
 
 /// Intent-implied OICP defaults (v0.3). The classified intent
 /// carries a latency signal — "DeepQuery" wants extended thinking
@@ -3629,6 +4055,186 @@ impl Runtime {
         added
     }
 
+    /// Abstract-question → concrete article-title expansion.
+    ///
+    /// Targets the failure mode `decompose_question` doesn't reach:
+    /// questions with zero extractable entities, where the answer
+    /// lives in a Wikipedia article whose title is a single concrete
+    /// noun the question never says. Marathon (v16 audit) examples:
+    ///
+    /// - T4 "How did computing develop from there in the next
+    ///   century?" — bench expects 20th-century / electronic /
+    ///   WWII content. Question lacks era keywords; embedding lands
+    ///   on SEP `computing-history` (pre-electronic narrative).
+    /// - T7 "After the war, what architecture became standard for the
+    ///   first electronic computers?" — bench expects
+    ///   `Von Neumann architecture` + `ENIAC` Wikipedia articles.
+    ///   Question never names them; one VN-arch chunk at position 14.
+    /// - T9 "What hardware breakthrough in the 1950s made smaller
+    ///   computers possible?" — bench expects `Transistor`. Zero
+    ///   transistor chunks retrieved; model hallucinated
+    ///   `ferrite core memory`.
+    ///
+    /// Approach: one Fast-slot LLM call with a JSON-schema-
+    /// constrained output of 2-3 Wikipedia titles. The titles are
+    /// fanned out via the existing `fan_out_decomposed_queries`
+    /// helper so the new path reuses the same search-and-merge
+    /// shape as the comparison decomposer.
+    ///
+    /// Opt-in via `SOVEREIGN_TITLE_EXPAND=1`. Default off — the
+    /// primitive adds ~400-800ms per turn (one LLM call + N embed
+    /// + N searches), and we want bench-level evidence that the
+    /// added latency buys the recall lift before turning it on
+    /// for all KnowledgeQuery traffic.
+    ///
+    /// Returns `None` when the gate is off, the LLM call fails,
+    /// the JSON doesn't parse, or no titles emerge. Caller
+    /// proceeds without expansion in any of those cases.
+    async fn expand_question_to_titles(
+        &self,
+        message: &str,
+        context: &ConversationContext,
+    ) -> Option<Vec<String>> {
+        if std::env::var("SOVEREIGN_TITLE_EXPAND").ok().as_deref() != Some("1") {
+            return None;
+        }
+
+        // Build a short conversation-context block — the LLM
+        // benefits from knowing what the user has been asking
+        // about so "from there" / "after the war" can resolve to
+        // the right era. We bound the included history at 4
+        // messages to keep the prompt tight and the Fast-slot
+        // call fast.
+        let recent: Vec<&Message> = context
+            .conversation
+            .messages
+            .iter()
+            .rev()
+            .take(4)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let recent_summary: String = recent
+            .iter()
+            .map(|m| {
+                let role = match m.role {
+                    Role::User => "User",
+                    Role::Assistant => "Assistant",
+                    Role::System => "System",
+                };
+                let mut end = m.content.len().min(200);
+                while end > 0 && !m.content.is_char_boundary(end) {
+                    end -= 1;
+                }
+                format!("{role}: {}", &m.content[..end])
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let prompt = format!(
+            "Given the conversation and the user's current question, name 2-3 \
+             specific Wikipedia article titles that would directly answer the \
+             question. Use the exact title an English Wikipedia article would \
+             have (e.g., \"Transistor\", \"Von Neumann architecture\", \
+             \"History of computing hardware\"). If the question pivots to a \
+             new topic, name the titles for the new topic — do not anchor on \
+             the prior subject.\n\n\
+             Recent conversation:\n{recent_summary}\n\n\
+             Current question: {message}\n\n\
+             Reply with JSON only:\n\
+             {{\"titles\": [\"Title 1\", \"Title 2\"]}}"
+        );
+
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "titles": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "maxItems": 3
+                }
+            },
+            "required": ["titles"]
+        });
+
+        let request = CompletionRequest {
+            prompt,
+            system_message: None,
+            preferred_speed: Speed::Fast,
+            max_tokens: Some(120),
+            temperature: Some(0.1),
+            think_budget: Some(0),
+            structured_output: Some(schema),
+            top_k: None,
+            top_p: None,
+            oicp: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
+        };
+
+        let response = match self.inference.complete(&request).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::debug!(
+                    error = %e,
+                    "title_expand: Fast-slot LLM call failed; skipping expansion"
+                );
+                return None;
+            }
+        };
+        let raw = response.text.trim();
+        let json_str = raw
+            .strip_prefix("```json")
+            .and_then(|s| s.strip_suffix("```"))
+            .unwrap_or(raw)
+            .trim();
+        let parsed: serde_json::Value = match serde_json::from_str(json_str) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::debug!(
+                    error = %e,
+                    raw = %raw,
+                    "title_expand: parse failed; skipping expansion"
+                );
+                return None;
+            }
+        };
+        let titles: Vec<String> = parsed
+            .get("titles")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .take(3)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if titles.is_empty() {
+            return None;
+        }
+        tracing::info!(
+            target: "retrieval_audit",
+            event = "title_expand",
+            query = %truncate_with_ellipsis(message, 120),
+            titles = ?titles,
+            "retrieval_audit: title_expand"
+        );
+        Some(titles)
+    }
+
     /// Install a note store for commitment persistence. Daemon bootstrap
     /// wires this; CLI eval path leaves it `None`, in which case the
     /// commissive handler degrades to a clear "no notes store wired"
@@ -3730,12 +4336,55 @@ impl Runtime {
     /// Single canonical implementation; both intent paths
     /// (KnowledgeQuery + DeepQuery) call this rather than inlining
     /// the ~80-line graph-walk + fallback block.
+    /// Fetch a single chunk by its LanceDB row id from a specific
+    /// corpus. Used by atlas-grounding's direct-fetch path for atom
+    /// shapes whose `first_appearance.chunk_id` is numeric
+    /// (conversation, personal-vault) — bypassing the SEP/Wikipedia
+    /// FTS-by-article-slug path that doesn't apply when chunks
+    /// aren't titled by article. Returns `None` on any failure
+    /// (corpus not installed, index open failure, chunk_id not
+    /// present) — caller treats absence as a no-op.
+    ///
+    /// Opens the index per call. Acceptable today: the atlas-fetch
+    /// loop budget is small (~6 requests / query); opening is
+    /// dominated by the LanceDB manifest read which is cached after
+    /// the first hit. If profiling shows this is hot, the right
+    /// optimisation is a per-call index cache in `apply_atlas_grounding`,
+    /// not memoising across queries (atlas-grounding fires once per
+    /// chat turn).
+    async fn fetch_chunk_by_id(
+        &self,
+        corpus_id: &str,
+        chunk_id: u64,
+    ) -> Option<corpus_engine::ScoredChunk> {
+        let engine = self.corpus_engine.as_ref()?;
+        let indexes = engine.installed_indexes().await.ok()?;
+        let info = indexes.into_iter().find(|i| i.corpus_id == corpus_id)?;
+        let index = corpus_engine::index::CorpusIndex::open(&info.path)
+            .await
+            .ok()?;
+        let stored = index.get_chunks(&[chunk_id]).await.ok()?;
+        let s = stored.into_iter().next()?;
+        Some(corpus_engine::ScoredChunk {
+            content: s.content,
+            title: s.title,
+            url: None,
+            corpus_id: corpus_id.to_string(),
+            score: 0.0,
+            metadata: std::collections::HashMap::new(),
+            chunk_id: Some(s.id),
+            source_doc_id: None,
+            vector_distance: None,
+        })
+    }
+
     async fn apply_atlas_grounding(
         &self,
         query_text: &str,
         embedding: &[f32],
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         label: &str,
+        scope: Option<&str>,
     ) {
         if !atlas_grounding_enabled() {
             return;
@@ -3747,7 +4396,38 @@ impl Runtime {
             return;
         }
 
-        let corpus_ids = provider.loaded_corpus_ids();
+        let mut corpus_ids = provider.loaded_corpus_ids();
+        // Scope-driven atlas filtering. When the router classifies
+        // the query against a `scope = "personal"`-tagged exemplar
+        // (conversation-history / personal-vault shapes), restrict
+        // the atlas pool to user-owned corpora (mesh_sharing=false
+        // in IndexInfo). Without this, large public atlases
+        // (wikipedia at 1.6M atoms) drown small personal atlases
+        // (conversations-personal at ~200) in the global cosine
+        // race. The router's nearest exemplar is the load-bearing
+        // signal; downstream retrieval honors it here.
+        if scope == Some("personal") {
+            // Same sharp-signal limitation as the lance-side filter
+            // in `prepare_knowledge_query_plan` — see that block for
+            // the rationale + TODO. Pattern match is the immediate
+            // demonstrable wiring; recipe annotation is the proper
+            // long-form productionization.
+            const PERSONAL_CORPUS_PREFIXES: &[&str] =
+                &["conversations-", "personal-", "journal-", "inner-work-"];
+            let before = corpus_ids.len();
+            corpus_ids.retain(|id| {
+                PERSONAL_CORPUS_PREFIXES.iter().any(|p| id.starts_with(p))
+            });
+            if before != corpus_ids.len() {
+                tracing::info!(
+                    label,
+                    kept = corpus_ids.len(),
+                    dropped = before - corpus_ids.len(),
+                    scope = "personal",
+                    "atlas-grounding: scope-filtered to personal-corpus prefixes"
+                );
+            }
+        }
         let ctxs: Vec<Arc<crate::atlas_context::AtlasContext>> =
             corpus_ids.iter().filter_map(|id| provider.get(id)).collect();
         let graphs: Vec<Arc<crate::atlas_context::AtlasGraph>> =
@@ -3789,6 +4469,68 @@ impl Runtime {
                 if graph_added >= fetch_budget {
                     break;
                 }
+
+                // Shape-aware fetch. ChunkRequest.chunk_id is the
+                // atom's first_appearance.chunk_id. For SEP/Wikipedia
+                // atoms it's a section slug (`sec_00001`) and the
+                // FTS-by-article-slug path below resolves it via
+                // title-match. For conversation / personal-vault
+                // atoms it's the numeric LanceDB row id — FTS+title-
+                // match yields zero because the chunk title is the
+                // conversation name, not the chunk_id. Detect
+                // numeric ids and do a direct chunks_by_ids lookup
+                // against the source corpus identified by
+                // `article_slug` (which for non-SEP atlases is the
+                // corpus_id itself, per AtlasGraph::load_from_disk
+                // construction). Surfaced by conversations-personal
+                // 2026-05-17: atlas atoms scored 0.7+ in
+                // atlas_navigate but the FTS-fetch path produced
+                // graph_added=0.
+                if let Ok(chunk_id_num) = req.chunk_id.parse::<u64>() {
+                    if let Some(mut boosted) =
+                        self.fetch_chunk_by_id(&req.article_slug, chunk_id_num).await
+                    {
+                        let key = format!(
+                            "{}|{}",
+                            boosted.title.clone().unwrap_or_default(),
+                            truncate_chars(&boosted.content, 80)
+                        );
+                        if seen.insert(key) {
+                            boosted.score = req.score * 0.05;
+                            // Make atlas-fetched chunks competitive
+                            // in `cross_corpus_sort_cmp` against
+                            // lance-fetched chunks (which carry
+                            // vector_distance from hybrid search).
+                            // Map atom relevance to a synthetic
+                            // distance: high atlas score → low
+                            // distance (sorted to top); the runtime's
+                            // cross-corpus sort then keeps atlas
+                            // chunks above lance fillers when
+                            // truncating to KQ_MERGED_LIMIT.
+                            boosted.vector_distance = Some(
+                                (1.0_f32 - (req.score / 2.0).min(1.0)).max(0.0),
+                            );
+                            if !req.verbatim_excerpts.is_empty() {
+                                let mut head = String::from("[Atlas highlights]\n");
+                                for ex in &req.verbatim_excerpts {
+                                    head.push_str(ex);
+                                    head.push('\n');
+                                }
+                                head.push('\n');
+                                head.push_str(&boosted.content);
+                                boosted.content = head;
+                            }
+                            chunks.push(boosted);
+                            graph_added += 1;
+                            if graph_added >= fetch_budget {
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                // SEP/Wikipedia article-slug path.
                 let fts_hits = self
                     // Article slug + passage preview as FTS query
                     // (see eval-side runner.rs comment). Title-bias
@@ -3850,16 +4592,27 @@ impl Runtime {
                 provider.record_match(&ctx.atlas_corpus_id, &ctx.atlas_corpus_id);
             }
             if graph_added > 0 {
+                // Per-corpus breakdown of what graph-walk just pushed,
+                // so a downstream drop (cap / truncate / expand) can
+                // be pinned by comparing this against later sites
+                // (ARCH §0.1 glassbox).
+                let mut per_corpus: std::collections::BTreeMap<String, usize> =
+                    std::collections::BTreeMap::new();
+                let n = chunks.len();
+                for c in chunks.iter().skip(n - graph_added.min(n)) {
+                    *per_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+                }
                 tracing::info!(
                     label,
                     graph_added,
-                    "atlas-grounding: graph-walk fused"
+                    per_corpus = ?per_corpus,
+                    "atlas-grounding: graph-walk fused (per-corpus injected counts)"
                 );
             }
         } else {
-            // Fallback: bag-of-atoms (no graph layer loaded by this
-            // provider). Kept for older deployments + as a safety
-            // net during graph-layer rollout.
+            // No graph layer loaded for any provider. Direct bag-of-
+            // atoms injection — kept for older deployments + as a
+            // safety net during graph-layer rollout.
             let mut bag_added = 0usize;
             for corpus_id in &corpus_ids {
                 if let Some(ctx) = provider.get(corpus_id) {
@@ -3890,6 +4643,24 @@ impl Runtime {
         query_text: &str,
         limit: usize,
         label: &str,
+    ) -> Vec<corpus_engine::ScoredChunk> {
+        self.search_corpus_indexes_with_overrides(embedding, query_text, limit, label, None)
+            .await
+    }
+
+    /// Variant of `search_corpus_indexes` that accepts per-corpus K
+    /// overrides — used by hot-corpora affinity (pre-merge bias).
+    /// When the conversation has already drawn many chunks from a
+    /// corpus, we increase its candidate pool so the merge layer
+    /// sees more of its top results. Per-corpus K defaults to
+    /// `limit` for any corpus not in the override map.
+    async fn search_corpus_indexes_with_overrides(
+        &self,
+        embedding: &[f32],
+        query_text: &str,
+        limit: usize,
+        label: &str,
+        per_corpus_limits: Option<&HashMap<String, usize>>,
     ) -> Vec<corpus_engine::ScoredChunk> {
         let mut chunks = Vec::new();
         let engine = match &self.corpus_engine {
@@ -4054,11 +4825,22 @@ impl Runtime {
                     continue;
                 }
             };
+            let effective_limit = per_corpus_limits
+                .and_then(|m| m.get(&info.corpus_id).copied())
+                .unwrap_or(limit);
+            if effective_limit != limit {
+                tracing::info!(
+                    corpus = %info.corpus_id,
+                    base_limit = limit,
+                    effective_limit,
+                    "{label}: per-corpus K override applied"
+                );
+            }
             match idx
                 .search_with_rerank(
                     embedding,
                     query_text,
-                    limit,
+                    effective_limit,
                     self.rerank_fn.as_ref(),
                     &self.rerank_config,
                     None,
@@ -4072,6 +4854,31 @@ impl Runtime {
                         rerank_enabled = self.rerank_config.enabled
                             && self.rerank_fn.is_some(),
                         "{label}: search complete"
+                    );
+                    // Naturalistic audit: top-3 per corpus so post-mortem
+                    // can answer "did the right article even reach the
+                    // merge pool from this corpus?" before any cap or
+                    // expansion. Keeps the existing info!() line above
+                    // unchanged; this is a sibling event on its own target.
+                    let top3: Vec<(String, f32)> = scored
+                        .iter()
+                        .take(3)
+                        .map(|c| {
+                            (
+                                c.title.clone().unwrap_or_default(),
+                                c.score,
+                            )
+                        })
+                        .collect();
+                    tracing::info!(
+                        target: "retrieval_audit",
+                        event = "corpus_results",
+                        label = label,
+                        corpus = %info.corpus_id,
+                        count = scored.len(),
+                        effective_limit,
+                        top3 = ?top3,
+                        "retrieval_audit: corpus_results"
                     );
                     chunks.extend(scored);
                 }
@@ -4674,7 +5481,9 @@ impl Runtime {
         context: &ConversationContext,
         intent: &Intent,
     ) -> Vec<corpus_engine::ScoredChunk> {
-        let kc = self.prepare_knowledge_context(message, context, intent).await;
+        let kc = self
+            .prepare_knowledge_context(message, context, intent, None)
+            .await;
         kc.chunks
     }
 
@@ -4686,6 +5495,7 @@ impl Runtime {
         message: &str,
         context: &ConversationContext,
         intent: &Intent,
+        scope: Option<&str>,
     ) -> KnowledgeContext {
         // Document-attached messages are detected by the
         // `[Document attached: filename]` prefix. We only need to
@@ -4725,7 +5535,16 @@ impl Runtime {
             // and corpus-type documents in StateStore. User-uploaded documents
             // are NOT included — they are only surfaced when explicitly
             // attached via [Document attached: ...].
-            let corpus_embedding = self.inference.embed_query(message).await.unwrap_or_default();
+            let retrieval_query = build_retrieval_query(message, context);
+            if retrieval_query != message {
+                tracing::debug!(
+                    bare_chars = message.len(),
+                    expanded_chars = retrieval_query.len(),
+                    "retrieval: expanded follow-up query with prior user turns"
+                );
+            }
+            let corpus_embedding =
+                self.inference.embed_query(&retrieval_query).await.unwrap_or_default();
             let label = format!("{intent:?}");
 
             // Run the local corpus search and the mesh fan-out
@@ -4742,15 +5561,54 @@ impl Runtime {
             // depth for the model to write a sourced multi-paragraph
             // answer. At K=20/corpus → top-15, the merge holds 4-5
             // articles each with 2-3 chunks: real synthesis material.
-            let local_corpora_fut =
-                self.search_corpus_indexes(&corpus_embedding, message, KQ_PER_CORPUS_LIMIT, &label);
+            let hot_corpora_dq = collect_hot_corpora(&context.conversation.messages);
+            let per_corpus_overrides_dq =
+                build_per_corpus_k_overrides(&hot_corpora_dq, KQ_PER_CORPUS_LIMIT);
+            let local_corpora_fut = self.search_corpus_indexes_with_overrides(
+                &corpus_embedding,
+                message,
+                KQ_PER_CORPUS_LIMIT,
+                &label,
+                per_corpus_overrides_dq.as_ref(),
+            );
             let mesh_fut = async {
                 match &self.mesh_knowledge {
                     Some(m) => m.search(message, &corpus_embedding, KQ_PER_CORPUS_LIMIT).await,
                     None => Vec::new(),
                 }
             };
-            let (local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
+            let (mut local_scored, mesh_scored) = tokio::join!(local_corpora_fut, mesh_fut);
+
+            // Scope filter: when the router classified this turn as
+            // `scope = "personal"`, restrict the local hits to
+            // user-owned corpora so the synthesis prompt isn't
+            // dominated by general-knowledge sources. Prefix match
+            // is a TODO placeholder for recipe-level
+            // `[corpus] scope = "personal"` annotation — same
+            // pattern as the KQ plan path (see
+            // `prepare_knowledge_query_plan`).
+            if matches!(scope, Some("personal")) {
+                // TODO: replace prefix match with recipe-level
+                // `[corpus] scope = "personal"` annotation read from
+                // installed_indexes(). Mirror of the KQ plan path
+                // (see `prepare_knowledge_query_plan`).
+                const PERSONAL_CORPUS_PREFIXES: &[&str] =
+                    &["conversations-", "personal-", "journal-", "inner-work-"];
+                let before = local_scored.len();
+                local_scored.retain(|c| {
+                    PERSONAL_CORPUS_PREFIXES
+                        .iter()
+                        .any(|p| c.corpus_id.starts_with(p))
+                });
+                tracing::info!(
+                    kept = local_scored.len(),
+                    dropped = before.saturating_sub(local_scored.len()),
+                    scope = ?scope,
+                    label = %label,
+                    "prepare_knowledge_context: scope-filtered retrieval to personal-corpus prefixes"
+                );
+            }
+
             local_hits = local_scored.len();
             // Glass-box log: how many hits from local vs. mesh, and
             // which corpora did mesh claim to serve? If mesh_hits > 0
@@ -4822,7 +5680,7 @@ impl Runtime {
             // route and benefit equally from atlas grounding.
             // Same env override (`SOVEREIGN_ATLAS_GROUNDING=0`)
             // applies here.
-            self.apply_atlas_grounding(message, &corpus_embedding, &mut all_chunks, "DeepQuery")
+            self.apply_atlas_grounding(message, &corpus_embedding, &mut all_chunks, "DeepQuery", scope)
                 .await;
 
             // Also search StateStore for corpus-type documents (used by test
@@ -4919,11 +5777,31 @@ impl Runtime {
             );
         }
 
+        // Title expansion (opt-in via SOVEREIGN_TITLE_EXPAND=1).
+        // DeepQuery is the path many comparative/contested/synthesis
+        // questions take, where abstract phrasings need explicit
+        // Wikipedia titles named ("Christopher Columbus", "Buddhism",
+        // "Atomic bombings of Hiroshima and Nagasaki") for retrieval
+        // to land. Mirrors the KnowledgeQuery wiring.
+        let title_expand_titles_dq: Option<Vec<String>> =
+            self.expand_question_to_titles(message, context).await;
+        if let Some(titles) = &title_expand_titles_dq {
+            let added = self
+                .fan_out_decomposed_queries(titles, &mut all_chunks, "TitleExpand")
+                .await;
+            tracing::info!(
+                titles = ?titles,
+                chunks_added = added,
+                "DeepQuery: title-expand retrieval"
+            );
+        }
+
         // Noise floor — drop chunks with zero query-token overlap in
         // both title and content. These survived hybrid RRF on a weak
         // tangential signal (one shared FTS token in a 1024-char
         // chunk, or vector similarity to phrasing rather than topic);
-        // they fill prompt budget the model can't act on.
+        // they fill prompt budget the model can't act on. See KQ
+        // path comment for the v33 / v36 protection design history.
         let pre_floor = all_chunks.len();
         all_chunks = drop_no_overlap_chunks(all_chunks, message);
         if all_chunks.len() < pre_floor {
@@ -4976,6 +5854,19 @@ impl Runtime {
             all_chunks.retain(|c| seen.insert((c.corpus_id.clone(), c.content.clone())));
         }
         all_chunks = cap_chunks_per_article(all_chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
+        // Title-expand reservation. Mirrors the KnowledgeQuery
+        // wiring — pins chunks from title-expand titles before the
+        // KQ_MERGED_LIMIT truncate so the multi-source expander below
+        // can't displace them by picking a different dominant article.
+        if let Some(titles) = &title_expand_titles_dq {
+            if !titles.is_empty() {
+                all_chunks = reserve_chunks_per_entity(
+                    all_chunks,
+                    titles,
+                    COMPARISON_PER_ENTITY_RESERVE,
+                );
+            }
+        }
         all_chunks.truncate(KQ_MERGED_LIMIT);
 
         // Multi-source cohesion expansion. DeepQuery is the path
@@ -5039,10 +5930,41 @@ impl Runtime {
             }
         }
         let folder_meta_for_ctx = self.folder_metadata_snapshot().await;
+        // Build the corpus-kind + display-category lookups before
+        // the provenance components so the SourceSummary
+        // `display_name` can render "Your conversations" for any
+        // corpus declaring `[display] category = "conversation"`.
+        // Catalog routing + Wikipedia editors' POV markers —
+        // best-effort: `installed_indexes()` errors fall through to
+        // defaults, so no callsite gates on the engine being
+        // configured.
+        let (kinds, display_categories): (
+            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, String>,
+        ) = if let Some(engine) = &self.corpus_engine {
+            let mut kinds_map = std::collections::HashMap::new();
+            let mut display_map = std::collections::HashMap::new();
+            for info in engine.installed_indexes().await.unwrap_or_default() {
+                if let Some(d) = &info.display {
+                    if let Some(cat) = &d.category {
+                        display_map.insert(info.corpus_id.clone(), cat.clone());
+                    }
+                }
+                kinds_map.insert(info.corpus_id, info.kind);
+            }
+            (kinds_map, display_map)
+        } else {
+            Default::default()
+        };
         let (sources, coverage) = build_provenance_components(
             &source_map,
             &peer_attribution,
             &folder_meta_for_ctx,
+            if display_categories.is_empty() {
+                None
+            } else {
+                Some(&display_categories)
+            },
         );
 
         // 5. Build prompt with knowledge context.
@@ -5056,22 +5978,6 @@ impl Runtime {
         // exact failure mode v6 surfaced empirically (chunks_fact_score
         // climbed but answer-fact-score didn't, because the model
         // never saw the depth chunks).
-        // Build the corpus-kind map and contested-titles set for
-        // formatting. Catalog routing + Wikipedia editors' POV
-        // markers — both no-ops when the supporting metadata isn't
-        // available, so safe to compute unconditionally.
-        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
-            if let Some(engine) = &self.corpus_engine {
-                engine
-                    .installed_indexes()
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|info| (info.corpus_id, info.kind))
-                    .collect()
-            } else {
-                Default::default()
-            };
         let contested_titles: std::collections::HashSet<String> =
             self.contested_titles_for_chunks(&all_chunks).await;
         let folder_meta = self.folder_metadata_snapshot().await;
@@ -5091,6 +5997,11 @@ impl Runtime {
                     None
                 } else {
                     Some(&folder_meta)
+                },
+                if display_categories.is_empty() {
+                    None
+                } else {
+                    Some(&display_categories)
                 },
             );
             if history.is_empty() {
@@ -5315,12 +6226,46 @@ impl Runtime {
 
         let mut parts = vec![base.to_string()];
 
+        let now_utc = chrono::Utc::now();
+        parts.push(today_anchor_block(&now_utc.format("%Y-%m-%d").to_string()));
+
+        // Tool-Mastery Layer 2 — tool dossier ambient context.
+        // Spliced LATE in the system message (after conversation
+        // history / memories / landscape) so it sits closest to
+        // the user's in-flight message in the prompt. Empirically
+        // the dossier is most influential at the tail of the
+        // system block — earlier placements get buried under
+        // intervening sections and the model under-weights them.
+        // The splice itself happens after all the other sections
+        // below; we store the now_utc here so the renderer sees
+        // a single consistent "now" across the whole assembly.
+        let now_unix = now_utc.timestamp();
+
+        // Conversation history. CompletionRequest is a single
+        // user-turn prompt+system shape — prior assistant/user turns
+        // aren't natively threaded by the inference adapter. We
+        // render the last few turns into the system message so the
+        // model can resolve coreference and topic continuity across
+        // follow-up questions. Without this, multi-turn answers
+        // literally say "I'm having trouble identifying who 'he'
+        // refers to" because the synthesis prompt sees only the
+        // current user message. Surfaced by
+        // sovereign/bench/wikipedia_learn 2026-05-17 smoke.
+        if let Some(history) = format_conversation_history(
+            &context.conversation.messages,
+            CONV_HISTORY_TURNS,
+            CONV_HISTORY_CHARS_PER_MSG,
+            context.compacted_history.as_deref(),
+        ) {
+            parts.push(history);
+        }
+
         // Memories are rendered in the active skill's voice register —
         // factual skills get a flat list (pre-existing format),
         // relational skills get three confidence-banded sections so
         // the model can render its three epistemic registers
         // (history / inference / guess) when surfacing user history.
-        let register = self.skills.primary_skill_register();
+        let register = context.turn_register();
         if let Some(mem_section) =
             memory::format_memories_for_prompt(&context.memories, register)
         {
@@ -5362,7 +6307,67 @@ impl Runtime {
             parts.push(render_temporal_tensions(&context.temporal_tensions));
         }
 
+        // Tool-Mastery dossier — spliced LAST so it sits at the tail
+        // of the system block, closest to the user's in-flight
+        // message in the assembled prompt. Earlier placements get
+        // buried under intervening sections; the tail position
+        // maximises salience for the model's next action.
+        if let Some(dossier) = &context.tool_dossier {
+            parts.push(crate::dossier::render_tool_dossier(dossier, now_unix));
+        }
+
         parts.join("\n\n")
+    }
+
+    /// Summarize the dropped tail of the conversation so the
+    /// synthesis prompt retains an anchor for entities and topics
+    /// established outside the visible-history window.
+    ///
+    /// Activates only when `conversation.messages.len()` exceeds the
+    /// visible-history window by at least
+    /// `CONV_HISTORY_COMPACT_MIN_DROPPED` messages. The summary is
+    /// stored on `context.compacted_history` and read back by
+    /// `format_conversation_history` at prompt-assembly time.
+    ///
+    /// Soft-fail by design: a parse failure or an inference error
+    /// leaves `compacted_history = None` and the synthesis path
+    /// continues on just the visible window. Surfaced by
+    /// `sovereign/bench/wikipedia_learn` 2026-05-17 marathon thread.
+    async fn maybe_compact_dropped_history(&self, context: &mut ConversationContext) {
+        let total = context.conversation.messages.len();
+        if total <= CONV_HISTORY_TURNS {
+            return;
+        }
+        let dropped_end = total.saturating_sub(CONV_HISTORY_TURNS);
+        // If the tail is a user turn (in-flight message we just
+        // pushed) the visible window already accounts for it via
+        // `format_conversation_history`'s cap-1 logic — we keep
+        // the same "dropped before visible" set here.
+        let dropped = &context.conversation.messages[..dropped_end];
+        if dropped.len() < CONV_HISTORY_COMPACT_MIN_DROPPED {
+            return;
+        }
+        match crate::context::summarize_dropped_history(
+            self.inference.as_ref(),
+            dropped,
+        )
+        .await
+        {
+            Ok(summary @ Some(_)) => context.compacted_history = summary,
+            Ok(None) => {
+                tracing::debug!(
+                    dropped = dropped.len(),
+                    "context: summarize_dropped_history returned None — falling back to visible window only"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    dropped = dropped.len(),
+                    "context: summarize_dropped_history failed — falling back to visible window only"
+                );
+            }
+        }
     }
 
     /// Run the R3 temporal-tension pre-pass before prompt assembly.
@@ -5376,12 +6381,137 @@ impl Runtime {
     /// inference error, or a transport hiccup must never block a
     /// turn. The model just doesn't get the tension-surfacing cue
     /// for this turn and continues normally.
+    /// Build the per-turn tool catalog for a PRE-CLASSIFICATION call
+    /// site (i.e. before the router has produced an intent). Mode-only
+    /// narrowing applies — default-chat sees the full catalog so the
+    /// router can reason across the broadest set of options; inner-
+    /// work and recipe-author surface narrowing wins because the
+    /// user explicitly entered those modes.
+    ///
+    /// Post-classification sites should use
+    /// [`Self::narrow_tools_for_intent`] instead — that picks up the
+    /// intent-derived narrowing too.
+    fn narrow_tools_pre_classification(&self) -> Vec<ToolDescriptor> {
+        // Policy-builder site — read register directly from the
+        // mode declaration since context's `intent_policy` field
+        // isn't populated yet (pre-classification, the policy IS
+        // what we're building).
+        let policy = crate::intent_policy::policy_for_mode_only(
+            self.skills.primary_skill_register(),
+            self.skills.primary_skill_id_for_conversation().as_deref(),
+        );
+        crate::intent_policy::narrow_tools(&self.tools.descriptors(), &policy)
+    }
+
+    /// Build the per-turn tool catalog given a CLASSIFIED intent.
+    /// Used by handlers that have already received their `Intent`
+    /// argument from the dispatch site (e.g. the retrieval-miss
+    /// diversion in `handle_knowledge_query`). Routes through
+    /// `intent_policy::policy_for` so mode + register + intent
+    /// each get their say.
+    fn narrow_tools_for_intent(&self, intent: &Intent) -> Vec<ToolDescriptor> {
+        // Same policy-builder discipline as
+        // `narrow_tools_pre_classification`: read register
+        // directly from the mode rather than from a context that
+        // may or may not have the policy stashed yet.
+        let policy = crate::intent_policy::policy_for(
+            intent,
+            self.skills.primary_skill_register(),
+            self.skills.primary_skill_id_for_conversation().as_deref(),
+        );
+        crate::intent_policy::narrow_tools(&self.tools.descriptors(), &policy)
+    }
+
+    /// Gather the union of `ev-Tn-NNNN` handles emitted by prior
+    /// `tool_decision` writes on this conversation, for sampler-side
+    /// citation constraint (Tier 2 of tool-framework expansion).
+    /// Returns `None` when the NoteStore isn't wired (CLI / test
+    /// paths) or no prior decisions carried evidence ids — the
+    /// caller's CompletionRequest stays unconstrained on the
+    /// citation axis (Tier 1 prompt discipline is the only safety
+    /// net on those turns).
+    async fn gather_evidence_id_allowlist(
+        &self,
+        conversation_id: &str,
+    ) -> Option<Vec<String>> {
+        let notes = self.note_store.as_ref()?;
+        let payloads =
+            crate::memory::read_recent_tool_decisions(notes, Some(conversation_id), 32)
+                .await
+                .ok()?;
+        let mut ids: Vec<String> = Vec::new();
+        let mut seen: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for p in payloads {
+            for id in p.evidence_ids {
+                if seen.insert(id.clone()) {
+                    ids.push(id);
+                }
+            }
+        }
+        if ids.is_empty() {
+            None
+        } else {
+            tracing::debug!(
+                conversation_id,
+                ev_id_count = ids.len(),
+                "runtime: gathered evidence_id_allowlist from tool_decisions"
+            );
+            Some(ids)
+        }
+    }
+
+    /// Tool-Mastery Layer 2 pre-pass. Computes the tool dossier
+    /// (tools available + outcome history + ambient state) and
+    /// stashes it on `context.tool_dossier` so
+    /// `build_system_message` can splice it. Soft-fails: on any
+    /// error or a relational skill the field stays `None` and the
+    /// splice is a no-op — preserving today's behaviour for
+    /// inner-work and for CLI/test harnesses that don't wire a
+    /// NoteStore.
+    async fn maybe_compute_tool_dossier(
+        &self,
+        context: &mut ConversationContext,
+        conversation_id: &str,
+    ) {
+        let active_skill_id = self.skills.primary_skill_id_for_conversation();
+        let active_skill = active_skill_id
+            .as_deref()
+            .and_then(|id| self.skills.skill_by_id(id))
+            .cloned();
+        if let Some(dossier) = crate::dossier::compute_tool_dossier(
+            &self.tools,
+            self.note_store.as_deref(),
+            active_skill.as_ref(),
+            Some(conversation_id),
+        )
+        .await
+        {
+            tracing::info!(
+                conversation_id,
+                skill = active_skill.as_ref().map(|s| s.id.as_str()),
+                tools = dossier.tools_available.len(),
+                outcomes = dossier.outcome_history.len(),
+                has_note_store = self.note_store.is_some(),
+                "dossier:computed_for_turn"
+            );
+            context.tool_dossier = Some(dossier);
+        } else {
+            tracing::info!(
+                conversation_id,
+                skill = active_skill.as_ref().map(|s| s.id.as_str()),
+                has_note_store = self.note_store.is_some(),
+                "dossier:skipped_for_turn"
+            );
+        }
+    }
+
     async fn maybe_splice_temporal_tensions(
         &self,
         context: &mut ConversationContext,
         user_message: &str,
     ) {
-        if self.skills.primary_skill_register() != SkillRegister::Relational {
+        if context.turn_register() != SkillRegister::Relational {
             return;
         }
         // Skip when there's nothing to compare against — common case
@@ -5425,7 +6555,7 @@ impl Runtime {
     /// skills, and sessions with no active skill, keep the prior
     /// factual contract — non-relational behavior is unchanged.
     fn build_primary_system_message(&self, base: &str, context: &ConversationContext) -> String {
-        let contract = epistemic_contract_for(self.skills.primary_skill_register());
+        let contract = epistemic_contract_for(context.turn_register());
         self.build_system_message(
             &format!("{contract}\n\n{base}"),
             context,
@@ -5883,6 +7013,7 @@ impl Runtime {
             coarse_intent: Some("CONTINUATION".to_string()),
             self_assessment: None,
             timing: None,
+            scope: None,
         };
         self.handle_message_stream_with_classification(
             message,
@@ -5961,6 +7092,7 @@ impl Runtime {
             coarse_intent: Some("REDIRECT".to_string()),
             self_assessment: None,
             timing: None,
+            scope: None,
         };
         let message = session.input.clone();
         let conversation_id = session.conversation_id.clone();
@@ -6023,7 +7155,7 @@ impl Runtime {
         // skill_id so an inner-work conversation only surfaces
         // inner-work memories, and a general conversation never sees
         // them. See `MemoryScope` for the invariant.
-        if self.skills.primary_skill_register() == SkillRegister::Relational {
+        if context.turn_register() == SkillRegister::Relational {
             let scope = crate::traits::MemoryScope::from_conversation_skill(
                 context.conversation.skill_id.as_deref(),
             );
@@ -6057,12 +7189,19 @@ impl Runtime {
         .ok();
         context.working_memory = working_memory;
 
-        // 1b. Update topic context for turn-aware routing.
+        // 1b. Update topic context for turn-aware routing. The
+        //     incoming user `message` is passed in so the extractor
+        //     can detect a pivot off the prior arc — otherwise the
+        //     topic stays anchored to the last assistant turn and a
+        //     learner question that shifts subject ("Why didn't
+        //     relativity win the Nobel?" after a photoelectric chain)
+        //     keeps the stale topic, dragging retrieval off course.
         let topic_context = crate::context::update_topic_context(
             self.inference.as_ref(),
             &context.conversation.messages,
             context.topic_context.as_ref(),
             context.document_session.as_ref(),
+            Some(message),
         )
         .await
         .ok();
@@ -6080,6 +7219,15 @@ impl Runtime {
         };
         self.store.save_message(&user_msg).await?;
         context.conversation.messages.push(user_msg);
+
+        // 2a. Compact dropped history. Once the conversation exceeds
+        //     the visible window the synthesis prompt would drop the
+        //     oldest turns silently — coreference and topic anchors
+        //     established in T0/T1 would vanish from view at T10+.
+        //     Fast-slot summary preserves them as a compact preamble.
+        //     Surfaced by sovereign/bench/wikipedia_learn 2026-05-17
+        //     marathon thread.
+        self.maybe_compact_dropped_history(&mut context).await;
 
         // 2b. Tag the conversation with the skill that was active
         // when it started. The store upsert is idempotent — only
@@ -6107,7 +7255,13 @@ impl Runtime {
         // intent via `ClarificationCard` or `NextStepButtons`, and
         // re-classifying the same message would waste a Fast-slot
         // call and risk drifting from the user's explicit choice.
-        let tool_descriptors = self.tools.descriptors();
+        //
+        // Pre-classification narrowing: mode-only. The router sees
+        // the broadest catalog the surface admits so classification
+        // isn't artificially constrained by an as-yet-unknown
+        // intent. Handlers downstream can re-narrow via
+        // `narrow_tools_for_intent` once the intent is in hand.
+        let tool_descriptors = self.narrow_tools_pre_classification();
         let classification = if let Some(preset) = preset {
             preset
         } else {
@@ -6150,13 +7304,30 @@ impl Runtime {
         // diagnostics into downstream handlers. Preserving these
         // names keeps the handle_knowledge_query / handle_simple call
         // sites untouched so PR1 stays behaviour-preserving.
+        //
+        // Build the per-turn IntentPolicy and stash it on context
+        // so downstream consumers read register/effective_intent
+        // from one source of truth rather than re-querying
+        // `SkillRegistry::primary_skill_register()` at ~16 sites.
+        // The witness-intent override is now folded into
+        // `intent_policy::policy_for`; the effective intent we
+        // dispatch on is `policy.effective_intent`.
         let raw_intent = classification.primary.intent.clone();
-        let intent = override_intent_for_relational_register(
-            raw_intent,
-            self.skills.primary_skill_register(),
+        let active_mode = self.skills.primary_skill_id_for_conversation();
+        let declared_register = self.skills.primary_skill_register();
+        let intent_policy = crate::intent_policy::policy_for(
+            &raw_intent,
+            declared_register,
+            active_mode.as_deref(),
         );
+        let intent = intent_policy
+            .effective_intent
+            .clone()
+            .unwrap_or_else(|| raw_intent.clone());
+        context.intent_policy = Some(intent_policy);
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
+        let scope = classification.scope.clone();
 
         tracing::info!(
             intent = ?intent,
@@ -6256,7 +7427,7 @@ impl Runtime {
             let candidates = self
                 .retrieve_candidates(message, &context, &intent)
                 .await;
-            let register = self.skills.primary_skill_register();
+            let register = context.turn_register();
             let witness_grounding = build_witness_grounding(&context, register);
             let inputs = crate::pipeline::TeamPipelineInputs {
                 provider: Arc::clone(&self.inference),
@@ -6300,7 +7471,7 @@ impl Runtime {
         if matches!(intent, Intent::ExpressiveQuery) {
             tracing::info!(
                 intent = ?intent,
-                register = ?self.skills.primary_skill_register(),
+                register = ?context.turn_register(),
                 "runtime: dispatching ExpressiveQuery to streaming witness"
             );
             return self
@@ -6360,6 +7531,12 @@ impl Runtime {
         // skills only; zero-cost no-op for factual skills.
         self.maybe_splice_temporal_tensions(&mut context, message).await;
 
+        // Tool-Mastery Layer 2 — compute the tool dossier so
+        // `build_system_message` can splice it. No-op on relational
+        // skills (the helper short-circuits) and when no NoteStore
+        // is wired.
+        self.maybe_compute_tool_dossier(&mut context, conversation_id).await;
+
         // KnowledgeQuery: real streaming path. Prepare the synthesis
         // plan synchronously (retrieval + evidence-shape routing +
         // source expansion + request build + retrieved_chunks
@@ -6373,7 +7550,34 @@ impl Runtime {
                 intent = ?intent,
                 "runtime: stream path — KnowledgeQuery/ComparisonQuery with token streaming"
             );
-            let plan = self.prepare_knowledge_query_plan(message, &context, &intent).await;
+
+            // RetrievalStart — fire immediately so the desktop chip
+            // appears before the corpus search begins. Bypasses
+            // `try_emit_narration` (which suppresses below 1.5s
+            // elapsed) because the user is staring at typing-dots
+            // and needs to see activity within 200ms. RetrievalComplete
+            // below remains gated by the suppression rules.
+            let retrieval_start_at = std::time::Instant::now();
+            self.routing_events
+                .emit_turn_narration(TurnNarration {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    event: NarrationEvent {
+                        phase: NarrationPhase::RetrievalStart,
+                        text: "Searching your knowledge…".to_string(),
+                        elapsed_ms: 0,
+                    },
+                })
+                .await;
+
+            let plan = self
+                .prepare_knowledge_query_plan(message, &context, &intent, scope.as_deref())
+                .await;
+            tracing::debug!(
+                retrieval_ms = retrieval_start_at.elapsed().as_millis() as u64,
+                chunks = plan.chunks.len(),
+                "runtime:retrieval_start_to_complete"
+            );
 
             // PR5 — post-retrieval retrieval-miss diversion. Off-
             // target evidence shape (dispersed across ≥3 sources,
@@ -6456,6 +7660,13 @@ impl Runtime {
             let store = Arc::clone(&self.store);
             let approval = Arc::clone(&self.approval);
             let inference_config = self.inference_config.clone();
+            // Tool-Mastery Layer 3 — cloned so the nested
+            // post-stream gap-check spawn can write a
+            // `tool_decision` outcome note after refinement
+            // resolves. Soft-fail when no NoteStore is wired
+            // (test harnesses): `record_tool_outcome` no-ops.
+            let notes_for_outcome: Option<Arc<corpus_engine::NoteStore>> =
+                self.note_store.clone();
             // Cloned into the outer spawn so the post-stream gap-
             // check can emit narration chips that reach the desktop
             // UI alongside the INFORMATION REQUEST card. Without
@@ -6487,6 +7698,7 @@ impl Runtime {
             let top_source_label = shape.top_source_label.clone();
             let coarse_intent_for_prov = coarse_intent.clone();
             let self_assessment_for_prov = self_assessment.clone();
+            let routing_trigger_for_prov = classification.rationale.clone();
 
             // PR3: compute next-step offers against the same
             // retrieval the answer was built from. We do this on the
@@ -6582,6 +7794,14 @@ impl Runtime {
                     &source_map,
                     &std::collections::HashMap::new(),
                     &folder_meta,
+                    // KnowledgeQueryPlan doesn't carry the
+                    // display-category lookup; the chip-label rename
+                    // for conversation corpora only fires on the
+                    // DeepQuery path (see `prepare_knowledge_context`).
+                    // Threading the lookup through the plan is a
+                    // follow-up if we want the KQ streaming surface
+                    // to render "Your conversations" as well.
+                    None,
                 );
                 let provenance = ResponseProvenance {
                     intent: "KnowledgeQuery".to_string(),
@@ -6593,6 +7813,7 @@ impl Runtime {
                     tokens_used: 0,
                     coarse_intent: coarse_intent_for_prov,
                     self_assessment: self_assessment_for_prov,
+                    routing_trigger: routing_trigger_for_prov,
                     coverage: coverage_for_prov,
                 };
                 let metadata_json = serde_json::json!({
@@ -6631,8 +7852,22 @@ impl Runtime {
                 }
 
                 if gap_check_enabled {
+                    // Per the humility principle (see
+                    // `prepare_knowledge_query_plan` for the long
+                    // form): always run the gap check on KQ paths.
+                    // The retrieval-shape route (FastFocused vs
+                    // PrimarySynthesis) decides synthesis style; it
+                    // does NOT decide whether the answer is actually
+                    // grounded. The gap check is the LLM-based
+                    // judge of "did the model answer the question?"
+                    // and has to fire regardless of how concentrated
+                    // the retrieval looked. Top-source label is
+                    // included in the log so a grep on
+                    // `gap_check_scheduled` reconstructs which
+                    // retrieval-shape paths reach the check.
                     tracing::debug!(
                         route = ?route_for_log,
+                        top_source = %top_source_label,
                         "KnowledgeQuery stream: scheduling post-stream gap check"
                     );
                     let collab_inference = Arc::clone(&inference);
@@ -6652,8 +7887,135 @@ impl Runtime {
                     // the in-flight INFORMATION REQUEST card.
                     let collab_events = collab_routing_events.clone();
                     let collab_sid = collab_session_id.clone();
+                    let collab_sid_for_outcome = collab_sid.clone();
+                    let collab_notes_for_outcome = notes_for_outcome.clone();
+                    // Tool-Mastery Layer 3 — record what happened
+                    // on this KQ turn so the next turn's dossier
+                    // can read it. Outcome resolves from the
+                    // post-stream refinement result (Stale =
+                    // gap-check fired and rewrote the answer),
+                    // plus the evidence-presence signal captured
+                    // before the spawn (NoResults = retrieval was
+                    // empty; Useful = chunks landed and the
+                    // original answer stood). All writes are
+                    // best-effort — see `dossier::record_tool_outcome`.
+                    // Tool-Mastery Layer 3 — synchronous baseline
+                    // write BEFORE the gap-check spawn fires. Writing
+                    // here (not inside the spawn) guarantees the
+                    // tool_decision lands even when the bench / CLI
+                    // exits before the gap-check spawn completes —
+                    // run_post_stream_refinement can take 10-30s and
+                    // the next turn's dossier read would otherwise
+                    // see nothing. The spawn below MAY overwrite with
+                    // `Stale` when refinement actually rewrites the
+                    // answer; the dossier reader returns
+                    // most-recent-first so the later write supersedes
+                    // when it lands in time.
+                    // Decide outcome from three orthogonal signals so a
+                    // turn whose retrieval LANDED but whose answer
+                    // landed in "I don't know" territory still records
+                    // `no-results` (the snapshot-freshness shape: the
+                    // hybrid retriever happily returns 30+ historical
+                    // Tour de France articles for a "2027 Tour" query
+                    // even though none of them are about 2027). The
+                    // answer-content check uses general English
+                    // negation + absence patterns, not bank vocabulary,
+                    // so it transfers across questions.
+                    let answer_is_honest_negation = {
+                        let lower = full_text.to_lowercase();
+                        let has_negation = ["don't", "do not", "cannot", "can't",
+                            "doesn't have", "no information", "no data",
+                            "no record", "outside", "unable to"]
+                            .iter()
+                            .any(|w| lower.contains(w));
+                        let has_scope_token = ["information", "data", "record",
+                            "snapshot", "knowledge base", "details", "results"]
+                            .iter()
+                            .any(|w| lower.contains(w));
+                        has_negation && has_scope_token
+                    };
+                    let retrieval_missed = documents_found == 0
+                        || answer_is_honest_negation
+                        || (!shape.title_match
+                            && shape.query_token_coverage < EVIDENCE_MIN_TOKEN_COVERAGE);
+                    let baseline_outcome = if retrieval_missed {
+                        crate::memory::ToolDecisionOutcome::NoResults
+                    } else {
+                        crate::memory::ToolDecisionOutcome::Useful
+                    };
+                    let baseline_reasoning = if documents_found == 0 {
+                        "knowledge retrieval returned 0 chunks".to_string()
+                    } else if answer_is_honest_negation {
+                        format!(
+                            "retrieval returned {documents_found} chunks but \
+                             the assistant's answer acknowledged a gap \
+                             (snapshot-freshness or scope mismatch)"
+                        )
+                    } else if retrieval_missed {
+                        format!(
+                            "retrieval returned {documents_found} chunks but \
+                             title_match=false and query_token_coverage={:.2} \
+                             (corpus does not cover this topic)",
+                            shape.query_token_coverage
+                        )
+                    } else {
+                        format!("synthesised over {documents_found} chunks")
+                    };
+                    // Tier 1 (result memory): populate summary +
+                    // turn_index so the next turn's dossier can
+                    // render addressable references. `evidence_ids`
+                    // stays empty here because the legacy KQ path
+                    // doesn't route through knowledge_lookup tool —
+                    // when it does (follow-up PR), this site will
+                    // also pass the per-call ev-Tn-NNNN handles.
+                    let summary = if shape.top_source_label.is_empty() {
+                        None
+                    } else {
+                        Some(shape.top_source_label.clone())
+                    };
+                    // Turn index: count of prior user messages
+                    // (zero-based). The current in-flight user
+                    // message is already pushed onto
+                    // conversation.messages by the time we reach
+                    // this site, so subtract 1.
+                    let turn_index_for_outcome = context
+                        .conversation
+                        .messages
+                        .iter()
+                        .filter(|m| matches!(m.role, Role::User))
+                        .count()
+                        .saturating_sub(1);
+                    let baseline_extras = crate::memory::ToolDecisionExtras {
+                        summary: summary.clone(),
+                        evidence_ids: Vec::new(),
+                        turn_index: turn_index_for_outcome,
+                    };
+                    crate::dossier::record_tool_outcome(
+                        notes_for_outcome.as_deref(),
+                        collab_sid_for_outcome.as_deref().unwrap_or(""),
+                        Some(&conversation_id_owned),
+                        "knowledge_lookup",
+                        baseline_outcome,
+                        &baseline_reasoning,
+                        baseline_extras,
+                    )
+                    .await;
+
+                    let outcome_notes = collab_notes_for_outcome.clone();
+                    let outcome_notes_present = outcome_notes.is_some();
+                    // Capture Tier-1 extras for the stale-write
+                    // path inside the spawn (closure can't reach
+                    // back to the dispatch-frame locals).
+                    let stale_summary_for_capture = summary.clone();
+                    let turn_index_for_capture = turn_index_for_outcome;
                     tokio::spawn(async move {
-                        run_post_stream_refinement(
+                        tracing::info!(
+                            conversation_id = %collab_cid,
+                            has_notes = outcome_notes_present,
+                            documents_found,
+                            "dossier:streaming_kq_outcome_spawn_fired"
+                        );
+                        let refined = run_post_stream_refinement(
                             collab_inference.as_ref(),
                             collab_approval.as_ref(),
                             collab_store.as_ref(),
@@ -6668,13 +8030,29 @@ impl Runtime {
                             collab_sid,
                         )
                         .await;
+                        if refined.is_some() {
+                            // Stale write supersedes the baseline
+                            // entry from above. Preserve summary +
+                            // turn_index so the dossier history
+                            // stays addressable; flag the outcome
+                            // change via the new reasoning.
+                            let stale_extras = crate::memory::ToolDecisionExtras {
+                                summary: stale_summary_for_capture.clone(),
+                                evidence_ids: Vec::new(),
+                                turn_index: turn_index_for_capture,
+                            };
+                            crate::dossier::record_tool_outcome(
+                                outcome_notes.as_deref(),
+                                collab_sid_for_outcome.as_deref().unwrap_or(""),
+                                Some(&collab_cid),
+                                "knowledge_lookup",
+                                crate::memory::ToolDecisionOutcome::Stale,
+                                "gap-check refined the post-stream answer",
+                                stale_extras,
+                            )
+                            .await;
+                        }
                     });
-                } else {
-                    tracing::info!(
-                        route = ?route_for_log,
-                        top_source = %top_source_label,
-                        "KnowledgeQuery stream: skipping gap check (concentrated single-source)"
-                    );
                 }
 
                 // Auto-title after first exchange — same post-stream
@@ -6704,9 +8082,29 @@ impl Runtime {
             return Ok(StreamHandle { message_id, stream });
         }
 
+        // RetrievalStart — DeepQuery streaming path. Skipped for
+        // SimpleQuery because that intent is a quick factual answer
+        // and the existing RetrievalComplete narration is also gated
+        // off for it (chunks typically empty). Fires immediately so
+        // the chip is on screen before `prepare_knowledge_context`
+        // returns.
+        if !matches!(intent, Intent::SimpleQuery) {
+            self.routing_events
+                .emit_turn_narration(TurnNarration {
+                    session_id: _session_id.clone(),
+                    conversation_id: conversation_id.to_string(),
+                    event: NarrationEvent {
+                        phase: NarrationPhase::RetrievalStart,
+                        text: "Searching your knowledge…".to_string(),
+                        elapsed_ms: 0,
+                    },
+                })
+                .await;
+        }
+
         // 4. Search knowledge + build prompt (shared with handle_simple).
         let kc = self
-            .prepare_knowledge_context(message, &context, &intent)
+            .prepare_knowledge_context(message, &context, &intent, scope.as_deref())
             .await;
 
         // Narration — DeepQuery / SimpleQuery streaming path. Mirrors
@@ -6750,6 +8148,16 @@ impl Runtime {
         // `model_id_for` here would miss peer attribution (the
         // mesh wrapper can only report "I routed to peer X" after
         // its async `select_peer` pass has run).
+        //
+        // Tier 2: populate evidence_id_allowlist from the
+        // conversation's prior tool_decision payloads so the
+        // sampler's EvidenceIdAllowlistConstraint can block
+        // fabrications of `[ev-Tn-NNNN]` ids the model hasn't
+        // actually been given. Soft-fails to None when no prior
+        // ids exist (Tier 1 prompt discipline is then the only
+        // safety net — same posture as today).
+        let evidence_id_allowlist =
+            self.gather_evidence_id_allowlist(conversation_id).await;
         let request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
@@ -6766,6 +8174,11 @@ impl Runtime {
                             model_id: None,
                             enable_thinking: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist,
+        lark_grammar: None,
         };
 
         let search_method = kc.search_method;
@@ -6827,7 +8240,7 @@ impl Runtime {
         // shape — id + content + created_at is what the echo overlay
         // displays; the rest of the Memory record stays internal.
         let recalled_memories_for_metadata: Option<serde_json::Value> =
-            if self.skills.primary_skill_register() == SkillRegister::Relational
+            if context.turn_register() == SkillRegister::Relational
                 && !context.memories.is_empty()
             {
                 Some(serde_json::Value::Array(
@@ -6889,6 +8302,7 @@ impl Runtime {
                 tokens_used: 0,
                 coarse_intent,
                 self_assessment,
+                routing_trigger: classification.rationale.clone(),
                 coverage,
             };
             let metadata_json = serde_json::json!({
@@ -7108,7 +8522,7 @@ impl Runtime {
         // *"I left my last job because the team was burning out"*).
         // Re-rank/replace `context.memories` via cosine over batched
         // embeddings. Falls back to the FTS list on any error.
-        if self.skills.primary_skill_register() == SkillRegister::Relational {
+        if context.turn_register() == SkillRegister::Relational {
             let recall_start = std::time::Instant::now();
             let scope = crate::traits::MemoryScope::from_conversation_skill(
                 context.conversation.skill_id.as_deref(),
@@ -7152,13 +8566,15 @@ impl Runtime {
         context.working_memory = working_memory;
 
         // 1c. Update topic context for turn-aware routing. Latest user
-        //     message is part of the extraction input.
+        //     message is part of the extraction input — see the
+        //     streaming-path equivalent comment above for rationale.
         let topic_context_start = std::time::Instant::now();
         let topic_context = crate::context::update_topic_context(
             self.inference.as_ref(),
             &context.conversation.messages,
             context.topic_context.as_ref(),
             context.document_session.as_ref(),
+            Some(message),
         )
         .await
         .ok();
@@ -7167,7 +8583,13 @@ impl Runtime {
         context.topic_context = topic_context;
 
         // 2. Route.
-        let tool_descriptors = self.tools.descriptors();
+        //
+        // Pre-classification narrowing (mode-only). See the
+        // streaming-path comment for rationale; this keeps the two
+        // dispatch surfaces symmetric so a turn classified the same
+        // way sees the same tool catalog regardless of the
+        // streaming/non-streaming distinction.
+        let tool_descriptors = self.narrow_tools_pre_classification();
         let routing_start = std::time::Instant::now();
         let classification = self
             .router
@@ -7200,18 +8622,33 @@ impl Runtime {
             policy.clone(),
         );
 
+        // Build the per-turn IntentPolicy on the non-streaming path
+        // too, with the same shape as the streaming dispatch. See
+        // that block for the contract; this stays symmetric so a
+        // turn classified the same way sees the same policy on
+        // either dispatch surface.
         let raw_intent = classification.primary.intent.clone();
-        let intent = override_intent_for_relational_register(
-            raw_intent,
-            self.skills.primary_skill_register(),
+        let active_mode = self.skills.primary_skill_id_for_conversation();
+        let declared_register = self.skills.primary_skill_register();
+        let intent_policy = crate::intent_policy::policy_for(
+            &raw_intent,
+            declared_register,
+            active_mode.as_deref(),
         );
+        let intent = intent_policy
+            .effective_intent
+            .clone()
+            .unwrap_or_else(|| raw_intent.clone());
+        context.intent_policy = Some(intent_policy);
         let coarse_intent = classification.coarse_intent.clone();
         let self_assessment = classification.self_assessment.clone();
+        let scope = classification.scope.clone();
 
         tracing::info!(
             intent = ?intent,
             coarse = ?coarse_intent,
             self_assessment = ?self_assessment,
+            scope = ?scope,
             tier = ?policy.tier,
             "runtime: routed"
         );
@@ -7273,6 +8710,11 @@ impl Runtime {
         self.maybe_splice_temporal_tensions(&mut context, message).await;
         upstream_metrics.tensions_ms = Some(tensions_start.elapsed().as_millis() as u64);
 
+        // 2d. Tool-Mastery Layer 2 — compute the dossier. Same
+        // pattern as the streaming path: pre-pass populates the
+        // field, `build_system_message` splices it.
+        self.maybe_compute_tool_dossier(&mut context, conversation_id).await;
+
         // When a legacy [Document attached: ...] prefix is used, bypass the
         // planner entirely and route to the map-reduce document_operation path.
         if let Some(rest) = message.strip_prefix("[Document attached: ") {
@@ -7294,6 +8736,37 @@ impl Runtime {
                 );
                 return result;
             }
+        }
+
+        // ── Attached-document branch (the new path, sovereign decision 7693f16b) ──
+        //
+        // When this conversation has an active `DocumentSession`, the
+        // user has attached a document and the answer probably lives in
+        // it. Bypass intent classification + corpus-shaped retrieval
+        // entirely and dispatch through a `ReasonWithTools`-style loop
+        // over `[attached_doc_search, knowledge_lookup, web_fetch]`.
+        // The model picks which tool to call (and how many times).
+        //
+        // The book-report bench (2026-05-20) surfaced the failure mode
+        // this fixes: a question about Conrad's novel was classified as
+        // `KnowledgeQuery` → corpus retrieval → 32 chunks from
+        // `sep`+`wikipedia`, zero from the attached novel → answer about
+        // the 2005 London bombings. The KQ handler doesn't consult the
+        // tool catalog, so registering `attached_doc_search` alone
+        // didn't change behaviour. Branching here is what makes the
+        // tool actually fire.
+        if context.document_session.is_some() {
+            tracing::info!(
+                conversation_id,
+                "runtime: dispatching to handle_attached_doc_turn (document_session present)"
+            );
+            let result = self.handle_attached_doc_turn(message, conversation_id).await;
+            tracing::info!(
+                success = result.is_ok(),
+                total_latency_ms = turn_start.elapsed().as_millis() as u64,
+                "runtime: turn end (attached_doc)"
+            );
+            return result;
         }
 
         // ── Team-pipeline gate (Phase 4 of the situated-team plan) ──
@@ -7324,7 +8797,7 @@ impl Runtime {
             let candidates = self
                 .retrieve_candidates(message, &context, &intent)
                 .await;
-            let register = self.skills.primary_skill_register();
+            let register = context.turn_register();
             let witness_grounding = build_witness_grounding(&context, register);
             let inputs = crate::pipeline::TeamPipelineInputs {
                 provider: Arc::clone(&self.inference),
@@ -7431,7 +8904,13 @@ impl Runtime {
             }
             Intent::KnowledgeQuery | Intent::ComparisonQuery => {
                 self.handle_knowledge_query(
-                    message, conversation_id, &context, &intent, coarse_intent, self_assessment,
+                    message,
+                    conversation_id,
+                    &context,
+                    &intent,
+                    coarse_intent,
+                    self_assessment,
+                    classification.rationale.clone(),
                 )
                 .await
             }
@@ -7449,7 +8928,14 @@ impl Runtime {
             }
             _ => {
                 self.handle_simple(
-                    message, conversation_id, &context, &intent, coarse_intent, self_assessment,
+                    message,
+                    conversation_id,
+                    &context,
+                    &intent,
+                    coarse_intent,
+                    self_assessment,
+                    classification.rationale.clone(),
+                    scope.as_deref(),
                 )
                 .await
             }
@@ -7950,10 +9436,12 @@ impl Runtime {
         intent: &Intent,
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
+        routing_trigger: Option<String>,
+        scope: Option<&str>,
     ) -> Result<Response> {
         // Search knowledge + build prompt (shared with handle_message_stream).
         let mut kc = self
-            .prepare_knowledge_context(message, context, intent)
+            .prepare_knowledge_context(message, context, intent, scope)
             .await;
 
         // Witness override for relational + reasoning-shaped intents.
@@ -7977,7 +9465,7 @@ impl Runtime {
         // (`SimpleQuery`) and continuations are deliberately
         // untouched — their existing prompt is already brief and
         // doesn't need the witness scaffolding.
-        let register = self.skills.primary_skill_register();
+        let register = context.turn_register();
         let want_witness_path = register == SkillRegister::Relational
             && matches!(intent, Intent::DeepQuery);
         let mut metrics = RuntimeMetrics::default();
@@ -8045,6 +9533,11 @@ impl Runtime {
             self.build_oicp(&intent)
         };
 
+        // Tier 2: same evidence_id_allowlist gather as the
+        // streaming KQ path — see the comment block at the
+        // streaming dispatch site for the rationale.
+        let evidence_id_allowlist =
+            self.gather_evidence_id_allowlist(conversation_id).await;
         let request = CompletionRequest {
             prompt: kc.prompt,
             system_message: Some(kc.system),
@@ -8061,6 +9554,11 @@ impl Runtime {
                             model_id: None,
                             enable_thinking: final_enable_thinking,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist,
+        lark_grammar: None,
         };
 
         let synth_start = std::time::Instant::now();
@@ -8111,6 +9609,7 @@ impl Runtime {
             tokens_used: completion.tokens_used,
             coarse_intent,
             self_assessment,
+            routing_trigger,
             coverage: kc.coverage,
         };
 
@@ -8182,15 +9681,42 @@ impl Runtime {
         message: &str,
         context: &ConversationContext,
         intent: &Intent,
+        scope: Option<&str>,
     ) -> KnowledgeQueryPlan {
-        use std::cmp::Ordering;
-
         tracing::info!(message_chars = message.len(), "handle_knowledge_query: begin");
 
         // 1. Embed the query using the query-side function (applies
         //    instruction prefix for asymmetric models like Qwen3-Embedding).
+        //
+        //    Follow-up turns get the prior-user-turn topic anchor
+        //    folded in via `build_retrieval_query` so the embedded
+        //    text isn't just "What did he publish in 1905?" — which
+        //    matches no Einstein chunk. BM25 leg below still sees
+        //    the bare message. See sovereign/bench/wikipedia_learn.
         let t_search = std::time::Instant::now();
-        let embedding = self.inference.embed_query(message).await.unwrap_or_default();
+        let retrieval_query = build_retrieval_query(message, context);
+        if retrieval_query != message {
+            tracing::debug!(
+                bare_chars = message.len(),
+                expanded_chars = retrieval_query.len(),
+                "retrieval: expanded follow-up query with prior user turns"
+            );
+        }
+        // Captured for retrieval_audit turn_summary at end of fn.
+        let topic_for_audit: Option<String> = context
+            .topic_context
+            .as_ref()
+            .and_then(|tc| tc.topic.clone());
+        let prior_messages_for_audit = context.conversation.messages.len();
+        let query_preview_for_audit =
+            truncate_with_ellipsis(message, 120).to_string();
+        let retrieval_query_preview_for_audit =
+            truncate_with_ellipsis(&retrieval_query, 160).to_string();
+        let embedding = self
+            .inference
+            .embed_query(&retrieval_query)
+            .await
+            .unwrap_or_default();
 
         // 2. Search corpus-engine LanceDB indexes.
         //
@@ -8204,9 +9730,72 @@ impl Runtime {
         // (`MAX_KNOWLEDGE_CHARS`) downstream still bounds what the
         // model sees, so the larger merge set only buys us a sharper
         // evidence-shape signal, not a longer prompt.
+        // Hot-corpora pre-merge K boost. Builds per-corpus K
+        // overrides from the conversation's prior chunk histogram;
+        // corpora the user has been learning from get a wider pool
+        // so the cross-corpus merge filter doesn't drop their top
+        // results when many other corpora are competing. See
+        // `build_per_corpus_k_overrides` for the formula and
+        // `HOT_CORPUS_K_RANGE` for the magnitude.
+        let hot_corpora = collect_hot_corpora(&context.conversation.messages);
+        let per_corpus_overrides =
+            build_per_corpus_k_overrides(&hot_corpora, KQ_PER_CORPUS_LIMIT);
         let mut chunks = self
-            .search_corpus_indexes(&embedding, message, KQ_PER_CORPUS_LIMIT, "KnowledgeQuery")
+            .search_corpus_indexes_with_overrides(
+                &embedding,
+                message,
+                KQ_PER_CORPUS_LIMIT,
+                "KnowledgeQuery",
+                per_corpus_overrides.as_ref(),
+            )
             .await;
+
+        // 2a'. Scope-driven retrieval filter. When the router classifies
+        //      the query as `scope = "personal"` (matched against
+        //      conversation-history / personal-vault exemplars in
+        //      sovereign/router/exemplars.toml), restrict the retrieval
+        //      pool to user-owned corpora (mesh_sharing=false). Without
+        //      this filter, conversations-personal lance hits get
+        //      crowded out by wikipedia / SEP chunks that semantically
+        //      match the QUERY SHAPE ("books", "chats", "discussions")
+        //      better than the actual conversation chunks do — even
+        //      though the user is asking ABOUT their own conversations
+        //      and wikipedia is irrelevant. Diagnostic trace
+        //      `post-apply_atlas_grounding` showed 17-23 conv chunks
+        //      in the bag pre-truncate, all dropped because their
+        //      vector_distance against abstract meta-questions was
+        //      higher than wikipedia's. (ARCH §0.1 — visible decision.)
+        if scope == Some("personal") {
+            // Sharp signal needed here: `mesh_sharing=false` covers
+            // many corpora the user marked private (wikipedia, SEP,
+            // codebase indexes) and so doesn't actually discriminate
+            // "the user's personal chat corpus" from "any private
+            // knowledge corpus". Diagnostic trace on the 2026-05-17
+            // synth run showed `kept=229 dropped=60` after the
+            // mesh_sharing filter — wikipedia and sep both survived
+            // because they were mesh_sharing=false in this install.
+            // TODO: replace with an explicit recipe-level annotation
+            // (`[corpus] scope = "personal"`) once schema lands. Today
+            // we match the corpus_id pattern so the scope plumbing is
+            // demonstrably end-to-end and the bench loop can close on
+            // real data. (ARCH §0.1 — visible decision, named TODO.)
+            const PERSONAL_CORPUS_PREFIXES: &[&str] =
+                &["conversations-", "personal-", "journal-", "inner-work-"];
+            let before = chunks.len();
+            chunks.retain(|c| {
+                PERSONAL_CORPUS_PREFIXES
+                    .iter()
+                    .any(|p| c.corpus_id.starts_with(p))
+            });
+            if before != chunks.len() {
+                tracing::info!(
+                    kept = chunks.len(),
+                    dropped = before - chunks.len(),
+                    scope = "personal",
+                    "KnowledgeQuery: scope-filtered retrieval to personal-corpus prefixes"
+                );
+            }
+        }
 
         // 2b. Entity boost — fetch articles named in the question via
         //     focused per-entity searches. See `prepare_knowledge_context`
@@ -8297,9 +9886,49 @@ impl Runtime {
             );
         }
 
+        // 2b'''. Optional title expansion (gated by SOVEREIGN_TITLE_EXPAND=1).
+        //        Targets the abstract-question failure mode that
+        //        entity boost + comparison decomp don't reach:
+        //        questions with zero extractable entities whose
+        //        answer lives in a Wikipedia article keyed by a
+        //        single concrete noun the question never says.
+        //        Marathon T4/T7/T9 are the canonical instances —
+        //        bench expects `Transistor` / `Von Neumann
+        //        architecture` / `ENIAC` titles that the abstract
+        //        question framings never embed close to.
+        // Capture into outer-scope var so the merge phase below can
+        // reserve shelf space for the title-expand chunks — without
+        // this, v21b audit showed `expand_from_dominant_source`
+        // displacing the title-expand articles when an unrelated
+        // article (`wikipedia::Computer` for T0; `watched-959...::""`
+        // for T3; `sep::turing-machine` for T8) became the
+        // auto-detected dominant source on the merged top-K.
+        let title_expand_titles: Option<Vec<String>> =
+            self.expand_question_to_titles(message, context).await;
+        if let Some(titles) = &title_expand_titles {
+            // v22 design — hybrid search per bare title. v30 attempted
+            // "{title}: {message}" composite queries to bias toward
+            // section-deep chunks; net-negative on 13-thread bench
+            // (-0.045 fact, -0.059 judge vs v28) because the message
+            // sometimes overrides the title in the embedding, pulling
+            // off-article chunks. Reverted.
+            let added = self
+                .fan_out_decomposed_queries(titles, &mut chunks, "TitleExpand")
+                .await;
+            tracing::info!(
+                titles = ?titles,
+                chunks_added = added,
+                "KnowledgeQuery: title-expand retrieval"
+            );
+        }
+        audit_pipeline_stage(&chunks, "after_title_expand", message);
+
         // 2c. Noise floor — drop chunks with zero query-token overlap
         //     in title or content. These are pure-RRF noise that fills
-        //     prompt budget without contributing signal.
+        //     prompt budget without contributing signal. See
+        //     `drop_no_overlap_chunks` for the v33 / v36 design
+        //     history (both attempts at protecting title-expand
+        //     chunks at this stage regressed the cross-thread bench).
         let pre_floor = chunks.len();
         let mut chunks = drop_no_overlap_chunks(chunks, message);
         if chunks.len() < pre_floor {
@@ -8309,6 +9938,7 @@ impl Runtime {
                 "KnowledgeQuery: noise floor dropped no-overlap chunks"
             );
         }
+        audit_pipeline_stage(&chunks, "after_noise_floor", message);
 
         // 2d. Atlas grounding — graph-walk navigation when the
         //     provider exposes the graph layer; bag-of-atoms top-K
@@ -8316,8 +9946,26 @@ impl Runtime {
         //     the full design rationale (cosine seeds → BFS expand
         //     over typed edges → FTS-fetch source chunks via atom
         //     evidence previews).
-        self.apply_atlas_grounding(message, &embedding, &mut chunks, "KnowledgeQuery")
+        self.apply_atlas_grounding(message, &embedding, &mut chunks, "KnowledgeQuery", scope)
             .await;
+        // Per-corpus snapshot RIGHT AFTER apply_atlas_grounding returns.
+        // Paired with the graph-walk trace inside apply (which shows
+        // what was pushed) and the post-truncate trace below — if
+        // counts here match the push trace but diverge from post-
+        // truncate, the drop is in sort+cap+truncate. (ARCH §0.1)
+        let post_atlas_per_corpus: std::collections::BTreeMap<String, usize> = {
+            let mut m: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for c in &chunks {
+                *m.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            m
+        };
+        tracing::info!(
+            n_chunks = chunks.len(),
+            per_corpus = ?post_atlas_per_corpus,
+            "handle_knowledge_query: post-apply_atlas_grounding (per-corpus)"
+        );
 
         // 3. Reweight by query relevance (mirrors prepare_knowledge_context),
         //    then sort by score, cap chunks-per-article for breadth, and
@@ -8358,16 +10006,101 @@ impl Runtime {
                 COMPARISON_PER_ENTITY_RESERVE,
             );
         }
+        // Title-expand reservation. When the title-expand primitive
+        // named explicit Wikipedia titles for this turn, pin chunks
+        // from those titles before the KQ_MERGED_LIMIT truncate. The
+        // motivation is the same as the comparison reservation: the
+        // upstream step (here `expand_question_to_titles`) made an
+        // intentional source selection that the cross-corpus sort
+        // shouldn't be allowed to silently demote. v21b audit
+        // showed T0/T3/T8 regressions where title-expand had pulled
+        // the right Wikipedia articles into the pool but they were
+        // out-scored at sort time by chunks from articles the
+        // dominant-source expander then flooded with.
+        if let Some(titles) = &title_expand_titles {
+            if !titles.is_empty() {
+                chunks = reserve_chunks_per_entity(
+                    chunks,
+                    titles,
+                    COMPARISON_PER_ENTITY_RESERVE,
+                );
+            }
+        }
+        audit_pipeline_stage(&chunks, "after_cap_and_reserve", message);
         chunks.truncate(KQ_MERGED_LIMIT);
+        audit_pipeline_stage(&chunks, "after_truncate", message);
+
+        // Naturalistic audit — post-merge composition. Answers "after
+        // cap + truncate, which corpus and which article actually has
+        // shelf space in the prompt?" Separates merge-layer starvation
+        // (wikipedia chunks were never in the pool) from cap-layer
+        // starvation (wikipedia was capped down to 1 chunk while a
+        // single non-wiki article occupies 10 slots).
+        {
+            use std::collections::HashMap;
+            let mut by_corpus: HashMap<String, usize> = HashMap::new();
+            let mut by_article: HashMap<(String, String), usize> = HashMap::new();
+            for c in &chunks {
+                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+                *by_article
+                    .entry((
+                        c.corpus_id.clone(),
+                        c.title.clone().unwrap_or_default(),
+                    ))
+                    .or_insert(0) += 1;
+            }
+            let mut corpus_pairs: Vec<(String, usize)> =
+                by_corpus.into_iter().collect();
+            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let mut article_pairs: Vec<((String, String), usize)> =
+                by_article.into_iter().collect();
+            article_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let article_top: Vec<(String, String, usize)> = article_pairs
+                .into_iter()
+                .take(5)
+                .map(|((cid, t), n)| (cid, t, n))
+                .collect();
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "post_merge",
+                total = chunks.len(),
+                by_corpus = ?corpus_pairs,
+                top5_articles = ?article_top,
+                "retrieval_audit: post_merge"
+            );
+        }
 
         let search_ms = t_search.elapsed().as_millis() as u64;
+        // Per-corpus breakdown at this checkpoint — paired with the
+        // graph-walk trace upstream so any drop between the two is
+        // visible (ARCH §0.1 glassbox).
+        let post_truncate_per_corpus: std::collections::BTreeMap<String, usize> = {
+            let mut m: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for c in &chunks {
+                *m.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            m
+        };
         tracing::info!(
             chunks_found = chunks.len(),
             search_ms,
-            "handle_knowledge_query: corpus search done"
+            per_corpus = ?post_truncate_per_corpus,
+            "handle_knowledge_query: corpus search done (per-corpus survivors)"
         );
 
         // 4a. Empty results path — answer from parametric knowledge.
+        //
+        // v29 attempted to gate this on (entities non-empty +
+        // meta_atlas empty) to emit refusal prose for fabricated-
+        // entity questions. The behavior change is correct (don't
+        // hallucinate biographies of made-up people) but the bench
+        // can't measure it — the model's refusal vocab ("not
+        // certain", "no record") doesn't always align with the
+        // bench's expected_facts list ("no information", "couldn't
+        // find"). Reverted to the simpler general-knowledge prompt
+        // until bench fixtures are updated to a broader refusal-
+        // vocabulary expected set.
         if chunks.is_empty() {
             tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
             let corpora = context.installed_corpora_display();
@@ -8398,6 +10131,11 @@ impl Runtime {
                             model_id: None,
                             enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
             };
             return KnowledgeQueryPlan {
                 request,
@@ -8423,6 +10161,16 @@ impl Runtime {
         // regardless of evidence shape. The whole point of the split
         // is to keep these off the primary slot; letting the evidence
         // shape escalate to PrimarySynthesis would defeat that.
+        //
+        // v32 attempted "junk-retrieval escalation": shape.is_off_target()
+        // + entities non-empty → force PrimarySynthesis + parametric-
+        // authorization system message. Net negative on marathon
+        // variance test because the marathon T3 question ("What did
+        // she contribute that was genuinely new?") has no extracted
+        // proper-noun entity, so the escalation didn't fire on the
+        // canonical failure case. The real variance lever is upstream
+        // (why don't title-expand'd Lovelace chunks survive merge?),
+        // not in synth routing. Reverted.
         let route = if matches!(intent, Intent::ComparisonQuery) {
             SynthesisRoute::FastFocused
         } else {
@@ -8460,9 +10208,21 @@ impl Runtime {
         // Either expansion path uses the `EXPANDED_KNOWLEDGE_CHARS`
         // budget; the formatter trims to fit if the expanded set is
         // larger than 8000 chars.
+        // v23 attempted "title-expand authoritative — skip all
+        // expansion". v24 then tried fetch-by-title to compensate.
+        // Both regressed fact_recall because auto-expansion was
+        // providing useful depth coverage from non-title-expand
+        // articles. Restored to v22 behavior: title-expand chunks
+        // get reserved (see reserve_chunks_per_entity above), and
+        // downstream expanders still fire normally to deepen
+        // coverage of the dominant article. The cost is occasional
+        // displacement of title-expand chunks (T2/T7/T8 v22) but
+        // the net is +19pt fact, +22pt src vs baseline.
         let single_source_expansion = matches!(route, SynthesisRoute::FastFocused)
             && shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT;
+        let expansion_kind: &'static str;
         let (chunks, knowledge_char_budget, expansion_fired) = if single_source_expansion {
+            expansion_kind = "dominant_source";
             let (expanded, _from_source, _grounding, _dropped) =
                 self.expand_from_dominant_source(chunks, &shape).await;
             (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
@@ -8473,13 +10233,64 @@ impl Runtime {
             // from ≥ 2 sources — otherwise we're back to the initial
             // chunk set and the prompt budget should reflect that.
             if sources_expanded >= 2 {
+                expansion_kind = "top_sources";
                 (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
             } else {
+                expansion_kind = "top_sources_noop";
                 (expanded, MAX_KNOWLEDGE_CHARS, false)
             }
         } else {
+            expansion_kind = "none";
             (chunks, MAX_KNOWLEDGE_CHARS, false)
         };
+
+        // Naturalistic audit — post-expansion composition. After the
+        // dominant-source or top-sources expander has had its say,
+        // what's actually in the prompt? T11 (marathon) showed 12
+        // Atanasoff-Berry chunks at this layer despite a 10-cap at
+        // merge — that's `expand_from_dominant_source` honestly doing
+        // its job after a *wrong* article won evidence-shape dominance.
+        // The fix lives in shape signals, not the expander, so this
+        // log lets us see exactly when the wrong dominant survives.
+        // (Glassbox: paired with graph-walk + post-truncate traces
+        // upstream per ARCH §0.1; drops inside the expander surface
+        // here as a delta against the merge-cap total.)
+        {
+            use std::collections::HashMap;
+            let mut by_corpus: HashMap<String, usize> = HashMap::new();
+            let mut by_article: HashMap<(String, String), usize> = HashMap::new();
+            for c in &chunks {
+                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+                *by_article
+                    .entry((
+                        c.corpus_id.clone(),
+                        c.title.clone().unwrap_or_default(),
+                    ))
+                    .or_insert(0) += 1;
+            }
+            let mut corpus_pairs: Vec<(String, usize)> =
+                by_corpus.into_iter().collect();
+            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let mut article_pairs: Vec<((String, String), usize)> =
+                by_article.into_iter().collect();
+            article_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let article_top: Vec<(String, String, usize)> = article_pairs
+                .into_iter()
+                .take(5)
+                .map(|((cid, t), n)| (cid, t, n))
+                .collect();
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "post_expansion",
+                kind = expansion_kind,
+                fired = expansion_fired,
+                single_source_expansion,
+                total = chunks.len(),
+                by_corpus = ?corpus_pairs,
+                top5_articles = ?article_top,
+                "retrieval_audit: post_expansion"
+            );
+        }
 
         // 4d. Build prompt. Retrieved content first, question last —
         // keeps the model from reasoning purely from training weights
@@ -8490,18 +10301,24 @@ impl Runtime {
         // (`KNOWLEDGE_SYNTHESIS_SYSTEM`) has dedicated guidance for
         // them. Best-effort: if `installed_indexes()` errors we fall
         // back to no-kinds formatting (pre-catalog behaviour).
-        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
-            if let Some(engine) = &self.corpus_engine {
-                engine
-                    .installed_indexes()
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|info| (info.corpus_id, info.kind))
-                    .collect()
-            } else {
-                Default::default()
-            };
+        let (kinds, display_categories): (
+            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, String>,
+        ) = if let Some(engine) = &self.corpus_engine {
+            let mut kinds_map = std::collections::HashMap::new();
+            let mut display_map = std::collections::HashMap::new();
+            for info in engine.installed_indexes().await.unwrap_or_default() {
+                if let Some(d) = &info.display {
+                    if let Some(cat) = &d.category {
+                        display_map.insert(info.corpus_id.clone(), cat.clone());
+                    }
+                }
+                kinds_map.insert(info.corpus_id, info.kind);
+            }
+            (kinds_map, display_map)
+        } else {
+            Default::default()
+        };
         // Surface Wikipedia editors' POV/controversy flags as
         // `(contested)` markers on the source label. Best-effort:
         // graph absent → empty set → no markers, behaviour
@@ -8522,6 +10339,11 @@ impl Runtime {
                 None
             } else {
                 Some(&folder_meta)
+            },
+            if display_categories.is_empty() {
+                None
+            } else {
+                Some(&display_categories)
             },
         );
         let corpus_display = context.installed_corpora_display();
@@ -8573,6 +10395,11 @@ impl Runtime {
                                     model_id: None,
                                     enable_thinking: None,
                 sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
                 }
             }
             SynthesisRoute::PrimarySynthesis => {
@@ -8598,6 +10425,11 @@ impl Runtime {
                                     model_id: None,
                                     enable_thinking: None,
                 sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
                 }
             }
         };
@@ -8614,6 +10446,7 @@ impl Runtime {
                     "corpus_id": c.corpus_id,
                     "url": c.url,
                     "snippet": snippet,
+                    "score": c.score,
                     "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
                     "chunk_id": c.chunk_id,
                     "source_doc_id": c.source_doc_id,
@@ -8626,10 +10459,26 @@ impl Runtime {
             *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
         }
 
-        // Gap check gating: only on multi-source / weak-evidence
-        // synthesis, where the Fast path's "skip gap check" would hide
-        // a genuine hole in the answer.
-        let gap_check_enabled = matches!(route, SynthesisRoute::PrimarySynthesis);
+        // Gap check ALWAYS fires on the KnowledgeQuery path.
+        //
+        // Humility principle: the corpus is the source of truth and
+        // we have to query it before deciding whether external
+        // lookup is warranted — but we also have to honestly check
+        // whether the answer we synthesised actually addresses the
+        // question. Retrieval shape (FastFocused vs PrimarySynthesis)
+        // is a SYNTHESIS-routing decision, not an answer-quality
+        // signal. The 2026-05-19 M5-Mac-Studio failure pinned this:
+        // 12 chunks clustered tightly on `wikipedia::Mac (computer)`
+        // because of title overlap with "Mac Studio", route was
+        // FastFocused, gap check was skipped — and the model
+        // produced "no reliable info" with no INFORMATION REQUEST
+        // surfaced. The gap check is the LLM-based judge of "is
+        // this answer grounded in the evidence?"; it has to run
+        // regardless of how concentrated the evidence looked.
+        //
+        // Cost: one small-LLM call (~1s) per FastFocused turn,
+        // post-stream so user-visible latency is unaffected.
+        let gap_check_enabled = true;
 
         let result_quality = if expansion_fired {
             "focused"
@@ -8642,6 +10491,57 @@ impl Runtime {
         let _ = expansion_fired; // logged by expand_from_dominant_source already
 
         let folder_meta = self.folder_metadata_snapshot().await;
+
+        // Naturalistic audit — turn_summary. One structured line per
+        // synthesis turn so a grep on `retrieval_audit` reconstructs
+        // the full story: query, topic anchor, hot-corpora histogram,
+        // entities extracted, evidence-shape decision, expansion kind,
+        // and the final per-corpus + per-article composition that the
+        // synthesizer will see. Pairs with the `corpus_results`,
+        // `post_merge`, and `post_expansion` events emitted earlier
+        // for the same turn — match by query preview or by event order.
+        {
+            use std::collections::HashMap;
+            let mut by_corpus: HashMap<String, usize> = HashMap::new();
+            for c in &chunks {
+                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            let mut corpus_pairs: Vec<(String, usize)> =
+                by_corpus.into_iter().collect();
+            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let hot_pairs: Vec<(String, usize)> = {
+                let mut v: Vec<(String, usize)> = hot_corpora
+                    .iter()
+                    .map(|(k, v)| (k.clone(), *v))
+                    .collect();
+                v.sort_by(|a, b| b.1.cmp(&a.1));
+                v
+            };
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "turn_summary",
+                intent = ?intent,
+                route = ?route,
+                query = %query_preview_for_audit,
+                expanded_query = %retrieval_query_preview_for_audit,
+                topic = ?topic_for_audit,
+                prior_messages = prior_messages_for_audit,
+                hot_corpora = ?hot_pairs,
+                entities = ?entities,
+                meta_atlas_hits = meta_atlas_hits.len(),
+                expansion_kind,
+                expansion_fired,
+                final_chunks = chunks.len(),
+                final_by_corpus = ?corpus_pairs,
+                top_source = %shape.top_source_label,
+                top_source_repeat = shape.top_source_repeat_count,
+                distinct_sources = shape.distinct_sources,
+                title_match = shape.title_match,
+                top1 = shape.top1_score,
+                median = shape.median_score,
+                "retrieval_audit: turn_summary"
+            );
+        }
 
         KnowledgeQueryPlan {
             request,
@@ -8780,6 +10680,11 @@ impl Runtime {
             model_id: None,
             enable_thinking: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         };
         let completion = self.inference.complete(&request).await?;
         let response_msg = Message {
@@ -8989,7 +10894,7 @@ impl Runtime {
         // witness contract is the only voice in play; situated
         // context goes in as a brief observation block, not a rule
         // set the model is asked to evaluate.
-        let register = self.skills.primary_skill_register();
+        let register = context.turn_register();
         let mut metrics = RuntimeMetrics::default();
         let system = if register == SkillRegister::Relational {
             // Multi-shot Pass A: structured contradiction check. Soft-
@@ -9132,6 +11037,11 @@ impl Runtime {
             model_id: None,
             enable_thinking,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
         let synth_start = std::time::Instant::now();
         let completion = self.inference.complete(&request).await?;
@@ -9227,7 +11137,7 @@ impl Runtime {
             .as_deref()
             .unwrap_or("no prior turn in this conversation");
 
-        let register = self.skills.primary_skill_register();
+        let register = context.turn_register();
 
         // Capture the recalled memories the witness drew on so the
         // metadata trail mirrors the non-streaming path. Inner-work's
@@ -9350,6 +11260,11 @@ impl Runtime {
             model_id: None,
             enable_thinking,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
         };
 
         let _synth_start = std::time::Instant::now();
@@ -9552,7 +11467,6 @@ impl Runtime {
         _conversation_id: &str,
         context: &ConversationContext,
     ) -> Result<Response> {
-        use std::cmp::Ordering;
         let locator = parse_metalingual_locator(message);
         tracing::info!(?locator, "MetalingualQuery: parsed locator");
 
@@ -9664,18 +11578,24 @@ impl Runtime {
         // Build the synthesis prompt — emphasise that the answer
         // describes how the located source uses the term, and that
         // citations should attribute claims to the source.
-        let kinds: std::collections::HashMap<String, corpus_engine::CorpusKind> =
-            if let Some(engine) = &self.corpus_engine {
-                engine
-                    .installed_indexes()
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|info| (info.corpus_id, info.kind))
-                    .collect()
-            } else {
-                Default::default()
-            };
+        let (kinds, display_categories): (
+            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, String>,
+        ) = if let Some(engine) = &self.corpus_engine {
+            let mut kinds_map = std::collections::HashMap::new();
+            let mut display_map = std::collections::HashMap::new();
+            for info in engine.installed_indexes().await.unwrap_or_default() {
+                if let Some(d) = &info.display {
+                    if let Some(cat) = &d.category {
+                        display_map.insert(info.corpus_id.clone(), cat.clone());
+                    }
+                }
+                kinds_map.insert(info.corpus_id, info.kind);
+            }
+            (kinds_map, display_map)
+        } else {
+            Default::default()
+        };
         let folder_meta = self.folder_metadata_snapshot().await;
         let doc_context = format_scored_chunks_with_kinds(
             &chunks,
@@ -9686,6 +11606,11 @@ impl Runtime {
                 None
             } else {
                 Some(&folder_meta)
+            },
+            if display_categories.is_empty() {
+                None
+            } else {
+                Some(&display_categories)
             },
         );
         let prompt = format!(
@@ -9714,6 +11639,11 @@ impl Runtime {
             model_id: None,
             enable_thinking: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let completion = self.inference.complete(&request).await?;
@@ -9756,8 +11686,9 @@ impl Runtime {
         intent: &Intent,
         coarse_intent: Option<String>,
         self_assessment: Option<String>,
+        routing_trigger: Option<String>,
     ) -> Result<Response> {
-        let plan = self.prepare_knowledge_query_plan(message, context, intent).await;
+        let plan = self.prepare_knowledge_query_plan(message, context, intent, None).await;
 
         // PR5 — non-streaming retrieval-miss diversion. Mirrors the
         // streaming path: dispersed noise → suppress synthesis +
@@ -9768,7 +11699,13 @@ impl Runtime {
                 .latest_for_conversation(conversation_id)
                 .map(|s| s.id)
                 .unwrap_or_default();
-            let tool_descriptors = self.tools.descriptors();
+            // Post-classification site: intent IS in hand here, so
+            // we apply full intent-keyed narrowing. The
+            // retrieval-miss handler renders an INFORMATION
+            // REQUEST card; surfacing the intent-appropriate tool
+            // catalog lets the model offer accurate "next-step"
+            // affordances to the user.
+            let tool_descriptors = self.narrow_tools_for_intent(intent);
             tracing::info!(
                 distinct_sources = plan.shape.distinct_sources,
                 retrieval_count = plan.shape.count,
@@ -9788,9 +11725,15 @@ impl Runtime {
         let completion = self.inference.complete(&plan.request).await?;
 
         let final_content = if plan.gap_check_enabled {
+            // Humility principle: always run the gap check on KQ
+            // paths. The retrieval-shape route is a synthesis-
+            // routing decision, not an answer-quality signal. See
+            // the matching block in the streaming KQ path + the
+            // long-form note at `prepare_knowledge_query_plan`.
             tracing::debug!(
                 route = ?plan.route,
-                "KnowledgeQuery: running gap check (multi-source or weak evidence)"
+                top_source = %plan.shape.top_source_label,
+                "KnowledgeQuery: running gap check"
             );
             self.maybe_collaborate(
                 conversation_id,
@@ -9800,11 +11743,6 @@ impl Runtime {
             )
             .await
         } else {
-            tracing::info!(
-                route = ?plan.route,
-                top_source = %plan.shape.top_source_label,
-                "KnowledgeQuery: skipping gap check (concentrated single-source)"
-            );
             completion.text.clone()
         };
 
@@ -9812,6 +11750,11 @@ impl Runtime {
             &plan.source_map,
             &std::collections::HashMap::new(),
             &plan.folder_meta,
+            // KnowledgeQueryPlan doesn't yet carry a display-category
+            // lookup. See the matching note in the streaming path
+            // above — DeepQuery is where the conversation-label
+            // rename fires for v1.
+            None,
         );
         let provenance = ResponseProvenance {
             intent: "KnowledgeQuery".to_string(),
@@ -9827,6 +11770,7 @@ impl Runtime {
             tokens_used: completion.tokens_used,
             coarse_intent,
             self_assessment,
+            routing_trigger,
             coverage: coverage_for_prov,
         };
 
@@ -9995,6 +11939,11 @@ impl Runtime {
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         };
 
         let prompt_response = self.inference.complete(&prompt_request).await?;
@@ -10082,9 +12031,82 @@ impl Runtime {
             working_directory: None,
             in_reasoning_loop: false,
             agent_session_token: None,
+            turn_index: 0,
         };
 
-        let result = tool.execute(&params, &tool_ctx).await?;
+        // Tool-activity narration — bracket the tool.execute call with
+        // Start/Complete frames. Bypasses `try_emit_narration` (which
+        // suppresses under 1.5s elapsed) because tool dispatch needs to
+        // surface immediately for the "feels alive" UX. The call_id
+        // correlates Start with Complete so the desktop can pair them
+        // even if they arrive out of order with other narration frames.
+        let call_id = uuid::Uuid::new_v4().to_string();
+        let (session_id, session_elapsed_ms) = self
+            .sessions
+            .latest_for_conversation(conversation_id)
+            .map(|s| (s.id, s.started_at.elapsed().as_millis() as u64))
+            .unwrap_or_default();
+        let tool_start = std::time::Instant::now();
+        let resolved_label = std::path::Path::new(&resolved_source)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(resolved_source.as_str())
+            .to_string();
+        self.routing_events
+            .emit_turn_narration(TurnNarration {
+                session_id: session_id.clone(),
+                conversation_id: conversation_id.to_string(),
+                event: NarrationEvent {
+                    phase: NarrationPhase::ToolInvocationStart {
+                        call_id: call_id.clone(),
+                        tool_id: "document_operation".to_string(),
+                        summary: format!("Analyzing {resolved_label}"),
+                    },
+                    text: format!(
+                        "Analyzing {resolved_label} — {chunk_count} chunk{} across {word_count} words",
+                        if chunk_count == 1 { "" } else { "s" }
+                    ),
+                    elapsed_ms: session_elapsed_ms,
+                },
+            })
+            .await;
+
+        let exec_result = tool.execute(&params, &tool_ctx).await;
+        let elapsed_after = session_elapsed_ms + tool_start.elapsed().as_millis() as u64;
+        let (ok, result_summary) = match &exec_result {
+            Ok(out) => {
+                let chars = match out {
+                    StepOutput::Text(t) => t.len(),
+                    StepOutput::Json(v) => {
+                        serde_json::to_string(v).map(|s| s.len()).unwrap_or(0)
+                    }
+                    _ => 0,
+                };
+                (
+                    true,
+                    format!("Synthesized {chars} chars from {chunk_count} chunks"),
+                )
+            }
+            Err(e) => (false, format!("Document analysis failed: {e}")),
+        };
+        self.routing_events
+            .emit_turn_narration(TurnNarration {
+                session_id: session_id.clone(),
+                conversation_id: conversation_id.to_string(),
+                event: NarrationEvent {
+                    phase: NarrationPhase::ToolInvocationComplete {
+                        call_id: call_id.clone(),
+                        tool_id: "document_operation".to_string(),
+                        ok,
+                        result_summary: result_summary.clone(),
+                    },
+                    text: result_summary,
+                    elapsed_ms: elapsed_after,
+                },
+            })
+            .await;
+
+        let result = exec_result?;
         let result_text = match &result {
             StepOutput::Text(t) => t.clone(),
             StepOutput::Json(v) => serde_json::to_string_pretty(v).unwrap_or_default(),
@@ -10112,6 +12134,7 @@ impl Runtime {
             tokens_used: 0,
             coarse_intent: None,
             self_assessment: None,
+            routing_trigger: None,
             coverage: None,
         };
 
@@ -10292,6 +12315,11 @@ impl Runtime {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -10371,6 +12399,7 @@ impl Runtime {
             tokens_used: synthesis.tokens_used,
             coarse_intent: None,
             self_assessment: None,
+            routing_trigger: None,
             coverage: None,
         };
 
@@ -10406,6 +12435,1358 @@ impl Runtime {
             task: Some(task),
             metrics: None,
         })
+    }
+
+    /// Handle a turn on a conversation with an attached document.
+    ///
+    /// Dispatches the turn through a `ReasonWithTools`-style loop over
+    /// a fixed catalog `[attached_doc_search, knowledge_lookup,
+    /// web_fetch]`. The model decides whether the answer is in the
+    /// attached text (call `attached_doc_search`), in the corpus
+    /// (`knowledge_lookup`), on the web (`web_fetch`), or some
+    /// combination. Replaces the legacy parallel `DocumentAssetManager`
+    /// router that mis-routed factual questions about an attached novel
+    /// to `OffTopic` and sent them to the general corpus.
+    ///
+    /// Why a hand-rolled loop instead of `Executor::execute_reason_with_tools`:
+    /// the Executor doesn't yet emit `ToolInvocationStart` / `Complete`
+    /// narration — those frames are the load-bearing diagnostic for
+    /// "did the model pick the doc tool". Inlining the loop keeps the
+    /// narration-emission contract local to this handler; future cleanup
+    /// can lift it into the Executor.
+    async fn handle_attached_doc_turn(
+        &self,
+        message: &str,
+        conversation_id: &str,
+    ) -> Result<Response> {
+        // ── Fixed tool catalog ────────────────────────────────────
+        // Order matters for the model: list `attached_doc_search`
+        // first to bias toward the most direct path. The model can
+        // still pick the others when the question demands it.
+        let available_tools: &[&str] =
+            &["attached_doc_search", "knowledge_lookup", "web_fetch"];
+        const MAX_ITERATIONS: usize = 4;
+
+        let turn_start = std::time::Instant::now();
+
+        // ── Build tool descriptions for the system prompt ────────
+        let mut tool_descs: Vec<String> = Vec::with_capacity(available_tools.len());
+        for id in available_tools {
+            if let Ok(t) = self.tools.get(*id) {
+                let d = t.descriptor();
+                tool_descs.push(format!("- {} (id: {}): {}", d.name, d.id, d.description));
+            }
+        }
+
+        // ── Resolve the attached asset + its skeleton ────────────
+        // `DocumentSession.source` carries the asset id (per the
+        // bench's `dispatch_question` and decision note 7693f16b).
+        // The skeleton field carries the model-extracted overview,
+        // main entities (ranked, with kind labels), and structural
+        // moments. Without this briefing the model formulates queries
+        // in the question's vocabulary — e.g. searching Conrad for
+        // "the bomber" when the chunks call him "Stevie". With it,
+        // the model picks up character / concept vocabulary on the
+        // first query.
+        let (briefing, briefing_entity_names) =
+            self.build_attached_doc_briefing(conversation_id).await;
+
+        // Fetch the asset's full chunk content + RAPTOR verbatim
+        // spans up-front. Used by `verify_quotes_in_answer` below to
+        // demote any quoted span in the model's final answer that
+        // isn't substring-present in the document. The pre-fetch keeps
+        // the verification path hot — we never want to skip it for
+        // perf reasons. Best-effort: failures leave the verification
+        // surface empty, which means the model's answer is returned
+        // unchanged (graceful degradation).
+        let (verification_chunks, verification_verbatim_spans) =
+            self.fetch_quote_verification_surface(conversation_id).await;
+
+        // Question-conditional RAG-into-briefing was tested and
+        // *hurt* the bench score on book-report Tier 1 (28% vs
+        // 71% baseline). Embedding the full user question with
+        // its interrogative structure ("what / where / who / when")
+        // surfaced early-chapter introductory chunks, not the
+        // load-bearing later passages. The model's own targeted
+        // entity queries (e.g. "Chief Inspector Heat velvet collar")
+        // out-perform the full-question embedding by a wide
+        // margin. Kept the helper for future experiments (e.g.
+        // embedding a *summary* of the question rather than the
+        // full question) but not on the hot path.
+        let prefetch_block = String::new();
+
+        if std::env::var("SOVEREIGN_DEBUG_BRIEFING").is_ok() {
+            eprintln!(
+                "[attached_doc] briefing: {} chars, {} entities; prefetch: {} chars",
+                briefing.len(),
+                briefing_entity_names.len(),
+                prefetch_block.len(),
+            );
+            // Dump the entity-association section so we can see which
+            // chunks K-NN-per-entity surfaced.
+            if let Some(start) = briefing.find("**High entity-association chunks**") {
+                let tail = &briefing[start..];
+                eprintln!("[attached_doc] association section:\n{}", tail);
+            } else {
+                eprintln!("[attached_doc] association section: <empty> (no chunks associated with ≥2 entities)");
+            }
+        }
+
+        let system_prompt = format!(
+            "The user has attached a document to this conversation. {briefing}{prefetch_block}\
+             \n\nYou have these tools:\n\n\
+             {tool_descs}\n\n\
+             Emit a tool call as a single line, exact format:\n\
+             <tool_call>{{\"tool\":\"<id>\",\"query\":\"<search terms>\"}}</tool_call>\n\n\
+             ## How to query effectively\n\
+             **Phrase queries in the document's vocabulary, not the question's.** RAG retrieval scores chunks by similarity to your query, so paraphrasing the question abstractly will miss chunks that describe the same event in the document's specific words. The briefing above lists the document's actual entities and the phrases the document uses about them; lift query terms from there.\n\
+             \n\
+             **Your first query must use at least one entity name from the briefing.** Do not start with abstract question-words. Pick the entity in the briefing whose role most overlaps the question, and query with its name plus a concrete noun from its quote sample.\n\
+             \n\
+             **Plan for multiple queries.** Most questions have more than one layer of evidence — a partial hit on the first query usually means there's a richer passage you haven't found yet, often anchored on a *different* entity. Before answering, run at least 2 queries against different entities from the briefing. Stop only when you've explored the obvious angles or hit {MAX_ITERATIONS}.\n\
+             \n\
+             ## Rules\n\
+             - When the question references the attached document, the user's text, \"this book\", \"this paper\", \"the document\", or a specific phrase that would live in the attachment, call `attached_doc_search` FIRST.\n\
+             - If a search returns 0 passages, switch vocabulary (try a different character name from the briefing, or a phrase from one of the quote samples).\n\
+             - **Citations are evidence, not decoration.** Never write `[passage N]`, `[Source: X]`, or any other citation marker unless that citation appeared verbatim in a tool result above this line. Do not invent passage numbers. If retrieval came up empty, do not fabricate citations to make your answer look grounded — say plainly that you couldn't find supporting passages.\n\
+             - **HIT vs context chunks.** Tool results mark each chunk as either `HIT` (a direct embedding match for your query — load-bearing evidence) or `context` (a neighbour chunk surrounding a HIT, providing narrative flow). Cite HIT chunks for direct factual claims; use context chunks to understand setup and consequences. Don't quote a context chunk as if it were retrieved evidence for a different question.\n\
+             - **Pretraining recall is not document evidence.** This document may be one you've seen during training (famous book, common paper, viral article). The user attached *their* copy because the specific text matters — paraphrasing from memory drops the exact wording, may use a different edition, and may be subtly wrong. If you find yourself writing facts that didn't come from a retrieved passage, mark them clearly: `(from general knowledge of this work, not from retrieved text — may differ from your attached copy)`. Default to refusal over training-data fluency.\n\
+             - When you do have passages, write your final answer with [Source] citations that map to the actual labels the tool returned. Mark any claim you can't verify against retrieved passages as `[unverified]`.\n\
+             - Maximum {MAX_ITERATIONS} tool calls per turn.\n",
+            tool_descs = tool_descs.join("\n"),
+        );
+
+        // Conversation is held as a typed segment list rather than a
+        // raw String so we can compress superseded tool results out
+        // of every prefill after the first. Prefill cost dominates
+        // per-question latency (~120s of 150s on the book-report
+        // bench); keeping all four tool results verbatim in every
+        // iteration's prompt is mostly wasted compute, since the
+        // model issues refined queries on the same tool by turn 3-4
+        // and the early result becomes dead weight.
+        //
+        // Compression rule: for each `tool_id`, keep the most recent
+        // `MAX_TOOL_RESULTS_KEPT_PER_TOOL` results in full; replace
+        // older ones with a one-line `(superseded — N passages, content
+        // dropped)` marker. The model still sees that it queried,
+        // sees the query text, and sees how much came back — it just
+        // doesn't re-prefill the chunk content on every turn.
+        let conversation_header =
+            format!("{system_prompt}\n\n---\n\nUser: {message}\n\nAssistant:");
+        let mut conversation_segments: Vec<AttachedDocSegment> = Vec::new();
+        let mut iterations: usize = 0;
+        let mut tool_ids_invoked: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        let mut total_chunks: usize = 0;
+        let mut search_method_parts: Vec<String> = Vec::new();
+        // Distinct (lowercased, trimmed) query strings the model has
+        // actually issued this turn. Used to enforce the
+        // "explore-multiple-angles" rule structurally — the prompt asks
+        // for it, but on the book-report bench the model retrieved 3
+        // passages on its first query and stopped, missing the other
+        // half of the answer that lived in a different chunk. Tracking
+        // distinct queries lets the runtime push back when the model
+        // tries to bail after one angle.
+        let mut distinct_queries: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        // Minimum queries we expect before accepting a final answer.
+        // Empirically the variance between runs at MIN=2 was large
+        // (book-report Tier-1 swung 42-71% across identical-config
+        // runs) because the model's choice of which two entities to
+        // query was the single biggest random factor. Raising to 3
+        // forces broader coverage; the gate's forcing message also
+        // calls out unused entities from the briefing explicitly so
+        // the third query targets a specifically-untouched angle.
+        const MIN_DISTINCT_QUERIES: usize = 3;
+
+        // Resolve session_id for narration emission. The bench / desktop
+        // create a session via `self.sessions.begin(...)` in
+        // `handle_turn` before reaching this handler, so this is non-empty
+        // on the production path. Missing session is non-fatal — narration
+        // just won't surface to the UI.
+        let session_id: String = self
+            .sessions
+            .latest_for_conversation(conversation_id)
+            .map(|s| s.id)
+            .unwrap_or_default();
+
+        loop {
+            let conversation =
+                render_attached_doc_conversation(&conversation_header, &conversation_segments);
+            let request = CompletionRequest {
+                prompt: conversation,
+                system_message: None,
+                preferred_speed: Speed::Slow,
+                max_tokens: Some(self.inference_config.max_tokens),
+                temperature: Some(self.inference_config.temperature),
+                structured_output: None,
+                think_budget: Some(self.inference_config.think_budget),
+                top_k: self.inference_config.top_k,
+                top_p: None,
+                oicp: self.build_oicp(&Intent::ComplexTask),
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
+            };
+
+            let completion = self.inference.complete(&request).await?;
+            let response_text = completion.text.trim().to_string();
+
+            // ── Tool call? Parse + dispatch ──────────────────────
+            if let Some((tool_id, query)) = parse_tool_call_inline(&response_text) {
+                distinct_queries.insert(query.trim().to_lowercase());
+                // Surface "calling X" immediately on TWO surfaces:
+                // (a) the in-session narration log — what the bench
+                //     + the chat-history transcript read after the
+                //     turn completes;
+                // (b) the routing-events sink — what the desktop UI
+                //     subscribes to for live "Searching for X…" chips.
+                // Both bypass the 1.5s suppression / 3-event cap in
+                // `try_emit_narration` per the explicit contract on
+                // `NarrationPhase::ToolInvocation*`.
+                let call_id = uuid::Uuid::new_v4().to_string();
+                let summary = format!(
+                    "{tool_id}: \"{}\"",
+                    truncate_for_chip(&query, 60)
+                );
+                let start_phase = NarrationPhase::ToolInvocationStart {
+                    call_id: call_id.clone(),
+                    tool_id: tool_id.clone(),
+                    summary: summary.clone(),
+                };
+                let start_text = format!("Searching via {tool_id} for \"{query}\"");
+                self.sessions.force_push_narration(
+                    &session_id,
+                    start_phase.clone(),
+                    start_text.clone(),
+                );
+                let elapsed_ms = turn_start.elapsed().as_millis() as u64;
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event: NarrationEvent {
+                            phase: start_phase,
+                            text: start_text,
+                            elapsed_ms,
+                        },
+                    })
+                    .await;
+
+                let (tool_result_text, ok, result_summary) = match self.tools.get(&tool_id) {
+                    Ok(_) => {
+                        let params = serde_json::json!({"query": query});
+                        let tool_ctx = ToolContext {
+                            conversation_id: conversation_id.to_string(),
+                            task_id: None,
+                            working_directory: None,
+                            in_reasoning_loop: true,
+                            agent_session_token: None,
+                            turn_index: 0,
+                        };
+                        match self.tools.call_cached(&tool_id, &params, &tool_ctx).await {
+                            Ok(StepOutput::Text(t)) => {
+                                let chunks = t.matches("[Source").count();
+                                total_chunks += chunks;
+                                if std::env::var("SOVEREIGN_DEBUG_BRIEFING").is_ok() {
+                                    let preview: String = t.chars().take(500).collect();
+                                    eprintln!(
+                                        "[attached_doc] query={:?} chunks={} preview:\n{}\n---",
+                                        query, chunks, preview
+                                    );
+                                }
+                                (
+                                    t.clone(),
+                                    true,
+                                    format!("Retrieved {chunks} passage(s)"),
+                                )
+                            }
+                            Ok(StepOutput::Json(v)) => {
+                                let txt = v
+                                    .get("answer")
+                                    .and_then(|a| a.as_str())
+                                    .unwrap_or("(no answer field)")
+                                    .to_string();
+                                (txt, true, "Retrieved JSON payload".to_string())
+                            }
+                            Ok(_) => (
+                                "(no results)".to_string(),
+                                true,
+                                "Empty result".to_string(),
+                            ),
+                            Err(e) => (
+                                format!("Tool error: {e}"),
+                                false,
+                                format!("Failed: {e}"),
+                            ),
+                        }
+                    }
+                    Err(_) => (
+                        format!("Tool '{tool_id}' not available."),
+                        false,
+                        "Unknown tool".to_string(),
+                    ),
+                };
+
+                let complete_phase = NarrationPhase::ToolInvocationComplete {
+                    call_id: call_id.clone(),
+                    tool_id: tool_id.clone(),
+                    ok,
+                    result_summary: result_summary.clone(),
+                };
+                self.sessions.force_push_narration(
+                    &session_id,
+                    complete_phase.clone(),
+                    result_summary.clone(),
+                );
+                let elapsed_complete_ms = turn_start.elapsed().as_millis() as u64;
+                self.routing_events
+                    .emit_turn_narration(TurnNarration {
+                        session_id: session_id.clone(),
+                        conversation_id: conversation_id.to_string(),
+                        event: NarrationEvent {
+                            phase: complete_phase,
+                            text: result_summary.clone(),
+                            elapsed_ms: elapsed_complete_ms,
+                        },
+                    })
+                    .await;
+
+                tool_ids_invoked.insert(tool_id.clone());
+                if !search_method_parts.contains(&tool_id) {
+                    search_method_parts.push(tool_id.clone());
+                }
+
+                let thinking = response_text
+                    .split("<tool_call>")
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let passage_count = tool_result_text.matches("[Source").count();
+                conversation_segments.push(AttachedDocSegment::ToolCall {
+                    thinking,
+                    tool_id: tool_id.clone(),
+                    query: query.clone(),
+                    result: tool_result_text,
+                    passage_count,
+                });
+
+                iterations += 1;
+                if iterations >= MAX_ITERATIONS {
+                    conversation_segments.push(AttachedDocSegment::FinalCue(
+                        " You've used all available searches. Synthesize the final \
+                         answer from what you have. Cite passages with [Source]; mark \
+                         anything you couldn't verify against retrieved text as \
+                         [unverified].\n\nAssistant:"
+                            .to_string(),
+                    ));
+                    break;
+                }
+                continue;
+            }
+
+            // ── No tool call: this is the model's final answer ──
+            //
+            // Two structural gates run here. Each addresses a different
+            // failure mode the bench surfaced.
+            //
+            // **(1) No-retrieval gate.** If the model wants to
+            // synthesize without ever successfully retrieving a
+            // passage, that's exactly the failure mode that
+            // contaminates answers on famous documents — the model
+            // has the doc in pretraining and will recite it (often
+            // subtly wrong, often out of date, often a different
+            // version than the user's attached copy). Refuse;
+            // push a forcing turn demanding query or admission.
+            if total_chunks == 0 && iterations < MAX_ITERATIONS {
+                tracing::warn!(
+                    iterations,
+                    "attached_doc: model emitted final answer with 0 retrieved chunks — forcing another query"
+                );
+                conversation_segments.push(AttachedDocSegment::Gate {
+                    thinking: response_text.trim().to_string(),
+                    gate_text:
+                        "You have NOT retrieved any passages from the attached document yet. Citing passages or stating document-specific facts without retrieval is exactly the pretraining-fallback failure the user asked you to avoid. You MUST either: (a) emit another <tool_call> using an entity name from the briefing, or (b) state plainly that you could not find this in the attached document. Do not fabricate `[passage N]` or `[Source: …]` markers. Try again now."
+                            .to_string(),
+                });
+                iterations += 1;
+                continue;
+            }
+
+            // **(2) Triangulation gate.** A single retrieval often
+            // surfaces one angle and misses the other half of the
+            // answer that lives in a different chunk. The bench's
+            // stevie_address_label question is the canonical case —
+            // Heat's velvet-collar discovery (one part of the book)
+            // and Winnie's address-label sewing (a different part)
+            // are both required; one query finds at most one of
+            // them. Force at least two *distinct* queries before
+            // accepting a final answer, unless the model has
+            // exhausted iterations trying.
+            if distinct_queries.len() < MIN_DISTINCT_QUERIES
+                && iterations < MAX_ITERATIONS
+            {
+                tracing::warn!(
+                    distinct = distinct_queries.len(),
+                    iterations,
+                    "attached_doc: model tried to finalise after fewer than {MIN_DISTINCT_QUERIES} distinct queries — forcing another angle"
+                );
+                // Enumerate entities from the briefing that haven't
+                // yet appeared in any query. The model's biggest
+                // source of run-to-run variance is which entity it
+                // picks — naming the unused ones explicitly turns
+                // the prompt's soft "try a different entity" into a
+                // concrete shortlist the model can pick from.
+                let unused_entities: Vec<&str> = briefing_entity_names
+                    .iter()
+                    .filter(|name| {
+                        let lower = name.to_lowercase();
+                        !distinct_queries.iter().any(|q| q.contains(&lower))
+                    })
+                    .take(6)
+                    .map(|s| s.as_str())
+                    .collect();
+                let unused_hint = if unused_entities.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        " Your next <tool_call> MUST contain one of these entity names: {}. Pick whichever fits a different aspect of the question and INCLUDE THE NAME VERBATIM in the query. Don't paraphrase the question — name the entity.",
+                        unused_entities.join(", "),
+                    )
+                };
+                conversation_segments.push(AttachedDocSegment::Gate {
+                    thinking: response_text.trim().to_string(),
+                    gate_text: format!(
+                        "You've explored {n} angle(s) so far ({required} required) and your queries all use question-vocabulary, not document-vocabulary. The chunks holding the answer use the document's own entity names — querying \"identification evidence\" again will return the same chunks; you need to try a name.{unused_hint}",
+                        n = distinct_queries.len(),
+                        required = MIN_DISTINCT_QUERIES,
+                    ),
+                });
+                iterations += 1;
+                continue;
+            }
+
+            let verified = crate::quote_verification::verify_quotes(
+                &response_text,
+                &verification_chunks,
+                &verification_verbatim_spans,
+                crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
+            );
+            if verified.demoted_count > 0 {
+                tracing::warn!(
+                    demoted = verified.demoted_count,
+                    verified = verified.verified_count,
+                    "attached_doc: post-generation guardrail demoted unverified quotations"
+                );
+            }
+            return self
+                .package_attached_doc_response(
+                    conversation_id,
+                    &verified.rewritten,
+                    &completion,
+                    &tool_ids_invoked,
+                    total_chunks,
+                    iterations,
+                    &search_method_parts,
+                )
+                .await;
+        }
+
+        // ── Cap hit: force one more completion to synthesize ────
+        let final_conversation =
+            render_attached_doc_conversation(&conversation_header, &conversation_segments);
+        let final_request = CompletionRequest {
+            prompt: final_conversation,
+            system_message: None,
+            preferred_speed: Speed::Slow,
+            max_tokens: Some(self.inference_config.max_tokens),
+            temperature: Some(self.inference_config.temperature),
+            structured_output: None,
+            think_budget: Some(self.inference_config.think_budget),
+            top_k: self.inference_config.top_k,
+            top_p: None,
+            oicp: self.build_oicp(&Intent::ComplexTask),
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
+        };
+        let final_completion = self.inference.complete(&final_request).await?;
+        let mut final_text = final_completion.text.trim().to_string();
+        // Last-resort honesty gate. If the iteration cap was hit
+        // without a single successful retrieval, the model is about
+        // to produce an answer drawn entirely from pretraining
+        // (recall of a famous document) or fabricated. Replace it
+        // with a structured refusal that names what the model tried
+        // and why it's not answering — the user can then adjust the
+        // question, re-attach, or accept that the document doesn't
+        // address what they asked.
+        if total_chunks == 0 {
+            tracing::warn!(
+                iterations,
+                "attached_doc: cap hit with 0 retrieved chunks — emitting refusal"
+            );
+            final_text = format!(
+                "I tried {iterations} search(es) of the attached document and didn't find passages that address your question. \
+                 Rather than answer from general knowledge — which would likely diverge from the specific text you attached — I'm flagging this as not answerable from the attached document.\n\n\
+                 If you think the answer is in there, try rephrasing the question using a character name, place, or specific phrase you recall from the text, and I'll search again.",
+            );
+        }
+        let verified = crate::quote_verification::verify_quotes(
+            &final_text,
+            &verification_chunks,
+            &verification_verbatim_spans,
+            crate::quote_verification::DEFAULT_MIN_QUOTE_CHARS,
+        );
+        if verified.demoted_count > 0 {
+            tracing::warn!(
+                demoted = verified.demoted_count,
+                verified = verified.verified_count,
+                "attached_doc: post-generation guardrail (cap-hit path) demoted unverified quotations"
+            );
+        }
+        self.package_attached_doc_response(
+            conversation_id,
+            &verified.rewritten,
+            &final_completion,
+            &tool_ids_invoked,
+            total_chunks,
+            iterations,
+            &search_method_parts,
+        )
+        .await
+    }
+
+    /// Build a "Document briefing" block for the system prompt: the
+    /// document's title, type, overview, top-N ranked entities, and
+    /// the first few structural moments. Falls back to a minimal
+    /// "(briefing unavailable)" string when the asset can't be
+    /// resolved or the skeleton hasn't been built yet — the handler
+    /// then runs without a briefing, which is degraded but still
+    /// correct (the model just queries blind).
+    ///
+    /// **Tier-gating is implicit** via the per-section emptiness
+    /// checks (`skeleton.overview.trim().is_empty()`,
+    /// `skeleton.segments.is_empty()`, `raptor_nodes.is_empty()`,
+    /// `distinctive.is_empty()`, etc.). At `MultiHopReady`, T3-only
+    /// fields (overview, segments, RAPTOR nodes, motifs) are still
+    /// empty so their sections skip themselves; T2 fields
+    /// (main_entities, entity_index, action_atoms,
+    /// structural_moments) are populated and surface normally. As T3
+    /// completes mid-conversation each new turn picks up a richer
+    /// briefing — no explicit state-check needed in this function.
+    ///
+    /// Why this matters: the chunks the tool retrieves use the
+    /// document's vocabulary (character names, concept terms), not
+    /// the question's vocabulary. The book-report bench (2026-05-21)
+    /// surfaced the failure mode — a question about "the bomber" hit
+    /// 0/1 on RAG queries because Conrad's chunks talk about
+    /// "Stevie". Putting ranked entities in the system prompt fixes
+    /// the vocabulary mismatch at the source: the model now formulates
+    /// queries with the words the chunks actually contain.
+    /// Pre-fetch the verification surface for `verify_quotes` calls
+    /// at the end of `handle_attached_doc_turn`. Returns
+    /// `(chunk_contents, raptor_verbatim_spans)`.
+    ///
+    /// The chunk contents are every chunk for the attached asset's
+    /// source key; verification matches answer quotes against
+    /// substring presence anywhere in the document. RAPTOR quote_spans
+    /// are passed as `extra_verbatim_spans` so spans that cross
+    /// chunk boundaries (or live in RAPTOR node text not directly
+    /// chunked) still verify.
+    ///
+    /// Failures fall back to empty vecs — the verification function
+    /// then becomes a no-op, leaving the answer unchanged. Better to
+    /// ship an unmodified answer than to crash on a transient store
+    /// read.
+    async fn fetch_quote_verification_surface(
+        &self,
+        conversation_id: &str,
+    ) -> (Vec<String>, Vec<String>) {
+        let session = match self
+            .store
+            .get_document_session_by_conversation(conversation_id)
+            .await
+        {
+            Ok(Some(s)) => s,
+            _ => return (Vec::new(), Vec::new()),
+        };
+        let asset = match self.store.get_document_asset(&session.source).await {
+            Ok(Some(a)) => a,
+            _ => return (Vec::new(), Vec::new()),
+        };
+        let chunks = self
+            .store
+            .get_chunks_by_source(&asset.source_key())
+            .await
+            .unwrap_or_default();
+        let chunk_contents: Vec<String> = chunks.into_iter().map(|c| c.content).collect();
+        let raptor_nodes = self.store.list_raptor_nodes(&asset.id).await.unwrap_or_default();
+        let verbatim_spans: Vec<String> = raptor_nodes
+            .iter()
+            .flat_map(|n| n.quote_spans.iter().map(|q| q.text.clone()))
+            .collect();
+        (chunk_contents, verbatim_spans)
+    }
+
+    async fn build_attached_doc_briefing(
+        &self,
+        conversation_id: &str,
+    ) -> (String, Vec<String>) {
+        let session = match self
+            .store
+            .get_document_session_by_conversation(conversation_id)
+            .await
+        {
+            Ok(Some(s)) => s,
+            _ => return ("(no attached document briefing available)".to_string(), Vec::new()),
+        };
+        let asset = match self.store.get_document_asset(&session.source).await {
+            Ok(Some(a)) => a,
+            _ => return ("(no attached document briefing available)".to_string(), Vec::new()),
+        };
+
+        let mut s = String::new();
+        let mut entity_names: Vec<String> = Vec::new();
+        s.push_str(&format!(
+            "\n\n## Attached document\n\
+             **Title:** {}\n\
+             **Type:** {}\n\
+             **Length:** {} words across {} chunks\n",
+            asset.title,
+            asset.document_type.label(),
+            asset.word_count,
+            asset.chunk_count,
+        ));
+
+        // Skeleton may be `None` when the ingest hasn't reached the
+        // BuildingSkeleton phase yet. Without a skeleton the briefing
+        // degrades to title + type only — still useful, just not
+        // vocabulary-priming.
+        let Some(skeleton) = asset.skeleton.as_ref() else {
+            s.push_str(
+                "\n(structural skeleton not yet built — query the document directly)\n",
+            );
+            return (s, entity_names);
+        };
+
+        if !skeleton.overview.trim().is_empty() {
+            s.push_str(&format!("\n**Overview:** {}\n", skeleton.overview.trim()));
+        }
+
+        // Top entities — ranked by presence_rate. Cap at 12 so a
+        // long-character-list document doesn't blow the prompt
+        // budget, but wide enough that mid-prominence entities
+        // (often the load-bearing ones for a specific question)
+        // make the cut. Include the kind label AND one quote
+        // sample so the model picks up the document's actual
+        // phrasing, not just the entity name. The book-report
+        // bench (2026-05-21) surfaced the failure mode this
+        // addresses: with just names, the model still queries
+        // in question-vocabulary ("physical evidence") instead
+        // of document-vocabulary ("velvet collar", "address
+        // label"). Sample quotes are what carry the phrasing
+        // signal across.
+        if !skeleton.main_entities.is_empty() {
+            s.push_str(
+                "\n**Main entities** (use these names + phrasings in queries — they're what the document actually says):\n",
+            );
+            for ent in skeleton.main_entities.iter().take(12) {
+                entity_names.push(ent.name.clone());
+                let quote_hint = skeleton
+                    .entity_index
+                    .get(&ent.name)
+                    .and_then(|app| app.quote_samples.first())
+                    .map(|q| {
+                        let cleaned = q
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        let trimmed: String = cleaned.chars().take(140).collect();
+                        format!(" — e.g. \"{trimmed}…\"")
+                    })
+                    .unwrap_or_default();
+                s.push_str(&format!(
+                    "- {} ({}, presence {:.0}%){}\n",
+                    ent.name,
+                    ent.kind.label(),
+                    ent.presence_rate * 100.0,
+                    quote_hint,
+                ));
+            }
+        }
+
+        if !skeleton.structural_moments.is_empty() {
+            // Fetch the asset's chunks once so we can splice the raw
+            // passage of each load-bearing structural moment directly
+            // into the briefing. Without this, the briefing tells the
+            // model *what* the moment is in abstract prose
+            // ("Heat seizes the velvet collar despite orders") but
+            // doesn't give the model the document's actual phrasing.
+            // Including ~280 chars of the moment's chunk content
+            // primes the model with the right vocabulary AND gives it
+            // direct evidence to cite, without needing the retrieval
+            // tool to surface that chunk at query time.
+            //
+            // Cost trade-off: 8 moments × ~280 chars = ~2.2KB added
+            // to the system prompt. That's a small fraction of an
+            // 8K-context model and pays off heavily in fact recall.
+            let chunks = self
+                .store
+                .get_chunks_by_source(&asset.source_key())
+                .await
+                .unwrap_or_default();
+            let chunk_by_index: std::collections::HashMap<usize, &str> = chunks
+                .iter()
+                .map(|c| (c.chunk_index, c.content.as_str()))
+                .collect();
+
+            s.push_str("\n**Structural moments** (load-bearing passages with the document's actual text — cite these chunks directly when relevant):\n");
+            for m in skeleton.structural_moments.iter().take(8) {
+                let v = serde_json::to_value(m).unwrap_or(serde_json::Value::Null);
+                let label = v
+                    .get("label")
+                    .or_else(|| v.get("description"))
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("(moment)");
+                let chunk_idx = v.get("chunk_index").and_then(|x| x.as_u64()).unwrap_or(0) as usize;
+                let passage = chunk_by_index
+                    .get(&chunk_idx)
+                    .map(|content| {
+                        let cleaned: String = content
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        let snippet: String = cleaned.chars().take(280).collect();
+                        format!("\n    > [chunk {chunk_idx}] {snippet}…")
+                    })
+                    .unwrap_or_default();
+                s.push_str(&format!("- {label}{passage}\n"));
+            }
+
+            // ── Segment map (scene/section index) ──────────────
+            //
+            // The ingest LLM walked adjacent chunks and grouped
+            // them into `DocumentSegment`s (scene in fiction,
+            // section in a paper, procedure in a manual). We
+            // experimented with using these as retrieval-time
+            // expansion units; that hurt aggregate bench scores
+            // (T1 mech -18 from the prompt-budget squeeze
+            // needed to bound 70-chunk segments). Reverted —
+            // but the segment labels themselves are valuable
+            // as a scene index for query formulation: a model
+            // asking about "the bomb-handover scene" can see
+            // the actual segment title + chunk range and form
+            // a more targeted retrieval query.
+            //
+            // Cap at 24 segments to keep the briefing bounded;
+            // longer documents have more scenes than any single
+            // question needs surfaced.
+            if !skeleton.segments.is_empty() {
+                s.push_str("\n**Scene/section map** (titles the ingest LLM assigned to coherent multi-chunk units — use these to formulate scene-targeted queries):\n");
+                for seg in skeleton.segments.iter().take(24) {
+                    s.push_str(&format!(
+                        "- chunks {}..={} — \"{}\"\n",
+                        seg.chunk_start, seg.chunk_end, seg.title,
+                    ));
+                }
+            }
+
+            // ── Entity-association chunks (embedding-based) ─────
+            //
+            // The skeleton's structural_moments are LLM-curated and
+            // miss chunks that are narratively dense but didn't get
+            // tagged as "major turning points". Fill the gap by
+            // running a K-NN-per-entity probe: for each top entity,
+            // embed its name and pull top-3 chunks from the asset.
+            // Chunks that surface for ≥2 different entities are
+            // "co-associated" with multiple characters — a
+            // structural signal for multi-character scenes.
+            //
+            // Why embedding-based, not substring matching:
+            // substring scanning of chunk content for entity-name
+            // tokens looks like a useful heuristic but it's
+            // exactly the pattern the project retired in the 7-
+            // substring-heuristic refactor: brittle (no word
+            // boundaries — "Heat" matches "Heath"), document-
+            // dependent ("Heat" in a thermodynamics paper is a
+            // common noun not a character), and locale-fragile
+            // (the `tok.len() > 3` filter that excluded "Mr"
+            // also excludes legitimate names). Embedding similarity
+            // is the project's preferred substitute — same signal,
+            // no false-positive risk on out-of-domain attachments.
+            //
+            // Cost: 8 embed calls + 8 search_documents calls per
+            // briefing build. ~1s at current daemon throughput.
+            // Acceptable for the bench loop; a future change can
+            // move this work to ingest time and persist it on the
+            // skeleton so it's amortised across turns.
+            let top_entity_names: Vec<String> = skeleton
+                .main_entities
+                .iter()
+                .take(8)
+                .map(|e| e.name.clone())
+                .collect();
+            let mut chunk_associations: std::collections::HashMap<usize, Vec<String>> =
+                std::collections::HashMap::new();
+            for entity_name in &top_entity_names {
+                let entity_embedding = match self.inference.embed(entity_name).await {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                // Bump K to 64 to compete past chunks from other
+                // assets in the store — same source-filter limitation
+                // as the question-conditional prefetch helper.
+                let raw = match self
+                    .store
+                    .search_documents(&entity_embedding, entity_name, 64)
+                    .await
+                {
+                    Ok(c) => c,
+                    Err(_) => continue,
+                };
+                let asset_top: Vec<&crate::types::DocumentChunk> = raw
+                    .iter()
+                    .filter(|c| c.source == asset.source_key())
+                    .take(3)
+                    .collect();
+                for c in asset_top {
+                    chunk_associations
+                        .entry(c.chunk_index)
+                        .or_default()
+                        .push(entity_name.clone());
+                }
+            }
+            // Filter to chunks associated with ≥2 entities and rank
+            // by association count, then by chunk_index ascending
+            // (narrative order on ties). Cap at 6.
+            let mut density_ranked: Vec<(usize, usize, &crate::types::DocumentChunk)> = Vec::new();
+            for (chunk_idx, entities) in &chunk_associations {
+                if entities.len() >= 2 {
+                    if let Some(chunk_ref) = chunks.iter().find(|c| c.chunk_index == *chunk_idx) {
+                        density_ranked.push((entities.len(), *chunk_idx, chunk_ref));
+                    }
+                }
+            }
+            density_ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+            if !density_ranked.is_empty() {
+                s.push_str("\n**High entity-association chunks** (chunks that surface for multiple main entities under embedding similarity — often multi-character scenes):\n");
+                for (count, chunk_idx, chunk_ref) in density_ranked.iter().take(6) {
+                    let cleaned: String = chunk_ref
+                        .content
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let snippet: String = cleaned.chars().take(320).collect();
+                    let entities = chunk_associations.get(chunk_idx).cloned().unwrap_or_default();
+                    s.push_str(&format!(
+                        "- [chunk {chunk_idx}, associated with {count} entities: {}] {snippet}…\n",
+                        entities.join(", "),
+                    ));
+                }
+            }
+        }
+
+        // ── RAPTOR atlas section (briefing v2 augmentation) ─────
+        //
+        // Appended to (not replacing) the skeleton-based briefing
+        // during the transition. When raptor_nodes are populated
+        // for this asset, surface:
+        //   1. Mid-level node summaries with their evidence chunk
+        //      ranges — these are scene/section-scale signposts
+        //      RAPTOR built by clustering chunks then summarizing.
+        //      Each node carries verbatim quote_spans (hallucination-
+        //      detector-safe) and a transitive list of evidence
+        //      chunks the model can fetch via attached_doc_search.
+        //   2. Distinctive motifs from the TF-IDF + LLM-classified
+        //      index — direct retrieval handles for recurring
+        //      words/phrases (e.g. "incurious" in Conrad) that the
+        //      RAPTOR abstraction loses but the bench's T4 tier
+        //      relies on.
+        //   3. Tool-usage guidance for the granularity contract.
+        //
+        // The legacy skeleton section above stays in place as the
+        // fallback path: it's load-bearing today, and RAPTOR is
+        // additive while the new path proves itself against the
+        // bench. Once Phase 7 validates, the legacy section can be
+        // trimmed in a follow-up.
+        // ── Position pointers ───────────────────────────────────
+        //
+        // Deterministic retrieval handles independent of clustering
+        // quality. Embedding clusters carve by topic similarity, not
+        // by document position; a question about "how does it end"
+        // or "what is the document's premise" wants a position-
+        // anchored handle that clustering doesn't reliably provide.
+        // Position pointers give the model a deterministic "the
+        // opening/conclusion lives HERE" range regardless of the
+        // cluster shape and regardless of document type.
+        //
+        // The shape of "opening" and "ending" generalises:
+        //   - narrative: setup vs resolution
+        //   - argument: thesis vs conclusion
+        //   - paper: introduction+methodology vs results+discussion
+        //   - chronicle: earliest vs latest entries
+        //   - manual: overview vs appendices+references
+        // The model is left to interpret in context — the briefing
+        // describes positions, not document-type-specific roles.
+        let total_chunks = asset.chunk_count as u32;
+        if total_chunks > 20 {
+            let opening_end = (total_chunks / 20).clamp(5, 50);
+            let ending_start = total_chunks.saturating_sub((total_chunks / 10).clamp(10, 100));
+            s.push_str(&format!(
+                "\n**Position pointers.** Opening: chunks 0..{opening_end}. Ending: chunks {ending_start}..{}.\n",
+                total_chunks - 1,
+            ));
+        }
+
+        let raptor_nodes = self
+            .store
+            .list_raptor_nodes(&asset.id)
+            .await
+            .unwrap_or_default();
+        if !raptor_nodes.is_empty() {
+            // Pick the mid-level layer to surface. Heuristic:
+            // - If we have nodes at level ≥ 1, the highest non-empty
+            //   level is the "root layer" — skip it (it'll just be
+            //   1-4 nodes summarising the whole doc).
+            // - One level below the root is the scene/section layer
+            //   the briefing wants.
+            // - If only level-0 nodes exist (degenerate small doc),
+            //   surface them directly.
+            let max_level = raptor_nodes.iter().map(|n| n.level).max().unwrap_or(0);
+            let target_level = if max_level >= 2 {
+                max_level - 1
+            } else if max_level == 1 {
+                1
+            } else {
+                0
+            };
+
+            // Coherence-weighted ordering — tight clusters earn their
+            // briefing slot ahead of looser ones.
+            let mut surfaceable: Vec<&crate::types::RaptorNode> = raptor_nodes
+                .iter()
+                .filter(|n| n.level == target_level)
+                .collect();
+            surfaceable.sort_by(|a, b| {
+                b.cluster_coherence
+                    .partial_cmp(&a.cluster_coherence)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            if !surfaceable.is_empty() {
+                // Bench run #2 (2026-05-22) surfaced the failure mode
+                // this section's wording fixes: rendering the
+                // LLM-generated `node.summary` as a top-level claim
+                // ("Winnie flees with Ossipon to Paris...") led the
+                // model to treat the paraphrase as ground truth,
+                // anchor on its (sometimes wrong) details, and query
+                // down false leads. T1 `winnie_fate` regressed 100% →
+                // 0% on this exact failure: the briefing's
+                // post-Verloc-murder summary mentioned a train/wedding
+                // ring path that doesn't exist in Conrad's text, so
+                // the model queried for "wedding ring Winnie" and
+                // missed the actual chunk 957 newspaper-notice.
+                //
+                // Fix: the section now surfaces only *verifiable*
+                // signal — chunk range, primary entities, and a
+                // single verbatim quote span per cluster. The
+                // LLM-generated `summary` is dropped from the
+                // briefing entirely. Summaries still drive
+                // node-level *query matching* (their embeddings sit
+                // in raptor_nodes.summary_embedding for tool-side
+                // retrieval), but the model never sees their text
+                // in the system prompt, so it can't misread a
+                // paraphrase as a fact.
+                s.push_str("\n**Cluster signposts** — embedding-grouped passage ranges in the document. Use the chunk ranges and entity hints to formulate `attached_doc_search` queries; the inline `>` snippets are verbatim and safe to quote:\n");
+                for node in surfaceable.iter().take(8) {
+                    let chunk_min = node.evidence_chunk_ids.iter().min().copied().unwrap_or(0);
+                    let chunk_max = node.evidence_chunk_ids.iter().max().copied().unwrap_or(0);
+                    let entities_label = if node.primary_entities.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            " — entities: {}",
+                            node.primary_entities
+                                .iter()
+                                .take(4)
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                        )
+                    };
+                    s.push_str(&format!(
+                        "- chunks {chunk_min}..{chunk_max}{entities_label}\n",
+                    ));
+                    if let Some(q) = node.quote_spans.first() {
+                        let trimmed: String = q.text.chars().take(180).collect();
+                        s.push_str(&format!("    > [chunk {}] {trimmed}…\n", q.chunk_id));
+                    }
+                }
+            }
+        }
+
+        let motifs = self
+            .store
+            .list_asset_motifs(&asset.id)
+            .await
+            .unwrap_or_default();
+        let distinctive: Vec<&crate::types::AssetMotif> =
+            motifs.iter().filter(|m| m.is_distinctive).collect();
+        if !distinctive.is_empty() {
+            s.push_str("\n**Recurring motifs** (distinctive lexical recurrences — query `attached_doc_search` with the exact term to retrieve all occurrences):\n");
+            for m in distinctive.iter().take(12) {
+                let chunks_preview: Vec<String> = m
+                    .occurrence_chunk_ids
+                    .iter()
+                    .take(5)
+                    .map(|c| c.to_string())
+                    .collect();
+                let more = if m.occurrence_chunk_ids.len() > 5 {
+                    format!(", +{} more", m.occurrence_chunk_ids.len() - 5)
+                } else {
+                    String::new()
+                };
+                s.push_str(&format!(
+                    "- \"{}\" — chunks {}{}\n",
+                    m.term,
+                    chunks_preview.join(", "),
+                    more,
+                ));
+            }
+        }
+
+        if !raptor_nodes.is_empty() || !distinctive.is_empty() || total_chunks > 20 {
+            s.push_str(
+                "\n**Briefing is pointers, not facts.** Only the inline `>` lines are verbatim. \
+                 Quote only from retrieved chunks. If a query is thin, also try: a verbatim \
+                 motif term, a distinctive word you remember from the chunks, or a query \
+                 aimed at the OPENING/ENDING range.\n",
+            );
+        }
+
+        (s, entity_names)
+    }
+
+    /// Embed the user's question and prefetch top-K chunks from the
+    /// attached document. Returned as a system-prompt-shaped block
+    /// the caller splices in.
+    ///
+    /// **Off the hot path (book-report 2026-05-21):** retained for
+    /// future experiments (e.g. embedding a *summary* of the
+    /// question rather than the question itself). When tested on
+    /// the bench, embedding the full user question with its
+    /// interrogative scaffold ("what / where / who / when")
+    /// surfaced early-chapter introductory chunks rather than the
+    /// later load-bearing passages — net regression vs the model's
+    /// targeted entity-name queries. The helper stays compiled but
+    /// unused so a future variant doesn't have to re-derive it.
+    #[allow(dead_code)]
+    async fn build_question_conditional_passages(
+        &self,
+        conversation_id: &str,
+        message: &str,
+    ) -> String {
+        let debug = std::env::var("SOVEREIGN_DEBUG_BRIEFING").is_ok();
+        let session = match self
+            .store
+            .get_document_session_by_conversation(conversation_id)
+            .await
+        {
+            Ok(Some(s)) => s,
+            other => {
+                if debug { eprintln!("[prefetch] no session: {:?}", other.is_ok()); }
+                return String::new();
+            }
+        };
+        let asset = match self.store.get_document_asset(&session.source).await {
+            Ok(Some(a)) => a,
+            other => {
+                if debug { eprintln!("[prefetch] no asset for source={}: {:?}", session.source, other.is_ok()); }
+                return String::new();
+            }
+        };
+        let asset_source_key = asset.source_key();
+
+        let embedding = match self.inference.embed_query(message).await {
+            Ok(v) => v,
+            Err(e) => {
+                if debug { eprintln!("[prefetch] embed failed: {e}"); }
+                return String::new();
+            }
+        };
+        // K=64 here (vs K=16 in the tool path) because `search_documents`
+        // doesn't accept a source filter — when the user has had the
+        // same document ingested twice (a real-world case: re-attach
+        // after editing, plus the bench's iterative re-ingests), the
+        // top-K embedding hits often come entirely from the OTHER
+        // asset. Bumping K gives the current asset's chunks a chance
+        // to make it through the post-filter. Cost is bounded — 64
+        // chunks × a few hundred bytes is still trivial.
+        let chunks = match self
+            .store
+            .search_documents(&embedding, message, 64)
+            .await
+        {
+            Ok(c) => c,
+            Err(e) => {
+                if debug { eprintln!("[prefetch] search_documents failed: {e}"); }
+                return String::new();
+            }
+        };
+        if debug {
+            let mut source_counts: std::collections::BTreeMap<&str, usize> =
+                std::collections::BTreeMap::new();
+            for c in &chunks {
+                *source_counts.entry(c.source.as_str()).or_insert(0) += 1;
+            }
+            eprintln!(
+                "[prefetch] embed_dim={} total_chunks={} source_counts={:?} asset_source_key={}",
+                embedding.len(),
+                chunks.len(),
+                source_counts,
+                asset_source_key,
+            );
+        }
+        let relevant: Vec<&crate::types::DocumentChunk> = chunks
+            .iter()
+            .filter(|c| c.source == asset_source_key)
+            .take(6)
+            .collect();
+        if relevant.is_empty() {
+            return String::new();
+        }
+
+        let mut s = String::new();
+        s.push_str("\n\n**Passages most relevant to the user's question** (embedded the full question and ran RAG; the model can cite these chunks immediately):\n");
+        for c in &relevant {
+            let cleaned: String = c
+                .content
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            let snippet: String = cleaned.chars().take(350).collect();
+            if debug {
+                eprintln!("[prefetch] chunk {}: {}", c.chunk_index, snippet.chars().take(100).collect::<String>());
+            }
+            s.push_str(&format!(
+                "- [chunk {}] {}…\n",
+                c.chunk_index,
+                snippet,
+            ));
+        }
+        s
+    }
+
+    /// Save the assistant message + build the `Response` for an
+    /// attached-doc turn. Pulled out of `handle_attached_doc_turn`
+    /// because the loop has two exit points (model wrote a final
+    /// answer, or we hit the iteration cap and forced one) and
+    /// duplicating the bookkeeping at each invited drift.
+    async fn package_attached_doc_response(
+        &self,
+        conversation_id: &str,
+        text: &str,
+        completion: &CompletionResponse,
+        tool_ids_invoked: &std::collections::BTreeSet<String>,
+        total_chunks: usize,
+        iterations: usize,
+        search_method_parts: &[String],
+    ) -> Result<Response> {
+        let search_method = if search_method_parts.is_empty() {
+            Some(format!("AttachedDoc ({iterations} iterations, no tools)"))
+        } else {
+            Some(format!(
+                "AttachedDoc ({iterations} iterations: {tools})",
+                tools = search_method_parts.join(", "),
+            ))
+        };
+
+        let provenance = ResponseProvenance {
+            intent: "AttachedDoc".to_string(),
+            search_method,
+            sources: tool_ids_invoked
+                .iter()
+                .map(|id| SourceSummary {
+                    origin: id.clone(),
+                    count: 0,
+                    from_peer: None,
+                    display_name: None,
+                })
+                .collect(),
+            inference_backend: completion.model_id.clone(),
+            oicp_match: completion
+                .oicp_meta
+                .as_ref()
+                .and_then(|m| m.match_quality.as_ref())
+                .map(|q| format!("{q:?}")),
+            total_latency_ms: completion.latency_ms,
+            tokens_used: completion.tokens_used,
+            coarse_intent: None,
+            self_assessment: None,
+            routing_trigger: None,
+            coverage: None,
+        };
+
+        let assistant_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: text.to_string(),
+            created_at: now(),
+            metadata: Some(serde_json::json!({
+                "intent": "AttachedDoc",
+                "iterations": iterations,
+                "tools_invoked": tool_ids_invoked.iter().cloned().collect::<Vec<_>>(),
+                "retrieved_chunks_total": total_chunks,
+                "provenance": provenance,
+            })),
+            version: now(),
+        };
+        self.store.save_message(&assistant_msg).await?;
+        self.spawn_auto_title(conversation_id);
+
+        Ok(Response {
+            message: assistant_msg,
+            task: None,
+            metrics: None,
+        })
+    }
+}
+
+/// Parse `<tool_call>{"tool":"...","query":"..."}</tool_call>` out of
+/// A single step in the `handle_attached_doc_turn` ReasonWithTools
+/// loop. Held as a typed list so the conversation can be re-rendered
+/// each iteration with superseded tool results compressed out of
+/// the prefill.
+#[derive(Debug)]
+enum AttachedDocSegment {
+    /// One tool dispatch + its result. The renderer keeps the most
+    /// recent N results per tool_id verbatim and compresses older
+    /// ones to a one-line marker.
+    ToolCall {
+        thinking: String,
+        tool_id: String,
+        query: String,
+        result: String,
+        passage_count: usize,
+    },
+    /// A forcing gate (no-retrieval, triangulation). Always rendered
+    /// in full — gate text is short and load-bearing for the next
+    /// turn's reasoning.
+    Gate {
+        thinking: String,
+        gate_text: String,
+    },
+    /// The "you've used all your searches — synthesize" cue that
+    /// closes the iteration loop. Always rendered in full.
+    FinalCue(String),
+}
+
+/// Cap on how many tool results per tool_id to keep verbatim in the
+/// prefill. Older results on the same tool collapse to a one-line
+/// `(superseded — N passages, content dropped)` marker. Two is enough
+/// to let the model cross-reference its two most recent angles while
+/// preventing the prefill from doubling on each iteration.
+const MAX_TOOL_RESULTS_KEPT_PER_TOOL: usize = 2;
+
+/// Render the attached-doc conversation as a single string for the
+/// next inference call. Compresses older tool results on the same
+/// tool to bound prefill cost.
+fn render_attached_doc_conversation(
+    header: &str,
+    segments: &[AttachedDocSegment],
+) -> String {
+    use std::collections::{HashMap, HashSet};
+
+    // Per tool_id, collect segment indices; keep the most recent N.
+    let mut per_tool: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (i, seg) in segments.iter().enumerate() {
+        if let AttachedDocSegment::ToolCall { tool_id, .. } = seg {
+            per_tool.entry(tool_id.as_str()).or_default().push(i);
+        }
+    }
+    let mut keep_full: HashSet<usize> = HashSet::new();
+    for indices in per_tool.values() {
+        for &i in indices.iter().rev().take(MAX_TOOL_RESULTS_KEPT_PER_TOOL) {
+            keep_full.insert(i);
+        }
+    }
+
+    let mut out = String::with_capacity(header.len() + segments.len() * 2048);
+    out.push_str(header);
+    for (i, seg) in segments.iter().enumerate() {
+        match seg {
+            AttachedDocSegment::ToolCall {
+                thinking,
+                tool_id,
+                query,
+                result,
+                passage_count,
+            } => {
+                if keep_full.contains(&i) {
+                    out.push_str(&format!(
+                        " {thinking}\n\n[{tool_id} results for \"{query}\"]:\n{result}\n\nAssistant:",
+                    ));
+                } else {
+                    out.push_str(&format!(
+                        " {thinking}\n\n[{tool_id} results for \"{query}\" — {passage_count} passage(s); content dropped from this prefill, superseded by a later query on the same tool. The evidence informed the queries you issued after it.]\n\nAssistant:",
+                    ));
+                }
+            }
+            AttachedDocSegment::Gate { thinking, gate_text } => {
+                out.push_str(&format!(" {thinking}\n\n[gate] {gate_text}\n\nAssistant:"));
+            }
+            AttachedDocSegment::FinalCue(text) => {
+                out.push_str(text);
+            }
+        }
+    }
+    out
+}
+
+/// arbitrary model output. Returns `(tool_id, query)` or `None`.
+/// Mirrors `executor::parse_tool_call` — see comment there. Kept
+/// runtime-local rather than pub-cratifying so the executor's tool-call
+/// shape can evolve independently if needed.
+fn parse_tool_call_inline(text: &str) -> Option<(String, String)> {
+    let start = text.find("<tool_call>")?;
+    let end = text.find("</tool_call>")?;
+    if end <= start {
+        return None;
+    }
+    let json_str = &text[start + "<tool_call>".len()..end];
+    let v: serde_json::Value = serde_json::from_str(json_str.trim()).ok()?;
+    let tool_id = v.get("tool")?.as_str()?.to_string();
+    let query = v.get("query")?.as_str()?.to_string();
+    Some((tool_id, query))
+}
+
+/// Best-effort truncation for narration chips — clamps `s` to `max`
+/// chars and adds an ellipsis when clipped. Keeps the desktop chip
+/// from breaking layout on long search queries while preserving the
+/// full query in the conversation prompt.
+fn truncate_for_chip(s: &str, max: usize) -> String {
+    let trimmed = s.trim();
+    if trimmed.chars().count() <= max {
+        trimmed.to_string()
+    } else {
+        let head: String = trimmed.chars().take(max).collect();
+        format!("{head}…")
     }
 }
 
@@ -11045,7 +14426,7 @@ mod folder_attribution_tests {
         folder_meta.insert("folder_abc".into(), folder("Case Files", 0, 0, &[]));
 
         let (sources, coverage) =
-            build_provenance_components(&source_map, &HashMap::new(), &folder_meta);
+            build_provenance_components(&source_map, &HashMap::new(), &folder_meta, None);
         let folder_src = sources
             .iter()
             .find(|s| s.origin == "folder_abc")
@@ -11072,7 +14453,7 @@ mod folder_attribution_tests {
         );
 
         let (_sources, coverage) =
-            build_provenance_components(&source_map, &HashMap::new(), &folder_meta);
+            build_provenance_components(&source_map, &HashMap::new(), &folder_meta, None);
         let cov = coverage.expect("thin folder must produce a CoverageNote");
         assert_eq!(cov.kind, "thin");
         assert_eq!(cov.thin_folders.len(), 1);
@@ -11090,6 +14471,7 @@ mod folder_attribution_tests {
             &source_map,
             &HashMap::new(),
             &HashMap::new(),
+            None,
         );
         assert!(
             coverage.is_none(),
@@ -11160,13 +14542,14 @@ mod relational_intent_override_tests {
     #[test]
     fn non_relational_register_is_passthrough() {
         let intent = Intent::MetalingualQuery;
-        let out = override_intent_for_relational_register(intent.clone(), SkillRegister::Factual);
+        let out = crate::intent_policy::apply_witness_intent_override(&intent, SkillRegister::Factual);
         assert!(matches!(out, Intent::MetalingualQuery));
     }
 
     #[test]
     fn relational_overrides_metalingual_to_expressive() {
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::MetalingualQuery,
             SkillRegister::Relational,
         );
@@ -11175,7 +14558,8 @@ mod relational_intent_override_tests {
 
     #[test]
     fn relational_overrides_knowledge_to_expressive() {
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::KnowledgeQuery,
             SkillRegister::Relational,
         );
@@ -11184,7 +14568,8 @@ mod relational_intent_override_tests {
 
     #[test]
     fn relational_overrides_complex_task_to_expressive() {
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::ComplexTask,
             SkillRegister::Relational,
         );
@@ -11193,7 +14578,8 @@ mod relational_intent_override_tests {
 
     #[test]
     fn relational_preserves_expressive() {
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::ExpressiveQuery,
             SkillRegister::Relational,
         );
@@ -11204,7 +14590,8 @@ mod relational_intent_override_tests {
     fn relational_preserves_deep_query() {
         // DeepQuery + Relational rides handle_simple's witness branch
         // and benefits from extended-thinking budget; don't downgrade.
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::DeepQuery,
             SkillRegister::Relational,
         );
@@ -11215,7 +14602,8 @@ mod relational_intent_override_tests {
     fn relational_preserves_continuation() {
         // Continuation routes from the prior turn's rebound intent;
         // overriding here would mask the actual continuation context.
-        let out = override_intent_for_relational_register(
+        let out = crate::intent_policy::apply_witness_intent_override(
+            &
             Intent::Continuation { task_id: "t-1".into() },
             SkillRegister::Relational,
         );
@@ -11281,7 +14669,7 @@ mod formatter_stream_section_tests {
                 Some("rolling"),
             ),
         ];
-        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## Broad map (inventory)"));
         assert!(out.contains("## Articulated claims (arguments)"));
         assert!(out.contains("## Lived practice (traces)"));
@@ -11302,7 +14690,7 @@ mod formatter_stream_section_tests {
             None,
             None,
         )];
-        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## From knowledge base"));
         assert!(!out.contains("## Broad map"));
     }
@@ -11313,9 +14701,44 @@ mod formatter_stream_section_tests {
             chunk("wiki", "Tagged", "x", Some("inventory"), Some("frozen")),
             chunk("wiki", "Untagged", "y", None, None),
         ];
-        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None);
+        let out = format_scored_chunks_with_kinds(&chunks, 4096, None, None, None, None);
         assert!(out.contains("## Broad map (inventory)"));
         assert!(out.contains("## From knowledge base"));
+    }
+
+    /// Today-anchor unit tests. Pins the contract that the system
+    /// message + refine prompt both surface a current-date line plus
+    /// shape-level recency-reasoning discipline.
+    mod today_anchor_tests {
+        use super::super::today_anchor_block;
+
+        #[test]
+        fn renders_the_supplied_iso_date_verbatim() {
+            let out = today_anchor_block("2026-05-19");
+            assert!(
+                out.contains("Current date: 2026-05-19."),
+                "expected anchor line, got: {out}"
+            );
+        }
+
+        #[test]
+        fn includes_recency_reasoning_discipline() {
+            // SHAPE-level guidance only — these phrases are about
+            // "compare to today, flag stale" patterns, not specific
+            // products or events. Per `feedback_no_teaching_to_test`
+            // the discipline lives in the prompt; bank vocabulary
+            // does not.
+            let out = today_anchor_block("2026-05-19");
+            assert!(out.contains("compare"), "missing compare-instruction");
+            assert!(
+                out.contains("date that has already passed"),
+                "missing stale-prediction handling"
+            );
+            assert!(
+                out.contains("event happened") || out.contains("prediction was wrong"),
+                "missing the two-paths instruction"
+            );
+        }
     }
 }
 

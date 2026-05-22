@@ -192,6 +192,61 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
         }
     }
 
+    // Mirror of the primary-alias block above for the Fast slot.
+    // Symmetric `commonwealth/fast` + bare `fast` advertisement
+    // makes the Fast slot routable by alias across the mesh, the
+    // same way the Slow slot is via `commonwealth/primary`. Without
+    // this, a caller asking for `commonwealth/fast` hits "no node
+    // advertises model 'commonwealth/fast'" because the Fast slot
+    // only advertised its concrete GGUF id (e.g.
+    // `Qwen3.5-9B-UD-MTP-Q6_K_XL`). Observed 2026-05-19: search-gym
+    // judge calls and any other Fast-aliased traffic returned 503
+    // until this block landed.
+    //
+    // Skipped if there's no Fast slot loaded, mirroring the primary
+    // block's gate.
+    let fast_model_name = provider.model_id_for(Speed::Fast);
+    if !fast_model_name.is_empty() && fast_model_name != "unknown" {
+        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .info_for_file(&fast_model_name);
+        let (capabilities, size_gb) = match info {
+            Some(slot) => (slot.capabilities, slot.size_gb),
+            None => {
+                let mut caps = std::collections::HashMap::new();
+                caps.insert(Capability::General, 2u8);
+                caps.insert(Capability::Analysis, 2u8);
+                (caps, None)
+            }
+        };
+        for alias_id in ["commonwealth/fast", "fast"] {
+            if !seen_ids.insert(alias_id.to_string()) {
+                continue;
+            }
+            let claims = synthesize_slot_claims(Speed::Fast, alias_id, &capabilities);
+            tracing::info!(
+                alias = %alias_id,
+                target = %fast_model_name,
+                caps = ?capabilities,
+                "build_self_manifest: advertised fast alias"
+            );
+            models.push(ProviderModel {
+                id: alias_id.to_string(),
+                base_model: None,
+                quantization: None,
+                context_tokens: 32_768,
+                status: ModelStatus {
+                    available: true,
+                    loaded: true,
+                    estimated_tokens_per_sec: None,
+                    estimated_ttft_ms: None,
+                    estimated_load_time_sec: None,
+                },
+                size_gb,
+                claims,
+            });
+        }
+    }
+
     // PR-E2: Code specialist. Separate ProviderModel entry so peer
     // schedulers can see the `code` hint claim without having to
     // first elicit a hot-swap. Only emitted when the provider
@@ -250,6 +305,61 @@ pub fn build_self_manifest(provider: &dyn InferenceProvider) -> ProviderManifest
             });
         }
     }
+    // Operator-loaded extras slots (`/internal/models/load`,
+    // `[models.extra]`). Without this block, a hot-loaded slot lands
+    // in the inference store but `locate_named_model` returns
+    // Unknown — so `/v1/chat/completions` with the slot's GGUF id
+    // 503s with "no node in this mesh advertises model". Confirmed
+    // 2026-05-20: a bench could hot-load Qwen3.6 into a Gemma-primary
+    // daemon, but the first chat request bounced.
+    //
+    // Extras are advertised as Slow-tier (full context, full output
+    // budget). We accept whatever the operator chose to load — the
+    // routing layer reads `id` literally, so coexistence with Fast
+    // and Slow primary names is fine as long as ids don't collide
+    // (the `seen_ids` set covers that).
+    for (_slot_name, extras_model_id) in provider.extras_inventory() {
+        if extras_model_id.is_empty()
+            || extras_model_id == "unknown"
+            || !seen_ids.insert(extras_model_id.clone())
+        {
+            continue;
+        }
+        let info = sovereign_core::models_manifest::DEFAULT_MANIFEST
+            .info_for_file(&extras_model_id);
+        let (capabilities, size_gb) = match info {
+            Some(slot) => (slot.capabilities, slot.size_gb),
+            None => {
+                let mut caps = std::collections::HashMap::new();
+                caps.insert(Capability::General, 2u8);
+                caps.insert(Capability::Analysis, 2u8);
+                (caps, None)
+            }
+        };
+        tracing::info!(
+            model = %extras_model_id,
+            caps = ?capabilities,
+            size_gb = ?size_gb,
+            "build_self_manifest: advertised extras slot"
+        );
+        let claims = synthesize_slot_claims(Speed::Slow, &extras_model_id, &capabilities);
+        models.push(ProviderModel {
+            id: extras_model_id,
+            base_model: None,
+            quantization: None,
+            context_tokens: 32_768,
+            status: ModelStatus {
+                available: true,
+                loaded: true,
+                estimated_tokens_per_sec: None,
+                estimated_ttft_ms: None,
+                estimated_load_time_sec: None,
+            },
+            size_gb,
+            claims,
+        });
+    }
+
     // Provider name reflects the configured chat primary — that's
     // the name response attribution uses ("qwen3.5-27b @ peer
     // BeefyMac"). Ask the provider directly for its Slow slot
@@ -495,8 +605,14 @@ mod self_manifest_tests {
             "manifest leaked a code claim even without a code slot: {:#?}",
             manifest.models
         );
-        // Fast + primary GGUF + 2 primary aliases (commonwealth/primary, primary).
-        assert_eq!(manifest.models.len(), 4, "expected fast + primary + 2 aliases: {:#?}", manifest.models);
+        // Fast slot + primary GGUF + 2 primary aliases (commonwealth/primary, primary)
+        // + 2 fast aliases (commonwealth/fast, fast) = 6 entries.
+        assert_eq!(
+            manifest.models.len(),
+            6,
+            "expected fast + primary + 2 primary aliases + 2 fast aliases: {:#?}",
+            manifest.models
+        );
     }
 
     #[test]
@@ -547,11 +663,11 @@ mod self_manifest_tests {
             code_id: Some("qwen-coder-32b-instruct.Q4_K_M"),
         };
         let manifest = build_self_manifest(&stub);
-        // fast + primary GGUF + 2 primary aliases + code.
+        // fast + primary GGUF + 2 primary aliases + 2 fast aliases + code = 7.
         assert_eq!(
             manifest.models.len(),
-            5,
-            "expected fast + primary + 2 aliases + code: {:#?}",
+            7,
+            "expected fast + primary + 2 primary aliases + 2 fast aliases + code: {:#?}",
             manifest.models
         );
         let code_model = manifest

@@ -128,6 +128,7 @@ fn gossip_convergence_five_nodes_bounded_rounds() {
 
                     embed_model: None,
                     benchmark: None,
+                    current_in_flight: None,
                 }),
             },
             timestamp: 100 + i as u64,
@@ -203,6 +204,7 @@ fn gossip_convergence_with_late_joiner() {
 
                     embed_model: None,
                     benchmark: None,
+                    current_in_flight: None,
                 }),
             },
             timestamp: 100,
@@ -254,6 +256,7 @@ fn gossip_convergence_with_late_joiner() {
 
                 embed_model: None,
                 benchmark: None,
+                current_in_flight: None,
             }),
         },
         timestamp: 200,

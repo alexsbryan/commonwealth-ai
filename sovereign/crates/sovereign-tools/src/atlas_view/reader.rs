@@ -33,6 +33,19 @@ pub struct AtlasCorpusSummary {
     /// corpus" without a separate provenance file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_extracted_unix: Option<u64>,
+    /// Logical UI category from the recipe's `[display]` block —
+    /// drives the Atlas View rail grouping (`category =
+    /// "conversation"` collapses every conversation-source corpus
+    /// under one "Conversations" header). `None` on legacy indexes
+    /// that pre-date the `[display]` block — the frontend buckets
+    /// those into an "Other" group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_category: Option<String>,
+    /// Icon hint from the recipe's `[display]` block. Free-form
+    /// string the frontend maps onto its icon set. `None` falls back
+    /// to a generic glyph.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_icon: Option<String>,
 }
 
 /// Forward-compat field on per-atom DTOs. Phase 1 always emits
@@ -193,6 +206,8 @@ fn summarise_corpus(
     corpus_id: &str,
     atlas_dir: &Path,
 ) -> Result<AtlasCorpusSummary, std::io::Error> {
+    let (display_category, display_icon) = read_display_meta(atlas_dir);
+
     // Hot path: a v2 `_summary.json` exists and matches the live
     // atoms.json cache key — returns in microseconds. Cold path:
     // cache miss recomputes once and writes the sidecar, so
@@ -212,6 +227,8 @@ fn summarise_corpus(
                 total_atoms: 0,
                 atom_counts: BTreeMap::new(),
                 last_extracted_unix: None,
+                display_category,
+                display_icon,
             });
         }
     };
@@ -233,7 +250,46 @@ fn summarise_corpus(
         total_atoms: summary.atom_count,
         atom_counts: summary.atom_counts,
         last_extracted_unix,
+        display_category,
+        display_icon,
     })
+}
+
+/// Read the `[display]` block from `<index_dir>/_corpus_meta.json`
+/// (the parent of the atlas directory). Returns
+/// `(category, icon)` — either or both `None` on legacy indexes
+/// pre-dating the field, malformed meta, or missing file.
+///
+/// Light-weight: parses just enough JSON to extract the two fields
+/// rather than pulling in the full `IndexMeta` deserialiser (which
+/// the corpus-engine crate keeps `pub(crate)`).
+fn read_display_meta(atlas_dir: &Path) -> (Option<String>, Option<String>) {
+    let Some(index_dir) = atlas_dir.parent() else {
+        return (None, None);
+    };
+    let meta_path = index_dir.join("_corpus_meta.json");
+    let Ok(raw) = std::fs::read(&meta_path) else {
+        return (None, None);
+    };
+    #[derive(serde::Deserialize)]
+    struct Probe {
+        #[serde(default)]
+        display: Option<DisplayProbe>,
+    }
+    #[derive(serde::Deserialize)]
+    struct DisplayProbe {
+        #[serde(default)]
+        category: Option<String>,
+        #[serde(default)]
+        icon: Option<String>,
+    }
+    match serde_json::from_slice::<Probe>(&raw) {
+        Ok(p) => match p.display {
+            Some(d) => (d.category, d.icon),
+            None => (None, None),
+        },
+        Err(_) => (None, None),
+    }
 }
 
 #[cfg(test)]
@@ -477,11 +533,55 @@ mod tests {
             total_atoms: 3,
             atom_counts: BTreeMap::from([(AtomType::Entity, 2), (AtomType::Claim, 1)]),
             last_extracted_unix: Some(1_700_000_000),
+            display_category: Some("reference".into()),
+            display_icon: Some("book".into()),
         };
         let json = serde_json::to_string(&summary).unwrap();
         assert!(json.contains("\"corpus_id\":\"wikipedia\""));
         assert!(json.contains("\"total_atoms\":3"));
+        assert!(json.contains("\"display_category\":\"reference\""));
         let back: AtlasCorpusSummary = serde_json::from_str(&json).unwrap();
         assert_eq!(back, summary);
+    }
+
+    #[test]
+    fn display_block_in_corpus_meta_is_read_when_present() {
+        let tmp = TempDir::new().unwrap();
+        let atlas_dir = tmp.path().join("conversations-anthropic").join("atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        // Minimal `_corpus_meta.json` with the `[display]` block populated.
+        std::fs::write(
+            atlas_dir.parent().unwrap().join("_corpus_meta.json"),
+            r#"{
+                "corpus_id": "conversations-anthropic",
+                "corpus_name": "Claude conversations",
+                "embedding_model": "qwen-embedding-0.6b",
+                "embedding_dimensions": 768,
+                "mesh_sharing": false,
+                "license": "private",
+                "created_at": 0,
+                "last_updated": 0,
+                "display": { "category": "conversation", "icon": "chat-bubble" }
+            }"#,
+        )
+        .unwrap();
+        let (category, icon) = read_display_meta(&atlas_dir);
+        assert_eq!(category.as_deref(), Some("conversation"));
+        assert_eq!(icon.as_deref(), Some("chat-bubble"));
+    }
+
+    #[test]
+    fn display_block_absent_returns_none_pair() {
+        let tmp = TempDir::new().unwrap();
+        let atlas_dir = tmp.path().join("legacy").join("atlas");
+        std::fs::create_dir_all(&atlas_dir).unwrap();
+        std::fs::write(
+            atlas_dir.parent().unwrap().join("_corpus_meta.json"),
+            r#"{"corpus_id":"legacy"}"#,
+        )
+        .unwrap();
+        let (category, icon) = read_display_meta(&atlas_dir);
+        assert!(category.is_none());
+        assert!(icon.is_none());
     }
 }

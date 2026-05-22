@@ -260,12 +260,20 @@ pub fn build_slots_from_config(
         n_seq_max: 1,
         n_ctx: primary_ctx,
     });
-    slots.push(SlotPlan {
-        role: "fast".into(),
-        path: cfg.models.fast.clone(),
-        n_seq_max: 8,
-        n_ctx: 8_192,
-    });
+    // Fast subsume: when no explicit fast model is configured, the
+    // primary slot serves fast-routed requests too — no separate
+    // weights or context to budget for, so the fast SlotPlan is
+    // skipped. (The primary SlotPlan already covers the weights;
+    // primary's KV cache also handles the few extra concurrent
+    // short calls fast normally would.)
+    if cfg.models.has_explicit_fast() {
+        slots.push(SlotPlan {
+            role: "fast".into(),
+            path: cfg.models.fast_path().to_path_buf(),
+            n_seq_max: 8,
+            n_ctx: 8_192,
+        });
+    }
     slots.push(SlotPlan {
         role: "embed".into(),
         path: cfg.models.embed.clone(),

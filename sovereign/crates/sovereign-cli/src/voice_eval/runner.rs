@@ -389,20 +389,25 @@ fn resolve_skills_dir(explicit: Option<&PathBuf>) -> Result<PathBuf> {
         sovereign_core::error::Error::Serialization(format!("cannot resolve current dir: {e}"))
     })?;
     loop {
-        let candidate = here.join("sovereign").join("skills");
-        if candidate.is_dir() {
-            return Ok(candidate);
-        }
-        let alt = here.join("skills");
-        if alt.is_dir() && alt.join("inner-work").is_dir() {
-            return Ok(alt);
+        // Prefer the new `modes/` directory; fall back to `skills/`
+        // for back-compat with checkouts that haven't pulled the
+        // skills-as-menu retirement yet.
+        for sub in ["modes", "skills"] {
+            let candidate = here.join("sovereign").join(sub);
+            if candidate.is_dir() && candidate.join("inner-work").is_dir() {
+                return Ok(candidate);
+            }
+            let alt = here.join(sub);
+            if alt.is_dir() && alt.join("inner-work").is_dir() {
+                return Ok(alt);
+            }
         }
         if !here.pop() {
             break;
         }
     }
     Err(sovereign_core::error::Error::Serialization(
-        "voice eval: could not find `sovereign/skills/` walking up from CWD. Pass --skills-dir.".into(),
+        "voice eval: could not find `sovereign/modes/` (or legacy `sovereign/skills/`) walking up from CWD. Pass --skills-dir.".into(),
     ))
 }
 

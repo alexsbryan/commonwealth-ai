@@ -1,6 +1,9 @@
 pub mod atlas_context;
 pub mod context;
+pub mod dossier;
+pub mod quote_verification;
 pub mod error;
+pub mod intent_policy;
 pub mod executor;
 pub mod health;
 pub mod health_monitor;
@@ -17,11 +20,13 @@ pub mod registry;
 pub mod router;
 pub mod router_embed;
 pub mod runtime;
+pub mod scope_classifier;
 pub mod gap;
 pub mod setup_config;
 pub mod skills;
 pub mod stubs;
 pub mod title;
+pub mod tool_result_cache;
 pub mod traits;
 pub mod types;
 

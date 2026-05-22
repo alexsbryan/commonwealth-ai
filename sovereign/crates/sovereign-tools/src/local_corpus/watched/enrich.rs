@@ -571,8 +571,22 @@ mod tests {
         );
     }
 
+    /// Per-file lock so tests that mutate `SOVEREIGN_HOME` don't race
+    /// each other under `cargo test`'s parallel runner. The env var is
+    /// process-global; two parallel `set_var(..)` callers would
+    /// otherwise see each other's value on read. Mirrors the
+    /// `cache_test_lock()` pattern in `mcp_surface.rs` — preferred
+    /// over `serial_test` because it scopes to the tests that need it.
+    fn sovereign_home_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
+
     #[tokio::test]
     async fn driver_synthesizes_config_at_canonical_path() {
+        let _guard = sovereign_home_test_lock();
         // Override SOVEREIGN_HOME so the test doesn't write to
         // the operator's real ~/.sovereign.
         let dir = tempdir().unwrap();
@@ -600,6 +614,7 @@ mod tests {
 
     #[tokio::test]
     async fn driver_rejects_concurrent_start_for_same_corpus() {
+        let _guard = sovereign_home_test_lock();
         // Override SOVEREIGN_HOME for this test.
         let dir = tempdir().unwrap();
         std::env::set_var("SOVEREIGN_HOME", dir.path());

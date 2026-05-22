@@ -93,10 +93,30 @@ pub fn spawn_resume_in_progress_ingests(state: AppState) {
     });
 }
 
+fn env_truthy(key: &str) -> bool {
+    match std::env::var(key) {
+        Ok(v) => {
+            let v = v.trim().to_ascii_lowercase();
+            matches!(v.as_str(), "1" | "true" | "yes" | "on")
+        }
+        Err(_) => false,
+    }
+}
+
 /// The actual scan. Pulled out so a future test can drive it
 /// against a fixture engine without depending on `tokio::spawn`
 /// timing.
 async fn resume_in_progress_ingests(state: AppState) {
+    // Operator-facing opt-out — used by `sovereign agent-bench` to
+    // stop a half-finished corpus ingest from competing with the
+    // bench's chat slot. Default behaviour (env unset / "0" / "false")
+    // is unchanged.
+    if env_truthy("SOVEREIGN_DISABLE_AUTO_RESUME") {
+        tracing::info!(
+            "auto_resume: SOVEREIGN_DISABLE_AUTO_RESUME set — skipping ingest resume"
+        );
+        return;
+    }
     let Some(engine) = state.inner.corpus_engine.clone() else {
         // No engine = nothing to resume. Standalone Commonwealth
         // configurations that disable the corpus surface land here.

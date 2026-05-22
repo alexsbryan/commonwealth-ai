@@ -1,0 +1,27 @@
+{
+  "query": "confidence decay rates memories",
+  "cached": true,
+  "stored_at_turn": 0,
+  "current_turn": 1,
+  "evidence": [
+    {
+      "id": "ev-T0-0000",
+      "source_kind": "corpus",
+      "source_id": "project-docs::memory_decay",
+      "title": "Confidence decay defaults",
+      "content": "The default uniform decay rate is 10 percent confidence loss per month. Memories below the 0.2 prune floor get dropped during prune sweeps.",
+      "confidence": 0.91,
+      "retrieval_context": "corpus chunk (score 0.91)"
+    },
+    {
+      "id": "ev-T0-0001",
+      "source_kind": "note",
+      "source_id": "note-decay-tuning",
+      "title": "Tuning history note",
+      "content": "Three retired research-shaped skills declared a slower 0.05 per month decay rate and a 0.1 prune floor. Those values were not promoted to defaults.",
+      "confidence": 0.74,
+      "retrieval_context": "note (kind=decision)"
+    }
+  ],
+  "by_kind_counts": { "corpus": 1, "memory": 0, "note": 1, "web": 0 }
+}

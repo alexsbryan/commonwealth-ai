@@ -37,12 +37,23 @@
     /// Increment to trigger a history-drawer toggle from outside
     /// (nav-rail re-tap, Cmd+[ while inner work is active).
     historyToggle?: number;
+    /// True iff the inner-work surface is the currently-visible view.
+    /// App.svelte keeps this component mounted across visits (see
+    /// the `inner-work-layer` keep-alive comment in App.svelte), so
+    /// onMount/onDestroy fire at most once per app session. This
+    /// prop drives the per-visit lifecycle: snapshot+deactivate
+    /// peer skills on activate, restore them on deactivate.
+    active?: boolean;
   }
 
-  let { onExit, historyToggle = 0 }: Props = $props();
+  let { onExit, historyToggle = 0, active = true }: Props = $props();
 
   // React to external toggle signals (nav-rail re-tap, Cmd+[).
-  let prevHistoryToggle = historyToggle;
+  // Initialize `prev` to the same literal default as the prop (0)
+  // rather than reading `historyToggle` directly — referencing a
+  // prop outside a reactive context trips `state_referenced_locally`
+  // and would otherwise capture only the value at first render.
+  let prevHistoryToggle = $state(0);
   $effect(() => {
     if (historyToggle !== prevHistoryToggle) {
       prevHistoryToggle = historyToggle;
@@ -489,12 +500,9 @@
   // skills. The witness owns the page, full stop.
   let priorActiveSkillIds: string[] = [];
 
-  onMount(async () => {
-    // Snapshot the user's currently-active skills, then deactivate
-    // every non-inner-work skill so the witness owns the conversation
-    // in isolation. Failures here are best-effort: a bad list_skills
-    // call just leaves the snapshot empty, and the user's old skills
-    // stay active — degraded but not broken.
+  /// Snapshot + activate. Called on every entry into the surface
+  /// (first mount AND every later `active` true-transition).
+  async function enterSurface(): Promise<void> {
     try {
       const all = await listSkills();
       priorActiveSkillIds = all
@@ -504,22 +512,83 @@
         try {
           await toggleSkill(id, false);
         } catch (e) {
-          console.warn(`inner-work: failed to deactivate ${id} on mount:`, e);
+          console.warn(`inner-work: failed to deactivate ${id} on entry:`, e);
         }
       }
     } catch (e) {
-      console.warn("inner-work: failed to snapshot skills on mount:", e);
+      console.warn("inner-work: failed to snapshot skills on entry:", e);
     }
-
-    // Activate the inner-work skill so any new conversation created
-    // from this surface is pinned to it. Idempotent — if the user
-    // had already activated it elsewhere this is a no-op. We invert
-    // on destroy (best-effort).
     try {
       await toggleSkill("inner-work", true);
     } catch (e) {
-      console.warn("inner-work: failed to activate skill on mount:", e);
+      console.warn("inner-work: failed to activate skill on entry:", e);
     }
+  }
+
+  /// Restore + finalize. Called on every exit (active flips false)
+  /// AND on the rare onDestroy path (window close mid-surface). Both
+  /// paths are best-effort; awaits are not appropriate here because
+  /// the user is navigating away.
+  function leaveSurface(): void {
+    // If a witness response is in-flight, cancel it — leaving an
+    // orphaned stream would render its message-complete event into
+    // a void. Unlatch each pending turn locally too so a late-
+    // arriving completion event has no turn to attach itself to.
+    if (composing && conversationId) {
+      cancelStream(conversationId).catch(() => {});
+      for (const t of turns) {
+        if (t.pending) {
+          t.pending = false;
+          t.witness_text = null;
+          t.buffer = "";
+          t.message_id = null;
+        }
+      }
+    }
+    // Trigger memory extraction on the just-finished conversation.
+    // The runtime stamps every extracted memory with
+    // source_skill_id = "inner-work" so they only recall in
+    // future inner-work sessions.
+    if (conversationId) {
+      finalizeInnerWorkConversation(conversationId).catch((e) => {
+        console.warn("inner-work: memory extraction failed:", e);
+      });
+    }
+    // Flush any pending draft save.
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      innerWorkSession.saveDraft(date, draftText);
+      saveTimer = null;
+    }
+    // Drop any queued echo dots that haven't fired yet.
+    for (const t of pendingEchoTimers) clearTimeout(t);
+    pendingEchoTimers = [];
+    // Best-effort skill restoration. Sequence: deactivate
+    // inner-work, then re-enable each snapshot id.
+    toggleSkill("inner-work", false).catch(() => {});
+    for (const id of priorActiveSkillIds) {
+      toggleSkill(id, true).catch(() => {});
+    }
+    priorActiveSkillIds = [];
+  }
+
+  // Per-visit lifecycle. `active` is true on first mount (default
+  // prop), so we run an initial enter via onMount and then this
+  // effect handles every subsequent transition.
+  let prevActive = $state(true);
+  $effect(() => {
+    if (active === prevActive) return;
+    prevActive = active;
+    if (active) {
+      void enterSurface();
+    } else {
+      leaveSurface();
+    }
+  });
+
+  onMount(async () => {
+    // First-mount entry: peer-skill snapshot + activate.
+    await enterSurface();
 
     // Resume today's existing inner-work conversation if one is
     // remembered locally, otherwise leave creation lazy until the
@@ -699,6 +768,10 @@
   }
 
   onDestroy(() => {
+    // Timer + listener teardown. Per-visit skill restoration +
+    // memory extraction live in leaveSurface(), which runs on every
+    // `active` false-transition; here we only handle the once-per-
+    // app-session unmount path (full window close, HMR teardown).
     if (thresholdTimer) {
       clearTimeout(thresholdTimer);
       thresholdTimer = null;
@@ -707,46 +780,15 @@
       clearTimeout(hintsTimer);
       hintsTimer = null;
     }
-    // Drop any queued echo dots that haven't fired yet.
-    for (const t of pendingEchoTimers) clearTimeout(t);
-    pendingEchoTimers = [];
-    // Flush any pending save so closing the window doesn't drop the
-    // last typed-but-not-yet-saved text.
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      innerWorkSession.saveDraft(date, draftText);
-      saveTimer = null;
-    }
-    // If a witness response is in-flight, cancel it — leaving an
-    // orphaned stream would render its message-complete event into
-    // a void, and the partial text would never be displayed anyway.
-    if (composing && conversationId) {
-      cancelStream(conversationId).catch(() => {});
-    }
-    // Trigger memory extraction on the just-finished conversation.
-    // The runtime stamps every extracted memory with
-    // `source_skill_id = "inner-work"` so they only recall in
-    // future inner-work sessions — the wall is enforced server-
-    // side, not here. Best-effort: any failure logs but doesn't
-    // stall the unmount.
-    if (conversationId) {
-      finalizeInnerWorkConversation(conversationId).catch((e) => {
-        console.warn("inner-work: memory extraction failed:", e);
-      });
-    }
     unlistenChunk?.();
     unlistenComplete?.();
     unlistenError?.();
-    // Best-effort skill restoration. Awaiting in onDestroy is
-    // unreliable across the unmount path, so we fire-and-forget.
-    // Sequence: deactivate inner-work, then re-enable each skill in
-    // the snapshot. Each toggle rebuilds the runtime; for normal
-    // skill counts (≤5 active), the cumulative cost is bounded.
-    toggleSkill("inner-work", false).catch(() => {});
-    for (const id of priorActiveSkillIds) {
-      toggleSkill(id, true).catch(() => {});
+    // If the user closes the window while inner-work is still the
+    // active view, run the per-visit cleanup one last time —
+    // leaveSurface() is idempotent against an already-empty snapshot.
+    if (active) {
+      leaveSurface();
     }
-    priorActiveSkillIds = [];
   });
 
   // ── Witness summon ──────────────────────────────────────────
@@ -828,15 +870,20 @@
     // Even if the cancel call hadn't reached the runtime yet, we
     // unlatch the pending turn locally — the design contract says
     // Esc discards any partial output and returns the cursor to the
-    // user. A late-arriving completion will find no matching pending
-    // turn and the listener becomes a no-op.
+    // user. We also null `message_id` so a late-arriving
+    // `message-complete` doesn't re-attach itself by id and rewrite
+    // `witness_text` after the fact (findTurnFor's by-id branch would
+    // otherwise match the cancelled turn).
     for (const t of turns) {
       if (t.pending) {
         t.pending = false;
         t.witness_text = null;
         t.buffer = "";
+        t.message_id = null;
       }
     }
+    // `composing` is $derived from turns.some(pending); flipping
+    // pending=false above also flips composing automatically.
     textareaEl?.focus();
   }
 
@@ -1432,9 +1479,13 @@
   }
 
   /* ── Brand-corner exit ──────────────────────────────────────
-     Hover-only reveal so the surface stays bare for the typist. */
+     Hover-only reveal so the surface stays bare for the typist.
+     `position: absolute` (not `fixed`) so the mark is anchored to
+     the inner-work layer's bounds — the viewport-anchored variant
+     placed it under the always-on 60px NavRail and silently
+     swallowed every click. */
   .exit-mark {
-    position: fixed;
+    position: absolute;
     top: 1.25rem;
     left: 1.5rem;
     z-index: 3;
@@ -1463,9 +1514,11 @@
   }
 
   /* ── Local indicator ────────────────────────────────────────
-     Persistent. Unblinking. The user notices it once and stops. */
+     Persistent. Unblinking. The user notices it once and stops.
+     Anchored to the inner-work layer (not viewport) to avoid
+     overlapping the NavRail — see the exit-mark comment above. */
   .local-indicator {
-    position: fixed;
+    position: absolute;
     bottom: 1rem;
     left: 1.5rem;
     z-index: 3;

@@ -24,6 +24,7 @@ mod git_archaeology_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod corpus_catalog_cmd;
+mod corpus_scrub_cmd;
 mod meta_atlas_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;
@@ -50,10 +51,20 @@ mod reading_diag_cmd;
 mod recipe_agent_cmd;
 mod recipe_agent_live_trial;
 mod pipeline_cmd;
+// Ephemeral worker pods — Vast `WorkerProvider` impl + owner-key
+// persistence. See sovereign/docs/EPHEMERAL_WORKER_PODS.md.
+mod worker_pod_provider;
 mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;
 mod rough_edges_cmd;
+// Shared gym-judge surface (FastInferenceJudge + Verdict +
+// calibration types). Extracted out of search_gym_cmd in the
+// Tool-Mastery framework Phase 4 so the knowledge-gym runner and
+// the wikipedia-learn per-thread judge can share one implementation.
+mod gym_judge;
+mod knowledge_gym_cmd;
+mod search_gym_cmd;
 mod serve_cmd;
 mod service_install;
 mod setup_cmd;
@@ -204,6 +215,8 @@ const HELP: Help = Help {
             ("recipe",  "Run a corpus ingestion recipe"),
             ("pipeline", "Generic ingestion driver — durable worklist + retry + pause-resume"),
             ("bench",   "Throughput + correctness benchmarks for enrichment LLM tasks"),
+            ("search-gym", "Correctness harness for web-search-during-inference (mock-replay)"),
+            ("knowledge-gym", "Correctness harness for the unified knowledge_lookup tool (mock-replay)"),
             ("atlas",   "Atlas-style structural enrichment (Wikipedia link graph today)"),
             ("eval",    "Run a question bank against a corpus; measure retrieval quality"),
             ("tools",   "Invoke code-intelligence tools from the CLI (list / describe / call)"),
@@ -660,6 +673,23 @@ async fn async_main() {
                 let code = bench_cmd::run_bench(&raw_args[1..]).await;
                 std::process::exit(code);
             }
+            "agent-bench" => {
+                // Eight-problem coding battery; subprocess-driven
+                // pi / opencode / codex runners. See SYSTEM_OVERVIEW §11
+                // and `sovereign/crates/sovereign-agent-bench/`.
+                let code = sovereign_agent_bench::run_agent_bench(&raw_args[1..]).await;
+                std::process::exit(code as i32);
+            }
+            "search-gym" => {
+                util::tracing_init::init_tracing("sovereign_cli=info");
+                let code = search_gym_cmd::run_search_gym(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
+            "knowledge-gym" => {
+                util::tracing_init::init_tracing("sovereign_cli=info");
+                let code = knowledge_gym_cmd::run_knowledge_gym(&raw_args[1..]).await;
+                std::process::exit(code);
+            }
             "chat" => {
                 let code = chat_cmd::run_chat(&raw_args[1..]).await;
                 std::process::exit(code);
@@ -704,6 +734,7 @@ async fn async_main() {
                 // actually running.
                 util::tracing_init::init_tracing(
                     "sovereign_cli=info,\
+                     sovereign_core=info,\
                      sovereign_mesh=info,\
                      sovereign_inference=info,\
                      corpus_engine=info,\
@@ -939,8 +970,22 @@ async fn async_main() {
     // Code Intelligence tools — active as soon as any code corpus is
     // indexed via `sovereign code index`. They always register; with no
     // code corpora they return "no results" honestly rather than failing.
+    // SymbolLookupTool now reads SCIP directly, so build an empty
+    // in-memory graph here — projects/daemon callers attach a real
+    // merged handle via the dedicated `project serve` / `daemon`
+    // entry points. The CLI's `chat` path is a thin shell, not a
+    // long-running daemon, so a stubbed graph is honest: callers
+    // that need real SCIP go through `sovereign chat` /
+    // `sovereign daemon`, which wire it up properly.
+    let symbols_graph: sovereign_tools::ScipGraphHandle = Arc::new(
+        arc_swap::ArcSwap::from_pointee(
+            corpus_engine::ScipGraph::open_in_memory("cli-stub")
+                .expect("in-memory ScipGraph for CLI"),
+        ),
+    );
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
+        Arc::clone(&symbols_graph),
     )));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))

@@ -193,6 +193,14 @@ crates/
     ├── auto_ingest.rs reindexer.rs supervised_task.rs
     ├── auto_resume.rs        #   Re-spawn in-progress ingests on daemon restart
     ├── canonical_pull.rs     #   Pull a peer's canonical index over the mesh
+    ├── worker_pod.rs         #   Ephemeral worker bootstrap blob + Ed25519 token + WorkerHandle
+    ├── worker_http.rs        #   Pod-side router: /internal/worker/{upload,job,completed} + auth middleware
+    ├── worker_controller.rs  #   Owner-side controller + WorkerProvider trait + reqwest TLS pinning
+    ├── worker_daemon.rs      #   `daemon run --worker-mode` entry: HTTPS termination on :9742 from seed-derived cert
+    ├── worker_inference_proxy.rs #   Pod-side TLS-pinned proxy: /v1/chat/completions etc. → child daemon
+    ├── pinned_transport.rs   #   TLS-pinned reqwest client + WorkerToken bearer for pinned pods
+    ├── pinned_worker_source.rs #  PinnedWorkerEndpointSource + CompositeEndpointSource for inference scheduler
+    ├── pinned_pod_snapshot.rs #   On-disk PinnedPodSnapshot (~/.sovereign/worker-pods/*.json)
     └── projects.rs types.rs
 
 skills/                       # 8 skills: research-analyst, epistemic-research, codebase-navigator,
@@ -471,7 +479,9 @@ local LLM author recipes too.
 A typed-relationship graph runs as a parallel module to the atlas pipelines.
 Recipe-author declares `[[enrichment.entity_types]]` and
 `[[enrichment.relationship_types]]`; the LLM extract prompt is generated
-from that schema (LLGuidance JSON-grammar constrained). Three built-in
+from that schema (JSON-Schema → llguidance grammar, see
+`llguidance_constraint.rs`).
+Three built-in
 graph-pattern detectors:
 
 - `circular_flow` — petgraph DiGraph + Tarjan SCC + DFS-based simple-cycle
@@ -679,6 +689,18 @@ reader + a regression-fixture suite:
 each schema boundary and asserts they all parse. Adding a fixture there is
 the standard cost of a schema change.
 
+**`[display]` block** (`recipe.rs::DisplayMeta`) is a pure UI metadata
+table — `category` + `icon` — carried on the recipe and stamped onto
+`_corpus_meta.json` so retrieval-time code can read it off `IndexInfo`
+without re-resolving the recipe. Drives Atlas View rail grouping
+(`category = "conversation"` collapses every conversation source under
+one header), and `format_scored_chunks_with_kinds` substitutes
+`"From your conversations"` for the per-corpus slug when the source's
+category is `"conversation"`. Pure additive: every pre-existing recipe
+loads unchanged via `#[serde(default)]`. See §4.14c for the user-facing
+surface that drives this; the conversation-imports landing is the
+first consumer.
+
 **Publish nudge**
 (`sovereign-cli/src/project_cmd.rs::compose_publish_recipe_nudge`)
 
@@ -754,7 +776,7 @@ without touching the trait.
 
 ### 4.3 Inference
 
-`sovereign-inference/embedded.rs` wraps `llama-cpp-2` with a lazy-loaded slot
+`sovereign-inference/embedded.rs` wraps `llama-cpp-4` with a lazy-loaded slot
 system:
 
 | Role (user-facing)  | Slot     | Purpose                                  | Typical model       |
@@ -768,9 +790,64 @@ Code specialist shares the Main slot's lazy chat mutex (hot-swap on hint
 switch); only one of {Main, Code} resident at a time. The Embed slot stays
 on its own `Arc<EmbedSlot>` (cross-peer contract; never folded into chat).
 
+**Optional Main sibling pool (experimental, off by default).** Setting
+`SOVEREIGN_PRIMARY_SIBLINGS=N` (N≥2) eager-loads N independent Main
+`LlamaContext`s sharing one `Arc<LlamaModel>` — weights are loaded once;
+each sibling pays only its own KV cache. Non-streaming chat-completion
+dispatch then round-robins across siblings so `N` callers can be in
+`generate_sync` concurrently instead of serialising on a single
+`Mutex<SlotContext>`. Streaming, embed, rerank, and the warm-load helper
+continue to use the single lazy slot. Incompatible with a configured Code
+specialist (which expects to hot-swap one resident model); construction
+refuses to start when both are configured. Intended for measuring
+throughput on a single fat node (e.g., Strix Halo's 124 GiB GTT) without
+relying on mesh peers — see `embedded.rs::primary_siblings_env` and the
+`PrimarySiblingPool` struct for the contract.
+
 `models.toml` — five hardware profiles (`cpu_only`, `low_mem`, `default`,
 `high`, `very_high`) each declare `repo`, `file`, `family`, `quant`,
 `size_gb`, `thinking`. Per-slot `quirks_override` tunes family defaults.
+
+**Generation defaults (2026-05-17).** The chat-slot decode path is
+`generate_sync` with two-tier jump-forward decoding enabled by default
+(`SOVEREIGN_JUMP_FWD_DISABLE=1` / `SOVEREIGN_JUMP_FWD_T2_DISABLE=1` to
+opt out). Tier 1 (single-survivor token from the mask cache) is an O(1)
+read on warm states; Tier 2 (FSM byte-walk + `VocabTrie` longest-match)
+catches structural-skeleton runs Tier 1 misses on BPE vocabs. Both
+emit forced tokens into the next batched decode without paying a
+per-token forward pass — ~15% tok/s lift measured on the Twin Earth
+extraction schema (Tier 1 alone captured 0% on Qwen3 BPE; Tier 2
+captured 11.3%). When the loaded gguf carries MTP heads, the
+dispatcher additionally routes schema/no-tools requests through
+`generate_sync_mtp` (draft-verify-accept speculative decoding via the
+MTP head). Wiring jump-forward into the MTP loop so the two speedups
+compose is a tracked todo. Telemetry: per-request
+`inference: end-of-generation` line carries `jump_fwd_n` /
+`jump_fwd_runs` / `jump_fwd_bytes_n` so an operator can decompose
+throughput by which path produced which tokens.
+
+**`SlotContext` is a sum type — `SingleToken` or `Speculative`
+(2026-05-20).** The slot's inference mode is encoded as
+`SlotInferenceMode { SingleToken { ctx }, Speculative { target_ctx,
+draft_ctx, session, n_draft_max } }`. Pre-2026-05-20 the slot carried
+`ctx + Option<draft_ctx> + Option<mtp_session>` as parallel fields and
+quarantined via `mtp_session = None`, which left the target ctx with
+an orphaned `set_embeddings_pre_norm(true)` hook installed by
+`common_speculative_init` (upstream has no `..._uninit`) — every
+subsequent decode returned `Decode Error -3` for the rest of the
+slot's life. Demotion is now structural via
+`SlotContext::demote_to_single_token` — drops session + draft +
+mutated-target, rebuilds the target from the `MtpRebuildParams`
+captured at load time. ARCH §7 "structural invariants" applied:
+illegal hybrid state is unrepresentable. The new
+`try_upgrade_to_speculative` runs `probe_mtp_roundtrip` at
+construction (1-token synthetic `target.decode → session.process →
+session.begin`) so MTP-named ggufs that lack real head tensors
+degrade to `SingleToken` at load with one warn line instead of
+producing a 4-hour cascade at first request. See
+`sovereign-inference/src/embedded.rs::SlotInferenceMode` for the type
++ accessors, and the `SOVEREIGN_MTP_DISABLE=1` env var for an
+operator-side bypass at slot construction.
 
 `model_family.rs` encodes per-family quirks: `ThinkingControl`, sampling
 defaults, `EmbedQuirks` (`PoolingStrategy`, `NormalizationStrategy`,
@@ -1140,6 +1217,17 @@ Three layers:
   <corpus> [--type] [--query]`, `sovereign atlas show-atom <corpus>
   <atom_id>`. Same `FileAtlasReader`; `--format=json` for `jq`.
 
+**Rail grouping by recipe `[display] category`.** The corpus picker
+groups rows under category headers — every corpus declaring
+`category = "conversation"` lands under a single "Conversations"
+header (so the user's `conversation-history` and any imported
+`conversations-anthropic` live side by side), category-less corpora
+bucket into "Other." `AtlasCorpusSummary` carries `display_category`
++ `display_icon` over the wire; the frontend (`AtlasIndex.svelte`)
+maps known categories onto labels and falls back to a title-cased
+rendering for unknown values so a recipe that adds a new category
+lights up without a frontend round-trip.
+
 Read-only today. Phase 2 (curation overlay) is scoped in NoteStore
 todo "Atlas inspector Phase 2 — curation overlay" and §10.1 below.
 Forward-compat `curation_status` / `overlay_supports` / `stable_key`
@@ -1197,18 +1285,35 @@ keyword-match.
 Splices short structured summaries of the user's own world into the system
 prompt before each turn. Three views:
 
-| View                   | Source (StateStore)                                  | Domain (enrichment) |
-|------------------------|------------------------------------------------------|---------------------|
-| `personal-knowledge`   | `memories` (confidence > 0.2, not deleted)           | `personal`          |
-| `conversation-history` | `conversations + messages`, 180-day window, excludes `local_only` skills | `conversational` |
-| `institutional-notes`  | `notes` (decisions, invariants, todos, redteam findings — not reflections) | `institutional` |
+| View                   | Source (StateStore)                                  | Enrichment |
+|------------------------|------------------------------------------------------|------------|
+| `personal-knowledge`   | `memories` (confidence > 0.2, not deleted)           | v1 `field_model` (`personal` domain) |
+| `conversation-history` | `conversations + messages`, 180-day window, excludes `local_only` skills | v2 atlas — `conversation_atlas` pipeline + `threaded_turns` chunker |
+| `institutional-notes`  | `notes` (decisions, invariants, todos, redteam findings — not reflections) | v1 `field_model` (`institutional` domain) |
 
-Each view runs the v1 enrichment pipeline and writes `field_skeleton.json`
-to `~/.sovereign/indexes/<view>/`. Before each message,
-`LandscapeDigestProvider::splice_landscape_digests` formats per-view
-markdown blocks within token budgets (300 / 200 / 100), computes cross-view
-**resonance** (cosine ≥ 0.75, ≤5 matches per digest, phrased tentatively),
-and splices the result into `ConversationContext`.
+The `conversation-history` view migrated to v2 atlas in the
+conversation-imports landing (§4.14c) so the user's Sovereign-internal
+chats produce the same `atoms.json` shape as imported Claude exports —
+both surfaces in Atlas View, both groupable under the shared
+"Conversations" rail header. The SQL acquirer emits per-message rows in
+the `### [YYYY-MM-DD HH:MM] <role>\n<body>` shape `threaded_turns`
+expects, so the chunker pairs user+assistant turns into retrieval units
+byte-identical to the Anthropic-export path. Personal-knowledge and
+institutional-notes keep the v1 skeleton path.
+
+Per-view digest source:
+- v1 views read `field_skeleton.json` → `digest::format_landscape`.
+- v2 atlas view reads `atlas/atoms.json` →
+  `atlas_digest::render_atlas_digest`, which ranks Entity / Claim /
+  Question atoms by salience and emits the same three-section
+  markdown shape (`People & topics`, `Recurring threads`,
+  `Open questions`) so the existing token budget + cross-view
+  resonance code is unchanged.
+
+Before each message, `LandscapeDigestProvider::splice_landscape_digests`
+formats per-view markdown blocks within token budgets (300 / 200 / 100),
+computes cross-view **resonance** (cosine ≥ 0.75, ≤5 matches per digest,
+phrased tentatively), and splices the result into `ConversationContext`.
 
 **Structural privacy invariants** (enforced in code):
 
@@ -1429,6 +1534,53 @@ corpus configured for OCR on a daemon that can't honour it.
   guard-tripped or errored corpora prominently above the source list
   (5-second polling refresh while the section is mounted).
 
+### 4.14c Conversation imports — Settings → Imports
+
+A desktop tab (`sovereign-desktop` Settings → Imports) that turns the
+user's exported conversation history from third-party assistants into
+a browsable corpus alongside their Sovereign-internal chats. v1 ships
+the Anthropic path; ChatGPT + Gemini land in follow-up PRs (§10.1).
+
+```
+[Settings → Imports]
+  user picks data-<uuid>-batch-0000.zip
+    → import_anthropic_zip (Tauri cmd)
+        unzip → ~/.sovereign/conversations/conversations.json
+        count `chat_messages` for pre-flight ETA
+        POST /internal/corpus/install { corpus_id: "conversations-anthropic" }
+    → existing `corpus-progress` Tauri event stream drives the
+      progress card; ETA is derived client-side from
+      `elapsed * (100 − percent) / percent` after a 60s warmup.
+    → phase: complete → "Open in Atlas" calls
+      atlasNavigation.requestAtom(corpus_id, firstAtomId).
+```
+
+| Layer | Where |
+|---|---|
+| Recipe | `sovereign-recipes/conversations-anthropic/recipe.toml` (mirror at `corpus-engine/recipes/conversations-anthropic/recipe.toml` for the bundled-fallback path). Single canonical landing zone `~/.sovereign/conversations/conversations.json`; recipe carries `[display] category = "conversation"` so the Atlas View rail groups it with `conversation-history`. |
+| Tauri command | `sovereign-desktop/src-tauri/src/import_commands.rs::import_anthropic_zip` — validates `.zip`, locates `conversations.json` (root or one-level-nested), streams it to `<canonical>.tmp` → atomic rename, archives any prior file to `conversations.json.bak-<ts>`. |
+| Pre-flight ETA | `total_messages * SECONDS_PER_MESSAGE` (baked from one calibration run on the user's own export; ±30% band rendered in the UI). |
+| Live ETA | `sovereign-desktop/src/lib/util/etaFromProgress.ts` — pure helper, vitest-covered (15 cases). Suppresses output before 60s warmup OR percent < 5%; hides on terminal phases. |
+| UI | `sovereign-desktop/src/lib/components/settings/ImportsTab.svelte`. Anthropic row enabled; ChatGPT + Gemini rows show "Coming soon" pills so the product surface is legible without being functional. |
+| Provenance label | When the source corpus carries `[display] category = "conversation"`, `runtime.rs::build_provenance_components` substitutes `display_name = "Your conversations"` for the per-corpus slug — citation chips render as one logical pool. |
+| Synth prompt | `runtime.rs::format_scored_chunks_with_kinds` peels chunks from category=conversation corpora into a dedicated `## From your conversations` section; collapses both conversation corpora into one prompt bucket. |
+
+The `[display]` block (`corpus-engine/src/recipe.rs::DisplayMeta`)
+flows through `_corpus_meta.json` and surfaces on `IndexInfo` so
+retrieval-time code reads category off the index summary instead of
+re-resolving the recipe. See §3.7 for the schema back-compat
+contract; the existing recipe-back-compat fixture pins the
+display-less shape.
+
+Pinned by `recipe_back_compat::recipe_without_display_block_still_parses`,
+`recipe_back_compat::recipe_with_display_block_round_trips`,
+`atlas_view::reader::display_block_in_corpus_meta_is_read_when_present`,
+`atlas_digest::three_section_shape_renders_when_all_atom_types_present`,
+`import_commands::unpack_finds_nested_conversations_json`,
+`import_commands::unpack_rotates_existing_canonical_file`,
+`import_commands::count_messages_counts_sender_markers`, and
+`etaFromProgress.spec.ts` (15 vitest cases).
+
 ### 4.14b Newsworthy — Wikipedia freshness layer
 
 Daemon-driven near-real-time refresh for the `wikipedia-newsworthy`
@@ -1560,6 +1712,173 @@ co-evolution clusters + staleness queue); `Investigation queue`
 (unmatched narrative entities, auto-classified into file-path /
 method-function / abstract-principle / self-reference / worth-a-closer-look
 buckets); `Internal` (rough-edges summary).
+
+### 4.17 Agent-coding battery — `sovereign-agent-bench`
+
+Eight-problem graded battery measuring how well an end-to-end coding
+agent (pi / opencode / codex / aider, model-agnostic) drives a real
+software-engineering task to completion. Replaces the OICP-types
+one-shot demo (`HANDOFF.md`) — that proved plumbing works; this
+*measures* how well plumbing works on diverse tasks.
+
+Problem mix: three algorithmic (1.1 Regex Shortest Path, 1.2 Group
+Knapsack, 1.3 Tree LIS), three system-design (2.1 Strict-Order Global
+Counter, 2.2 Mutual Friend at 1B Scale, 2.3 Zero-Knowledge BMI), two
+code tests (3.1 Hex Conway, 3.2 Light's Out). Witness languages span
+Rust × 3, Go × 2, TypeScript × 2, Python × 1. Each problem scored
+`0..=3` on three dimensions (correctness / approach / efficiency),
+`72` max total.
+
+**Crate:** `sovereign/crates/sovereign-agent-bench/` (~3.5k lines,
+14 files all under the §3.1 800-line ceiling). Bench data lives at
+`sovereign/bench/agent-coding/problems/<id>/` (TOML config + prompt.md
++ rubric.md + held-out fixtures), with dated baselines under
+`baselines/agent-coding/<date>-<agent>-<model>.json` and a
+`latest.json` symlink for regression compare.
+
+**CLI:** `sovereign agent-bench <run|list|show>`. The `run` subcommand
+launches the chosen agent on each selected problem in an ephemeral
+`TempDir` workdir with `env_clear()`'d credentials, monitors a JSONL
+event stream for the token-budget kill (default 16K output tokens
+per problem), copies held-out test fixtures into the workdir AFTER
+the agent exits, runs the witness verify command, parses test
+results via a per-language parser (cargo libtest / `go test -json` /
+vitest text / pytest text), buckets the pass fraction into a 0..=3
+score, runs the LLM judge for the judged dimensions (default 3 trials,
+majority vote + `coverage_mean` continuous signal per
+`runner_threads.rs:597-680` pattern), assembles a `BenchReport`,
+optionally retargets the `latest.json` baseline, and surfaces a
+regression delta. Agent dispatch is via `AgentRunnerRegistry`
+(mirror of `corpus-engine::DomainRegistry`); the MVS ships the `pi`
+runner — opencode / codex / aider land as later PRs.
+
+**MVS scope (PR 1):** crate scaffold + trait + registry + `PiRunner` +
+`MockAgentRunner` + problem loader + cargo-test witness parser +
+HTTP judge + multi-trial aggregator + scoring + report + baseline
+persistence + 3.2 Light's Out problem data + `tests/mvs_pipeline.rs`
+(end-to-end against the mock runner + stub judge; no GPU/network).
+
+**Setup:** `bash scripts/setup-pi-provider.sh` writes
+`~/.pi/agent/models.json` with a `commonwealth` provider pointing
+at `http://localhost:9741/v1`. Idempotent.
+
+**Plan:** `~/.claude/plans/i-want-to-pickup-sorted-eagle.md`.
+
+---
+
+### 4.18 Canonical agent-tools layer — `commonwealth-agent-tools`
+
+The Commonwealth single-source-of-truth tool surface. Five canonical
+primitives — `inspect_workdir` (polymorphic over file/dir/find/grep),
+`write_file`, `cargo_build`, `cargo_smoke`, `agent_done` — every
+agent runner (pi / codex / opencode / native) translates to and
+from. The `native` runner uses the canonical set end-to-end (no
+arbitrary `bash`); the `pi` adapter is observer-only (pi keeps its
+own tools internally but every tool call gets normalized into the
+canonical shape for cross-agent comparison).
+
+**Crate:** `sovereign/crates/commonwealth-agent-tools/` (~1.2k lines,
+8 source files all under the §3.1 800-line ceiling). 34 unit tests
+pinning the canonical contract: schema completeness, descriptor
+shape, adapter equivalence (`pi_and_native_expose_the_same_canonical_set`
+fails if a future PR teaches one adapter a primitive and not the
+other), workdir-path traversal rejection, and per-primitive
+round-trip.
+
+**Layering:**
+
+- `primitive::Primitive` — closed enum, 5 variants. `PrimitiveKind`
+  carries id() + from_id() + all(). Adding a variant is a hard
+  break that touches every adapter + executor exhaustively.
+- `descriptor` — JSON Schema per variant. This is what the model
+  sees in the OpenAI chat completion `tools` array.
+- `executor::execute` — async dispatch over `Primitive`; bound to
+  `ExecCtx { workdir, subprocess_wall_cap }`. Reuses the witness's
+  `tokio::time::timeout` + `kill_on_drop` shape so an
+  infinite-loop test never hangs the runner.
+- `result::ToolResult` / `ToolError` — structured envelope + closed
+  error taxonomy. Cross-agent failure-class comparison is
+  well-defined because the error variants are closed.
+- `registry::Registry` — open registry per ARCH §4. v1 seeds all 5
+  primitives.
+- `adapter::AgentToolAdapter` — translate-call + translate-result
+  + canonical-coverage. `native::Adapter` is identity;
+  `pi::Adapter` maps pi's six tools (`read`, `ls`, `find`, `grep`,
+  `write`, `bash`) through `BashIntent` (closed enum) onto the
+  canonical set.
+
+**Bench wiring:** `sovereign-agent-bench`'s `ToolCallRecord` carries
+`canonical_kind: Option<PrimitiveKind>` (serde-default for
+backwards-compat). `runners/pi.rs` calls
+`pi::Adapter::translate(name, args)` after harvesting each tool
+event; `runners/native.rs` drives the daemon's
+`/v1/chat/completions` directly with the canonical descriptor set
+and dispatches via `Registry::dispatch`. `runners/shared_detectors.rs`
+holds the `ThrashTracker` both runners share so the
+`SAME_PATH_WRITE_THRESHOLD = 3` rule lives in exactly one place.
+
+**First measurement (2026-05-21, 35B primary, N=3, PR 1):** native
+and pi tie on 1.1 (9.0 ± 0.0), 2.1 (~3 ± 2), and 3.2 (0.0). Canonical
+purity (no `bash` in the native tool set) did NOT close the
+verify-discipline gap on 2.1 / 3.2 — the model still wrote
+`src/lib.rs` 3× without calling `cargo_build`, even when
+`cargo_build` was right there in the registry. The architectural
+result is the measurement instrument; the meta-skill hypothesis
+"tool naming closes the gap" did not hold. Future work targets
+the deeper attention-budget gap.
+
+**PR 2 — Role layer + multi-language primitives (2026-05-21 evening).**
+The slot/role framing surfaced: one model trying to play one role
+loses the counter-force that produces discipline. Solution: split
+the agent loop across three roles operating on the same model
+weights via different prompts + tool subsets + forced first tools:
+
+- `Planner` — emits `agent_plan { plan }` once at run start. Tool
+  subset = `[agent_plan]` only. Forced first tool fires `agent_plan`
+  immediately. The plan is sticky in `RoleDossier.plan` across every
+  subsequent role call.
+- `Implementer` — `write_file` + `handoff_to_evaluator` + `agent_done`.
+  Forced first tool = `write_file`. NO `inspect_workdir` in the
+  subset (structural enforcement: the workdir state is already in
+  the user message; including inspect just enabled inspect-loops).
+- `Evaluator` — `build` + `smoke` + `handoff_to_implementer` +
+  `agent_done`. The model can't write here by construction.
+
+Three new primitives: `agent_plan`, `handoff_to_evaluator`,
+`handoff_to_implementer`. Two renames: `cargo_build` → `build`,
+`cargo_smoke` → `smoke`. The renamed primitives carry the bench
+language-agnostically — `ExecCtx.build_cmd` + `verify_cmd` are
+populated from `problem.witness.resolved_build_cmd()` /
+`problem.witness.verify_cmd`. Per-language defaults exist for Rust /
+Go / TypeScript / Python (Python's build is a no-op since it's
+interpreted). The pi adapter's `BashIntent` classifier accepts
+per-problem command prefixes via `with_problem_commands(build,
+verify)` — Go's `go test` is recognized when the problem binds Go
+commands, etc.
+
+`runners/native.rs` gained a `NativeMode` enum: `RoleAware` (default,
+v2 behavior) and `Monolithic` (PR-1 baseline, kept for the
+apples-to-apples regression compare). The registry registers both:
+`--agent native` for the role-aware loop, `--agent native-monolithic`
+for the baseline.
+
+**Counter-force closes verify-discipline (validated 2026-05-21
+evening):** smoke run on 1.1 — Planner → Implementer (one write) →
+Evaluator (build + smoke) → 8/9 (dim_a=3 / dim_b=2 / dim_c=3).
+12/12 tests passed; the Evaluator looped between build and smoke at
+the end (couldn't decide to call agent_done after seeing tests
+pass), tripping the `same-primitive loop` detector — a separate
+attention-budget gap that's the next iteration's target. The role
+layer's structural commitment to verify-after-write is what the
+plan promised; it held.
+
+`role::Role` is a closed enum + exhaustive matches in
+`role::transition`, `role::profile::default_profile_for`, and every
+adapter site — adding a 4th role (Critic, Spec-Anchor) is a
+typed-fence operation.
+
+**Plans:** PR 1 — `~/.claude/plans/autonomous-loop-tick-tingly-clock.md`.
+PR 2 — `~/.claude/plans/role-layer-multilang.md`.
 
 ---
 
@@ -1841,6 +2160,249 @@ commonwealth daemon start/stop/status
 `contrib/`: `install.sh` (curl installer), `systemd/commonwealth.service`,
 `launchd/com.commonwealth.daemon.plist`.
 
+### 5.11 Desktop production-readiness layer
+
+A coordinated stack of changes (W1–W6) shipped for the friends-and-family
+launch, all targeting the same failure mode: a non-technical user's chat
+experience gets ruined by either (a) a daemon crash dropping the whole UI,
+or (b) peer work pinning their GPU while they're actively chatting.
+
+#### 5.11.1 Child-process daemon supervisor (W1)
+
+`sovereign/crates/sovereign-desktop/src-tauri/src/supervisor.rs` —
+Tauri-free, broadcast-driven supervisor with heartbeat, exponential
+backoff (1s→5s→30s→2min), crash-loop ceiling (>5 in 1h), bounded
+stderr ring buffer, and crash-log persistence to
+`<data_dir>/crash-logs/daemon-<unix-ts>.log`.
+
+Opt-in via `SOVEREIGN_USE_SUPERVISOR=1`. When set,
+`supervisor_setup::maybe_start` (also new) resolves the `sovereign-cli`
+binary (`SOVEREIGN_CLI_PATH` override → next-to-exe fallback), spawns
+it as a child via `tokio::process::Command`, waits up to 60s for the
+first Healthy state, and overrides `BootstrapMode::Local` to
+`BootstrapMode::Attach { client_port }` — folding the supervised path
+into the existing Attach-mode HTTP plumbing. On failure, falls back to
+the legacy in-process `EmbeddedDaemon` with a loud `warn!`.
+
+Motivated by process-level ggml/llama.cpp SEGVs that an in-process
+supervisor can't catch (the panic IS the process dying). The
+child-process boundary makes "daemon crashed → click Reconnect" a
+recoverable UI state instead of a dead window.
+
+`RemoteApiProvider::warmup_primary` was added so the supervised
+daemon's window-focus warmup flows over HTTP to the child's
+`/internal/inference/warmup` route (which already existed; the override
+just routes there).
+
+PR-3 (deferred) flips the supervised path to default and removes the
+in-process EmbeddedDaemon construction from `bootstrap.rs`.
+
+#### 5.11.2 Contribution ceiling + foreground-yield for peer serving (W2)
+
+`commonwealth/crates/commonwealth-api/src/admission.rs` —
+`peer_admission_layer` axum middleware applied per-route to
+`POST /v1/chat/completions` (client port) and
+`POST /internal/knowledge/search` (internal port). Local requests
+(no `X-Node-Id`) admit unconditionally — one header check, hot path
+stays cheap. Peer requests check, in priority order:
+
+1. **Paused** — `AppState::contribution_paused_until > now`
+2. **Yielding to local** — local foreground request within
+   `yield_window_secs`
+3. **Ceiling exceeded** — `peer_inflight_count >= contribution_max_peer_inflight`
+
+Rejections return 503 with structured body
+(`{error, reason: "paused" | "yielded_to_local" | "ceiling_exceeded",
+retry_after_secs}`) plus `Retry-After` header so the requesting peer's
+load balancer picks another peer naturally.
+
+`PeerInflightGuard` is a RAII type that decrements the inflight counter
+on drop — including panic unwind — so the count stays accurate even
+when downstream handlers blow up.
+
+The foreground-yield primitive already existed for ingest workers
+(`yield_window_secs`); W2 extended it to peer-served inference, which
+is the actual "press send and the GPU isn't pinned by peer work" fix.
+
+New control routes (loopback-only, on the client port alongside
+`/internal/inference/warmup`):
+
+- `GET  /internal/contribution/status`   — Settings/tray snapshot
+- `POST /internal/contribution/ceiling`  — set peer-inflight cap
+- `POST /internal/contribution/pause`    — pause for N seconds
+- `POST /internal/contribution/resume`   — clear active pause
+- `GET  /internal/contribution/recent`   — last N LedgerEvents
+
+#### 5.11.3 Tray status chip + pause-with-duration menu (W3)
+
+`sovereign/crates/sovereign-desktop/src-tauri/src/tray.rs` —
+rewritten from the Open/Quit-only stub. Status text line updated by a
+5s tokio poller calling `get_contribution_status`. Pause submenu posts
+to `/internal/contribution/pause` with the chosen duration; "Until I
+resume" encodes 365 days and the renderer recognises that ceiling.
+Resume Sharing item is `set_enabled` per the poll's `paused_until`.
+
+Five Tauri command wrappers (`commands.rs`):
+`get_contribution_status`, `set_contribution_ceiling`,
+`pause_contributions`, `resume_contributions`, `get_recent_contributions`.
+Local DTOs mirror the daemon shapes byte-for-byte (same pattern as
+`MeshQuiesceState`) so the desktop crate doesn't depend on
+`commonwealth-api` types.
+
+Frontend pieces deferred: in-app `ContributionPanel.svelte`,
+color-changing tray icon assets.
+
+#### 5.11.4 First-mesh-join consent (W4)
+
+`DesktopConfig.first_mesh_consent: Option<FirstMeshConsent>`.
+`FirstMeshConsent` records `{ share_gpu, ceiling, recorded_at_unix }`.
+`None` means "consent dialog not yet shown" — the Svelte `App.svelte`
+gates the main UI on this.
+
+Tauri commands: `get_first_mesh_consent`,
+`record_first_mesh_consent(share_gpu)`. Yes → ceiling=1 (25% bucket
+per the W4 plan); No → ceiling=0. The command persists to
+`DesktopConfig` AND best-effort applies the ceiling at the daemon. A
+boot-time re-apply in `main.rs` (after `state::bootstrap`) re-issues
+the ceiling so a daemon restart doesn't silently revert to unlimited.
+
+Frontend `ConsentGate.svelte` deferred.
+
+#### 5.11.5 Crash report "send to Alex" (W6)
+
+`sovereign/crates/sovereign-desktop/src-tauri/src/crash_bundle.rs` —
+reads the latest supervisor-written crash log, redacts `SetupConfig`
+(model basenames only, never absolute paths), stitches into a single
+markdown file at `~/Desktop/sovereign-crash-<unix-ts>.md`, returns a
+prefilled `mailto:` URL the frontend opens via `tauri-plugin-shell`.
+
+**No auto-upload.** v1 ships a markdown file the user reads before
+sending — transparency builds trust for the friends-and-family launch.
+The mailto body instructs them to attach the file manually. Tail-of-log
+truncation at 256 KB (panic context lives at the bottom of stderr).
+
+Tauri command: `prepare_crash_report` returns `{ report_path, mailto_url }`.
+
+Frontend `ReconnectBanner.svelte` "Send report" button deferred.
+
+#### 5.11.6 Svelte layer
+
+Frontends consuming the Rust commands and HTTP routes above:
+
+- `ReconnectBanner.svelte` (W1/W6, mounted globally in `App.svelte`) —
+  subscribes to `supervisor-state` events; silent for healthy/starting,
+  warns for unhealthy/restarting, surfaces a "Send report" button on
+  `failed` that calls `prepare_crash_report` →
+  `tauri-plugin-shell.open(mailto_url)` and shows the local report
+  path so the user can attach manually.
+- `ConsentGate.svelte` (W4) — full-screen modal on first launch when
+  `get_first_mesh_consent` returns `None`; routed via the `"consent"`
+  view in `App.svelte`'s `AppView` union.
+- `SharingSection.svelte` (W3) — Settings → Sharing tab. Ceiling preset
+  row (Off / A little / Some / More / Unlimited), pause-status
+  countdown with "Until I resume" handling, three pause-duration
+  buttons + Resume, live recent-activity feed (10 events, 5s poll),
+  yielding-to-foreground state surface.
+- `ConnectSection.svelte` (W5) — Settings → Connect tab. Copy-button
+  rows for `OPENAI_BASE_URL=http://localhost:<port>/v1` + API key,
+  dark-themed Codex one-liner, live `/v1/models` list refreshed every
+  10s. No new daemon endpoints — `/v1/models` already existed.
+
+Tab routing in `SettingsPanel.svelte`: "Sharing" sits between Mesh and
+Skills; "Connect" sits between Skills and Paths. Both indexed by the
+keyword-search at the top of the panel.
+
+Open polish items not in scope for the launch:
+
+- Tray icon assets (green/yellow/red) + platform tint code.
+- HintCues activation nudging first-time users to the Sharing tab.
+- W1 PR-3 — default-flip removing the in-process EmbeddedDaemon path,
+  plus the contribution-reads HTTP bridge `mesh_get_contributions`
+  needs for full functionality in supervisor mode.
+- Graceful SIGTERM-with-grace on daemon shutdown (libc-based; small).
+
+### 5.12 Pinned worker pods as inference peers
+
+Ephemeral worker pods (Vast L40S rented via `pipeline pod up`) join the
+mesh scheduler's inference pool as one more peer, scored by the same
+OICP load balancer that picks between BeefyMac and a local primary
+slot. Pods aren't gossiped — they're owner-private, TLS-pinned, and
+authenticated by an Ed25519 `WorkerToken`. Spec:
+`sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`.
+
+What ships:
+
+- **`PeerInferenceEndpoint.transport: Option<PinnedTransport>`**
+  (`sovereign-mesh/src/daemon.rs`). `None` is the default plain-HTTP
+  mesh peer; `Some(t)` carries a pre-built TLS-pinned `reqwest::Client`
+  + the owner-signed bearer. Every outbound HTTP path in
+  `peer_inference.rs` (4 call sites, plus manifest fetch) branches on
+  this through one `provider_for_peer(&peer, url)` helper so the
+  pinned-pod carve-out can't accidentally regress when a new routing
+  path is added.
+- **`pinned_transport.rs`** — derives a TLS-pinned client + synthetic
+  `NodeId` from a bootstrap blob's seed. `synthetic_node_id_from_seed`
+  domain-separates from the pubkey thumbprint so the scheduler's
+  per-peer hashmap key can't collide with the TLS pin.
+- **`pinned_worker_source.rs`** — `PinnedWorkerEndpointSource`
+  (register/deregister/list) + `CompositeEndpointSource` that
+  concatenates a mesh source with a pinned source. The composite
+  suppresses ledger emission for pinned-pod node ids — pods are the
+  owner's own paid compute, not gifted peer compute.
+- **`pinned_pod_snapshot.rs`** — on-disk snapshot format at
+  `~/.sovereign/worker-pods/<vast-id>.json` carrying the bootstrap
+  blob + host:port + operator-stamped capabilities. `pod up` writes
+  one (atomic write-then-rename); `pod down` deletes it. The daemon
+  loads every snapshot on startup and registers each pod with the
+  inference scheduler.
+- **Pod-side proxy** (`worker_inference_proxy.rs`) — the worker
+  daemon's `:9742` listener serves `POST /v1/chat/completions`,
+  `POST /v1/embeddings`, `GET /v1/models`, `GET /oicp/v1/capabilities`
+  when an `InferenceProxyConfig` is wired. Each request is forwarded
+  to the child daemon at `http://127.0.0.1:9741` via streaming
+  reqwest (`bytes_stream` + axum `Body::from_stream`) so SSE token
+  pacing is preserved through the TLS tunnel. The same Ed25519
+  `require_worker_token` middleware that gates `/internal/worker/*`
+  covers these — no second auth layer. Until the child daemon's
+  `/v1/models` probe returns 200, the proxy 503s with `Retry-After`
+  so the owner sees a transient-error pattern (which the scheduler's
+  fan-out retry tolerates) rather than `ECONNREFUSED` (which is
+  opaque).
+- **Affinity carve-out** in `peer_inference.rs`: pinned pods have no
+  "users" beyond the owner, so the scheduler normalises
+  `claim_affinity = 1.0` for any peer with `transport.is_some()`.
+  Without this, a pinned pod whose child manifest didn't advertise
+  outside-user serving would be silently penalised in the scoring
+  ratio.
+
+Invariants pinned by tests:
+
+- The pod's TLS cert is deterministic from the blob's seed
+  (`deterministic_cert_from_seed` in `pinned_transport.rs`) — the
+  owner's snapshot-reload flow depends on byte-identical cert
+  derivation.
+- A pinned pod's synthetic node id never collides with its pubkey
+  thumbprint (`synthetic_node_id_differs_from_pod_thumbprint`).
+- `PinnedTransport`'s Debug impl redacts the bearer.
+- `CompositeEndpointSource::ledger_emission_for` returns `None` for
+  every registered pinned node id, regardless of what the inner mesh
+  source would have emitted.
+- `worker_inference_proxy` returns 503 when `child_ready` is false
+  and 401 when the bearer is missing.
+- `load_all_snapshots` skips corrupt/non-JSON files rather than
+  bailing the whole daemon startup.
+
+Out of scope for v1 (deferred):
+
+- Hot-reload of the pinned source (today: daemon picks up new pods on
+  restart only — `pipeline pod up` writes the snapshot but the
+  running daemon doesn't auto-re-scan the directory).
+- HTTP register/unregister endpoint for runtime pod attach.
+- Stream-pacing regression test against a real SSE child.
+- Real-Vast E2E in CI (the unit + proxy tests cover the plumbing; a
+  live Vast test belongs in the integration suite that already runs
+  `tests/worker_e2e.rs`).
+
 ---
 
 ## 6. How the Four Projects Fit Together
@@ -2050,13 +2612,14 @@ file or gap with an entry is sequenced work.
 | `commands.rs` (Tauri) split | `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) | Tauri's command-registration surface; splitting requires re-grouping by feature without breaking the IPC name registry. Coordination cost > current pain. |
 | `atos_cmd/run.rs` split | `sovereign-cli/src/atos_cmd/run.rs` (~4300 lines) | ATOS runner loop (§4.13). Subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, done-marker accept, run-record persistence all cohere as one state machine today. Split is one-file-per-stage when the stage boundaries stabilise. Landed 2026-05-06 in commits 032a0ad + 0229adb; the audit pass that produced this entry caught it. |
 | `mesh_cmd.rs` split | `sovereign-cli/src/mesh_cmd.rs` (~3000 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under mesh self-heal + cloud peering work. |
-| `json_constraint.rs` split | `sovereign-inference/src/json_constraint.rs` (~3100 lines) | LLGuidance JSON-Schema constraint integration. The grammar layer + tokenizer glue + diff coalescer cohere tightly; splitting requires the grammar API to stabilise upstream. |
 | `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~2600 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Holds lifecycle state machine (try_resume / create / join / leave / shutdown), HTTP listener wiring (7-router merge), background-task spawning (gossip, auto-collaborate, auto-resume, storage-snapshot, newsworthy-watcher), AppState construction with an order-sensitive `CorpusEngine` injection invariant, config reload, and mDNS/relay-IP helpers. Free extractions of pure helpers landed: `mesh_discovery.rs` (relay/IP enumeration); the `start_daemon()` order invariant is pinned by `sovereign-mesh/tests/daemon_wiring.rs` and the port-config plumbing is pinned by `tests/port_config.rs`. The load-bearing splits (`start_daemon()` → `app_state_builder.rs` + `background_tasks.rs`) are unblocked but stay deferred until the `MemberRecord.client_port` wire-protocol work (below) lands and a real two-daemon integration test against `start_daemon` itself can be built. |
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Adapts the local `InferenceProvider` to the `LocalInferenceService` shape that the mesh router calls, *and* synthesizes this node's OICP `CapabilityClaim`s for peer scoring. Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) have been extracted to `oicp_synthesis.rs`. Remaining concerns — wire-shape translation, tool-call envelope parsing (grammar vs. legacy marker), tool-profile policy — are tightly coupled to the `LocalInferenceService` impl and stay in the file until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~1900 lines) | `MeshInferenceProvider` (the OICP-aware router) plus throughput observation, manifest caching, and quarantine policy. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. Further split blocked on `select_peer` (~470 lines) — splitting it requires the OICP-cache key + peer-health weight semantics to stop moving; until then the routing logic reads more clearly as one method. |
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration: partition planning, peer recruitment, handoff state machine, gossip integration. Lifecycle states (`Planning → Handoff → Active → Complete`) cohere as one state machine; splitting before the cloud-peer flavour settles would re-merge. |
 | `MemberRecord.client_port` wire-protocol field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` candidate-URL builder | The local-side port plumbing landed 2026-05-13: `EmbeddedDaemon` honors `SetupConfig.daemon.{client_port,internal_port}` for its own bind/announce decisions (`resolved_ports` helper, threaded through `create_mesh` / `join_mesh` / `start_daemon` / mDNS / auto-collaborate spawn). What remains is the **peer-uniformity assumption**: `peer_inference_endpoints` rewrites every peer's URL with `this daemon's client_port`, and `auto_ingest`'s candidate-URL builder pins port `9742` regardless of what gossip reported. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` (and a matching `client_port` slot in the join handshake's wire shape) so peers advertise their *own* client port rather than counting on uniformity. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` (Phase 1 shipped 2026-05-12) | Phase 1 ships read-only inspection (§4.10c). Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash, not the volatile sequential `AtomId`) so user edits and approval state survive re-extraction. Overlay-merging branches go inside the existing `FileAtlasReader` — no new trait. The forward-compat `curation_status` / `overlay_supports` fields are already on every DTO; flipping them lights up `<CurationStatusBadge>` and `<EditAffordances>` slots already present in `AtomDetail.svelte`. Design notes: NoteStore decision "Atlas inspector: stable_key by content hash" + todo "Atlas inspector Phase 2 — curation overlay". |
+| Imports tab — ChatGPT + Gemini extractors | `corpus-engine/src/extractors/` + `sovereign-recipes/conversations-{chatgpt,gemini}/` | v1 of Settings → Imports (§4.14c) ships the Anthropic path only — extractor + recipe + Tauri command wired end-to-end against the user's own `conversations.json`. ChatGPT (OpenAI export zip) and Gemini (Google Takeout) follow once their schema work lands. Plumbing is source-agnostic: the import command, progress stream, Atlas-View grouping, and `[display] category = "conversation"` synth-prompt rename all light up once a new `<source>_export` extractor + recipe register themselves. |
+| Imports tab — KQ chip label for conversation corpora | `sovereign-core/src/runtime.rs` `KnowledgeQueryPlan` | The DeepQuery path threads `display_categories` through `build_provenance_components` so the citation chip renders "Your conversations" instead of a corpus_id slug. The streaming KQ path (`handle_knowledge_query_stream`) and the metalingual locator path pass `None` today — they'd need to thread the lookup through `KnowledgeQueryPlan`. Sub-page UX polish; the synth-prompt section split (§4.14c) is the load-bearing change. |
 
 (`atos_cmd.rs` and `local.rs` were the prior tenants of this list; both
 were split into folders in the spring 2026 refactor pass.)

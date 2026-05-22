@@ -116,7 +116,7 @@ fn build_descriptors() -> Vec<ToolDescriptor> {
     // Order mirrors project_cmd.rs's registration so the manifest
     // matches any diagnostics that reference the registry's ordering.
     vec![
-        SymbolLookupTool::new(Arc::clone(&engine)).descriptor(),
+        SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&scip_handle)).descriptor(),
         CodeSearchTool::new(Arc::clone(&engine)).descriptor(),
         RecentChangesTool::new(Arc::clone(&engine)).descriptor(),
         FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&scip_handle))

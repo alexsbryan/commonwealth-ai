@@ -588,8 +588,6 @@ pub fn canonicalize_apply_patch_heredoc(cmd: &str) -> Option<String> {
     let leading_ws_len = cmd.len() - trimmed_start.len();
     let leading = &cmd[..leading_ws_len];
 
-    // Opener: `apply_patch <<TAG` with optional quoting around TAG.
-    // Capture tag chars so we can use it as the closer marker.
     let after_apply = trimmed_start.strip_prefix("apply_patch")?;
     let after_lt = after_apply.trim_start().strip_prefix("<<")?;
     let (tag, after_tag) = parse_heredoc_tag(after_lt.trim_start())?;
@@ -1279,7 +1277,107 @@ pub fn apply_read_attractor_nudge_chat(
         tool_call_id: None,
         tool_calls: None,
     });
+
+    // Structural commit via grammar (R2): require `cmd` to start with
+    // the canonical apply_patch heredoc opener. The JSON-schema
+    // sampler in `inference_adapter::tool_envelope_schema_for` honours
+    // this hint by injecting a `pattern` on the `cmd` field, and the
+    // `JsonConstraint` walker masks any byte that wouldn't extend the
+    // literal prefix until the prefix is fully emitted. After that
+    // point the string body samples freely.
+    //
+    // R2.1 — path baking: when prior history names the target file
+    // (an Add File marker in a previous assistant emission, or a
+    // file-extension token like `.toml` / `.rs` in the user task),
+    // extend the prefix to commit the path AND the first body-line
+    // `+` marker. Doing so caps the post-prefix free-form region:
+    // the model can no longer fill the path slot with prose
+    // ("1. Cargo.toml in oicp-types/... (placeholder for actual
+    // content)") because the prefix already wrote the path and the
+    // next byte must extend a `+`-prefixed body line.
+    let target_path = extract_recent_add_file_path(messages)
+        .or_else(|| extract_first_path_hint(messages));
+    req.cmd_prefix = Some(match target_path {
+        Some(p) => format!("apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: {p}\n+"),
+        None => "apply_patch <<'EOF'\n*** Begin Patch\n*** Add File: ".to_string(),
+    });
 }
+
+/// Scan messages for the most recent `*** Add File: <path>` marker
+/// in an assistant tool_call. Returns the path (verbatim, trimmed)
+/// or `None` if no prior write was attempted. Used by the
+/// read-attractor / failure-recovery nudge to bake the target path
+/// into the cmd_prefix so the grammar walker commits the path
+/// structurally rather than letting the model invent one.
+fn extract_recent_add_file_path(
+    messages: &[crate::openai_types::ChatMessage],
+) -> Option<String> {
+    for msg in messages.iter().rev() {
+        if msg.role != "assistant" {
+            continue;
+        }
+        let tcs = msg.tool_calls.as_ref()?;
+        let Some(tc) = tcs.first() else { continue };
+        if tc.function.name != "exec_command" {
+            continue;
+        }
+        let args: serde_json::Value =
+            serde_json::from_str(&tc.function.arguments).ok()?;
+        let cmd = args.get("cmd").and_then(|c| c.as_str())?;
+        if let Some(p) = find_add_file_marker(cmd) {
+            return Some(p);
+        }
+    }
+    None
+}
+
+/// Match `*** Add File: <path>` (with optional leading `***`) in a
+/// cmd string. Returns the path with surrounding whitespace trimmed.
+fn find_add_file_marker(cmd: &str) -> Option<String> {
+    for line in cmd.lines() {
+        let stripped = line.trim_start_matches("*** ").trim_start();
+        if let Some(rest) = stripped.strip_prefix("Add File:") {
+            let path = rest.trim();
+            if !path.is_empty() {
+                return Some(path.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Fallback path extractor: scan user/tool messages for the first
+/// path-shaped token (`.<ext>` tail with a known build-tool extension).
+/// Used when no prior Add File marker exists — the user is asking for
+/// a fresh write and the path lives in the task text.
+fn extract_first_path_hint(
+    messages: &[crate::openai_types::ChatMessage],
+) -> Option<String> {
+    const EXTS: &[&str] = &[
+        ".rs", ".toml", ".md", ".json", ".yaml", ".yml", ".py", ".ts",
+        ".tsx", ".js", ".jsx", ".go", ".sh", ".txt", ".sql",
+    ];
+    for msg in messages {
+        if msg.role != "user" && msg.role != "tool" {
+            continue;
+        }
+        for token in msg.content.split(|c: char| c.is_whitespace() || matches!(c, ',' | ';' | '(' | ')' | '`' | '"' | '\'')) {
+            let candidate = token.trim_end_matches(|c: char| matches!(c, '.' | ',' | ':' | '!' | '?' | ';'));
+            if candidate.len() < 3 || candidate.len() > 120 {
+                continue;
+            }
+            if !EXTS.iter().any(|ext| candidate.ends_with(ext)) {
+                continue;
+            }
+            if candidate.contains("..") || candidate.starts_with('-') {
+                continue;
+            }
+            return Some(candidate.to_string());
+        }
+    }
+    None
+}
+
 
 /// Pull the task seed (what the user originally asked for) out of a
 /// frontdoor compressed-history user message.
@@ -1792,6 +1890,231 @@ pub fn apply_anti_repetition_chat(req: &mut crate::openai_types::ChatCompletionR
     });
 }
 
+/// Scan the conversation history for URLs that appeared in prior
+/// `role: tool` messages (typically search-tool results) and set
+/// them on `req.url_allowlist`. This is the server-side accumulator
+/// that the gym runner performs client-side at
+/// `sovereign-cli/src/search_gym_cmd/runner.rs:217-232` — by doing
+/// it here, every client that uses the standard OpenAI tool-call
+/// loop benefits without each one having to implement URL tracking.
+///
+/// The URL constraint in `sovereign-inference/src/url_constraint.rs`
+/// is what actually prevents fabrication at sampling time; this
+/// function just ensures the allowlist that drives it is populated
+/// from whatever the model has already seen in the conversation.
+///
+/// Idempotent: a caller-supplied `url_allowlist` is left untouched.
+/// Operators who know what they want to allow (the gym runner's
+/// explicit accumulation, or a power user with hard-coded allowed
+/// domains) win over this synthesis.
+///
+/// Privacy: tool-result content stays inside the conversation. We
+/// only extract bytes that were already part of the request the
+/// daemon received — no new information crosses any boundary.
+pub fn apply_url_allowlist_from_tool_results(
+    req: &mut crate::openai_types::ChatCompletionRequest,
+) {
+    if req.url_allowlist.is_some() {
+        // Caller supplied one; respect it.
+        return;
+    }
+    let mut urls: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    for msg in &req.messages {
+        if msg.role != "tool" {
+            continue;
+        }
+        for u in extract_urls_from_text(&msg.content) {
+            if seen.insert(u.clone()) {
+                urls.push(u);
+            }
+        }
+    }
+    if !urls.is_empty() {
+        tracing::debug!(
+            url_count = urls.len(),
+            "frontdoor: url_allowlist accumulated from tool results"
+        );
+        req.url_allowlist = Some(urls);
+    }
+}
+
+/// Pull HTTP/HTTPS URL substrings out of `text`. Conservative —
+/// terminates on the usual non-URL characters that would cause the
+/// URL constraint's `is_url_terminator` to fire (whitespace, common
+/// punctuation, brackets, quotes). Trailing punctuation is stripped
+/// so a URL at the end of a sentence doesn't include the period.
+pub fn extract_urls_from_text(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if has_url_marker_at(bytes, i) {
+            let start = i;
+            // Skip past the scheme + "://"
+            let scheme_end = if bytes[i..].starts_with(b"https://") {
+                i + 8
+            } else {
+                i + 7
+            };
+            let mut end = scheme_end;
+            while end < bytes.len() && !is_url_terminator_byte(bytes[end]) {
+                end += 1;
+            }
+            // Trim trailing punctuation that would have terminated
+            // a real URL anyway. Keep `/` (URLs can legitimately end
+            // in a trailing slash).
+            while end > scheme_end && is_trailing_strip(bytes[end - 1]) {
+                end -= 1;
+            }
+            if end > scheme_end {
+                // Safe: extract_urls_from_text only walks ASCII
+                // separators, so the byte boundary at `end` is
+                // valid UTF-8.
+                if let Ok(s) = std::str::from_utf8(&bytes[start..end]) {
+                    out.push(s.to_string());
+                }
+            }
+            i = end.max(start + 1);
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+fn has_url_marker_at(bytes: &[u8], i: usize) -> bool {
+    bytes[i..].starts_with(b"https://") || bytes[i..].starts_with(b"http://")
+}
+
+/// Accumulator companion to `apply_url_allowlist_from_tool_results`.
+/// Walks the chat history for `role: tool` messages, pulls
+/// `ev-Tn-NNNN` evidence handles out of each (matching both the
+/// JSON `"id": "ev-T2-0001"` field shape and any inline mentions
+/// inside evidence content), unions them, and threads the result
+/// onto `req.evidence_id_allowlist`. The inference sampler then
+/// constrains every emitted `[ev-T…` citation to this set, making
+/// fabrication structurally impossible at sample time.
+///
+/// Idempotent: a caller-supplied `evidence_id_allowlist` wins
+/// (we never overwrite an explicit allowlist). Empty result =
+/// leave `None`, which means citations stay unconstrained — Tier 1
+/// prompt discipline is the only safety net on turns with no prior
+/// evidence (the constraint is most valuable from turn 2 onward
+/// when there ARE prior ids to defend).
+///
+/// Privacy: tool-result content stays inside the conversation. We
+/// only extract bytes that were already part of the request the
+/// daemon received — no new information crosses any boundary.
+pub fn apply_evidence_id_allowlist_from_tool_results(
+    req: &mut crate::openai_types::ChatCompletionRequest,
+) {
+    if req.evidence_id_allowlist.is_some() {
+        return;
+    }
+    let mut ids: Vec<String> = Vec::new();
+    let mut seen: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    for msg in &req.messages {
+        if msg.role != "tool" {
+            continue;
+        }
+        for id in extract_evidence_ids_from_text(&msg.content) {
+            if seen.insert(id.clone()) {
+                ids.push(id);
+            }
+        }
+    }
+    if !ids.is_empty() {
+        tracing::debug!(
+            ev_id_count = ids.len(),
+            "frontdoor: evidence_id_allowlist accumulated from tool results"
+        );
+        req.evidence_id_allowlist = Some(ids);
+    }
+}
+
+/// Pull `ev-Tn-NNNN` substrings out of `text`. Shape is
+/// `ev-T<digits>-<digits>` — turn index then evidence index. Both
+/// numeric segments are flexible-length (turn can be one or many
+/// digits, index is typically 4-padded but not required). Output
+/// is the bare id (no surrounding brackets), suitable for direct
+/// insertion into `evidence_id_allowlist`.
+pub fn extract_evidence_ids_from_text(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i + 4 < bytes.len() {
+        if &bytes[i..i + 4] == b"ev-T" {
+            let start = i;
+            let mut p = i + 4;
+            let turn_start = p;
+            while p < bytes.len() && bytes[p].is_ascii_digit() {
+                p += 1;
+            }
+            if p == turn_start || p >= bytes.len() || bytes[p] != b'-' {
+                i += 1;
+                continue;
+            }
+            p += 1;
+            let idx_start = p;
+            while p < bytes.len() && bytes[p].is_ascii_digit() {
+                p += 1;
+            }
+            if p == idx_start {
+                i += 1;
+                continue;
+            }
+            if let Ok(s) = std::str::from_utf8(&bytes[start..p]) {
+                out.push(s.to_string());
+            }
+            i = p;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Mirrors `sovereign-inference/src/url_constraint.rs::is_url_terminator`.
+/// Kept in sync intentionally — the byte sets must agree or the
+/// extractor will find URLs the constraint cannot constrain (false
+/// allow) or stop short of URLs the constraint expects whole (false
+/// reject). Deviation here is a bug.
+fn is_url_terminator_byte(b: u8) -> bool {
+    matches!(
+        b,
+        b' ' | b'\t'
+            | b'\n'
+            | b'\r'
+            | b','
+            | b'<'
+            | b'>'
+            | b'('
+            | b')'
+            | b'['
+            | b']'
+            | b'"'
+            | b'\''
+            | b'?'
+            | b'!'
+            | b';'
+            | b':'
+    )
+}
+
+/// Trailing-punctuation strip for the extractor. Looser than
+/// `is_url_terminator_byte` — includes `.` because a sentence
+/// "see https://x.test/path." should yield `https://x.test/path`,
+/// not the trailing period. The constraint allows `.` inside URLs
+/// (it's part of the domain) but terminates on it at a terminal
+/// trie node, so this is the right asymmetry: extractor strips,
+/// constraint enforces.
+fn is_trailing_strip(b: u8) -> bool {
+    matches!(b, b'.' | b',' | b';' | b':' | b'!' | b'?')
+}
+
 /// Extract absolute-path-shaped substrings from `s`. A path is a
 /// `/`-rooted sequence of at least 2 components made of
 /// `[A-Za-z0-9_.-]`. Returns owned strings deduplicated.
@@ -2144,6 +2467,115 @@ pub fn canonicalize_chat_response_tool_calls(
     fixed
 }
 
+/// Promote a model-emitted tool call from the `content` field into
+/// the structured `tool_calls` field.
+///
+/// Some chat templates (or models emitting JSON-mode output) place
+/// the tool call as a JSON object in the assistant message's content
+/// rather than in the structured `tool_calls` array. Recognised
+/// shapes:
+///   - `{"name": "<tool>", "parameters": {...}}`  — Qwen3 family
+///   - `{"name": "<tool>", "arguments": {...}}`   — native OpenAI
+///
+/// When recognised, the function rewrites `message.tool_calls` to
+/// contain the promoted call and clears `message.content`. Returns
+/// `true` if a promotion happened.
+///
+/// Without this, downstream consumers (frontdoor middleware,
+/// opencode clients, the search-gym test harness) see
+/// `tool_calls=[]` and report "model didn't call any tool" even
+/// though the model clearly intended to. Surfaced by the search-gym
+/// harness on Qwen3.5-9B fixtures during Phase 2 (May 2026); a
+/// parallel implementation lives in
+/// `sovereign-cli/src/search_gym_cmd/runner.rs::promote_content_tool_call`
+/// to catch the same shape in test-time runs.
+///
+/// No-ops if `message.tool_calls` already has entries — the model
+/// emitted in the structured channel, no promotion needed.
+pub fn promote_in_content_tool_call(
+    message: &mut crate::openai_types::ChatMessage,
+) -> bool {
+    // Don't touch already-structured tool calls. If the model used
+    // both channels (rare but possible), the structured one wins;
+    // we'd rather lose a duplicate than synthesise a competing one.
+    if message
+        .tool_calls
+        .as_ref()
+        .map(|t| !t.is_empty())
+        .unwrap_or(false)
+    {
+        return false;
+    }
+
+    let trimmed = strip_think_blocks(&message.content).trim().to_string();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let parsed: serde_json::Value = match serde_json::from_str(&trimmed) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
+    let name = match parsed.get("name").and_then(|v| v.as_str()) {
+        Some(s) if !s.is_empty() => s.to_string(),
+        _ => return false,
+    };
+    let args_value = match parsed.get("parameters").or_else(|| parsed.get("arguments")) {
+        Some(v) => v,
+        None => return false,
+    };
+    let arguments = match serde_json::to_string(args_value) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    // Synthesise a `tool_call_<short>` id so downstream id-based
+    // lookups (tool_call_id correlation on subsequent role:tool
+    // messages) have something to bind to. The id only needs to be
+    // distinct within this assistant turn; a hash of the args keeps
+    // it stable across retries.
+    let id = format!(
+        "promoted_{}_{:x}",
+        name,
+        // Cheap non-crypto hash so debugging output is readable.
+        // We don't need collision resistance — just distinctness
+        // within a turn (and we only synthesise one call here).
+        arguments.len() as u32 ^ (name.len() as u32).wrapping_mul(31)
+    );
+
+    message.tool_calls = Some(vec![crate::openai_types::ToolCall {
+        id,
+        kind: "function".to_string(),
+        function: crate::openai_types::FunctionCall {
+            name,
+            arguments,
+        },
+    }]);
+    message.content = String::new();
+    true
+}
+
+/// Strip `<think>…</think>` blocks from a string. Mirrors the
+/// implementation in the search-gym runner — kept in sync by
+/// convention (both are short, both target the same chat-template
+/// quirks). Unterminated `<think>` discards the rest of the input
+/// rather than emit partial thinking content.
+fn strip_think_blocks(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find("<think>") {
+        out.push_str(&rest[..start]);
+        rest = &rest[start..];
+        if let Some(end) = rest.find("</think>") {
+            rest = &rest[end + "</think>".len()..];
+        } else {
+            return out;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Which tool policy block to render in the distilled directive.
 /// Matches the `runs_synthetic_tools` decision: Opencode profile
 /// gets synthetic `write_file*` injection so its policy points
@@ -2342,6 +2774,11 @@ pub(crate) async fn apply_distiller(
         think_budget: Some(0),
         tool_profile: None,
     sampling_mode: None,
+    assistant_prefix: None,
+    cmd_prefix: None,
+    url_allowlist: None,
+    evidence_id_allowlist: None,
+    lark_grammar: None,
     };
 
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
@@ -2849,6 +3286,11 @@ async fn summarise_block(
         think_budget: Some(0),
         tool_profile: None,
     sampling_mode: None,
+    assistant_prefix: None,
+    cmd_prefix: None,
+    url_allowlist: None,
+    evidence_id_allowlist: None,
+    lark_grammar: None,
     };
     let response = chat_completions(State(state.clone()), headers.clone(), Json(chat_req)).await;
     let status = response.status();
@@ -3035,6 +3477,98 @@ mod tests {
     fn keeplist_keeps_exec_command_and_web_search() {
         assert!(tool_keeplist_contains("exec_command"));
         assert!(tool_keeplist_contains("web_search"));
+    }
+
+    // ─── promote_in_content_tool_call — Phase 2 productionization ────
+    //
+    // Pins the model-content → structured-tool_calls promotion the
+    // search-gym harness surfaced as a real daemon-side gap on Qwen3
+    // family models. Without these, every chat user whose model
+    // emits tool calls in the content channel sees their tool calls
+    // silently dropped.
+
+    fn msg(role: &str, content: &str) -> crate::openai_types::ChatMessage {
+        crate::openai_types::ChatMessage {
+            role: role.to_string(),
+            content: content.to_string(),
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
+
+    #[test]
+    fn promote_in_content_recognises_parameters_shape() {
+        let mut m = msg(
+            "assistant",
+            r#"<think></think>
+
+{"name":"search","parameters":{"query":"NVDA current stock price"}}"#,
+        );
+        assert!(promote_in_content_tool_call(&mut m));
+        assert_eq!(m.content, "");
+        let tcs = m.tool_calls.expect("promoted");
+        assert_eq!(tcs.len(), 1);
+        assert_eq!(tcs[0].function.name, "search");
+        let args: serde_json::Value = serde_json::from_str(&tcs[0].function.arguments).unwrap();
+        assert_eq!(
+            args.get("query").and_then(|v| v.as_str()).unwrap(),
+            "NVDA current stock price"
+        );
+    }
+
+    #[test]
+    fn promote_in_content_recognises_arguments_shape() {
+        let mut m = msg("assistant", r#"{"name":"search","arguments":{"q":"x"}}"#);
+        assert!(promote_in_content_tool_call(&mut m));
+        assert_eq!(m.tool_calls.unwrap()[0].function.name, "search");
+    }
+
+    #[test]
+    fn promote_in_content_noop_when_tool_calls_already_set() {
+        // Model used the structured channel — leave it alone.
+        let mut m = crate::openai_types::ChatMessage {
+            role: "assistant".to_string(),
+            content: r#"{"name":"other","parameters":{}}"#.to_string(),
+            tool_call_id: None,
+            tool_calls: Some(vec![crate::openai_types::ToolCall {
+                id: "existing".to_string(),
+                kind: "function".to_string(),
+                function: crate::openai_types::FunctionCall {
+                    name: "real_call".to_string(),
+                    arguments: "{}".to_string(),
+                },
+            }]),
+        };
+        assert!(!promote_in_content_tool_call(&mut m));
+        // Existing tool call preserved; content not cleared.
+        let tcs = m.tool_calls.as_ref().unwrap();
+        assert_eq!(tcs[0].function.name, "real_call");
+        assert!(m.content.contains("other"));
+    }
+
+    #[test]
+    fn promote_in_content_rejects_non_tool_content() {
+        let mut m = msg("assistant", "Hello, how can I help?");
+        assert!(!promote_in_content_tool_call(&mut m));
+        assert!(m.tool_calls.is_none());
+    }
+
+    #[test]
+    fn promote_in_content_rejects_unrelated_json() {
+        // Valid JSON, but neither `name` nor `parameters/arguments`
+        // — must NOT be promoted (would synthesise a garbage tool
+        // call from arbitrary structured content).
+        let mut m = msg("assistant", r#"{"answer": 42, "confidence": "high"}"#);
+        assert!(!promote_in_content_tool_call(&mut m));
+        assert!(m.tool_calls.is_none());
+    }
+
+    #[test]
+    fn promote_in_content_handles_unterminated_think() {
+        // Unterminated `<think>` discards everything past it, so
+        // there's no JSON to parse. No promotion.
+        let mut m = msg("assistant", "<think>still thinking...");
+        assert!(!promote_in_content_tool_call(&mut m));
     }
 
     #[test]
@@ -3581,6 +4115,11 @@ mod tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         }
     }
 
@@ -5023,5 +5562,197 @@ That's my answer."#;
         let a = sha256_hex(&canonical_source_blob(&mk()));
         let b = sha256_hex(&canonical_source_blob(&mk()));
         assert_eq!(a, b);
+    }
+
+    // ─── URL allowlist accumulator ──────────────────────────────
+
+    use crate::openai_types::{ChatCompletionRequest, ChatMessage};
+
+    fn req_with_messages(msgs: Vec<ChatMessage>) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: Some("test".into()),
+            messages: msgs,
+            temperature: None,
+            max_tokens: None,
+            stream: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+            response_format: None,
+            oicp: None,
+            chat_template_kwargs: None,
+            think_budget: None,
+            tool_profile: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
+        }
+    }
+
+    fn user_msg(content: &str) -> ChatMessage {
+        ChatMessage {
+            role: "user".into(),
+            content: content.into(),
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
+
+    fn tool_msg(content: &str) -> ChatMessage {
+        ChatMessage {
+            role: "tool".into(),
+            content: content.into(),
+            tool_call_id: Some("call-1".into()),
+            tool_calls: None,
+        }
+    }
+
+    #[test]
+    fn extract_urls_picks_up_simple_https() {
+        let urls = super::extract_urls_from_text(
+            "see https://example.test/path for more"
+        );
+        assert_eq!(urls, vec!["https://example.test/path"]);
+    }
+
+    #[test]
+    fn extract_urls_strips_trailing_sentence_punctuation() {
+        let urls = super::extract_urls_from_text(
+            "Read https://example.test/article. Then https://example.test/follow-up!"
+        );
+        assert_eq!(
+            urls,
+            vec![
+                "https://example.test/article",
+                "https://example.test/follow-up"
+            ]
+        );
+    }
+
+    #[test]
+    fn extract_urls_handles_markdown_link_form() {
+        let urls = super::extract_urls_from_text(
+            "[label](https://example.test/x) and [other](https://example.test/y)"
+        );
+        // The `)` terminates the URL — parentheses are URL terminators.
+        assert_eq!(
+            urls,
+            vec!["https://example.test/x", "https://example.test/y"]
+        );
+    }
+
+    #[test]
+    fn extract_urls_handles_numbered_list_form() {
+        // The gym runner + production WebSearchTool both use this shape.
+        let urls = super::extract_urls_from_text(
+            "[1] First — https://example.test/a\n[2] Second — https://example.test/b\n"
+        );
+        assert_eq!(
+            urls,
+            vec!["https://example.test/a", "https://example.test/b"]
+        );
+    }
+
+    #[test]
+    fn extract_urls_skips_bare_scheme_and_garbage() {
+        // No path → empty url, must not be emitted.
+        let urls = super::extract_urls_from_text("just text, no urls. https:// alone");
+        assert!(urls.is_empty(), "got unexpected urls: {urls:?}");
+    }
+
+    #[test]
+    fn extract_urls_handles_both_http_and_https() {
+        let urls = super::extract_urls_from_text(
+            "secure https://a.test/x and insecure http://b.test/y"
+        );
+        assert_eq!(urls, vec!["https://a.test/x", "http://b.test/y"]);
+    }
+
+    #[test]
+    fn accumulator_extracts_urls_from_single_tool_message() {
+        let mut req = req_with_messages(vec![
+            user_msg("question"),
+            tool_msg(
+                "[1] Title — https://example.test/result\n\
+                 [2] Other — https://example.test/result2"
+            ),
+        ]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        let urls = req.url_allowlist.expect("should be populated");
+        assert_eq!(
+            urls,
+            vec!["https://example.test/result", "https://example.test/result2"]
+        );
+    }
+
+    #[test]
+    fn accumulator_dedups_across_multiple_tool_messages() {
+        let mut req = req_with_messages(vec![
+            user_msg("question"),
+            tool_msg("[1] T — https://example.test/x"),
+            user_msg("follow-up"),
+            tool_msg("[1] T2 — https://example.test/x (same as before)"),
+            tool_msg("[2] T3 — https://example.test/y"),
+        ]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        let urls = req.url_allowlist.expect("should be populated");
+        assert_eq!(urls, vec!["https://example.test/x", "https://example.test/y"]);
+    }
+
+    #[test]
+    fn accumulator_ignores_urls_in_non_tool_messages() {
+        // Users / assistants may quote URLs in their messages but
+        // those shouldn't grant citation rights — the URL constraint
+        // is about preventing model fabrication, not about replaying
+        // arbitrary user input.
+        let mut req = req_with_messages(vec![
+            user_msg("I read https://example.test/x earlier"),
+            ChatMessage {
+                role: "assistant".into(),
+                content: "Yes I see https://example.test/y mentioned".into(),
+                tool_call_id: None,
+                tool_calls: None,
+            },
+        ]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        assert!(
+            req.url_allowlist.is_none(),
+            "user/assistant URLs must not populate the allowlist"
+        );
+    }
+
+    #[test]
+    fn accumulator_respects_caller_supplied_allowlist() {
+        // ARCH §7 layering: a caller that explicitly sets an
+        // allowlist knows what they want and wins. Especially
+        // important for the gym runner which does its own
+        // accumulation client-side and would be double-counted if
+        // we overwrote it here.
+        let mut req = req_with_messages(vec![tool_msg(
+            "[1] — https://from-tool.test/x",
+        )]);
+        req.url_allowlist = Some(vec!["https://caller-chosen.test/y".into()]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        let urls = req.url_allowlist.expect("preserved");
+        assert_eq!(urls, vec!["https://caller-chosen.test/y"]);
+    }
+
+    #[test]
+    fn accumulator_leaves_allowlist_unset_when_no_tool_urls() {
+        let mut req = req_with_messages(vec![
+            user_msg("hello"),
+            tool_msg("no urls in this result, just plain text"),
+        ]);
+        super::apply_url_allowlist_from_tool_results(&mut req);
+        assert!(
+            req.url_allowlist.is_none(),
+            "should not set an empty allowlist (would block all URLs)"
+        );
     }
 }

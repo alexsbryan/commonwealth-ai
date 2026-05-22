@@ -540,6 +540,7 @@ async fn handle_tool_call(
         working_directory: None,
         in_reasoning_loop: false,
         agent_session_token: Some(agent_session_token),
+        turn_index: 0,
     };
 
     let result = tool.execute(&arguments, &ctx).await;

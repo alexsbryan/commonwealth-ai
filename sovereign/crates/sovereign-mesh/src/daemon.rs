@@ -634,6 +634,21 @@ impl EmbeddedDaemon {
         }
     }
 
+    /// Build a `YieldHook` backed by the running daemon's `AppState`.
+    /// Returns `None` when the daemon hasn't started yet. Lives here
+    /// so callers in `sovereign-cli` (which depends on this crate but
+    /// not on `commonwealth-api`) can install foreground back-pressure
+    /// on the lint/test watchers without taking a direct
+    /// `commonwealth-api` dep.
+    pub async fn build_yield_hook(
+        &self,
+    ) -> Option<std::sync::Arc<dyn corpus_engine::YieldHook>> {
+        let state = self.app_state().await?;
+        Some(commonwealth_api::yield_hook::AppStateYieldHook::new(
+            state.inner.clone(),
+        ))
+    }
+
     /// Where mesh state + setup are persisted. Needed by the HTTP
     /// mesh API's rotate handler, which talks to `persist::rotate_join_key`
     /// directly rather than going through a daemon method.
@@ -1183,6 +1198,12 @@ impl EmbeddedDaemon {
                 .collect(),
                 system_ram_gb: m.capabilities.hardware.system_ram_gb,
                 benchmark: m.capabilities.benchmark.clone(),
+                current_in_flight: m.capabilities.current_in_flight,
+                // Mesh peers always use the default plain-HTTP transport
+                // — TLS pinning is reserved for ephemeral worker pods,
+                // which surface through `PinnedWorkerEndpointSource` in
+                // a separate path.
+                transport: None,
             })
             .collect()
     }
@@ -1803,9 +1824,15 @@ fn register_local_model_slots(
 
     let mut slots: Vec<(String, &std::path::Path)> = vec![
         ("primary".into(), cfg.models.primary.as_path()),
-        ("fast".into(), cfg.models.fast.as_path()),
         ("embed".into(), cfg.models.embed.as_path()),
     ];
+    // Mesh-advertise fast only when it's a distinct GGUF. If the
+    // primary subsumes the fast role, a separate "fast" advertisement
+    // would mislead peers into thinking there are two chat models on
+    // this node when there's actually one.
+    if cfg.models.has_explicit_fast() {
+        slots.push(("fast".into(), cfg.models.fast_path()));
+    }
     if let Some(code_path) = cfg.models.code.as_ref() {
         slots.push(("code".into(), code_path.as_path()));
     }
@@ -1975,6 +2002,30 @@ pub struct PeerInferenceEndpoint {
     /// scheduler falls back to observation-only throughput scoring,
     /// which degrades to neutral 1.0 below the sample threshold.
     pub benchmark: Option<sovereign_core::oicp::BenchmarkResult>,
+    /// Peer's gossiped self-reported concurrent inference count.
+    /// Authoritative: peers count requests they serve from their
+    /// own local user — traffic the founder never originated and
+    /// `peer_observations[name].in_flight` is structurally blind
+    /// to. Used by `select_peer` to override the founder-local view
+    /// when present. `None` for older peers (gossip field absent);
+    /// scoring falls back to `peer_observations` in that case.
+    /// See `sovereign/docs/MESH_LOAD_AWARENESS.md`.
+    pub current_in_flight: Option<u32>,
+    /// How to actually open a connection to this endpoint.
+    ///
+    /// `None` is the default mesh transport — plain HTTP to `base_urls`,
+    /// gossip-issued bearer (or no bearer). `Some(transport)` means
+    /// route through a TLS-pinned `reqwest::Client` carrying the
+    /// owner-signed `WorkerToken`, the way ephemeral worker pods are
+    /// authenticated. See `crate::pinned_transport`.
+    ///
+    /// The scoring, manifest fetch, throughput tracking, and fan-out
+    /// fallback paths in `peer_inference.rs` are oblivious to this
+    /// field — they only consume `node_id`, `name`, `base_urls`, and
+    /// the load signals. The hot-path call site that actually opens
+    /// the HTTP connection is the only place that branches on it.
+    /// Spec: `sovereign/docs/PINNED_WORKER_AS_INFERENCE_PEER.md`.
+    pub transport: Option<crate::pinned_transport::PinnedTransport>,
 }
 
 impl Default for EmbeddedDaemon {
@@ -2028,7 +2079,7 @@ mod tests {
         let cfg = SetupConfig {
             models: ModelsSection {
                 primary: PathBuf::from("/m/qwen3-coder-30b.gguf"),
-                fast: PathBuf::from("/m/qwen3-1.7b.gguf"),
+                fast: Some(PathBuf::from("/m/qwen3-1.7b.gguf")),
                 embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
                 code: None,
                 context_size: None,

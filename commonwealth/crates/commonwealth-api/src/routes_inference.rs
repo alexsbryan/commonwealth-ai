@@ -183,6 +183,21 @@ pub async fn chat_completions(
         crate::frontdoor::apply_failure_nudge_chat(&mut request);
         crate::frontdoor::apply_anti_repetition_chat(&mut request);
         crate::frontdoor::apply_read_attractor_nudge_chat(&mut request);
+        // URL-allowlist accumulator. Walks the conversation history
+        // for URLs in prior `role: tool` messages (search results,
+        // typically) and threads them into `request.url_allowlist`
+        // so the inference-layer URL constraint
+        // (`sovereign-inference/src/url_constraint.rs`) can prevent
+        // the model from fabricating sibling URLs during synthesis.
+        // Idempotent: a caller-supplied `url_allowlist` wins.
+        crate::frontdoor::apply_url_allowlist_from_tool_results(&mut request);
+        // Evidence-id allowlist accumulator (Tier 2 of tool-framework
+        // expansion). Same shape as the URL accumulator above but
+        // for `ev-Tn-NNNN` citation handles. Threaded onto
+        // `request.evidence_id_allowlist` so the sampler's
+        // `EvidenceIdAllowlistConstraint` can prevent the model from
+        // fabricating sibling ids during synthesis. Idempotent.
+        crate::frontdoor::apply_evidence_id_allowlist_from_tool_results(&mut request);
         let want_stream = request.stream.unwrap_or(false);
         info!(
             want_stream,
@@ -731,6 +746,17 @@ async fn serve_local_non_stream(
             //      No-op when emitted path is already canonical OR
             //      no similar path exists.
             for choice in resp.choices.iter_mut() {
+                // First pass: promote in-content tool calls into the
+                // structured `tool_calls` field. Some models (Qwen3
+                // family observed in the search-gym harness) emit
+                // tool calls as JSON objects in the message content
+                // rather than the structured channel. Without this
+                // promotion, downstream consumers see tool_calls=[]
+                // and the tool intent is silently lost.
+                if crate::frontdoor::promote_in_content_tool_call(&mut choice.message) {
+                    info!("promoted in-content tool call into structured tool_calls field");
+                }
+
                 if let Some(tcs) = choice.message.tool_calls.as_mut() {
                     let heredoc_fixed =
                         crate::frontdoor::canonicalize_chat_response_tool_calls(tcs);

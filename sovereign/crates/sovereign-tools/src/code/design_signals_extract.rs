@@ -296,6 +296,7 @@ mod tests {
             working_directory: None,
             in_reasoning_loop: false,
             agent_session_token: None,
+            turn_index: 0,
         };
         let out = tool
             .execute(&json!({ "design_path": "DESIGN.md" }), &ctx)
@@ -331,6 +332,7 @@ mod tests {
             working_directory: None,
             in_reasoning_loop: false,
             agent_session_token: None,
+            turn_index: 0,
         };
         let err = tool
             .execute(&json!({ "design_path": "MISSING.md" }), &ctx)
@@ -355,6 +357,7 @@ mod tests {
             working_directory: None,
             in_reasoning_loop: false,
             agent_session_token: None,
+            turn_index: 0,
         };
         // Omit `design_path` entirely — should default to DESIGN.md.
         let out = tool.execute(&json!({}), &ctx).await.expect("execute");
@@ -375,6 +378,7 @@ mod tests {
             working_directory: None,
             in_reasoning_loop: false,
             agent_session_token: None,
+            turn_index: 0,
         };
         let out = tool
             .execute(

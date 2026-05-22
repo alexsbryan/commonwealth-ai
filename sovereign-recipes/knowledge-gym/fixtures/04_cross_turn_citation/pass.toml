@@ -1,0 +1,45 @@
+# Knowledge-gym fixture 04 — cross-turn citation.
+#
+# Shape: Tier 1's flagship behavior. Turn 0 retrieves two evidence
+# rows (ev-T0-0000 corpus chunk + ev-T0-0001 note); the model
+# answers and cites them. Turn 1 asks a follow-up that references
+# the prior turn's evidence by handle. The model should:
+#   (a) NOT re-call knowledge_lookup — the relevant evidence is
+#       already in the conversation;
+#   (b) cite at least one [ev-T0-NNNN] handle from turn 0 to
+#       anchor the answer to the prior evidence.
+#
+# Mechanism: Tier 1's dossier renderer surfaces past-turn evidence
+# ids; Tier 2's frontdoor accumulator (post-Tier-2 wiring) gathers
+# them into the request's evidence_id_allowlist so the constraint
+# engages structurally. Even without Tier 2 engaged, prompt
+# discipline + dossier rendering should be enough for the model
+# to cite cross-turn.
+#
+# This is the fixture that proves Phase A of Gym Phase 2 works
+# end-to-end. Without multi-turn replay, this shape was
+# bench-validatable only via the slow wikipedia_learn threads.
+
+[turn_0]
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+must_not_cite_evidence_id_outside_returned = true
+
+[turn_1]
+# The follow-up should reuse prior evidence, not re-fetch. The
+# model SHOULD be able to refrain from calling the tool — its
+# memory of turn 0's evidence is in the conversation history
+# the dossier surfaces.
+should_call_knowledge_lookup = false
+
+# The load-bearing predicate: at least one cross-turn handle
+# must appear in the answer. Turn 1's scope refers to "prior
+# turns" as < current_turn = 1, so any ev-T0-NNNN reference
+# counts.
+must_reference_prior_turn_evidence = true
+
+# Citation faithfulness preserved on the second turn too. The
+# evidence_id_allowlist accumulator threads turn 0's handles
+# onto turn 1's request, so the constraint engages cross-turn.
+must_not_cite_evidence_id_outside_returned = true

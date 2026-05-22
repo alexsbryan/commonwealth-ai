@@ -1,0 +1,183 @@
+loaded thread bank `wikipedia-learn-v0` — 13 threads, 77 turns, target corpus `wikipedia`
+Daemon: http://localhost:9741
+Chat model:  Qwen3.6-35B-A3B-Claude-4.7-Opus-Reasoning-Distilled-APEX-I-Compact
+Embed model: qwen-embedding-0.6b
+Database:    /Users/alexsbryan/.sovereign/sovereign.db
+Indexes:     /Users/alexsbryan/.sovereign/indexes
+Corpora:     arch-principles (58 chunks), atos-experiment-oicp-types (55 chunks), commonwealth (2021 chunks), commonwealth-ai (18924 chunks), commonwealth-ai-arch-principles (58 chunks), commonwealth-ai-system-overview (61 chunks), conversation-history (91 chunks), conversations-personal (267 chunks), corpus-engine (4925 chunks), drift-target (0 chunks), folder-9ef2f912ea2e (850 chunks), institutional-notes (9 chunks), oicp-types (76 chunks), sep (187967 chunks), sovereign (13765 chunks), system-overview (57 chunks), tokei (308 chunks), tokei-readme (25 chunks), watched-959ee8a8f330 (973 chunks), wikipedia (1869702 chunks)
+Tools:       10 registered
+Router embed exemplars: 117 loaded from sovereign/router/exemplars.toml
+Temperature: 0 (override)
+Atlas: 0 corpus context(s) loaded from cache
+Meta-atlas:  1561915 canonical atoms across 13 corpus(es)
+  → thread einstein_1905 (5 turns)
+[router] "Who was Albert Einstein?" → KnowledgeQuery (embed: sim=0.605 margin=0.064 nearest="What year did Einstein publish his special relativity paper?")
+    turn 0 fact=1.00 src=1.00 177465ms
+[router] "What did he publish in 1905?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=1.00 src=1.00 26434ms
+[router] "Tell me more about the photoelectric one." → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.25 src=0.50 23740ms
+[router] "Did that idea win him a Nobel Prize?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.67 src=1.00 22210ms
+[router] "Why didn't relativity win the Nobel instead?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.00 src=1.00 21413ms
+  → thread wwii_causal (5 turns)
+[router] "What caused World War II to break out in 1939?" → DeepQuery (embed: sim=0.569 margin=0.098 nearest="How did the Great Depression catalyze the rise of fascism in interwar Europe?")
+    turn 0 fact=0.75 src=1.00 26605ms
+[router] "Why was Hitler able to invade in the first place?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.25 src=0.00 34350ms
+[router] "But hadn't Germany been disarmed after the previous war?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.33 src=1.00 40272ms
+[router] "So what made that treaty fail?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=1.00 src=0.50 32667ms
+[router] "Were there voices at the time who predicted it would?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.67 src=1.00 36757ms
+  → thread computing_history (12 turns)
+[router] "Who was Charles Babbage?" → KnowledgeQuery (coarse=LOOKUP, confidence=1.00)
+    turn 0 fact=0.67 src=1.00 19061ms
+[router] "What was the Analytical Engine he designed?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.67 src=1.00 24690ms
+[router] "Who worked alongside him on its mathematics?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.33 src=1.00 23965ms
+[router] "What did she contribute that was genuinely new?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.00 src=0.00 9811ms
+[router] "How did computing develop from there in the next c" → DeepQuery (coarse=REASONING, confidence=1.00)
+    turn 4 fact=1.00 src=1.00 27759ms
+[router] "What did Alan Turing add to the theoretical foundation?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 5 fact=0.67 src=1.00 35475ms
+[router] "What role did he play during World War II?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 6 fact=1.00 src=1.00 32019ms
+[router] "After the war, what architecture became standard for the fir" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 7 fact=1.00 src=0.50 37457ms
+[router] "How did that design differ from what Turing had proposed?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 8 fact=1.00 src=0.50 39302ms
+[router] "What hardware breakthrough in the 1950s made smaller compute" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 9 fact=0.50 src=1.00 37337ms
+[router] "And what did Intel's founders do with that technology in the" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 10 fact=1.00 src=1.00 42897ms
+[router] "Going back to Babbage's original vision — how close did th" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 11 fact=0.67 src=0.50 48943ms
+  → thread darwin_origin (6 turns)
+[router] "Who was Charles Darwin?" → KnowledgeQuery (coarse=LOOKUP, confidence=1.00)
+    turn 0 fact=0.67 src=1.00 18744ms
+[router] "What was his most famous voyage?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.50 src=0.50 22511ms
+[router] "What did he observe on the Galápagos that mattered most?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=1.00 src=1.00 30403ms
+[router] "What theory did those observations eventually lead to?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.33 src=1.00 25401ms
+[router] "When did he publish the book that laid it out?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.50 src=1.00 17185ms
+[router] "Was anyone else circling the same idea independently?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 5 fact=0.33 src=1.00 23954ms
+  → thread french_revolution_causal (6 turns)
+[router] "What was the French Revolution?" → DeepQuery (embed: sim=0.709 margin=0.100 nearest="What caused the French Revolution, and how did it reshape European political tho…")
+    turn 0 fact=0.75 src=1.00 33447ms
+[router] "What triggered it in 1789 specifically?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.75 src=0.50 31165ms
+[router] "Why was the treasury empty?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.50 src=0.50 38529ms
+[router] "Why couldn't the king just raise taxes to cover it?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=1.00 src=0.50 34362ms
+[router] "What ideas were circulating that made resistance feel justif" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=1.00 src=1.00 42826ms
+[router] "How did all of this turn so violent so fast?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 5 fact=0.50 src=0.00 48728ms
+  → thread industrial_revolution_synthesis (7 turns)
+[router] "What was the Industrial Revolution?" → DeepQuery (embed: sim=0.751 margin=0.115 nearest="Trace how the Industrial Revolution changed labor, demography, and political ord…")
+    turn 0 fact=1.00 src=1.00 28034ms
+[router] "Why did it start in Britain specifically?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.75 src=1.00 32292ms
+[router] "What was the role of the steam engine?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.75 src=1.00 35062ms
+[router] "How did agricultural changes free up the labor force?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.50 src=0.50 34490ms
+[router] "What did the early factories look like in practice?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.75 src=0.00 35973ms
+[router] "Who benefited and who didn't?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 5 fact=0.50 src=0.50 38996ms
+[router] "How did this whole pattern spread to other countries?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 6 fact=0.50 src=1.00 43448ms
+  → thread scientific_revolution_synthesis (6 turns)
+[router] "What was the Scientific Revolution?" → DeepQuery (embed: sim=0.669 margin=0.082 nearest="Trace how the Industrial Revolution changed labor, demography, and political ord…")
+    turn 0 fact=0.50 src=1.00 24814ms
+[router] "Who first proposed that the Earth orbits the Sun?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=1.00 src=0.50 30017ms
+[router] "Who proved that idea observationally?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=1.00 src=1.00 32722ms
+[router] "What mathematical laws described the planet motions?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=1.00 src=1.00 36201ms
+[router] "And who finally unified all of this under a single theory?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=1.00 src=0.50 35106ms
+[router] "Why did this period reshape philosophy as well as science?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 5 fact=0.25 src=1.00 40538ms
+  → thread newton_einstein_compare (5 turns)
+[router] "How did Newton describe gravity?" → ComparisonQuery (embed: sim=0.803 margin=0.269 nearest="Contrast Einstein's and Newton's accounts of gravity.")
+    turn 0 fact=0.75 src=0.50 18925ms
+[router] "How did Einstein describe it differently?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=1.00 src=0.50 26477ms
+[router] "Which one correctly predicted the bending of starlight?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=1.00 src=0.50 26955ms
+[router] "What about Mercury's orbit — does Newton's version explain" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.75 src=1.00 30836ms
+[router] "So is Newton wrong, or just incomplete?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.50 src=0.50 32188ms
+  → thread buddhism_christianity_compare (5 turns)
+[router] classify_json raw output: " {\n  \"intent\": \"LOOKUP\"\n}"
+[router] "When and where did Buddhism originate?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+    turn 0 fact=0.75 src=0.00 20582ms
+[router] "And Christianity?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.00 src=0.00 23193ms
+[router] "How do the two traditions explain why people suffer?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.50 src=0.50 22810ms
+[router] "What does each say is the way out of suffering?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.20 src=0.00 22437ms
+[router] "Where do the two diverge most sharply on ethics?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.00 src=0.00 22873ms
+  → thread nonexistent_entity_boundary (4 turns)
+[router] classify_json raw output: " {\n  \"intent\": \"LOOKUP\"\n}"
+[router] "Tell me about the mathematician Edward Hampshire-W" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+    turn 0 fact=0.50 src=0.00 20272ms
+[router] "Hm, maybe I'm thinking of someone else. Did you mean Hampshi" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.25 src=0.00 24195ms
+[router] "Sorry — I meant the mathematician Karl Weierstrass. What w" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.50 src=1.00 39501ms
+[router] "Why was that approach influential?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=1.00 src=0.50 29355ms
+  → thread ambiguous_name_boundary (5 turns)
+[router] "Who was Adam Smith?" → KnowledgeQuery (coarse=LOOKUP, confidence=1.00)
+    turn 0 fact=0.75 src=1.00 18663ms
+[router] "What's the difference between his moral philosophy and his e" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.75 src=0.00 22611ms
+[router] "Is there a tension between the two views?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.33 src=1.00 31980ms
+[router] "And what about Smith the physicist — the modern one?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.40 src=0.00 23822ms
+[router] "Forget it — back to Adam Smith. Was he ever criticized in " → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.67 src=1.00 27200ms
+  → thread atomic_bombing_contested (6 turns)
+[router] "What happened at Hiroshima and Nagasaki in August " → DeepQuery (embed: sim=0.665 margin=0.062 nearest="What are the ethical considerations around the atomic bombings of Hiroshima and …")
+    turn 0 fact=1.00 src=1.00 31774ms
+[router] "What was the argument in favor of dropping the bombs?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.80 src=0.50 31639ms
+[router] "And the argument against?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=1.00 src=0.00 33481ms
+[router] "How many people were killed?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.75 src=1.00 30549ms
+[router] "What do modern historians generally conclude?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.50 src=0.00 32883ms
+[router] "Was it ethically justifiable?" → DeepQuery (knowledge thread; inherited from prior turn)
+    turn 5 fact=0.25 src=0.00 37823ms
+  → thread columbus_legacy_contested (5 turns)
+[router] classify_json raw output: " {\n  \"intent\": \"LOOKUP\"\n}"
+[router] "What did Christopher Columbus do?" → KnowledgeQuery (coarse=LOOKUP, confidence=0.00)
+    turn 0 fact=0.60 src=1.00 21208ms
+[router] "Why was he celebrated as a hero for so long?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 1 fact=0.75 src=0.50 22705ms
+[router] "What does the indigenous perspective on his voyages emphasiz" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 2 fact=0.00 src=0.50 23276ms
+[router] "How have historians revised the older account?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 3 fact=0.00 src=1.00 16586ms
+[router] "Why are monuments to him still controversial today?" → KnowledgeQuery (knowledge thread; inherited from prior turn)
+    turn 4 fact=0.00 src=0.00 20116ms
+wrote thread run JSON to sovereign/bench/wikipedia_learn/baselines/threads-v36-allthreads.json

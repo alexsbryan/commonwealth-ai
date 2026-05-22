@@ -38,6 +38,7 @@ use sovereign_core::atlas_context::{
 use crate::chat_cmd::bootstrap::ChatSession;
 use crate::chat_cmd::render::split_reasoning;
 use crate::enrich_cmd::paths;
+use crate::eval_cmd::attribution;
 use crate::eval_cmd::bank::{EvalBank, Question};
 use crate::eval_cmd::score::{
     score_essay_readiness, score_facts, score_facts_in_text, score_sources, score_sources_loose,
@@ -300,7 +301,9 @@ pub async fn run_bank_routing(
 }
 
 async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingResult {
-    use sovereign_core::types::{ConversationContext, Intent};
+    use sovereign_core::types::{
+        ConversationContext, Effect, Idempotency, Intent, Latency, Scope, ToolDescriptor,
+    };
 
     let expected = match &q.expected_intent {
         Some(s) => crate::eval_cmd::bank::ExpectedIntent::Exact(
@@ -346,13 +349,36 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
         topic_context: None,
         knowledge_view_digests: None,
         temporal_tensions: Vec::new(),
+            compacted_history: None,
+            tool_dossier: None,
+            intent_policy: None,
     };
+
+    // Expose a `web_search` tool descriptor so the router's
+    // `force_action` gate (which checks `has_search` against
+    // available_tools) fires under the same conditions as the
+    // production desktop, where SearchTool is always registered.
+    // Without this, routing-only eval underrepresents the daemon's
+    // real behaviour — temporal/future questions fall through to
+    // the LLM Pass 1 instead of taking the heuristic ACTION path.
+    let eval_tools = vec![ToolDescriptor {
+        id: "web_search".to_string(),
+        name: "web_search".to_string(),
+        description: "Search the web for current information".to_string(),
+        parameters: serde_json::json!({}),
+        examples: vec![],
+        effect: Effect::Read,
+        idempotency: Idempotency::Idempotent,
+        latency: Latency::Slow,
+        scope: Scope::External,
+        output_schema: None,
+    }];
 
     let t = Instant::now();
     let classification = match session
         .runtime
         .router
-        .classify(&q.question, &context, &[])
+        .classify(&q.question, &context, &eval_tools)
         .await
     {
         Ok(c) => c,
@@ -1490,9 +1516,33 @@ async fn run_question(
     // `expected_sources` (a virtual entity card titled `physicalism`
     // isn't a passage from the physicalism article, just a pointer to
     // it).
-    let rigid_source = score_sources(&q.expected_sources, &all_hits);
+    //
+    // For conversation-history banks where `attribution_mode` is
+    // `user` or `assistant`, hits are projected through
+    // `attribution::filter_chunk_content` first so a model's
+    // restatement of the user's question does not score as evidence
+    // of the user having said it (or vice versa). No-op for
+    // non-conversation chunks (no turn headers to match).
+    let attribution_mode = attribution::AttributionMode::from_str(&q.attribution_mode);
+    let hits_for_scoring: Vec<ScoredChunk> = if attribution_mode
+        == attribution::AttributionMode::Both
+    {
+        all_hits.clone()
+    } else {
+        all_hits
+            .iter()
+            .map(|h| {
+                let mut filtered = h.clone();
+                filtered.content =
+                    attribution::filter_chunk_content(&h.content, attribution_mode);
+                filtered
+            })
+            .collect()
+    };
+    let rigid_source = score_sources(&q.expected_sources, &hits_for_scoring);
     let source_score: ScoreSnapshot = rigid_source.clone().into();
-    let fact_score: ScoreSnapshot = score_facts(&q.expected_facts, &all_hits).into();
+    let fact_score: ScoreSnapshot =
+        score_facts(&q.expected_facts, &hits_for_scoring).into();
 
     // 3b. Loose-judge source scoring (Option A). Opt-in via
     //     `--loose-source-judge`. Adds an LLM pass that looks at the
@@ -1508,7 +1558,7 @@ async fn run_question(
             let (loose, details) = score_sources_loose(
                 &q.question,
                 &rigid_source,
-                &all_hits,
+                &hits_for_scoring,
                 session.inference.as_ref(),
             )
             .await;
@@ -1529,7 +1579,7 @@ async fn run_question(
         score_essay_readiness(
             &q.question,
             &q.category,
-            &all_hits,
+            &hits_for_scoring,
             &atlas_navigation,
             session.inference.as_ref(),
         )
@@ -1836,7 +1886,23 @@ async fn run_question_synth(session: &ChatSession, q: &Question, judge: bool) ->
 
     // 8. Score: facts → answer text, sources → retrieved-chunk titles,
     //    plus the snippet-fact diagnostic.
-    let snippet_haystack = snippets.join("\n");
+    //
+    // For attribution_mode ∈ {user, assistant}, the snippet-fact
+    // diagnostic filters opposite-attribution turn blocks out of
+    // each snippet before joining. The synth answer text itself is
+    // NOT filterable here — the LLM saw the unfiltered chunks at
+    // generation time. Closing that gap requires runtime-side
+    // attribution-aware retrieval; tracked as a follow-up.
+    let attribution_mode = attribution::AttributionMode::from_str(&q.attribution_mode);
+    let snippet_haystack = if attribution_mode == attribution::AttributionMode::Both {
+        snippets.join("\n")
+    } else {
+        snippets
+            .iter()
+            .map(|s| attribution::filter_chunk_content(s, attribution_mode))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
     let fact_score: ScoreSnapshot =
         score_facts_in_text(&q.expected_facts, &visible).into();
     let chunks_fact_score: ScoreSnapshot =

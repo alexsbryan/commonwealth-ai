@@ -30,7 +30,7 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
     SetupConfig {
         models: ModelsSection {
             primary: PathBuf::from("/models/primary.gguf"),
-            fast: PathBuf::from("/models/fast.gguf"),
+            fast: Some(PathBuf::from("/models/fast.gguf")),
             embed: PathBuf::from("/models/embed.gguf"),
             code: None,
             context_size: None,

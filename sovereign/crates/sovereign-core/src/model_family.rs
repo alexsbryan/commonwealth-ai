@@ -126,6 +126,22 @@ pub struct ModelQuirks {
     /// cross-encoder reranker families (`BgeReranker`). Populated
     /// only when the slot is a Rerank slot.
     pub rerank: Option<RerankQuirks>,
+
+    /// True iff the family's gguf carries recurrent layers (Mamba /
+    /// Gated DeltaNet / RWKV / SSM). Drives the prefix-cache safety
+    /// gate in the inference path: `clear_kv_cache_seq` doesn't
+    /// rewind recurrent hidden state, so partial-keep prefix caching
+    /// is unsafe and the slot must always full-clear before a new
+    /// prompt. Default `false` for attention-only families.
+    ///
+    /// 2026-05-20: replaces the `is_recurrent_arch_by_name` substring
+    /// heuristic that pattern-matched "qwen3.5" / "qwen3.6" / "qwopus"
+    /// in the gguf file name. The gguf `general.architecture`
+    /// metadata is still the primary signal at slot load time (read
+    /// by `is_recurrent_arch`); this quirks flag is the fallback the
+    /// runtime consults when the metadata is empty.
+    #[serde(default)]
+    pub has_recurrent_layers: bool,
 }
 
 /// Cross-encoder rerank configuration. Sits alongside `EmbedQuirks`
@@ -224,11 +240,16 @@ impl ModelFamily {
                 code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: false,
             },
 
-            // Qwen3.5 uses the same thinking tokens as Qwen3 but a
-            // slightly higher temperature reflects community-observed
-            // behaviour with the new Gated DeltaNet architecture.
+            // Qwen3.5 / Qwen3.6 / Qwopus3.5 use Gated DeltaNet — a
+            // recurrent component in the attention path. Same thinking
+            // tokens as Qwen3 but slightly higher temperature reflects
+            // community-observed behaviour with the new architecture.
+            // The `has_recurrent_layers` flag drives the prefix-cache
+            // safety gate in `generate_sync` (partial-keep is unsafe
+            // on recurrent layers; full-clear required).
             ModelFamily::Qwen35 => ModelQuirks {
                 thinking: ThinkingControl::SystemPromptToken {
                     enable:  "/think".into(),
@@ -251,6 +272,7 @@ impl ModelFamily {
                 code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: true,
             },
 
             // Qwen3-Embedding uses last-token pooling and requires the
@@ -288,6 +310,7 @@ impl ModelFamily {
                     output_dimensions:    1024, // overridden in manifest for 4B (2560) / 8B (4096)
                 }),
                 rerank: None,
+                has_recurrent_layers: false,
             },
 
             ModelFamily::Gemma3 => ModelQuirks {
@@ -311,6 +334,7 @@ impl ModelFamily {
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: false,
             },
 
             // Gemma 4 inherits Gemma 3's quirks — same chat-template
@@ -319,25 +343,44 @@ impl ModelFamily {
             // tuning didn't change between 3 and 4).
             ModelFamily::Gemma4 => ModelQuirks {
                 thinking: ThinkingControl::None,
+                // Default profile uses the model card's universal
+                // recommendation (T=1.0, top_p=0.95, top_k=64).
                 default_temperature:      1.0,
                 default_top_k:            Some(64),
                 default_top_p:            0.95,
                 default_presence_penalty: 0.0,
-                // llama-cpp tradition defaults for sampler-stage
-                // params not on this family's card.
                 default_min_p:              0.05,
                 default_repetition_penalty: 1.15,
                 default_frequency_penalty:  0.1,
-                instruct_temperature:      None,
-                instruct_top_k:            None,
-                instruct_top_p:            None,
-                instruct_presence_penalty: None,
-                code_temperature:      None,
-                code_top_k:            None,
-                code_top_p:            None,
-                code_presence_penalty: None,
+                // Per-mode tuning beyond the card. The card publishes
+                // one universal T=1.0 but in practice constrained
+                // tool / instruct work benefits from a tighter
+                // distribution. Observed 2026-05-19 on gemma-4-26B-A4B-it
+                // at the cognitive bank: T=1.0 left positional bias
+                // dominant on multi-choice and let whitespace tokens
+                // win on calibration. Tighter T trades distribution
+                // breadth for adherence to the schema/argument.
+                //
+                // Instruct = non-thinking general work (the cognitive
+                // bank's mode). Tighten T enough that the model's
+                // argument-content beats positional bias, but stay
+                // higher than greedy so multi-modal choices have
+                // sampling latitude.
+                instruct_temperature:      Some(0.7),
+                instruct_top_k:            Some(50),
+                instruct_top_p:            Some(0.95),
+                instruct_presence_penalty: Some(0.0),
+                // Code = composing structured emission. Tightest T —
+                // schema-constrained output benefits from low T to
+                // avoid sampling drift inside string bodies, JSON
+                // escape sequences, and TOML body lines.
+                code_temperature:      Some(0.4),
+                code_top_k:            Some(40),
+                code_top_p:            Some(0.95),
+                code_presence_penalty: Some(0.0),
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: false,
             },
 
             ModelFamily::Llama3 => ModelQuirks {
@@ -361,6 +404,7 @@ impl ModelFamily {
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: false,
             },
 
             ModelFamily::Phi4 => ModelQuirks {
@@ -384,6 +428,7 @@ impl ModelFamily {
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: false,
             },
 
             // Phi-4-reasoning cannot have thinking disabled. Attempting
@@ -411,6 +456,7 @@ impl ModelFamily {
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: false,
             },
 
             // Cross-encoder reranker. Sampling defaults are placebos
@@ -444,6 +490,7 @@ impl ModelFamily {
                     max_context: 8192,
                     max_batch:   50,
                 }),
+                has_recurrent_layers: false,
             },
 
             // SmolLM3 uses the same thinking token convention as Qwen3,
@@ -472,6 +519,7 @@ impl ModelFamily {
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: false,
             },
 
             // Safe conservative defaults. No thinking injection.
@@ -498,6 +546,7 @@ impl ModelFamily {
                 code_presence_penalty: None,
                 embed: None,
                 rerank: None,
+                has_recurrent_layers: false,
             },
         }
     }

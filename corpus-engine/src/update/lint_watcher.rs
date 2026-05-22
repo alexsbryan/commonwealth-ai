@@ -29,6 +29,7 @@ use tokio::task::JoinHandle;
 
 use crate::lint_results::{LintResultKind, LintResultStore};
 use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
+use crate::yield_hook::YieldHook;
 
 /// Default cooldown after a subprocess completes before consuming a
 /// queued rerun. Coalesces bursts of file edits arriving during the
@@ -74,6 +75,20 @@ pub struct LintWatcher {
     /// invocations — the thundering-herd fix.
     run_slot: Option<Arc<Semaphore>>,
     cooldown_ms: u64,
+    /// Optional foreground back-pressure hook. When set, the
+    /// subprocess runner waits until `should_yield()` returns false
+    /// before spawning cargo. Background freshness work yields to
+    /// user-facing inference — a workspace cargo-check during a
+    /// 35B chat turn can easily push RSS into jetsam territory.
+    ///
+    /// Shared via `Arc<RwLock>` between the watcher and its spawned
+    /// runner task. Late-binding: daemon_cmd builds the watcher
+    /// before EmbeddedDaemon (and thus AppStateYieldHook) exists,
+    /// then installs the hook via `set_yield_hook` after
+    /// `start_daemon` returns. The runner task re-reads the slot
+    /// each iteration so a hook installed mid-run takes effect on
+    /// the next cargo invocation.
+    yield_hook: Arc<std::sync::RwLock<Option<Arc<dyn YieldHook>>>>,
 }
 
 impl LintWatcher {
@@ -92,6 +107,22 @@ impl LintWatcher {
             rerun_pending: Arc::new(AtomicBool::new(false)),
             run_slot: None,
             cooldown_ms: DEFAULT_RERUN_COOLDOWN_MS,
+            yield_hook: Arc::new(std::sync::RwLock::new(None)),
+        }
+    }
+
+    /// Wire in a foreground back-pressure hook. The lint subprocess
+    /// waits until `should_yield()` returns false before each run,
+    /// preventing the workspace cargo check from contending with a
+    /// hot inference slot for memory.
+    ///
+    /// Interior mutability via `RwLock` lets the daemon install the
+    /// hook after the watcher is already running — `daemon_cmd`
+    /// builds the watcher early in startup, then EmbeddedDaemon
+    /// builds AppStateYieldHook and back-installs it.
+    pub fn set_yield_hook(&self, hook: Arc<dyn YieldHook>) {
+        if let Ok(mut guard) = self.yield_hook.write() {
+            *guard = Some(hook);
         }
     }
 
@@ -137,6 +168,11 @@ impl LintWatcher {
         let rerun_pending = Arc::clone(&self.rerun_pending);
         let run_slot = self.run_slot.clone();
         let cooldown_ms = self.cooldown_ms;
+        // Clone the shared `Arc<RwLock>` so the spawned task can
+        // re-read the slot each iteration. A hook installed
+        // late (after EmbeddedDaemon starts) becomes active on the
+        // next loop iteration without restarting the watcher.
+        let yield_hook_shared = Arc::clone(&self.yield_hook);
 
         let handle = tokio::spawn(async move {
             // Loop: run the lint subprocess, then check whether any file
@@ -163,6 +199,37 @@ impl LintWatcher {
                     },
                     None => None,
                 };
+
+                // Foreground back-pressure: wait until inference has
+                // gone idle for the configured yield window. Polls at
+                // 5s so the lint run starts within a few seconds of
+                // the last chat request, but never overlaps. Without
+                // this, a workspace cargo-check (~2-4 GB peak) racing
+                // a 35B chat slot has pushed RSS to jetsam threshold.
+                let mut logged_wait = false;
+                loop {
+                    let hook_now = yield_hook_shared
+                        .read()
+                        .ok()
+                        .and_then(|g| g.clone());
+                    match hook_now {
+                        Some(h) if h.should_yield() => {
+                            if !logged_wait {
+                                tracing::info!(
+                                    "LintWatcher: yielding to foreground inference; deferring cargo run"
+                                );
+                                logged_wait = true;
+                            }
+                            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+                        }
+                        _ => break,
+                    }
+                }
+                if logged_wait {
+                    tracing::info!(
+                        "LintWatcher: foreground idle — proceeding with cargo run"
+                    );
+                }
 
                 if let Err(e) =
                     run_lint_subprocess(command.clone(), working_dir.clone(), timeout_secs, Arc::clone(&store)).await
@@ -219,6 +286,14 @@ impl BackgroundWatcher for LintWatcher {
     }
 
     async fn on_files_changed(&self, paths: Vec<PathBuf>) {
+        // Sample up to 5 paths for diagnostic logging — helps catch the
+        // "watcher loop on its own build artifacts" pattern by showing
+        // which paths leaked through `interesting_coordinator_paths`.
+        let sample: Vec<String> = paths
+            .iter()
+            .take(5)
+            .map(|p| p.display().to_string())
+            .collect();
         if let Err(e) = self.store.mark_stale(&paths).await {
             tracing::warn!("LintWatcher: failed to mark stale: {e}");
         }
@@ -229,11 +304,13 @@ impl BackgroundWatcher for LintWatcher {
             self.rerun_pending.store(true, Ordering::SeqCst);
             tracing::info!(
                 count = paths.len(),
+                ?sample,
                 "LintWatcher: files changed during in-flight run; queued rerun"
             );
         } else {
             tracing::info!(
                 count = paths.len(),
+                ?sample,
                 "LintWatcher: files changed, starting lint"
             );
             self.spawn_run(false).await;

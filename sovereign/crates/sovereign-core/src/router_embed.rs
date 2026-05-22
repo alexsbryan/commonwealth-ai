@@ -64,6 +64,14 @@ struct ExemplarFile {
 struct ExemplarRow {
     intent: String,
     query: String,
+    /// Optional scope axis ORTHOGONAL to intent. Forwarded through
+    /// `EmbedClassification.scope` so downstream retrieval can bias
+    /// corpus selection (e.g., `scope = "personal"` on a
+    /// knowledge_query exemplar restricts atlas grounding to
+    /// user-owned corpora — `mesh_sharing=false` in IndexInfo).
+    /// `None` = no scope hint (current default behavior).
+    #[serde(default)]
+    scope: Option<String>,
 }
 
 /// One embedded exemplar.
@@ -75,6 +83,10 @@ struct Exemplar {
     embedding: Vec<f32>,
     /// Kept for diagnostics — surfaced in router rationale.
     query: String,
+    /// Optional scope tag from the source exemplar; propagates to
+    /// `EmbedClassification.scope` when this exemplar is the
+    /// nearest match.
+    scope: Option<String>,
 }
 
 /// Result of an embed-classify call.
@@ -90,6 +102,12 @@ pub struct EmbedClassification {
     /// Nearest exemplar text — diagnostic surface for "why did this
     /// route here?". Truncated to 80 chars.
     pub nearest_exemplar: String,
+    /// Scope tag from the nearest exemplar (when set). Orthogonal
+    /// to intent; downstream retrieval consumes this to bias corpus
+    /// selection. Values today: `Some("personal")` for
+    /// conversation-history / journaling shapes; `None` for the
+    /// general / external-knowledge default.
+    pub scope: Option<String>,
 }
 
 /// Hand-authored intent classifier. Pre-embeds every exemplar at
@@ -131,6 +149,7 @@ impl EmbedRouter {
                 intent,
                 embedding: emb,
                 query: row.query,
+                scope: row.scope,
             });
         }
 
@@ -174,6 +193,28 @@ impl EmbedRouter {
         Ok(self.classify_from_embedding(&q))
     }
 
+    /// Same as `classify` but returns the L2-normalised query
+    /// embedding alongside the verdict, so the caller can reuse the
+    /// embedding for downstream classifiers (e.g. the binary
+    /// personal-scope classifier) without paying a second embed.
+    pub async fn classify_returning_embedding(
+        &self,
+        query: &str,
+        inference: &dyn InferenceProvider,
+    ) -> Result<(Option<EmbedClassification>, Vec<f32>)> {
+        if self.exemplars.is_empty() {
+            // Still embed so caller can run scope classifier; cheap
+            // single embed and matches the non-empty path's contract.
+            let mut q = inference.embed_query(query).await?;
+            normalize(&mut q);
+            return Ok((None, q));
+        }
+        let mut q = inference.embed_query(query).await?;
+        normalize(&mut q);
+        let intent = self.classify_from_embedding(&q);
+        Ok((intent, q))
+    }
+
     /// Classify against a pre-computed query embedding. Public for
     /// callers that already have one (the router could splice this
     /// into the existing search-embedding pipeline to skip a second
@@ -187,8 +228,10 @@ impl EmbedRouter {
         }
 
         // Max similarity per intent + remember the nearest exemplar
-        // text for the diagnostic surface.
-        let mut per_intent: HashMap<Intent, (f32, &str)> = HashMap::new();
+        // (text + scope) for the diagnostic surface and downstream
+        // routing bias.
+        let mut per_intent: HashMap<Intent, (f32, &str, Option<&str>)> =
+            HashMap::new();
         for ex in &self.exemplars {
             if ex.embedding.len() != q_normalized.len() {
                 // Dimension mismatch (exemplars embedded with a
@@ -199,30 +242,32 @@ impl EmbedRouter {
             let sim = dot(q_normalized, &ex.embedding);
             per_intent
                 .entry(ex.intent.clone())
-                .and_modify(|(best, best_q)| {
+                .and_modify(|(best, best_q, best_scope)| {
                     if sim > *best {
                         *best = sim;
                         *best_q = ex.query.as_str();
+                        *best_scope = ex.scope.as_deref();
                     }
                 })
-                .or_insert((sim, ex.query.as_str()));
+                .or_insert((sim, ex.query.as_str(), ex.scope.as_deref()));
         }
         if per_intent.is_empty() {
             return None;
         }
 
-        let mut ranked: Vec<(Intent, f32, &str)> = per_intent
+        let mut ranked: Vec<(Intent, f32, &str, Option<&str>)> = per_intent
             .into_iter()
-            .map(|(i, (s, q))| (i, s, q))
+            .map(|(i, (s, q, sc))| (i, s, q, sc))
             .collect();
         ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let (top_intent, top_sim, nearest) = (
+        let (top_intent, top_sim, nearest, top_scope) = (
             ranked[0].0.clone(),
             ranked[0].1,
             ranked[0].2,
+            ranked[0].3,
         );
-        let second_sim = ranked.get(1).map(|(_, s, _)| *s).unwrap_or(0.0);
+        let second_sim = ranked.get(1).map(|(_, s, _, _)| *s).unwrap_or(0.0);
         let margin = top_sim - second_sim;
 
         if top_sim < self.min_top_sim || margin < self.min_margin {
@@ -233,6 +278,7 @@ impl EmbedRouter {
             top_sim,
             margin,
             nearest_exemplar: truncate(nearest, 80),
+            scope: top_scope.map(String::from),
         })
     }
 }
@@ -311,6 +357,7 @@ mod tests {
             intent,
             embedding: e,
             query: query.into(),
+            scope: None,
         }
     }
 

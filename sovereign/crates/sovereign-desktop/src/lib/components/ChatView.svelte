@@ -503,7 +503,14 @@
           messageId: p.message_id,
           newContent: p.new_content,
         });
-        scrollToBottom();
+        // Targeted scroll: the refined message may not be at the
+        // bottom of the conversation (the user could be reviewing a
+        // multi-turn chat and have triggered search-now on an
+        // earlier turn). `scrollToBottom` would skip past the
+        // updated bubble in that case. `scrollToMessage` falls
+        // through to `scrollToBottom` when the element isn't
+        // findable (just-deleted, hydration race, etc.).
+        scrollToMessage(p.message_id);
       },
     );
   });
@@ -932,6 +939,31 @@
       }
     });
   }
+
+  /// Scroll a specific assistant bubble into view by its message id.
+  /// Used after MESSAGE_REFINED so the user sees the updated content
+  /// even when the refined message isn't the last one in the chat
+  /// (e.g. they triggered search-now on an earlier turn after
+  /// scrolling up). Two rAFs deep: the first waits for Svelte to
+  /// re-render the new content (the {#key content} block in
+  /// AssistantMessage tears down + remounts the prose subtree on
+  /// content swap), the second runs after the new DOM has laid out
+  /// so scrollIntoView lands on the final position.
+  ///
+  /// Falls through to `scrollToBottom` when the element isn't in
+  /// the DOM (just-deleted, conversation switch race, etc.).
+  function scrollToMessage(id: string) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-message-id="${id}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          scrollToBottom();
+        }
+      });
+    });
+  }
 </script>
 
 <div class="chat-view">
@@ -983,6 +1015,8 @@
           messageId={msg.id}
           conversationId={activeConversationId ?? ""}
           isStreaming={msg.id === streamingMessageId}
+          refining={msg.refining}
+          searchAugmentation={msg.searchAugmentation}
           onNextStep={handleNextStep}
         />
       {/each}
@@ -993,7 +1027,36 @@
 
       <InformationRequestCard
         request={pendingInfoRequest}
+        conversationId={activeConversationId}
         onHandled={() => send({ type: "CLEAR_INFO" })}
+        onRefiningStarted={() => {
+          // The to-be-refined message is the most recent COMPLETED
+          // assistant bubble. Skip any in-flight streaming bubble
+          // (refinement is a post-stream concept) — the same
+          // discipline MESSAGE_REFINED's guard enforces.
+          const target = [...messages]
+            .reverse()
+            .find(
+              (m) =>
+                m.role === "assistant" && m.id !== streamingMessageId,
+            );
+          if (target) send({ type: "MESSAGE_REFINING", messageId: target.id });
+        }}
+        onSearchAugmented={(augmentation) => {
+          const target = [...messages]
+            .reverse()
+            .find(
+              (m) =>
+                m.role === "assistant" && m.id !== streamingMessageId,
+            );
+          if (target) {
+            send({
+              type: "SEARCH_AUGMENTED",
+              messageId: target.id,
+              augmentation,
+            });
+          }
+        }}
       />
 
       <!-- Antifragile-routing UI. All three read from `routingStore`
@@ -1042,6 +1105,8 @@
       <AttachmentBanner
         filename={attachedAsset.title || attachedAsset.filename}
         chunksCreated={attachedAsset.chunk_count}
+        assetId={attachedAsset.id}
+        initialState={attachedAsset.state}
         onremove={() => { attachedAsset = null; attachment = null; }}
       />
     {:else if attachment}
@@ -1157,6 +1222,10 @@
     padding: 24px 32px 16px;
     display: flex;
     flex-direction: column;
+    /* Isolate from the input row below — typing into the textarea
+       must not trigger a paint cycle over the entire message
+       column. */
+    contain: layout paint style;
   }
 
   /* ── Empty state ── */
@@ -1268,12 +1337,22 @@
     padding: 12px 20px 16px;
     border-top: 1px solid var(--border-mid);
     background: var(--bg-secondary);
+    /* Paint containment — tells the browser this subtree's
+       layout/style/paint cannot affect the messages column above
+       and vice versa. Without it WebKitGTK invalidates a much
+       larger area on every keystroke than it needs to. The
+       contain spec excludes `size` so the row still flexes its
+       parent to fit growing content. */
+    contain: layout paint style;
   }
 
   .input-row {
     display: flex;
     gap: 8px;
     align-items: flex-end;
+    /* Same reasoning — keystrokes only invalidate this row, not
+       the surrounding banners or hints. */
+    contain: layout paint style;
   }
 
   .attach-btn {
@@ -1344,7 +1423,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    /* Specific transitions only — `transition: all` causes WebKitGTK
+       to track every animatable property and ran a paint cycle for
+       this button (and its siblings) on every keystroke in the
+       adjacent textarea, even though no property was actually
+       changing. The `disabled` flip just snaps now. */
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
   }
 
   .search-btn:hover:not(:disabled) {
@@ -1370,7 +1454,8 @@
     gap: 4px;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s;
+    /* See .search-btn — specific transitions only. */
+    transition: background 0.2s, border-color 0.2s;
     position: relative;
   }
 

@@ -43,6 +43,92 @@ const REASONING_OPENERS = [
   "The user is asking",
 ];
 
+// Companion to the snapshot/restore test below. Verifies that the
+// peer-skill restoration also runs when the user leaves inner-work
+// *without* going through the brand-corner mark — clicking the
+// NavRail Settings icon jumps view straight from "inner_work" to
+// "settings", bypassing the exit-mark. The keep-alive layer in
+// App.svelte means onDestroy never fires either; the per-visit
+// `active` effect inside InnerWorkSurface is what actually runs the
+// restoration in this path.
+test.describe("inner work surface — exit via nav-rail", () => {
+  test("nav-rail-to-settings (no exit-mark click) still restores prior skills", async ({
+    sovereignPage: page,
+    chat,
+  }) => {
+    await bootToChat(page, chat);
+
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __sovereign_test__: {
+          setHandler: (cmd: string, fn: (args?: unknown) => unknown) => void;
+        };
+        __toggleLog?: Array<{ id: string; active: boolean }>;
+        __activeSkills?: Set<string>;
+      };
+      w.__toggleLog = [];
+      w.__activeSkills = new Set(["research"]);
+      w.__sovereign_test__.setHandler("list_skills", () => {
+        const active = w.__activeSkills!;
+        return [
+          {
+            id: "research",
+            name: "Research",
+            description: "",
+            trust_level: "user",
+            active: active.has("research"),
+          },
+          {
+            id: "inner-work",
+            name: "Inner Work",
+            description: "",
+            trust_level: "user",
+            active: active.has("inner-work"),
+          },
+        ];
+      });
+      w.__sovereign_test__.setHandler("toggle_skill", (args: unknown) => {
+        const a = args as { skillId?: string; active?: boolean };
+        const id = String(a.skillId ?? "");
+        const isActive = Boolean(a.active);
+        w.__toggleLog!.push({ id, active: isActive });
+        if (isActive) w.__activeSkills!.add(id);
+        else w.__activeSkills!.delete(id);
+        return null;
+      });
+    });
+
+    await page.getByTestId("open-inner-work").click();
+    await expect(page.locator(".dateline")).toBeVisible({ timeout: 3_000 });
+
+    // Skip the brand-corner exit — jump straight to settings via the
+    // NavRail. This is the path the user takes when they're done
+    // writing and want to flip a setting before chatting.
+    await page.getByTestId("nav-settings").click();
+    await page.locator(".cfg").waitFor();
+
+    // Poll until the restoration sequence appears in the toggle log.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => {
+            return (
+              window as unknown as {
+                __toggleLog: Array<{ id: string; active: boolean }>;
+              }
+            ).__toggleLog;
+          }),
+        { timeout: 2_000 },
+      )
+      .toEqual([
+        { id: "research", active: false },
+        { id: "inner-work", active: true },
+        { id: "inner-work", active: false },
+        { id: "research", active: true },
+      ]);
+  });
+});
+
 test.describe("inner work surface — skill exclusivity", () => {
   test("entering deactivates other skills and activates inner-work; exit restores", async ({
     sovereignPage: page,

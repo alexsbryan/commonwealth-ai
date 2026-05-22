@@ -513,6 +513,11 @@ impl Executor {
                                     model_id: None,
                                     enable_thinking: None,
                 sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
                 };
 
                 // Best-of-N sampling or single completion.
@@ -633,6 +638,7 @@ impl Executor {
                     working_directory: None,
                     in_reasoning_loop: false,
                     agent_session_token: None,
+                    turn_index: 0,
                 };
 
                 let retry = tool.retry_config().unwrap_or_default();
@@ -663,7 +669,13 @@ impl Executor {
                         tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
                     }
 
-                    match tool.execute(&resolved_params, &tool_ctx).await {
+                    // Tier 4: dispatch via `call_cached` so the
+                    // ReasonWithTools loop benefits from the shared
+                    // tool-result cache. Idempotent reads
+                    // (knowledge_lookup, code-intel) hit the cache
+                    // on duplicate args; non-idempotent tools
+                    // bypass entirely per descriptor.idempotency.
+                    match self.tools.call_cached(tool_id, &resolved_params, &tool_ctx).await {
                         Ok(output) => return Ok(output),
                         Err(e) => {
                             let msg = e.to_string().to_lowercase();
@@ -882,6 +894,11 @@ impl Executor {
                             model_id: None,
                             enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
             };
 
             let response = self.inference.complete(&request).await?;
@@ -891,7 +908,7 @@ impl Executor {
             if let Some(tool_call) = parse_tool_call(&response_text) {
                 // Find and execute the tool.
                 let tool_result = match self.tools.get(&tool_call.tool_id) {
-                    Ok(tool) => {
+                    Ok(_tool) => {
                         let params = serde_json::json!({"query": tool_call.query});
                         let ctx = ToolContext {
                             conversation_id: task.conversation_id.clone(),
@@ -899,8 +916,10 @@ impl Executor {
                             working_directory: None,
                             in_reasoning_loop: true,
                             agent_session_token: None,
+                            turn_index: 0,
                         };
-                        match tool.execute(&params, &ctx).await {
+                        // Tier 4: cache-aware dispatch.
+                        match self.tools.call_cached(&tool_call.tool_id, &params, &ctx).await {
                             Ok(output) => match output {
                                 StepOutput::Text(t) => t,
                                 StepOutput::Json(v) => v
@@ -963,6 +982,11 @@ impl Executor {
                                     model_id: None,
                                     enable_thinking: None,
                     sampling_mode: None,
+                    assistant_prefix: None,
+                    cmd_prefix: None,
+                    url_allowlist: None,
+                    evidence_id_allowlist: None,
+                    lark_grammar: None,
                     };
                     let final_response = self.inference.complete(&final_request).await?;
 
@@ -1150,17 +1174,26 @@ When ready to answer (without a <tool_call>):
             }
 
             SampleSelector::Verify { tool_id } => {
-                let tool = self.tools.get(tool_id)?;
+                // Confirm the tool exists before iterating
+                // candidates — `call_cached` would also fail with
+                // ToolNotFound, but checking once up-front gives a
+                // cleaner failure mode.
+                self.tools.get(tool_id)?;
                 let ctx = ToolContext {
                     conversation_id: String::new(),
                     task_id: None,
                     working_directory: None,
                     in_reasoning_loop: false,
                     agent_session_token: None,
+                    turn_index: 0,
                 };
                 for candidate in candidates {
                     let params = serde_json::json!({"input": candidate});
-                    if tool.execute(&params, &ctx).await.is_ok() {
+                    // Tier 4: empty conversation_id means the cache
+                    // skips this call entirely (per `call_cached`
+                    // logic). Verify is one-off discrimination
+                    // across candidates — no value in caching.
+                    if self.tools.call_cached(tool_id, &params, &ctx).await.is_ok() {
                         return Ok(candidate.clone());
                     }
                 }

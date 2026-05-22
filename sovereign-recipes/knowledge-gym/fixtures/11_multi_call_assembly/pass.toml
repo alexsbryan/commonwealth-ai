@@ -1,0 +1,41 @@
+# Knowledge-gym fixture 11 — multi-call assembly.
+#
+# Shape: the user asks about two genuinely-unrelated topics in
+# one message. A focused-query model should issue TWO separate
+# knowledge_lookup calls (one per topic) and assemble both into
+# the answer.
+#
+# KNOWN WEAKNESS (deferred to a follow-up runner extension):
+# the current mock_evidence.json returns the SAME envelope on
+# every tool call regardless of query. So a model that issues
+# one wide query gets both rows back and has no incentive to
+# decompose. The model's choice to one-shot is correct given
+# the mock — not a real correctness signal.
+#
+# Fix shape (future PR): add `mock_evidence_by_query.json`
+# support to the runner — a list of {match: <substring>,
+# evidence: [...]} entries; the runner picks the response
+# whose substring matches the model's actual query, with a
+# fallback to mock_evidence.json for unmatched queries. That
+# lets fixture 11 punish one-wide-query strategies because
+# the wide query won't match any substring → empty evidence →
+# model has to refine into two narrower queries.
+#
+# Until then, this fixture sets a lenient floor that the gym's
+# overall pass rate isn't pulled down by an artificial test.
+# When the runner extension lands, swap min_tool_calls back
+# to 2.
+
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+
+# Minimum-1 floor until mock_evidence_by_query lands. The
+# real assembly test wants ≥2; documented in this file's
+# header.
+min_tool_calls = 1
+
+# Reasonable upper bound — the model shouldn't keep retrying.
+max_lookup_calls = 4
+
+# Citation faithfulness preserved across multiple calls.
+must_not_cite_evidence_id_outside_returned = true

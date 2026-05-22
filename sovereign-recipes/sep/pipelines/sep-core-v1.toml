@@ -6,11 +6,15 @@
 #   sovereign enrich sep-ingest <slug> --force
 #   sovereign enrich build sep-<slug>
 #
-# Idempotence comes from sovereign's own enrichment layer (atoms.json
-# check inside `enrich build`) plus the worklist's `done` state. Re-
-# running this recipe is safe — already-completed slugs are skipped
-# at the worklist level; previously-finished slugs that were re-seeded
-# are skipped inside `enrich build` itself.
+# Idempotence comes from sovereign's own enrichment layer (`enrich
+# build` resumes from the last-completed sub-stage on a partial atlas)
+# plus the worklist's `done` state. Re-running this recipe is safe —
+# already-completed slugs are skipped at the worklist level; previously
+# half-built slugs (atoms present but configurations missing — a crash
+# state from older pipeline runs) get re-queued and resumed on the
+# next pass because the source filter now gates on
+# `configurations.json` (the final-stage marker) rather than
+# `atoms.json` (a first-stage marker that lied about completeness).
 #
 # ## Operational defaults
 #
@@ -41,16 +45,29 @@ version = 1
 # `--key <slug>` to `pipeline run`. The recipe-level default stays
 # the full corpus so partial-run usage is purely additive.
 type    = "command"
-# Emit one bare slug per line, restricted to slugs that don't yet have
-# a built atlas. Three stages:
+# Emit one bare slug per line, restricted to slugs whose atlas isn't
+# fully built. Three stages:
 #   1. `--list` produces `<header>\n<count>  <slug>` rows
 #   2. `awk 'NR>1 {print $2}'` drops the header + count, leaving the slug
-#   3. `while read … [ -f .../atoms.json ] || echo` skips slugs whose
-#      atlas/atoms.json already exists on disk
-# `enrich build` is idempotent on atoms.json, but `enrich sep-ingest
-# --force` still re-scaffolds (~2s × already-done count) — filtering
-# at the source keeps the worklist real-work-only and re-runs cheap.
-command = "sovereign enrich sep-ingest --list | awk 'NR>1 {print $2}' | while IFS= read -r s; do [ -f \"$HOME/.sovereign/indexes/sep-$s/atlas/atoms.json\" ] || echo \"$s\"; done"
+#   3. `while read … [ -f .../configurations.json ] || echo` skips slugs
+#      whose atlas/configurations.json already exists on disk.
+#
+# **Gate choice: `configurations.json`, not `atoms.json`.** Atom extraction
+# is the FIRST stage of `enrich build`; configurations is one of the LAST
+# (writes after atoms + edges + resolution_failures + trajectories). A
+# build that crashes mid-pipeline leaves atoms.json behind but no
+# configurations.json — gating on atoms.json silently treats those
+# half-baked atlases as done. Audited 2026-05-17: ~514/1306 atlases
+# were in this state ("semi-failed"); switching the gate to
+# configurations.json self-heals them on the next pipeline run.
+#
+# `enrich build` is itself idempotent — re-running on a partial atlas
+# resumes from where it left off (verified by replaying sep-holes:
+# enrich build wrote configurations + gaps + schema_validation +
+# tension_candidates without touching the prior atoms/edges files).
+# So the source filter only needs to identify "did the full build
+# ever finish?"; the worker handles the rest.
+command = "sovereign enrich sep-ingest --list | awk 'NR>1 {print $2}' | while IFS= read -r s; do [ -f \"$HOME/.sovereign/indexes/sep-$s/atlas/configurations.json\" ] || echo \"$s\"; done"
 
 [enrich]
 # `&&` short-circuits — if sep-ingest fails (404 slug, missing
@@ -70,6 +87,15 @@ stderr_pattern  = "Phase \\d+ validation failed|atom schema violation"
 [[enrich.failure_classifier]]
 bucket          = "parquet_missing"
 stderr_pattern  = "sep\\.parquet.*not found|run `sovereign corpus acquire sep`"
+
+# Catches exit-127 cascades — the typical cause is a `cargo build` racing
+# against in-flight pipeline subprocess spawns (cargo's atomic-rename of
+# target/release/sovereign-cli exposes a window where new shell-outs
+# can't resolve `sovereign` on PATH). Bucketing this loudly means a
+# future cascade self-diagnoses instead of pooling into `unknown`.
+[[enrich.failure_classifier]]
+bucket          = "binary_missing"
+stderr_pattern  = "sovereign: command not found|sovereign: No such file"
 
 [dispatch]
 max_attempts = 3

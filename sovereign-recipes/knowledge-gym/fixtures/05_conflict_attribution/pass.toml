@@ -1,0 +1,27 @@
+# Knowledge-gym fixture 05 — conflict attribution.
+#
+# Shape: two evidence rows disagree on a specific factual point
+# (the corpus says decay = 10%/month; the note records a decision
+# that decay SHOULD be 5%/month). The model should surface the
+# disagreement explicitly rather than picking one silently.
+#
+# Mechanism: structural SHAPE-level predicate
+# answer_attributes_conflict. Looks for contrast vocabulary
+# (however / but / yet) AND plural-source acknowledgement
+# (two sources / one source ... another) AND at least two
+# distinct cited evidence ids. Per
+# feedback_no_teaching_to_test: the vocabulary lists describe
+# SHAPES of English disagreement framing, not bank-derived
+# phrases. The prompt nudges toward attribution without
+# specifying language.
+
+should_call_knowledge_lookup = true
+expected_first_tool = "knowledge_lookup"
+max_lookup_calls = 1
+
+# Citation faithfulness — both rows are valid handles.
+must_not_cite_evidence_id_outside_returned = true
+
+# The load-bearing predicate: the model acknowledges that the
+# two rows disagree.
+answer_attributes_conflict = true

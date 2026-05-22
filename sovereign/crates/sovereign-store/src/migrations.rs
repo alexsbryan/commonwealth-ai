@@ -372,6 +372,51 @@ pub fn run_document_asset_migration(conn: &Connection) -> rusqlite::Result<()> {
     )
 }
 
+/// RAPTOR atlas — cluster-summarize-recurse tree replacing the
+/// per-chunk LLM skeleton, plus a TF-IDF motif index that captures
+/// lexical recurrences RAPTOR's abstraction loses.
+///
+/// Both tables hang off `document_assets(id)` with ON DELETE CASCADE
+/// so cleanup is automatic when an asset is deleted.
+pub fn run_raptor_atlas_migration(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS raptor_nodes (
+            node_id                 TEXT    PRIMARY KEY,
+            asset_id                TEXT    NOT NULL REFERENCES document_assets(id) ON DELETE CASCADE,
+            level                   INTEGER NOT NULL,
+            summary                 TEXT    NOT NULL,
+            -- Embeddings stored as raw little-endian f32 bytes for
+            -- compactness; encode/decode helpers live in sqlite.rs.
+            summary_embedding       BLOB    NOT NULL,
+            centroid_embedding      BLOB    NOT NULL,
+            children_node_ids       TEXT    NOT NULL,    -- JSON array of UUIDs
+            direct_member_chunk_ids TEXT,                -- JSON array, NULL above level 0
+            evidence_chunk_ids      TEXT    NOT NULL,    -- JSON array
+            quote_spans             TEXT    NOT NULL,    -- JSON array of QuoteSpan
+            primary_entities        TEXT    NOT NULL,    -- JSON array of name strings
+            cluster_coherence       REAL    NOT NULL,
+            created_at              INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_raptor_nodes_asset_level
+            ON raptor_nodes(asset_id, level);
+
+        CREATE TABLE IF NOT EXISTS asset_motifs (
+            asset_id             TEXT    NOT NULL REFERENCES document_assets(id) ON DELETE CASCADE,
+            term                 TEXT    NOT NULL,
+            tf_idf_score         REAL    NOT NULL,
+            occurrence_chunk_ids TEXT    NOT NULL,    -- JSON array
+            is_distinctive       INTEGER NOT NULL,    -- 0 / 1
+            PRIMARY KEY (asset_id, term)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_asset_motifs_distinctive
+            ON asset_motifs(asset_id, is_distinctive DESC, tf_idf_score DESC);
+        ",
+    )
+}
+
 /// Add vector index readiness tracking to corpus_state.
 /// `vector_index_ready = 1` means the IVF-PQ index is built and semantic
 /// search is available. Defaults to 0 so existing corpora start unverified;

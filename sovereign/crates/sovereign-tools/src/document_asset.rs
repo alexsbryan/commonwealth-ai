@@ -18,13 +18,24 @@
 //! pattern for the synthesis and aggregation executors.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+use futures::stream::{self, StreamExt};
+use serde::Deserialize;
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
 
 use crate::rag::chunk::{chunk_text, TextChunk};
 use crate::rag::parse::parse_file;
+use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
+
+/// Concurrency cap for parallel per-batch LLM calls in the T2 entity
+/// extraction phase. The mesh load balancer sees `buffered(6)` simultaneous
+/// requests and fans them across peers; on single-machine deployments the
+/// Slow slot queues them. 6 was tuned earlier in the RAPTOR work where the
+/// same value showed good throughput without overwhelming a 2-peer mesh.
+const T2_BATCH_CONCURRENCY: usize = 6;
 
 // ─── Self-reference detection ────────────────────────────────
 
@@ -190,14 +201,30 @@ impl ExecutionOutput {
     }
 }
 
-/// First `max` chars of `content`, trimmed at a word boundary when possible.
-/// Matches the snippet format used elsewhere in the codebase so citation
-/// popovers look consistent with knowledge-query popovers.
+/// First `max` *bytes* of `content` — walked back to the nearest UTF-8
+/// char boundary, then to a whitespace boundary when one is available
+/// within the safe window. Matches the snippet format used elsewhere in
+/// the codebase so citation popovers look consistent with
+/// knowledge-query popovers.
+///
+/// The char-boundary walk is load-bearing for non-ASCII documents:
+/// Conrad uses curly quotes (U+201C, 3 bytes), em-dashes (U+2014, 3
+/// bytes), and ellipses (U+2026, 3 bytes); slicing at a raw byte index
+/// in that text used to panic with "end byte index N is not a char
+/// boundary" inside the Cargo runtime.
 fn short_snippet(content: &str, max: usize) -> String {
     if content.len() <= max {
         return content.to_string();
     }
-    let truncated = &content[..max];
+    // Walk back to the nearest char boundary. is_char_boundary is
+    // stable since 1.9; floor_char_boundary is nightly-only, so we
+    // open-code the walk. At most 3 iterations (UTF-8 chars are ≤4
+    // bytes), so the cost is negligible.
+    let mut end = max;
+    while end > 0 && !content.is_char_boundary(end) {
+        end -= 1;
+    }
+    let truncated = &content[..end];
     match truncated.rfind(char::is_whitespace) {
         Some(pos) if pos > 0 => format!("{}...", &truncated[..pos]),
         _ => format!("{truncated}..."),
@@ -237,11 +264,17 @@ pub enum IngestProgress {
     },
     /// Embedding chunks into the vector store.
     Indexing { done: usize, total: usize },
-    /// Embedding complete. RAG queries now available.
+    /// Embedding complete. RAG queries now available. (T1 done)
     RagAvailable { asset_id: String },
-    /// Skeleton extraction in progress.
+    /// Skeleton enrichment in progress. The same variant fires for
+    /// both the T2 (entity extraction) and T3 (RAPTOR + segments +
+    /// overview) phases; the `MultiHopReady` event between them
+    /// signals the phase boundary.
     BuildingSkeleton { done: usize, total: usize },
-    /// Fully ready. All operations available.
+    /// T2 done. Entity index + action atoms available; PPR
+    /// multi-hop retrieval works while T3 continues.
+    MultiHopReady { asset_id: String },
+    /// T3 done. All operations available.
     Ready {
         asset_id: String,
         main_entities: usize,
@@ -449,7 +482,30 @@ impl DocumentAssetManager {
             }
         };
 
-        // ── Skeleton future ─────────────────────────────────
+        // ── Tiered enrichment future (T2 → MultiHopReady → T3) ──
+        //
+        // Splits the prior monolithic skeleton phase into the two
+        // tiered states defined in the proper-curried-peach plan:
+        //
+        //   T2: lean entity extraction + action atoms — yields a
+        //       partial skeleton (entity_index + main_entities +
+        //       actions + sections + structural_moments). Asset
+        //       transitions to MultiHopReady. PPR multi-hop
+        //       retrieval becomes available at this point.
+        //
+        //   T3: TextTiling segments + RAPTOR atlas + motif index +
+        //       overview generation — fills in the remaining
+        //       skeleton fields (segments, overview) AND populates
+        //       the raptor_nodes + asset_motifs tables. Asset
+        //       transitions to Ready. Full briefing-driven synthesis
+        //       becomes available.
+        //
+        // Both phases run in the SAME future (not parallel with
+        // embedding — they depend on chunks being persisted). The
+        // foreground T3 is a deliberate change from the prior
+        // background spawn: we want Ready to actually mean "all
+        // enrichment landed," not "skeleton landed and RAPTOR is
+        // still cooking."
         let skeleton_future = {
             let inference = Arc::clone(&self.inference);
             let store = Arc::clone(&self.store);
@@ -458,9 +514,9 @@ impl DocumentAssetManager {
             let on_progress = Arc::clone(&on_progress);
 
             async move {
-                // Detect document type from the opening chunks.
                 let doc_type = detect_document_type(&inference, &text_chunks).await;
 
+                // ── T2 — entity extraction + action atoms ──────
                 store
                     .update_asset_state(
                         &asset_id,
@@ -471,7 +527,7 @@ impl DocumentAssetManager {
                     )
                     .await?;
 
-                let skeleton = build_skeleton(
+                let mut skeleton = build_skeleton(
                     &inference,
                     &store,
                     &asset_id,
@@ -481,13 +537,67 @@ impl DocumentAssetManager {
                 )
                 .await?;
 
+                // Persist partial skeleton + transition to
+                // MultiHopReady so queries arriving in the
+                // T3-window can use PPR.
+                store
+                    .save_asset_skeleton(&asset_id, &skeleton, &doc_type)
+                    .await?;
+                store
+                    .update_asset_state(&asset_id, &AssetState::MultiHopReady)
+                    .await?;
+                on_progress(IngestProgress::MultiHopReady {
+                    asset_id: asset_id.clone(),
+                });
+
+                // ── T3 — RAPTOR atlas + motifs + segments + overview ──
+                // Re-emit BuildingSkeleton state so the UI's progress
+                // bar reactivates for the T3 enrichment phase. The
+                // chunks_done counter resets at this milestone — by
+                // design (the visual reset signals a real capability
+                // checkpoint, not just continuous work).
+                store
+                    .update_asset_state(
+                        &asset_id,
+                        &AssetState::BuildingSkeleton {
+                            chunks_done: 0,
+                            chunks_total: chunk_count,
+                        },
+                    )
+                    .await?;
+
+                // Segments (TextTiling) + overview run concurrently —
+                // both touch all chunks, neither depends on the other.
+                let segments_future =
+                    extract_segments(&inference, &text_chunks, &skeleton.main_entities, doc_type.clone());
+                let overview_future =
+                    generate_overview(&inference, &text_chunks, &doc_type);
+                let (segments, overview) = tokio::join!(segments_future, overview_future);
+                skeleton.segments = segments;
+                skeleton.overview = overview;
+
+                // RAPTOR + motif build. Failures are logged inside
+                // the helper and degrade quality without breaking
+                // ingest — the partial skeleton from T2 is still a
+                // valid retrieval surface.
+                let source_key = format!("asset:{asset_id}");
+                build_and_persist_raptor_atlas(
+                    &inference,
+                    &store,
+                    &asset_id,
+                    &source_key,
+                    doc_type.clone(),
+                )
+                .await;
+
+                // Final skeleton save (with overview + segments now
+                // populated) + Ready transition.
                 store
                     .save_asset_skeleton(&asset_id, &skeleton, &doc_type)
                     .await?;
                 store
                     .update_asset_state(&asset_id, &AssetState::Ready)
                     .await?;
-
                 on_progress(IngestProgress::Ready {
                     asset_id: asset_id.clone(),
                     main_entities: skeleton.main_entities.len(),
@@ -500,12 +610,18 @@ impl DocumentAssetManager {
             }
         };
 
-        // Run both concurrently. Embedding typically finishes first
-        // (pure computation), unlocking RAG while skeleton keeps going.
+        // Embedding + tiered enrichment run concurrently. Embedding
+        // typically finishes first (pure computation), flipping the
+        // asset to PartiallyReady (T1 done) so cosine retrieval works
+        // immediately. The enrichment future then walks T2 → T3.
         let (embed_result, skeleton_result) = tokio::join!(embed_future, skeleton_future);
 
         embed_result?;
         let (skeleton, doc_type) = skeleton_result?;
+
+        // (T3 used to be a tokio::spawn background task here. It
+        // now runs inside skeleton_future above, so Ready means
+        // *all* enrichment has landed.)
 
         Ok(DocumentAsset {
             id: asset_id,
@@ -622,6 +738,39 @@ impl DocumentAssetManager {
         );
 
         Ok(skeleton)
+    }
+
+    /// Rebuild ONLY the RAPTOR atlas + motif index for an existing
+    /// Ready asset, leaving the legacy skeleton untouched. Used by
+    /// the bench (`--rebuild-raptor`) and by future admin paths to
+    /// populate the new atlas on documents ingested before the
+    /// RAPTOR pipeline shipped — without paying for a full ~20-min
+    /// skeleton rebuild.
+    ///
+    /// Returns `Ok(())` on success. Errors propagate from the store
+    /// (no chunks, write failure) or the inference layer (embed /
+    /// summarize failures). Per `build_and_persist_raptor_atlas`'s
+    /// own contract, internal failures inside RAPTOR or motif
+    /// extraction are logged + swallowed; this entry point only
+    /// errors on upfront preconditions.
+    pub async fn rebuild_raptor_atlas(&self, asset_id: &str) -> Result<()> {
+        tracing::info!(asset_id = %asset_id, "rebuild_raptor_atlas — begin");
+        let asset = self
+            .store
+            .get_document_asset(asset_id)
+            .await?
+            .ok_or_else(|| Error::NotFound(format!("document asset {asset_id}")))?;
+        let source_key = asset.source_key();
+        let doc_type = asset.document_type.clone();
+        build_and_persist_raptor_atlas(
+            &self.inference,
+            &self.store,
+            asset_id,
+            &source_key,
+            doc_type,
+        )
+        .await;
+        Ok(())
     }
 
     /// Route a user's question to the right operation type, then
@@ -823,6 +972,11 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -983,6 +1137,11 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -1141,6 +1300,11 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -1257,6 +1421,11 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -1320,6 +1489,11 @@ impl DocumentAssetManager {
                         model_id: None,
                         enable_thinking: None,
             sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
             })
             .await?;
 
@@ -1383,6 +1557,11 @@ async fn detect_document_type(
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         })
         .await;
 
@@ -1412,9 +1591,20 @@ async fn detect_document_type(
     detected
 }
 
-/// Build the structural skeleton by processing chunks in batches
-/// through the LLM. Extracts sections, entities (with kind), and
-/// structural moments.
+/// Build the T2 (entity-tier) skeleton by processing chunks in
+/// parallel through the LLM. Extracts sections, entities (with
+/// kind), and structural moments. Returns a *partial* skeleton —
+/// `overview` is empty and `segments` is empty; those are T3
+/// outputs, filled in by `build_and_persist_raptor_atlas`.
+///
+/// Parallelism: per-batch tasks fan out across the mesh via
+/// `futures::stream::iter(...).buffered(T2_BATCH_CONCURRENCY)`. On a
+/// 2-peer mesh, this gives near-linear speedup over the previous
+/// sequential `for batch in chunks.chunks(4)` loop; on a single-machine
+/// deployment, the Slow slot serialises them but the async overhead
+/// is no worse than the sequential version. The May-21 lean-grammar
+/// probe measured 1.4s/batch; with concurrency=6 on a 250-batch
+/// document that projects to ~60s for the entity-extraction phase.
 async fn build_skeleton(
     inference: &Arc<dyn InferenceProvider>,
     store: &Arc<dyn StateStore>,
@@ -1424,116 +1614,167 @@ async fn build_skeleton(
     on_progress: &Arc<dyn Fn(IngestProgress) + Send + Sync>,
 ) -> Result<DocumentSkeleton> {
     let chunk_count = chunks.len();
+
+    // Process chunks in batches of 4 for coherence. Each batch produces
+    // a `Vec<SkeletonBatchEntry>` (defined in the lean parser). After
+    // the parallel stream completes, we merge entries sequentially into
+    // the shared accumulators — merge is cheap (HashMap insertion).
+    let batch_size = 4;
+    let batches: Vec<(usize, Vec<TextChunk>)> = chunks
+        .chunks(batch_size)
+        .enumerate()
+        .map(|(idx, b)| (idx, b.to_vec()))
+        .collect();
+    let total_batches = batches.len();
+    let completed = Arc::new(AtomicUsize::new(0));
+
+    let inference_arc = Arc::clone(inference);
+    let store_arc = Arc::clone(store);
+    let on_progress_arc = Arc::clone(on_progress);
+    let asset_id_owned = asset_id.to_string();
+    let doc_type_owned = doc_type.clone();
+    let chunk_count_for_progress = chunk_count;
+
+    let batch_results: Vec<(usize, Option<Vec<SkeletonBatchEntry>>)> = stream::iter(batches)
+        .map(|(batch_idx, batch)| {
+            let inference = Arc::clone(&inference_arc);
+            let store = Arc::clone(&store_arc);
+            let on_progress = Arc::clone(&on_progress_arc);
+            let asset_id = asset_id_owned.clone();
+            let doc_type = doc_type_owned.clone();
+            let completed = Arc::clone(&completed);
+            async move {
+                let batch_start = batch_idx * batch_size;
+                let passage: String = batch
+                    .iter()
+                    .map(|c| c.content.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n\n---\n\n");
+
+                // Lean entity-only schema with llguidance grammar
+                // enforcement (May-21 wire-format landing). Model
+                // emits exactly batch.len() newline-separated lines,
+                // each an optional comma-separated capitalized name
+                // list. Grammar guarantees alignment.
+                let prompt = format!(
+                    "Extract named entities mentioned in each of the {batch_size} chunks below \
+                     from this {doc_type} document — characters, organizations, places, key \
+                     concepts — using their canonical names as they appear in the text. \
+                     Output EXACTLY {batch_size} lines, one per chunk in order. Each line is a \
+                     comma-separated list of names. Use an empty line for a chunk with no \
+                     notable named entities. No prose, no JSON, no headers, no chunk indices.\n\n\
+                     Chunks (starting at section {batch_start}):\n\n{passage}\n\nAnswer ({batch_size} lines):",
+                    doc_type = doc_type.label(),
+                    batch_size = batch.len(),
+                );
+                let mut start_rhs = String::from("line");
+                for _ in 1..batch.len() {
+                    start_rhs.push_str(" \"\\n\" line");
+                }
+                let lark_grammar = format!(
+                    "start: {start_rhs}\n\
+                     line: (entity (\",\" \" \"? entity)*)?\n\
+                     entity: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/\n",
+                );
+
+                let response = inference
+                    .complete(&CompletionRequest {
+                        prompt,
+                        system_message: None,
+                        preferred_speed: Speed::Slow,
+                        max_tokens: Some(120),
+                        temperature: Some(0.1),
+                        think_budget: Some(0),
+                        structured_output: None,
+                        top_k: None,
+                        top_p: None,
+                        oicp: None,
+                        tools: None,
+                        tool_choice: None,
+                        model_id: None,
+                        enable_thinking: None,
+                        sampling_mode: None,
+                        assistant_prefix: None,
+                        cmd_prefix: None,
+                        url_allowlist: None,
+                        evidence_id_allowlist: None,
+                        lark_grammar: Some(lark_grammar),
+                    })
+                    .await;
+                let parsed = response
+                    .ok()
+                    .map(|resp| parse_lean_skeleton_batch(&resp.text, batch_start, batch.len()));
+
+                // Per-batch progress tick. Atomic counter is the only
+                // way to give the UI monotonic progress when batches
+                // complete out of order under buffered().
+                let done_now = completed.fetch_add(1, Ordering::SeqCst) + 1;
+                let chunks_done =
+                    (done_now * batch_size).min(chunk_count_for_progress);
+                on_progress(IngestProgress::BuildingSkeleton {
+                    done: chunks_done,
+                    total: chunk_count_for_progress,
+                });
+                let _ = store
+                    .update_asset_state(
+                        &asset_id,
+                        &AssetState::BuildingSkeleton {
+                            chunks_done,
+                            chunks_total: chunk_count_for_progress,
+                        },
+                    )
+                    .await;
+
+                (batch_idx, parsed)
+            }
+        })
+        .buffered(T2_BATCH_CONCURRENCY)
+        .collect()
+        .await;
+
+    let _ = total_batches; // referenced for future progress assertions; kept silent
+
+    // Merge results sequentially after the parallel stream completes.
+    // Order by batch_idx so the resulting sections list is in document
+    // order — some downstream code reads sections in order.
+    let mut sorted_results = batch_results;
+    sorted_results.sort_by_key(|(idx, _)| *idx);
     let mut sections = Vec::new();
-    // Track entity mentions and the kinds the LLM assigned.
     let mut entity_mentions: std::collections::HashMap<String, Vec<usize>> =
         std::collections::HashMap::new();
     let mut entity_kinds: std::collections::HashMap<String, EntityKind> =
         std::collections::HashMap::new();
     let mut structural_moments = Vec::new();
-
-    // Process chunks in batches of 4 for coherence.
-    let batch_size = 4;
-    for (batch_idx, batch) in chunks.chunks(batch_size).enumerate() {
-        let batch_start = batch_idx * batch_size;
-        let passage: String = batch
-            .iter()
-            .map(|c| c.content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n---\n\n");
-
-        let entity_kinds_hint = match doc_type {
-            DocumentTypeTag::Narrative => "Character, Theme, Event, Concept",
-            DocumentTypeTag::Argument => "Argument, Claim, Concept, Person",
-            DocumentTypeTag::Evidence => "Claim, Evidence, Person, Concept",
-            DocumentTypeTag::Chronicle => "Person, Event, Theme, Concept",
-            DocumentTypeTag::Technical => "Concept, Theme, Person, Event",
-            DocumentTypeTag::Unknown => "Character, Argument, Concept, Claim, Evidence, Theme, Person, Event",
-        };
-
-        let prompt = format!(
-            "Analyse these passages from a {doc_type} document. For each passage, extract:\n\n\
-             1. **function**: One of: Introduces, Develops, Complicates, Resolves, Transitions, Evidences\n\
-             2. **key_entities**: Important names, concepts, arguments, or themes (up to 5). \
-                Each entity is an object: {{\"name\": \"...\", \"kind\": \"...\"}}\n\
-                Valid kinds: {entity_kinds_hint}\n\
-             3. **establishes**: One sentence — what this section establishes or advances\n\
-             4. **is_structural_moment**: true/false — is this a major turning point, revelation, or shift?\n\
-             5. **moment_description**: If structural moment, one sentence describing it\n\n\
-             Passages (starting at section {batch_start}):\n\n{passage}\n\n\
-             Respond as a JSON array with one object per passage:\n\
-             [{{\"function\": \"...\", \"key_entities\": [{{\"name\": \"...\", \"kind\": \"...\"}}], \
-             \"establishes\": \"...\", \"is_structural_moment\": false, \"moment_description\": null}}]",
-            doc_type = doc_type.label(),
-        );
-
-        let response = inference
-            .complete(&CompletionRequest {
-                prompt,
-                system_message: None,
-                preferred_speed: Speed::Fast,
-                max_tokens: Some(512),
-                temperature: Some(0.1),
-                think_budget: Some(0),
-                structured_output: None,
-                top_k: None,
-                top_p: None,
-                oicp: None,
-            tools: None,
-            tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-            sampling_mode: None,
-            })
-            .await;
-
-        if let Ok(resp) = response {
-            if let Some(parsed) = parse_skeleton_batch(&resp.text, batch_start) {
-                for entry in parsed {
-                    for (name, kind) in &entry.entity_names_and_kinds {
-                        entity_mentions
-                            .entry(name.clone())
-                            .or_default()
-                            .push(entry.chunk_index);
-                        // Keep the first assigned kind (most likely correct
-                        // since early mentions are usually introductory).
-                        entity_kinds.entry(name.clone()).or_insert_with(|| kind.clone());
-                    }
-                    if let Some(ref desc) = entry.moment_description {
-                        structural_moments.push(StructuralMoment {
-                            chunk_index: entry.chunk_index,
-                            description: desc.clone(),
-                            salience: 0.8,
-                        });
-                    }
-                    sections.push(SectionAnnotation {
-                        chunk_index: entry.chunk_index,
-                        function: entry.function,
-                        key_entities: entry
-                            .entity_names_and_kinds
-                            .iter()
-                            .map(|(n, _)| n.clone())
-                            .collect(),
-                        establishes: entry.establishes,
-                    });
-                }
+    for (_, parsed_opt) in sorted_results {
+        let Some(parsed) = parsed_opt else { continue };
+        for entry in parsed {
+            for (name, kind) in &entry.entity_names_and_kinds {
+                entity_mentions
+                    .entry(name.clone())
+                    .or_default()
+                    .push(entry.chunk_index);
+                entity_kinds
+                    .entry(name.clone())
+                    .or_insert_with(|| kind.clone());
             }
+            if let Some(ref desc) = entry.moment_description {
+                structural_moments.push(StructuralMoment {
+                    chunk_index: entry.chunk_index,
+                    description: desc.clone(),
+                    salience: 0.8,
+                });
+            }
+            sections.push(SectionAnnotation {
+                chunk_index: entry.chunk_index,
+                function: entry.function,
+                key_entities: entry
+                    .entity_names_and_kinds
+                    .iter()
+                    .map(|(n, _)| n.clone())
+                    .collect(),
+                establishes: String::new(),
+            });
         }
-
-        let done = ((batch_idx + 1) * batch_size).min(chunk_count);
-        on_progress(IngestProgress::BuildingSkeleton {
-            done,
-            total: chunk_count,
-        });
-        let _ = store
-            .update_asset_state(
-                asset_id,
-                &AssetState::BuildingSkeleton {
-                    chunks_done: done,
-                    chunks_total: chunk_count,
-                },
-            )
-            .await;
     }
 
     // ── Build entity ranking ────────────────────────────────
@@ -1565,11 +1806,16 @@ async fn build_skeleton(
         .into_iter()
         .filter(|(name, _)| main_entities.iter().any(|e| &e.name == name))
         .map(|(name, indices)| {
+            // Char-bounded truncation. The prior `c.content[..len.min(200)]`
+            // byte-sliced and panicked when byte 200 landed inside a
+            // multi-byte char (curly quotes, em-dashes, ellipses — common
+            // in literary text). Same fix shape as `short_snippet`: take
+            // chars not bytes.
             let quote_samples: Vec<String> = indices
                 .iter()
                 .take(3)
                 .filter_map(|&i| chunks.get(i))
-                .map(|c| c.content[..c.content.len().min(200)].to_string())
+                .map(|c| c.content.chars().take(200).collect::<String>())
                 .collect();
             (
                 name,
@@ -1581,19 +1827,911 @@ async fn build_skeleton(
         })
         .collect();
 
-    // ── Build overview ──────────────────────────────────────
-    let overview = generate_overview(inference, chunks, doc_type).await;
-
     structural_moments.truncate(40);
 
+    // ── Action atoms (atlas-light) ──────────────────────────
+    // For each top-N entity, run a Fast-slot pass over the entity's
+    // appearance chunks and extract verb-object pairs anchored to
+    // chunk_index. Cap N at 6 so the per-document cost stays bounded.
+    // Action atoms route around the embedding-similarity gap — the
+    // model queries by entity name, the tool consults the atom index,
+    // and the original chunk surfaces by structural lookup rather
+    // than embedding similarity.
+    let actions = extract_action_atoms(inference, chunks, &main_entities, &entity_index).await;
+
+    // T2-phase skeleton is partial — `overview` and `segments` are
+    // empty placeholders. T3 (`build_and_persist_raptor_atlas` called
+    // from `ingest`) fills them in: `overview` from the RAPTOR root
+    // summary, `segments` from `extract_segments` (TextTiling).
+    // This split is what powers the tiered state machine — the asset
+    // transitions to `MultiHopReady` after this function returns,
+    // before T3 enrichment starts.
     Ok(DocumentSkeleton {
         sections,
         main_entities,
         entity_index,
         structural_moments,
-        overview,
+        overview: String::new(),
+        actions,
+        segments: Vec::new(),
         built_at: chrono::Utc::now(),
     })
+}
+
+/// Two-pass segment extraction.
+///
+/// **Pass A — boundary detection.** For each pair of adjacent
+/// chunks, ask the model whether there is a segment break between
+/// them. Output is a single word (`BREAK` or `CONTINUE`) — minimal
+/// decode cost, accuracy is the model's job. ~N-1 calls for N
+/// chunks.
+///
+/// **Pass B — segment naming.** Derive segment ranges from the
+/// boundary decisions, then fire one call per segment to produce
+/// title + summary + function. Output is bounded JSON.
+///
+/// Both passes use Speed::Slow (Primary 35B). Fast slot would
+/// likely do well at Pass A (binary decision on adjacent chunks)
+/// but is currently unloaded; revisit if ingest latency becomes a
+/// production-perf blocker.
+///
+/// The function is fault-tolerant: any call failure falls back to
+/// `CONTINUE` (no break) or a default title, so a partial network
+/// blip produces fewer, larger segments rather than failing the
+/// whole ingest. Segments are an additive retrieval surface, not
+/// a load-bearing index — degraded extraction degrades retrieval
+/// gracefully.
+async fn extract_segments(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[TextChunk],
+    main_entities: &[RankedEntity],
+    doc_type: DocumentTypeTag,
+) -> Vec<DocumentSegment> {
+    if chunks.len() < 2 {
+        return Vec::new();
+    }
+
+    // ── Pass A — boundary detection via TextTiling ─────────
+    //
+    // Replaces the original per-pair LLM Pass A (one Speed::Slow
+    // call per adjacent chunk pair, N-1 sequential calls for N
+    // chunks — ~17 min on the Conrad 1006-chunk doc). TextTiling
+    // (Hearst 1997, embedding variant) computes adjacent-chunk
+    // cosine similarity, smooths it, scores each gap by its
+    // "depth" (how far it dips below the surrounding peaks), and
+    // thresholds at mean + k·std. Zero LLM calls; ~30s for
+    // embedding + sub-second for the boundary detection.
+    //
+    // The earlier batched-LLM Pass A failed validation 2026-05-21
+    // (template-shaped output, 5% precision). TextTiling has none
+    // of that failure mode — boundaries fall out of arithmetic on
+    // numbers the embedding model already produced for the chunk
+    // store. The per-document-type cue is gone because the
+    // similarity signal is doc-type-agnostic; doc-type-aware
+    // naming still happens in Pass B.
+    let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+    let embeddings = match inference.embed_batch(&texts).await {
+        Ok(e) if e.len() == chunks.len() => e,
+        _ => {
+            // Embedding failure or count mismatch — fall back to one
+            // segment per chunk so the rest of the pipeline still
+            // makes progress.
+            tracing::warn!(
+                "extract_segments — embed_batch failed or returned wrong count; treating doc as one segment per chunk"
+            );
+            vec![]
+        }
+    };
+    let breaks: Vec<bool> = if embeddings.is_empty() {
+        vec![false; chunks.len().saturating_sub(1)]
+    } else {
+        detect_segment_boundaries(&embeddings, /* window = */ 3, /* depth_k = */ 1.0)
+    };
+    tracing::info!(
+        chunks = chunks.len(),
+        breaks = breaks.iter().filter(|b| **b).count(),
+        "extract_segments — TextTiling complete"
+    );
+
+    // Derive segment ranges from break decisions.
+    let mut ranges: Vec<(usize, usize)> = Vec::new();
+    let mut seg_start = 0usize;
+    for (i, &is_break) in breaks.iter().enumerate() {
+        if is_break {
+            // Segment [seg_start..=i] ends. Next segment starts at i+1.
+            ranges.push((seg_start, i));
+            seg_start = i + 1;
+        }
+    }
+    // Close the final segment, which runs to the last chunk.
+    ranges.push((seg_start, chunks.len() - 1));
+
+    // Cap segment count so a very-low depth_k or a pathological
+    // embedding signal that fires breaks on every gap can't blow
+    // up Pass B with hundreds of single-chunk segments.
+    if ranges.len() > 200 {
+        return Vec::new();
+    }
+
+    // ── Pass B — name each segment ─────────────────────────
+    let mut segments = Vec::new();
+    let entity_list = main_entities
+        .iter()
+        .take(8)
+        .map(|e| e.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    for (start, end) in ranges {
+        // Compose segment body — clip each chunk to keep prompt
+        // bounded for very long segments.
+        let mut body = String::new();
+        for j in start..=end {
+            if let Some(c) = chunks.get(j) {
+                let snippet: String = c.content.chars().take(400).collect();
+                body.push_str(&format!("[chunk {j}] {snippet}\n\n"));
+            }
+            // Cap body size at ~6 chunks worth to keep prefill
+            // bounded; longer segments still get title+summary
+            // but from a clipped view (acceptable for naming).
+            if body.len() > 2400 {
+                break;
+            }
+        }
+        let prompt = format!(
+            "You are naming a segment of a {doc_type} document. The segment spans \
+             chunks {start}..={end}. Main document entities (subset may appear here): \
+             {entity_list}. Respond with a JSON object only — no prose:\n\
+             {{\"title\":\"<short, in document's own register>\", \
+             \"summary\":\"<1-2 sentences, neutral>\", \
+             \"function\":\"Introduces|Develops|Complicates|Resolves|Transitions|Evidences\", \
+             \"key_entities\":[\"name1\",\"name2\"]}}\n\n\
+             Segment content:\n{body}\nJSON:",
+            doc_type = doc_type.label(),
+        );
+        let resp = inference
+            .complete(&CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Slow,
+                max_tokens: Some(180),
+                temperature: Some(0.1),
+                think_budget: Some(0),
+                structured_output: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
+            })
+            .await;
+        let (title, summary, function, key_entities) = match resp {
+            Ok(r) => parse_segment_naming(&r.text).unwrap_or_else(|| {
+                (
+                    format!("Segment chunks {start}..={end}"),
+                    String::new(),
+                    SectionFunction::Develops,
+                    Vec::new(),
+                )
+            }),
+            Err(_) => (
+                format!("Segment chunks {start}..={end}"),
+                String::new(),
+                SectionFunction::Develops,
+                Vec::new(),
+            ),
+        };
+        segments.push(DocumentSegment {
+            id: format!("seg-{start}"),
+            chunk_start: start,
+            chunk_end: end,
+            title,
+            summary,
+            key_entities,
+            function,
+        });
+    }
+
+    segments
+}
+
+/// Build the RAPTOR atlas + motif index for an asset and persist them.
+/// Runs after the legacy skeleton has finished so chunks-with-embeddings
+/// are guaranteed to be in the store.
+///
+/// Errors are logged and swallowed: the legacy skeleton is the durable
+/// retrieval surface, and RAPTOR is additive. A RAPTOR build failure
+/// degrades briefing quality but never breaks attach.
+async fn build_and_persist_raptor_atlas(
+    inference: &Arc<dyn InferenceProvider>,
+    store: &Arc<dyn StateStore>,
+    asset_id: &str,
+    source_key: &str,
+    doc_type: DocumentTypeTag,
+) {
+    let started = std::time::Instant::now();
+    tracing::info!(asset_id, "raptor_atlas: starting background build");
+
+    // Fetch chunks (which carry embeddings from the embed phase).
+    let chunks = match store.get_chunks_by_source(source_key).await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(asset_id, error = %e, "raptor_atlas: get_chunks_by_source failed");
+            return;
+        }
+    };
+    let total = chunks.len();
+    let mut raptor_chunks: Vec<ChunkInput> = Vec::with_capacity(total);
+    let mut embeddings: Vec<Vec<f32>> = Vec::with_capacity(total);
+    for c in &chunks {
+        if let Some(emb) = c.embedding.as_ref() {
+            raptor_chunks.push(ChunkInput {
+                chunk_id: c.chunk_index as u32,
+                content: c.content.clone(),
+            });
+            embeddings.push(emb.clone());
+        }
+    }
+    if raptor_chunks.is_empty() {
+        tracing::warn!(asset_id, total, "raptor_atlas: no embedded chunks; skipping");
+        return;
+    }
+
+    // ── RAPTOR tree ─────────────────────────────────────────
+    let nodes = match build_raptor_atlas(inference, &raptor_chunks, &embeddings, doc_type.clone())
+        .await
+    {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::warn!(asset_id, error = %e, "raptor_atlas: build_raptor_atlas failed");
+            return;
+        }
+    };
+    let node_count = nodes.len();
+    if let Err(e) = store.save_raptor_nodes(asset_id, &nodes).await {
+        tracing::warn!(asset_id, error = %e, "raptor_atlas: save_raptor_nodes failed");
+        return;
+    }
+
+    // ── Motif index ─────────────────────────────────────────
+    let text_chunks: Vec<TextChunk> = raptor_chunks
+        .iter()
+        .map(|c| TextChunk {
+            content: c.content.clone(),
+            index: c.chunk_id as usize,
+        })
+        .collect();
+    // Wider candidate pool (was 100) since the df>=1 floor lets
+    // rare-but-distinctive scene markers reach the LLM classifier.
+    // Most of the extra 100 will be filtered out as noise; that's
+    // the classifier's job. Cost: one extra Slow call with a
+    // marginally longer prompt — bounded.
+    let candidates = extract_motif_candidates(&text_chunks, 200);
+    let motif_count = candidates.len();
+    let motifs = classify_motifs(inference, candidates, doc_type).await;
+    let distinctive_count = motifs.iter().filter(|m| m.is_distinctive).count();
+    if let Err(e) = store.save_asset_motifs(asset_id, &motifs).await {
+        tracing::warn!(asset_id, error = %e, "raptor_atlas: save_asset_motifs failed");
+        return;
+    }
+
+    tracing::info!(
+        asset_id,
+        chunks = raptor_chunks.len(),
+        nodes = node_count,
+        motif_candidates = motif_count,
+        distinctive_motifs = distinctive_count,
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "raptor_atlas: background build complete"
+    );
+}
+
+/// Stoplist of the most common English function words. Used by motif
+/// extraction to filter out conjunctions, prepositions, pronouns, and
+/// other words that recur frequently in every English document and
+/// therefore can't distinguish one document from another. Kept short
+/// and curated (~110 entries) rather than exhaustive — the TF-IDF +
+/// LLM classifier downstream catches anything this misses.
+const MOTIF_STOPLIST: &[&str] = &[
+    "the", "and", "for", "are", "but", "not", "you", "all", "can", "had",
+    "her", "was", "one", "our", "out", "day", "get", "has", "him", "his",
+    "how", "man", "new", "now", "old", "see", "two", "way", "who", "boy",
+    "did", "its", "let", "put", "say", "she", "too", "use", "any", "every",
+    "from", "have", "into", "like", "more", "much", "must", "only", "over",
+    "said", "some", "such", "than", "that", "them", "they", "this", "very",
+    "want", "well", "were", "what", "when", "with", "your", "their", "there",
+    "these", "those", "would", "could", "should", "about", "after", "again",
+    "before", "being", "below", "doing", "going", "having", "still", "while",
+    "where", "which", "whose", "until", "under", "above", "across", "almost",
+    "another", "because", "between", "however", "without", "through", "though",
+    "perhaps", "rather", "seemed", "though", "toward", "upon", "whom",
+    "indeed", "least", "much", "often", "since", "thus", "yet", "even",
+    "made", "make", "down", "back", "come", "came", "took", "look", "good",
+    "great", "long", "last", "first", "right", "left", "thing", "things",
+    "those", "time", "times", "year", "years", "place", "world",
+];
+
+/// Candidate term for the motif index. Pure-Rust extraction pass —
+/// no LLM. Returns up to `top_n` terms ranked by chunk-presence
+/// breadth (terms appearing in 3+ chunks but not in every chunk are
+/// the most likely motif candidates). Caller passes the result to
+/// `classify_motifs` for the LLM motif-vs-noise judgment.
+fn extract_motif_candidates(
+    chunks: &[TextChunk],
+    top_n: usize,
+) -> Vec<MotifCandidate> {
+    use std::collections::HashMap;
+
+    let stoplist: std::collections::HashSet<&str> = MOTIF_STOPLIST.iter().copied().collect();
+
+    // term → (total_count, set_of_chunk_indices)
+    let mut term_stats: HashMap<String, (u32, std::collections::BTreeSet<u32>)> =
+        HashMap::new();
+
+    for (idx, chunk) in chunks.iter().enumerate() {
+        let mut seen_this_chunk: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+        for raw in chunk.content.split(|c: char| !c.is_alphabetic() && c != '\'') {
+            let lower = raw.to_lowercase();
+            // Length + stoplist filters. Drop possessives and contractions
+            // by stripping a trailing 's or ' before the length check.
+            let trimmed = lower
+                .trim_end_matches("'s")
+                .trim_end_matches('\'')
+                .to_string();
+            if trimmed.len() < 4 || trimmed.len() > 20 {
+                continue;
+            }
+            if stoplist.contains(trimmed.as_str()) {
+                continue;
+            }
+            if !trimmed.chars().any(|c| c.is_alphabetic()) {
+                continue;
+            }
+            let entry = term_stats
+                .entry(trimmed.clone())
+                .or_insert_with(|| (0, std::collections::BTreeSet::new()));
+            entry.0 += 1;
+            if seen_this_chunk.insert(trimmed) {
+                entry.1.insert(idx as u32);
+            }
+        }
+    }
+
+    let total_chunks = chunks.len().max(1) as f32;
+    let mut candidates: Vec<MotifCandidate> = term_stats
+        .into_iter()
+        .filter_map(|(term, (count, chunk_set))| {
+            let df = chunk_set.len();
+            // Drop topical terms (>60% of doc — generic vocabulary).
+            // Keep low-df hapax-and-near-hapax terms: a Conrad word
+            // like "coruscations" (df=2) IS the load-bearing scene
+            // marker, not noise. The LLM motif classifier downstream
+            // separates real motifs from incidental rarities; we
+            // only need to keep the candidate pool wide enough that
+            // the rare-but-distinctive ones reach it.
+            if df < 1 || df as f32 / total_chunks > 0.6 {
+                return None;
+            }
+            let occurrences: Vec<u32> = chunk_set.into_iter().collect();
+            // TF-IDF style score: higher when a term is moderately
+            // frequent in absolute count but distributed across
+            // relatively few chunks.
+            let tf = count as f32;
+            let idf = ((total_chunks + 1.0) / (df as f32 + 1.0)).ln();
+            let score = tf * idf;
+            Some(MotifCandidate {
+                term,
+                tf_idf_score: score,
+                occurrence_chunk_ids: occurrences,
+            })
+        })
+        .collect();
+
+    candidates.sort_by(|a, b| {
+        b.tf_idf_score
+            .partial_cmp(&a.tf_idf_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    candidates.truncate(top_n);
+    candidates
+}
+
+/// A pre-classification motif candidate. Identical shape to
+/// `AssetMotif` minus `is_distinctive`, which the LLM classifier
+/// fills in.
+#[derive(Debug, Clone)]
+struct MotifCandidate {
+    term: String,
+    tf_idf_score: f32,
+    occurrence_chunk_ids: Vec<u32>,
+}
+
+/// Ask the model which of the candidate terms are genuine recurring
+/// motifs vs incidental rare words. One Slow-slot call; grammar
+/// forces a JSON array of motif terms drawn from the input set.
+///
+/// Returns a Vec<AssetMotif> with `is_distinctive` set per the
+/// model's judgment. Falls back to "all distinctive" on LLM failure
+/// — over-inclusive is safer than empty (the briefing has its own
+/// budget cap).
+async fn classify_motifs(
+    inference: &Arc<dyn InferenceProvider>,
+    candidates: Vec<MotifCandidate>,
+    doc_type: DocumentTypeTag,
+) -> Vec<AssetMotif> {
+    if candidates.is_empty() {
+        return Vec::new();
+    }
+
+    let terms_csv = candidates
+        .iter()
+        .map(|c| c.term.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let doc_cue = match doc_type {
+        DocumentTypeTag::Narrative => {
+            "recurring motifs are images, gestures, character tics, or refrains the author returns to"
+        }
+        DocumentTypeTag::Argument => {
+            "recurring motifs are key concepts or terms-of-art the argument turns on"
+        }
+        DocumentTypeTag::Evidence => {
+            "recurring motifs are central variables, methods, or claims the paper threads through"
+        }
+        DocumentTypeTag::Chronicle => {
+            "recurring motifs are people, places, or patterns that recur across the timeline"
+        }
+        DocumentTypeTag::Technical => {
+            "recurring motifs are protocols, components, or recurring procedures"
+        }
+        DocumentTypeTag::Unknown => {
+            "recurring motifs are terms the document returns to deliberately, not incidentally"
+        }
+    };
+
+    let prompt = format!(
+        "You are picking out genuine recurring motifs from a {doc_type} document. \
+         The candidates below were extracted by frequency; some are real motifs the \
+         document returns to deliberately, others are incidental rare vocabulary. \
+         For this document type, {doc_cue}.\n\n\
+         CANDIDATES: {terms_csv}\n\n\
+         Reply with a JSON array of just the motif terms — only terms from the \
+         candidate list, lowercase, no explanation. Example: [\"incurious\", \"circles\"].",
+        doc_type = doc_type.label(),
+    );
+
+    let resp = inference
+        .complete(&CompletionRequest {
+            prompt,
+            system_message: None,
+            preferred_speed: Speed::Slow,
+            max_tokens: Some(400),
+            temperature: Some(0.1),
+            think_budget: Some(0),
+            structured_output: None,
+            top_k: None,
+            top_p: None,
+            oicp: None,
+            tools: None,
+            tool_choice: None,
+            model_id: None,
+            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
+        })
+        .await;
+
+    let distinctive_set: std::collections::HashSet<String> = match resp {
+        Ok(r) => parse_motif_classification(&r.text),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "classify_motifs — LLM call failed; treating all candidates as distinctive"
+            );
+            candidates.iter().map(|c| c.term.clone()).collect()
+        }
+    };
+
+    candidates
+        .into_iter()
+        .map(|c| AssetMotif {
+            is_distinctive: distinctive_set.contains(&c.term),
+            term: c.term,
+            tf_idf_score: c.tf_idf_score,
+            occurrence_chunk_ids: c.occurrence_chunk_ids,
+        })
+        .collect()
+}
+
+/// Parse the model's motif-classification response. Accepts JSON
+/// arrays of strings, ignoring anything outside the first `[...]`
+/// span. Returns the set of distinctive terms (lowercased). On
+/// parse failure returns an empty set — caller decides the fallback.
+fn parse_motif_classification(text: &str) -> std::collections::HashSet<String> {
+    let start = match text.find('[') {
+        Some(i) => i,
+        None => return std::collections::HashSet::new(),
+    };
+    let end = match text[start..].find(']') {
+        Some(i) => start + i + 1,
+        None => return std::collections::HashSet::new(),
+    };
+    let json_slice = &text[start..end];
+    serde_json::from_str::<Vec<String>>(json_slice)
+        .map(|v| v.into_iter().map(|s| s.to_lowercase()).collect())
+        .unwrap_or_default()
+}
+
+/// TextTiling-style boundary detection on adjacent-chunk embedding
+/// similarity. Returns a `Vec<bool>` of length `embeddings.len() - 1`
+/// where `true` at index `i` means a segment break falls between
+/// chunk `i` and chunk `i+1`.
+///
+/// Algorithm (Hearst 1997, modern embedding variant):
+/// 1. Compute cosine similarity between each adjacent pair.
+/// 2. For each gap `i`, compute a "depth score" — how far this
+///    similarity dips below the maximum similarity in the
+///    `window`-sized neighborhood on either side. A high depth
+///    score means the gap is a deep valley between two coherent
+///    regions.
+/// 3. Threshold: `depth > mean(depth) + depth_k * std(depth)`.
+///
+/// Parameters:
+/// - `window`: how many gaps to scan on each side when computing
+///   left/right peaks. 3 works well for ~700-char chunks; smaller
+///   for noisier signals, larger for sentence-level tiling.
+/// - `depth_k`: standard-deviation multiplier for the threshold.
+///   1.0 gives a "moderately confident" boundary. 0.5 is more
+///   permissive; 1.5 is stricter. The bench will tune this.
+///
+/// Returns no breaks (all `false`) if `embeddings.len() < 2` or
+/// if the depth signal has no variance (e.g. identical embeddings).
+fn detect_segment_boundaries(
+    embeddings: &[Vec<f32>],
+    window: usize,
+    depth_k: f32,
+) -> Vec<bool> {
+    let n = embeddings.len();
+    if n < 2 {
+        return Vec::new();
+    }
+
+    // Cosine similarity for each gap (n-1 gaps for n chunks).
+    let sims: Vec<f32> = (0..n - 1)
+        .map(|i| cosine_similarity(&embeddings[i], &embeddings[i + 1]))
+        .collect();
+
+    // Depth score for each gap. The left/right peak is the max
+    // similarity in the window-sized neighborhood; the depth is
+    // how far the current similarity drops below the average of
+    // the two peaks. Higher depth = stronger boundary candidate.
+    let depths: Vec<f32> = (0..sims.len())
+        .map(|i| {
+            let left_start = i.saturating_sub(window);
+            let right_end = (i + window + 1).min(sims.len());
+            let left_peak = sims[left_start..=i]
+                .iter()
+                .copied()
+                .fold(f32::NEG_INFINITY, f32::max);
+            let right_peak = sims[i..right_end]
+                .iter()
+                .copied()
+                .fold(f32::NEG_INFINITY, f32::max);
+            ((left_peak - sims[i]) + (right_peak - sims[i])).max(0.0)
+        })
+        .collect();
+
+    // Adaptive threshold: mean + depth_k * std. If std == 0 the
+    // signal is flat and no boundaries should fire.
+    let mean = depths.iter().sum::<f32>() / depths.len() as f32;
+    let variance = depths.iter().map(|d| (d - mean).powi(2)).sum::<f32>()
+        / depths.len() as f32;
+    let std = variance.sqrt();
+    if std < f32::EPSILON {
+        return vec![false; depths.len()];
+    }
+    let threshold = mean + depth_k * std;
+
+    depths.iter().map(|d| *d > threshold).collect()
+}
+
+/// Cosine similarity between two equal-length f32 vectors.
+/// Returns 0.0 if either vector is empty or has zero magnitude.
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.is_empty() || a.len() != b.len() {
+        return 0.0;
+    }
+    let mut dot = 0.0f32;
+    let mut na = 0.0f32;
+    let mut nb = 0.0f32;
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    if na <= f32::EPSILON || nb <= f32::EPSILON {
+        return 0.0;
+    }
+    dot / (na.sqrt() * nb.sqrt())
+}
+
+/// Parse the lean skeleton-extraction response (one line per chunk,
+/// comma-separated entity names). Returns one SkeletonBatchEntry per
+/// chunk in the batch.
+///
+/// Lines are taken in order — line N maps to batch_start+N. Empty
+/// lines (chunks with no entities) produce an entry with an empty
+/// entity list. If the model emits fewer lines than expected, the
+/// missing tail is filled with empty entries so chunk_index alignment
+/// is preserved.
+///
+/// The lark grammar wired alongside this parser should make
+/// fewer-than-expected lines impossible in practice, but we defend
+/// against it so a grammar-compile fallback (which silently drops
+/// the constraint) doesn't desync the entity_index.
+fn parse_lean_skeleton_batch(
+    response: &str,
+    batch_start: usize,
+    batch_len: usize,
+) -> Vec<SkeletonBatchEntry> {
+    let trimmed = response.trim();
+    // Strip a stray "Answer:" prefix if the model echoes the cue.
+    let cleaned = trimmed
+        .strip_prefix("Answer:")
+        .map(|s| s.trim())
+        .unwrap_or(trimmed);
+
+    let mut lines: Vec<&str> = cleaned.lines().collect();
+    // Pad with empty lines if model emitted fewer than expected.
+    while lines.len() < batch_len {
+        lines.push("");
+    }
+    lines.truncate(batch_len);
+
+    let mut entries = Vec::with_capacity(batch_len);
+    for (i, line) in lines.iter().enumerate() {
+        let entity_names_and_kinds: Vec<(String, EntityKind)> = line
+            .split(',')
+            .map(|n| n.trim())
+            .filter(|n| !n.is_empty() && n.chars().any(|c| c.is_alphabetic()))
+            .map(|n| (n.to_string(), EntityKind::Concept))
+            .collect();
+        entries.push(SkeletonBatchEntry {
+            chunk_index: batch_start + i,
+            // Per-chunk function is no longer carried in the lean
+            // schema; segments carry function at segment scope which
+            // is what downstream consumes. Default to Develops as
+            // an unobtrusive placeholder.
+            function: SectionFunction::Develops,
+            entity_names_and_kinds,
+            // structural_moments superseded by segments.
+            moment_description: None,
+        });
+    }
+    entries
+}
+
+/// Parse the Pass-B segment-naming JSON response. Returns None for
+/// unparseable responses; the caller falls back to a placeholder
+/// title rather than failing the segment.
+fn parse_segment_naming(
+    text: &str,
+) -> Option<(String, String, SectionFunction, Vec<String>)> {
+    let trimmed = text.trim();
+    let start = trimmed.find('{')?;
+    let end = trimmed.rfind('}')?;
+    if end <= start {
+        return None;
+    }
+    let json_str = &trimmed[start..=end];
+    let v: serde_json::Value = serde_json::from_str(json_str).ok()?;
+    let obj = v.as_object()?;
+    let title = obj.get("title").and_then(|x| x.as_str())?.to_string();
+    let summary = obj
+        .get("summary")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string();
+    let function = match obj
+        .get("function")
+        .and_then(|x| x.as_str())
+        .unwrap_or("Develops")
+        .to_lowercase()
+        .as_str()
+    {
+        "introduces" => SectionFunction::Introduces,
+        "develops" => SectionFunction::Develops,
+        "complicates" => SectionFunction::Complicates,
+        "resolves" => SectionFunction::Resolves,
+        "transitions" => SectionFunction::Transitions,
+        "evidences" => SectionFunction::Evidences,
+        _ => SectionFunction::Develops,
+    };
+    let key_entities = obj
+        .get("key_entities")
+        .and_then(|x| x.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((title, summary, function, key_entities))
+}
+
+/// Run a Fast-slot extraction over the top-N entities' chunks and
+/// emit `ActionAtom`s. One LLM call per entity, batching that entity's
+/// appearance chunks into a single prompt. The model is asked for a
+/// JSON list of `{verb, object, chunk_index, evidence}`; any chunk
+/// we can't parse cleanly is silently dropped — atoms are an additive
+/// retrieval surface, not a load-bearing index, so missing data is
+/// degraded behaviour, not a failure mode.
+async fn extract_action_atoms(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[TextChunk],
+    main_entities: &[RankedEntity],
+    entity_index: &std::collections::HashMap<String, EntityAppearances>,
+) -> Vec<ActionAtom> {
+    let mut out: Vec<ActionAtom> = Vec::new();
+    // Top-6: covers the load-bearing characters/concepts in a typical
+    // narrative; running the full top-30 would blow the budget for
+    // marginal lift on peripheral entities.
+    for ent in main_entities.iter().take(6) {
+        let Some(appearances) = entity_index.get(&ent.name) else {
+            continue;
+        };
+        // Cap appearance chunks at 6 to bound the prompt size. The
+        // entity's earliest appearances are usually introductory;
+        // we sample stride-wise from the appearance list so we cover
+        // beginning, middle, end of the entity's arc.
+        let total = appearances.chunk_indices.len();
+        let sample_indices: Vec<usize> = if total <= 6 {
+            appearances.chunk_indices.clone()
+        } else {
+            let stride = (total / 6).max(1);
+            appearances
+                .chunk_indices
+                .iter()
+                .step_by(stride)
+                .take(6)
+                .copied()
+                .collect()
+        };
+
+        // Compose a single prompt listing the sampled chunks with
+        // their indices. Cap each chunk excerpt at 500 chars so the
+        // total prompt stays inside Fast-slot context limits even
+        // when an entity hits 6 long chunks.
+        let mut passages = String::new();
+        for &idx in &sample_indices {
+            if let Some(chunk) = chunks.get(idx) {
+                let excerpt: String = chunk.content.chars().take(500).collect();
+                passages.push_str(&format!(
+                    "\n[chunk {idx}]\n{}\n",
+                    excerpt.trim(),
+                ));
+            }
+        }
+        if passages.trim().is_empty() {
+            continue;
+        }
+
+        let prompt = format!(
+            "Extract what \"{name}\" DOES in these passages. For each chunk \
+             where {name} performs a notable action, emit one JSON object:\n\
+             {{\"chunk_index\": <int>, \"verb\": \"<lowercase verb>\", \
+             \"object\": \"<short noun phrase>\", \"evidence\": \"<verbatim snippet ≤140 chars>\"}}\n\n\
+             Rules:\n\
+             - Skip chunks where {name} is only mentioned in passing.\n\
+             - Verb is a single lowercase past-tense verb (e.g. \"stitched\", \"discovered\", \"killed\").\n\
+             - Object is what the verb acts on, in the document's own wording.\n\
+             - Evidence is verbatim text from the chunk, ≤140 chars, that contains the verb+object.\n\
+             - Skip if nothing notable happens to/by {name} in the chunk.\n\n\
+             Passages:\n{passages}\n\n\
+             Respond with a JSON array, no commentary:\n[",
+            name = ent.name,
+        );
+
+        let response = inference
+            .complete(&CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Fast,
+                max_tokens: Some(768),
+                temperature: Some(0.1),
+                think_budget: Some(0),
+                structured_output: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
+            })
+            .await;
+
+        let text = match response {
+            Ok(r) => r.text,
+            Err(e) => {
+                tracing::debug!(entity = %ent.name, error = %e, "extract_action_atoms — LLM call failed; skipping entity");
+                continue;
+            }
+        };
+
+        // Tolerant JSON parse — the model sometimes wraps the array
+        // in ```json fences or appends explanatory prose. Isolate
+        // the first `[` to the last `]`.
+        let start = text.find('[');
+        let end = text.rfind(']');
+        let (start, end) = match (start, end) {
+            (Some(s), Some(e)) if e > s => (s, e),
+            _ => continue,
+        };
+        let payload = &text[start..=end];
+        let parsed: Vec<ActionAtomDraft> = match serde_json::from_str(payload) {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::debug!(
+                    entity = %ent.name,
+                    error = %e,
+                    payload = %payload.chars().take(200).collect::<String>(),
+                    "extract_action_atoms — parse failed; skipping entity"
+                );
+                continue;
+            }
+        };
+
+        for draft in parsed {
+            // Sanity: drop atoms whose chunk_index isn't in the
+            // sampled set — the model occasionally hallucinates
+            // chunk numbers when extracting.
+            if !sample_indices.contains(&draft.chunk_index) {
+                continue;
+            }
+            let evidence = draft.evidence.trim();
+            if evidence.is_empty() {
+                continue;
+            }
+            out.push(ActionAtom {
+                entity: ent.name.clone(),
+                verb: draft.verb.trim().to_lowercase(),
+                object: draft.object.trim().to_string(),
+                chunk_index: draft.chunk_index,
+                evidence: evidence.chars().take(140).collect(),
+            });
+        }
+    }
+
+    tracing::info!(atoms = out.len(), "extract_action_atoms — done");
+    out
+}
+
+#[derive(Debug, Deserialize)]
+struct ActionAtomDraft {
+    chunk_index: usize,
+    verb: String,
+    object: String,
+    evidence: String,
 }
 
 /// Generate a one-paragraph overview of the document.
@@ -1635,6 +2773,11 @@ async fn generate_overview(
                     model_id: None,
                     enable_thinking: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         })
         .await
         .map(|r| r.text)
@@ -1649,7 +2792,6 @@ struct SkeletonBatchEntry {
     function: SectionFunction,
     /// Entity names paired with their classified kind.
     entity_names_and_kinds: Vec<(String, EntityKind)>,
-    establishes: String,
     moment_description: Option<String>,
 }
 
@@ -1726,12 +2868,6 @@ fn parse_skeleton_batch(response: &str, batch_start: usize) -> Option<Vec<Skelet
             })
             .unwrap_or_default();
 
-        let establishes = obj
-            .get("establishes")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
         let is_moment = obj
             .get("is_structural_moment")
             .and_then(|v| v.as_bool())
@@ -1749,7 +2885,6 @@ fn parse_skeleton_batch(response: &str, batch_start: usize) -> Option<Vec<Skelet
             chunk_index: batch_start + i,
             function,
             entity_names_and_kinds,
-            establishes,
             moment_description,
         });
     }
@@ -1996,6 +3131,27 @@ mod tests {
     }
 
     #[test]
+    fn short_snippet_handles_multibyte_at_boundary() {
+        // Regression: Conrad's text uses U+201C / U+201D curly quotes
+        // (3 bytes each in UTF-8). Passing `max` such that the byte
+        // index lands inside one of those quotes used to panic with
+        // "end byte index N is not a char boundary". This is the input
+        // shape that book-report bench v1.1 caught on the Tier-4
+        // winnie_incurious_motif question.
+        let content = "Mr Verloc observed quietly\u{201C}I have no means of action upon the police here.\u{201D} Vladimir replied at length.";
+        // Find the byte index of the opening curly quote and ask for a
+        // snippet that lands inside it.
+        let quote_byte = content.find('\u{201C}').expect("test fixture must contain U+201C");
+        let inside_quote = quote_byte + 1; // mid-character; would panic on raw slice
+        let snip = short_snippet(content, inside_quote);
+        // Must not panic AND must end with the ellipsis sentinel.
+        assert!(
+            snip.ends_with("..."),
+            "expected snippet to end with `...`, got: {snip:?}"
+        );
+    }
+
+    #[test]
     fn mentions_document_word_boundary_avoids_partial_matches() {
         // Token "life" must not match inside "wildlife".
         let asset = test_asset("What is Life", "What_is_Life.pdf");
@@ -2033,5 +3189,211 @@ mod tests {
 
         let xform = parse_route_response(r#"{"op":"transformation"}"#, "orig").unwrap();
         assert!(matches!(xform, DocumentAssetOperation::Transformation));
+    }
+
+    // ── TextTiling boundary detection ───────────────────────────
+
+    /// Build a synthetic embedding sequence: `cluster_count` clusters
+    /// of `per_cluster` chunks each, where within-cluster chunks share
+    /// a near-identical embedding and between-cluster chunks are
+    /// near-orthogonal. The expected break pattern is "false ×
+    /// (per_cluster-1), true, false × (per_cluster-1), true, ..."
+    fn synthetic_clusters(cluster_count: usize, per_cluster: usize) -> Vec<Vec<f32>> {
+        let mut out = Vec::new();
+        for c in 0..cluster_count {
+            let mut base = vec![0.01; 8];
+            base[c % 8] = 1.0;
+            for k in 0..per_cluster {
+                // Tiny within-cluster jitter so cosine isn't exactly 1.0.
+                let mut v = base.clone();
+                v[(c + k + 1) % 8] += 0.02;
+                out.push(v);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn texttiling_fires_breaks_at_cluster_transitions() {
+        // 3 clusters × 4 chunks = 12 chunks, 11 gaps. Expected:
+        // breaks at gaps 3 and 7 (between cluster 0/1 and 1/2).
+        let embeddings = synthetic_clusters(3, 4);
+        let breaks = detect_segment_boundaries(&embeddings, 3, 0.5);
+        assert_eq!(breaks.len(), 11);
+
+        // The two cluster-transition gaps should be flagged.
+        assert!(breaks[3], "expected break at gap 3 (cluster 0→1)");
+        assert!(breaks[7], "expected break at gap 7 (cluster 1→2)");
+
+        // Within-cluster gaps should be quiet. We allow one or two
+        // false positives in the noisy jitter — the test checks the
+        // signal-to-noise floor, not perfection.
+        let within_breaks = breaks.iter().enumerate()
+            .filter(|(i, b)| **b && *i != 3 && *i != 7)
+            .count();
+        assert!(
+            within_breaks <= 1,
+            "too many false-positive within-cluster breaks: {within_breaks}"
+        );
+    }
+
+    #[test]
+    fn texttiling_flat_embeddings_emit_no_breaks() {
+        // All identical embeddings → similarity is uniformly high,
+        // depth signal is flat, no breaks should fire.
+        let embeddings = vec![vec![0.5, 0.5, 0.5, 0.5]; 10];
+        let breaks = detect_segment_boundaries(&embeddings, 3, 1.0);
+        assert_eq!(breaks.len(), 9);
+        assert!(breaks.iter().all(|b| !b), "flat signal should produce no breaks");
+    }
+
+    #[test]
+    fn texttiling_short_input_returns_empty() {
+        assert!(detect_segment_boundaries(&[], 3, 1.0).is_empty());
+        assert!(
+            detect_segment_boundaries(&[vec![1.0, 0.0]], 3, 1.0).is_empty(),
+            "single chunk has no gaps"
+        );
+    }
+
+    #[test]
+    fn texttiling_strict_threshold_silences_marginal_breaks() {
+        // Same clusters as before but with a stricter k. The
+        // cluster-transition gaps still fire (their depth is much
+        // larger than within-cluster noise), but anything marginal
+        // gets filtered out.
+        let embeddings = synthetic_clusters(3, 4);
+        let lax = detect_segment_boundaries(&embeddings, 3, 0.3);
+        let strict = detect_segment_boundaries(&embeddings, 3, 1.5);
+        let lax_count = lax.iter().filter(|b| **b).count();
+        let strict_count = strict.iter().filter(|b| **b).count();
+        assert!(
+            strict_count <= lax_count,
+            "stricter threshold must not produce more breaks (lax {lax_count} vs strict {strict_count})"
+        );
+    }
+
+    // ── Motif extraction ─────────────────────────────────────────
+
+    fn chunk(content: &str) -> TextChunk {
+        TextChunk {
+            content: content.to_string(),
+            index: 0,
+        }
+    }
+
+    #[test]
+    fn motif_candidates_surface_recurring_word_across_many_chunks() {
+        // "incurious" appears in 5 of 20 chunks (25%, well within
+        // the 60% topicality ceiling) → must surface.
+        // "hat" appears in 1 chunk → must not surface (df < 3 floor).
+        // "the" appears in many chunks → must not surface (stoplisted).
+        let mut chunks = vec![
+            chunk("Winnie was incurious about the matter and went on with her work."),
+            chunk("The professor walked alone, carrying his frail explosive device."),
+            chunk("Stevie drew his circles, oblivious to the world around him."),
+            chunk("Mrs Verloc remained incurious during the long evening at home."),
+            chunk("The cab horse was whipped and Stevie's hat fell to the pavement."),
+            chunk("Winnie's incurious eyes lighted on the broken figure of her brother."),
+            chunk("The narrator notes Mrs Verloc was an incurious person by nature."),
+            chunk("An incurious silence settled over the parlour after the explosion."),
+        ];
+        // Pad with topically-distinct chunks so the document is large
+        // enough that "incurious" sits comfortably under the 60% ceiling.
+        for i in 0..12 {
+            chunks.push(chunk(&format!(
+                "Topic {i} unrelated paragraph about unconnected events and \
+                 separate matters with totally distinct vocabulary."
+            )));
+        }
+        let cands = extract_motif_candidates(&chunks, 20);
+        let terms: Vec<&str> = cands.iter().map(|c| c.term.as_str()).collect();
+        assert!(
+            terms.contains(&"incurious"),
+            "expected 'incurious' in candidates; got {terms:?}"
+        );
+        assert!(!terms.contains(&"hat"), "single-chunk term must not surface");
+        assert!(!terms.contains(&"the"), "stoplisted word must not surface");
+    }
+
+    #[test]
+    fn motif_candidates_drop_words_in_too_many_chunks() {
+        // A word in >60% of chunks is topical not motivic. Build a
+        // doc where "rust" appears in 8/10 chunks — should NOT surface
+        // even though it's frequent.
+        let mut chunks = Vec::new();
+        for _ in 0..8 {
+            chunks.push(chunk("This passage talks about rust programming."));
+        }
+        chunks.push(chunk("This passage talks about Python programming."));
+        chunks.push(chunk("This passage talks about Java programming."));
+        let cands = extract_motif_candidates(&chunks, 20);
+        let terms: Vec<&str> = cands.iter().map(|c| c.term.as_str()).collect();
+        assert!(
+            !terms.contains(&"rust"),
+            "topical term in 80% of chunks must be excluded; got {terms:?}"
+        );
+    }
+
+    #[test]
+    fn motif_candidates_handle_possessives_and_contractions() {
+        // "winnie's" should normalize to "winnie" via the 's strip.
+        // Need ≥10 chunks total so 3 occurrences stay under the 60% ceiling.
+        let mut chunks = vec![
+            chunk("Winnie's act was deliberate. Winnie's eyes were closed."),
+            chunk("This is about Winnie's life and Winnie's choice."),
+            chunk("The novel turns on Winnie's transformation through trauma."),
+        ];
+        for i in 0..8 {
+            chunks.push(chunk(&format!(
+                "Topic {i} unrelated paragraph with separate distinct vocabulary."
+            )));
+        }
+        let cands = extract_motif_candidates(&chunks, 20);
+        let terms: Vec<&str> = cands.iter().map(|c| c.term.as_str()).collect();
+        assert!(
+            terms.contains(&"winnie"),
+            "possessive strip should normalise 'winnie's' → 'winnie'; got {terms:?}"
+        );
+        assert!(
+            !terms.iter().any(|t| t.ends_with('\'')),
+            "no candidate should retain a trailing apostrophe; got {terms:?}"
+        );
+    }
+
+    #[test]
+    fn parse_motif_classification_extracts_array_from_noisy_response() {
+        // Model often wraps the JSON in extra text — parser must
+        // skip prose and find the [...] span.
+        let resp = r#"Sure! Here are the motifs: ["incurious", "circles", "professor"] — let me know if you want more."#;
+        let set = parse_motif_classification(resp);
+        assert_eq!(set.len(), 3);
+        assert!(set.contains("incurious"));
+        assert!(set.contains("circles"));
+        assert!(set.contains("professor"));
+    }
+
+    #[test]
+    fn parse_motif_classification_returns_empty_on_no_array() {
+        let set = parse_motif_classification("the model refused to comply");
+        assert!(set.is_empty());
+    }
+
+    #[test]
+    fn parse_motif_classification_lowercases() {
+        let set = parse_motif_classification(r#"["Incurious", "CIRCLES"]"#);
+        assert!(set.contains("incurious"));
+        assert!(set.contains("circles"));
+    }
+
+    #[test]
+    fn cosine_similarity_basic_cases() {
+        assert!((cosine_similarity(&[1.0, 0.0], &[1.0, 0.0]) - 1.0).abs() < 1e-6);
+        assert!((cosine_similarity(&[1.0, 0.0], &[0.0, 1.0])).abs() < 1e-6);
+        assert!((cosine_similarity(&[1.0, 0.0], &[-1.0, 0.0]) + 1.0).abs() < 1e-6);
+        // Mismatched length → 0.0 sentinel.
+        assert_eq!(cosine_similarity(&[1.0], &[1.0, 0.0]), 0.0);
+        // Zero magnitude → 0.0 sentinel.
+        assert_eq!(cosine_similarity(&[0.0, 0.0], &[1.0, 1.0]), 0.0);
     }
 }

@@ -863,6 +863,35 @@ pub trait DocumentAssetStore: Send + Sync {
         operation: &DocumentAssetOperation,
         duration_ms: u64,
     ) -> Result<()>;
+
+    /// Persist all RAPTOR nodes for an asset in one transaction.
+    /// Replaces any existing nodes for the same asset — the tree is
+    /// rebuilt atomically, not incrementally.
+    async fn save_raptor_nodes(
+        &self,
+        asset_id: &str,
+        nodes: &[RaptorNode],
+    ) -> Result<()>;
+
+    /// All RAPTOR nodes for an asset, ordered by level ascending
+    /// (leaves first).
+    async fn list_raptor_nodes(&self, asset_id: &str) -> Result<Vec<RaptorNode>>;
+
+    /// Fetch a single node by its node_id. Used by the granularity-
+    /// aware retrieval tool when the model drills from a parent to
+    /// its evidence chunks.
+    async fn get_raptor_node(&self, node_id: &str) -> Result<Option<RaptorNode>>;
+
+    /// Persist the motif index for an asset. Replaces any existing
+    /// motifs for the same asset.
+    async fn save_asset_motifs(
+        &self,
+        asset_id: &str,
+        motifs: &[AssetMotif],
+    ) -> Result<()>;
+
+    /// Motif index for an asset, distinctive motifs first.
+    async fn list_asset_motifs(&self, asset_id: &str) -> Result<Vec<AssetMotif>>;
 }
 
 // ─── 6. Storage (supertrait) ──────────────────────────────────

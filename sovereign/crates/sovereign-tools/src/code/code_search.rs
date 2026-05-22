@@ -22,6 +22,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::*;
 
+use corpus_engine::types::CorpusKind;
 use corpus_engine::CorpusEngine;
 
 use super::{escape_sql, extract_code_rows_pub, CodeRow};
@@ -192,6 +193,9 @@ impl Tool for CodeSearchTool {
 
         let mut rows: Vec<CodeRow> = Vec::new();
         for info in &indexes {
+            if info.kind != CorpusKind::Code {
+                continue;
+            }
             let Ok(index) = self.engine.open_index(&info.path).await else {
                 continue;
             };
@@ -258,8 +262,10 @@ impl Tool for CodeSearchTool {
         let mut text = format_approximate_response(query, &rows);
 
         // Append index health note when no code indexes are present.
+        // Knowledge / catalog corpora don't count for this tool's purposes.
         let indexes = self.engine.installed_indexes().await.unwrap_or_default();
-        if indexes.is_empty() {
+        let has_code = indexes.iter().any(|i| i.kind == CorpusKind::Code);
+        if !has_code {
             text.push_str(
                 "\n\n---\nIndex: absent | 0 symbols\n\
                  Code index not built. Run `sovereign code index <path>` \

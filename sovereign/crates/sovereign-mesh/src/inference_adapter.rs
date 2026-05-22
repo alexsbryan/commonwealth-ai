@@ -338,6 +338,10 @@ impl SovereignInferenceAdapter {
         req.temperature = request.temperature;
         req.top_p = request.top_p;
         req.sampling_mode = request.sampling_mode;
+        req.assistant_prefix = request.assistant_prefix.clone();
+        req.cmd_prefix = request.cmd_prefix.clone();
+        req.url_allowlist = request.url_allowlist.clone();
+        req.evidence_id_allowlist = request.evidence_id_allowlist.clone();
         // Forward the Commonwealth `think_budget` extension. The
         // daemon's `format_prompt` reads `req.think_budget == Some(0)`
         // to inject `/no_think` for SystemPromptToken thinking
@@ -368,6 +372,19 @@ impl SovereignInferenceAdapter {
         if let Some(rf) = request.response_format.as_ref() {
             req.structured_output = extract_response_format_schema(rf);
         }
+        // Commonwealth extension: forward `lark_grammar` directly.
+        // Unlike `response_format` (which we extract a JSON Schema
+        // from), `lark_grammar` is the raw Lark source string —
+        // pass it through as-is. The sampler builder
+        // (`embedded::build_sampler`) compiles it via llguidance.
+        // When both `lark_grammar` and `structured_output` are set,
+        // `lark_grammar` wins (`embedded.rs:7964` mutual-exclusion).
+        // This is intentional: the in-process daemon path already
+        // honoured `lark_grammar` precedence; wiring it through
+        // HTTP preserves the semantics.
+        if let Some(grammar) = request.lark_grammar.as_ref() {
+            req.lark_grammar = Some(grammar.clone());
+        }
         // Tool-call grammar: when the caller sets `tool_choice =
         // "required"` (OpenAI semantics: model MUST call a tool) and
         // tools are present, install a JSON-Schema grammar over the
@@ -392,9 +409,74 @@ impl SovereignInferenceAdapter {
         // so downstream tooling (chat-template selection,
         // tools-on-fast-slot guard, telemetry) sees what the caller
         // actually sent.
-        if req.structured_output.is_none() {
-            if let Some(envelope) = tool_envelope_schema_for_with_env(request) {
-                req.structured_output = Some(envelope);
+        tracing::info!(
+            structured_output_pre = req.structured_output.is_some(),
+            assistant_prefix = request.assistant_prefix.is_some(),
+            tools_count = request.tools.as_ref().map(|t| t.len()).unwrap_or(0),
+            tool_choice = ?request.tool_choice,
+            alternation_env = alternation_grammar_enabled(),
+            "inference_adapter: pre-envelope-check"
+        );
+        if req.structured_output.is_none() && request.assistant_prefix.is_none() {
+            // R1 (assistant_prefix) and envelope-schema don't compose:
+            // the prefill places the model mid-JSON while the grammar
+            // mask starts fresh on the first generated token expecting
+            // a JSON-object opener. When R1 fires, the prefix IS the
+            // structural commitment.
+            //
+            // R2 (cmd_prefix) DOES compose: the grammar walks from
+            // token 0 normally and the prefix appears as a `pattern`
+            // on the cmd field, enforced by the existing string-body
+            // walker. So we only suppress envelope install for R1.
+            if let Some(envelope) =
+                tool_envelope_schema_for_with_env_and_cmd_prefix(request, request.cmd_prefix.as_deref())
+            {
+                // **Alternation grammar path (2026-05-21).** When
+                // `SOVEREIGN_ALTERNATION_GRAMMAR` is on, route the
+                // envelope schema through llguidance's Lark grammar
+                // with a top-level `text | tool_envelope` rule so
+                // the model can emit either a parseable tool call
+                // OR plain text. Closes the agent-bench scanner's
+                // `parse_failed_envelope` + `loop_trap` classes.
+                // Behind an env-var so we can A/B against the
+                // existing `structured_output` JSON-mask path.
+                if alternation_grammar_enabled() {
+                    // Canonical first-principles path (2026-05-21):
+                    // attach the tool-envelope JSON Schema directly
+                    // and route through llguidance's
+                    // `TopLevelGrammar::from_json_schema`. Strict
+                    // schema closure is enforced upstream (proven
+                    // by `from_json_schema_rejects_incomplete_envelope`
+                    // unit test in llguidance_constraint.rs).
+                    //
+                    // The Lark+%json wrapper was the previous
+                    // attempt; it accepted partial JSON
+                    // (model emitting `{...]}` without outer `}`),
+                    // leaving the daemon parser to recover via the
+                    // leniency chain. The schema route closes that
+                    // gap structurally.
+                    //
+                    // To preserve the model's escape into plain text
+                    // (the "I'm done" turn), the envelope is
+                    // augmented with a `done` virtual tool that
+                    // accepts a free-form `reason` string. Pi /
+                    // bench harness treats `done` as the
+                    // termination signal instead of a real tool
+                    // execution.
+                    let envelope_with_done = inject_done_tool(&envelope);
+                    let schema_json =
+                        serde_json::to_string(&envelope_with_done).unwrap_or_default();
+                    tracing::info!(
+                        schema_bytes = schema_json.len(),
+                        "inference_adapter: llguidance schema installed (canonical, with done)"
+                    );
+                    // Re-uses the `lark_grammar` field but the
+                    // LlguidanceConstraint constructor detects JSON
+                    // schema input by leading `{`.
+                    req.lark_grammar = Some(schema_json);
+                } else {
+                    req.structured_output = Some(envelope);
+                }
             }
         }
         // Per-request `enable_thinking` toggle. The OpenAI extension
@@ -437,16 +519,46 @@ impl SovereignInferenceAdapter {
 pub(crate) fn parse_tool_envelope_direct(
     text: &str,
 ) -> Vec<sovereign_inference::embedded::ParsedToolCall> {
-    let trimmed = text.trim();
-    let parsed: Result<serde_json::Value, _> =
-        serde_json::from_str(trimmed).or_else(|_| {
-            // Mirror the parser-hardening pre-pass: unescaped raw
-            // newlines inside string values are common from
-            // Qwen-Coder. Re-try on a normalized copy.
+    // Strip a leading `<think>...</think>` block if present.
+    // Qwen-family chat templates wrap the assistant turn opener in
+    // `<think>` tags, so under JSON-schema grammar the model's bare
+    // JSON ends up inside think markers. Without this strip, the
+    // .trim() below leaves `<think>` at the start and `from_str`
+    // can't parse.
+    //
+    // Also strip a TRAILING `</tool_call>` marker — the chat
+    // template (or model's training) appends this after the JSON
+    // envelope closes. Without removing it, `serde_json::from_str`
+    // rejects the trailing data and parse_tool_envelope_direct
+    // returns empty even though the JSON itself was perfectly
+    // formed. Observed 2026-05-21: fast-slot model emitted
+    // `{"name":"read",...}</tool_call>` under grammar, daemon
+    // extracted zero tool calls.
+    let without_think = strip_leading_think_block(text);
+    let without_close = strip_trailing_tool_call_close(without_think.as_ref());
+    let trimmed = without_close.trim();
+    // Use a streaming JSON deserializer to consume the FIRST complete
+    // JSON value and ignore trailing garbage. Without this, an input
+    // like `{envelope}\n<tool_call>` (model started a second
+    // tool-call chain but ran out of tokens, observed in 2026-05-21
+    // 35B primary sweep across 1.1/2.1/2.2/3.2) failed
+    // `serde_json::from_str`'s strict "entire input must be JSON"
+    // requirement → empty result → daemon emitted envelope as text
+    // → pi parser saw text → toolCall lost.
+    //
+    // StreamDeserializer reads one value and stops; trailing
+    // `<tool_call>` / `</tool_call>` / other model-emission noise
+    // doesn't break the parse. This closes all "model emits envelope
+    // then arbitrary trailing content" variants structurally —
+    // including ones not yet observed.
+    let obj_opt = parse_first_json_value(trimmed)
+        .or_else(|| {
+            // Fall back to escape-fixup once. Qwen-Coder sometimes
+            // emits unescaped raw newlines inside string values.
             let fixed = sovereign_inference::embedded::escape_unescaped_control_chars_in_string_values(trimmed);
-            serde_json::from_str(&fixed)
+            parse_first_json_value(&fixed)
         });
-    let Ok(obj) = parsed else { return Vec::new() };
+    let Some(obj) = obj_opt else { return Vec::new() };
     let Some(name) = obj.get("name").and_then(|v| v.as_str()) else {
         return Vec::new();
     };
@@ -461,6 +573,20 @@ pub(crate) fn parse_tool_envelope_direct(
     }]
 }
 
+/// Parse the first complete JSON value from `text` using a streaming
+/// deserializer. Returns `Some(value)` when the prefix is a valid
+/// JSON object; ignores any trailing garbage (markers, partial
+/// envelopes, control chars). Returns `None` when no leading JSON
+/// value parses.
+fn parse_first_json_value(text: &str) -> Option<serde_json::Value> {
+    let mut stream =
+        serde_json::Deserializer::from_str(text).into_iter::<serde_json::Value>();
+    match stream.next() {
+        Some(Ok(v)) => Some(v),
+        _ => None,
+    }
+}
+
 /// True when the `SOVEREIGN_FORCE_TOOL_CALLS` env-var is set to a
 /// truthy value (`1` / `true`, case-insensitive). Tools-using
 /// clients that don't pass `tool_choice` (opencode, Aider, the
@@ -471,6 +597,86 @@ pub(crate) fn parse_tool_envelope_direct(
 /// next request.
 fn force_tool_calls_env() -> bool {
     std::env::var("SOVEREIGN_FORCE_TOOL_CALLS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Strip `<think>` and `</think>` tags from text, KEEPING the
+/// content between them. Under llguidance schema-driven grammar,
+/// the chat template's `<think>` opener gets prepended to the
+/// model's generation; the model then emits the JSON tool envelope
+/// INSIDE the think block, and the chat template appends
+/// `</think>` after. Removing the whole block (as an earlier
+/// version of this function did) loses the JSON envelope. Stripping
+/// just the tags leaves the JSON intact for `serde_json::from_str`
+/// to parse.
+///
+/// Returns a `Cow<str>` because the no-tag path is the common case
+/// for non-think models (Qwopus3.5-Coder under instruct mode); only
+/// allocate when we actually have tags to remove.
+fn strip_leading_think_block(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.contains("<think>") && !text.contains("</think>") {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let stripped = text.replace("<think>", "").replace("</think>", "");
+    std::borrow::Cow::Owned(stripped)
+}
+
+/// Strip a trailing `</tool_call>` marker (and any whitespace
+/// after it). Qwen-family chat templates append this token
+/// automatically after a tool-call assistant turn; under the
+/// grammar-constrained bare-JSON path the marker ends up dangling
+/// after the model's JSON envelope. serde_json's `from_str`
+/// rejects trailing data, so without this strip the
+/// direct-envelope parse returns empty.
+fn strip_trailing_tool_call_close(text: &str) -> &str {
+    let trimmed = text.trim_end();
+    trimmed.strip_suffix("</tool_call>").unwrap_or(text)
+}
+
+/// Inject a `done` virtual tool into the tool-envelope `anyOf`.
+/// The done tool's only field is `reason: string`. Pi/bench recognise
+/// `name="done"` as the model's termination signal instead of a real
+/// tool execution. Replaces the Lark `text | tool_envelope`
+/// alternation hack — the model now has a structured exit via a
+/// regular tool call. Under llguidance's `from_json_schema` the
+/// schema enforces strict closure; the model can't emit malformed
+/// envelopes regardless of which variant it picks.
+fn inject_done_tool(envelope: &serde_json::Value) -> serde_json::Value {
+    let mut envelope = envelope.clone();
+    let done_variant = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "enum": ["done"]},
+            "arguments": {
+                "type": "object",
+                "properties": {
+                    "reason": {"type": "string"},
+                },
+                "required": ["reason"],
+                "additionalProperties": false,
+            },
+        },
+        "required": ["name", "arguments"],
+        "additionalProperties": false,
+    });
+    if let Some(variants) = envelope.get_mut("oneOf").and_then(|v| v.as_array_mut()) {
+        variants.push(done_variant);
+    } else if let Some(variants) = envelope.get_mut("anyOf").and_then(|v| v.as_array_mut()) {
+        variants.push(done_variant);
+    }
+    envelope
+}
+
+/// True when `SOVEREIGN_ALTERNATION_GRAMMAR` is set to a truthy
+/// value. When on, `build_completion_request` builds a Lark
+/// `text | tool_envelope` alternation grammar via llguidance and
+/// sets `request.lark_grammar` instead of `request.structured_output`.
+/// Off by default during rollout so existing JsonConstraint paths
+/// stay unchanged; flip on per-daemon-process to A/B the alternation
+/// path against the in-house mask.
+fn alternation_grammar_enabled() -> bool {
+    std::env::var("SOVEREIGN_ALTERNATION_GRAMMAR")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
@@ -488,30 +694,114 @@ fn force_tool_calls_env() -> bool {
 pub(crate) fn tool_envelope_schema_for_with_env(
     request: &ChatCompletionRequest,
 ) -> Option<serde_json::Value> {
-    if let Some(s) = tool_envelope_schema_for(request) {
-        return Some(s);
+    tool_envelope_schema_for_with_env_and_cmd_prefix(request, None)
+}
+
+/// Same as `tool_envelope_schema_for_with_env`, but also decorates the
+/// `cmd` parameter of `exec_command` tools with a `pattern` that pins
+/// the literal prefix. `JsonConstraint` consumes `pattern` (prefix
+/// subset only — see `compile_schema`) and masks any byte that
+/// wouldn't extend the prefix until the prefix is fully emitted.
+/// Family-agnostic; called from `build_completion_request` when
+/// `request.cmd_prefix.is_some()`.
+pub(crate) fn tool_envelope_schema_for_with_env_and_cmd_prefix(
+    request: &ChatCompletionRequest,
+    cmd_prefix: Option<&str>,
+) -> Option<serde_json::Value> {
+    let mut envelope = tool_envelope_schema_for(request).or_else(|| {
+        // Two env-var paths can synthesize an envelope when the
+        // caller passed `tool_choice=auto` (or omitted it):
+        //
+        //   * `SOVEREIGN_FORCE_TOOL_CALLS=1` — original behaviour.
+        //     Overrides to "required" so the model is grammar-
+        //     locked to a tool call.
+        //   * `SOVEREIGN_ALTERNATION_GRAMMAR=1` — alternation path.
+        //     We still need the envelope schema (it gets embedded
+        //     in the Lark grammar's `tool_envelope` rule) but the
+        //     grammar's `start: text | tool_envelope` rule lets
+        //     the model escape into plain text when no tool call
+        //     is appropriate, so we don't induce a loop trap by
+        //     synthesizing the envelope here.
+        //
+        // `tool_choice="none"` opts out of both paths — caller
+        // explicitly asked for no tool calls, honour it.
+        if force_tool_calls_env() || alternation_grammar_enabled() {
+            let tc = request.tool_choice.as_ref().map(|v| v.as_str()).flatten();
+            if tc == Some("none") {
+                return None;
+            }
+            let mut overridden = request.clone();
+            overridden.tool_choice = Some(serde_json::json!("required"));
+            tool_envelope_schema_for(&overridden)
+        } else {
+            None
+        }
+    })?;
+    if let Some(prefix) = cmd_prefix.filter(|s| !s.is_empty()) {
+        inject_cmd_pattern(&mut envelope, prefix);
     }
-    if !force_tool_calls_env() {
-        return None;
+    Some(envelope)
+}
+
+/// Walk an envelope schema, find any `exec_command` variant in `oneOf`,
+/// and inject a `pattern` on its `arguments.cmd` string field. The
+/// pattern is the literal prefix anchored at start (`^literal...`).
+/// `JsonConstraint`'s string-body walker recognises this subset and
+/// enforces it as a forced-prefix on the cmd field.
+fn inject_cmd_pattern(schema: &mut serde_json::Value, prefix: &str) {
+    let Some(variants) = schema.get_mut("oneOf").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    let pattern = format!("^{}", regex_escape_literal(prefix));
+    for variant in variants {
+        // Variants are `{type:"object", properties:{name:{enum:["X"]}, arguments:{...}}}`.
+        let name_const = variant
+            .get("properties")
+            .and_then(|p| p.get("name"))
+            .and_then(|n| n.get("enum"))
+            .and_then(|e| e.as_array())
+            .and_then(|a| a.first())
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        if name_const.as_deref() != Some("exec_command") {
+            continue;
+        }
+        let Some(args) = variant
+            .get_mut("properties")
+            .and_then(|p| p.get_mut("arguments"))
+        else {
+            continue;
+        };
+        let Some(cmd) = args.get_mut("properties").and_then(|p| p.get_mut("cmd")) else {
+            continue;
+        };
+        let Some(cmd_obj) = cmd.as_object_mut() else {
+            continue;
+        };
+        cmd_obj.insert(
+            "pattern".to_string(),
+            serde_json::Value::String(pattern.clone()),
+        );
     }
-    // The env-var path is opt-in by the daemon operator. We treat
-    // it as "every tools-using request gets the envelope grammar"
-    // and override the caller's `tool_choice` *unless* they
-    // explicitly said `"none"` (semantically: model must NOT call
-    // a tool — overriding that would be hostile). opencode and
-    // similar clients default to `"auto"`, which we DO override —
-    // the env var is the operator's signal that this daemon is
-    // dedicated to tool-driven autonomous loops where text-only
-    // turns kill the iteration.
-    if request.tool_choice.as_ref().and_then(|v| v.as_str()) == Some("none") {
-        return None;
+}
+
+/// Escape regex metacharacters in `s` so it matches as a literal.
+/// JsonConstraint's pattern parser only accepts the literal-prefix
+/// subset (see `compile_schema`), so this escapes both standard
+/// metacharacters and the chars the parser would refuse to treat as
+/// literal. Idempotent.
+fn regex_escape_literal(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 2);
+    for ch in s.chars() {
+        if matches!(
+            ch,
+            '\\' | '^' | '$' | '.' | '|' | '?' | '*' | '+' | '(' | ')' | '[' | ']' | '{' | '}'
+        ) {
+            out.push('\\');
+        }
+        out.push(ch);
     }
-    if request.tools.as_ref().is_none_or(|t| t.is_empty()) {
-        return None;
-    }
-    let mut overridden = request.clone();
-    overridden.tool_choice = Some(serde_json::json!("required"));
-    tool_envelope_schema_for(&overridden)
+    out
 }
 
 /// When the request has `tool_choice = "required"` (OpenAI semantics
@@ -806,7 +1096,15 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         //     still has a chance.
         //   • free-form — the legacy `<tool_call>{...}</tool_call>`
         //     markup the chat template emits when no grammar is set.
-        let grammar_constrained = req.structured_output.is_some()
+        // Two grammar paths produce bare-JSON tool envelopes:
+        //   * `structured_output` (in-house JsonConstraint) — Phase
+        //     1 enrichment and the historical force-tool-calls path.
+        //   * `lark_grammar` (llguidance, canonical from_json_schema)
+        //     — the 2026-05-21 alternation-grammar adoption.
+        // Either one means the model emitted a `{"name":...,
+        // "arguments":...}` envelope without `<tool_call>` markers.
+        let grammar_constrained = (req.structured_output.is_some()
+            || req.lark_grammar.is_some())
             && tool_envelope_schema_for_with_env(&request).is_some();
         if tools_present {
             tracing::debug!(
@@ -814,9 +1112,25 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                 "inference_adapter:tool_parse_mode"
             );
         }
+        // When the request set an `assistant_prefix`, the inference
+        // layer appended it to the rendered prompt — but it lives in
+        // the prompt's KV cache, not in `resp.text` (which is just
+        // the model's *generated* continuation). Stitch the prefix
+        // back on for tool-call parsing so the `<tool_call>{...}`
+        // opener encoded into the prefix lines up with the
+        // `</tool_call>` closer in the generated tail.
+        let text_for_parsing: String = match req.assistant_prefix.as_deref() {
+            Some(p) if !p.is_empty() => {
+                let mut joined = String::with_capacity(p.len() + resp.text.len());
+                joined.push_str(p);
+                joined.push_str(&resp.text);
+                joined
+            }
+            _ => resp.text.clone(),
+        };
         let (parsed_calls, parse_errors) = if tools_present {
             if grammar_constrained {
-                let direct = parse_tool_envelope_direct(&resp.text);
+                let direct = parse_tool_envelope_direct(&text_for_parsing);
                 if !direct.is_empty() {
                     tracing::debug!(
                         tool_call_count = direct.len(),
@@ -827,10 +1141,10 @@ impl LocalInferenceService for SovereignInferenceAdapter {
                     tracing::debug!(
                         "inference_adapter:tool_parse_grammar_direct_empty_falling_back_to_marker"
                     );
-                    sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
+                    sovereign_inference::embedded::parse_tool_calls_with_errors(&text_for_parsing)
                 }
             } else {
-                sovereign_inference::embedded::parse_tool_calls_with_errors(&resp.text)
+                sovereign_inference::embedded::parse_tool_calls_with_errors(&text_for_parsing)
             }
         } else {
             (Vec::new(), Vec::new())
@@ -1165,6 +1479,11 @@ mod adapter_translation_tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         };
         let (prompt, _system) = SovereignInferenceAdapter::flatten(&req);
         // The prior tool call is replayed as a <tool_call> block so
@@ -1198,6 +1517,11 @@ mod adapter_translation_tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         };
         let forwarded = SovereignInferenceAdapter::forward_tools(&req).unwrap();
         assert_eq!(forwarded.len(), 2);
@@ -1226,6 +1550,11 @@ mod adapter_translation_tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         };
         assert!(SovereignInferenceAdapter::forward_tools(&req).is_none());
     }
@@ -1279,6 +1608,11 @@ mod adapter_translation_tests {
             think_budget,
             tool_profile: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         }
     }
 
@@ -1338,6 +1672,11 @@ mod adapter_translation_tests {
             think_budget: None,
             tool_profile: None,
         sampling_mode: None,
+        assistant_prefix: None,
+        cmd_prefix: None,
+        url_allowlist: None,
+        evidence_id_allowlist: None,
+        lark_grammar: None,
         }
     }
 
@@ -1399,13 +1738,22 @@ mod adapter_translation_tests {
         assert!(super::tool_envelope_schema_for(&req).is_none());
     }
 
+    /// Per-test-module lock for tests that mutate
+    /// `SOVEREIGN_FORCE_TOOL_CALLS`. Three callers, all in this file.
+    /// The promise "tests run fast so the race won't matter" turned
+    /// out to be a flake under repo-wide parallel `cargo test` — pin
+    /// it with an actual mutex.
+    fn force_tool_calls_env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> =
+            std::sync::OnceLock::new();
+        LOCK.get_or_init(|| std::sync::Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+    }
+
     #[test]
     fn force_tool_calls_env_engages_schema_when_choice_omitted() {
-        // SAFETY: tests modify process env. Each test that touches this
-        // var must restore. Cargo's default test harness runs tests in
-        // parallel within a file — explicit serialization via a mutex
-        // would be safer in a larger suite. For now, the env var name is
-        // unique to this codebase and these two tests run fast.
+        let _guard = force_tool_calls_env_lock();
         std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
         let req = req_with_tool_choice(Some(vec![tool_def("write")]), None);
         let schema = super::tool_envelope_schema_for_with_env(&req);
@@ -1415,6 +1763,7 @@ mod adapter_translation_tests {
 
     #[test]
     fn force_tool_calls_env_overrides_auto() {
+        let _guard = force_tool_calls_env_lock();
         // Operator opted in via env: even an explicit "auto" gets
         // upgraded to "required" so the grammar engages. The opt-in
         // is global to the daemon; clients that need text-only turns
@@ -1430,7 +1779,29 @@ mod adapter_translation_tests {
     }
 
     #[test]
+    fn alternation_grammar_env_engages_schema_on_auto() {
+        // Test that SOVEREIGN_ALTERNATION_GRAMMAR=1 also triggers
+        // the envelope-schema synthesis when tool_choice is "auto"
+        // (or omitted). Same env-var gating as
+        // SOVEREIGN_FORCE_TOOL_CALLS but without the loop trap —
+        // the grammar gives the model a text branch to escape.
+        let _guard = force_tool_calls_env_lock();
+        std::env::set_var("SOVEREIGN_ALTERNATION_GRAMMAR", "1");
+        let req = req_with_tool_choice(
+            Some(vec![tool_def("write")]),
+            Some(serde_json::json!("auto")),
+        );
+        let schema = super::tool_envelope_schema_for_with_env(&req);
+        std::env::remove_var("SOVEREIGN_ALTERNATION_GRAMMAR");
+        assert!(
+            schema.is_some(),
+            "alternation env should synthesize tool_choice=required like force does"
+        );
+    }
+
+    #[test]
     fn force_tool_calls_env_respects_explicit_none() {
+        let _guard = force_tool_calls_env_lock();
         // tool_choice="none" semantically means "model must NOT call a
         // tool". Even with the env var set, refuse to override that.
         std::env::set_var("SOVEREIGN_FORCE_TOOL_CALLS", "1");
@@ -1441,6 +1812,32 @@ mod adapter_translation_tests {
         let schema = super::tool_envelope_schema_for_with_env(&req);
         std::env::remove_var("SOVEREIGN_FORCE_TOOL_CALLS");
         assert!(schema.is_none(), "explicit none must NOT be overridden");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_strips_trailing_close_marker() {
+        // 2026-05-21 regression: fast-slot model emitted bare JSON
+        // followed by a `</tool_call>` close (chat-template suffix).
+        // serde_json rejects trailing data so direct-parse returned
+        // empty unless the close is stripped first.
+        let text = r#"{"name":"read","arguments":{"path":"src/lib.rs"}}</tool_call>"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1, "trailing </tool_call> must be stripped");
+        assert_eq!(calls[0].name, "read");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_strips_think_tags_keeps_content() {
+        // Old behaviour stripped the whole `<think>...</think>` block.
+        // New behaviour strips only the tags so the JSON envelope
+        // INSIDE the block (which happens under llguidance schema +
+        // Qwen chat template) survives parsing.
+        // The think prefix here contains arbitrary prose; the
+        // envelope-shaped JSON is INSIDE the tags.
+        let text = r#"<think>{"name":"read","arguments":{"path":"a"}}</think>"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1, "JSON inside think must survive strip");
+        assert_eq!(calls[0].name, "read");
     }
 
     #[test]
@@ -1471,6 +1868,43 @@ mod adapter_translation_tests {
         let calls = super::parse_tool_envelope_direct(text);
         assert_eq!(calls.len(), 1, "normalization should recover");
         assert_eq!(calls[0].name, "write");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_ignores_trailing_open_marker() {
+        // 2026-05-21 N=3 sweep failure mode: 35B emits envelope + a
+        // stray `<tool_call>` opener at the end (intended to chain a
+        // second call but ran out of tokens). Strict serde_json
+        // rejected trailing data → daemon emitted as text → pi lost
+        // the tool call. Streaming parser must consume first complete
+        // JSON value and ignore the trailing marker.
+        let text = r#"{"name":"write","arguments":{"path":"src/lib.rs","content":"pub fn f() {}\n"}}
+<tool_call>"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1, "should extract envelope despite trailing <tool_call>");
+        assert_eq!(calls[0].name, "write");
+        assert!(calls[0].arguments.contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_ignores_trailing_garbage_text() {
+        // Class B fix generalizes beyond `<tool_call>` — any trailing
+        // garbage after a valid envelope is fine.
+        let text = r#"{"name":"bash","arguments":{"command":"ls"}} blah blah"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "bash");
+    }
+
+    #[test]
+    fn parse_tool_envelope_direct_ignores_second_envelope() {
+        // Two complete envelopes in a row: take the first, leave the
+        // second (pi protocol is one tool call per turn).
+        let text = r#"{"name":"read","arguments":{"path":"a"}} {"name":"read","arguments":{"path":"b"}}"#;
+        let calls = super::parse_tool_envelope_direct(text);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "read");
+        assert!(calls[0].arguments.contains("\"a\""));
     }
 
     #[test]

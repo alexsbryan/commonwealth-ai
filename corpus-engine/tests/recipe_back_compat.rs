@@ -506,6 +506,66 @@ type = "sentence"
 // 3. The validator MUST flag them so recipe authors know they're
 //    not fully wired yet.
 
+/// `[display]` block was added in the conversation-imports / atlas
+/// rail-grouping landing. Every recipe pre-dating that block must
+/// continue to parse with `display = None` so old TOMLs keep
+/// loading. See `Recipe::display` for the back-compat contract.
+#[test]
+fn recipe_without_display_block_still_parses() {
+    let toml = r#"
+[corpus]
+id = "demo"
+name = "demo"
+
+[acquire]
+type = "bulk_download"
+url = "https://example.com/data.zip"
+
+[extract]
+type = "plaintext"
+
+[chunk]
+type = "paragraph"
+"#;
+    let r = Recipe::from_toml(toml).expect("display-less recipe must parse");
+    assert!(
+        r.display.is_none(),
+        "absent [display] block must deserialize to None, got {:?}",
+        r.display
+    );
+}
+
+/// Forward shape: a recipe declaring the new `[display]` block.
+/// Pins the field names + reads them back. Lives alongside the
+/// back-compat fixtures so the schema lock and the new-field
+/// happy-path live in one file.
+#[test]
+fn recipe_with_display_block_round_trips() {
+    let toml = r#"
+[corpus]
+id = "conversations-anthropic"
+name = "Claude conversations"
+
+[acquire]
+type = "local_file"
+path = "~/.sovereign/conversations/conversations.json"
+
+[extract]
+type = "anthropic_export"
+
+[chunk]
+type = "threaded_turns"
+
+[display]
+category = "conversation"
+icon = "chat-bubble"
+"#;
+    let r = Recipe::from_toml(toml).expect("display block must parse");
+    let d = r.display.expect("display block populated");
+    assert_eq!(d.category.as_deref(), Some("conversation"));
+    assert_eq!(d.icon.as_deref(), Some("chat-bubble"));
+}
+
 #[test]
 fn reserved_custom_sql_variant_parses_today() {
     let toml = r#"

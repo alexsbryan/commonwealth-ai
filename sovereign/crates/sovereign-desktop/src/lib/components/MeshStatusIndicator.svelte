@@ -5,7 +5,11 @@
 
   const POLL_INTERVAL_MS = 10_000;
 
-  let mesh: MeshStateResponse | null = $state(null);
+  // The colon annotation does NOT propagate through $state() in Svelte 5
+  // runes — TypeScript narrows to the literal type of the initializer
+  // (`null`), and every subsequent assignment treats `mesh` as `never`.
+  // Passing the type as the generic parameter keeps the union intact.
+  let mesh = $state<MeshStateResponse | null>(null);
 
   onMount(() => {
     void refresh();

@@ -105,6 +105,17 @@ impl BulkDownloader {
         if existing_len > 0 {
             request = request.header("Range", format!("bytes={existing_len}-"));
         }
+        // Private/gated HF datasets (and snapshot tarballs published
+        // to private repos) require bearer auth. Scope the token to
+        // huggingface.co hosts so we don't leak it to unrelated
+        // bulk-download URLs.
+        if url.contains("huggingface.co") {
+            if let Ok(tok) = std::env::var("HF_TOKEN") {
+                if !tok.is_empty() {
+                    request = request.bearer_auth(tok);
+                }
+            }
+        }
 
         let response = request.send().await?;
 

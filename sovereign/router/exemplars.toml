@@ -359,6 +359,86 @@ query = "Give me just the answer."
 intent = "conation_query"
 query = "Drop the caveat at the end."
 
+# ── Conation centroid expansion (2026-05) ──
+# When the substring-based looks_like_conation heuristic was
+# retired, these were added so the embed-router centroid for
+# CONATION covers the shapes the substring list used to catch:
+# pace-modifiers (slower / faster), length-modifiers (longer /
+# expand / elaborate), abort-shapes (cancel / abort / halt),
+# and walk-through-shapes. Each entry is a representative
+# imperative — when a user says something semantically nearby,
+# the embed router picks CONATION without any code change.
+
+[[example]]
+intent = "conation_query"
+query = "Slower, walk me through that piece."
+
+[[example]]
+intent = "conation_query"
+query = "Walk through what you just did, step by step."
+
+[[example]]
+intent = "conation_query"
+query = "Expand on that last part."
+
+[[example]]
+intent = "conation_query"
+query = "Make it longer with more detail."
+
+[[example]]
+intent = "conation_query"
+query = "Elaborate on the second point."
+
+[[example]]
+intent = "conation_query"
+query = "Cancel that, start over."
+
+[[example]]
+intent = "conation_query"
+query = "Halt — wrong direction."
+
+[[example]]
+intent = "conation_query"
+query = "Faster, just the headline."
+
+# ── Memory-reference shape (expressive cluster) ──
+# When the substring looks_like_memory_reference heuristic was
+# retired, these were added so the expressive centroid covers
+# the "Remember when..." / "Last time we talked" / "You mentioned
+# X" recall framings that route to EXPRESSIVE (relational), not
+# COMMISSION or METALINGUAL.
+
+[[example]]
+intent = "expressive_query"
+query = "Last time we talked about my old job — I wanted to circle back to that."
+
+[[example]]
+intent = "expressive_query"
+query = "You mentioned my brother before; I keep thinking about that."
+
+[[example]]
+intent = "expressive_query"
+query = "Remember the thing I said about my mom? I'm still sitting with it."
+
+# ── Personal-recall (knowledge_query cluster) ──
+# When looks_like_personal_recall retired, these cover the
+# "what books have I mentioned" / "did I tell you about X"
+# shape that asks about the conversation's content, not its
+# vocabulary. Routes to knowledge_query (LOOKUP against the
+# personal corpus), not METALINGUAL.
+
+[[example]]
+intent = "knowledge_query"
+query = "What books have I mentioned to you in past conversations?"
+
+[[example]]
+intent = "knowledge_query"
+query = "Did I tell you about the trip I took last spring?"
+
+[[example]]
+intent = "knowledge_query"
+query = "What did I share earlier about my reading list?"
+
 # ── commissive_query — first-person future commitments ──
 
 [[example]]
@@ -527,3 +607,276 @@ query = "How are you doing today?"
 [[example]]
 intent = "simple_query"
 query = "What's 17 times 24?"
+
+# ── conversation-history KQ — content recall against the user's
+#    own chat corpus. Disambiguates from `metalingual_query`
+#    (which is about how WE NAME things in our system) by
+#    pointing at CONTENT the user discussed in past sessions.
+#
+# Misroute sources fixed by these (per routing-only bench
+# 2026-05-17, conversation/questions):
+#   - "When did I decide to pause hiring..." was routed
+#     ExpressiveQuery via "Why is this job decision feeling so
+#     heavy?" — that's emotional disclosure, this is content recall.
+#   - "Have I ever talked about <topic>" was routed
+#     MetalingualQuery via "What did we discuss earlier about
+#     routing?" — routing is a system word; <topic> is content.
+#   - "What did I work through in chats over the past week" was
+#     routed MetalingualQuery via the same exemplar.
+
+# Each of these carries `scope = "personal"` — an orthogonal axis
+# the embed router forwards to RouterClassification.scope.
+# Downstream retrieval (prepare_knowledge_context +
+# apply_atlas_grounding) reads scope to restrict to user-owned
+# corpora instead of competing in the global cosine race against
+# wikipedia / SEP / etc.
+#
+# Design principle: this set is intentionally small (one exemplar
+# per query-shape axis) and uses domains DISJOINT from the
+# conversation-history bench so the router learns the SHAPE rather
+# than memorising bench wording. When adding to this set, ask:
+# does this exemplar cover a new query shape, or is it a paraphrase
+# of an existing one? Only the former earns a slot.
+#
+# Axes covered (one exemplar each):
+#   A. First-person possessive + factual recall on a content area
+#      that's mine ("what did I say about my X")
+#   B. Explicit conversational referent ("in our chats / past
+#      conversations / we've discussed")
+#   C. Existential negation / has-it-ever-come-up
+#   D. Reflexive pattern over time ("what have I been struggling
+#      with / drawn to / wrestling with")
+#   E. View evolution ("how has my thinking about X changed")
+#   F. Recurring / aggregation ("what tensions keep showing up")
+#
+# Intent labels mix knowledge_query (single-shot recall) and
+# deep_query (multi-conversation synthesis) — but the scope tag is
+# the load-bearing signal, so both intents enter the same
+# personal-corpus retrieval filter downstream.
+
+# A. first-person possessive + factual recall
+[[example]]
+intent = "knowledge_query"
+scope = "personal"
+query = "What did I say about my houseplant care routine?"
+
+# B. explicit conversational referent
+[[example]]
+intent = "knowledge_query"
+scope = "personal"
+query = "Across our past conversations, which hiking trails have I mentioned?"
+
+# C. existential negation / has-it-ever-come-up
+[[example]]
+intent = "knowledge_query"
+scope = "personal"
+query = "Have I ever brought up sourdough bread baking in any chat?"
+
+# D. reflexive pattern over time
+[[example]]
+intent = "deep_query"
+scope = "personal"
+query = "What have I been wrestling with creatively over the last few months?"
+
+# E. view evolution
+[[example]]
+intent = "deep_query"
+scope = "personal"
+query = "How has my thinking about commuting changed since I moved?"
+
+# F. recurring / aggregation
+[[example]]
+intent = "deep_query"
+scope = "personal"
+query = "What tensions keep showing up in how I describe my mornings?"
+
+
+# ─────────────────────────────────────────────────────────────────
+# Migrated from the retired skill `routing.trigger_phrases` lists.
+# Skills-as-menu was retired in favour of intent-keyed policy;
+# the trigger phrases that pointed users at the right "skill"
+# now seed the router's classification directly. Each exemplar
+# below is a SHAPE of query the corresponding retired skill
+# wanted to handle — not a literal trigger phrase, because the
+# embed router classifies whole user queries, not isolated
+# keywords.
+# ─────────────────────────────────────────────────────────────────
+
+# ── codebase-navigator → metalingual_query / knowledge_query ──
+# These shapes ask about the codebase/project as a coded system —
+# Jakobson's metalingual function. The in-system locator ("in
+# this codebase", "in our project") is the load-bearing signal.
+
+[[example]]
+intent = "metalingual_query"
+query = "Where is the function that handles tool dispatch in this codebase?"
+
+[[example]]
+intent = "metalingual_query"
+query = "Who calls KnowledgeViewManager::splice_into in our code?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does `IntentPolicy` mean in this project?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What recent changes touched the router classification pipeline?"
+
+[[example]]
+intent = "metalingual_query"
+query = "Find the implementation of the URL-allowlist constraint."
+
+[[example]]
+intent = "knowledge_query"
+query = "What's the call chain from handle_message_stream to the inference provider?"
+
+# ── research-analyst → deep_query ──
+# Multi-source synthesis with evaluation, not a flat lookup.
+
+[[example]]
+intent = "deep_query"
+query = "Research what's been published on situated agents for open-weight models."
+
+[[example]]
+intent = "deep_query"
+query = "Survey the field of constrained-decoding sampling techniques."
+
+[[example]]
+intent = "deep_query"
+query = "Compare the major sources on context-window scaling and which one has the strongest evidence."
+
+# ── epistemic-research → deep_query (contested-position shape) ──
+# Questions about where the debate is, not just what's true.
+
+[[example]]
+intent = "deep_query"
+query = "What's the scholarly consensus on whether large language models reason?"
+
+[[example]]
+intent = "deep_query"
+query = "What are the contested positions on free will and which is the strongest?"
+
+[[example]]
+intent = "deep_query"
+query = "Where do philosophers disagree about consciousness?"
+
+[[example]]
+intent = "deep_query"
+query = "Are moral facts objective — what positions exist and what's the standing of each?"
+
+# ── collaborative-research → deep_query ──
+# Multi-turn inquiry with intermediate scoping. The "let's
+# research together" phrasing maps to the same deep-query shape;
+# the multi-turn collaboration is handled by the conversation
+# loop, not a separate intent.
+
+[[example]]
+intent = "deep_query"
+query = "Let's dig into how the M-series Apple Silicon roadmap has evolved — start with what was announced."
+
+# ── document-analyst → complex_task ──
+# Document operations that span the whole document; not a
+# simple lookup. The "[Document attached: …]" prefix already
+# bypasses classification entirely, but bare phrasings hit
+# the router.
+
+[[example]]
+intent = "complex_task"
+query = "Read through this paper and extract every methodology decision the authors made."
+
+[[example]]
+intent = "complex_task"
+query = "Map the character relationships across all the chapters."
+
+[[example]]
+intent = "complex_task"
+query = "Summarize the argument structure of this essay and identify the load-bearing premises."
+
+# ── code-review → complex_task ──
+# Code review is a multi-step plan: read, identify issues,
+# explain, suggest fixes. Maps to ComplexTask cleanly.
+
+[[example]]
+intent = "complex_task"
+query = "Review this function for correctness and find bugs that aren't obvious from the diff."
+
+# ── personal-assistant → commissive_query / conation_query ──
+# Already well-covered by existing exemplars, but adding a few
+# task-management shapes that the retired skill's phrases pointed at.
+
+[[example]]
+intent = "commissive_query"
+query = "Remind me to follow up with the design team on Thursday."
+
+[[example]]
+intent = "commissive_query"
+query = "Keep track of my reading list — I'll add things as I find them."
+
+[[example]]
+intent = "conation_query"
+query = "Schedule a focused work block for tomorrow morning."
+
+# ── cells_v1 regression patches ──
+# Two SHAPES under-represented in the cluster centroids surfaced
+# as nearest-neighbour misroutes on the cells_v1 routing bench.
+# Per `feedback_no_teaching_to_test`, each addition uses
+# different surface vocabulary than the failing bench question —
+# the cluster should generalise across subject matter.
+
+# Source-attribution metalingual: "According to <named external
+# source>, what does <term> mean?" — the question is about how
+# a specific source uses a term, not the term's free-form
+# meaning. Distinct from the existing "in this codebase / in
+# our project" metalingual cluster (which is self-referential).
+# Source-attribution metalingual is still about HOW SOMEONE
+# USES A WORD, just with the someone being an external named
+# document rather than the conversation itself.
+
+[[example]]
+intent = "metalingual_query"
+query = "According to Wikipedia, what does 'recursion' mean?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does the IPCC define as a climate tipping point?"
+
+[[example]]
+intent = "metalingual_query"
+query = "How does the WHO guideline define a 'pandemic phase'?"
+
+[[example]]
+intent = "metalingual_query"
+query = "According to the textbook, what does 'thermodynamic equilibrium' refer to?"
+
+[[example]]
+intent = "metalingual_query"
+query = "According to the EPA, what does the term 'pollutant' cover?"
+
+[[example]]
+intent = "metalingual_query"
+query = "According to the dictionary, what does 'inference' refer to?"
+
+[[example]]
+intent = "metalingual_query"
+query = "What does the rulebook define as a 'foul' in this context?"
+
+# Generic-concept comparison: "What's the difference between X
+# and Y?" where X and Y are well-known concepts (programming
+# constructs, scientific phenomena, protocols) rather than
+# symbols in this codebase. The metalingual "in our codebase"
+# variant has been pulling these into metalingual via nearest-
+# neighbour drift; these additions reweight the comparison
+# centroid toward generic-concept asks.
+
+[[example]]
+intent = "comparison_query"
+query = "What's the difference between SQL and NoSQL databases?"
+
+[[example]]
+intent = "comparison_query"
+query = "How do TCP and UDP differ as transport protocols?"
+
+[[example]]
+intent = "comparison_query"
+query = "What's the difference between a function and a method in object-oriented code?"
