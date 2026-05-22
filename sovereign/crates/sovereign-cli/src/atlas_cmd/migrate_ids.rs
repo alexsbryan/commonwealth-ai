@@ -89,6 +89,27 @@ pub async fn run(args: &[String]) -> i32 {
         if !atlas_dir.is_dir() {
             continue;
         }
+        // Skip atlases whose atoms.json is missing/empty/malformed.
+        // Migration on a stub atlas has nothing to do; treating it
+        // as a hard error blocks the whole --all pass.
+        let atoms_path = atlas_dir.join("atoms.json");
+        match std::fs::metadata(&atoms_path) {
+            Err(_) => {
+                println!(
+                    "{:<32} {:>8} {:>10} {:>10} {:>10}",
+                    corpus_id, 0, 0, 0, "skip (no atoms.json)"
+                );
+                continue;
+            }
+            Ok(m) if m.len() < 8 => {
+                println!(
+                    "{:<32} {:>8} {:>10} {:>10} {:>10}",
+                    corpus_id, 0, 0, 0, "skip (empty atoms.json)"
+                );
+                continue;
+            }
+            Ok(_) => {}
+        }
 
         match migrate_atlas_ids(&atlas_dir, &corpus_id, dry_run) {
             Ok(summary) => {
@@ -111,20 +132,19 @@ pub async fn run(args: &[String]) -> i32 {
                     summary.cross_corpus_edges_rewritten,
                     status,
                 );
-                if !summary.collisions_detected.is_empty() {
+                if summary.atoms_deduped > 0 {
                     eprintln!(
-                        "  ⚠ {} hash collisions on {} (probably needs longer hash prefix)",
-                        summary.collisions_detected.len(),
-                        corpus_id
+                        "  ⓘ {} duplicate atoms collapsed on {} ({} pre-dedup hash matches)",
+                        summary.atoms_deduped,
+                        corpus_id,
+                        summary.collisions_detected.len()
                     );
-                    for (a, b) in &summary.collisions_detected {
-                        eprintln!("    {} ↔ {}", a, b);
-                    }
                 }
                 total.atoms_migrated += summary.atoms_migrated;
                 total.atoms_already_content_hash += summary.atoms_already_content_hash;
                 total.edges_rewritten += summary.edges_rewritten;
                 total.cross_corpus_edges_rewritten += summary.cross_corpus_edges_rewritten;
+                total.atoms_deduped += summary.atoms_deduped;
             }
             Err(e) => {
                 eprintln!("  ✗ {}: {e}", corpus_id);
@@ -135,8 +155,9 @@ pub async fn run(args: &[String]) -> i32 {
 
     println!();
     println!(
-        "Total: {} atoms migrated, {} already content-hash, {} edges rewritten, {} cross-corpus edges rewritten, {} errors",
+        "Total: {} atoms migrated, {} duplicates collapsed, {} already content-hash, {} edges rewritten, {} cross-corpus edges rewritten, {} errors",
         total.atoms_migrated,
+        total.atoms_deduped,
         total.atoms_already_content_hash,
         total.edges_rewritten,
         total.cross_corpus_edges_rewritten,

@@ -22,6 +22,7 @@
 
 pub mod budget;
 pub mod build_doc_index;
+pub mod enable_incremental;
 pub mod inspect;
 pub mod migrate_ids;
 pub mod stats;
@@ -60,6 +61,18 @@ const HELP: Help = Help {
                 "show-atom",
                 "Full inspector record for one atom — type body, evidence, related, cross-corpus.",
             ),
+            (
+                "migrate-ids",
+                "Move 6 P0: rewrite sequential atom ids to content-hash. Idempotent.",
+            ),
+            (
+                "build-doc-index",
+                "Move 6 P1: derive doc_to_atoms.json sidecar from atoms.json.",
+            ),
+            (
+                "enable-incremental",
+                "Move 6 P5: flip per-corpus atlas_incremental_enabled flag (pre-flight checks content-hash).",
+            ),
         ]),
         HelpSection::Notes(
             "Atlas commands operate against an already-installed corpus index. Install \
@@ -89,6 +102,7 @@ pub async fn run_atlas(args: &[String]) -> i32 {
         "show-atom" => inspect::run_show_atom(&args[1..]).await,
         "migrate-ids" => migrate_ids::run(&args[1..]).await,
         "build-doc-index" => build_doc_index::run(&args[1..]).await,
+        "enable-incremental" => enable_incremental::run(&args[1..]).await,
         "stats" => stats::run(&args[1..]).await,
         other => {
             eprintln!("error: unknown atlas subcommand `{other}`");

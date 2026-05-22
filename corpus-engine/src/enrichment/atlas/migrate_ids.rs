@@ -29,7 +29,7 @@
 //! - Migration is idempotent: re-running on a migrated atlas is a
 //!   no-op.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::error::{Error, Result};
@@ -49,6 +49,10 @@ pub struct MigrationSummary {
     pub cross_corpus_edges_rewritten: usize,
     pub files_touched: Vec<String>,
     pub collisions_detected: Vec<(String, String)>,
+    /// Count of duplicate atoms collapsed by the post-rewrite dedup
+    /// pass — same as `collisions_detected.len()` in the common case
+    /// but expressed as a count for the CLI summary.
+    pub atoms_deduped: usize,
 }
 
 /// Migrate atoms.json + edges.json + cross_corpus_edges.json in
@@ -218,6 +222,18 @@ pub fn migrate_atlas_ids(
         rewrite_atom(env, &id_map);
     }
     summary.atoms_migrated = id_map.len();
+
+    // Dedup by id: duplicate sequential-id atoms that hashed to the
+    // same content-hash are the migration's intended collapse. Keep
+    // first-seen; the `collisions_detected` log already captures
+    // which pairs were merged so the operator can audit. Without
+    // this step atoms.json carries multiple records sharing one id
+    // and every downstream reader (apply_atom_delta, drift,
+    // retrieval) sees inconsistent atom state.
+    let pre_dedup = atoms_file.atoms.len();
+    let mut seen_ids: HashSet<AtomId> = HashSet::new();
+    atoms_file.atoms.retain(|env| seen_ids.insert(env.id().clone()));
+    summary.atoms_deduped = pre_dedup - atoms_file.atoms.len();
 
     if !dry_run {
         write_atomic(
@@ -617,6 +633,40 @@ mod tests {
         }).unwrap();
         assert_eq!(bob_atom.participants.len(), 1);
         assert_eq!(bob_atom.participants[0], alice_new);
+    }
+
+    #[test]
+    fn migrate_collapses_duplicate_atoms_to_one_id() {
+        // Two sequential-id atoms with identical
+        // (canonical_name, entity_type) collapse to one content-hash
+        // atom after migration. Before this dedup pass the
+        // migration left two records sharing one new id —
+        // downstream consumers (apply_atom_delta + retrieval) saw
+        // inconsistent atom state.
+        let tmp = tempfile::tempdir().unwrap();
+        let dup_a = make_entity(1, "Alice");
+        let dup_b = make_entity(2, "Alice");
+        let unique = make_entity(3, "Bob");
+        write_fixture(tmp.path(), vec![dup_a, dup_b, unique], vec![]);
+
+        let summary = migrate_atlas_ids(tmp.path(), "c", false).unwrap();
+        assert_eq!(summary.atoms_deduped, 1, "one duplicate Alice collapsed");
+        assert_eq!(summary.collisions_detected.len(), 1);
+
+        let atoms: AtomsFile = serde_json::from_slice(
+            &fs::read(tmp.path().join("atoms.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(atoms.atoms.len(), 2, "Alice + Bob, no duplicates");
+
+        let mut ids: Vec<_> = atoms
+            .atoms
+            .iter()
+            .map(|env| env.id().as_str().to_string())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 2, "atom ids are unique post-migration");
     }
 
     #[test]
