@@ -68,6 +68,7 @@
   let stateLabel = $derived.by(() => {
     if (liveState === "Pending") return "Queued…";
     if (liveState === "PartiallyReady") return "Ready for questions";
+    if (liveState === "MultiHopReady") return "Multi-hop ready";
     if (typeof liveState === "object" && liveState !== null) {
       if ("Indexing" in liveState) {
         const pct = indexingPct;

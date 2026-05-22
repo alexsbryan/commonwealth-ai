@@ -722,6 +722,7 @@ export type AssetState =
   | { Indexing: { chunks_done: number; chunks_total: number } }
   | "PartiallyReady"
   | { BuildingSkeleton: { chunks_done: number; chunks_total: number } }
+  | "MultiHopReady"
   | "Ready"
   | { Failed: { reason: string } };
 

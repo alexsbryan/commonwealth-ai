@@ -73,6 +73,7 @@
     return (
       s === "Ready" ||
       s === "PartiallyReady" ||
+      s === "MultiHopReady" ||
       (typeof s === "object" && "BuildingSkeleton" in s)
     );
   }
@@ -80,6 +81,7 @@
   function stateLabel(s: AssetState): string {
     if (s === "Ready") return "";
     if (s === "PartiallyReady") return "partial";
+    if (s === "MultiHopReady") return "multi-hop";
     if (s === "Pending") return "pending";
     if (typeof s === "object") {
       if ("Indexing" in s) return "indexing";

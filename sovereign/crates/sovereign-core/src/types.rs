@@ -2452,6 +2452,25 @@ impl DocumentAsset {
 
 /// Processing state of a document asset. Drives the UI's progress
 /// display and determines which operations are available.
+///
+/// Tiered retrieval surface (proper-curried-peach plan, 2026-05-22):
+/// the state machine exposes three discrete capability tiers between
+/// `Pending` and `Ready`. Each tier unlocks a specific retrieval mode
+/// without waiting for the next.
+///
+/// - **PartiallyReady** (T1): chunks + embeddings persisted → cosine
+///   top-K retrieval works.
+/// - **MultiHopReady** (T2): entity index + action atoms built →
+///   personalised-PageRank multi-hop retrieval works.
+/// - **Ready** (T3): RAPTOR atlas + motifs + structural metadata
+///   built → full briefing-driven synthesis with scene-scale
+///   signposts.
+///
+/// `BuildingSkeleton` is reused as the "in-flight enrichment" state
+/// for both the T2 and T3 phases. The progress counter rises through
+/// each phase; a `MultiHopReady` milestone fires between them. The
+/// progress bar may briefly reset at the milestone — by design (it
+/// signals a real capability checkpoint, not just continuous work).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AssetState {
     /// File accepted. Processing not yet started.
@@ -2461,15 +2480,20 @@ pub enum AssetState {
         chunks_done: usize,
         chunks_total: usize,
     },
-    /// Embedding done. RAG available. Skeleton extraction running.
-    /// Synthesis and coherent analysis available with degraded quality.
+    /// T1 done. Embeddings persisted; cosine retrieval works. T2
+    /// enrichment running (entity extraction + action atoms).
     PartiallyReady,
-    /// Skeleton extraction in progress.
+    /// T2 or T3 enrichment in progress. Reused variant — the phase
+    /// is implicit in the surrounding state-machine flow (T2 fires
+    /// before MultiHopReady; T3 fires after).
     BuildingSkeleton {
         chunks_done: usize,
         chunks_total: usize,
     },
-    /// Fully ready. All operations available.
+    /// T2 done. Entity index + action atoms available; PPR multi-hop
+    /// retrieval works. T3 enrichment (RAPTOR + motifs) running.
+    MultiHopReady,
+    /// T3 done. All operations available.
     Ready,
     /// Ingest failed.
     Failed { reason: String },
@@ -2477,13 +2501,15 @@ pub enum AssetState {
 
 impl AssetState {
     /// True when the document has enough indexed data to answer
-    /// RAG queries — embedding is complete even if the skeleton
-    /// is still building.
+    /// retrieval queries. All three tiers (T1, T2, T3) qualify —
+    /// only the *quality* differs. Pending / Indexing return false
+    /// because chunks aren't in the store yet.
     pub fn is_queryable(&self) -> bool {
         matches!(
             self,
             AssetState::PartiallyReady
                 | AssetState::BuildingSkeleton { .. }
+                | AssetState::MultiHopReady
                 | AssetState::Ready
         )
     }
@@ -2495,13 +2521,20 @@ impl AssetState {
             AssetState::Indexing { .. } => "Indexing",
             AssetState::PartiallyReady => "Partially ready",
             AssetState::BuildingSkeleton { .. } => "Building structure",
+            AssetState::MultiHopReady => "Multi-hop ready",
             AssetState::Ready => "Ready",
             AssetState::Failed { .. } => "Failed",
         }
     }
 
-    /// Progress as a 0.0–1.0 fraction. Indexing is the first half,
-    /// skeleton extraction is the second half.
+    /// Progress as a 0.0–1.0 fraction.
+    ///
+    /// `MultiHopReady` returns 0.7 — between PartiallyReady's 0.5
+    /// and Ready's 1.0, signalling that the second enrichment tier
+    /// has landed. `BuildingSkeleton`'s fraction continues to span
+    /// 0.5 → 1.0 in both T2 and T3 phases; the bar visually resets
+    /// at the MultiHopReady checkpoint, which is intentional — that
+    /// reset *is* the visual milestone.
     pub fn progress_fraction(&self) -> Option<f32> {
         match self {
             AssetState::Indexing {
@@ -2515,6 +2548,7 @@ impl AssetState {
             } if *chunks_total > 0 => {
                 Some(0.5 + *chunks_done as f32 / *chunks_total as f32 * 0.5)
             }
+            AssetState::MultiHopReady => Some(0.7),
             AssetState::Ready => Some(1.0),
             _ => None,
         }

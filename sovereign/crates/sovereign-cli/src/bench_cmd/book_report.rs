@@ -1405,6 +1405,10 @@ fn render_progress(p: &IngestProgress) -> (&'static str, serde_json::Value) {
             "building_skeleton",
             serde_json::json!({ "done": done, "total": total }),
         ),
+        IngestProgress::MultiHopReady { asset_id } => (
+            "multi_hop_ready",
+            serde_json::json!({ "asset_id": asset_id }),
+        ),
         IngestProgress::Ready {
             asset_id,
             main_entities,
