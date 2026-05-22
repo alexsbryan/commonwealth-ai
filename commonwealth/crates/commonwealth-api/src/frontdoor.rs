@@ -4119,6 +4119,7 @@ mod tests {
         cmd_prefix: None,
         url_allowlist: None,
         evidence_id_allowlist: None,
+        lark_grammar: None,
         }
     }
 
@@ -5590,6 +5591,7 @@ That's my answer."#;
             cmd_prefix: None,
             url_allowlist: None,
             evidence_id_allowlist: None,
+            lark_grammar: None,
         }
     }
 

@@ -163,6 +163,28 @@ impl CorpusIndex {
         Ok(())
     }
 
+    /// Delete chunks whose row id is in `ids`. Move 6 P6 pairs this
+    /// with `chunk_delta` so the watcher's reindex hot path drops
+    /// only the chunks whose content actually changed, instead of
+    /// nuking and re-embedding the whole file.
+    ///
+    /// Empty `ids` is a no-op (no database round-trip).
+    pub async fn delete_chunks_by_ids(&self, ids: &[u64]) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let list: String = ids
+            .iter()
+            .map(u64::to_string)
+            .collect::<Vec<_>>()
+            .join(",");
+        self.table
+            .delete(&format!("id IN ({list})"))
+            .await
+            .map_err(|e| Error::Database(format!("delete_chunks_by_ids: {e}")))?;
+        Ok(())
+    }
+
     /// Stream the `content_hash` column and count distinct values.
     ///
     /// Diagnostic helper: a chunk's `content_hash` is set at extract

@@ -241,6 +241,10 @@ impl CorpusIndex {
             // Stamped by `set_display` from the ingest path right
             // after create when the recipe carries a `[display]` block.
             display: None,
+            // Move 6 P5.b/c — opt-in by the user via
+            // `set_atlas_incremental_enabled(true)` after migrating
+            // the corpus's atoms.json to content-hash ids.
+            atlas_incremental_enabled: None,
         };
         write_meta(path, &meta)?;
 

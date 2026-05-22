@@ -64,7 +64,7 @@ use crate::types::{EmbedFn, InferenceFn};
 /// `--include-functions`, and `--include-private` flags. The latter
 /// two are honoured only on the code-corpus branch.
 #[derive(Debug, Clone, Deserialize, Default)]
-struct StructureFirstConfig {
+pub struct StructureFirstConfig {
     /// Corpus id to read chunks from (e.g. `"wikipedia"`). Required.
     pub source_corpus_id: String,
     /// Cap on the number of articles to process. `None` means "all".
@@ -196,94 +196,11 @@ impl AtlasIngestion for StructureFirstIngestion {
 
             // ── Aggregate per article ───────────────────────────
             // BTreeMap so output is stable across runs.
-            let mut articles: BTreeMap<String, AggregatedArticle> = BTreeMap::new();
-            let mut chunks_with_metadata = 0usize;
-            let mut chunks_without_metadata = 0usize;
-
-            for chunk in chunks {
-                let Some(metadata_raw) = chunk.metadata_raw.as_deref() else {
-                    chunks_without_metadata += 1;
-                    continue;
-                };
-                let meta: WikipediaChunkMetadata = match serde_json::from_str(metadata_raw)
-                {
-                    Ok(m) => m,
-                    Err(_) => {
-                        chunks_without_metadata += 1;
-                        continue;
-                    }
-                };
-                chunks_with_metadata += 1;
-
-                // Resolve canonical article title. Prefer chunk.title;
-                // fall back to URL-derived title; skip if neither.
-                let article_title = chunk
-                    .title
-                    .clone()
-                    .or_else(|| {
-                        chunk
-                            .url
-                            .as_deref()
-                            .and_then(crate::extractors::wikipedia_types::wiki_title_from_url)
-                    });
-                let Some(article_title) = article_title else {
-                    continue;
-                };
-
-                let entry = articles
-                    .entry(article_title.clone())
-                    .or_insert_with(|| AggregatedArticle::new(article_title.clone()));
-
-                // Carry per-article fields from the first metadata
-                // we see for the article. Wikipedia chunks repeat
-                // these across sections.
-                if entry.wikidata_qid.is_none() {
-                    entry.wikidata_qid = meta.wikidata_qid.clone();
-                }
-                if entry.page_id.is_none() {
-                    entry.page_id = meta.page_id;
-                }
-                if entry.url.is_none() {
-                    entry.url = chunk.url.clone();
-                }
-
-                // Capture the lead chunk (first one we see whose
-                // section_type is "lead" OR section_path empty/depth==0).
-                let is_lead = meta.section_type == "lead"
-                    || meta.section_depth == 0
-                    || meta.section_path.is_empty();
-                if is_lead && entry.lead.is_none() {
-                    entry.lead = Some(LeadChunk {
-                        chunk_id: chunk.id,
-                        content: chunk.content.clone(),
-                    });
-                }
-
-                // Outgoing wikilinks — dedupe per (article, target).
-                // First-seen `link_text` wins. Track the first chunk
-                // we saw the link in so the placeholder Entity has a
-                // sensible `first_appearance`.
-                //
-                // Namespace filter: skip wikilinks targeting Wikipedia
-                // meta namespaces (Help:, Wikipedia:, Template:,
-                // Portal:, Category:, File:, User:, Special:, Talk:,
-                // Draft:). The Vital-L5 corpus filter excludes them
-                // by design — leaving them as placeholders pollutes
-                // the link graph (Help:IPA/English collected 6557
-                // inbound on the first pass, dwarfing real entities).
-                for link in &meta.outgoing_links {
-                    if is_meta_namespace(&link.target_title) {
-                        continue;
-                    }
-                    entry
-                        .outgoing
-                        .entry(link.target_title.clone())
-                        .or_insert(OutgoingLink {
-                            link_text: link.link_text.clone(),
-                            first_seen_chunk: chunk.id,
-                        });
-                }
-            }
+            let AggregatedArticles {
+                articles,
+                chunks_with_metadata,
+                chunks_without_metadata,
+            } = aggregate_articles_from_chunks(&chunks);
 
             tracing::info!(
                 articles = articles.len(),
@@ -494,7 +411,7 @@ impl AtlasIngestion for StructureFirstIngestion {
 // ── Aggregation scratch types ────────────────────────────────────
 
 #[derive(Debug)]
-struct AggregatedArticle {
+pub struct AggregatedArticle {
     #[allow(dead_code)]
     title: String,
     wikidata_qid: Option<String>,
@@ -518,14 +435,114 @@ impl AggregatedArticle {
     }
 }
 
+/// Output of [`aggregate_articles_from_chunks`]. Carries the article
+/// map plus chunk-level metadata counters that the caller uses for
+/// progress tracing.
+pub struct AggregatedArticles {
+    pub articles: BTreeMap<String, AggregatedArticle>,
+    pub chunks_with_metadata: usize,
+    pub chunks_without_metadata: usize,
+}
+
+/// Walk `chunks` and aggregate them into per-article scratch state.
+///
+/// Shared between the deterministic full-corpus walk in `ingest()`
+/// and the per-doc incremental path used by the newsworthy host
+/// (Move 6 P5.a.1). Both produce the same `AggregatedArticle` shape;
+/// `extract_atoms_for_articles` consumes either.
+///
+/// Skips chunks without `metadata_raw`, with malformed metadata, or
+/// without a resolvable article title (no `chunk.title` and no
+/// wiki-title in `chunk.url`).
+pub fn aggregate_articles_from_chunks(
+    chunks: &[crate::index::EnrichmentChunkRow],
+) -> AggregatedArticles {
+    let mut articles: BTreeMap<String, AggregatedArticle> = BTreeMap::new();
+    let mut chunks_with_metadata = 0usize;
+    let mut chunks_without_metadata = 0usize;
+
+    for chunk in chunks {
+        let Some(metadata_raw) = chunk.metadata_raw.as_deref() else {
+            chunks_without_metadata += 1;
+            continue;
+        };
+        let meta: WikipediaChunkMetadata = match serde_json::from_str(metadata_raw) {
+            Ok(m) => m,
+            Err(_) => {
+                chunks_without_metadata += 1;
+                continue;
+            }
+        };
+        chunks_with_metadata += 1;
+
+        let article_title = chunk.title.clone().or_else(|| {
+            chunk
+                .url
+                .as_deref()
+                .and_then(crate::extractors::wikipedia_types::wiki_title_from_url)
+        });
+        let Some(article_title) = article_title else {
+            continue;
+        };
+
+        let entry = articles
+            .entry(article_title.clone())
+            .or_insert_with(|| AggregatedArticle::new(article_title.clone()));
+
+        if entry.wikidata_qid.is_none() {
+            entry.wikidata_qid = meta.wikidata_qid.clone();
+        }
+        if entry.page_id.is_none() {
+            entry.page_id = meta.page_id;
+        }
+        if entry.url.is_none() {
+            entry.url = chunk.url.clone();
+        }
+
+        let is_lead = meta.section_type == "lead"
+            || meta.section_depth == 0
+            || meta.section_path.is_empty();
+        if is_lead && entry.lead.is_none() {
+            entry.lead = Some(LeadChunk {
+                chunk_id: chunk.id,
+                content: chunk.content.clone(),
+            });
+        }
+
+        // Outgoing wikilinks — dedupe per (article, target). Meta-
+        // namespace targets (Help:, Wikipedia:, Template:, Portal:,
+        // Category:, File:, User:, Special:, Talk:, Draft:) are
+        // excluded; the Vital-L5 corpus filter strips them and they
+        // pollute the placeholder graph otherwise.
+        for link in &meta.outgoing_links {
+            if is_meta_namespace(&link.target_title) {
+                continue;
+            }
+            entry
+                .outgoing
+                .entry(link.target_title.clone())
+                .or_insert(OutgoingLink {
+                    link_text: link.link_text.clone(),
+                    first_seen_chunk: chunk.id,
+                });
+        }
+    }
+
+    AggregatedArticles {
+        articles,
+        chunks_with_metadata,
+        chunks_without_metadata,
+    }
+}
+
 #[derive(Debug)]
-struct LeadChunk {
+pub(crate) struct LeadChunk {
     chunk_id: u64,
     content: String,
 }
 
 #[derive(Debug)]
-struct OutgoingLink {
+pub(crate) struct OutgoingLink {
     link_text: String,
     first_seen_chunk: u64,
 }
@@ -612,6 +629,508 @@ fn preview(text: &str, max_chars: usize) -> String {
         trimmed.to_string()
     } else {
         trimmed.chars().take(max_chars).collect::<String>() + "…"
+    }
+}
+
+// ── Move 6 P3: per-doc incremental extraction ───────────────────
+//
+// `ingest()` above does the deterministic full-corpus walk. P3 adds
+// a per-document factor that takes specified doc_ids (= article
+// titles for wiki structural) and returns an `AtomsDelta` ready for
+// `apply_atom_delta`. The atoms it emits carry content-hash ids
+// (Move 6 P0) so re-extracting the same article produces the same
+// id and downstream edges + cross-corpus references stay stable.
+//
+// Edge emission stays a separate concern. The caller (P5 source
+// wire) combines this with an edge refresh against the current
+// atom set.
+
+/// Per-doc structural extraction result.
+#[derive(Debug, Clone)]
+pub struct StructureFirstDelta {
+    pub atoms_delta: crate::enrichment::atlas::atoms_delta::AtomsDelta,
+    /// Outgoing Involves edges for the extracted articles. Caller
+    /// merges these into edges.json (P5 wiring).
+    pub edges: Vec<Edge>,
+}
+
+/// Extract atoms for a single set of articles ("docs" in P6 atlas
+/// terminology). Returns an [`AtomsDelta`] whose `upserted_docs`
+/// shape is ready for [`crate::enrichment::atlas::atoms_delta::apply_atom_delta`].
+///
+/// `articles` is keyed by canonical article title (= doc_id for
+/// structural-first wiki). Off-corpus wikilinks produce placeholder
+/// Entity atoms in the same delta — they're cheap to recompute and
+/// the placeholder set drifts naturally as the source set churns.
+///
+/// `corpus_id` MUST match the corpus the atlas belongs to so atom
+/// ids hash correctly. The Phase 5 wire derives it from the corpus's
+/// directory name; tests pass an explicit string.
+pub fn extract_atoms_for_articles(
+    articles: &std::collections::BTreeMap<String, AggregatedArticle>,
+    corpus_id: &str,
+    cfg: &StructureFirstConfig,
+) -> StructureFirstDelta {
+    // Build title → AtomId via content-hash. Every article's id is
+    // stable across re-extractions of the same canonical_name.
+    let entity_type = structural_entity_type();
+    let mut title_to_atom: HashMap<String, AtomId> =
+        HashMap::with_capacity(articles.len());
+    let mut upserted_docs: Vec<(String, Vec<AtomEnvelope>)> =
+        Vec::with_capacity(articles.len());
+
+    for (title, agg) in articles.iter() {
+        let atom_id =
+            AtomId::entity_content_hash(title, &entity_type, corpus_id);
+        title_to_atom.insert(title.clone(), atom_id.clone());
+
+        let (first_chunk_id, lead_text) = match agg.lead.as_ref() {
+            Some(lead) => (lead.chunk_id, lead.content.as_str()),
+            None => (
+                agg.outgoing
+                    .values()
+                    .next()
+                    .map(|e| e.first_seen_chunk)
+                    .unwrap_or(0),
+                "",
+            ),
+        };
+        let description = first_sentence_truncated(
+            strip_leading_title(lead_text, title),
+            cfg.lead_description_chars,
+        );
+
+        let entity = Entity {
+            id: atom_id,
+            canonical_name: title.clone(),
+            aliases: Vec::new(),
+            entity_type: entity_type.clone(),
+            first_appearance: ChunkRef::new(
+                first_chunk_id.to_string(),
+                Some(preview(lead_text, 120)),
+            ),
+            description,
+            defining_quote: None,
+            salience: 0.5,
+            enrichment_depth: EnrichmentDepth::Structural,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+            concept_kind: None,
+        };
+        // doc_id = article title (matches the structural-first
+        // convention where chunk_id IS the article slug for wiki).
+        upserted_docs.push((title.clone(), vec![AtomEnvelope::Entity(entity)]));
+    }
+
+    // Placeholder Entity atoms for off-corpus wikilinks. Each
+    // unique target becomes one placeholder. Group them under a
+    // synthetic doc_id `_placeholders` so deletions of real articles
+    // don't accidentally drop placeholders, and re-extraction can
+    // refresh them as a unit.
+    let mut placeholder_targets: std::collections::BTreeMap<String, (u64, String)> =
+        std::collections::BTreeMap::new();
+    for (_, agg) in articles.iter() {
+        for (target, link) in &agg.outgoing {
+            if title_to_atom.contains_key(target)
+                || placeholder_targets.contains_key(target)
+            {
+                continue;
+            }
+            placeholder_targets.insert(
+                target.clone(),
+                (link.first_seen_chunk, link.link_text.clone()),
+            );
+        }
+    }
+    let mut placeholder_atoms: Vec<AtomEnvelope> = Vec::new();
+    for (target, (chunk_id, link_text)) in &placeholder_targets {
+        let atom_id =
+            AtomId::entity_content_hash(target, &entity_type, corpus_id);
+        title_to_atom.insert(target.clone(), atom_id.clone());
+        placeholder_atoms.push(AtomEnvelope::Entity(Entity {
+            id: atom_id,
+            canonical_name: target.clone(),
+            aliases: if link_text != target {
+                vec![link_text.clone()]
+            } else {
+                Vec::new()
+            },
+            entity_type: entity_type.clone(),
+            first_appearance: ChunkRef::new(chunk_id.to_string(), None),
+            description: String::new(),
+            defining_quote: None,
+            salience: 0.0,
+            enrichment_depth: EnrichmentDepth::Structural,
+            affiliation: None,
+            role: None,
+            participants: Vec::new(),
+            concept_kind: None,
+        }));
+    }
+    if !placeholder_atoms.is_empty() {
+        upserted_docs.push(("_placeholders".to_string(), placeholder_atoms));
+    }
+
+    // Build Involves edges for the extracted articles. Caller
+    // applies these to edges.json after `apply_atom_delta` has
+    // committed the atoms.
+    let mut edges: Vec<Edge> = Vec::new();
+    let mut next_edge_idx = 1usize;
+    for (title, agg) in articles.iter() {
+        let source_atom = title_to_atom
+            .get(title)
+            .expect("kept article has an atom id")
+            .clone();
+        for target_title in agg.outgoing.keys() {
+            let target_atom = title_to_atom
+                .get(target_title)
+                .expect("every wikilink target has an atom (real or placeholder)")
+                .clone();
+            edges.push(Edge {
+                id: EdgeId::new(next_edge_idx),
+                edge_type: EdgeType::Involves,
+                source: source_atom.clone(),
+                target: target_atom,
+                evidence: Vec::new(),
+                trigger_event: None,
+                sub_question: None,
+                confidence: 1.0,
+                provenance: EdgeProvenance::WikilinkStructural,
+            });
+            next_edge_idx += 1;
+        }
+    }
+
+    StructureFirstDelta {
+        atoms_delta: crate::enrichment::atlas::atoms_delta::AtomsDelta {
+            added: Vec::new(),
+            removed_doc_ids: Vec::new(),
+            upserted_docs,
+            added_edges: edges.clone(),
+        },
+        edges,
+    }
+}
+
+/// Test-only constructor for `AggregatedArticle` so callers can
+/// build fixtures without round-tripping through the chunk index.
+/// Pub(crate) so the P3 + P5 test modules can use it.
+pub(crate) fn aggregated_article_for_test(
+    title: String,
+    lead_content: String,
+    lead_chunk_id: u64,
+    outgoing: Vec<(String, String, u64)>,
+) -> AggregatedArticle {
+    let mut a = AggregatedArticle::new(title);
+    a.lead = Some(LeadChunk {
+        chunk_id: lead_chunk_id,
+        content: lead_content,
+    });
+    for (target, link_text, first_seen_chunk) in outgoing {
+        a.outgoing.insert(
+            target,
+            OutgoingLink {
+                link_text,
+                first_seen_chunk,
+            },
+        );
+    }
+    a
+}
+
+#[cfg(test)]
+mod move6_p3_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn default_cfg() -> StructureFirstConfig {
+        StructureFirstConfig {
+            source_corpus_id: "test".into(),
+            limit_articles: None,
+            lead_description_chars: 200,
+            include_functions: true,
+            include_private: false,
+        }
+    }
+
+    fn wiki_chunk(
+        id: u64,
+        title: &str,
+        content: &str,
+        section_type: &str,
+        outgoing: Vec<(&str, &str)>,
+    ) -> crate::index::EnrichmentChunkRow {
+        let meta = crate::extractors::wikipedia_types::WikipediaChunkMetadata {
+            section_name: "Lead".into(),
+            section_path: vec![],
+            section_depth: 0,
+            section_type: section_type.into(),
+            citation_needed_count: None,
+            pov_count: None,
+            clarification_needed_count: None,
+            update_count: None,
+            is_flagged_stable: None,
+            outgoing_links: outgoing
+                .into_iter()
+                .map(
+                    |(t, lt)| crate::extractors::wikipedia_types::WikiLink {
+                        target_title: t.into(),
+                        link_text: lt.into(),
+                    },
+                )
+                .collect(),
+            revision_id: None,
+            wikidata_qid: None,
+            page_id: None,
+        };
+        crate::index::EnrichmentChunkRow {
+            id,
+            content: content.into(),
+            title: Some(title.into()),
+            url: Some(format!(
+                "https://en.wikipedia.org/wiki/{}",
+                title.replace(' ', "_")
+            )),
+            metadata_raw: Some(serde_json::to_string(&meta).unwrap()),
+            source_doc_id: Some(title.replace(' ', "_")),
+        }
+    }
+
+    #[test]
+    fn aggregate_articles_groups_chunks_by_title() {
+        // Move 6 P5.a.1 contract: per-doc aggregation produces the
+        // same shape as the full-corpus walk so the incremental path
+        // and ingest() share the downstream extractor.
+        let chunks = vec![
+            wiki_chunk(
+                1,
+                "Albert Einstein",
+                "Albert Einstein was a German-born physicist.",
+                "lead",
+                vec![("Physics", "physics"), ("Help:Foo", "help")],
+            ),
+            wiki_chunk(
+                2,
+                "Albert Einstein",
+                "He published the theory of relativity.",
+                "factual",
+                vec![("Theory of relativity", "relativity")],
+            ),
+            wiki_chunk(
+                3,
+                "Isaac Newton",
+                "Isaac Newton was an English mathematician.",
+                "lead",
+                vec![],
+            ),
+        ];
+        let out = aggregate_articles_from_chunks(&chunks);
+        assert_eq!(out.articles.len(), 2);
+        assert_eq!(out.chunks_with_metadata, 3);
+        assert_eq!(out.chunks_without_metadata, 0);
+
+        let einstein = out.articles.get("Albert Einstein").unwrap();
+        assert!(einstein.lead.is_some(), "lead chunk captured");
+        // Meta-namespace target (Help:) is filtered; Physics +
+        // Theory_of_relativity survive.
+        assert_eq!(einstein.outgoing.len(), 2);
+        assert!(einstein.outgoing.contains_key("Physics"));
+        assert!(einstein.outgoing.contains_key("Theory of relativity"));
+        assert!(
+            !einstein.outgoing.contains_key("Help:Foo"),
+            "meta-namespace targets dropped at aggregation"
+        );
+    }
+
+    #[test]
+    fn aggregate_articles_skips_chunks_without_metadata() {
+        let mut chunks = vec![wiki_chunk(
+            1,
+            "Albert Einstein",
+            "lead",
+            "lead",
+            vec![],
+        )];
+        chunks.push(crate::index::EnrichmentChunkRow {
+            id: 2,
+            content: "no metadata".into(),
+            title: Some("Albert Einstein".into()),
+            url: None,
+            metadata_raw: None,
+            source_doc_id: Some("Albert_Einstein".into()),
+        });
+        let out = aggregate_articles_from_chunks(&chunks);
+        assert_eq!(out.chunks_with_metadata, 1);
+        assert_eq!(out.chunks_without_metadata, 1);
+        assert_eq!(out.articles.len(), 1);
+    }
+
+    #[test]
+    fn extract_emits_one_entity_per_article() {
+        let mut articles = BTreeMap::new();
+        articles.insert(
+            "Albert_Einstein".to_string(),
+            aggregated_article_for_test(
+                "Albert_Einstein".to_string(),
+                "Albert Einstein was a German-born physicist.".to_string(),
+                10,
+                vec![],
+            ),
+        );
+        articles.insert(
+            "Isaac_Newton".to_string(),
+            aggregated_article_for_test(
+                "Isaac_Newton".to_string(),
+                "Isaac Newton was an English mathematician.".to_string(),
+                20,
+                vec![],
+            ),
+        );
+
+        let delta = extract_atoms_for_articles(&articles, "wikipedia", &default_cfg());
+        assert_eq!(delta.atoms_delta.upserted_docs.len(), 2);
+        let einstein = delta
+            .atoms_delta
+            .upserted_docs
+            .iter()
+            .find(|(doc, _)| doc == "Albert_Einstein")
+            .unwrap();
+        assert_eq!(einstein.1.len(), 1);
+        match &einstein.1[0] {
+            AtomEnvelope::Entity(e) => {
+                assert_eq!(e.canonical_name, "Albert_Einstein");
+                assert!(e.id.is_content_hash());
+                assert!(
+                    e.description.contains("German-born"),
+                    "description should derive from lead: {}",
+                    e.description
+                );
+            }
+            _ => panic!("expected Entity"),
+        }
+    }
+
+    #[test]
+    fn content_hash_ids_stable_across_re_extraction() {
+        // The whole point of P3: re-running extract_atoms_for_articles
+        // with the same inputs produces the same atom ids.
+        let mut articles = BTreeMap::new();
+        articles.insert(
+            "Einstein".to_string(),
+            aggregated_article_for_test(
+                "Einstein".to_string(),
+                "lead text".to_string(),
+                1,
+                vec![],
+            ),
+        );
+
+        let d1 = extract_atoms_for_articles(&articles, "wikipedia", &default_cfg());
+        let d2 = extract_atoms_for_articles(&articles, "wikipedia", &default_cfg());
+
+        let id1 = match &d1.atoms_delta.upserted_docs[0].1[0] {
+            AtomEnvelope::Entity(e) => e.id.clone(),
+            _ => unreachable!(),
+        };
+        let id2 = match &d2.atoms_delta.upserted_docs[0].1[0] {
+            AtomEnvelope::Entity(e) => e.id.clone(),
+            _ => unreachable!(),
+        };
+        assert_eq!(id1, id2);
+    }
+
+    #[test]
+    fn placeholder_atoms_grouped_under_synthetic_doc() {
+        let mut articles = BTreeMap::new();
+        articles.insert(
+            "Einstein".to_string(),
+            aggregated_article_for_test(
+                "Einstein".to_string(),
+                "lead".to_string(),
+                1,
+                vec![
+                    ("Special_Relativity".to_string(), "special relativity".to_string(), 2),
+                    ("Quantum_Mechanics".to_string(), "QM".to_string(), 3),
+                ],
+            ),
+        );
+        let d = extract_atoms_for_articles(&articles, "wikipedia", &default_cfg());
+        // 1 article doc + 1 _placeholders doc.
+        assert_eq!(d.atoms_delta.upserted_docs.len(), 2);
+        let placeholders = d
+            .atoms_delta
+            .upserted_docs
+            .iter()
+            .find(|(doc, _)| doc == "_placeholders")
+            .unwrap();
+        assert_eq!(placeholders.1.len(), 2);
+        for env in &placeholders.1 {
+            match env {
+                AtomEnvelope::Entity(e) => {
+                    assert!(e.id.is_content_hash());
+                    assert_eq!(e.salience, 0.0); // placeholders are off-corpus
+                }
+                _ => panic!(),
+            }
+        }
+    }
+
+    #[test]
+    fn involves_edges_emitted_with_resolved_ids() {
+        let mut articles = BTreeMap::new();
+        articles.insert(
+            "Einstein".to_string(),
+            aggregated_article_for_test(
+                "Einstein".to_string(),
+                "lead".to_string(),
+                1,
+                vec![("Newton".to_string(), "newton".to_string(), 2)],
+            ),
+        );
+        articles.insert(
+            "Newton".to_string(),
+            aggregated_article_for_test(
+                "Newton".to_string(),
+                "newton lead".to_string(),
+                10,
+                vec![],
+            ),
+        );
+
+        let d = extract_atoms_for_articles(&articles, "wikipedia", &default_cfg());
+        assert_eq!(d.edges.len(), 1);
+        let edge = &d.edges[0];
+        assert_eq!(edge.edge_type, EdgeType::Involves);
+        // Both endpoints are content-hash ids of in-corpus articles
+        // (no placeholders since "Newton" is in the kept set).
+        assert!(edge.source.is_content_hash());
+        assert!(edge.target.is_content_hash());
+    }
+
+    #[test]
+    fn ids_partition_across_corpora() {
+        let mut articles = BTreeMap::new();
+        articles.insert(
+            "Einstein".to_string(),
+            aggregated_article_for_test(
+                "Einstein".to_string(),
+                "".to_string(),
+                1,
+                vec![],
+            ),
+        );
+        let d_a = extract_atoms_for_articles(&articles, "wikipedia", &default_cfg());
+        let d_b = extract_atoms_for_articles(&articles, "obsidian-vault", &default_cfg());
+        let id_a = match &d_a.atoms_delta.upserted_docs[0].1[0] {
+            AtomEnvelope::Entity(e) => e.id.clone(),
+            _ => unreachable!(),
+        };
+        let id_b = match &d_b.atoms_delta.upserted_docs[0].1[0] {
+            AtomEnvelope::Entity(e) => e.id.clone(),
+            _ => unreachable!(),
+        };
+        assert_ne!(id_a, id_b, "same article in different corpora → different ids");
     }
 }
 

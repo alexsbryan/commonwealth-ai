@@ -429,6 +429,29 @@ pub struct PhaseRunner {
     /// augmentation) — override via [`with_atom_post_processors`]
     /// in tests that need to pin a specific transform set.
     atom_post_processors: super::atom_normalizer::AtomPostProcessorRegistry,
+    /// Move 6 P4: section-level LLM cache config. When `Some`, the
+    /// Phase 1 loop computes a cache key per chapter and consults
+    /// the section cache at `<atlas_dir>/section_cache/` before
+    /// dispatching the LLM call. Hits short-circuit the round-trip;
+    /// misses persist the response after a successful parse.
+    section_cache: Option<SectionCacheConfig>,
+}
+
+/// Move 6 P4: configuration for the Phase 1 section-level LLM cache.
+/// Built via [`PhaseRunner::with_section_cache`].
+#[derive(Debug, Clone)]
+pub struct SectionCacheConfig {
+    /// Atlas directory; cache files land at
+    /// `<atlas_dir>/section_cache/<key>.json`.
+    pub atlas_dir: PathBuf,
+    /// Identifier for the chat model that produced the cached
+    /// outputs. Part of the cache key so a model swap silently
+    /// invalidates stale entries.
+    pub model_id: String,
+    /// Prompt-version token. Bumped by the pipeline author when the
+    /// Phase 1 prompt template changes semantically; cached entries
+    /// produced under the old version no longer match.
+    pub prompt_version: String,
 }
 
 impl PhaseRunner {
@@ -451,7 +474,31 @@ impl PhaseRunner {
             checkpoint_path: None,
             atom_post_processors:
                 super::atom_normalizer::AtomPostProcessorRegistry::default_chain(),
+            section_cache: None,
         }
+    }
+
+    /// Move 6 P4: install a section-level LLM cache. The Phase 1
+    /// loop reads `<atlas_dir>/section_cache/<key>.json` before
+    /// dispatching the LLM call. Hits return the cached response
+    /// verbatim; misses persist the new response on success.
+    ///
+    /// `model_id` and `prompt_version` are part of the cache key —
+    /// they must change in lockstep with whatever the runner sends
+    /// as the LLM prompt body, so a re-run after a prompt edit
+    /// doesn't return a semantically-stale response.
+    pub fn with_section_cache(
+        mut self,
+        atlas_dir: impl Into<PathBuf>,
+        model_id: impl Into<String>,
+        prompt_version: impl Into<String>,
+    ) -> Self {
+        self.section_cache = Some(SectionCacheConfig {
+            atlas_dir: atlas_dir.into(),
+            model_id: model_id.into(),
+            prompt_version: prompt_version.into(),
+        });
+        self
     }
 
     /// Override the cross-cutting post-process chain. Tests use this
@@ -812,7 +859,64 @@ impl PhaseRunner {
                 }
             };
 
-            let chat_result = match retry_mode {
+            // ── Move 6 P4: section-cache lookup ──────────────
+            // Cache key incorporates the chapter text + prompt
+            // version + model id. Only the default retry mode
+            // consults the cache — terse retries are by definition
+            // a different prompt shape and would corrupt the entry.
+            let section_cache_key = if retry_mode.is_none() {
+                self.section_cache.as_ref().map(|cfg| {
+                    crate::enrichment::atlas::section_cache::cache_key(
+                        &chapter.text,
+                        &cfg.prompt_version,
+                        &cfg.model_id,
+                    )
+                })
+            } else {
+                None
+            };
+            let cached_response: Option<String> =
+                match (&self.section_cache, section_cache_key.as_deref()) {
+                    (Some(cfg), Some(key)) => {
+                        match crate::enrichment::atlas::section_cache::lookup(
+                            &cfg.atlas_dir,
+                            key,
+                        ) {
+                            Ok(Some(bytes)) => match String::from_utf8(bytes) {
+                                Ok(s) => {
+                                    tracing::debug!(
+                                        chapter_id = %chapter.chapter_id,
+                                        cache_key = %key,
+                                        "phase1.section_cache_hit"
+                                    );
+                                    Some(s)
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        chapter_id = %chapter.chapter_id,
+                                        error = %e,
+                                        "phase1.section_cache_corrupt — re-dispatching"
+                                    );
+                                    None
+                                }
+                            },
+                            Ok(None) => None,
+                            Err(e) => {
+                                tracing::warn!(
+                                    chapter_id = %chapter.chapter_id,
+                                    error = %e,
+                                    "phase1.section_cache_io_err — re-dispatching"
+                                );
+                                None
+                            }
+                        }
+                    }
+                    _ => None,
+                };
+
+            let chat_result: Result<String> = if let Some(cached) = cached_response {
+                Ok(cached)
+            } else { match retry_mode {
                 Some(RetryMode::Terse { max_output_tokens }) => match &self.chat_with_tokens {
                     Some(chat_t) => (chat_t)(&prompt, max_output_tokens).await,
                     None => (self.chat)(&prompt).await,
@@ -849,7 +953,7 @@ impl PhaseRunner {
                         _ => (self.chat)(&prompt).await,
                     }
                 }
-            };
+            } };
 
             let response = match chat_result {
                 Ok(r) => {
@@ -975,6 +1079,28 @@ impl PhaseRunner {
                 chapter_id: &chapter.chapter_id,
                 question_count: parsed.questions.len(),
             });
+
+            // Move 6 P4: persist the raw response under the cache
+            // key so the next run skips the LLM round-trip when the
+            // chapter text + prompt + model haven't changed. Only
+            // store on the default retry path — terse responses
+            // come from a different prompt and would poison the
+            // entry.
+            if let (Some(cfg), Some(key)) =
+                (self.section_cache.as_ref(), section_cache_key.as_ref())
+            {
+                if let Err(e) = crate::enrichment::atlas::section_cache::store(
+                    &cfg.atlas_dir,
+                    key,
+                    response.as_bytes(),
+                ) {
+                    tracing::warn!(
+                        chapter_id = %chapter.chapter_id,
+                        error = %e,
+                        "phase1.section_cache_store_failed — run continues"
+                    );
+                }
+            }
 
             // Stamp the runner-known chapter_id over whatever the model
             // emitted as `section_id`. Models routinely truncate or
