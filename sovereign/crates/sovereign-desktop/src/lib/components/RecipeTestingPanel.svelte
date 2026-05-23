@@ -480,11 +480,11 @@
   .btn-test {
     background: var(--accent);
     border: 1px solid transparent;
-    color: #fff;
+    color: var(--text-on-accent);
   }
 
   .btn-test:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--accent) 85%, #000);
+    background: var(--accent-hover);
   }
 
   /* ── Spinner ── */

@@ -126,7 +126,7 @@
   }
   input,
   textarea {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--bg-elevated);
     border: 1px solid var(--border, #2a2c33);
     color: inherit;
     padding: 0.5rem 0.6rem;
@@ -141,7 +141,7 @@
     resize: vertical;
   }
   .error {
-    color: #f4b3b3;
+    color: var(--coral);
     font-size: 0.85rem;
     margin: 0.4rem 0 0;
   }
@@ -161,11 +161,11 @@
     font-size: 0.88rem;
   }
   button.primary {
-    background: rgba(120, 200, 240, 0.18);
-    border-color: rgba(120, 200, 240, 0.4);
+    background: var(--lavender-dim);
+    border-color: color-mix(in srgb, var(--lavender) 50%, transparent);
   }
   button.primary:hover:not(:disabled) {
-    background: rgba(120, 200, 240, 0.25);
+    background: color-mix(in srgb, var(--lavender) 30%, transparent);
   }
   button:disabled {
     opacity: 0.5;

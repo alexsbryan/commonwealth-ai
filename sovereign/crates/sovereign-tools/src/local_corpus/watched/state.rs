@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
+use sovereign_core::types::AssetState;
 
 use super::status::WatchedFolderStatus;
 use super::walker::EntryRecord;
@@ -138,6 +139,23 @@ pub enum EnrichmentRuntimeStatus {
     Failed {
         failed_at_unix: u64,
         reason: String,
+    },
+    /// Tiered (in-process) enrichment status. Carries an explicit
+    /// `AssetState` so the UI can render the same T1 / T2 / T3
+    /// milestones as attached documents do. `state` advances
+    /// PartiallyReady → MultiHopReady → Ready (or → Failed) over
+    /// the build's lifecycle. `built_at_unix` flips to Some once
+    /// the build reaches Ready; until then it stays None and the
+    /// UI renders "in flight".
+    ///
+    /// `#[serde(default)]` on the parent field means pre-v1 state
+    /// files round-trip as Off. Once a corpus has gone through one
+    /// tiered build, subsequent loads deserialize as Tiered.
+    Tiered {
+        state: AssetState,
+        started_at_unix: u64,
+        built_at_unix: Option<u64>,
+        doc_count: usize,
     },
 }
 

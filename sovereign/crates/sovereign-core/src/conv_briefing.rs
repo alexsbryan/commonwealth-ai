@@ -51,6 +51,39 @@ use corpus_engine::ScoredChunk;
 
 use crate::conv_tiered::{ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader};
 
+/// Display-category strings that route through the tiered (RAPTOR +
+/// chunk_entities + PPR) retrieval path. Watched folders join
+/// conversations on this list because both populate the conv_raptor_*
+/// / chunk_entities tables under the same shape (conv_uuid keyed on
+/// the source identifier — `conv_uuid` for conversation corpora,
+/// `corpus_id` itself for watched folders).
+pub const TIERED_DISPLAY_CATEGORIES: &[&str] = &["conversation", "watched_folder"];
+
+/// True if `cat` names a tiered-enrichment-bearing corpus category.
+/// Used by both `build_conv_tiered_briefings` and
+/// `rerank_conv_chunks_via_ppr` to decide which chunks participate
+/// in the tiered retrieval surface.
+pub fn is_tiered_category(cat: &str) -> bool {
+    TIERED_DISPLAY_CATEGORIES.iter().any(|c| *c == cat)
+}
+
+/// For a tiered category, return the conv_uuid key used to bucket
+/// chunks into per-source graphs. Conversations use `source_doc_id`
+/// (one graph per conversation); watched folders collapse all
+/// chunks under `corpus_id` (one graph per folder) because
+/// individual files don't carry meaningful entity-co-occurrence
+/// boundaries — the folder is the unit of context.
+pub fn tiered_group_key<'a>(
+    category: &str,
+    corpus_id: &'a str,
+    source_doc_id: Option<&'a str>,
+) -> Option<&'a str> {
+    match category {
+        "watched_folder" => Some(corpus_id),
+        _ => source_doc_id,
+    }
+}
+
 /// Renderable briefing for a single conversation. Carries the parts
 /// the prompt-assembly path stitches together.
 #[derive(Debug, Clone)]
@@ -64,6 +97,13 @@ pub struct ConvBriefing {
     /// for Tiny convs (synthetic node only — overview already carries
     /// the signal).
     pub signposts: Vec<ClusterSignpost>,
+    /// Display category that drove this briefing's inclusion —
+    /// `"conversation"` for chat exports, `"watched_folder"` for
+    /// folder corpora. The renderer uses this to pick the header
+    /// label ("Conversation context" vs "Watched folder context")
+    /// and the per-bullet framing ("hits across N chunks" works
+    /// uniformly).
+    pub source_category: String,
 }
 
 /// One leaf-cluster signpost. Drives the bullet rendering inside a
@@ -146,18 +186,21 @@ pub async fn build_conv_tiered_briefings(
     // surfaces both in one briefing block.
     let mut hits: HashMap<(String, String), usize> = HashMap::new();
     for c in chunks {
-        let is_conv = display
-            .get(&c.corpus_id)
-            .map(|cat| cat == "conversation")
-            .unwrap_or(false);
-        if !is_conv {
+        let Some(category) = display.get(&c.corpus_id) else {
+            continue;
+        };
+        if !is_tiered_category(category) {
             continue;
         }
-        let Some(conv_uuid) = c.source_doc_id.as_ref() else {
+        let Some(conv_uuid) = tiered_group_key(
+            category,
+            &c.corpus_id,
+            c.source_doc_id.as_deref(),
+        ) else {
             continue;
         };
         *hits
-            .entry((c.corpus_id.clone(), conv_uuid.clone()))
+            .entry((c.corpus_id.clone(), conv_uuid.to_string()))
             .or_insert(0) += 1;
     }
     if hits.is_empty() {
@@ -229,12 +272,21 @@ pub async fn build_conv_tiered_briefings(
             Vec::new()
         };
 
+        // Stamp the source category so the renderer can pick the
+        // right header. Falls back to "conversation" defensively —
+        // every briefing here passed `is_tiered_category` upstream.
+        let source_category = display
+            .get(corpus_id)
+            .cloned()
+            .unwrap_or_else(|| "conversation".to_string());
+
         briefings.push(ConvBriefing {
             conv_uuid: conv_uuid.clone(),
             overview,
             hit_count: *hit_count,
             chunk_count: skeleton.chunk_count,
             signposts,
+            source_category,
         });
     }
 
@@ -294,19 +346,62 @@ async fn fetch_signposts(
 
 /// Format the briefings into a prompt block. Deep mode renders bullets
 /// per cluster signpost; shallow mode renders one bullet per conv.
+///
+/// Header text adapts to the briefings' source categories: pure
+/// conversation hits use "Conversation context"; pure watched-folder
+/// hits use "Watched folder context"; mixed hits use the combined
+/// "Conversation & watched folder context". The Deep-mode framing
+/// stays consistent because the rendering shape ("source title —
+/// hits across chunks") works uniformly for both source types.
 fn render_briefings(briefings: &[ConvBriefing], mode: BriefingMode) -> String {
     if briefings.is_empty() {
         return String::new();
     }
+    let has_conv = briefings.iter().any(|b| b.source_category == "conversation");
+    let has_folder = briefings.iter().any(|b| b.source_category == "watched_folder");
+    let header = match (has_conv, has_folder) {
+        (true, true) => "## Conversation & watched folder context",
+        (false, true) => "## Watched folder context",
+        _ => "## Conversation context",
+    };
+    let deep_intro = match (has_conv, has_folder) {
+        (true, true) => {
+            "These conversations and watched folders carry most of the \
+             retrieved chunks. Each is summarised with its top cluster \
+             signposts so you can ground responses in the source's own \
+             structure:\n\n"
+        }
+        (false, true) => {
+            "These watched folders carry most of the retrieved chunks. \
+             Each is summarised with its top cluster signposts so you \
+             can ground responses in the folder's own structure:\n\n"
+        }
+        _ => {
+            "These conversations carry most of the retrieved chunks. \
+             Each is summarised with its top cluster signposts so you \
+             can ground responses in the conversation's own structure:\n\n"
+        }
+    };
+    let shallow_intro = match (has_conv, has_folder) {
+        (true, true) => {
+            "Conversations and watched folders contributing to the \
+             retrieved chunks (ordered by hit count):\n\n"
+        }
+        (false, true) => {
+            "Watched folders contributing to the retrieved chunks \
+             (ordered by hit count):\n\n"
+        }
+        _ => {
+            "Conversations contributing to the retrieved chunks \
+             (ordered by hit count):\n\n"
+        }
+    };
     let mut s = String::new();
-    s.push_str("## Conversation context\n");
+    s.push_str(header);
+    s.push('\n');
     match mode {
         BriefingMode::Deep => {
-            s.push_str(
-                "These conversations carry most of the retrieved chunks. \
-                 Each is summarised with its top cluster signposts so you \
-                 can ground responses in the conversation's own structure:\n\n",
-            );
+            s.push_str(deep_intro);
             for b in briefings {
                 s.push_str(&format!(
                     "**{}** — {} hit{} across {} chunk{}\n",
@@ -333,10 +428,7 @@ fn render_briefings(briefings: &[ConvBriefing], mode: BriefingMode) -> String {
             }
         }
         BriefingMode::Shallow => {
-            s.push_str(
-                "Conversations contributing to the retrieved chunks (ordered \
-                 by hit count):\n\n",
-            );
+            s.push_str(shallow_intro);
             for b in briefings {
                 s.push_str(&format!(
                     "- **{}** — {} hit{} across {} chunk{}\n",

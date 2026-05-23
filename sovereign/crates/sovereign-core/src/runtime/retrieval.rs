@@ -513,22 +513,30 @@ impl Runtime {
             return;
         };
 
-        // 1. Group conv-corpus chunks by (corpus_id, conv_uuid).
+        // 1. Group tiered-corpus chunks by (corpus_id, conv_uuid).
+        // Watched-folder corpora collapse all chunks under
+        // `conv_uuid = corpus_id` (one graph per folder); conversation
+        // corpora bucket by source_doc_id (one graph per conv). The
+        // helper in `conv_briefing` centralises the dispatch so both
+        // call sites stay in sync.
         let mut convs: std::collections::HashMap<(String, String), Vec<usize>> =
             std::collections::HashMap::new();
         for (idx, c) in chunks.iter().enumerate() {
-            let is_conv = display_categories
-                .get(&c.corpus_id)
-                .map(|cat| cat == "conversation")
-                .unwrap_or(false);
-            if !is_conv {
+            let Some(category) = display_categories.get(&c.corpus_id) else {
+                continue;
+            };
+            if !crate::conv_briefing::is_tiered_category(category) {
                 continue;
             }
-            let Some(uuid) = c.source_doc_id.as_ref() else {
+            let Some(uuid) = crate::conv_briefing::tiered_group_key(
+                category,
+                &c.corpus_id,
+                c.source_doc_id.as_deref(),
+            ) else {
                 continue;
             };
             convs
-                .entry((c.corpus_id.clone(), uuid.clone()))
+                .entry((c.corpus_id.clone(), uuid.to_string()))
                 .or_default()
                 .push(idx);
         }

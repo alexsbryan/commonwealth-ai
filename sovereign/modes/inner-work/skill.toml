@@ -3,6 +3,11 @@ id = "inner-work"
 name = "Inner Work"
 version = "0.1.0"
 description = "Reflective companion for personal psychological work. Socratic, parts-aware, pattern-oriented."
+# User-chosen workspace surface (entered via the nav rail). Owns
+# chats opened while the user is in Inner Work; loses the
+# recency tie-break to any workspace skill activated more
+# recently (e.g. switching to Recipe Author).
+activation_kind = "workspace"
 
 # `[routing]` retired: inner-work is a USER-CHOSEN surface
 # (entered via the desktop rail), not a router-triggered mode.

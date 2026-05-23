@@ -89,12 +89,12 @@
     letter-spacing: 0.04em;
   }
   .pill.ok {
-    background: rgba(120, 220, 160, 0.18);
-    color: #b9f0c9;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .pill.fail {
-    background: rgba(240, 130, 130, 0.18);
-    color: #f6c0c0;
+    background: var(--coral-dim);
+    color: var(--coral);
   }
   .errors {
     list-style: none;
@@ -106,8 +106,8 @@
   }
   .errors li {
     position: relative;
-    background: rgba(240, 130, 130, 0.06);
-    border: 1px solid rgba(240, 130, 130, 0.25);
+    background: color-mix(in srgb, var(--coral) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--coral) 35%, transparent);
     border-radius: 4px;
     padding: 0.5rem 0.6rem;
   }
@@ -138,7 +138,7 @@
     cursor: pointer;
   }
   .copy:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--bg-elevated);
     color: var(--fg, #e6e6e8);
   }
 </style>

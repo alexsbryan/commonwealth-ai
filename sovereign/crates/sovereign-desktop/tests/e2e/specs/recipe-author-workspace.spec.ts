@@ -5,11 +5,17 @@ import { test, expect, bootToChat } from "../fixtures/test-base";
 //
 // What the spec proves:
 // - The "Recipe Author →" entry on the chat sidebar opens the
-//   workspace and toggles the skill activation backend call.
+//   workspace.
 // - "+ New project" creates a project, refreshes the sidebar, auto-
 //   selects, and renders all the dashboard cards.
-// - "← Back to chat" returns to the chat workspace and toggles the
-//   skill activation backend call back off.
+// - "← Back to chat" returns to the chat workspace.
+//
+// Pre-2026-05-24 this spec also asserted that workspace enter/exit
+// toggled the recipe-author skill via
+// `recipe_author_set_workspace_active`. That command was removed
+// when routing moved to a conversation-tag model — the chat surface
+// creates conversations with `surface_skill_id = "recipe-author"`
+// and the runtime resolves the primary skill from that tag.
 test.describe("recipe author workspace", () => {
   test("user opens workspace, creates a project, sees dashboard, exits", async ({
     sovereignPage: page,
@@ -20,21 +26,6 @@ test.describe("recipe author workspace", () => {
     // The sidebar entry is gated behind the M2 dev flag — present.
     const openBtn = page.getByTestId("open-recipe-author");
     await expect(openBtn).toBeVisible();
-
-    // Track skill activation toggle calls so we can assert both
-    // enter (true) and exit (false) ran.
-    await page.evaluate(() => {
-      // Replace the default to record calls in addition to setting state.
-      window.__sovereign_test__._raSkillCalls = [];
-      window.__sovereign_test__.setHandler(
-        "recipe_author_set_workspace_active",
-        ({ active }: { active: boolean }) => {
-          window.__sovereign_test__._raSkillCalls.push(active);
-          window.__sovereign_test__.recipeAuthor.active = !!active;
-          return !!active;
-        },
-      );
-    });
 
     await openBtn.click();
     const workspace = page.getByTestId("recipe-author-workspace");
@@ -84,15 +75,6 @@ test.describe("recipe author workspace", () => {
     await page.getByText("← Back to chat").click();
     await expect(workspace).toHaveCount(0);
     await expect(page.locator(".empty-state, .chat-empty")).toBeVisible();
-
-    // Both skill toggle calls fired (enter=true on mount, exit=false
-    // on destroy). Order matters — enter must precede exit.
-    const calls = await page.evaluate(
-      () => window.__sovereign_test__._raSkillCalls as boolean[],
-    );
-    expect(calls.length).toBeGreaterThanOrEqual(2);
-    expect(calls[0]).toBe(true);
-    expect(calls[calls.length - 1]).toBe(false);
   });
 
   test("workspace surfaces the empty-state when no projects exist", async ({

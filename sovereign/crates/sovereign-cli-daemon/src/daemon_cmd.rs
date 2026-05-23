@@ -853,6 +853,63 @@ async fn run_daemon(args: &[String]) -> i32 {
         },
     };
 
+    // GliNER per-chunk entity extractor — hoisted out of the engine
+    // block so both the engine's tiered runner (conv corpora) AND the
+    // folder_tiered_deps below can share the same Arc<dyn> handle
+    // (the underlying GlinerExtractor is ~150MB ONNX; one load only).
+    let chunk_entity_extractor: Option<
+        std::sync::Arc<
+            dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor,
+        >,
+    > = {
+        let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
+        if sovereign_tools::gliner_ner::probe_model_available(model_id) {
+            let store_path = data_dir.join("sovereign.db");
+            match sovereign_store::sqlite::SqliteStateStore::open(&store_path) {
+                Ok(store_for_extractor) => {
+                    match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
+                        Ok(ex) => {
+                            tracing::info!(
+                                model = model_id,
+                                "conv-tiered: GliNER extractor loaded (shared across engine + folder driver)"
+                            );
+                            Some(std::sync::Arc::new(
+                                sovereign_tools::conv_tiered_provider::GlinerChunkExtractor::new(
+                                    Arc::new(store_for_extractor),
+                                    Arc::new(ex),
+                                ),
+                            ) as Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>)
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                model = model_id,
+                                error = %e,
+                                "conv-tiered: GliNER load failed — tiered ingest will fall back to RAPTOR-only entities"
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        store_path = %store_path.display(),
+                        error = %e,
+                        "conv-tiered: cannot open state store for entity extractor — skipping"
+                    );
+                    None
+                }
+            }
+        } else {
+            let root = sovereign_tools::gliner_ner::models_root().join(model_id);
+            tracing::info!(
+                model = model_id,
+                expected_path = %root.display(),
+                "conv-tiered: GliNER model not installed — per-chunk entity extraction disabled. Tiered ingest will use RAPTOR-derived entities only."
+            );
+            None
+        }
+    };
+
     let engine: Arc<CorpusEngine> = {
         let indexes_dir = data_dir.join("indexes");
         let provider_for_embed = Arc::clone(&provider);
@@ -948,66 +1005,10 @@ async fn run_daemon(args: &[String]) -> i32 {
                 }
             }
         };
-        // GliNER per-chunk entity extractor (spec
-        // `sovereign/docs/specs/CONV_TIERED_PORT.md` Phase 1). Loaded
-        // when the gliner-ner feature is on AND the model files are
-        // present at the configured path. Optional — falls back to
-        // RAPTOR-derived entities (Option A) when unavailable. The
-        // tiered runner fires this ahead of the LLM-heavy
-        // TieredEnrichmentProvider call so chunk_entities populates
-        // even if the LLM half fails or is killed mid-run.
-        let chunk_entity_extractor: Option<
-            std::sync::Arc<
-                dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor,
-            >,
-        > = {
-            let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
-            if sovereign_tools::gliner_ner::probe_model_available(model_id) {
-                let store_path = data_dir.join("sovereign.db");
-                match sovereign_store::sqlite::SqliteStateStore::open(&store_path) {
-                    Ok(store_for_extractor) => {
-                        match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
-                            Ok(ex) => {
-                                tracing::info!(
-                                    model = model_id,
-                                    "conv-tiered: GliNER extractor loaded for ingest hook"
-                                );
-                                Some(std::sync::Arc::new(
-                                    sovereign_tools::conv_tiered_provider::GlinerChunkExtractor::new(
-                                        Arc::new(store_for_extractor),
-                                        Arc::new(ex),
-                                    ),
-                                ) as Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>)
-                            }
-                            Err(e) => {
-                                tracing::warn!(
-                                    model = model_id,
-                                    error = %e,
-                                    "conv-tiered: GliNER load failed — tiered ingest will fall back to RAPTOR-only entities"
-                                );
-                                None
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            store_path = %store_path.display(),
-                            error = %e,
-                            "conv-tiered: cannot open state store for entity extractor — skipping"
-                        );
-                        None
-                    }
-                }
-            } else {
-                let root = sovereign_tools::gliner_ner::models_root().join(model_id);
-                tracing::info!(
-                    model = model_id,
-                    expected_path = %root.display(),
-                    "conv-tiered: GliNER model not installed — per-chunk entity extraction disabled. Tiered ingest will use RAPTOR-derived entities only."
-                );
-                None
-            }
-        };
+        // GliNER per-chunk entity extractor hoisted to outer scope
+        // above so the engine and the folder driver can share the
+        // same Arc<dyn> handle. Clone here to reuse.
+        let chunk_entity_extractor_for_engine = chunk_entity_extractor.clone();
 
         let mut engine_builder = CorpusEngine::new(recipes_dir, indexes_dir, embed)
             .with_embedding_model(&embed_model_name)
@@ -1017,10 +1018,58 @@ async fn run_daemon(args: &[String]) -> i32 {
         if let Some(provider) = tiered_provider {
             engine_builder = engine_builder.with_tiered_provider(provider);
         }
-        if let Some(extractor) = chunk_entity_extractor {
+        if let Some(extractor) = chunk_entity_extractor_for_engine {
             engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
         }
         Arc::new(engine_builder)
+    };
+
+    // ── Folder tiered deps ───────────────────────────────────────
+    // Watched-folder corpora reuse the conv-tiered table shape
+    // (`conv_*` tables, conv_uuid = corpus_id) via the
+    // `FolderTieredProvider`. The driver opens its own
+    // SqliteStateStore handle so this block is independent of the
+    // engine-side conv provider; both share the underlying db file
+    // (`~/.sovereign/sovereign.db`).
+    //
+    // Installed on the manager via `set_tiered_deps` after the
+    // manager is constructed (~line 1593 below). Without these,
+    // `enable_enrichment` falls back to the legacy subprocess.
+    let folder_tiered_deps: Option<
+        sovereign_tools::local_corpus::watched::enrich::TieredDeps,
+    > = {
+        let db_path = data_dir.join("sovereign.db");
+        match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
+            Ok(store) => {
+                let store_arc = Arc::new(store);
+                let folder_prov =
+                    sovereign_tools::conv_tiered_provider::FolderTieredProvider::new(
+                        store_arc,
+                        Arc::clone(&provider),
+                    );
+                let folder_prov_arc: Arc<
+                    dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider,
+                > = Arc::new(folder_prov);
+                tracing::info!(
+                    "watched_folder:tiered_deps_constructed — \
+                     FolderTieredProvider wired; folder enrichment routes \
+                     through in-process tiered driver"
+                );
+                Some(sovereign_tools::local_corpus::watched::enrich::TieredDeps {
+                    tiered_provider: folder_prov_arc,
+                    gliner_extractor: chunk_entity_extractor,
+                })
+            }
+            Err(e) => {
+                tracing::warn!(
+                    db_path = %db_path.display(),
+                    error = %e,
+                    "watched_folder:tiered_deps_unavailable — cannot open state store; \
+                     folder enrichment will fall back to the legacy subprocess"
+                );
+                None
+            }
+        }
     };
 
     // ── Tool registry (code intelligence + notes) ─────────────────
@@ -1597,6 +1646,14 @@ async fn run_daemon(args: &[String]) -> i32 {
                          chat_model or embed_model not configured; \
                          per-folder enrichment will return an error \
                          until models are picked"
+                    );
+                }
+                if let Some(deps) = folder_tiered_deps.clone() {
+                    manager.set_tiered_deps(deps).await;
+                    tracing::info!(
+                        "watched_folder:tiered_deps_installed — \
+                         enable_enrichment will route through the \
+                         in-process tiered driver"
                     );
                 }
                 Some(

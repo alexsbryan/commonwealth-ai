@@ -78,8 +78,8 @@
   }
   .cnt {
     font-size: 0.72rem;
-    background: rgba(240, 130, 130, 0.18);
-    color: #f6c0c0;
+    background: var(--coral-dim);
+    color: var(--coral);
     padding: 1px 8px;
     border-radius: 999px;
   }
@@ -91,7 +91,7 @@
   }
   .samples li {
     padding: 2px 0;
-    border-left: 2px solid rgba(255, 255, 255, 0.05);
+    border-left: 2px solid var(--bg-elevated);
     padding-left: 0.5rem;
   }
   .samples li.more {

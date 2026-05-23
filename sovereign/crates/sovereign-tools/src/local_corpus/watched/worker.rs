@@ -278,6 +278,40 @@ impl Worker {
 
         let mut snapshot = outcome.snapshot;
 
+        // Filter out docs already classified as failed-extraction
+        // (scanned PDFs without OCR, corrupt files, etc.). Without
+        // this, a folder whose only docs ALL fail extraction would
+        // (a) show the docs as `added` in every diff,
+        // (b) trigger `apply_update` which would fail when no docs
+        //     successfully extract,
+        // (c) leave the index without `_corpus_meta.json` because no
+        //     successful ingest ever wrote it,
+        // (d) trap the worker in `Errored` because the next sweep's
+        //     precondition guard at the bottom of this function would
+        //     fire on the missing meta.
+        // The failed-files list already surfaces unreadable docs to
+        // the UI; dropping them from the apply path is purely
+        // defensive — it doesn't hide the problem, just stops the
+        // loop. When OCR becomes available later (mid-run install
+        // via `set_ocr_ctx`), `collect_failed_files` above re-classifies
+        // the doc out of `failed_files`, this filter no-ops on it,
+        // and it lands in the next diff naturally.
+        let failed_ids: std::collections::HashSet<String> = state
+            .failed_files
+            .iter()
+            .map(|f| f.doc_id.clone())
+            .collect();
+        if !failed_ids.is_empty() {
+            let before = snapshot.len();
+            snapshot.retain(|doc_id, _| !failed_ids.contains(doc_id));
+            tracing::debug!(
+                corpus_id = %corpus_id,
+                dropped = before.saturating_sub(snapshot.len()),
+                remaining = snapshot.len(),
+                "watched_folder:snapshot_filtered_for_failed_files"
+            );
+        }
+
         // 5. Tombstone revivals — must run BEFORE diff, because a
         // revived doc should be reclassified from `unchanged` (which
         // happens if prior entries still hold it) or `added` (if

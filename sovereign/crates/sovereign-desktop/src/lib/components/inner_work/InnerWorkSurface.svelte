@@ -500,35 +500,29 @@
   // skills. The witness owns the page, full stop.
   let priorActiveSkillIds: string[] = [];
 
-  /// Snapshot + activate. Called on every entry into the surface
-  /// (first mount AND every later `active` true-transition).
+  // Surface skill id — tags every conversation this surface creates
+  // so routing applies the inner-work intent_policy + witness path.
+  // Co-located with the surface that owns it (2026-05-24
+  // architecture redesign). See `Runtime::resolve_active_mode`.
+  const SURFACE_SKILL_ID = "inner-work";
+
+  /// Per-visit entry. Pre-2026-05-24 this also snapshotted peer
+  /// skills + toggled the inner-work skill on (a workaround for the
+  /// global-registry-state routing model that would otherwise let
+  /// other active skills' tools leak into the witness path). With
+  /// routing now driven by the conversation's surface tag set at
+  /// create-time, peer skills can't pollute the witness path even
+  /// when active — the structural surface override is the single
+  /// source of truth. Entry becomes a no-op; kept as a hook so
+  /// future per-visit work (analytics, telemetry) has a clear seam.
   async function enterSurface(): Promise<void> {
-    try {
-      const all = await listSkills();
-      priorActiveSkillIds = all
-        .filter((s) => s.active && s.id !== "inner-work")
-        .map((s) => s.id);
-      for (const id of priorActiveSkillIds) {
-        try {
-          await toggleSkill(id, false);
-        } catch (e) {
-          console.warn(`inner-work: failed to deactivate ${id} on entry:`, e);
-        }
-      }
-    } catch (e) {
-      console.warn("inner-work: failed to snapshot skills on entry:", e);
-    }
-    try {
-      await toggleSkill("inner-work", true);
-    } catch (e) {
-      console.warn("inner-work: failed to activate skill on entry:", e);
-    }
+    // intentionally empty post-redesign
   }
 
-  /// Restore + finalize. Called on every exit (active flips false)
-  /// AND on the rare onDestroy path (window close mid-surface). Both
-  /// paths are best-effort; awaits are not appropriate here because
-  /// the user is navigating away.
+  /// Per-visit exit. Cancels any in-flight witness stream, flushes
+  /// the draft save, and triggers memory extraction so the
+  /// conversation's witness-tagged memories land before the user
+  /// can leave. Skill toggling removed (see `enterSurface`).
   function leaveSurface(): void {
     // If a witness response is in-flight, cancel it — leaving an
     // orphaned stream would render its message-complete event into
@@ -563,13 +557,6 @@
     // Drop any queued echo dots that haven't fired yet.
     for (const t of pendingEchoTimers) clearTimeout(t);
     pendingEchoTimers = [];
-    // Best-effort skill restoration. Sequence: deactivate
-    // inner-work, then re-enable each snapshot id.
-    toggleSkill("inner-work", false).catch(() => {});
-    for (const id of priorActiveSkillIds) {
-      toggleSkill(id, true).catch(() => {});
-    }
-    priorActiveSkillIds = [];
   }
 
   // Per-visit lifecycle. `active` is true on first mount (default
@@ -799,10 +786,13 @@
 
     // Lazy-create the conversation on first summon of the day. This
     // keeps "open, write nothing, close" from leaving empty entries
-    // in the main conversation list.
+    // in the main conversation list. Tagged with the inner-work
+    // surface skill so routing applies the witness handler from
+    // turn one — without the tag the conversation would fall
+    // through to default chat (2026-05-24 architecture redesign).
     if (!conversationId) {
       try {
-        const created = await createConversation();
+        const created = await createConversation(SURFACE_SKILL_ID);
         conversationId = created.id;
         innerWorkSession.setConversationIdFor(date, created.id);
         // Title with the dateline so the entry is recognisable in

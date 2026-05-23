@@ -477,30 +477,115 @@ pub async fn recipe_author_restore_checkpoint(
 /// exit). The runtime's `primary_skill_id_for_conversation` prefers
 /// LocalOnly skills, and the recipe-author skill is `local_only`, so
 /// any conversation started while the workspace is open is tagged
-/// with `skill_id = "recipe-author"`.
+/// Build the per-turn situated-context preamble for a Recipe Author
+/// conversation. Diagnosed 2026-05-23: the desktop chat surface was
+/// dispatching raw user messages through `send_message_stream`,
+/// giving the agent no signal about which project was active. The
+/// agent would respond by asking the user to paste the recipe TOML
+/// + validation errors because it had no other way to see them
+/// — even though `RecipeProject`, the recipe.toml on disk, and the
+/// validation tool were all reachable from the same process.
 ///
-/// Returns `true` when the skill is active after the call. Idempotent
-/// — calling activate twice or deactivate twice is a no-op.
+/// This command renders the M1-CLI-equivalent splice block:
+///
+///   - `[Project state]` — charter, corpus state, recent decisions,
+///     outstanding issues, capability requests (from
+///     `recipe_author::situated_context::render`).
+///   - `[Current recipe TOML]` — fenced TOML block when
+///     `<recipes_dir>/<recipe_id>/recipe.toml` exists, or a note
+///     that the recipe hasn't been drafted yet.
+///   - `[Latest validation]` — inline-validated by parsing the same
+///     TOML and surfacing the first errors. Empty when no recipe.
+///
+/// Frontend calls this before every turn and concatenates the block
+/// with the user's message: `{block}\n[Partner says]\n{user_text}`.
+/// Cheap (~5KB block, no network) so re-running every turn is fine
+/// and keeps the agent's view of project state fresh.
 #[tauri::command]
-pub async fn recipe_author_set_workspace_active(
+pub async fn recipe_author_build_prelude(
     state: State<'_, Arc<AppState>>,
-    active: bool,
-) -> Result<bool, String> {
-    const SKILL_ID: &str = "recipe-author";
-    {
-        let mut config = state.config.write().await;
-        let already = config.active_skills.iter().any(|id| id == SKILL_ID);
-        if active && !already {
-            config.active_skills.push(SKILL_ID.into());
-            config.save()?;
-        } else if !active && already {
-            config.active_skills.retain(|id| id != SKILL_ID);
-            config.save()?;
-        } else {
-            // No change — skip the runtime rebuild.
-            return Ok(active);
+    feature_id: String,
+) -> Result<String, String> {
+    let (notes, features) = handles(&state).await?;
+    let project = recipe_author::RecipeProject::load(
+        &feature_id,
+        Arc::clone(&notes),
+        Arc::clone(&features),
+    )
+    .await
+    .map_err(|e| format!("Recipe Author: load project '{feature_id}' failed: {e}"))?;
+
+    let situated = recipe_author::situated_context::render(&project)
+        .await
+        .map_err(|e| format!("Recipe Author: render situated context failed: {e}"))?;
+
+    // Recipe TOML — resolve via the project's recipe_id (None until
+    // the agent's first `recipe_write_structured` call). When None
+    // we tell the agent explicitly so it knows to draft from scratch
+    // rather than assume one exists.
+    let summary = project
+        .read_summary()
+        .map_err(|e| format!("Recipe Author: read summary failed: {e}"))?;
+    let (recipe_block, validation_block) = match &summary.recipe_id {
+        Some(recipe_id) => {
+            let path = sovereign_root_dir()
+                .join("recipes")
+                .join(recipe_id)
+                .join("recipe.toml");
+            match std::fs::read_to_string(&path) {
+                Ok(toml) => {
+                    let validation = inline_validate_recipe(&toml);
+                    let recipe = format!(
+                        "\n[Current recipe TOML]\nPath: {}\n```toml\n{}\n```\n",
+                        path.display(),
+                        toml.trim_end(),
+                    );
+                    (recipe, validation)
+                }
+                Err(e) => (
+                    format!(
+                        "\n[Current recipe TOML]\nNot readable at {}: {e}\n",
+                        path.display()
+                    ),
+                    String::new(),
+                ),
+            }
         }
-    }
-    crate::state::rebuild_runtime(&state).await?;
-    Ok(active)
+        None => (
+            "\n[Current recipe TOML]\n(no recipe drafted yet — use \
+             `recipe_write_structured` to create one)\n"
+                .to_string(),
+            String::new(),
+        ),
+    };
+
+    let block = format!(
+        "[Project state]\n{situated}{recipe_block}{validation_block}\n[Partner says]\n"
+    );
+    Ok(block)
 }
+
+/// Inline TOML-parse validation. Mirrors what `RecipeValidateTool`
+/// produces but runs in-process so the prelude doesn't need to dance
+/// around the tool dispatcher. Returns an empty string when the
+/// recipe parses cleanly — the agent doesn't need to see a "passes"
+/// notice every turn.
+fn inline_validate_recipe(toml: &str) -> String {
+    match toml::from_str::<corpus_engine::Recipe>(toml) {
+        Ok(_) => String::new(),
+        Err(e) => format!(
+            "\n[Latest validation]\nRecipe does NOT parse. First error:\n{e}\n"
+        ),
+    }
+}
+
+fn sovereign_root_dir() -> std::path::PathBuf {
+    if let Ok(p) = std::env::var("SOVEREIGN_HOME") {
+        return std::path::PathBuf::from(p);
+    }
+    if let Some(home) = dirs::home_dir() {
+        return home.join(".sovereign");
+    }
+    std::path::PathBuf::from(".sovereign")
+}
+

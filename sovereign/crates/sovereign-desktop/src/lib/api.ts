@@ -130,15 +130,34 @@ export async function resumeSession(
   });
 }
 
-export async function createConversation(): Promise<CreateConversationResponse> {
-  return invoke("create_conversation");
+/** Create a new conversation, optionally tagged with the surface
+ *  that owns it (`surfaceSkillId`). The tag drives routing for
+ *  every subsequent turn — the workspace skill the surface declares
+ *  here is the one the runtime uses to resolve `intent_policy`.
+ *  Pass `undefined` for default-chat conversations.
+ *
+ *  See the 2026-05-24 architecture redesign in
+ *  `SqliteStateStore::insert_empty_conversation` for context on why
+ *  the tag lives on the conversation row instead of on global
+ *  registry state. */
+export async function createConversation(
+  surfaceSkillId?: string,
+): Promise<CreateConversationResponse> {
+  return invoke("create_conversation", { surfaceSkillId });
 }
 
+/** List conversations filtered by their surface tag. Each surface
+ *  passes its own `surfaceSkillId` (or `undefined` for default chat).
+ *  Cross-surface visibility is structurally restricted — the default
+ *  sidebar only sees default-chat conversations; Inner Work history
+ *  only sees inner-work conversations; Recipe Author only sees its
+ *  own. */
 export async function listConversations(
   limit?: number,
   offset?: number,
+  surfaceSkillId?: string,
 ): Promise<ConversationEntry[]> {
-  return invoke("list_conversations", { limit, offset });
+  return invoke("list_conversations", { limit, offset, surfaceSkillId });
 }
 
 export async function getConversation(
@@ -1315,15 +1334,19 @@ export async function recipeAuthorRestoreCheckpoint(
   });
 }
 
-/** Toggle the recipe-author skill in `active_skills`. Called on
- *  workspace mount (active=true) so primary_skill_id_for_conversation
- *  picks the recipe-author system prompt for new conversations
- *  started while the workspace is open. */
-export async function recipeAuthorSetWorkspaceActive(
-  active: boolean,
-): Promise<boolean> {
-  return invoke("recipe_author_set_workspace_active", { active });
+/** Build the per-turn situated-context preamble for a Recipe Author
+ *  conversation. Returns a `[Project state]…[Current recipe TOML]…
+ *  [Latest validation]…[Partner says]\n` block that the chat surface
+ *  concatenates with the user's message before dispatching through
+ *  `sendMessageStream`. Without this, the agent has no idea which
+ *  project is active and answers questions like "fix the recipe"
+ *  by asking the user to paste it. */
+export async function recipeAuthorBuildPrelude(
+  featureId: string,
+): Promise<string> {
+  return invoke("recipe_author_build_prelude", { featureId });
 }
+
 
 // ─── Atlas Inspector (Phase 1) ───────────────────────────────
 

@@ -691,8 +691,8 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
   .btn-select:hover:not(:disabled) {
-    background: #8FD28E;
-    border-color: #8FD28E;
+    background: color-mix(in srgb, var(--growth) 80%, white);
+    border-color: color-mix(in srgb, var(--growth) 80%, white);
     transform: translateY(-1px);
   }
   .btn-select:disabled {
@@ -839,27 +839,27 @@
   }
 
   .tier-basic {
-    background: rgba(110, 136, 86, 0.15);
+    background: var(--growth-glow);
     color: var(--text-muted);
-    border: 1px solid rgba(110, 136, 86, 0.25);
+    border: 1px solid color-mix(in srgb, var(--growth) 25%, transparent);
   }
 
   .tier-standard {
-    background: rgba(74, 186, 216, 0.12);
+    background: var(--sky-dim);
     color: var(--sky);
-    border: 1px solid rgba(74, 186, 216, 0.25);
+    border: 1px solid color-mix(in srgb, var(--sky) 30%, transparent);
   }
 
   .tier-premium {
     background: linear-gradient(
       90deg,
-      rgba(201, 168, 76, 0.12) 0%,
-      rgba(240, 168, 72, 0.30) 40%,
-      rgba(201, 168, 76, 0.12) 80%
+      var(--accent-dim) 0%,
+      color-mix(in srgb, var(--accent) 32%, transparent) 40%,
+      var(--accent-dim) 80%
     );
     background-size: 200% 100%;
     animation: premium-glimmer 2.5s ease-in-out infinite;
-    border: 1px solid rgba(201, 168, 76, 0.4);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
     color: var(--accent-light);
   }
 

@@ -708,6 +708,68 @@ async fn details_handler(
             failed_at_unix: *failed_at_unix,
             reason: reason.clone(),
         },
+        // Tiered (in-process) status — project into the existing
+        // Off / Building / Complete API shapes so the desktop UI
+        // doesn't need new variants today. Ready → Complete (with
+        // `built_at_unix` from the Tiered payload). Failed inside
+        // Tiered would have surfaced as the Failed arm above; this
+        // arm is reached only for non-terminal states.
+        sovereign_tools::local_corpus::watched::state::EnrichmentRuntimeStatus::Tiered {
+            state: tier_state,
+            started_at_unix,
+            built_at_unix,
+            doc_count,
+        } => {
+            use sovereign_core::types::AssetState;
+            match tier_state {
+                AssetState::Ready => EnrichmentStatus::Complete {
+                    pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
+                    built_at_unix: built_at_unix.unwrap_or(0),
+                    doc_count: *doc_count,
+                    current_doc_count: state.entries.len(),
+                },
+                AssetState::Failed { reason } => EnrichmentStatus::Failed {
+                    pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
+                    failed_at_unix: built_at_unix.unwrap_or(*started_at_unix),
+                    reason: reason.clone(),
+                },
+                AssetState::Pending => EnrichmentStatus::Building {
+                    pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
+                    phase: "tiered:pending".into(),
+                    current: 0,
+                    total: 0,
+                    started_at_unix: *started_at_unix,
+                },
+                AssetState::Indexing { chunks_done, chunks_total } => EnrichmentStatus::Building {
+                    pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
+                    phase: "tiered:indexing".into(),
+                    current: *chunks_done,
+                    total: *chunks_total,
+                    started_at_unix: *started_at_unix,
+                },
+                AssetState::PartiallyReady => EnrichmentStatus::Building {
+                    pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
+                    phase: "tiered:partially_ready".into(),
+                    current: 0,
+                    total: 0,
+                    started_at_unix: *started_at_unix,
+                },
+                AssetState::BuildingSkeleton { chunks_done, chunks_total } => EnrichmentStatus::Building {
+                    pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
+                    phase: "tiered:building_skeleton".into(),
+                    current: *chunks_done,
+                    total: *chunks_total,
+                    started_at_unix: *started_at_unix,
+                },
+                AssetState::MultiHopReady => EnrichmentStatus::Building {
+                    pipeline_id: pipeline_id_for_enrichment.clone().unwrap_or_default(),
+                    phase: "tiered:multi_hop_ready".into(),
+                    current: 0,
+                    total: 0,
+                    started_at_unix: *started_at_unix,
+                },
+            }
+        }
     };
 
     Json(DetailsResponse {

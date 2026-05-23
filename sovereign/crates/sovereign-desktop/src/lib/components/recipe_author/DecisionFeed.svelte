@@ -79,7 +79,7 @@
     gap: 0.55rem;
   }
   li {
-    border-left: 2px solid rgba(120, 200, 240, 0.4);
+    border-left: 2px solid color-mix(in srgb, var(--lavender) 50%, transparent);
     padding: 0.1rem 0 0.1rem 0.55rem;
   }
   .row-head {
@@ -95,7 +95,7 @@
     letter-spacing: 0.04em;
   }
   .kind.deferred {
-    color: #f0c98c;
+    color: var(--accent-light);
   }
   .attr {
     color: var(--muted, #8a8c93);

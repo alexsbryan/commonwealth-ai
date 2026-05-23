@@ -415,7 +415,7 @@ fn main() -> ExitCode {
             recipe_author_commands::recipe_author_new_project,
             recipe_author_commands::recipe_author_dashboard_state,
             recipe_author_commands::recipe_author_restore_checkpoint,
-            recipe_author_commands::recipe_author_set_workspace_active,
+            recipe_author_commands::recipe_author_build_prelude,
             mesh_commands::mesh_create,
             mesh_commands::mesh_join,
             mesh_commands::mesh_preview_join_link,

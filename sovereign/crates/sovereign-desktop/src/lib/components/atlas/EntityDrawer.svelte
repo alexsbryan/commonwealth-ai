@@ -188,6 +188,11 @@
 </aside>
 
 <style>
+  /* Entity drawer — Lavender Court palette. Sibling of
+   * AtlasConvCorpusView + ConvDetail. Seed label uses gold accent
+   * (it's the active query handle); conv links + co-chips use
+   * lavender-flavoured backgrounds to read as "this is the
+   * conversations world". */
   .entity-drawer {
     position: fixed;
     top: 0;
@@ -195,35 +200,36 @@
     bottom: 0;
     width: 360px;
     max-width: 90vw;
-    background: var(--surface, #1a1a1a);
-    border-left: 1px solid var(--border, #333);
-    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border-mid);
+    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.35);
     display: flex;
     flex-direction: column;
-    padding: 1rem 1.1rem;
-    gap: 1rem;
+    padding: 18px 20px;
+    gap: 16px;
     overflow-y: auto;
     z-index: 50;
-    color: var(--text-primary, #ddd);
+    color: var(--text-primary);
     font-family: var(--font-sans);
   }
   .drawer-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: 8px;
   }
   .seed {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: 4px;
     min-width: 0;
   }
   .seed-label {
-    font-size: 0.7rem;
+    font-size: 0.66rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted, #888);
+    letter-spacing: 0.1em;
+    color: var(--accent-light);
+    font-weight: 600;
   }
   .seed-text {
     margin: 0;
@@ -232,53 +238,63 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
   }
   .close-button {
     background: transparent;
-    border: 1px solid var(--border, #444);
-    color: inherit;
+    border: 1px solid var(--border-mid);
+    color: var(--text-secondary);
     width: 28px;
     height: 28px;
-    border-radius: 0.4rem;
+    border-radius: var(--radius);
     cursor: pointer;
     font-size: 1.1rem;
     line-height: 1;
     flex-shrink: 0;
+    font-family: inherit;
+    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
   }
   .close-button:hover {
-    background: var(--surface-2, #2a2a2a);
+    background: var(--bg-elevated);
+    border-color: var(--border-bright);
+    color: var(--text-primary);
   }
   .totals {
     display: flex;
-    gap: 1rem;
-    padding: 0.75rem;
-    background: var(--surface-2, #232323);
-    border-radius: 0.5rem;
+    gap: 18px;
+    padding: 12px 14px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
   }
   .total {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.1rem;
+    gap: 2px;
   }
   .total-n {
     font-size: 1.4rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
-    color: var(--text-primary, #ddd);
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
   }
   .total-label {
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--text-muted, #888);
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    font-weight: 500;
   }
   .section-h {
-    margin: 0 0 0.4rem;
-    font-size: 0.78rem;
+    margin: 0 0 6px;
+    font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted, #888);
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    font-weight: 600;
   }
   .label-list,
   .conv-list,
@@ -288,78 +304,85 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.25rem;
+    gap: 4px;
   }
   .label-row {
     display: flex;
     justify-content: space-between;
-    padding: 0.25rem 0.5rem;
-    background: var(--surface-2, #232323);
-    border-radius: 0.35rem;
-    font-size: 0.85rem;
+    padding: 4px 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
   }
   .label-count {
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
   .hint {
-    margin: 0.4rem 0 0;
-    color: var(--text-muted, #888);
-    font-size: 0.78rem;
+    margin: 6px 0 0;
+    color: var(--text-muted);
+    font-size: 0.76rem;
     font-style: italic;
   }
   .conv-link,
   .co-chip {
     width: 100%;
-    background: var(--surface-2, #232323);
-    border: 1px solid transparent;
-    color: inherit;
-    border-radius: 0.4rem;
-    padding: 0.4rem 0.55rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: var(--radius);
+    padding: 7px 10px;
     text-align: left;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 0.5rem;
+    gap: 8px;
     font-size: 0.82rem;
+    font-family: inherit;
+    transition: border-color 120ms ease, background 120ms ease;
   }
   .conv-link:hover,
   .co-chip:hover {
-    background: var(--surface-3, #2a2a2a);
-    border-color: var(--border, #444);
+    background: var(--lavender-dim);
+    border-color: var(--lavender);
   }
   .conv-link:disabled {
     cursor: default;
-    opacity: 0.7;
+    opacity: 0.6;
   }
   .conv-id {
-    font-family: var(--font-mono, monospace);
-    font-size: 0.78rem;
-    color: var(--text-muted, #999);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--text-muted);
   }
   .conv-count,
   .co-meta {
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
-    font-size: 0.76rem;
+    font-size: 0.74rem;
   }
   .co-chip {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.15rem;
+    gap: 2px;
   }
   .co-name {
-    color: var(--text-primary, #ddd);
+    color: var(--text-primary);
+    font-weight: 500;
   }
   .status {
-    color: var(--text-muted, #888);
-    padding: 0.6rem 0;
+    color: var(--text-secondary);
+    padding: 10px 0;
+    font-size: 0.88rem;
   }
   .status.error {
-    color: #e25555;
+    color: var(--error);
   }
   .status.empty p {
-    margin: 0.3rem 0;
+    margin: 4px 0;
+    color: var(--text-muted);
   }
 </style>

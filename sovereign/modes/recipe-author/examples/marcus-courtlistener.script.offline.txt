@@ -1,0 +1,34 @@
+# Offline smoke script for the recipe-author agent loop.
+#
+# Used to verify wiring (Runtime → handle_recipe_author_turn_stream →
+# tool registry → recipe_*) WITHOUT hitting the upstream CourtListener
+# API. Pair with `--no-fetch` to skip the harness's post-trial sample
+# fetch:
+#
+#   sovereign recipe-agent live-trial \
+#     --charter sovereign/modes/recipe-author/examples/marcus-courtlistener.charter.md \
+#     --script  sovereign/modes/recipe-author/examples/marcus-courtlistener.script.offline.txt \
+#     --skills-dir sovereign/modes \
+#     --no-fetch
+#
+# Each partner turn is explicit about NOT calling probe_url / web_fetch
+# / web_search / recipe_test — anything that touches the network. The
+# agent should still demonstrate a meaningful tool-call loop
+# (recipe_write_structured → recipe_validate → decision_log →
+# checkpoint), which is what we want to prove end-to-end.
+
+# Turn 1 — draft from the charter, no network research.
+Draft the recipe TOML for this project. DO NOT call probe_url,
+web_fetch, web_search, or recipe_test — assume the CourtListener REST
+v4 API lives at https://www.courtlistener.com/api/rest/v4/opinions/
+with `Authorization: Token {api_token}` and offset pagination via
+`page=` (page_size 20). Declare `api_token`, `court`, and `start_date`
+as parameters. Call recipe_write_structured, then recipe_validate.
+Summarize what you wrote in two sentences.
+
+# Turn 2 — log the decision + checkpoint. Still no network.
+Log a decision (kind=source_choice, attribution=partner) recording
+that we picked CourtListener REST v4 over PACER for v1 because PACER
+access is a real constraint per the charter. Then create a checkpoint
+labelled "offline-smoke-v1". Do not call recipe_test or any probe — we
+are intentionally not hitting the API in this run.

@@ -641,3 +641,42 @@ pub fn run_chunk_entities_migration(conn: &Connection) -> rusqlite::Result<()> {
         ",
     )
 }
+
+/// Surface-skill backfill (2026-05-24). The pre-redesign routing
+/// model toggled the inner-work / recipe-author skill in the global
+/// `active_skills` registry on workspace mount; the runtime then
+/// resolved the primary skill via
+/// `SkillRegistry::primary_skill_id_for_conversation` at dispatch
+/// time. Conversations created under that model never recorded
+/// which surface owned them on their own row.
+///
+/// The new model tags `conversations.skill_id` at create-time from
+/// `SURFACE_SKILL_ID` constants exported by each surface
+/// (`RecipeChatSurface`, `InnerWorkSurface`). Conversations created
+/// under the old model have `skill_id IS NULL` and would surface
+/// in the wrong workspace list + lose their workspace prompt.
+///
+/// Backfill rule: a conversation whose extracted memories carry
+/// `source_skill_id = '<surface>'` was demonstrably owned by that
+/// surface. Tag the conversation accordingly. Guarded on
+/// `skill_id IS NULL` so re-running is a no-op and conversations
+/// already tagged (by the new path) are not clobbered. Memories
+/// are the truth-source because the inner-work memory wall already
+/// stamped them at extraction time.
+pub fn run_surface_skill_backfill(conn: &Connection) -> rusqlite::Result<()> {
+    for surface in ["inner-work", "recipe-author"] {
+        let _ = conn.execute(
+            "UPDATE conversations
+             SET skill_id = ?1
+             WHERE skill_id IS NULL
+               AND EXISTS (
+                 SELECT 1 FROM memories
+                 WHERE memories.source_conversation_id = conversations.id
+                   AND memories.source_skill_id = ?1
+                   AND memories.deleted_at IS NULL
+               )",
+            [surface],
+        );
+    }
+    Ok(())
+}

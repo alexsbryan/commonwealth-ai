@@ -254,10 +254,6 @@
     // without a real daemon. The state is held on
     // `__sovereign_test__.recipeAuthor` so specs can manipulate it
     // via `setHandler` overrides without rewriting all the defaults.
-    recipe_author_set_workspace_active: ({ active }) => {
-      window.__sovereign_test__.recipeAuthor.active = !!active;
-      return !!active;
-    },
     recipe_author_list_projects: () => {
       return window.__sovereign_test__.recipeAuthor.projects.slice();
     },

@@ -143,33 +143,24 @@
     rootActionInflight = false;
   }
 
-  // Folder-ingest v1 §3.3 — enrichment lifecycle. The user picks
-  // a pipeline at enable time; the daemon runs the build in a
-  // subprocess; progress events stream back through the
-  // refreshing details digest. v1 ships with three atlas
-  // pipelines, defaulting to philosophy_atlas because the spec's
-  // mission-doc users (program managers, lawyers, students,
-  // researchers, journalists) most often deal with argumentative
-  // / analytical material.
-  const ATLAS_PIPELINES = [
-    {
-      id: "philosophy_atlas",
-      label: "Philosophy / argumentative",
-      hint: "Default. Best for documents arguing positions or analyzing questions.",
-    },
-    {
-      id: "referential_atlas",
-      label: "Reference material",
-      hint: "Encyclopedias, wikis, structured reference works. Skips configuration phase.",
-    },
-    {
-      id: "literary_atlas",
-      label: "Literary / narrative",
-      hint: "Long-form prose with character / event arcs.",
-    },
-  ];
+  // Folder-ingest v1 §3.3 — enrichment lifecycle.
+  //
+  // Default path: in-process tiered driver (RAPTOR clusters +
+  // TF-IDF motif index + GliNER chunk_entities feeding the PPR
+  // multi-hop retrieval surface). Universal across corpus shapes
+  // — the pipeline_id is accepted but ignored. AssetState
+  // (PartiallyReady → MultiHopReady → Ready) streams back as
+  // EnrichmentRuntimeStatus::Tiered events the details digest
+  // projects into the existing Building/Complete/Failed shapes.
+  //
+  // Legacy fallback default: daemons without tiered deps installed
+  // still spawn `sovereign-cli enrich build` and that path requires
+  // a pipeline_id from {philosophy_atlas, referential_atlas,
+  // literary_atlas}. The tiered path accepts but ignores this value.
+  // Picker UI removed (universal under tiered) — hard-code the
+  // legacy default here so back-compat installs still work.
+  const DEFAULT_LEGACY_PIPELINE = "philosophy_atlas";
 
-  let pickedPipeline = $state(ATLAS_PIPELINES[0].id);
   let enrichActionInflight = $state(false);
   let enrichError: string | null = $state(null);
   let pollHandle: ReturnType<typeof setInterval> | null = null;
@@ -194,7 +185,7 @@
     enrichActionInflight = true;
     enrichError = null;
     try {
-      await lcWatchEnrichEnable(details.corpus_id, pickedPipeline);
+      await lcWatchEnrichEnable(details.corpus_id, DEFAULT_LEGACY_PIPELINE);
       await reload();
     } catch (e) {
       enrichError = String(e);
@@ -449,60 +440,49 @@
       </section>
     {/if}
 
-    <!-- Atlas enrichment lifecycle. Off / Building / Complete /
+    <!-- Tiered enrichment lifecycle. Off / Building / Complete /
          Failed render distinct affordances. Honest cost framing
          per §3.3 — the user reads what enrichment does, when it
          works well/poorly, what it costs, and what's recoverable
-         BEFORE clicking Enable. -->
+         BEFORE clicking Enable.
+
+         As of the watched-folder tiered port: enable invokes the
+         in-process tiered driver (RAPTOR + motifs + GliNER entity
+         graph). The pipeline picker below is vestigial under the
+         tiered path — only the legacy subprocess (daemons without
+         FolderTieredProvider installed) honours it. Kept so the
+         picker still works on those installs without UI changes. -->
     <section class="section enrichment">
       <h3 class="section-title">Atlas enrichment</h3>
 
       {#if details.enrichment.kind === "off"}
         <p class="section-lede">
-          When enabled, Sovereign reads across documents in this
-          folder to surface positions, fault lines, exemplars, and
-          structural connections — atlas-style coverage you can
-          use for richer situated context. Enable when this folder's
-          contents share a coherent domain.
+          Turn this on and Sovereign reads across the folder to build
+          a richer map of what's in it — section-level summaries, the
+          words and phrases that recur and matter, and the people,
+          places, and ideas that connect files to each other. Answers
+          can then cite scene-level context, not just the nearest
+          paragraph.
         </p>
         <ul class="honest-list">
           <li>
-            <strong>When it works well</strong> — documents about
-            related topics, arguing related questions, or describing
-            a shared domain.
+            <strong>Worth it for</strong> — notes, papers, transcripts,
+            anything where files refer to each other. The more your
+            files share — recurring names, repeated concepts, the same
+            cast of characters — the more this lifts answers.
           </li>
           <li>
-            <strong>When it works less well</strong> — heterogeneous
-            folders mixing unrelated topics, reference material
-            without argumentative structure, or grab-bag collections.
-            The atlas may produce thin or arbitrary results; you can
-            disable without harm.
+            <strong>Skip it for</strong> — small folders (a handful of
+            files), grab-bags of unrelated topics, or pure data dumps
+            (CSVs, exports). Nothing breaks, but the extra map adds
+            little.
           </li>
           <li>
-            <strong>What's recoverable</strong> — disable any time;
-            the folder reverts to retrieval-only. The chunk index
-            stays.
+            <strong>Easy to undo</strong> — disable any time. The
+            folder keeps working with plain search; the enrichment
+            data drops cleanly.
           </li>
         </ul>
-
-        <fieldset class="pipeline-picker">
-          <legend>Pipeline</legend>
-          {#each ATLAS_PIPELINES as p (p.id)}
-            <label class="radio">
-              <input
-                type="radio"
-                name="atlas-pipeline"
-                value={p.id}
-                checked={pickedPipeline === p.id}
-                onchange={() => (pickedPipeline = p.id)}
-              />
-              <span>
-                <strong>{p.label}</strong>
-                <span class="hint inline">— {p.hint}</span>
-              </span>
-            </label>
-          {/each}
-        </fieldset>
 
         {#if details.live_entries > 0}
           {@const est = costEstimate(details.live_entries)}
@@ -907,36 +887,6 @@
     padding: 6px 10px;
     border-left: 2px solid var(--lk-rule);
     line-height: 1.4;
-  }
-  .pipeline-picker {
-    border: 1px solid var(--lk-rule);
-    border-radius: var(--radius);
-    padding: 12px 14px;
-    margin: 12px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  .pipeline-picker legend {
-    padding: 0 6px;
-    font-size: var(--lk-size-meta);
-    color: var(--lk-ink-soft);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .radio {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    font-size: var(--lk-size-meta);
-    color: var(--lk-ink);
-    line-height: 1.4;
-    cursor: pointer;
-  }
-  .radio input[type="radio"] { margin-top: 4px; }
-  .hint.inline {
-    color: var(--lk-ink-faded);
-    font-weight: normal;
   }
   .cost {
     margin: 8px 0 0;

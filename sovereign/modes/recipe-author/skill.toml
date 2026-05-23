@@ -3,6 +3,11 @@ id = "recipe-author"
 name = "Recipe Author"
 version = "0.2.0"
 description = "Authoring partner for a domain expert building a Sovereign corpus + investigation schema. Translates between domain language and recipe TOML; runs the author → validate → test loop; escalates to the maintainer when the engine doesn't have a capability the project needs."
+# User-chosen workspace surface (entered via the nav rail). Wins
+# over any active background skill when chats are dispatched, and
+# wins the recency tie-break against other workspace skills like
+# inner-work — whichever was most recently activated owns the chat.
+activation_kind = "workspace"
 
 # `[routing]` retired: recipe-author is a USER-CHOSEN workspace
 # (entered via the desktop sidebar), not a router-triggered mode.
@@ -28,7 +33,20 @@ optional = []
 [inference]
 privacy            = "local_only"
 capability_hint    = "general"
-latency_class      = "normal"
+# Diagnosed 2026-05-23. Prior config used `latency_class = "normal"`
+# which routes through the Fast slot (Gemma 4B). The recipe-author
+# workflow REQUIRES tool-orchestrated authoring — `recipe_write_structured`,
+# `recipe_validate`, `recipe_test`, `decision_log`, `probe_url` —
+# none of which Gemma 4B emits reliably. Symptom: every "fix the
+# recipe" / "draft it" turn returned advisory text + a follow-up
+# question instead of a tool envelope, exactly what the skill prompt
+# explicitly forbids ("Act, don't announce"). Bumping to `extended`
+# routes through the Primary slot (35B-class) which has the
+# instruction-following + structured-output discipline to drive the
+# author → validate → test loop. Higher latency per turn (~5-10s
+# vs ~1s) but the per-turn outcome shifts from "another Q&A" to
+# "concrete progress on the recipe".
+latency_class      = "extended"
 min_context_tokens = 16384
 max_output_tokens  = 4096
 register           = "factual"

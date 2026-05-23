@@ -86,8 +86,8 @@
   .new-btn {
     width: 100%;
     padding: 0.5rem 0.7rem;
-    background: rgba(120, 200, 240, 0.12);
-    border: 1px solid rgba(120, 200, 240, 0.3);
+    background: var(--lavender-dim);
+    border: 1px solid color-mix(in srgb, var(--lavender) 35%, transparent);
     color: inherit;
     border-radius: 4px;
     cursor: pointer;
@@ -95,7 +95,7 @@
     text-align: left;
   }
   .new-btn:hover {
-    background: rgba(120, 200, 240, 0.18);
+    background: var(--lavender-dim);
   }
   .empty {
     color: var(--muted, #8a8c93);
@@ -126,11 +126,11 @@
     text-align: left;
   }
   .row:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--bg-elevated);
   }
   .row.active {
-    background: rgba(120, 200, 240, 0.12);
-    border-color: rgba(120, 200, 240, 0.3);
+    background: var(--lavender-dim);
+    border-color: color-mix(in srgb, var(--lavender) 35%, transparent);
   }
   .row-title {
     font-weight: 500;
@@ -146,15 +146,15 @@
     font-size: 0.7rem;
     padding: 1px 6px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-elevated);
   }
   .status.pass {
-    background: rgba(120, 220, 160, 0.18);
-    color: #b9f0c9;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .status.fail {
-    background: rgba(240, 130, 130, 0.18);
-    color: #f6c0c0;
+    background: var(--coral-dim);
+    color: var(--coral);
   }
   .muted {
     color: var(--muted, #8a8c93);

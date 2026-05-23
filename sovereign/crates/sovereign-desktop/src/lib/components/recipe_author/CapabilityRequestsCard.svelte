@@ -49,7 +49,7 @@
     gap: 0.5rem;
   }
   li {
-    border-left: 2px solid rgba(240, 180, 100, 0.5);
+    border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
     padding: 0.1rem 0 0.1rem 0.55rem;
   }
   .row-head {
@@ -60,7 +60,7 @@
   }
   .status {
     text-transform: uppercase;
-    color: #f0c98c;
+    color: var(--accent-light);
     font-weight: 600;
     letter-spacing: 0.04em;
   }

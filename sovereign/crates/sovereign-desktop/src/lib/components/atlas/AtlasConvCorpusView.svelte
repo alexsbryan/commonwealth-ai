@@ -225,62 +225,102 @@
 {/if}
 
 <style>
+  /* Atlas conv-corpus view — Lavender Court palette.
+   * All colour, border, and radius tokens come from app.css; no
+   * hardcoded fallbacks (the prior version drifted with stale
+   * --surface/--surface-2/--border-strong references that didn't
+   * map onto any real token). State pills use the app's semantic
+   * roles (growth = Ready, accent = in-flight, coral = pending,
+   * error = failed). Entity chips wear the lavender wash that
+   * also marks the Conversations tile in AtlasIndex. */
   .conv-corpus-view {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    padding: 1.5rem 2rem;
-    max-width: 60rem;
+    gap: 18px;
+    padding: 28px 32px 44px;
+    max-width: 64rem;
     margin: 0 auto;
+    font-family: var(--font-sans);
+    color: var(--text-primary);
   }
   .view-header {
     display: flex;
     align-items: flex-start;
-    gap: 1rem;
+    gap: 16px;
   }
   .back-button {
     background: transparent;
-    border: 1px solid var(--border, #444);
-    border-radius: 0.4rem;
-    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    padding: 6px 12px;
     cursor: pointer;
-    color: inherit;
-    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-family: inherit;
+    letter-spacing: 0.01em;
+    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
   }
   .back-button:hover {
-    background: var(--surface-2, #2a2a2a);
+    background: var(--bg-elevated);
+    border-color: var(--border-bright);
+    color: var(--text-primary);
   }
   .header-text h1 {
     margin: 0;
-    font-size: 1.4rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
   }
   .subtitle {
-    margin: 0.2rem 0 0;
-    color: var(--text-muted, #888);
-    font-size: 0.85rem;
+    margin: 4px 0 0;
+    color: var(--text-muted);
+    font-size: 0.82rem;
   }
   .search-row input {
     width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--border, #444);
-    border-radius: 0.4rem;
-    background: var(--surface, #1a1a1a);
-    color: inherit;
-    font-size: 0.95rem;
+    padding: 9px 14px;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    background: var(--bg-input);
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    font-family: inherit;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+  .search-row input::placeholder {
+    color: var(--text-muted);
+  }
+  .search-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-surface);
   }
   .status {
-    padding: 1rem;
-    color: var(--text-muted, #888);
+    padding: 18px 4px;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
   }
   .status.error {
-    color: var(--error, #d44);
+    color: var(--error);
   }
   .status.empty {
     text-align: center;
+    padding: 32px 4px;
   }
   .status .hint {
-    margin-top: 0.6rem;
-    font-size: 0.85rem;
+    margin-top: 8px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+  .status .hint code {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 1px 5px;
+    background: var(--bg-elevated);
+    border-radius: 3px;
+    color: var(--text-secondary);
   }
   .conv-list {
     list-style: none;
@@ -288,7 +328,7 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: 8px;
   }
   .conv-row {
     display: contents;
@@ -296,113 +336,142 @@
   .conv-button {
     width: 100%;
     text-align: left;
-    background: var(--surface, #1a1a1a);
-    border: 1px solid var(--border, #333);
-    border-radius: 0.5rem;
-    padding: 0.8rem 1rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
     cursor: pointer;
-    color: inherit;
+    color: var(--text-primary);
+    font-family: inherit;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 6px;
+    transition: border-color 140ms ease, background 140ms ease;
   }
   .conv-button:hover {
-    border-color: var(--border-strong, #555);
-    background: var(--surface-2, #222);
+    border-color: var(--border-bright);
+    background: var(--bg-elevated);
+  }
+  .conv-button:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-dim);
   }
   .conv-header {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    gap: 0.8rem;
+    gap: 12px;
   }
   .conv-title {
     font-weight: 600;
-    font-size: 0.98rem;
-    line-height: 1.3;
+    font-size: 0.95rem;
+    line-height: 1.35;
     flex: 1;
+    color: var(--text-primary);
   }
+  /* State pills — each carries its own semantic role token.
+   * Tinted background + matching foreground; no hardcoded RGBA. */
   .state-pill {
-    font-size: 0.7rem;
+    font-size: 0.66rem;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0.15rem 0.5rem;
-    border-radius: 0.7rem;
-    background: var(--surface-2, #333);
-    color: var(--text-muted, #aaa);
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
     white-space: nowrap;
+    font-weight: 500;
   }
   .state-ready {
-    background: rgba(46, 160, 67, 0.18);
-    color: #4ec06b;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .state-multihopready {
-    background: rgba(212, 167, 44, 0.18);
-    color: #d4a72c;
+    background: var(--accent-dim);
+    color: var(--accent-light);
   }
   .state-partiallyready {
-    background: rgba(212, 167, 44, 0.12);
-    color: #c39530;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
   }
   .state-pending {
-    background: rgba(150, 150, 150, 0.18);
-    color: #999;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
   }
   .state-failed {
-    background: rgba(216, 76, 76, 0.18);
-    color: #e25555;
+    background: var(--coral-dim);
+    color: var(--coral);
   }
   .conv-meta {
     display: flex;
-    gap: 0.8rem;
-    font-size: 0.78rem;
-    color: var(--text-muted, #888);
+    gap: 14px;
+    font-size: 0.76rem;
+    color: var(--text-muted);
     align-items: center;
   }
   .tiny-pill {
-    font-size: 0.65rem;
+    font-size: 0.62rem;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: 0.1rem 0.4rem;
-    border-radius: 0.6rem;
-    background: rgba(150, 150, 150, 0.14);
-    color: #999;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-weight: 500;
   }
   .entity-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.3rem;
-    margin-top: 0.2rem;
+    gap: 5px;
+    margin-top: 4px;
   }
+  /* Entity chip — lavender wash. Same colour family as the
+   * Conversations tile on AtlasIndex, so the chips read as part
+   * of the same world rather than imported blue from another app. */
   .entity-chip {
-    background: rgba(96, 132, 232, 0.16);
-    color: #92ade8;
-    border-radius: 0.5rem;
-    padding: 0.1rem 0.55rem;
-    font-size: 0.75rem;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
+    border-radius: var(--radius);
+    padding: 2px 9px;
+    font-size: 0.74rem;
     border: 1px solid transparent;
     font-family: inherit;
     cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
   }
   .entity-chip:hover {
-    background: rgba(96, 132, 232, 0.28);
-    border-color: rgba(96, 132, 232, 0.55);
+    background: var(--lavender-glow);
+    border-color: var(--lavender);
+    color: var(--text-primary);
   }
   .entity-chip:focus-visible {
-    outline: 2px solid rgba(96, 132, 232, 0.7);
+    outline: 2px solid var(--lavender);
     outline-offset: 1px;
   }
   .load-more {
     display: flex;
     justify-content: center;
-    padding: 0.8rem;
+    padding: 12px;
   }
   .load-more-button {
     background: transparent;
-    border: 1px solid var(--border, #444);
-    border-radius: 0.4rem;
-    padding: 0.4rem 1rem;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    padding: 7px 18px;
     cursor: pointer;
-    color: inherit;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 0.85rem;
+    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+  }
+  .load-more-button:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent-light);
+    background: var(--accent-glow);
+  }
+  .load-more-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 </style>

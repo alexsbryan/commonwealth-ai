@@ -203,7 +203,7 @@
   }
 
   .approve:hover:not(:disabled) {
-    background: #6ed876;
+    background: color-mix(in srgb, var(--success) 85%, white);
   }
 
   .deny {
@@ -212,6 +212,6 @@
   }
 
   .deny:hover:not(:disabled) {
-    background: #ef5350;
+    background: color-mix(in srgb, var(--error) 85%, white);
   }
 </style>

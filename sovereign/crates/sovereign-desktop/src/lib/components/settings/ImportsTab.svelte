@@ -835,22 +835,22 @@
     flex-wrap: wrap;
   }
   .gliner-controls .badge.installed {
-    background: rgba(78, 192, 107, 0.18);
-    color: #6dd58a;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .gliner-controls .badge.not-installed {
-    background: rgba(150, 150, 150, 0.18);
-    color: var(--text-muted, #888);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
   }
   .gliner-controls .badge.running {
-    background: rgba(96, 132, 232, 0.18);
-    color: #92ade8;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
     font-variant-numeric: tabular-nums;
   }
   .install-btn,
   .redownload-btn {
-    background: var(--accent, #5077e5);
-    color: white;
+    background: var(--accent);
+    color: var(--text-on-accent);
     border: none;
     border-radius: 6px;
     padding: 6px 14px;

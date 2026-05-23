@@ -119,7 +119,7 @@
     font-size: 0.75rem;
   }
   .diag-status.online {
-    color: var(--success, #22c55e);
+    color: var(--success);
   }
   .diag-status.offline {
     color: var(--text-muted);
@@ -127,9 +127,9 @@
 
   .diag-error {
     padding: 6px 10px;
-    background: rgba(220, 60, 60, 0.08);
+    background: color-mix(in srgb, var(--error) 10%, transparent);
     color: var(--error);
-    border: 1px solid rgba(220, 60, 60, 0.25);
+    border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
     border-radius: var(--radius);
     font-size: 0.78rem;
   }

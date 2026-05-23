@@ -48,18 +48,22 @@
     | "inner_work"
     | "atlas";
 
-  type RailMode = "chat" | "inner_work" | "atlas" | "settings";
+  type RailMode = "chat" | "inner_work" | "atlas" | "recipe_author" | "settings";
 
   // `let view: AppView = $state("loading")` would narrow `view` to the
   // literal type `"loading"`, breaking every later `view === "chat"`
   // comparison. The generic form keeps the full union.
   let view = $state<AppView>("loading");
 
-  // The rail is visible in all post-onboarding views. recipe_author
-  // maps to "chat" on the rail since it's a sub-surface of outer work.
+  // Rail mirrors view for every top-level destination. Recipe Author
+  // joins Outer / Inner / Atlas / Settings as a peer when the
+  // workspace is enabled in DesktopConfig; without the opt-in the
+  // rail entry is hidden by NavRail itself (no rail-mode collapse
+  // needed).
   let railMode: RailMode = $derived(
     view === "inner_work" ? "inner_work"
     : view === "atlas" ? "atlas"
+    : view === "recipe_author" ? "recipe_author"
     : view === "settings" ? "settings"
     : "chat"
   );
@@ -332,7 +336,7 @@
     conversationListRef?.loadConversations?.();
   }
 
-  function handleRailNavigate(mode: "chat" | "inner_work" | "atlas" | "settings") {
+  function handleRailNavigate(mode: RailMode) {
     // Close reading surface when leaving outer work to keep layout clean.
     if (mode !== "chat" && readingSession.isOpen) {
       readingSession.closeReading();
@@ -397,7 +401,7 @@
         <div class="loading-mark">◈</div>
       </div>
       <h1>SOVEREIGN</h1>
-      <p class="loading-tagline">your ai · your data · your mesh</p>
+      <p class="loading-tagline">your ai</p>
       {#if backendError}
         <p class="error">{backendError}</p>
       {:else}
@@ -417,7 +421,11 @@
 {:else}
   <!-- Post-onboarding chrome shell: rail + content area side by side -->
   <div class="app-chrome">
-    <NavRail active={railMode} onNavigate={handleRailNavigate} />
+    <NavRail
+      active={railMode}
+      onNavigate={handleRailNavigate}
+      showRecipeAuthor={recipeAuthorEnabled}
+    />
     <div class="app-chrome-content">
       <!-- InnerWork keep-alive layer: mounted on first visit, shown/hidden
            via CSS so the mount lifecycle (skill snapshot, conversation
@@ -469,9 +477,6 @@
               bind:this={conversationListRef}
               {selectedConversationId}
               onSelect={handleConversationSelect}
-              onOpenRecipeAuthor={recipeAuthorEnabled
-                ? () => (view = "recipe_author")
-                : undefined}
             />
           </aside>
           <main class="main-content">

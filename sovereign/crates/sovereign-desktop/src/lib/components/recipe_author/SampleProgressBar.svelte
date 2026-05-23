@@ -59,15 +59,15 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: var(--border-mid);
+    border: 1px solid var(--border-bright);
   }
   .ladder li.hit {
-    color: #b9f0c9;
+    color: var(--growth);
   }
   .ladder li.hit .dot {
-    background: rgba(120, 220, 160, 0.55);
-    border-color: rgba(120, 220, 160, 0.75);
+    background: color-mix(in srgb, var(--growth) 60%, transparent);
+    border-color: color-mix(in srgb, var(--growth) 80%, transparent);
   }
   .now {
     margin: 0.3rem 0 0;

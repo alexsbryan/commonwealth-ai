@@ -196,12 +196,12 @@
   .ppr-bridge {
     margin-top: 2px;
     font-size: 0.72rem;
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     font-style: italic;
     padding-left: 1.2em;
   }
   .bridge-seed {
-    color: #92ade8;
+    color: var(--lavender-light);
     font-style: normal;
     font-weight: 500;
   }

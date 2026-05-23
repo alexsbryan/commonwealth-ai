@@ -168,13 +168,39 @@ pub fn policy_for(
             source: PolicySource::InnerWorkMode,
             effective_intent: Some(effective_intent),
         },
-        Some(MODE_RECIPE_AUTHOR) => IntentPolicy {
-            tool_filter: ToolFilter::allow(recipe_author_tools()),
-            synthesis_addendum: None,
-            register: effective_register,
-            source: PolicySource::RecipeAuthorMode,
-            effective_intent: Some(effective_intent),
-        },
+        Some(MODE_RECIPE_AUTHOR) => {
+            // Recipe-author workspace REQUIRES tool orchestration —
+            // every meaningful turn calls `recipe_write_structured`,
+            // `recipe_validate`, `recipe_test`, `decision_log`,
+            // `probe_url`, etc. Without forcing the intent here, the
+            // router classifies most messages ("fix the recipe",
+            // "draft it", "test it") as `SimpleQuery` or
+            // `KnowledgeQuery` and dispatches through plain-chat
+            // handlers that never enter a tool loop. The agent's
+            // response then becomes advisory text + a follow-up
+            // question — exactly what the skill prompt forbids
+            // ("Act, don't announce"). Forcing `ComplexTask` routes
+            // every turn through `handle_complex_task`, which runs
+            // the agent loop on the Primary slot with the recipe
+            // tool catalog.
+            //
+            // Continuation is preserved as-is — it carries a task_id
+            // for an in-flight tool loop, so re-classifying it would
+            // break the resume contract.
+            let recipe_intent = match &effective_intent {
+                Intent::ComplexTask | Intent::Continuation { .. } => {
+                    effective_intent.clone()
+                }
+                _ => Intent::ComplexTask,
+            };
+            IntentPolicy {
+                tool_filter: ToolFilter::allow(recipe_author_tools()),
+                synthesis_addendum: None,
+                register: effective_register,
+                source: PolicySource::RecipeAuthorMode,
+                effective_intent: Some(recipe_intent),
+            }
+        }
         Some(other) => {
             // Unknown mode — warn and fall through. Forward-compat:
             // adding a third mode in the future shouldn't crash;

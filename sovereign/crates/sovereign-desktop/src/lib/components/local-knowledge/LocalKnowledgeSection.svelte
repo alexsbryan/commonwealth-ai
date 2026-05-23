@@ -28,8 +28,15 @@
     /// on the sample-atlas progress screen. App closes Settings + the
     /// toast fires when the atlas finishes.
     onDropToChat?: () => void;
+    /// True when this component is rendered inside the Settings
+    /// Knowledge tab (post-tab-merge). The wrapper supplies its own
+    /// heading + lede, so we drop the internal header and lift the
+    /// "Add" affordance above the source lists — adding sources is
+    /// the primary action when the user opens this tab, and a buried
+    /// CTA was the main hierarchy complaint.
+    embedded?: boolean;
   }
-  let { onOpenChatWithSeed, onDropToChat }: Props = $props();
+  let { onOpenChatWithSeed, onDropToChat, embedded = false }: Props = $props();
 
   import "./_theme.css";
 
@@ -173,8 +180,8 @@
   }
 </script>
 
-<div class="lk lk-section">
-  {#if mode.kind === "idle"}
+<div class="lk lk-section" class:lk-section--embedded={embedded}>
+  {#if mode.kind === "idle" && !embedded}
     <header class="head">
       <h1 class="title">Local knowledge</h1>
       <p class="lede">
@@ -211,39 +218,85 @@
       onDiscard={handleDiscardIncomplete}
     />
 
-    <section class="plate">
-      <div class="plate-head">
-        <p class="lk-label">Sources</p>
-        <span class="plate-count lk-folio">{corpora.length}</span>
-      </div>
-      <LocalKnowledgeList {corpora} onRemove={handleRemove} {onOpenChatWithSeed} />
-    </section>
+    {#if embedded}
+      <!-- Embedded ordering: Add → Sources → Watched. The settings
+           tab wraps with its own h3/lede so the Add affordance is
+           the first action the user sees on the local side. Mirrors
+           the Catalog corpora pattern above (install tier picker on
+           top, list below). -->
+      <section class="plate plate-add">
+        <div class="plate-head">
+          <p class="lk-label">Add a source</p>
+        </div>
+        <LocalKnowledgeAdd
+          onPickFolder={enterFolderFlow}
+          onPickObsidian={enterObsidianFlow}
+          onPickWatchedFolder={enterWatchedFolderFlow}
+        />
+      </section>
 
-    {#if watchedCorpora.length > 0}
+      {#if corpora.length > 0}
+        <section class="plate">
+          <div class="plate-head">
+            <p class="lk-label">Folders</p>
+            <span class="plate-count lk-folio">{corpora.length}</span>
+          </div>
+          <LocalKnowledgeList {corpora} onRemove={handleRemove} {onOpenChatWithSeed} />
+        </section>
+      {/if}
+
+      {#if watchedCorpora.length > 0}
+        <section class="plate">
+          <div class="plate-head">
+            <p class="lk-label">Watched folders</p>
+            <span class="plate-count lk-folio">{watchedCorpora.length}</span>
+          </div>
+          <WatchedFolderList
+            corpora={watchedCorpora}
+            onChanged={reload}
+            onOpenDetail={(corpusId) =>
+              (mode = { kind: "watched-folder-detail", corpusId })}
+          />
+        </section>
+      {/if}
+    {:else}
+      <!-- Standalone ordering: Sources → Watched → Add. Preserved for
+           any caller that still mounts this component outside the
+           Settings Knowledge tab. -->
       <section class="plate">
         <div class="plate-head">
-          <p class="lk-label">Watched folders</p>
-          <span class="plate-count lk-folio">{watchedCorpora.length}</span>
+          <p class="lk-label">Sources</p>
+          <span class="plate-count lk-folio">{corpora.length}</span>
         </div>
-        <WatchedFolderList
-          corpora={watchedCorpora}
-          onChanged={reload}
-          onOpenDetail={(corpusId) =>
-            (mode = { kind: "watched-folder-detail", corpusId })}
+        <LocalKnowledgeList {corpora} onRemove={handleRemove} {onOpenChatWithSeed} />
+      </section>
+
+      {#if watchedCorpora.length > 0}
+        <section class="plate">
+          <div class="plate-head">
+            <p class="lk-label">Watched folders</p>
+            <span class="plate-count lk-folio">{watchedCorpora.length}</span>
+          </div>
+          <WatchedFolderList
+            corpora={watchedCorpora}
+            onChanged={reload}
+            onOpenDetail={(corpusId) =>
+              (mode = { kind: "watched-folder-detail", corpusId })}
+          />
+        </section>
+      {/if}
+
+      <section class="plate">
+        <div class="plate-head">
+          <p class="lk-label">Add</p>
+        </div>
+        <LocalKnowledgeAdd
+          onPickFolder={enterFolderFlow}
+          onPickObsidian={enterObsidianFlow}
+          onPickWatchedFolder={enterWatchedFolderFlow}
         />
       </section>
     {/if}
-
-    <section class="plate">
-      <div class="plate-head">
-        <p class="lk-label">Add</p>
-      </div>
-      <LocalKnowledgeAdd
-        onPickFolder={enterFolderFlow}
-        onPickObsidian={enterObsidianFlow}
-        onPickWatchedFolder={enterWatchedFolderFlow}
-      />
-    </section>
   {:else if mode.kind === "folder-flow"}
     <FolderDropFlow
       initialPath={mode.initialPath}
@@ -271,6 +324,33 @@
   .lk-section {
     padding: 28px 32px 44px;
     position: relative;
+  }
+  /* Embedded mode: rendered inside the Settings Knowledge tab.
+     The outer doc-section already supplies horizontal gutter +
+     vertical rhythm; collapse our own padding so we don't
+     double-indent or push the page longer than necessary.
+     SettingsPanel's `.lk-embed :global(...)` overrides also touch
+     `.head`, `.plate`, and `.plate-head` for the same reason. */
+  .lk-section--embedded {
+    padding: 0;
+  }
+  /* The Add affordance reads first in embedded mode. Give it a
+     subtle stamp-wash background so it stands apart from the
+     listing plates without shouting. */
+  .lk-section--embedded :global(.plate.plate-add) {
+    padding: 14px 16px 16px;
+    border: 1px dashed var(--lk-rule);
+    border-radius: 6px;
+    background: linear-gradient(
+      180deg,
+      var(--lk-stamp-glow, transparent) 0%,
+      transparent 100%
+    );
+  }
+  .lk-section--embedded :global(.plate.plate-add .plate-head) {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 8px;
   }
 
   .head {

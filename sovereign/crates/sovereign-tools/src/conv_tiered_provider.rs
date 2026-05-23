@@ -66,6 +66,17 @@ use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
 
 /// Concrete provider wiring the corpus-engine dispatch trait to the
 /// real RAPTOR builder + SQLite persistence.
+///
+/// ## Folder-corpus reuse convention
+///
+/// Watched-folder corpora reuse this provider's persistence shape
+/// (`conv_raptor_nodes` / `conv_motifs` / `conv_skeletons`) by calling
+/// `enrich_conversation` with `conv_uuid = corpus_id`. The bucket
+/// classification (`ConvBucket::classify(chunks.len())`) handles
+/// folder size variability — a 5-file folder takes the Tiny synthetic
+/// path; a 5000-chunk vault takes the LongTail RAPTOR path. The
+/// `FolderTieredProvider` sibling below wraps this with the folder
+/// runner from `corpus-engine::enrichment::tiered::run_folder_tiered_enrichment`.
 pub struct ConvTieredProvider {
     store: Arc<SqliteStateStore>,
     inference: Arc<dyn InferenceProvider>,
@@ -639,6 +650,216 @@ fn mean_vector(vectors: &[Vec<f32>]) -> Vec<f32> {
         *slot /= n;
     }
     out
+}
+
+// ─── Folder-corpus tiered provider ──────────────────────────────────
+//
+// Watched-folder corpora go through the same `conv_*` table shape but
+// with `conv_uuid = corpus_id` and motif extraction enabled (the
+// briefing layer surfaces motifs alongside RAPTOR signposts). Dispatch
+// is via `corpus_engine::enrichment::tiered::run_folder_tiered_enrichment`,
+// which collapses all source_doc_ids into one bag before calling
+// `enrich_conversation`.
+
+use sovereign_core::conv_tiered::ConvMotifRow;
+
+/// Concrete tiered provider for watched-folder corpora. Persists into
+/// the same SQLite tables as `ConvTieredProvider` (conv_raptor_nodes /
+/// conv_motifs / conv_skeletons) under `conv_uuid = corpus_id`, plus
+/// builds + saves the TF-IDF motif index that conversation provider
+/// skips (folder briefings surface motifs as recurring-vocabulary
+/// anchors per `TIERED_RETRIEVAL.md`).
+pub struct FolderTieredProvider {
+    store: Arc<SqliteStateStore>,
+    inference: Arc<dyn InferenceProvider>,
+}
+
+impl FolderTieredProvider {
+    pub fn new(store: Arc<SqliteStateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
+        Self { store, inference }
+    }
+
+    pub fn into_handle(self) -> Arc<dyn TieredEnrichmentProvider> {
+        Arc::new(self)
+    }
+}
+
+#[async_trait]
+impl TieredEnrichmentProvider for FolderTieredProvider {
+    async fn enrich_conversation(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        chunks: Vec<EnrichmentChunkRow>,
+        embeddings: Vec<Vec<f32>>,
+        bucket: ConvBucket,
+    ) -> Result<()> {
+        let chunk_count = chunks.len();
+        let updated_at = Utc::now().timestamp();
+        // Folder corpora often have chunks tagged with the source file
+        // name as `title`; reuse that as the overview when present,
+        // otherwise stamp a stable "Folder: <id>" fallback so the
+        // briefing renderer doesn't ship "(untitled conversation)" in
+        // a watched-folder context.
+        let chunk_title = conv_title_from_chunks(&chunks);
+        let overview_title = if chunk_title == "(untitled conversation)" {
+            format!("Folder: {corpus_id}")
+        } else {
+            chunk_title
+        };
+
+        let result: std::result::Result<(Vec<ConvRaptorNodeRow>, Vec<ConvMotifRow>), Error> =
+            match bucket {
+                ConvBucket::Tiny => Ok((
+                    synthesize_tiny_node(
+                        corpus_id,
+                        conv_uuid,
+                        &overview_title,
+                        &chunks,
+                        &embeddings,
+                        updated_at,
+                    ),
+                    Vec::new(),
+                )),
+                ConvBucket::Small
+                | ConvBucket::Medium
+                | ConvBucket::Large
+                | ConvBucket::LongTail => {
+                    build_folder_artifacts(
+                        corpus_id,
+                        conv_uuid,
+                        &chunks,
+                        &embeddings,
+                        self.inference.clone(),
+                        updated_at,
+                    )
+                    .await
+                }
+            };
+
+        match result {
+            Ok((nodes, motifs)) => {
+                if let Err(e) = self
+                    .store
+                    .save_conv_raptor_nodes(corpus_id, conv_uuid, &nodes)
+                    .await
+                {
+                    persist_state(
+                        &self.store,
+                        corpus_id,
+                        conv_uuid,
+                        ConvTieredState::Failed,
+                        chunk_count,
+                        Some(overview_title.clone()),
+                        updated_at,
+                    )
+                    .await;
+                    return Err(Error::Database(format!(
+                        "folder_tiered: save_conv_raptor_nodes({corpus_id}, {conv_uuid}): {e}"
+                    )));
+                }
+                if !motifs.is_empty() {
+                    if let Err(e) = self
+                        .store
+                        .save_conv_motifs(corpus_id, conv_uuid, &motifs)
+                        .await
+                    {
+                        // Best-effort. Motif failure degrades briefing
+                        // signposts but the RAPTOR tree already
+                        // persisted is the load-bearing retrieval
+                        // signal.
+                        tracing::warn!(
+                            corpus = corpus_id,
+                            conv = conv_uuid,
+                            error = %e,
+                            "folder_tiered: save_conv_motifs failed; continuing without motif index"
+                        );
+                    }
+                }
+                persist_state(
+                    &self.store,
+                    corpus_id,
+                    conv_uuid,
+                    ConvTieredState::Ready,
+                    chunk_count,
+                    Some(overview_title),
+                    updated_at,
+                )
+                .await;
+                Ok(())
+            }
+            Err(e) => {
+                persist_state(
+                    &self.store,
+                    corpus_id,
+                    conv_uuid,
+                    ConvTieredState::Failed,
+                    chunk_count,
+                    Some(overview_title),
+                    updated_at,
+                )
+                .await;
+                Err(e)
+            }
+        }
+    }
+}
+
+/// Folder Non-Tiny path: call the corpus-free `build_atlas_artifacts`
+/// (sovereign-tools/src/document_asset.rs Move 3 helper) for both
+/// RAPTOR nodes and TF-IDF motif index, then convert each to the
+/// conv-scoped row shapes for persistence.
+async fn build_folder_artifacts(
+    corpus_id: &str,
+    conv_uuid: &str,
+    chunks: &[EnrichmentChunkRow],
+    embeddings: &[Vec<f32>],
+    inference: Arc<dyn InferenceProvider>,
+    updated_at: i64,
+) -> std::result::Result<(Vec<ConvRaptorNodeRow>, Vec<ConvMotifRow>), Error> {
+    let raptor_chunks: Vec<ChunkInput> = chunks
+        .iter()
+        .map(|c| ChunkInput {
+            chunk_id: c.id as u32,
+            content: c.content.clone(),
+        })
+        .collect();
+
+    let (nodes, motifs) = crate::document_asset::build_atlas_artifacts(
+        &inference,
+        &raptor_chunks,
+        embeddings,
+        DocumentTypeTag::Unknown,
+    )
+    .await
+    .map_err(|e| {
+        Error::Database(format!(
+            "folder_tiered: build_atlas_artifacts({corpus_id}, {conv_uuid}): {e}"
+        ))
+    })?;
+
+    let mut node_rows = Vec::with_capacity(nodes.len());
+    for node in nodes {
+        node_rows.push(raptor_node_to_row(node, corpus_id, conv_uuid, updated_at)?);
+    }
+
+    let motif_rows: Vec<ConvMotifRow> = motifs
+        .into_iter()
+        .map(|m| {
+            let occ_json = serde_json::to_string(&m.occurrence_chunk_ids)
+                .unwrap_or_else(|_| "[]".into());
+            ConvMotifRow {
+                corpus_id: corpus_id.to_string(),
+                conv_uuid: conv_uuid.to_string(),
+                term: m.term,
+                tf_idf_score: m.tf_idf_score as f64,
+                occurrence_chunk_ids_json: occ_json,
+                is_distinctive: m.is_distinctive,
+            }
+        })
+        .collect();
+
+    Ok((node_rows, motif_rows))
 }
 
 #[cfg(test)]

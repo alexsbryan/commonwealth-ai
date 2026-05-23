@@ -35,7 +35,7 @@
   .toggle {
     background: transparent;
     border: none;
-    color: rgba(120, 200, 240, 0.85);
+    color: var(--lavender-light);
     cursor: pointer;
     padding: 0;
     font-size: 0.78rem;

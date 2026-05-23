@@ -320,6 +320,7 @@ fn make_skill(id: &str, _trigger: &str, synthesis: Option<&str>) -> Skill {
         name: id.to_string(),
         version: "0.1.0".to_string(),
         description: String::new(),
+        activation_kind: ActivationKind::default(),
         planner_templates: vec![PlanTemplate {
             name: "test".to_string(),
             trigger: "test trigger".to_string(),
