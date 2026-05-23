@@ -220,6 +220,21 @@ pub struct WatcherToggles {
     /// git-poll signal entirely (fall back to FS + lazy).
     #[serde(default = "default_git_poll_secs")]
     pub git_poll_secs: u64,
+    /// Per-project extra path components to drop at the FS watcher
+    /// seam, in addition to the universal `.git` / `target` /
+    /// `node_modules` / etc. hard-exclude list.
+    ///
+    /// Matched against any path component, so an entry of
+    /// `.sovereign` excludes `<root>/.sovereign/**` and
+    /// `<root>/sub/.sovereign/**` alike. Use this for tool-local
+    /// state directories (sovereign's own `.sovereign/`, generated
+    /// asset trees, IDE caches that aren't covered by `.gitignore`).
+    ///
+    /// The init CLI (`sovereign project init --watcher-ignore PATH`,
+    /// repeatable) is the canonical way to seed this; editing
+    /// `~/.sovereign/projects.json` directly also works.
+    #[serde(default = "default_ignore_paths")]
+    pub ignore_paths: Vec<String>,
 }
 
 impl Default for WatcherToggles {
@@ -230,6 +245,7 @@ impl Default for WatcherToggles {
             lint: true,
             scip_debounce_ms: default_scip_debounce_ms(),
             git_poll_secs: default_git_poll_secs(),
+            ignore_paths: default_ignore_paths(),
         }
     }
 }
@@ -237,6 +253,15 @@ impl Default for WatcherToggles {
 fn default_true() -> bool { true }
 fn default_scip_debounce_ms() -> u64 { 2000 }
 fn default_git_poll_secs() -> u64 { 30 }
+/// Default ignore_paths seeded at project registration. `.sovereign/`
+/// is the daemon's project-local state directory (notes.db, mesh.db,
+/// features.db + their SQLite WAL/SHM sidecars) — including it by
+/// default keeps the freshly-registered project quiet immediately.
+/// Users in other deployment shapes can replace this via
+/// `--watcher-ignore` at init time.
+fn default_ignore_paths() -> Vec<String> {
+    vec![".sovereign".to_string()]
+}
 fn default_registered_at() -> String {
     chrono::Utc::now().to_rfc3339()
 }

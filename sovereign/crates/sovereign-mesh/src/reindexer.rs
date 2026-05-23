@@ -390,7 +390,11 @@ async fn run_worker(ctx: WorkerCtx) {
 
     // Filesystem watcher. Held for the lifetime of the task so
     // the notify backend is released when the worker exits.
-    let _fs_watcher = match start_fs_watcher(&entry.root, _fs_tx) {
+    let _fs_watcher = match start_fs_watcher(
+        &entry.root,
+        &entry.watchers.ignore_paths,
+        _fs_tx,
+    ) {
         Ok(w) => Some(w),
         Err(e) => {
             tracing::warn!(
@@ -728,10 +732,11 @@ async fn execute_rebuild(
 
 fn start_fs_watcher(
     root: &Path,
+    extra_ignores: &[String],
     tx: mpsc::Sender<Event>,
 ) -> notify::Result<RecommendedWatcher> {
     let root = root.to_path_buf();
-    let filter = build_ignore_filter(&root);
+    let filter = build_ignore_filter(&root, extra_ignores);
 
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
         let Ok(event) = res else {
@@ -766,14 +771,26 @@ fn is_source_event(event: &Event) -> bool {
 
 struct IgnoreFilter {
     matcher: Option<ignore::gitignore::Gitignore>,
+    /// User-configured extras from `WatcherToggles::ignore_paths`.
+    /// Matched against any path component, same shape as
+    /// `HARD_EXCLUDE`. Empty for projects registered before the
+    /// field existed (serde default fills in `.sovereign`).
+    extra_ignores: Vec<String>,
 }
 
 impl IgnoreFilter {
     fn is_ignored(&self, path: &Path) -> bool {
-        // Hard-exclude a small set of directories even without a
-        // .gitignore. These are never source-relevant in any
-        // language we support, and on macOS `node_modules/` alone
-        // can easily push 100k events/sec during `npm install`.
+        // Hard-exclude path components that are never source-relevant in any
+        // language we support. The list complements the per-project
+        // `.gitignore` matcher below and the user-configurable
+        // `WatcherToggles::ignore_paths` — anything matched here is dropped
+        // at the watcher seam, before any event reaches the worker.
+        //
+        // Keep this list tight: only directory names that are universal noise
+        // across ecosystems (build outputs, VCS state, dep caches). Anything
+        // sovereign-specific or project-specific belongs in `ignore_paths`.
+        // On macOS `node_modules/` alone can push 100k events/sec during
+        // `npm install`, so this cheap component scan pays for itself.
         const HARD_EXCLUDE: &[&str] = &[
             ".git",
             "node_modules",
@@ -786,10 +803,11 @@ impl IgnoreFilter {
             ".venv",
             "venv",
         ];
-        if path
-            .components()
-            .any(|c| HARD_EXCLUDE.contains(&c.as_os_str().to_string_lossy().as_ref()))
-        {
+        if path.components().any(|c| {
+            let s = c.as_os_str().to_string_lossy();
+            HARD_EXCLUDE.contains(&s.as_ref())
+                || self.extra_ignores.iter().any(|e| e == s.as_ref())
+        }) {
             return true;
         }
         if let Some(m) = &self.matcher {
@@ -811,7 +829,7 @@ impl IgnoreFilter {
     }
 }
 
-fn build_ignore_filter(root: &Path) -> IgnoreFilter {
+fn build_ignore_filter(root: &Path, extra_ignores: &[String]) -> IgnoreFilter {
     let gitignore = root.join(".gitignore");
     let matcher = if gitignore.exists() {
         let mut builder = ignore::gitignore::GitignoreBuilder::new(root);
@@ -820,7 +838,10 @@ fn build_ignore_filter(root: &Path) -> IgnoreFilter {
     } else {
         None
     };
-    IgnoreFilter { matcher }
+    IgnoreFilter {
+        matcher,
+        extra_ignores: extra_ignores.to_vec(),
+    }
 }
 
 /// Decide whether the startup catch-up rebuild should fire for
@@ -946,20 +967,41 @@ mod tests {
     #[test]
     fn ignore_filter_excludes_hard_excludes_and_non_source_extensions() {
         let tmp = tempfile::tempdir().unwrap();
-        let filter = build_ignore_filter(tmp.path());
+        let filter = build_ignore_filter(tmp.path(), &[]);
         assert!(filter.is_ignored(&tmp.path().join("target/debug/foo.rs")));
         assert!(filter.is_ignored(&tmp.path().join("node_modules/x/index.js")));
         assert!(filter.is_ignored(&tmp.path().join("README.md")));
         assert!(filter.is_ignored(&tmp.path().join("docs/.git/HEAD")));
+        // .sovereign is NOT in HARD_EXCLUDE — it's a deployment convention,
+        // not universal noise. The project registry seeds it as a default
+        // ignore_path so it's still filtered for newly-registered projects.
+        assert!(!filter.is_ignored(&tmp.path().join(".sovereign/build.rs")));
         assert!(!filter.is_ignored(&tmp.path().join("src/main.rs")));
         assert!(!filter.is_ignored(&tmp.path().join("app/server.ts")));
+    }
+
+    #[test]
+    fn ignore_filter_honours_extra_ignores() {
+        let tmp = tempfile::tempdir().unwrap();
+        let extras = vec![".sovereign".to_string(), "my-cache".to_string()];
+        let filter = build_ignore_filter(tmp.path(), &extras);
+        // Project-local daemon state — SQLite WALs here would slip through
+        // any `.gitignore` that wasn't loaded, hence the explicit ignore.
+        assert!(filter.is_ignored(&tmp.path().join(".sovereign/notes.db-wal")));
+        assert!(filter.is_ignored(&tmp.path().join(".sovereign/build.rs")));
+        // A user-configured custom name applies the same way.
+        assert!(filter.is_ignored(&tmp.path().join("my-cache/some.rs")));
+        // Without the extras, a non-matching project shape isn't penalised.
+        assert!(!filter.is_ignored(&tmp.path().join("src/main.rs")));
+        let bare = build_ignore_filter(tmp.path(), &[]);
+        assert!(!bare.is_ignored(&tmp.path().join("my-cache/some.rs")));
     }
 
     #[test]
     fn ignore_filter_honours_gitignore() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::write(tmp.path().join(".gitignore"), "secret.rs\n").unwrap();
-        let filter = build_ignore_filter(tmp.path());
+        let filter = build_ignore_filter(tmp.path(), &[]);
         assert!(filter.is_ignored(&tmp.path().join("secret.rs")));
         assert!(!filter.is_ignored(&tmp.path().join("src/main.rs")));
     }

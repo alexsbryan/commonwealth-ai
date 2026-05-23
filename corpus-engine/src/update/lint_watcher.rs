@@ -350,11 +350,41 @@ async fn run_lint_subprocess(
     store: Arc<LintResultStore>,
 ) -> crate::error::Result<()> {
     let run_id = store.begin_run().await?;
+
+    // Snapshot the paths that triggered this run BEFORE clearing the
+    // stale set — the runner script (e.g. `sovereign-lint.sh`) uses
+    // them via `SOVEREIGN_CHANGED_PATHS` to scope `cargo check` to
+    // the actually-touched crates. Without this the script falls
+    // back to `git status`, which sees the entire working tree (not
+    // just what fs_change fired for) and runs a near-workspace
+    // check on every save. Joined with `:` to mirror Unix PATH and
+    // avoid quoting woes for paths with spaces.
+    let changed_paths_env: String = store
+        .stale_files_since_last_run()
+        .await
+        .ok()
+        .map(|paths| {
+            paths
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(":")
+        })
+        .unwrap_or_default();
+
     store.clear_stale().await?;
 
     let start = Instant::now();
     let mut child_cmd = Command::new("sh");
     child_cmd.arg("-c").arg(&command);
+    // Pass the snapshot through so the script can scope. Empty string
+    // means "no fs_change context" — the script falls through to its
+    // own discovery (workspace check, or a `git status` interactive
+    // path), which is the right behavior for the initial run before
+    // any events have fired.
+    if !changed_paths_env.is_empty() {
+        child_cmd.env("SOVEREIGN_CHANGED_PATHS", &changed_paths_env);
+    }
     child_cmd.kill_on_drop(true); // kill child when task is aborted or runtime drops
     child_cmd.stdout(std::process::Stdio::piped());
     child_cmd.stderr(std::process::Stdio::piped());
