@@ -125,6 +125,21 @@ pub struct SnapshotManifest {
     /// is junk-titles in the upstream list, not missing articles."
     #[serde(default)]
     pub notes: Option<String>,
+
+    /// Additional corpora bundled into this archive alongside the
+    /// primary `corpus_id`. Used by per-article-corpus pipelines (e.g.
+    /// SEP's 1770 `sep-<slug>` sibling corpora) so a single
+    /// `corpus install sep` restores both the canonical parent and
+    /// every per-article atlas. Each entry lands at
+    /// `indexes/<bundled_id>/` in the archive and extracts to
+    /// `~/.sovereign/indexes/<bundled_id>/` on restore.
+    ///
+    /// **Renaming caveat:** the `--as <new-id>` restore flag only
+    /// rewrites the primary corpus_id; bundled siblings retain their
+    /// archive names (which is the correct behavior — sibling ids are
+    /// load-bearing for query-time multi-corpus retrieval).
+    #[serde(default)]
+    pub bundled_corpora: Vec<String>,
 }
 
 impl SnapshotManifest {
@@ -159,6 +174,7 @@ impl SnapshotManifest {
             archive_size_bytes: None,
             archive_sha256: None,
             notes: None,
+            bundled_corpora: Vec::new(),
         }
     }
 
@@ -322,6 +338,14 @@ pub struct PublishOptions {
     /// picks based on whether they care about archive size or upload
     /// time more.
     pub zstd_level: i32,
+    /// Additional sibling corpora to bundle into the archive alongside
+    /// the primary index. Each entry is `(sibling_corpus_id,
+    /// sibling_index_dir)` — typically `("sep-aristotle",
+    /// PathBuf("~/.sovereign/indexes/sep-aristotle/"))`. Each sibling
+    /// tars under `indexes/<sibling_id>/` and its id is recorded in
+    /// `manifest.bundled_corpora`. Empty for the common single-corpus
+    /// case.
+    pub sibling_index_dirs: Vec<(String, PathBuf)>,
 }
 
 /// Result of a successful publish.
@@ -396,6 +420,7 @@ pub async fn publish_snapshot(opts: PublishOptions) -> Result<PublishOutcome> {
     manifest.source_recipe_sha256 = opts.source_recipe_sha256.clone();
     manifest.residual_gap_pct = opts.residual_gap_pct;
     manifest.notes = opts.notes.clone();
+    manifest.bundled_corpora = opts.sibling_index_dirs.iter().map(|(id, _)| id.clone()).collect();
 
     // Anchor a transactional view of any LanceDB datasets under
     // index_dir BEFORE the (slow) tar pass. The view is just a list of
@@ -597,6 +622,25 @@ fn write_snapshot_archive(
     if let Some(enrichment_dir) = opts.enrichment_dir.as_ref() {
         let enrichment_prefix = snapshot_enrichment_path(&manifest.corpus_id);
         tar.append_dir_all(&enrichment_prefix, enrichment_dir)?;
+    }
+
+    // Sibling-corpus bundling (e.g. SEP's 1770 per-article atlases).
+    // Each sibling tars under `indexes/<sibling_id>/`. If the sibling
+    // happens to carry a `chunks.lance/` we'd need Lance-aware capture
+    // — but the common case (per-article-atlas pipelines) has no Lance
+    // dataset, so naive walk is correct and cheap. Surface a hard error
+    // if we see one, rather than silently risk fragment-drop.
+    for (sibling_id, sibling_dir) in &opts.sibling_index_dirs {
+        let sibling_prefix = snapshot_index_path(sibling_id);
+        let sibling_lance = sibling_dir.join("chunks.lance");
+        if sibling_lance.is_dir() {
+            return Err(Error::InvalidInput(format!(
+                "sibling corpus '{sibling_id}' has a chunks.lance dataset; \
+                 sibling bundling currently only supports atlas-only siblings \
+                 (no Lance-aware capture for siblings yet)"
+            )));
+        }
+        tar.append_dir_all(&sibling_prefix, sibling_dir)?;
     }
 
     tar.finish()?;
@@ -908,6 +952,7 @@ mod tests {
             source_recipe_sha256: None,
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
+            sibling_index_dirs: Vec::new(),
         })
         .await
         .unwrap();
@@ -957,6 +1002,7 @@ mod tests {
             source_recipe_sha256: None,
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
+            sibling_index_dirs: Vec::new(),
         })
         .await
         .unwrap();
@@ -998,6 +1044,7 @@ mod tests {
             source_recipe_sha256: None,
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
+            sibling_index_dirs: Vec::new(),
         })
         .await
         .unwrap();
@@ -1024,10 +1071,130 @@ mod tests {
             source_recipe_sha256: None,
             producer_version: "sovereign-cli/test".into(),
             zstd_level: 3,
+            sibling_index_dirs: Vec::new(),
         })
         .await
         .unwrap();
         (output_path, outcome)
+    }
+
+    /// Build a sibling index dir that mimics SEP's per-article layout:
+    /// pure atlas (atoms.json + edges.json), no chunks.lance. Used by
+    /// the sibling-bundling tests below.
+    fn write_fake_sibling_index_dir(dir: &Path, corpus_id: &str) {
+        std::fs::create_dir_all(dir.join("atlas")).unwrap();
+        let meta = serde_json::json!({
+            "corpus_id": corpus_id,
+            "corpus_name": "Sibling Test",
+            "embedding_model": "qwen3-embedding-0.6b",
+            "embedding_dimensions": 1024,
+        });
+        std::fs::write(
+            dir.join("_corpus_meta.json"),
+            serde_json::to_vec_pretty(&meta).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("atlas/atoms.json"),
+            br#"{"atoms": [], "schema_version": "2.0"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("atlas/edges.json"),
+            br#"{"edges": [], "schema_version": "2.0"}"#,
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn publish_with_siblings_bundles_them_and_records_in_manifest() {
+        let tmp = tempfile::tempdir().unwrap();
+        let index_dir = tmp.path().join("indexes/sep");
+        let sibling_a = tmp.path().join("indexes/sep-aristotle");
+        let sibling_b = tmp.path().join("indexes/sep-descartes");
+        let output_path = tmp.path().join("out.tar.zst");
+        write_fake_index_dir(&index_dir, "sep", "qwen3-embedding-0.6b", 1024);
+        write_fake_sibling_index_dir(&sibling_a, "sep-aristotle");
+        write_fake_sibling_index_dir(&sibling_b, "sep-descartes");
+
+        let outcome = publish_snapshot(PublishOptions {
+            index_dir,
+            enrichment_dir: None,
+            output_path: output_path.clone(),
+            snapshot_id: "sep-2026-05-22".into(),
+            chunk_count: 100,
+            residual_gap_pct: Some(0.0),
+            notes: None,
+            source_recipe_sha256: None,
+            producer_version: "sovereign-cli/test".into(),
+            zstd_level: 3,
+            sibling_index_dirs: vec![
+                ("sep-aristotle".to_string(), sibling_a),
+                ("sep-descartes".to_string(), sibling_b),
+            ],
+        })
+        .await
+        .unwrap();
+
+        // Manifest records the siblings, sorted by caller.
+        assert_eq!(
+            outcome.manifest.bundled_corpora,
+            vec!["sep-aristotle".to_string(), "sep-descartes".to_string()]
+        );
+
+        // Round-trip restore lands every sibling under the right path.
+        let restore_tmp = tempfile::tempdir().unwrap();
+        let result = restore_snapshot_archive(
+            &output_path,
+            restore_tmp.path(),
+            "sep",
+            Some(&outcome.archive_sha256),
+            "qwen3-embedding-0.6b",
+            1024,
+        )
+        .unwrap();
+        assert_eq!(result.manifest.bundled_corpora.len(), 2);
+        assert!(restore_tmp.path().join("indexes/sep-aristotle/atlas/atoms.json").exists());
+        assert!(restore_tmp.path().join("indexes/sep-descartes/atlas/atoms.json").exists());
+        // Primary still landed correctly.
+        assert!(restore_tmp.path().join("indexes/sep/_corpus_meta.json").exists());
+    }
+
+    #[tokio::test]
+    async fn publish_with_sibling_carrying_lance_dataset_errors() {
+        // SEP-style siblings are atlas-only. A sibling with a
+        // chunks.lance dir would need Lance-aware capture which isn't
+        // wired for siblings yet — fail loudly rather than risk
+        // silent fragment-drop.
+        let tmp = tempfile::tempdir().unwrap();
+        let index_dir = tmp.path().join("indexes/parent");
+        let sibling = tmp.path().join("indexes/parent-child");
+        let output_path = tmp.path().join("out.tar.zst");
+        write_fake_index_dir(&index_dir, "parent", "qwen3-embedding-0.6b", 1024);
+        // Sibling with a (fake) chunks.lance dir present.
+        std::fs::create_dir_all(sibling.join("chunks.lance")).unwrap();
+        std::fs::write(sibling.join("_corpus_meta.json"), b"{}").unwrap();
+
+        let err = publish_snapshot(PublishOptions {
+            index_dir,
+            enrichment_dir: None,
+            output_path,
+            snapshot_id: "parent-2026-05-22".into(),
+            chunk_count: 1,
+            residual_gap_pct: None,
+            notes: None,
+            source_recipe_sha256: None,
+            producer_version: "sovereign-cli/test".into(),
+            zstd_level: 3,
+            sibling_index_dirs: vec![("parent-child".into(), sibling)],
+        })
+        .await
+        .unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("parent-child") && msg.contains("chunks.lance"),
+            "error must name the sibling and the offending dir: {msg}"
+        );
     }
 
     #[tokio::test]

@@ -75,9 +75,13 @@ vector = true
 # On embedding-model mismatch the restore is skipped with a clear log
 # line and the normal pipeline runs — Option B is automatic.
 [prebuilt]
+# Snapshot 2026-05-23: content-hash atom ids (Move 6 migration). 1.56M
+# atoms + 6.4M edges + doc_to_atoms sidecar — drop-in replacement for
+# the 2026-05-13 snapshot. Retrieval surface identical; enables
+# downstream incremental atlas updates.
 hf_repo = "svrnmesh/wikipedia-index"
-hf_filename = "wikipedia-qwen-embedding-0.6b-2026-05-13.tar.zst"
-sha256 = "65fa045c95d6ffdaa92b7634ea95acb2d9d4bac6c9f6cd20bc831c098c10c6bd"
+hf_filename = "wikipedia-qwen-embedding-0.6b-2026-05-23.tar.zst"
+sha256 = "f1dc0851b4684f1b5d7afffadc862541a711243fb4d8f79771b1a482f8ab74e0"
 compatible_embedding_model = "qwen-embedding-0.6b"
 
 # Delta updates: the manifest at manifest_url maps article URL → revision_id.
