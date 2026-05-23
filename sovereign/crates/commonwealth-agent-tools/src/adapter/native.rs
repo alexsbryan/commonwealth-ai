@@ -10,7 +10,7 @@ use crate::adapter::{AgentToolAdapter, TranslateOutcome};
 use crate::descriptor::descriptors;
 use crate::primitive::{
     AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
-    InspectIntent, Primitive, PrimitiveKind, SmokeArgs, WriteFileArgs,
+    InspectIntent, PatchFileArgs, Primitive, PrimitiveKind, SmokeArgs, WriteFileArgs,
 };
 
 /// Passthrough adapter — the canonical primitives ARE the agent's
@@ -47,6 +47,11 @@ impl AgentToolAdapter for Adapter {
                 serde_json::from_value::<WriteFileArgs>(raw_args.clone())
                     .ok()
                     .map(Primitive::WriteFile)
+            }
+            PrimitiveKind::PatchFile => {
+                serde_json::from_value::<PatchFileArgs>(raw_args.clone())
+                    .ok()
+                    .map(Primitive::PatchFile)
             }
             PrimitiveKind::Build => Some(Primitive::Build),
             PrimitiveKind::Smoke => {

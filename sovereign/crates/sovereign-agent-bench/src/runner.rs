@@ -294,17 +294,21 @@ pub fn context_for(
     wall_seconds_override: Option<u64>,
     role_model_map: RoleModelMap,
 ) -> AgentRunContext {
-    use commonwealth_agent_tools::syntax::{DynSyntaxValidator, RustSyntaxValidator};
+    use commonwealth_agent_tools::syntax::{
+        DynSyntaxValidator, PythonSyntaxValidator, RustSyntaxValidator,
+    };
     use std::sync::Arc;
     let syntax_validator: Option<DynSyntaxValidator> = match problem.witness.language {
         crate::problem::WitnessLanguage::Rust => {
             Some(Arc::new(RustSyntaxValidator::new()) as DynSyntaxValidator)
         }
+        crate::problem::WitnessLanguage::Python => {
+            Some(Arc::new(PythonSyntaxValidator::new()) as DynSyntaxValidator)
+        }
         // New languages plug their SyntaxValidator impl here. None
         // skips pre-build check; build subprocess still runs.
         crate::problem::WitnessLanguage::Go => None,
         crate::problem::WitnessLanguage::TypeScript => None,
-        crate::problem::WitnessLanguage::Python => None,
     };
     AgentRunContext {
         problem_id: problem.meta.id.clone(),

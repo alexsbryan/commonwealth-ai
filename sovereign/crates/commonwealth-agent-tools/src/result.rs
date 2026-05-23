@@ -69,6 +69,24 @@ pub enum ToolError {
         primitive: &'static str,
         secs: u64,
     },
+    /// Pre-write syntax check rejected a write_file call before
+    /// touching disk. Closes the "model emits English prose / typos
+    /// inside `content`" class observed on 3.2-lights-out-python
+    /// (2026-05-23): syntax defects no longer land on disk where
+    /// the next build cycle would discover them via cargo/pytest —
+    /// they're rejected at the write boundary so the Implementer
+    /// can re-emit immediately without burning an Evaluator
+    /// round-trip. `rendered_errors` is the compiler-shape error
+    /// block from `SyntaxValidator::render_errors`.
+    #[error("pre-write syntax check rejected {primitive}: {rendered_errors}")]
+    SyntaxRejected {
+        primitive: &'static str,
+        /// Language id (e.g. `"Rust"`, `"Python"`). Carried as `String`
+        /// because the source list lives on a trait object whose
+        /// lifetime is the executor frame, not `'static`.
+        language: String,
+        rendered_errors: String,
+    },
 }
 
 #[cfg(test)]
@@ -120,6 +138,26 @@ mod tests {
         assert!(s.contains("`write_file`"));
         assert!(s.contains("missing required field"));
         assert!(s.contains("parameter schema"));
+    }
+
+    #[test]
+    fn syntax_rejected_renders_with_language_and_help() {
+        let e = ToolError::SyntaxRejected {
+            primitive: "write_file",
+            language: "Python".to_string(),
+            rendered_errors: "error: invalid syntax\n  --> lights_out.py:83:5\n   |\n83 |     let me redo Gaussian elimination more carefully.\n   |     ^".into(),
+        };
+        let s = e.render_for_agent();
+        assert!(s.contains("pre-write syntax check rejected"));
+        assert!(s.contains("(Python)"));
+        assert!(s.contains("--> lights_out.py:83"));
+        assert!(s.contains("let me redo Gaussian elimination"));
+        // Help must say the disk wasn't touched and tell the model
+        // to re-emit cleanly. If a future PR softens this language,
+        // the model may interpret the failure as a hard write error
+        // and try a different filename instead of fixing content.
+        assert!(s.contains("NOT written to disk"));
+        assert!(s.contains("do not include reasoning, narration"));
     }
 }
 
@@ -208,6 +246,15 @@ impl ToolError {
                  = help: if the work is genuinely long-running, consider \
                  breaking it into smaller steps; otherwise this likely \
                  indicates a hang in the spawned process."
+            ),
+            ToolError::SyntaxRejected { primitive, language, rendered_errors } => format!(
+                "error: pre-write syntax check rejected `{primitive}` ({language})\n\
+                 {rendered_errors}\n  \
+                 = help: re-emit `write_file` with a corrected `content` field. \
+                 The file was NOT written to disk — your next write_file call \
+                 starts from the same state as before. The `content` field must \
+                 be valid {language} source code; do not include reasoning, \
+                 narration, or English sentences outside of comments/docstrings."
             ),
         }
     }

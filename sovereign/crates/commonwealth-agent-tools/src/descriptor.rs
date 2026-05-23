@@ -33,7 +33,7 @@ pub fn descriptor_for(kind: PrimitiveKind) -> Value {
             }),
         ),
         PrimitiveKind::WriteFile => (
-            "Atomically replace the contents of a file in the workdir with `content`. Creates parent directories if needed. Whole-file replacement — there is no diff/edit form. Does NOT run any build step; call `build` next to verify the change compiled.",
+            "Atomically replace the contents of a file in the workdir with `content`. Creates parent directories if needed. Whole-file replacement — for targeted edits to an existing file prefer `patch_file`, which has less JSON-escape pressure on `content` and is bounded in scope. Does NOT run any build step; call `build` next to verify the change compiled.",
             json!({
                 "type": "object",
                 "properties": {
@@ -41,6 +41,19 @@ pub fn descriptor_for(kind: PrimitiveKind) -> Value {
                     "content": {"type": "string", "description": "Complete file body."}
                 },
                 "required": ["path", "content"]
+            }),
+        ),
+        PrimitiveKind::PatchFile => (
+            "Replace a contiguous range of lines in an existing file with `new_content`. Lines are 1-indexed and inclusive: `start_line=5, end_line=7` replaces lines 5, 6, 7. `new_content` may be multi-line (split on `\\n`) or empty (deletes the range). Use this for targeted edits — it's smaller than `write_file` (less JSON-escape pressure) and the resulting full content is syntax-checked at the write boundary. For initial file creation or full rewrites, use `write_file` instead.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Workdir-relative path. The file must already exist."},
+                    "start_line": {"type": "integer", "description": "1-indexed inclusive start line."},
+                    "end_line": {"type": "integer", "description": "1-indexed inclusive end line (>= start_line)."},
+                    "new_content": {"type": "string", "description": "Replacement content. Multi-line OK. Empty deletes the range."}
+                },
+                "required": ["path", "start_line", "end_line", "new_content"]
             }),
         ),
         PrimitiveKind::Build => (
