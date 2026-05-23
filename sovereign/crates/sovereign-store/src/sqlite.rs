@@ -2746,6 +2746,182 @@ impl SqliteStateStore {
         Ok(())
     }
 
+    /// Distinct `chunk_id` values already present in `chunk_entities`
+    /// for a corpus, returned as a `HashSet` so the Phase B
+    /// incremental hook can compute the delta against the current
+    /// Lance chunk set in one membership-test pass. Empty set when no
+    /// extraction has run yet for the corpus.
+    pub async fn list_extracted_chunk_ids_for_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> Result<std::collections::HashSet<u64>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT chunk_id FROM chunk_entities WHERE corpus_id = ?1",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![corpus_id], |r| r.get::<_, i64>(0))
+            .map_err(map_db)?;
+        let mut out = std::collections::HashSet::new();
+        for row in rows {
+            out.insert(row.map_err(map_db)? as u64);
+        }
+        Ok(out)
+    }
+
+    /// Aggregate one entity's footprint inside a corpus. Drives the
+    /// desktop's Atlas-view entity drawer. Match is case-insensitive
+    /// on `text` (so "Borges" + "borges" + "BORGES" fold into one
+    /// row); per-label breakdown surfaces homonyms ("Swift"
+    /// Person vs "SWIFT" Organization) without merging.
+    ///
+    /// `co_limit` caps co-occurring entities; `conv_limit` caps the
+    /// top-conv list. Pass small values (~20) — the drawer shows the
+    /// head only; the full list is reserved for the "expand" tail.
+    pub async fn aggregate_entity(
+        &self,
+        corpus_id: &str,
+        text: &str,
+        co_limit: usize,
+        conv_limit: usize,
+    ) -> Result<sovereign_core::conv_tiered::EntityAggregateRow> {
+        use sovereign_core::conv_tiered::{
+            CoOccurringEntity, EntityAggregateRow, EntityConvHit, EntityLabelCount,
+        };
+        let conn = self.conn.lock().await;
+
+        // Canonical display form: pick the most-common surface-form
+        // variant inside the corpus. Ties broken by alphabetical so
+        // the answer is deterministic across re-queries.
+        let canonical: String = conn
+            .query_row(
+                "SELECT text FROM chunk_entities
+                 WHERE corpus_id = ?1 AND text = ?2 COLLATE NOCASE
+                 GROUP BY text
+                 ORDER BY COUNT(*) DESC, text ASC
+                 LIMIT 1",
+                rusqlite::params![corpus_id, text],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(map_db)?
+            .unwrap_or_else(|| text.to_string());
+
+        // Label breakdown.
+        let mut labels_stmt = conn
+            .prepare(
+                "SELECT label, COUNT(*) AS n
+                 FROM chunk_entities
+                 WHERE corpus_id = ?1 AND text = ?2 COLLATE NOCASE
+                 GROUP BY label
+                 ORDER BY n DESC, label ASC",
+            )
+            .map_err(map_db)?;
+        let labels: Vec<EntityLabelCount> = labels_stmt
+            .query_map(rusqlite::params![corpus_id, text], |r| {
+                Ok(EntityLabelCount {
+                    label: r.get::<_, String>(0)?,
+                    count: r.get::<_, i64>(1)?,
+                })
+            })
+            .map_err(map_db)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_db)?;
+        drop(labels_stmt);
+
+        // Scalar counts in one round-trip.
+        let (mention_count, conv_count, chunk_count): (i64, i64, i64) = conn
+            .query_row(
+                "SELECT
+                    COUNT(*),
+                    COUNT(DISTINCT conv_uuid),
+                    COUNT(DISTINCT chunk_id)
+                 FROM chunk_entities
+                 WHERE corpus_id = ?1 AND text = ?2 COLLATE NOCASE",
+                rusqlite::params![corpus_id, text],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .map_err(map_db)?;
+
+        // Top convs by mention count. NULL conv_uuid rows (non-conv
+        // corpora) are filtered out here so the drawer's "where it
+        // appears" list never tries to link to a missing conv.
+        let mut conv_stmt = conn
+            .prepare(
+                "SELECT conv_uuid, COUNT(*) AS n
+                 FROM chunk_entities
+                 WHERE corpus_id = ?1
+                   AND text = ?2 COLLATE NOCASE
+                   AND conv_uuid IS NOT NULL
+                 GROUP BY conv_uuid
+                 ORDER BY n DESC, conv_uuid ASC
+                 LIMIT ?3",
+            )
+            .map_err(map_db)?;
+        let top_convs: Vec<EntityConvHit> = conv_stmt
+            .query_map(
+                rusqlite::params![corpus_id, text, conv_limit as i64],
+                |r| {
+                    Ok(EntityConvHit {
+                        conv_uuid: r.get::<_, String>(0)?,
+                        mention_count: r.get::<_, i64>(1)?,
+                    })
+                },
+            )
+            .map_err(map_db)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_db)?;
+        drop(conv_stmt);
+
+        // Co-occurring entities: chunks that contain the seed
+        // entity, with every OTHER entity in those chunks bucketed
+        // by `(text, label)`. The self-join keys on chunk_id so
+        // intra-chunk neighbours are counted, not inter-chunk
+        // collisions.
+        let mut co_stmt = conn
+            .prepare(
+                "SELECT other.text, other.label, COUNT(DISTINCT other.chunk_id) AS shared
+                 FROM chunk_entities AS seed
+                 JOIN chunk_entities AS other
+                   ON other.corpus_id = seed.corpus_id
+                  AND other.chunk_id = seed.chunk_id
+                 WHERE seed.corpus_id = ?1
+                   AND seed.text = ?2 COLLATE NOCASE
+                   AND NOT (other.text = ?2 COLLATE NOCASE)
+                 GROUP BY other.text, other.label
+                 ORDER BY shared DESC, other.text ASC
+                 LIMIT ?3",
+            )
+            .map_err(map_db)?;
+        let co_occurring: Vec<CoOccurringEntity> = co_stmt
+            .query_map(
+                rusqlite::params![corpus_id, text, co_limit as i64],
+                |r| {
+                    Ok(CoOccurringEntity {
+                        text: r.get::<_, String>(0)?,
+                        label: r.get::<_, String>(1)?,
+                        shared_chunk_count: r.get::<_, i64>(2)?,
+                    })
+                },
+            )
+            .map_err(map_db)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_db)?;
+
+        Ok(EntityAggregateRow {
+            corpus_id: corpus_id.to_string(),
+            text: canonical,
+            labels,
+            mention_count,
+            conv_count,
+            chunk_count,
+            top_convs,
+            co_occurring,
+        })
+    }
+
     /// Read every `chunk_entities` row for one conversation.
     /// Returned in `(chunk_id ASC, char_start ASC)` order.
     pub async fn list_chunk_entities_for_conv(

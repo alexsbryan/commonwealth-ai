@@ -14,14 +14,33 @@
   import { onMount } from "svelte";
   import { atlasGetConvDetail } from "../../api";
   import type { ConvDetailView, ConvRaptorNodeView } from "../../types";
+  import EntityDrawer from "./EntityDrawer.svelte";
 
   interface Props {
     corpusId: string;
     convUuid: string;
     onBack: () => void;
+    /** Optional jump-to-conv from the drawer's "Top conversations"
+     *  list. Host (AtlasSurface) wires this to its conv routing. */
+    onSelectConv?: (convUuid: string) => void;
   }
 
-  let { corpusId, convUuid, onBack }: Props = $props();
+  let { corpusId, convUuid, onBack, onSelectConv }: Props = $props();
+
+  let drawerSeed: string | null = $state(null);
+
+  function openDrawer(name: string) {
+    drawerSeed = name;
+  }
+
+  function closeDrawer() {
+    drawerSeed = null;
+  }
+
+  function handleDrawerSelectConv(uuid: string) {
+    closeDrawer();
+    if (onSelectConv) onSelectConv(uuid);
+  }
 
   let detail: ConvDetailView | null = $state(null);
   let loading = $state(true);
@@ -246,12 +265,26 @@
     {#if node.primary_entities.length > 0}
       <div class="entity-row">
         {#each node.primary_entities as ent (ent)}
-          <span class={entityClass(ent, node.level)} title={entityTitle(ent, node.level)}>{ent}</span>
+          <button
+            type="button"
+            class={entityClass(ent, node.level)}
+            title={entityTitle(ent, node.level)}
+            onclick={() => openDrawer(ent)}
+          >{ent}</button>
         {/each}
       </div>
     {/if}
   </li>
 {/snippet}
+
+{#if drawerSeed !== null}
+  <EntityDrawer
+    {corpusId}
+    seed={drawerSeed}
+    onClose={closeDrawer}
+    onSelectConv={handleDrawerSelectConv}
+  />
+{/if}
 
 <style>
   .conv-detail {
@@ -395,6 +428,16 @@
     padding: 0.1rem 0.55rem;
     font-size: 0.75rem;
     border: 1px solid transparent;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .entity-chip:hover {
+    background: rgba(96, 132, 232, 0.28);
+    border-color: rgba(96, 132, 232, 0.55);
+  }
+  .entity-chip:focus-visible {
+    outline: 2px solid rgba(96, 132, 232, 0.7);
+    outline-offset: 1px;
   }
   /* Distinctive chip — entity unique to this leaf among the conv's
      level-0 siblings. Brighter accent + outline so the diff

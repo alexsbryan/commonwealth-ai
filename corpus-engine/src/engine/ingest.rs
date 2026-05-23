@@ -1784,6 +1784,48 @@ impl CorpusEngine {
                     }
                 }
             }
+
+            // Phase B incremental NER hook (spec
+            // `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md`
+            // §"Incremental update strategy"). For
+            // conversation-category corpora — `conversation-history`
+            // via the KnowledgeView debouncer, `conversations-personal`
+            // via Settings → Imports — every successful re-ingest
+            // fires `extract_delta_for_corpus` on the wired GliNER
+            // extractor so chunks added since the last Phase A
+            // backfill get NER mentions without an operator-initiated
+            // `sovereign corpus extract-entities` run. Best-effort:
+            // a missing extractor (model not installed) or a transient
+            // store failure logs and the ingest still finishes green.
+            let is_conv_category = recipe
+                .display
+                .as_ref()
+                .and_then(|d| d.category.as_deref())
+                .map(|c| c == "conversation")
+                .unwrap_or(false);
+            if is_conv_category {
+                if let Some(extractor) = self.chunk_entity_extractor() {
+                    match extractor
+                        .extract_delta_for_corpus(&recipe.corpus.id, index_path)
+                        .await
+                    {
+                        Ok(0) => tracing::debug!(
+                            corpus = %recipe.corpus.id,
+                            "phase_b: incremental NER — no new chunks since last extraction"
+                        ),
+                        Ok(n) => tracing::info!(
+                            corpus = %recipe.corpus.id,
+                            new_mentions = n,
+                            "phase_b: incremental NER complete"
+                        ),
+                        Err(e) => tracing::warn!(
+                            corpus = %recipe.corpus.id,
+                            error = %e,
+                            "phase_b: incremental NER failed (non-fatal — Phase A snapshot retained)"
+                        ),
+                    }
+                }
+            }
         }
 
         eprintln!(

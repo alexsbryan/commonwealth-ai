@@ -186,8 +186,15 @@ impl GlinerExtractor {
             model_id: model_id.to_string(),
             labels: labels.iter().map(|s| s.to_string()).collect(),
             threshold,
+            // Two role-marker formats in production:
+            //  - claude.ai zip export (conv-anthropic): `### [2025-08-05 14:22] user`
+            //  - Sovereign-internal chat history (conversation-history):
+            //    `[user]` / `[assistant]` inline markers
+            //  - conversations-personal: same as conv-anthropic
+            // Either format must strip so GliNER doesn't tag the
+            // literal role word as a Person.
             role_marker_re: Regex::new(
-                r"(?m)^###\s+\[[^\]]+\]\s+(user|assistant|system)\s*$",
+                r"(?m)(?:^###\s+\[[^\]]+\]\s+(?:user|assistant|system)\s*$|\[(?:user|assistant|system)\])",
             )
             .expect("static regex compiles"),
         })
@@ -441,34 +448,41 @@ pub async fn download_model(
 mod tests {
     use super::*;
 
-    #[test]
-    fn role_markers_get_stripped() {
-        // The regex matches a chat-format role marker even when
-        // surrounded by message content; the strip leaves the rest
-        // intact so downstream offsets shift by the marker length
-        // only.
-        let extractor = GlinerExtractor {
-            // Stub model — we don't call inference in this test.
-            // We just need the regex field; constructing via the
-            // public API would require the ONNX file to be present.
+    fn make_stub_extractor() -> GlinerExtractor {
+        GlinerExtractor {
             model: Mutex::new(unsafe { std::mem::zeroed() }),
             model_id: "test".into(),
             labels: vec!["Person".into()],
             threshold: 0.6,
             role_marker_re: Regex::new(
-                r"(?m)^###\s+\[[^\]]+\]\s+(user|assistant|system)\s*$",
+                r"(?m)(?:^###\s+\[[^\]]+\]\s+(?:user|assistant|system)\s*$|\[(?:user|assistant|system)\])",
             )
             .unwrap(),
-        };
+        }
+    }
+
+    #[test]
+    fn anthropic_role_markers_get_stripped() {
+        let extractor = make_stub_extractor();
         let raw = "### [2025-12-08 20:36] user\nWhat do you think about Borges?\n### [2025-12-08 20:37] assistant\nBorges is a literary giant.";
         let processed = extractor.preprocess(raw);
-        // Role-marker lines collapse to empty; message content
-        // survives untouched.
         assert!(!processed.contains("user"));
         assert!(!processed.contains("assistant"));
         assert!(processed.contains("Borges?"));
         assert!(processed.contains("literary giant"));
-        // Avoid the destructor running on the zeroed Mutex<GLiNER>.
+        std::mem::forget(extractor);
+    }
+
+    #[test]
+    fn sovereign_internal_role_markers_get_stripped() {
+        let extractor = make_stub_extractor();
+        // conversation-history uses inline [user]/[assistant] markers.
+        let raw = "[user] Tell me about Borges and labyrinths.\n\n[assistant] Borges treats labyrinths as a metaphor for coexistence.";
+        let processed = extractor.preprocess(raw);
+        assert!(!processed.contains("[user]"));
+        assert!(!processed.contains("[assistant]"));
+        assert!(processed.contains("Borges"));
+        assert!(processed.contains("labyrinths"));
         std::mem::forget(extractor);
     }
 

@@ -39,6 +39,7 @@
 //! with real per-conversation trees (Slow on every bucket — slower
 //! than the optimized budget, but it works end-to-end).
 
+use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -47,7 +48,7 @@ use corpus_engine::enrichment::tiered::{
     ChunkEntityExtractor, ConvBucket, TieredEnrichmentProvider,
 };
 use corpus_engine::error::{Error, Result};
-use corpus_engine::index::EnrichmentChunkRow;
+use corpus_engine::index::{CorpusIndex, EnrichmentChunkRow};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{DocumentTypeTag, QuoteSpan, RaptorNode};
 // `DocumentTypeTag::Unknown` is the closest neutral tag; conversation
@@ -100,8 +101,198 @@ impl GlinerChunkExtractor {
 }
 
 #[cfg(feature = "gliner-ner")]
+impl GlinerChunkExtractor {
+    /// Phase B incremental hook (spec
+    /// `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §"Incremental
+    /// update strategy"). Scans `index_path` for chunks NOT yet in
+    /// `chunk_entities` for `corpus_id` and runs GliNER only on the
+    /// delta. Non-destructive: writes via `save_chunk_entities`
+    /// (bulk-insert with REPLACE-on-conflict) so existing rows for
+    /// untouched chunks survive.
+    ///
+    /// Updates `chunk_entity_progress` with `state = "incremental"`
+    /// once the corpus has graduated from a one-shot Phase A backfill
+    /// into the live-corpus mode. Always recomputes `chunks_total`
+    /// against the current Lance set so the UI's progress bar
+    /// reflects the growing corpus rather than the snapshot Phase A
+    /// finished against.
+    ///
+    /// Best-effort by design: a missing index, an empty extractor
+    /// model, or a transient store error logs + returns Ok(0). The
+    /// caller (debouncer / sweep completion) treats Phase B as a
+    /// nice-to-have on top of Phase A's snapshot.
+    pub async fn extract_delta_for_corpus(
+        &self,
+        corpus_id: &str,
+        index_path: &Path,
+    ) -> Result<usize> {
+        let index = CorpusIndex::open(index_path).await?;
+        let groups = index.group_chunks_by_source_doc().await?;
+        let total_chunks: usize = groups.values().map(|v| v.len()).sum();
+        let already = self
+            .store
+            .list_extracted_chunk_ids_for_corpus(corpus_id)
+            .await
+            .map_err(|e| {
+                Error::Database(format!(
+                    "list_extracted_chunk_ids_for_corpus({corpus_id}): {e}"
+                ))
+            })?;
+
+        let now = crate::gliner_ner::now_unix();
+        let mut new_chunks_processed = 0usize;
+        let mut new_mentions = 0usize;
+        let mut high_chunk_id: Option<i64> = None;
+
+        for (conv_uuid, chunk_ids) in groups.iter() {
+            // Skip convs whose chunks are already fully covered to
+            // avoid the per-conv index fetch on the steady-state
+            // happy path (most convs unchanged between sweeps).
+            if chunk_ids.iter().all(|id| already.contains(id)) {
+                continue;
+            }
+            let rows = match index
+                .chunks_for_source_doc_with_embeddings(conv_uuid)
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = corpus_id,
+                        conv = %conv_uuid,
+                        error = %e,
+                        "extract_delta_for_corpus: chunk fetch failed; skipping conv"
+                    );
+                    continue;
+                }
+            };
+            let delta: Vec<EnrichmentChunkRow> = rows
+                .into_iter()
+                .map(|(row, _emb)| row)
+                .filter(|row| !already.contains(&row.id))
+                .collect();
+            if delta.is_empty() {
+                continue;
+            }
+            let texts: Vec<&str> = delta.iter().map(|c| c.content.as_str()).collect();
+            let mention_batches = match self.extractor.extract_batch(&texts) {
+                Ok(b) => b,
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = corpus_id,
+                        conv = %conv_uuid,
+                        error = %e,
+                        "extract_delta_for_corpus: extract_batch failed; skipping conv"
+                    );
+                    continue;
+                }
+            };
+            let mut conv_rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> =
+                Vec::new();
+            for (chunk, mentions) in delta.iter().zip(mention_batches.into_iter()) {
+                for m in mentions {
+                    conv_rows.push(m.into_row(
+                        corpus_id,
+                        chunk.id,
+                        Some(conv_uuid),
+                        now,
+                    ));
+                }
+                let chunk_id = chunk.id as i64;
+                high_chunk_id = Some(high_chunk_id.map_or(chunk_id, |p| p.max(chunk_id)));
+            }
+            new_chunks_processed += delta.len();
+            new_mentions += conv_rows.len();
+            if let Err(e) = self.store.save_chunk_entities(&conv_rows).await {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    conv = %conv_uuid,
+                    error = %e,
+                    "extract_delta_for_corpus: save_chunk_entities failed; continuing"
+                );
+            }
+        }
+
+        // Reconcile the progress row in either branch: when delta > 0
+        // we bump counters + flip state; when delta == 0 but the prior
+        // row says "complete" we still need to flip to "incremental"
+        // + refresh chunks_total so the UI stops showing the
+        // snapshot-time number forever on a live corpus.
+        let existing = self
+            .store
+            .get_chunk_entity_progress(corpus_id)
+            .await
+            .map_err(|e| {
+                Error::Database(format!("get_chunk_entity_progress({corpus_id}): {e}"))
+            })?;
+        let needs_write = new_chunks_processed > 0
+            || existing
+                .as_ref()
+                .map(|p| p.state != "incremental" || p.chunks_total != total_chunks as i64)
+                .unwrap_or(false);
+        if needs_write {
+            let labels_json = serde_json::to_string(&self.extractor.labels).ok();
+            let prior_processed = existing.as_ref().map(|p| p.chunks_processed).unwrap_or(0);
+            let prior_mentions = existing.as_ref().map(|p| p.mentions_extracted).unwrap_or(0);
+            let started_at = existing.as_ref().map(|p| p.started_at).unwrap_or(now);
+            let last_chunk_id = high_chunk_id
+                .or_else(|| existing.as_ref().and_then(|p| p.last_chunk_id));
+            let row = sovereign_core::conv_tiered::ChunkEntityProgressRow {
+                corpus_id: corpus_id.to_string(),
+                chunks_processed: prior_processed + new_chunks_processed as i64,
+                chunks_total: total_chunks as i64,
+                mentions_extracted: prior_mentions + new_mentions as i64,
+                last_chunk_id,
+                started_at,
+                updated_at: now,
+                // Clear `finished_at` — an incremental corpus is
+                // never "done" until uninstalled. The UI distinguishes
+                // "complete + finished" from "incremental +
+                // auto-updating" via the state field alone.
+                finished_at: None,
+                state: "incremental".to_string(),
+                model_id: Some(self.extractor.model_id.clone()),
+                threshold: Some(self.extractor.threshold as f64),
+                labels_json,
+                error_msg: None,
+            };
+            if let Err(e) = self.store.upsert_chunk_entity_progress(&row).await {
+                tracing::warn!(
+                    corpus = corpus_id,
+                    error = %e,
+                    "extract_delta_for_corpus: progress upsert failed"
+                );
+            }
+        }
+
+        if new_chunks_processed > 0 {
+            tracing::info!(
+                corpus = corpus_id,
+                new_chunks = new_chunks_processed,
+                new_mentions,
+                total_chunks,
+                "extract_delta_for_corpus: incremental NER pass complete"
+            );
+        }
+        Ok(new_mentions)
+    }
+}
+
+#[cfg(feature = "gliner-ner")]
 #[async_trait]
 impl ChunkEntityExtractor for GlinerChunkExtractor {
+    async fn extract_delta_for_corpus(
+        &self,
+        corpus_id: &str,
+        index_path: &Path,
+    ) -> Result<usize> {
+        // Delegate to the inherent method so the trait + inherent
+        // entry points stay bit-identical. Keeping the inherent
+        // method also lets callers in sovereign-tools call directly
+        // without paying for `Arc<dyn>` indirection.
+        GlinerChunkExtractor::extract_delta_for_corpus(self, corpus_id, index_path).await
+    }
+
     async fn extract_for_conversation(
         &self,
         corpus_id: &str,

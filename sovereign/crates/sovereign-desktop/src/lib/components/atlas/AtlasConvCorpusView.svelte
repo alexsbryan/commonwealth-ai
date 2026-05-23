@@ -13,6 +13,7 @@
   import { onMount } from "svelte";
   import { atlasListConversations } from "../../api";
   import type { ConvListPage, ConvSummary } from "../../types";
+  import EntityDrawer from "./EntityDrawer.svelte";
 
   interface Props {
     corpusId: string;
@@ -21,6 +22,23 @@
   }
 
   let { corpusId, onBack, onSelectConv }: Props = $props();
+
+  /** Seed entity for the drawer; `null` = drawer closed. Click an
+   *  `entity-chip` to open. */
+  let drawerSeed: string | null = $state(null);
+
+  function openDrawer(name: string) {
+    drawerSeed = name;
+  }
+
+  function closeDrawer() {
+    drawerSeed = null;
+  }
+
+  function handleDrawerSelectConv(convUuid: string) {
+    closeDrawer();
+    onSelectConv(convUuid);
+  }
 
   let page: ConvListPage | null = $state(null);
   let loading = $state(true);
@@ -168,14 +186,22 @@
                 </span>
               {/if}
             </div>
-            {#if conv.top_entities.length > 0}
-              <div class="entity-row">
-                {#each conv.top_entities as ent (ent)}
-                  <span class="entity-chip">{ent}</span>
-                {/each}
-              </div>
-            {/if}
           </button>
+          <!-- Chips render as siblings (not children) of the conv
+               button so each can be its own <button> — HTML disallows
+               nested interactive elements. -->
+          {#if conv.top_entities.length > 0}
+            <div class="entity-row">
+              {#each conv.top_entities as ent (ent)}
+                <button
+                  type="button"
+                  class="entity-chip"
+                  onclick={() => openDrawer(ent)}
+                  title={`See where "${ent}" appears across this corpus`}
+                >{ent}</button>
+              {/each}
+            </div>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -188,6 +214,15 @@
     {/if}
   {/if}
 </div>
+
+{#if drawerSeed !== null}
+  <EntityDrawer
+    {corpusId}
+    seed={drawerSeed}
+    onClose={closeDrawer}
+    onSelectConv={handleDrawerSelectConv}
+  />
+{/if}
 
 <style>
   .conv-corpus-view {
@@ -345,6 +380,17 @@
     border-radius: 0.5rem;
     padding: 0.1rem 0.55rem;
     font-size: 0.75rem;
+    border: 1px solid transparent;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .entity-chip:hover {
+    background: rgba(96, 132, 232, 0.28);
+    border-color: rgba(96, 132, 232, 0.55);
+  }
+  .entity-chip:focus-visible {
+    outline: 2px solid rgba(96, 132, 232, 0.7);
+    outline-offset: 1px;
   }
   .load-more {
     display: flex;

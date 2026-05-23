@@ -112,6 +112,7 @@
     corpusId={selection.corpusId}
     convUuid={selection.convUuid}
     onBack={handleBackFromConv}
+    onSelectConv={handleSelectConv}
   />
 {:else if selection?.kind === "conv"}
   <AtlasConvCorpusView

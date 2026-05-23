@@ -406,6 +406,30 @@ pub async fn atlas_download_gliner_model(
     Ok(())
 }
 
+/// Aggregate one entity's footprint inside a corpus. Powers the
+/// Atlas-view entity drawer: click an `entity-chip`, the UI invokes
+/// this to render mention/conv counts, label breakdown, top convs,
+/// and co-occurring entities. Matches `text` case-insensitively so
+/// the drawer collapses casing variance but splits homonyms by label.
+#[tauri::command]
+pub async fn atlas_get_entity_aggregate(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    text: String,
+) -> Result<sovereign_core::conv_tiered::EntityAggregateRow, String> {
+    let store = match state.sqlite_store.read().await.as_ref() {
+        Some(s) => Arc::clone(s),
+        None => return Err("Sqlite store not initialised".into()),
+    };
+    // Drawer hard-caps. Co-occurring 20 fits a single scroll-free
+    // column; top-convs 10 covers a "where it appears" tail with
+    // room for an explicit "view all" affordance later.
+    store
+        .aggregate_entity(&corpus_id, &text, 20, 10)
+        .await
+        .map_err(|e| format!("atlas_get_entity_aggregate: {e}"))
+}
+
 /// Per-corpus entity-extraction progress. Drives the AtlasIndex
 /// "X% extracted" badge that appears alongside per-state enrichment
 /// counts while extraction is running.

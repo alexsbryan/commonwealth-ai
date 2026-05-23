@@ -66,6 +66,26 @@ pub trait ChunkEntityExtractor: Send + Sync {
         conv_uuid: &str,
         chunks: Vec<EnrichmentChunkRow>,
     ) -> Result<usize>;
+
+    /// Phase B incremental hook (spec
+    /// `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §"Incremental
+    /// update strategy"). Called by `CorpusEngine::ingest` after a
+    /// conversation-category corpus's ingest succeeds. Implementor
+    /// scans the index for chunks NOT yet in `chunk_entities`, runs
+    /// extraction only on the delta, and flips
+    /// `chunk_entity_progress.state` to `"incremental"`.
+    ///
+    /// Default impl is a no-op so extractors that haven't opted into
+    /// incremental (e.g. RAPTOR-only paths, a hypothetical static-
+    /// corpus extractor) keep working with the snapshot-only Phase A
+    /// CLI.
+    async fn extract_delta_for_corpus(
+        &self,
+        _corpus_id: &str,
+        _index_path: &Path,
+    ) -> Result<usize> {
+        Ok(0)
+    }
 }
 
 /// Provider trait for the heavy tiered-enrichment work
