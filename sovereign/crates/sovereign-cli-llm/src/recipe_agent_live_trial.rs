@@ -1082,6 +1082,52 @@ async fn run_one_turn(
             //   the agent permutes one query word per call.
             // Either trip emits a synthesised tool result that
             // nudges the agent to ask the partner / switch tools.
+            // `done` is the virtual termination tool injected into
+            // the envelope schema by the daemon adapter when
+            // SOVEREIGN_ALTERNATION_GRAMMAR is on. Treat it as
+            // turn-end here: append a synthesised tool-result so the
+            // OpenAI message history stays well-formed, then break
+            // out of the iteration loop. Mirrors the equivalent
+            // special-case in `sovereign-core::runtime::handlers::
+            // recipe_author` and in sovereign-agent-bench's native
+            // runner.
+            if call.function.name == "done" {
+                let reason = serde_json::from_str::<serde_json::Value>(
+                    &call.function.arguments,
+                )
+                .ok()
+                .and_then(|v| v.get("reason").and_then(|r| r.as_str()).map(String::from))
+                .unwrap_or_default();
+                eprintln!(
+                    "  → done: {}",
+                    if reason.is_empty() {
+                        "(no reason given)"
+                    } else {
+                        reason.as_str()
+                    }
+                );
+                messages.push(ChatMessage {
+                    role: "tool".into(),
+                    content: serde_json::json!({
+                        "done": true,
+                        "reason": reason,
+                    })
+                    .to_string(),
+                    tool_call_id: Some(call.id.clone()),
+                    tool_calls: None,
+                });
+                return Ok(TurnOutcome {
+                    final_content: if reason.is_empty() {
+                        "(done — no reason supplied)".to_string()
+                    } else {
+                        reason
+                    },
+                    tool_calls,
+                    iters,
+                    elapsed_secs: started.elapsed().as_secs_f32(),
+                });
+            }
+
             let signature = call_signature(call);
             let sig_count = tool_signature_counts.entry(signature).or_insert(0);
             *sig_count += 1;
@@ -1110,6 +1156,7 @@ async fn run_one_turn(
         }
     }
 }
+
 
 // ─── Trial entry ─────────────────────────────────────────────────
 
