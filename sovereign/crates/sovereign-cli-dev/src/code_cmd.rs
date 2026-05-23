@@ -214,7 +214,7 @@ async fn cmd_reflect(args: &[String]) -> i32 {
 
     // ── Open NoteStore + write ───────────────────────────────
     let notes_path = home_dir().join(".sovereign").join("notes.db");
-    let notes = match corpus_engine::NoteStore::open(&notes_path) {
+    let notes = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(n) => n,
         Err(e) => {
             if !quiet {
@@ -228,9 +228,9 @@ async fn cmd_reflect(args: &[String]) -> i32 {
     };
     let session_id = format!("reflect-{}", chrono::Utc::now().timestamp());
     let scope = if feature_id.is_some() {
-        corpus_engine::NoteScope::Feature
+        corpus_engine_notes::NoteScope::Feature
     } else {
-        corpus_engine::NoteScope::Global
+        corpus_engine_notes::NoteScope::Global
     };
     match notes
         .write_reflection_scoped(
@@ -480,7 +480,7 @@ async fn cmd_brief(args: &[String]) -> i32 {
 
     // ── Notes store ───────────────────────────────────────────
     let notes_path = home_dir().join(".sovereign").join("notes.db");
-    let notes = match corpus_engine::NoteStore::open(&notes_path) {
+    let notes = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(n) => n,
         Err(e) => {
             eprintln!(

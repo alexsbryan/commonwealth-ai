@@ -14,7 +14,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{FeatureStore, NoteStore};
+use corpus_engine_notes::{NoteStore};
+use corpus_engine_atos::{FeatureStore};
 
 /// `.sovereign/` at the current repo root — matches where
 /// `sovereign project serve` writes notes.db / features.db.
@@ -54,7 +55,7 @@ pub(super) fn open_orchestrator() -> Result<Arc<sovereign_atos::LocalAtosOrchest
     // to disk-only reports rather than failing the CLI.
     let docs_path = sovereign_dir().join("project_docs.db");
     let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    if let Ok(store) = corpus_engine::ProjectDocsStore::open(&docs_path) {
+    if let Ok(store) = corpus_engine_notes::ProjectDocsStore::open(&docs_path) {
         orc = orc.with_project_docs(Arc::new(store), repo_root);
     }
 

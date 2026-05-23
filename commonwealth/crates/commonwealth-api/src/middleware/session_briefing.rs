@@ -38,7 +38,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 
-use corpus_engine::FeatureStore;
+use corpus_engine_atos::FeatureStore;
 
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
 use crate::openai_types::{ChatCompletionRequest, ChatMessage};

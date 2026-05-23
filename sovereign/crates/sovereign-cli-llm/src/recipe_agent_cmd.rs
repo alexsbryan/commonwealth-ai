@@ -26,7 +26,8 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{FeatureRow, FeatureState, FeatureStore, NoteStore};
+use corpus_engine_notes::{NoteStore};
+use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
 use sovereign_tools::recipe_author::{
     capability_request::CapabilityRequest, maintainer_inbox_dir, situated_context,
     RecipeProject,

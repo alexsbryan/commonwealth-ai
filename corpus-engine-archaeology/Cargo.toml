@@ -1,0 +1,33 @@
+[package]
+name = "corpus-engine-archaeology"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Git archaeology — commit-history mining + rough-edge surfacing + atom-provenance evaluation. Carved out of corpus-engine."
+
+# Archaeology surfaces information about a code repository's *history*
+# — what commits touched which atoms, which TODO/FIXME hot spots
+# accumulate without resolution, which inquiries (recorded questions)
+# still lack answers. Lives separately from the corpus pipeline
+# because the data plane doesn't need it; only sovereign-cli (the
+# archaeology CLIs) and sovereign-tools (the agent brief) call in.
+#
+# The three modules are self-contained — they share their own
+# `GitArchaeologyError` rather than reaching into corpus-engine's
+# error enum, so the carve-out doesn't even need a local Error type.
+# See corpus-engine/DECOMPOSITION.md.
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = "1"
+# `git_archaeology` parses commit timestamps; `archaeology_eval`
+# reads inquiry TOML and emits trace events; `rough_edges` walks
+# source trees for TODO/FIXME-like patterns.
+chrono = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"

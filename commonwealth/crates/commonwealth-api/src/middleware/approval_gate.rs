@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use corpus_engine::{NoteScope, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteStore};
 use sovereign_atos::approval::{
     current_spec_hash, detect_drift, find_approval, FeatureApproval,
 };

@@ -28,7 +28,7 @@ use std::path::Path;
 
 use async_trait::async_trait;
 
-use corpus_engine::{NoteStore, ScopeFilter};
+use corpus_engine_notes::{NoteStore, ScopeFilter};
 use sovereign_atos::approval;
 
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
@@ -389,7 +389,7 @@ async fn compose_notes_digest(repo_root: &Path, feature_id: &str) -> String {
     // The cache is keyed by an external hash function; reading it
     // directly would require duplicating ReadNoteDigestTool's
     // hash. Keep it simple: read headers from NoteStore.
-    use corpus_engine::NoteScope;
+    use corpus_engine_notes::NoteScope;
     let filter = ScopeFilter {
         scopes: vec![NoteScope::Global, NoteScope::Feature],
         feature_id: Some(feature_id.to_string()),

@@ -25,7 +25,7 @@
 //! pre-pass call site so the splice never sees a dossier it has to
 //! reject.
 
-use corpus_engine::NoteStore;
+use corpus_engine_notes::NoteStore;
 
 use crate::intent_policy;
 use crate::memory::{read_recent_tool_decisions, ToolDecisionOutcome};

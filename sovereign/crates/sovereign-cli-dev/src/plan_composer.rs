@@ -34,7 +34,7 @@
 //! - Phase-pass stop-condition verification (that's `project phase
 //!   pass N` in a separate command).
 
-use corpus_engine::design_signals::DesignSignals;
+use corpus_engine_atos::design_signals::DesignSignals;
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -66,7 +66,7 @@ impl OpenQuestionEntry {
 }
 
 /// Composed plan-item data ready to upsert into `plan.db`. Shape
-/// intentionally mirrors `corpus_engine::plan_items::PlanItem` so
+/// intentionally mirrors `corpus_engine_atos::plan_items::PlanItem` so
 /// the caller's conversion is a thin shim.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ComposedPlanItem {
@@ -500,7 +500,7 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::design_signals;
+    use corpus_engine_atos::design_signals;
 
     fn inputs_from<'a>(design_md: &'a str, oqs: &'a [OpenQuestionEntry], lang: Option<&'a str>, today: &'a str) -> (DesignSignals, ComposeInputs<'a>) {
         let signals = design_signals::extract(design_md);

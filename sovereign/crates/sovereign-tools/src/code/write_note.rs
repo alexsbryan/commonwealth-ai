@@ -13,7 +13,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::{NoteScope, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteStore};
 
 /// Kinds the tool admits in `validate()`. Single source of truth for
 /// the schema-`enum` field, the validator, and any future test that

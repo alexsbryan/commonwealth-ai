@@ -363,8 +363,8 @@ async fn main() {
 
     // Working notes tools — persist across sessions, used for session attribution.
     let notes_db_path = home.join(".sovereign").join("notes.db");
-    let note_store_for_runtime: Option<Arc<corpus_engine::NoteStore>> =
-        match corpus_engine::NoteStore::open(&notes_db_path) {
+    let note_store_for_runtime: Option<Arc<corpus_engine_notes::NoteStore>> =
+        match corpus_engine_notes::NoteStore::open(&notes_db_path) {
             Ok(store) => {
                 let store = Arc::new(store);
                 tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(&store))));

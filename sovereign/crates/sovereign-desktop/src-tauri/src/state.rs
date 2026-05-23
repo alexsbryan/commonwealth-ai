@@ -5,7 +5,9 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use corpus_engine::{CorpusEngine, FeatureStore, NoteStore};
+use corpus_engine::{CorpusEngine};
+use corpus_engine_notes::{NoteStore};
+use corpus_engine_atos::{FeatureStore};
 
 use sovereign_core::health_monitor::{HealthMonitor, MonitorConfig};
 use sovereign_core::insight::{InsightService, InsightSinkRegistry};
@@ -1440,12 +1442,12 @@ pub async fn bootstrap_with_progress(
         // same connection pool. None on failure means MCP doesn't
         // mount AND no commit harvesting — same graceful-degrade
         // posture as before.
-        let notes_for_harvester: Option<Arc<corpus_engine::NoteStore>> =
-            match corpus_engine::NoteStore::open(&notes_path) {
+        let notes_for_harvester: Option<Arc<corpus_engine_notes::NoteStore>> =
+            match corpus_engine_notes::NoteStore::open(&notes_path) {
                 Ok(s) => Some(Arc::new(s)),
                 Err(_) => None,
             };
-        match corpus_engine::NoteStore::open(&notes_path) {
+        match corpus_engine_notes::NoteStore::open(&notes_path) {
             Ok(notes_store) => {
                 let notes = Arc::new(notes_store);
                 let mut mcp_tools = ToolRegistry::new();

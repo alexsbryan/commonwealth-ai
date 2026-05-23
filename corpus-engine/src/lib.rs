@@ -12,7 +12,10 @@
 
 pub mod acquirers;
 pub mod alignment_projector;
-pub mod archaeology_eval;
+// archaeology_eval, git_archaeology, rough_edges moved to
+// corpus-engine-archaeology (step 4 of the decomposition plan,
+// 2026-05-23). corpus-engine has no internal users of these
+// modules — they only ever served the CLI + tool layer.
 pub mod atlas_canonical;
 pub mod atlas_traversal;
 pub mod canonical_sync;
@@ -24,7 +27,6 @@ pub mod enrichment;
 pub mod error;
 pub mod extractors;
 pub mod filters;
-pub mod git_archaeology;
 pub mod index;
 pub mod pii;
 pub mod progress;
@@ -32,7 +34,6 @@ pub mod recipe;
 pub mod recipe_builtin;
 mod recipe_parsing;
 pub mod registry;
-pub mod rough_edges;
 pub mod safety;
 pub mod sharding;
 pub mod snapshot;
@@ -65,26 +66,20 @@ pub mod test_results;
 #[cfg(feature = "stores")]
 pub mod lint_results;
 
-// Working notes and project documentation stores (rusqlite).
-#[cfg(feature = "stores")]
-pub mod notes;
-#[cfg(feature = "stores")]
-mod notes_schema;
-// NoteStore ↔ alignment-corpus sync. Same schema as `notes`.
+// NoteStore + project_docs live in `corpus-engine-notes` (carved out
+// 2026-05-23, step 3 of the decomposition plan). `notes_sync` (the
+// bridge between corpus-engine's `ExtractedDoc` and the new crate's
+// `NoteStore`) stays here to avoid a cyclic workspace dep — the bridge
+// translates one direction, corpus-engine→notes, which puts it
+// naturally on the corpus-engine side. External consumers depend on
+// `corpus-engine-notes` directly.
 #[cfg(feature = "stores")]
 pub mod notes_sync;
-#[cfg(feature = "stores")]
-pub mod project_docs;
-// ATOS feature + milestone store (rusqlite).
-#[cfg(feature = "stores")]
-pub mod features;
-// ATOS IMPLEMENTATION_PLAN.md index (rusqlite).
-#[cfg(feature = "stores")]
-pub mod plan_items;
-// DESIGN.md structural parser — uses tree-sitter, so still gated by
-// `treesitter`.
-#[cfg(feature = "treesitter")]
-pub mod design_signals;
+// ATOS state (features, plan_items, design_signals) lives in
+// `corpus-engine-atos` (carved out 2026-05-23, step 2 of the
+// decomposition plan). corpus-engine itself doesn't consume any of
+// them; consumers (sovereign-atos, sovereign-cli-dev, sovereign-tools,
+// commonwealth-api) depend on `corpus-engine-atos` directly.
 
 // ─── Public API Re-exports ──────────────────────────────
 
@@ -179,11 +174,14 @@ pub use update::lint_watcher::LintWatcher;
 #[cfg(feature = "treesitter")]
 pub use update::project_index_watcher::ProjectIndexWatcher;
 
-#[cfg(feature = "stores")]
-pub use notes::{NoteRow, NoteScope, NoteSource, NoteStore, ScopeFilter, ToolCallLogRow};
-#[cfg(feature = "stores")]
-pub use project_docs::{DocResult, ProjectDocsStore, find_markdown_files};
-#[cfg(feature = "stores")]
-pub use features::{
-    AtosRunRow, AtosToolEvent, FeatureRow, FeatureState, FeatureStore, MilestoneRow,
-};
+// notes / project_docs moved to corpus-engine-notes (step 3 of the
+// decomposition plan, 2026-05-23). No shim left here — external
+// consumers depend on `corpus-engine-notes` directly. The crate
+// is reachable inside corpus-engine via the `stores` feature for
+// the three internal users (alignment_projector, alignment_workspace,
+// project_index_watcher).
+// `features::{FeatureStore, FeatureRow, …}` moved to corpus-engine-atos
+// (step 2 of the decomposition plan, 2026-05-23). No shim left here —
+// the four consumer crates (sovereign-atos, sovereign-cli-dev,
+// sovereign-tools, commonwealth-api) depend on `corpus-engine-atos`
+// directly.

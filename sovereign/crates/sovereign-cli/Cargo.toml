@@ -31,6 +31,8 @@ sovereign-cli-shared = { workspace = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
 corpus-engine = { workspace = true }
+corpus-engine-archaeology = { workspace = true }
+corpus-engine-notes = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
 serde_json = { workspace = true }

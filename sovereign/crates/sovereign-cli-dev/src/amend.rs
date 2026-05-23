@@ -674,12 +674,12 @@ pub fn design_section_id(heading: &str) -> Option<&'static str> {
 /// changed between two snapshots. Walks H2 sections only; nested
 /// H3 differences bubble up via their parent section's body diff.
 pub fn changed_design_sections(
-    old: &corpus_engine::design_signals::DesignSignals,
-    new: &corpus_engine::design_signals::DesignSignals,
+    old: &corpus_engine_atos::design_signals::DesignSignals,
+    new: &corpus_engine_atos::design_signals::DesignSignals,
 ) -> Vec<&'static str> {
     use std::collections::BTreeMap;
     fn h2_map(
-        signals: &corpus_engine::design_signals::DesignSignals,
+        signals: &corpus_engine_atos::design_signals::DesignSignals,
     ) -> BTreeMap<String, String> {
         signals
             .sections
@@ -789,8 +789,8 @@ pub fn append_design_amendment_log(md: &str, entry: &str) -> String {
 mod design_amend_tests {
     use super::*;
 
-    fn signals(md: &str) -> corpus_engine::design_signals::DesignSignals {
-        corpus_engine::design_signals::extract(md)
+    fn signals(md: &str) -> corpus_engine_atos::design_signals::DesignSignals {
+        corpus_engine_atos::design_signals::extract(md)
     }
 
     #[test]

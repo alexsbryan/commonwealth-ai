@@ -11,6 +11,8 @@ license.workspace = true
 # 2026-05-22 — sovereign-atos uses NoteStore/FeatureStore/EmbedFn,
 # none of which are treesitter-gated.
 corpus-engine = { workspace = true }
+corpus-engine-atos = { workspace = true }
+corpus-engine-notes = { workspace = true }
 
 # Optional Fast-slot classification pass in teardown. The library
 # works without an InferenceProvider — the caller passes None.

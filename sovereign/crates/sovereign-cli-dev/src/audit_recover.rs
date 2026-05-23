@@ -62,7 +62,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_core::traits::ConversationStore;
 use sovereign_core::types::Role;
 use sovereign_store::sqlite::SqliteStateStore;
@@ -137,7 +137,7 @@ pub async fn cmd_audit_recover() -> i32 {
 
     // Group rows by session_id. The reader returns newest-first,
     // which is what `ToolPatternMatcher::scan` expects.
-    let mut by_session: HashMap<String, Vec<corpus_engine::ToolCallLogRow>> =
+    let mut by_session: HashMap<String, Vec<corpus_engine_notes::ToolCallLogRow>> =
         HashMap::new();
     for row in rows {
         by_session.entry(row.session_id.clone()).or_default().push(row);
@@ -168,7 +168,7 @@ pub async fn cmd_audit_recover() -> i32 {
     for (session_id, session_rows) in &by_session {
         // Trim per-session rows to the recovery cap. They're
         // already newest-first thanks to the reader's ORDER BY.
-        let limited: Vec<&corpus_engine::ToolCallLogRow> = session_rows
+        let limited: Vec<&corpus_engine_notes::ToolCallLogRow> = session_rows
             .iter()
             .take(MAX_ROWS_PER_SESSION)
             .collect();
@@ -559,7 +559,7 @@ mod tests {
 
         // Hand-roll the recovery flow over this store.
         let rows = store.tool_call_log_rows(0, 100).await.unwrap();
-        let session_rows: Vec<&corpus_engine::ToolCallLogRow> =
+        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> =
             rows.iter().filter(|r| r.session_id == "recover-sess-1").collect();
         let mut cooldowns = HashMap::new();
         let hits = ToolPatternMatcher::scan_for_recovery(&session_rows, &mut cooldowns);
@@ -589,7 +589,7 @@ mod tests {
             .unwrap();
 
         let rows = store.tool_call_log_rows(0, 100).await.unwrap();
-        let session_rows: Vec<&corpus_engine::ToolCallLogRow> =
+        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> =
             rows.iter().filter(|r| r.session_id == "idem-sess").collect();
 
         // First pass.
@@ -636,7 +636,7 @@ mod tests {
             .unwrap();
 
         let rows = store.tool_call_log_rows(0, 100).await.unwrap();
-        let session_rows: Vec<&corpus_engine::ToolCallLogRow> =
+        let session_rows: Vec<&corpus_engine_notes::ToolCallLogRow> =
             rows.iter().filter(|r| r.session_id == "solo-sess").collect();
         let mut cooldowns = HashMap::new();
         let hits = ToolPatternMatcher::scan_for_recovery(&session_rows, &mut cooldowns);

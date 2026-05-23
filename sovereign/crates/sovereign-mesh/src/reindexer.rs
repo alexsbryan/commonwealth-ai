@@ -146,7 +146,7 @@ pub struct Reindexer {
     /// available. When `None`, the git-poll path skips harvesting
     /// — production daemons configure it; minimal test setups
     /// don't have to.
-    commit_harvester: Option<Arc<corpus_engine::NoteStore>>,
+    commit_harvester: Option<Arc<corpus_engine_notes::NoteStore>>,
     /// Global serializer for `rust-analyzer scip` invocations across
     /// every registered project. SCIP export is an
     /// O(workspace-size) cargo + rust-analyzer pass — running four
@@ -189,7 +189,7 @@ impl Reindexer {
     /// handing the Arc to anything else.
     pub fn with_commit_harvester(
         self: &mut Arc<Self>,
-        notes: Arc<corpus_engine::NoteStore>,
+        notes: Arc<corpus_engine_notes::NoteStore>,
     ) {
         if let Some(inner) = Arc::get_mut(self) {
             inner.commit_harvester = Some(notes);
@@ -339,7 +339,7 @@ struct WorkerCtx {
     /// Phase 7.1: optional commit-message harvester. When set, the
     /// git-HEAD poll calls into [`crate::commit_harvest`] for the
     /// `old_head..new_head` range alongside the SCIP rebuild.
-    commit_harvester: Option<Arc<corpus_engine::NoteStore>>,
+    commit_harvester: Option<Arc<corpus_engine_notes::NoteStore>>,
     /// Cross-project rebuild serializer. See [`Reindexer::rebuild_permits`].
     rebuild_permits: Arc<Semaphore>,
 }

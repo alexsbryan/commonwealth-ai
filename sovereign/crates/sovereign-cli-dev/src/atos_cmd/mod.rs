@@ -1,8 +1,8 @@
 //! `sovereign atos` — the Agent Task Orchestration System CLI.
 //!
 //! The CLI is deliberately thin. It:
-//!   1. Owns the [`corpus_engine::FeatureStore`] and
-//!      [`corpus_engine::NoteStore`] paths (the same files
+//!   1. Owns the [`corpus_engine_atos::FeatureStore`] and
+//!      [`corpus_engine_notes::NoteStore`] paths (the same files
 //!      `sovereign project serve` uses, so artifacts are shared).
 //!   2. Spawns a driver subprocess (Claude Code by default, opencode
 //!      behind `--driver opencode`) with `SOVEREIGN_FEATURE_ID`

@@ -21,7 +21,7 @@
 //!    Skipped if archaeology hasn't been run.
 //! 4. **Recent activity** — commits in the last 7 days that touched
 //!    a working-set file. Uses
-//!    [`corpus_engine::git_archaeology::batch_harvest_all_commits`].
+//!    [`corpus_engine_archaeology::git_archaeology::batch_harvest_all_commits`].
 //!    Skipped if `repo_root` isn't a git repo.
 //!
 //! All sections are token-budgeted via
@@ -44,10 +44,10 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use corpus_engine::archaeology_eval::{inquiries_matching_files, load_inquiries_from_dir};
+use corpus_engine_archaeology::archaeology_eval::{inquiries_matching_files, load_inquiries_from_dir};
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
-use corpus_engine::git_archaeology::{batch_harvest_all_commits, CommitRecord};
-use corpus_engine::{NoteRow, NoteStore};
+use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, CommitRecord};
+use corpus_engine_notes::{NoteRow, NoteStore};
 use serde::Deserialize;
 
 use crate::knowledge_view::tokens::estimate_tokens;
@@ -386,7 +386,7 @@ async fn render_notes(
     working_set: &[PathBuf],
     remaining: usize,
 ) -> Result<String, BriefError> {
-    use corpus_engine::{NoteScope, ScopeFilter};
+    use corpus_engine_notes::{NoteScope, ScopeFilter};
     // `reflection` joins decision + invariant so session-end captures
     // (written by `sovereign code reflect`) surface in the next
     // session's brief automatically — closing the feedback loop.

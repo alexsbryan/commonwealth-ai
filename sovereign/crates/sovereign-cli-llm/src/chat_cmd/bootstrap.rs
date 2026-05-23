@@ -421,7 +421,7 @@ pub async fn build_session_with_skills(
     // (`daemon_cmd.rs::build_tool_registry` → `data_dir.join("notes.db")`)
     // so the chat REPL and bench surfaces share one outcome log.
     let notes_path = globals.data_dir.join("notes.db");
-    let notes_store = match corpus_engine::NoteStore::open(&notes_path) {
+    let notes_store = match corpus_engine_notes::NoteStore::open(&notes_path) {
         Ok(s) => Some(Arc::new(s)),
         Err(e) => {
             eprintln!(

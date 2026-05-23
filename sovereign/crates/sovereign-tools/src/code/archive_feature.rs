@@ -14,7 +14,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::FeatureStore;
+use corpus_engine_atos::FeatureStore;
 
 pub struct ArchiveFeatureTool {
     store: Arc<FeatureStore>,

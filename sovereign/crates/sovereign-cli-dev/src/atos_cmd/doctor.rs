@@ -12,7 +12,7 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine::FeatureStore;
+use corpus_engine_atos::FeatureStore;
 
 pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
     let mut report = DoctorReport::default();
@@ -46,7 +46,7 @@ pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
     // 3. notes.db reachable (opening applies the v4 migration as a
     //    side-effect, so success implies schema is caught up).
     let notes_db = sov.join("notes.db");
-    match corpus_engine::NoteStore::open(&notes_db) {
+    match corpus_engine_notes::NoteStore::open(&notes_db) {
         Ok(_) => report.pass("notes.db", "open + migrations OK".into()),
         Err(e) => report.fail("notes.db", format!("{e}")),
     }
@@ -152,7 +152,7 @@ pub(crate) async fn cmd_doctor(_args: &[String]) -> i32 {
 async fn check_feature(
     report: &mut DoctorReport,
     repo_root: &Path,
-    f: &corpus_engine::FeatureRow,
+    f: &corpus_engine_atos::FeatureRow,
 ) {
     let label = format!("feature `{}`", f.id);
 

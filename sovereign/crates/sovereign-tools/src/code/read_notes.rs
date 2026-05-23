@@ -13,7 +13,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::{NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
 
 pub struct ReadNotesTool {
     store: Arc<NoteStore>,

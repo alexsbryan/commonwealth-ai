@@ -18,7 +18,7 @@
 //! path so the desktop workspace doesn't have to replicate it; the
 //! renderer here stays the single source of truth for block shape.
 
-use corpus_engine::NoteRow;
+use corpus_engine_notes::NoteRow;
 use sovereign_core::error::Result;
 
 use super::decision_log::{DecisionAttribution, DecisionPayload};
@@ -262,7 +262,8 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use corpus_engine::{FeatureStore, NoteScope, NoteSource, NoteStore};
+    use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_atos::{FeatureStore};
 
     use super::super::decision_log::{DecisionKind, DecisionPayload};
 

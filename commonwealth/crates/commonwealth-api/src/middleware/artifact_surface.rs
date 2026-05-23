@@ -25,7 +25,7 @@
 use std::path::Path;
 
 use async_trait::async_trait;
-use corpus_engine::{NoteStore, ScopeFilter};
+use corpus_engine_notes::{NoteStore, ScopeFilter};
 
 use sovereign_atos::session::{ArtifactDelta, MilestonePassEvent};
 
@@ -102,8 +102,8 @@ async fn compute_delta(repo_root: &Path, feature_id: &str, since: i64) -> Artifa
     if let Ok(store) = NoteStore::open(&notes_db) {
         let filter = ScopeFilter {
             scopes: vec![
-                corpus_engine::NoteScope::Feature,
-                corpus_engine::NoteScope::Global,
+                corpus_engine_notes::NoteScope::Feature,
+                corpus_engine_notes::NoteScope::Global,
             ],
             feature_id: Some(feature_id.to_string()),
         };
@@ -135,7 +135,7 @@ async fn compute_delta(repo_root: &Path, feature_id: &str, since: i64) -> Artifa
 
     // ── Milestones that flipped to stop_passed ───────────────────
     let features_db = repo_root.join(".sovereign").join("features.db");
-    if let Ok(store) = corpus_engine::FeatureStore::open(&features_db) {
+    if let Ok(store) = corpus_engine_atos::FeatureStore::open(&features_db) {
         if let Ok(runs) = store.list_runs_for_feature(feature_id).await {
             let milestones = store.list_milestones(feature_id).await.unwrap_or_default();
             for run in runs {
@@ -276,7 +276,7 @@ mod tests {
                 vec![],
                 vec![],
                 "test",
-                corpus_engine::NoteScope::Feature,
+                corpus_engine_notes::NoteScope::Feature,
                 Some("fx"),
             )
             .await

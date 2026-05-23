@@ -13,6 +13,8 @@ commonwealth-knowledge = { workspace = true }
 commonwealth-app = { workspace = true }
 commonwealth-state = { workspace = true }
 corpus-engine = { workspace = true }
+corpus-engine-notes = { workspace = true }
+corpus-engine-atos = { workspace = true }
 # ATOS orchestrator library — middleware stack references it for
 # session state, approval lookups, and note-store access.
 sovereign-atos = { path = "../../../sovereign/crates/sovereign-atos" }

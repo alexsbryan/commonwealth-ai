@@ -1,0 +1,43 @@
+[package]
+name = "corpus-engine-atos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "ATOS feature store + plan items + DESIGN.md design signals. Carved out of corpus-engine for blast-radius control."
+
+# ATOS state (FeatureStore, plan_items, design_signals) has nothing
+# to do with corpora — it's the agent's persistent state for
+# feature lifecycle + design-doc parsing. Lived in corpus-engine
+# pre-2026-05-23 because that's where rusqlite + pulldown-cmark were
+# already wired up. Carving it out cuts the rebuild blast radius
+# for ATOS edits from 20 crates (all of corpus-engine's transitive
+# consumers) to 3 (sovereign-atos, sovereign-cli-dev, sovereign-tools).
+#
+# features.rs at 1551 lines is a §3.1 violation in the original
+# corpus-engine; the carve-out clears it from the corpus-engine
+# outliers list while leaving the file intact in its new home (the
+# concern fits one crate, so a further split isn't needed yet).
+#
+# See corpus-engine/DECOMPOSITION.md for the wider plan.
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+# UUIDs for feature/milestone/atos-run primary keys (features.rs).
+uuid = { workspace = true }
+
+# rusqlite for FeatureStore + plan_items (the two store modules).
+rusqlite = { version = "0.35", features = ["bundled"] }
+
+# Markdown AST for DESIGN.md structural parsing (design_signals.rs).
+# Matching the version corpus-engine previously declared for the
+# same parser.
+pulldown-cmark = { version = "0.12", default-features = false, features = ["simd"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3"

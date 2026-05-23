@@ -29,9 +29,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use corpus_engine::{
-    AtosRunRow, FeatureRow, FeatureStore, MilestoneRow, NoteRow, NoteStore,
-};
+use corpus_engine_notes::{NoteRow, NoteStore};
+use corpus_engine_atos::{AtosRunRow, FeatureRow, FeatureStore, MilestoneRow};
 
 pub mod approval;
 pub mod charter;
@@ -79,6 +78,30 @@ impl From<corpus_engine::Error> for Error {
         // honest after the library boundary.
         match e {
             corpus_engine::Error::InvalidInput(s) => Error::InvalidInput(s),
+            other => Error::Store(other.to_string()),
+        }
+    }
+}
+
+/// Same shape for `corpus-engine-atos::Error` after the ATOS state
+/// carve-out (2026-05-23). FeatureStore + plan_items now return their
+/// own narrow Error; bridge it here so the rest of sovereign-atos
+/// can `?`-bubble through unchanged.
+impl From<corpus_engine_atos::Error> for Error {
+    fn from(e: corpus_engine_atos::Error) -> Self {
+        match e {
+            corpus_engine_atos::Error::InvalidInput(s) => Error::InvalidInput(s),
+            other => Error::Store(other.to_string()),
+        }
+    }
+}
+
+/// Same shape for `corpus-engine-notes::Error` (NoteStore + project_docs
+/// carved out 2026-05-23, step 3). Mirrors the atos bridge above.
+impl From<corpus_engine_notes::Error> for Error {
+    fn from(e: corpus_engine_notes::Error) -> Self {
+        match e {
+            corpus_engine_notes::Error::InvalidInput(s) => Error::InvalidInput(s),
             other => Error::Store(other.to_string()),
         }
     }
@@ -332,7 +355,7 @@ pub trait AtosOrchestrator: Send + Sync {
     async fn promote_note(
         &self,
         note_id: &str,
-        to: corpus_engine::NoteScope,
+        to: corpus_engine_notes::NoteScope,
         feature_id: Option<&str>,
         new_content: Option<&str>,
     ) -> Result<String>;
@@ -357,7 +380,8 @@ pub trait AtosOrchestrator: Send + Sync {
 /// Expose the `Arc<FeatureStore>` + `Arc<NoteStore>` handles so
 /// transports that construct a `LocalAtosOrchestrator` don't need a
 /// direct corpus-engine import just for those types.
-pub use corpus_engine::{FeatureRow as _FeatureRow, NoteScope, NoteStore as _NoteStore};
+pub use corpus_engine_notes::{NoteScope, NoteStore as _NoteStore};
+pub use corpus_engine_atos::FeatureRow as _FeatureRow;
 
 /// Convenience constructor that wires a store pair into the default
 /// orchestrator. The optional `InferenceProvider` drives the Fast-slot

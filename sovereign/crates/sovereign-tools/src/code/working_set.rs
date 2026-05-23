@@ -18,7 +18,7 @@
 //! emits, so downstream joins are trivial.
 //!
 //! Path semantics + git subprocess style mirror
-//! [`corpus_engine::git_archaeology`] and
+//! [`corpus_engine_archaeology::git_archaeology`] and
 //! [`crate::code::recent_changes`] — explicit `current_dir`,
 //! `Result`-typed errors, no libgit2.
 

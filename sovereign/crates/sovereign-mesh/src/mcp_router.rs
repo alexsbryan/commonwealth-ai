@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tower_http::cors::CorsLayer;
 
-use corpus_engine::NoteStore;
+use corpus_engine_notes::NoteStore;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::types::{Effect, StepOutput, ToolContext};
 

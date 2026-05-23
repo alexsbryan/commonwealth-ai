@@ -36,9 +36,8 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::{
-    FeatureRow, FeatureState, FeatureStore, NoteRow, NoteScope, NoteStore, ScopeFilter,
-};
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
 use sovereign_core::error::{Error, Result};
 
 /// Wrap an `std::io::Error` into a `sovereign_core::Error` carrying
@@ -54,6 +53,19 @@ fn io_err<P: AsRef<Path>>(op: &str, path: P, e: std::io::Error) -> Error {
 /// from corpus-engine surfaces as a `Storage` failure here, which is
 /// the closest matching variant.
 fn ce_err(e: corpus_engine::Error) -> Error {
+    Error::Storage(e.to_string())
+}
+
+/// Same shape for `corpus-engine-atos::Error` (FeatureStore + plan_items
+/// + design_signals carved out 2026-05-23). FeatureStore call sites
+/// bubble the atos error type now.
+fn ce_atos_err(e: corpus_engine_atos::Error) -> Error {
+    Error::Storage(e.to_string())
+}
+
+/// Same shape for `corpus-engine-notes::Error` (NoteStore carved out
+/// 2026-05-23, step 3). NoteStore call sites bubble this error type.
+fn ce_notes_err(e: corpus_engine_notes::Error) -> Error {
     Error::Storage(e.to_string())
 }
 
@@ -181,7 +193,7 @@ impl RecipeProject {
         features
             .provision_recipe_project(&feature_id, title, charter_md)
             .await
-            .map_err(ce_err)?;
+            .map_err(ce_atos_err)?;
 
         let project_dir = Self::project_dir_for(&feature_id)?;
         std::fs::create_dir_all(&project_dir)
@@ -232,7 +244,7 @@ impl RecipeProject {
         let row = features
             .get(feature_id)
             .await
-            .map_err(ce_err)?
+            .map_err(ce_atos_err)?
             .ok_or_else(|| {
                 Error::InvalidInput(format!(
                     "no recipe-author project with feature_id `{feature_id}`"
@@ -417,7 +429,7 @@ impl RecipeProject {
         self.notes
             .read_notes_scoped(None, &[], &[], &[], limit, false, &scope)
             .await
-            .map_err(ce_err)
+            .map_err(ce_notes_err)
     }
 
     /// FeatureStore handle access for sibling tools that need to
@@ -448,5 +460,5 @@ pub async fn feature_row_for(
     feature_id: &str,
     features: &FeatureStore,
 ) -> Result<Option<FeatureRow>> {
-    features.get(feature_id).await.map_err(ce_err)
+    features.get(feature_id).await.map_err(ce_atos_err)
 }

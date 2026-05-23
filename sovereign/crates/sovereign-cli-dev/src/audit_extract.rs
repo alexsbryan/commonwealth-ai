@@ -39,7 +39,7 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use serde::{Deserialize, Serialize};
 use sovereign_tools::notes::diff_extract::{
     DecisionExtraction, DecisionExtractorBackend, DiffDecisionExtractor, ExtractionRequest,
@@ -198,7 +198,7 @@ async fn existing_extracted_bodies(
 async fn read_existing_decision_notes(
     notes: &NoteStore,
     limit: usize,
-) -> Vec<corpus_engine::NoteRow> {
+) -> Vec<corpus_engine_notes::NoteRow> {
     notes
         .read_notes(
             None,

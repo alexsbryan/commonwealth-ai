@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use corpus_engine::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -273,7 +273,7 @@ fn required_str<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::FeatureStore;
+    use corpus_engine_atos::FeatureStore;
 
     async fn fresh_stores() -> (Arc<NoteStore>, Arc<FeatureStore>, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -321,7 +321,7 @@ mod tests {
         };
         let id = v["finding_id"].as_str().unwrap().to_string();
 
-        let scope_filter = corpus_engine::ScopeFilter {
+        let scope_filter = corpus_engine_notes::ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(project.id.clone()),
         };

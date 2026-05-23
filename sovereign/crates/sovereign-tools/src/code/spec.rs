@@ -44,7 +44,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::ProjectDocsStore;
+use corpus_engine_notes::ProjectDocsStore;
 
 /// Hard cap on the bytes returned for any one document. The spec
 /// is normally a few KB at most; ARCHITECTURE.md is the long

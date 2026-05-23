@@ -56,7 +56,7 @@ struct EnrichedFields {
 pub async fn enrich(
     items: &mut [ComposedPlanItem],
     design_md: &str,
-    sections: &[corpus_engine::design_signals::Section],
+    sections: &[corpus_engine_atos::design_signals::Section],
     primary_language: Option<&str>,
     daemon_url: &str,
     model: &str,

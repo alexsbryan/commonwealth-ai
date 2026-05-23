@@ -78,10 +78,10 @@ struct ToolCounts {
 }
 
 async fn render_diff(
-    feature: &corpus_engine::FeatureRow,
-    milestone: &corpus_engine::MilestoneRow,
-    runs: &[corpus_engine::AtosRunRow],
-    feature_store: &std::sync::Arc<corpus_engine::FeatureStore>,
+    feature: &corpus_engine_atos::FeatureRow,
+    milestone: &corpus_engine_atos::MilestoneRow,
+    runs: &[corpus_engine_atos::AtosRunRow],
+    feature_store: &std::sync::Arc<corpus_engine_atos::FeatureStore>,
 ) {
     println!();
     println!("  ── atos diff ────────────────────────────────────────────────");

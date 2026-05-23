@@ -34,7 +34,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::*;
 
-use corpus_engine::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 
 pub struct ReadNoteDigestTool {
     notes: Arc<NoteStore>,

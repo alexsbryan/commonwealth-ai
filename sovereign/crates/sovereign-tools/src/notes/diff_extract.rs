@@ -42,7 +42,7 @@
 
 use async_trait::async_trait;
 
-use corpus_engine::NoteRow;
+use corpus_engine_notes::NoteRow;
 
 /// Maximum diff text fed to the backend, in bytes. ~80 KB is
 /// roughly the upper limit of a useful single-session diff
@@ -261,7 +261,7 @@ impl<B: DecisionExtractorBackend> DiffDecisionExtractor<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::{NoteScope, NoteSource};
+    use corpus_engine_notes::{NoteScope, NoteSource};
 
     /// Helper: a NoteRow stub with the fields `build_prompt` reads.
     fn note(id: &str, kind: &str, body: &str) -> NoteRow {
