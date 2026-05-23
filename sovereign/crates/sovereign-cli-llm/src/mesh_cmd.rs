@@ -71,6 +71,9 @@ pub async fn run_corpus(args: &[String]) -> i32 {
         "reconstruct-manifest" => cmd_corpus_reconstruct_manifest(&args[1..]).await,
         "migrate-to-partition" => cmd_corpus_migrate_to_partition(&args[1..]).await,
         "catalog" => crate::corpus_catalog_cmd::run_catalog(&args[1..]).await,
+        "extract-entities" => {
+            crate::corpus_extract_entities_cmd::run_extract_entities(&args[1..]).await
+        }
         "scrub" => crate::corpus_scrub_cmd::run_scrub(&args[1..]).await,
         "snapshot" => crate::corpus_snapshot_cmd::run_snapshot(&args[1..]).await,
         // Watched-folder lifecycle subcommands. Implemented in

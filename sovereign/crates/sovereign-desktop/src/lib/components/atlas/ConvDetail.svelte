@@ -67,6 +67,71 @@
   function stateClass(state: string): string {
     return `state-pill state-${state.toLowerCase()}`;
   }
+
+  /** Plain-language labels for the per-conv enrichment states. */
+  const STATE_LABEL: Record<string, string> = {
+    Ready: "Ready",
+    MultiHopReady: "Partly ready",
+    PartiallyReady: "Indexing…",
+    Pending: "Waiting",
+    Failed: "Failed",
+  };
+
+  function stateLabel(state: string): string {
+    return STATE_LABEL[state] ?? state;
+  }
+
+  /** Per-leaf entity-diff highlighting. Counts how many distinct
+   *  level-0 RAPTOR nodes mention each entity. An entity appearing
+   *  in exactly one leaf gets a "distinctive" chip style — that's
+   *  what differentiates the leaf from its siblings. Entities
+   *  appearing in 2+ leaves render as plain shared chips.
+   *
+   *  Why: leaf summaries often paraphrase to the conversation's
+   *  dominant theme (e.g. "the framework was applied to country
+   *  group X"), making sibling leaves read as near-identical. The
+   *  entity-frequency diff is where the actual specificity lives.
+   *  Sample case live 2026-05-22: "Beyond GDP" conv had two
+   *  level-0 leaves with similar prose summaries; one's distinctive
+   *  entities were `Park Chunghee`, `Mahathir Mohamad`, `Bumiputera`
+   *  (Asian-tiger application) while the other was generic
+   *  country exemplars. Highlighting surfaces that diff at-a-glance.
+   *
+   *  Diff only applies to level-0 leaves; roots/intermediates
+   *  aggregate entities by construction so distinctiveness isn't
+   *  meaningful at those levels.
+   */
+  let entityFreqAcrossLeaves = $derived.by(() => {
+    const counts = new Map<string, number>();
+    if (!detail) return counts;
+    for (const n of detail.raptor_nodes) {
+      if (n.level !== 0) continue;
+      // Dedupe within a single node so a duplicated entity in one
+      // leaf doesn't inflate its global count.
+      const seen = new Set<string>();
+      for (const e of n.primary_entities) {
+        if (seen.has(e)) continue;
+        seen.add(e);
+        counts.set(e, (counts.get(e) ?? 0) + 1);
+      }
+    }
+    return counts;
+  });
+
+  function entityClass(name: string, nodeLevel: number): string {
+    if (nodeLevel !== 0) return "entity-chip";
+    const count = entityFreqAcrossLeaves.get(name) ?? 0;
+    return count === 1 ? "entity-chip entity-chip-distinctive" : "entity-chip";
+  }
+
+  function entityTitle(name: string, nodeLevel: number): string {
+    if (nodeLevel !== 0) return name;
+    const count = entityFreqAcrossLeaves.get(name) ?? 0;
+    if (count === 1) {
+      return `${name} · unique to this cluster`;
+    }
+    return `${name} · in ${count} clusters`;
+  }
 </script>
 
 <div class="conv-detail">
@@ -92,34 +157,37 @@
     <section class="header-card">
       <div class="title-row">
         <h1>{detail.title}</h1>
-        <span class={stateClass(detail.state)}>{detail.state}</span>
+        <span
+          class={stateClass(detail.state)}
+          title={detail.state}
+        >{stateLabel(detail.state)}</span>
       </div>
       <div class="meta-row">
-        <span>{detail.chunk_count.toLocaleString()} chunks</span>
-        <span>{detail.raptor_nodes.length} RAPTOR node{detail.raptor_nodes.length === 1 ? "" : "s"}</span>
-        <span>levels {detail.max_level + 1}</span>
+        <span>{detail.chunk_count.toLocaleString()} messages</span>
+        <span>{detail.raptor_nodes.length} topic cluster{detail.raptor_nodes.length === 1 ? "" : "s"}</span>
+        <span>{detail.max_level + 1} level{detail.max_level === 0 ? "" : "s"} of summary</span>
         <span>updated {formatTimestamp(detail.updated_at)}</span>
       </div>
     </section>
 
     {#if detail.raptor_nodes.length === 0}
       <div class="status empty">
-        <p>No RAPTOR clusters were built for this conversation.</p>
+        <p>No topic clusters built for this conversation yet.</p>
       </div>
     {:else if detail.raptor_nodes.length === 1 && detail.raptor_nodes[0].is_synthetic_tiny}
       <section class="tier-section">
         <h2>Conversation summary</h2>
         <p class="tiny-note">
-          Tiny opt-2: only the conversation title is available. RAPTOR
-          clustering is skipped for conversations with fewer than 8
-          chunks (no LLM call, no signposts).
+          This conversation is too short to break into topic clusters —
+          only the conversation title is shown above. Searches still
+          find this chat by content.
         </p>
       </section>
     {:else if hierarchicalRender(detail)}
-      <!-- Hierarchical: root → intermediate → leaves. -->
+      <!-- Hierarchical: top-level → middle → leaf clusters. -->
       {@const maxLevel = detail.max_level}
       <section class="tier-section">
-        <h2>Root summary{rootsOnly(detail.raptor_nodes, maxLevel).length === 1 ? "" : "ies"}</h2>
+        <h2>Top-level summar{rootsOnly(detail.raptor_nodes, maxLevel).length === 1 ? "y" : "ies"}</h2>
         <ul class="node-list">
           {#each rootsOnly(detail.raptor_nodes, maxLevel) as node (node.node_id)}
             {@render renderNode(node)}
@@ -128,7 +196,7 @@
       </section>
       {#if intermediateLevels(detail.raptor_nodes, maxLevel).length > 0}
         <section class="tier-section">
-          <h2>Intermediate clusters</h2>
+          <h2>Mid-level themes</h2>
           <ul class="node-list">
             {#each intermediateLevels(detail.raptor_nodes, maxLevel) as node (node.node_id)}
               {@render renderNode(node)}
@@ -137,7 +205,7 @@
         </section>
       {/if}
       <section class="tier-section">
-        <h2>Leaf clusters</h2>
+        <h2>Topic clusters</h2>
         <ul class="node-list">
           {#each leavesOnly(detail.raptor_nodes) as node (node.node_id)}
             {@render renderNode(node)}
@@ -147,7 +215,7 @@
     {:else}
       <!-- Flat: just render every node ordered as backend returned. -->
       <section class="tier-section">
-        <h2>Clusters</h2>
+        <h2>Topics in this conversation</h2>
         <ul class="node-list">
           {#each detail.raptor_nodes as node (node.node_id)}
             {@render renderNode(node)}
@@ -161,19 +229,24 @@
 {#snippet renderNode(node: ConvRaptorNodeView)}
   <li class="raptor-node" data-level={node.level}>
     <div class="node-header">
-      <span class="level-badge">L{node.level}</span>
-      <span class="coherence" title="cluster coherence">
-        coherence {node.cluster_coherence.toFixed(2)}
+      <span class="level-badge" title={`Cluster depth ${node.level}`}>
+        {node.level === 0 ? "topic" : `level ${node.level}`}
+      </span>
+      <span
+        class="coherence"
+        title="How tightly the messages in this cluster cohere (0–1)"
+      >
+        tightness {node.cluster_coherence.toFixed(2)}
       </span>
       {#if node.evidence_chunk_count > 0}
-        <span class="evidence">{node.evidence_chunk_count} chunks</span>
+        <span class="evidence">{node.evidence_chunk_count} message{node.evidence_chunk_count === 1 ? "" : "s"}</span>
       {/if}
     </div>
     <p class="summary">{node.summary}</p>
     {#if node.primary_entities.length > 0}
       <div class="entity-row">
         {#each node.primary_entities as ent (ent)}
-          <span class="entity-chip">{ent}</span>
+          <span class={entityClass(ent, node.level)} title={entityTitle(ent, node.level)}>{ent}</span>
         {/each}
       </div>
     {/if}
@@ -321,6 +394,16 @@
     border-radius: 0.5rem;
     padding: 0.1rem 0.55rem;
     font-size: 0.75rem;
+    border: 1px solid transparent;
+  }
+  /* Distinctive chip — entity unique to this leaf among the conv's
+     level-0 siblings. Brighter accent + outline so the diff
+     reads at-a-glance against the plain shared entities. */
+  .entity-chip-distinctive {
+    background: rgba(78, 192, 107, 0.18);
+    color: #6dd58a;
+    border: 1px solid rgba(78, 192, 107, 0.45);
+    font-weight: 500;
   }
   .status {
     padding: 1rem;

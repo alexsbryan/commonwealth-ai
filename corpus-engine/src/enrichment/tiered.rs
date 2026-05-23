@@ -42,6 +42,32 @@ use crate::recipe::Recipe;
 /// taking ownership.
 pub type TieredProviderHandle = Arc<dyn TieredEnrichmentProvider>;
 
+/// Shared handle for the per-chunk NER extractor (GliNER today, via
+/// `sovereign-tools::gliner_ner`). Optional second hook fired by the
+/// tiered runner ahead of the heavy `TieredEnrichmentProvider` call
+/// — runs the cheap CPU-only NER pass first so the chunk_entities
+/// table populates even when the LLM-side enrichment fails or is
+/// killed mid-run. `None` falls back to RAPTOR-derived entities only.
+pub type ChunkEntityExtractorHandle = Arc<dyn ChunkEntityExtractor>;
+
+/// Per-chunk named-entity extractor. corpus-engine declares the
+/// trait so the dispatch loop can fire it per-conversation;
+/// sovereign-tools owns the concrete impl (where the `gline-rs` dep
+/// lives) and the SqliteStateStore persistence path.
+///
+/// One call per conversation: implementor batches chunks internally
+/// for throughput. Returns the count of mentions persisted so the
+/// runner can surface a "extracted N entities" log line.
+#[async_trait::async_trait]
+pub trait ChunkEntityExtractor: Send + Sync {
+    async fn extract_for_conversation(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        chunks: Vec<EnrichmentChunkRow>,
+    ) -> Result<usize>;
+}
+
 /// Provider trait for the heavy tiered-enrichment work
 /// (`build_raptor_atlas`, entity-graph extraction, motif
 /// classification, persistence). corpus-engine knows about the trait
@@ -150,12 +176,14 @@ pub async fn run_tiered_enrichment(
     recipe: &Recipe,
     index_path: &Path,
     provider: Option<&TieredProviderHandle>,
+    entity_extractor: Option<&ChunkEntityExtractorHandle>,
 ) -> Result<TieredDispatchPlan> {
     let corpus_id = recipe.corpus.id.clone();
     tracing::info!(
         corpus = %corpus_id,
         index = %index_path.display(),
         has_provider = provider.is_some(),
+        has_entity_extractor = entity_extractor.is_some(),
         "tiered enrichment: scanning chunks index for per-conversation grouping"
     );
 
@@ -244,6 +272,39 @@ pub async fn run_tiered_enrichment(
             continue;
         }
         let (chunks, embeddings): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
+
+        // Cheap CPU-only pass first: per-chunk NER. Runs ahead of
+        // the LLM-heavy provider call so even if the provider fails
+        // (e.g. inference timeout), chunk_entities still
+        // populates and the conv-entity-graph builder has something
+        // dense to work with. Optional — None means "skip NER".
+        if let Some(extractor) = entity_extractor {
+            // Clone chunks because the provider call below consumes
+            // the originals. Cheap relative to the NER work itself.
+            let chunks_for_ner = chunks.clone();
+            match extractor
+                .extract_for_conversation(&corpus_id, &conv_uuid, chunks_for_ner)
+                .await
+            {
+                Ok(n) => {
+                    tracing::debug!(
+                        corpus = %corpus_id,
+                        conv = %conv_uuid,
+                        mentions = n,
+                        "tiered enrichment: per-chunk NER persisted"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        corpus = %corpus_id,
+                        conv = %conv_uuid,
+                        error = %e,
+                        "tiered enrichment: per-chunk NER failed; continuing with RAPTOR-only entities for this conv"
+                    );
+                }
+            }
+        }
+
         if let Err(e) = provider
             .enrich_conversation(&corpus_id, &conv_uuid, chunks, embeddings, bucket)
             .await

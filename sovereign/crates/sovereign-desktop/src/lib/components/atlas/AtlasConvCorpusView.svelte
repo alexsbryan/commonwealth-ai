@@ -81,6 +81,19 @@
   function stateClass(state: string): string {
     return `state-pill state-${state.toLowerCase()}`;
   }
+
+  /** Plain-language labels for the per-conv enrichment states. */
+  const STATE_LABEL: Record<string, string> = {
+    Ready: "Ready",
+    MultiHopReady: "Partly ready",
+    PartiallyReady: "Indexing…",
+    Pending: "Waiting",
+    Failed: "Failed",
+  };
+
+  function stateLabel(state: string): string {
+    return STATE_LABEL[state] ?? state;
+  }
 </script>
 
 <div class="conv-corpus-view">
@@ -141,14 +154,17 @@
           >
             <div class="conv-header">
               <span class="conv-title">{conv.title}</span>
-              <span class={stateClass(conv.state)}>{conv.state}</span>
+              <span
+                class={stateClass(conv.state)}
+                title={conv.state}
+              >{stateLabel(conv.state)}</span>
             </div>
             <div class="conv-meta">
               <span class="chunks">{conv.chunk_count.toLocaleString()} chunks</span>
               <span class="updated">{formatTimestamp(conv.updated_at)}</span>
               {#if conv.is_tiny}
-                <span class="tiny-pill" title="Tiny opt-2: no LLM-extracted entities">
-                  tiny
+                <span class="tiny-pill" title="Short conversation — no detailed cluster summaries">
+                  short
                 </span>
               {/if}
             </div>

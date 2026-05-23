@@ -12,7 +12,14 @@
 
   import { onMount } from "svelte";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { atlasListAtoms, importAnthropicZip } from "../../api";
+  import { listen } from "@tauri-apps/api/event";
+  import {
+    atlasCheckGlinerModel,
+    atlasDownloadGlinerModel,
+    atlasListAtoms,
+    importAnthropicZip,
+  } from "../../api";
+  import type { GlinerModelStatus } from "../../types";
   import { atlasNavigation } from "../../stores/atlasNavigation.svelte";
   import { importsStore, type ImportState } from "../../stores/importsStore.svelte";
   import {
@@ -34,10 +41,66 @@
 
   onMount(() => {
     void importsStore.init();
+    void refreshGlinerStatus();
+    const unlisten = listen<{ file: string; downloaded: number; total: number }>(
+      "gliner-download-progress",
+      (e) => {
+        const { file, downloaded, total } = e.payload;
+        if (file === "__complete__") {
+          glinerDownloadFile = null;
+          glinerDownloadPct = 0;
+          void refreshGlinerStatus();
+          return;
+        }
+        glinerDownloadFile = file;
+        if (total > 0) {
+          glinerDownloadPct = Math.min(100, Math.round((downloaded / total) * 100));
+        }
+      },
+    );
+    return () => {
+      void unlisten.then((u) => u());
+    };
   });
 
   let importState = $derived<ImportState>(importsStore.state);
   let progress = $derived(importState.ingestProgress);
+
+  // ─── GliNER per-chunk entity extraction (Phase 1 model UX) ───
+  //
+  // Local NER model for the conv-tiered retrieval surface. Without
+  // it, ingest still works but falls back to RAPTOR-derived
+  // entities only (~5/leaf instead of ~24/chunk). The toggle is a
+  // one-time install — once the model is on disk, every future
+  // import auto-runs entity extraction via the daemon hook.
+  let glinerStatus: GlinerModelStatus | null = $state(null);
+  let glinerDownloading = $state(false);
+  let glinerDownloadFile: string | null = $state(null);
+  let glinerDownloadPct = $state(0);
+  let glinerError: string | null = $state(null);
+
+  async function refreshGlinerStatus() {
+    try {
+      glinerStatus = await atlasCheckGlinerModel();
+    } catch (e) {
+      glinerError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  async function downloadGlinerModel() {
+    glinerDownloading = true;
+    glinerError = null;
+    glinerDownloadPct = 0;
+    glinerDownloadFile = null;
+    try {
+      await atlasDownloadGlinerModel();
+    } catch (e) {
+      glinerError = e instanceof Error ? e.message : String(e);
+    } finally {
+      glinerDownloading = false;
+      await refreshGlinerStatus();
+    }
+  }
 
   // Active stages collapse the picker UI in favour of the progress
   // card so the user doesn't see a "Import Claude export" button
@@ -288,6 +351,63 @@
       <span class="badge">Coming soon</span>
     </article>
   </div>
+
+  <!-- Smart highlights (GliNER per-chunk NER). One-time model
+       install; thereafter every imported conversation gets
+       automatic entity tagging used by search + Atlas. -->
+  <article class="gliner-card">
+    <header class="source-header">
+      <div class="source-icon">🔍</div>
+      <div class="source-meta">
+        <h3 class="source-name">Smart highlights for your chats</h3>
+        <p class="source-help">
+          Find the people, places, works, and organizations in every
+          conversation you import. Once installed, this runs
+          automatically in the background — and your searches get
+          better at finding related conversations across topics.
+        </p>
+      </div>
+    </header>
+    <div class="gliner-controls" data-testid="gliner-controls">
+      {#if glinerStatus === null}
+        <span class="badge">Checking…</span>
+      {:else if glinerStatus.installed}
+        <span class="badge installed">✓ On</span>
+        <span class="path-hint">runs locally · nothing leaves your machine</span>
+        <button
+          type="button"
+          class="redownload-btn"
+          onclick={downloadGlinerModel}
+          disabled={glinerDownloading}
+          title="Re-download the model files (skip if already present)"
+        >
+          {glinerDownloading ? "Updating…" : "Re-download"}
+        </button>
+      {:else if glinerDownloading}
+        <span class="badge running">
+          {#if glinerDownloadFile === "tokenizer.json"}
+            Preparing… {glinerDownloadPct}%
+          {:else}
+            Downloading… {glinerDownloadPct}%
+          {/if}
+        </span>
+      {:else}
+        <span class="badge not-installed">Off</span>
+        <button
+          type="button"
+          class="install-btn"
+          onclick={downloadGlinerModel}
+        >
+          Turn on (one-time {glinerStatus.size_estimate_mb} MB download)
+        </button>
+      {/if}
+    </div>
+    {#if glinerError}
+      <p class="gliner-error" role="alert">
+        Something went wrong: {glinerError}
+      </p>
+    {/if}
+  </article>
   {/if}
 
   {#if !pickerVisible && importState.stage !== "needs_reset_confirm"}
@@ -695,5 +815,65 @@
   button.secondary:hover {
     background: var(--bg-elevated, var(--bg-primary));
     border-color: var(--border, currentColor);
+  }
+
+  /* GliNER per-chunk entity extraction (Phase 1 install card) */
+  .gliner-card {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg-surface, #1a1a1a);
+    border: 1px solid var(--border, #333);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .gliner-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .gliner-controls .badge.installed {
+    background: rgba(78, 192, 107, 0.18);
+    color: #6dd58a;
+  }
+  .gliner-controls .badge.not-installed {
+    background: rgba(150, 150, 150, 0.18);
+    color: var(--text-muted, #888);
+  }
+  .gliner-controls .badge.running {
+    background: rgba(96, 132, 232, 0.18);
+    color: #92ade8;
+    font-variant-numeric: tabular-nums;
+  }
+  .install-btn,
+  .redownload-btn {
+    background: var(--accent, #5077e5);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .install-btn:hover:not(:disabled),
+  .redownload-btn:hover:not(:disabled) {
+    background: var(--accent-strong, #6989f0);
+  }
+  .install-btn:disabled,
+  .redownload-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .path-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted, #888);
+    font-family: ui-monospace, monospace;
+  }
+  .gliner-error {
+    margin: 0;
+    color: var(--error, #d44);
+    font-size: 0.85rem;
   }
 </style>

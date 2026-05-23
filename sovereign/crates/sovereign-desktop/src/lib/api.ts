@@ -32,10 +32,12 @@ import type {
   AtomListPage,
   PageCursor,
   AtomDetail,
+  ChunkEntityProgressRow,
   ConvCorpusSummary,
   ConvDetailView,
   ConvEntityChip,
   ConvListPage,
+  GlinerModelStatus,
 } from "./types";
 
 export async function sendMessage(
@@ -1397,6 +1399,31 @@ export async function atlasGetConvEntities(
   convUuid: string,
 ): Promise<ConvEntityChip[]> {
   return invoke("atlas_get_conv_entities", { corpusId, convUuid });
+}
+
+/** Check whether the configured GliNER model is installed locally.
+ *  Drives the Settings → Imports "Install model" affordance. */
+export async function atlasCheckGlinerModel(): Promise<GlinerModelStatus> {
+  return invoke("atlas_check_gliner_model");
+}
+
+/** Kicks off a model download. Progress streams via the
+ *  `gliner-download-progress` Tauri event channel; callers subscribe
+ *  with `listen("gliner-download-progress", cb)` and receive
+ *  `{ file, downloaded, total }` payloads. Returns when complete. */
+export async function atlasDownloadGlinerModel(
+  modelId?: string,
+): Promise<void> {
+  return invoke("atlas_download_gliner_model", { modelId });
+}
+
+/** Per-corpus chunk-entity extraction progress. Returns `null` when
+ *  extraction has never been started for this corpus. AtlasIndex
+ *  polls this every ~5s while any state is non-terminal. */
+export async function atlasGetChunkEntityProgress(
+  corpusId: string,
+): Promise<ChunkEntityProgressRow | null> {
+  return invoke("atlas_get_chunk_entity_progress", { corpusId });
 }
 
 // ─── Contribution controls (W2/W3) ───────────────────────────

@@ -27,7 +27,7 @@ path = "src/main.rs"
 sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
-sovereign-tools = { workspace = true, features = ["treesitter"] }
+sovereign-tools = { workspace = true, features = ["treesitter", "gliner-ner"] }
 sovereign-atos = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-pipeline = { workspace = true }

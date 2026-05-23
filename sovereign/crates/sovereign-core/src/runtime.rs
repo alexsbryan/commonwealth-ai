@@ -784,8 +784,6 @@ impl Runtime {
         self
     }
 
-
-
     /// Install a `KnowledgeView` landscape-digest provider. Typically
     /// the `sovereign-tools::knowledge_view::KnowledgeViewManager`,
     /// constructed alongside the `StateStore` so the same `Arc` can

@@ -43,7 +43,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use corpus_engine::enrichment::tiered::{ConvBucket, TieredEnrichmentProvider};
+use corpus_engine::enrichment::tiered::{
+    ChunkEntityExtractor, ConvBucket, TieredEnrichmentProvider,
+};
 use corpus_engine::error::{Error, Result};
 use corpus_engine::index::EnrichmentChunkRow;
 use sovereign_core::traits::InferenceProvider;
@@ -66,6 +68,82 @@ use crate::raptor_atlas::{build_raptor_atlas, ChunkInput};
 pub struct ConvTieredProvider {
     store: Arc<SqliteStateStore>,
     inference: Arc<dyn InferenceProvider>,
+}
+
+/// Concrete `ChunkEntityExtractor` impl for the daemon ingest path.
+/// Wraps a single `GlinerExtractor` + `Arc<SqliteStateStore>` and
+/// persists rows into `chunk_entities` per-conversation. Fires
+/// from `corpus_engine::enrichment::tiered::run_tiered_enrichment`
+/// ahead of the LLM-heavy `TieredEnrichmentProvider` call.
+///
+/// Feature-gated under `gliner-ner` like the underlying extractor.
+#[cfg(feature = "gliner-ner")]
+pub struct GlinerChunkExtractor {
+    store: Arc<SqliteStateStore>,
+    extractor: Arc<crate::gliner_ner::GlinerExtractor>,
+}
+
+#[cfg(feature = "gliner-ner")]
+impl GlinerChunkExtractor {
+    pub fn new(
+        store: Arc<SqliteStateStore>,
+        extractor: Arc<crate::gliner_ner::GlinerExtractor>,
+    ) -> Self {
+        Self { store, extractor }
+    }
+
+    pub fn into_handle(
+        self,
+    ) -> Arc<dyn ChunkEntityExtractor> {
+        Arc::new(self)
+    }
+}
+
+#[cfg(feature = "gliner-ner")]
+#[async_trait]
+impl ChunkEntityExtractor for GlinerChunkExtractor {
+    async fn extract_for_conversation(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        chunks: Vec<EnrichmentChunkRow>,
+    ) -> Result<usize> {
+        if chunks.is_empty() {
+            return Ok(0);
+        }
+        let extracted_at = crate::gliner_ner::now_unix();
+        let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
+        let mention_batches = match self.extractor.extract_batch(&texts) {
+            Ok(b) => b,
+            Err(e) => {
+                return Err(Error::Database(format!(
+                    "GlinerChunkExtractor.extract_batch: {e}"
+                )));
+            }
+        };
+        let mut rows: Vec<sovereign_core::conv_tiered::ChunkEntityRow> = Vec::new();
+        for (chunk, mentions) in chunks.iter().zip(mention_batches.into_iter()) {
+            for m in mentions {
+                rows.push(m.into_row(
+                    corpus_id,
+                    chunk.id,
+                    Some(conv_uuid),
+                    extracted_at,
+                ));
+            }
+        }
+        let count = rows.len();
+        if let Err(e) = self
+            .store
+            .save_chunk_entities_for_conv(corpus_id, conv_uuid, &rows)
+            .await
+        {
+            return Err(Error::Database(format!(
+                "save_chunk_entities_for_conv({corpus_id}, {conv_uuid}): {e}"
+            )));
+        }
+        Ok(count)
+    }
 }
 
 impl ConvTieredProvider {

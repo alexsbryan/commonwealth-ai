@@ -948,6 +948,67 @@ async fn run_daemon(args: &[String]) -> i32 {
                 }
             }
         };
+        // GliNER per-chunk entity extractor (spec
+        // `sovereign/docs/specs/CONV_TIERED_PORT.md` Phase 1). Loaded
+        // when the gliner-ner feature is on AND the model files are
+        // present at the configured path. Optional — falls back to
+        // RAPTOR-derived entities (Option A) when unavailable. The
+        // tiered runner fires this ahead of the LLM-heavy
+        // TieredEnrichmentProvider call so chunk_entities populates
+        // even if the LLM half fails or is killed mid-run.
+        let chunk_entity_extractor: Option<
+            std::sync::Arc<
+                dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor,
+            >,
+        > = {
+            let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID;
+            if sovereign_tools::gliner_ner::probe_model_available(model_id) {
+                let store_path = data_dir.join("sovereign.db");
+                match sovereign_store::sqlite::SqliteStateStore::open(&store_path) {
+                    Ok(store_for_extractor) => {
+                        match sovereign_tools::gliner_ner::GlinerExtractor::new_default() {
+                            Ok(ex) => {
+                                tracing::info!(
+                                    model = model_id,
+                                    "conv-tiered: GliNER extractor loaded for ingest hook"
+                                );
+                                Some(std::sync::Arc::new(
+                                    sovereign_tools::conv_tiered_provider::GlinerChunkExtractor::new(
+                                        Arc::new(store_for_extractor),
+                                        Arc::new(ex),
+                                    ),
+                                ) as Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>)
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    model = model_id,
+                                    error = %e,
+                                    "conv-tiered: GliNER load failed — tiered ingest will fall back to RAPTOR-only entities"
+                                );
+                                None
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            store_path = %store_path.display(),
+                            error = %e,
+                            "conv-tiered: cannot open state store for entity extractor — skipping"
+                        );
+                        None
+                    }
+                }
+            } else {
+                let root = sovereign_tools::gliner_ner::models_root().join(model_id);
+                tracing::info!(
+                    model = model_id,
+                    expected_path = %root.display(),
+                    "conv-tiered: GliNER model not installed — per-chunk entity extraction disabled. Tiered ingest will use RAPTOR-derived entities only."
+                );
+                None
+            }
+        };
+
         let mut engine_builder = CorpusEngine::new(recipes_dir, indexes_dir, embed)
             .with_embedding_model(&embed_model_name)
             .with_batch_embed_fn(batch_embed)
@@ -955,6 +1016,9 @@ async fn run_daemon(args: &[String]) -> i32 {
             .with_self_node_id(self_node_id.to_string());
         if let Some(provider) = tiered_provider {
             engine_builder = engine_builder.with_tiered_provider(provider);
+        }
+        if let Some(extractor) = chunk_entity_extractor {
+            engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
         }
         Arc::new(engine_builder)
     };

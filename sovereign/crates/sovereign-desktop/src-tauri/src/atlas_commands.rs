@@ -344,6 +344,86 @@ pub async fn atlas_get_conv_detail(
     }))
 }
 
+/// GliNER model availability + path for the Settings → Imports
+/// surface. Returns whether the configured model is installed +
+/// the expected on-disk path so the UI can show "Install model"
+/// vs "Re-download" affordances. Spec: Phase 1 model UX.
+#[derive(serde::Serialize, Clone)]
+pub struct GlinerModelStatus {
+    pub installed: bool,
+    pub model_id: String,
+    pub expected_path: String,
+    pub size_estimate_mb: u64,
+}
+
+#[tauri::command]
+pub async fn atlas_check_gliner_model() -> Result<GlinerModelStatus, String> {
+    let model_id = sovereign_tools::gliner_ner::DEFAULT_MODEL_ID.to_string();
+    let installed = sovereign_tools::gliner_ner::probe_model_available(&model_id);
+    let expected_path = sovereign_tools::gliner_ner::models_root()
+        .join(&model_id)
+        .display()
+        .to_string();
+    Ok(GlinerModelStatus {
+        installed,
+        model_id,
+        expected_path,
+        // Empirical: gliner_small-v2.1 = ~600MB (ONNX f32 + tokenizer).
+        size_estimate_mb: 600,
+    })
+}
+
+/// Kicks off a model download. Streams progress via Tauri events
+/// on the channel `gliner-download-progress` (payload: `{ file,
+/// downloaded, total }`). Returns when the download completes or
+/// errors. Idempotent: skips files already present.
+#[tauri::command]
+pub async fn atlas_download_gliner_model(
+    app: tauri::AppHandle,
+    model_id: Option<String>,
+) -> Result<(), String> {
+    use tauri::Emitter;
+    let model_id = model_id
+        .unwrap_or_else(|| sovereign_tools::gliner_ner::DEFAULT_MODEL_ID.to_string());
+    let app_for_cb = app.clone();
+    let on_progress = move |file: &str, downloaded: u64, total: u64| {
+        let _ = app_for_cb.emit(
+            "gliner-download-progress",
+            serde_json::json!({
+                "file": file,
+                "downloaded": downloaded,
+                "total": total,
+            }),
+        );
+    };
+    sovereign_tools::gliner_ner::download_model(&model_id, on_progress)
+        .await
+        .map_err(|e| format!("atlas_download_gliner_model: {e}"))?;
+    let _ = app.emit(
+        "gliner-download-progress",
+        serde_json::json!({ "file": "__complete__", "downloaded": 0u64, "total": 0u64 }),
+    );
+    Ok(())
+}
+
+/// Per-corpus entity-extraction progress. Drives the AtlasIndex
+/// "X% extracted" badge that appears alongside per-state enrichment
+/// counts while extraction is running.
+#[tauri::command]
+pub async fn atlas_get_chunk_entity_progress(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+) -> Result<Option<sovereign_core::conv_tiered::ChunkEntityProgressRow>, String> {
+    let store = match state.sqlite_store.read().await.as_ref() {
+        Some(s) => Arc::clone(s),
+        None => return Err("Sqlite store not initialised".into()),
+    };
+    store
+        .get_chunk_entity_progress(&corpus_id)
+        .await
+        .map_err(|e| format!("atlas_get_chunk_entity_progress: {e}"))
+}
+
 /// Top-N entity chips for one conversation (A2). Drives the entity
 /// chip row above `ConversationChunkRenderer`'s message bubbles.
 /// Tiny convs return an empty list — the UI suppresses the chip row.

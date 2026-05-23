@@ -76,6 +76,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
         migrations::run_conv_tiered_migration(&conn)
             .map_err(|e| Error::Storage(format!("Conv tiered migration failed: {e}")))?;
+        migrations::run_chunk_entities_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Chunk entities migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -219,6 +221,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
         migrations::run_conv_tiered_migration(&conn)
             .map_err(|e| Error::Storage(format!("Conv tiered migration failed: {e}")))?;
+        migrations::run_chunk_entities_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Chunk entities migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -2255,6 +2259,23 @@ impl ConvTieredReader for SqliteStateStore {
     ) -> sovereign_core::error::Result<Vec<ConvRaptorNodeRow>> {
         SqliteStateStore::list_conv_raptor_nodes(self, corpus_id, conv_uuid).await
     }
+
+    async fn list_chunk_entities_for_conv(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> sovereign_core::error::Result<Vec<sovereign_core::conv_tiered::ChunkEntityRow>> {
+        SqliteStateStore::list_chunk_entities_for_conv(self, corpus_id, conv_uuid).await
+    }
+
+    async fn get_chunk_entity_progress(
+        &self,
+        corpus_id: &str,
+    ) -> sovereign_core::error::Result<
+        Option<sovereign_core::conv_tiered::ChunkEntityProgressRow>,
+    > {
+        SqliteStateStore::get_chunk_entity_progress(self, corpus_id).await
+    }
 }
 
 //
@@ -2645,6 +2666,205 @@ impl SqliteStateStore {
             out.push(row.map_err(map_db)?);
         }
         Ok((out, total as u64))
+    }
+
+    /// Replace all chunk_entities rows for one conversation. Writes
+    /// inside a transaction so concurrent reads see either the prior
+    /// or the new set, never a half-applied state. `rows.len()` is
+    /// also the natural progress increment for the batch CLI.
+    pub async fn save_chunk_entities_for_conv(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        rows: &[sovereign_core::conv_tiered::ChunkEntityRow],
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM chunk_entities WHERE corpus_id = ?1 AND conv_uuid = ?2",
+            rusqlite::params![corpus_id, conv_uuid],
+        )
+        .map_err(map_db)?;
+        for row in rows {
+            tx.execute(
+                "INSERT OR REPLACE INTO chunk_entities
+                    (corpus_id, chunk_id, text, label, char_start,
+                     char_end, score, conv_uuid, extracted_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                rusqlite::params![
+                    row.corpus_id,
+                    row.chunk_id as i64,
+                    row.text,
+                    row.label,
+                    row.char_start,
+                    row.char_end,
+                    row.score,
+                    row.conv_uuid,
+                    row.extracted_at,
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    /// Bulk-write chunk_entities rows scoped by chunk_id (no conv
+    /// grouping). Idempotent via PRIMARY KEY collision → REPLACE.
+    /// Used by non-conv corpora that don't have a `conv_uuid` to
+    /// group on.
+    pub async fn save_chunk_entities(
+        &self,
+        rows: &[sovereign_core::conv_tiered::ChunkEntityRow],
+    ) -> Result<()> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        for row in rows {
+            tx.execute(
+                "INSERT OR REPLACE INTO chunk_entities
+                    (corpus_id, chunk_id, text, label, char_start,
+                     char_end, score, conv_uuid, extracted_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                rusqlite::params![
+                    row.corpus_id,
+                    row.chunk_id as i64,
+                    row.text,
+                    row.label,
+                    row.char_start,
+                    row.char_end,
+                    row.score,
+                    row.conv_uuid,
+                    row.extracted_at,
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    /// Read every `chunk_entities` row for one conversation.
+    /// Returned in `(chunk_id ASC, char_start ASC)` order.
+    pub async fn list_chunk_entities_for_conv(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> Result<Vec<sovereign_core::conv_tiered::ChunkEntityRow>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT corpus_id, chunk_id, text, label, char_start,
+                        char_end, score, conv_uuid, extracted_at
+                 FROM chunk_entities
+                 WHERE corpus_id = ?1 AND conv_uuid = ?2
+                 ORDER BY chunk_id ASC, char_start ASC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![corpus_id, conv_uuid], |r| {
+                Ok(sovereign_core::conv_tiered::ChunkEntityRow {
+                    corpus_id: r.get(0)?,
+                    chunk_id: r.get::<_, i64>(1)? as u64,
+                    text: r.get(2)?,
+                    label: r.get(3)?,
+                    char_start: r.get(4)?,
+                    char_end: r.get(5)?,
+                    score: r.get(6)?,
+                    conv_uuid: r.get(7)?,
+                    extracted_at: r.get(8)?,
+                })
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok(out)
+    }
+
+    /// Upsert per-corpus extraction progress. Drives the CLI's
+    /// progress bar + the desktop's "entity extraction running"
+    /// badge.
+    pub async fn upsert_chunk_entity_progress(
+        &self,
+        row: &sovereign_core::conv_tiered::ChunkEntityProgressRow,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT INTO chunk_entity_progress
+                (corpus_id, chunks_processed, chunks_total,
+                 mentions_extracted, last_chunk_id, started_at,
+                 updated_at, finished_at, state, model_id, threshold,
+                 labels_json, error_msg)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+             ON CONFLICT(corpus_id) DO UPDATE SET
+                chunks_processed = excluded.chunks_processed,
+                chunks_total = excluded.chunks_total,
+                mentions_extracted = excluded.mentions_extracted,
+                last_chunk_id = excluded.last_chunk_id,
+                updated_at = excluded.updated_at,
+                finished_at = excluded.finished_at,
+                state = excluded.state,
+                model_id = excluded.model_id,
+                threshold = excluded.threshold,
+                labels_json = excluded.labels_json,
+                error_msg = excluded.error_msg",
+            rusqlite::params![
+                row.corpus_id,
+                row.chunks_processed,
+                row.chunks_total,
+                row.mentions_extracted,
+                row.last_chunk_id,
+                row.started_at,
+                row.updated_at,
+                row.finished_at,
+                row.state,
+                row.model_id,
+                row.threshold,
+                row.labels_json,
+                row.error_msg,
+            ],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    pub async fn get_chunk_entity_progress(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<sovereign_core::conv_tiered::ChunkEntityProgressRow>> {
+        let conn = self.conn.lock().await;
+        Ok(conn
+            .query_row(
+                "SELECT corpus_id, chunks_processed, chunks_total,
+                        mentions_extracted, last_chunk_id, started_at,
+                        updated_at, finished_at, state, model_id,
+                        threshold, labels_json, error_msg
+                 FROM chunk_entity_progress
+                 WHERE corpus_id = ?1",
+                rusqlite::params![corpus_id],
+                |r| {
+                    Ok(sovereign_core::conv_tiered::ChunkEntityProgressRow {
+                        corpus_id: r.get(0)?,
+                        chunks_processed: r.get(1)?,
+                        chunks_total: r.get(2)?,
+                        mentions_extracted: r.get(3)?,
+                        last_chunk_id: r.get(4)?,
+                        started_at: r.get(5)?,
+                        updated_at: r.get(6)?,
+                        finished_at: r.get(7)?,
+                        state: r.get(8)?,
+                        model_id: r.get(9)?,
+                        threshold: r.get(10)?,
+                        labels_json: r.get(11)?,
+                        error_msg: r.get(12)?,
+                    })
+                },
+            )
+            .ok())
     }
 
     /// Inventory of conv states for a corpus — used by ops tools to

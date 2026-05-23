@@ -1564,6 +1564,7 @@ impl CorpusEngine {
                                 &recipe,
                                 index_path,
                                 self.tiered_provider(),
+                                self.chunk_entity_extractor(),
                             )
                             .await?;
                             break 'enrichment;

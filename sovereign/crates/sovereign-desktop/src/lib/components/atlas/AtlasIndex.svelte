@@ -7,10 +7,15 @@
   // `AtlasCorpusView` for that corpus.
 
   import { onMount } from "svelte";
-  import { atlasListCorpora, atlasListConvCorpora } from "../../api";
+  import {
+    atlasGetChunkEntityProgress,
+    atlasListConvCorpora,
+    atlasListCorpora,
+  } from "../../api";
   import type {
     AtlasCorpusSummary,
     AtomType,
+    ChunkEntityProgressRow,
     ConvCorpusSummary,
   } from "../../types";
 
@@ -36,11 +41,18 @@
 
   let summaries: AtlasCorpusSummary[] = $state([]);
   let convSummaries: ConvCorpusSummary[] = $state([]);
+  /** Per-corpus extraction progress. Keyed by `corpus_id`. */
+  let extractionProgress: Record<string, ChunkEntityProgressRow | null> =
+    $state({});
   let loading = $state(true);
   let error: string | null = $state(null);
   /** Refresh interval id when any conv is still being enriched
    *  (not all Ready). Cleared when all conversations settle. */
   let convPollIntervalId: ReturnType<typeof setInterval> | null = null;
+  /** Separate poll for chunk_entity_progress — runs while any
+   *  corpus has `state = 'running'`. Clears when all extraction
+   *  jobs settle. */
+  let extractionPollIntervalId: ReturnType<typeof setInterval> | null = null;
 
   const ATOM_TYPE_ORDER: AtomType[] = [
     "Entity",
@@ -75,6 +87,8 @@
       summaries = atoms;
       convSummaries = convs;
       maybeStartConvPoll();
+      await refreshExtractionProgress();
+      maybeStartExtractionPoll();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
@@ -84,8 +98,57 @@
       if (convPollIntervalId !== null) {
         clearInterval(convPollIntervalId);
       }
+      if (extractionPollIntervalId !== null) {
+        clearInterval(extractionPollIntervalId);
+      }
     };
   });
+
+  async function refreshExtractionProgress() {
+    const updates: Record<string, ChunkEntityProgressRow | null> = {};
+    for (const c of convSummaries) {
+      try {
+        updates[c.corpus_id] = await atlasGetChunkEntityProgress(c.corpus_id);
+      } catch {
+        updates[c.corpus_id] = null;
+      }
+    }
+    extractionProgress = updates;
+  }
+
+  function anyExtractionRunning(): boolean {
+    for (const p of Object.values(extractionProgress)) {
+      if (p && p.state === "running") return true;
+    }
+    return false;
+  }
+
+  function maybeStartExtractionPoll() {
+    if (extractionPollIntervalId !== null) return;
+    if (!anyExtractionRunning()) return;
+    extractionPollIntervalId = setInterval(async () => {
+      try {
+        await refreshExtractionProgress();
+        if (!anyExtractionRunning() && extractionPollIntervalId !== null) {
+          clearInterval(extractionPollIntervalId);
+          extractionPollIntervalId = null;
+        }
+      } catch {
+        // Swallow — initial load already surfaced systemic errors.
+      }
+    }, 5000);
+  }
+
+  /** Render-side helper: 0-100 percent extracted or null if no
+   *  extraction row exists for this corpus yet. */
+  function extractionPct(corpusId: string): number | null {
+    const p = extractionProgress[corpusId];
+    if (!p || p.chunks_total === 0) return null;
+    return Math.min(
+      100,
+      Math.round((p.chunks_processed / p.chunks_total) * 100),
+    );
+  }
 
   /** Convs still mid-enrichment? Per-state counts where any state
    *  other than "Ready" or "Failed" is non-zero. */
@@ -209,11 +272,25 @@
 
   /** Per-state badge label + count for a conv corpus, suppressing
    *  zero counts so the row stays scannable. */
-  function convStateBadges(c: ConvCorpusSummary): Array<[string, number]> {
+  /** Plain-language labels for the per-conv enrichment states.
+   *  Backend reports `Ready / MultiHopReady / PartiallyReady /
+   *  Pending / Failed`; users see "Ready" / "Partly ready" /
+   *  "Indexing…" / "Waiting" / "Failed". Keeps the raw state name
+   *  as the data attribute so CSS + tests still target it. */
+  const CONV_STATE_LABEL: Record<string, string> = {
+    Ready: "Ready",
+    MultiHopReady: "Partly ready",
+    PartiallyReady: "Indexing…",
+    Pending: "Waiting",
+    Failed: "Failed",
+  };
+
+  function convStateBadges(c: ConvCorpusSummary): Array<[string, number, string]> {
     const order = ["Ready", "MultiHopReady", "PartiallyReady", "Pending", "Failed"];
-    return order.flatMap<[string, number]>((state) => {
+    return order.flatMap<[string, number, string]>((state) => {
       const n = c.state_counts[state] ?? 0;
-      return n > 0 ? [[state, n]] : [];
+      const label = CONV_STATE_LABEL[state] ?? state;
+      return n > 0 ? [[state, n, label]] : [];
     });
   }
 
@@ -297,13 +374,13 @@
                       </span>
                     </div>
                     <div class="counts">
-                      {#each convStateBadges(row.data) as [state, n] (state)}
+                      {#each convStateBadges(row.data) as [state, n, label] (state)}
                         <span
                           class="count-chip"
                           data-state={state.toLowerCase()}
-                          title={state}
+                          title={`${label} (${state})`}
                         >
-                          <span class="count-label">{state}</span>
+                          <span class="count-label">{label}</span>
                           <span class="count-n">{n.toLocaleString()}</span>
                         </span>
                       {/each}
@@ -311,6 +388,31 @@
                     {#if row.data.last_updated_unix}
                       <div class="meta">
                         Last updated: {formatTimestamp(row.data.last_updated_unix)}
+                      </div>
+                    {/if}
+                    {#if extractionProgress[row.data.corpus_id]}
+                      {@const prog = extractionProgress[row.data.corpus_id]!}
+                      {@const pct = extractionPct(row.data.corpus_id)}
+                      <div class="extraction-row">
+                        {#if prog.state === "running"}
+                          <span class="extraction-pill running">
+                            Finding names &amp; topics · {pct}%
+                            <span class="extraction-detail">
+                              ({prog.chunks_processed.toLocaleString()} of {prog.chunks_total.toLocaleString()} messages read · {prog.mentions_extracted.toLocaleString()} highlights so far)
+                            </span>
+                          </span>
+                        {:else if prog.state === "complete"}
+                          <span class="extraction-pill complete">
+                            ✓ Smart highlights ready
+                            <span class="extraction-detail">
+                              ({prog.mentions_extracted.toLocaleString()} names &amp; topics found across your chats)
+                            </span>
+                          </span>
+                        {:else if prog.state === "failed"}
+                          <span class="extraction-pill failed">
+                            Couldn't analyse highlights — re-run from Settings
+                          </span>
+                        {/if}
                       </div>
                     {/if}
                   </button>
@@ -484,5 +586,35 @@
     font-size: 0.74rem;
     color: var(--text-muted);
     letter-spacing: 0.01em;
+  }
+
+  .extraction-row {
+    margin-top: 8px;
+  }
+  .extraction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.74rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .extraction-pill.running {
+    background: rgba(96, 132, 232, 0.16);
+    color: #92ade8;
+  }
+  .extraction-pill.complete {
+    background: rgba(78, 192, 107, 0.16);
+    color: #6dd58a;
+  }
+  .extraction-pill.failed {
+    background: rgba(216, 76, 76, 0.18);
+    color: #e25555;
+  }
+  .extraction-detail {
+    color: var(--text-muted, #888);
+    font-size: 0.7rem;
+    font-weight: normal;
   }
 </style>

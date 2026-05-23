@@ -546,15 +546,37 @@ impl Runtime {
             std::collections::HashMap::new();
         let mut seeded_convs = 0usize;
         for ((corpus_id, conv_uuid), chunk_indices) in &convs {
-            let nodes = match reader.list_conv_raptor_nodes(corpus_id, conv_uuid).await {
-                Ok(n) => n,
-                Err(_) => continue,
-            };
-            if nodes.is_empty() {
+            // Layered builder: combine BOTH RAPTOR primary_entities
+            // (LLM-judged cluster-distinctiveness, ~5/leaf) AND
+            // GliNER chunk_entities (raw NER recall, ~24/chunk).
+            // Edge weights accumulate across layers; entities
+            // present in both sources end up with the strongest
+            // bonds. Empty collections collapse the unused layer
+            // naturally — fully RAPTOR-only or fully GliNER-only
+            // corpora both work without code branching here.
+            let chunk_entity_rows = reader
+                .list_chunk_entities_for_conv(corpus_id, conv_uuid)
+                .await
+                .unwrap_or_default();
+            let raptor_nodes = reader
+                .list_conv_raptor_nodes(corpus_id, conv_uuid)
+                .await
+                .unwrap_or_default();
+            if chunk_entity_rows.is_empty() && raptor_nodes.is_empty() {
                 continue;
             }
-            let graph = crate::conv_entity_graph::ConvEntityGraph::from_raptor_nodes(
-                corpus_id, conv_uuid, &nodes,
+            tracing::debug!(
+                corpus = corpus_id,
+                conv = conv_uuid,
+                chunk_entities = chunk_entity_rows.len(),
+                raptor_nodes = raptor_nodes.len(),
+                "conv_entity_graph: building layered (GliNER + RAPTOR)"
+            );
+            let graph = crate::conv_entity_graph::ConvEntityGraph::from_layered(
+                corpus_id,
+                conv_uuid,
+                &raptor_nodes,
+                &chunk_entity_rows,
             );
             if graph.is_empty() {
                 continue;

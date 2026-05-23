@@ -78,6 +78,43 @@ pub struct ConvMotifRow {
     pub is_distinctive: bool,
 }
 
+/// One per-chunk entity mention from the GliNER NER pass. Persisted
+/// in the `chunk_entities` table (migration:
+/// `run_chunk_entities_migration`). One chunk can produce many
+/// rows; same (text, label) within a chunk is deduped.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChunkEntityRow {
+    pub corpus_id: String,
+    pub chunk_id: u64,
+    pub text: String,
+    pub label: String,
+    pub char_start: i64,
+    pub char_end: i64,
+    pub score: f64,
+    pub conv_uuid: Option<String>,
+    pub extracted_at: i64,
+}
+
+/// Per-corpus extraction progress snapshot. Drives the CLI's "n / N
+/// chunks processed" line + the desktop's "entity extraction
+/// running" badge (future).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChunkEntityProgressRow {
+    pub corpus_id: String,
+    pub chunks_processed: i64,
+    pub chunks_total: i64,
+    pub mentions_extracted: i64,
+    pub last_chunk_id: Option<i64>,
+    pub started_at: i64,
+    pub updated_at: i64,
+    pub finished_at: Option<i64>,
+    pub state: String,
+    pub model_id: Option<String>,
+    pub threshold: Option<f64>,
+    pub labels_json: Option<String>,
+    pub error_msg: Option<String>,
+}
+
 /// Read-side handle the briefing builder calls to surface
 /// conv-tiered enrichment in retrieval prompts. The concrete impl on
 /// `SqliteStateStore` ships in `sovereign-store::sqlite`.
@@ -99,4 +136,22 @@ pub trait ConvTieredReader: Send + Sync {
         corpus_id: &str,
         conv_uuid: &str,
     ) -> crate::error::Result<Vec<ConvRaptorNodeRow>>;
+
+    /// All `chunk_entities` rows for one conversation. Returned in
+    /// `(chunk_id ASC, char_start ASC)` order so consumers building
+    /// the entity graph see entities in their natural document
+    /// position. Empty when GliNER hasn't run yet for this conv.
+    async fn list_chunk_entities_for_conv(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> crate::error::Result<Vec<ChunkEntityRow>>;
+
+    /// Extraction progress for one corpus, if any extraction has
+    /// ever been initiated. `None` when the corpus has never been
+    /// processed.
+    async fn get_chunk_entity_progress(
+        &self,
+        corpus_id: &str,
+    ) -> crate::error::Result<Option<ChunkEntityProgressRow>>;
 }
