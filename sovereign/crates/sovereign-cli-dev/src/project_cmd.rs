@@ -145,6 +145,7 @@ const HELP_INIT: crate::util::help::Help = crate::util::help::Help {
         crate::util::help::HelpSection::Usage(
             "sovereign project init [--name <id>] [--port <port>]\n    \
              [--data-dir <dir>] [--workspace-root <path>]\n    \
+             [--watcher-ignore <component>]...\n    \
              [--no-scip] [--no-hooks] [--no-claude-config]",
         ),
         crate::util::help::HelpSection::Flags(&[
@@ -152,14 +153,16 @@ const HELP_INIT: crate::util::help::Help = crate::util::help::Help {
             ("--port <port>",        "MCP server port (default: 9741)"),
             ("--data-dir <dir>",     "Index directory (default: ~/.sovereign/indexes)"),
             ("--workspace-root <p>", "Monorepo root; discover every Cargo/Go/etc. workspace under <p>"),
+            ("--watcher-ignore <c>", "Path component the FS watcher should drop (repeatable; replaces the default of .sovereign)"),
             ("--no-scip",            "Skip SCIP call graph export"),
             ("--no-hooks",           "Skip git hook installation"),
             ("--no-claude-config",   "Skip writing .claude/settings.json (overrides harness prompt)"),
         ]),
         crate::util::help::HelpSection::Examples(&[
-            ("sovereign project init",                           "Index the current workspace"),
-            ("sovereign project init --workspace-root ..",       "Index a monorepo from a sibling dir"),
-            ("sovereign project init --no-scip",                 "Skip call graph (no exporter installed)"),
+            ("sovereign project init",                                   "Index the current workspace"),
+            ("sovereign project init --workspace-root ..",               "Index a monorepo from a sibling dir"),
+            ("sovereign project init --watcher-ignore .sovereign --watcher-ignore generated", "Add custom ignores at the FS watcher seam"),
+            ("sovereign project init --no-scip",                         "Skip call graph (no exporter installed)"),
         ]),
     ],
 };
@@ -434,6 +437,14 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
     // `Some(false)` means "do not run git init; skip the prompt."
     let mut git_override: Option<bool> = None;
 
+    // Per-project extra ignore_paths fed into the watcher's
+    // IgnoreFilter. Defaults to `.sovereign` (sovereign's project-
+    // local state dir) when no `--watcher-ignore` is given; any
+    // flag presence replaces the default outright so users can
+    // construct a clean list.
+    let mut watcher_ignore_args: Vec<String> = Vec::new();
+    let mut watcher_ignore_set = false;
+
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -465,6 +476,16 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
             "--workspace-root" => {
                 i += 1;
                 workspace_root_arg = args.get(i).map(PathBuf::from);
+            }
+            "--watcher-ignore" => {
+                i += 1;
+                if let Some(v) = args.get(i) {
+                    watcher_ignore_args.push(v.clone());
+                    watcher_ignore_set = true;
+                } else {
+                    eprintln!("error: --watcher-ignore requires a path component");
+                    return 1;
+                }
             }
             flag if flag.starts_with('-') => {
                 eprintln!("warning: unknown flag '{flag}' — ignored");
@@ -1182,9 +1203,20 @@ vector = false
     if !no_scip {
         println!();
         println!("  Registering with daemon...");
+        // Build the watcher toggle block only when the user passed
+        // `--watcher-ignore` — otherwise let the daemon use the
+        // serde default (which already includes `.sovereign`).
+        let watchers_block = if watcher_ignore_set {
+            let mut t = sovereign_mesh::projects::WatcherToggles::default();
+            t.ignore_paths = watcher_ignore_args.clone();
+            Some(t)
+        } else {
+            None
+        };
         let register_body = serde_json::json!({
             "corpus_id": corpus_id,
             "root": abs_path.display().to_string(),
+            "watchers": watchers_block,
         });
         match daemon_post("/v1/projects/register", register_body).await {
             Ok(_) => {

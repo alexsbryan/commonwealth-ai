@@ -190,58 +190,83 @@ async fn check_server_tools() -> CheckResult {
     }
 }
 
-fn check_scip_indexed() -> CheckResult {
+async fn check_scip_indexed() -> CheckResult {
     // SCIP graphs are per-corpus: `~/.sovereign/indexes/<corpus_id>/scip_graph.db`.
-    // The previous version looked for a top-level `_scip_graph.db`
-    // that never existed. Walk the indexes directory, count any
-    // non-empty scip_graph.db files, and report the total.
+    //
+    // The previous version flagged "indexed" whenever the file size
+    // crossed 4 KB — which the empty schema alone clears. A SCIP DB
+    // that has failed every export for a week (e.g. the rust-analyzer
+    // proxy was unresolved) still showed green. Open each DB and ask
+    // it directly how many symbols it holds.
     let indexes_dir = home_dir().join(".sovereign").join("indexes");
-    let mut populated = Vec::new();
-    let mut empty = 0usize;
+    let mut populated: Vec<String> = Vec::new();
+    let mut empty: Vec<String> = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&indexes_dir) {
         for entry in entries.flatten() {
-            let db = entry.path().join("scip_graph.db");
-            match db.metadata() {
-                Ok(m) if m.len() > 4096 => {
-                    if let Some(name) =
-                        entry.path().file_name().and_then(|n| n.to_str())
-                    {
-                        populated.push(name.to_string());
+            let path = entry.path();
+            let db = path.join("scip_graph.db");
+            if !db.exists() {
+                continue;
+            }
+            let name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            match corpus_engine::ScipGraph::open(&db, &name) {
+                Ok(graph) => {
+                    if graph.symbol_count().await > 0 {
+                        populated.push(name);
+                    } else {
+                        empty.push(name);
                     }
                 }
-                Ok(_) => empty += 1,
-                Err(_) => {}
+                Err(_) => {
+                    // Integrity check owns the corrupt/schema-mismatch reporting;
+                    // skip here so a single DB doesn't double-fail across two checks.
+                }
             }
         }
     }
+    if !empty.is_empty() {
+        let list = empty.join(", ");
+        let example = empty.first().cloned().unwrap_or_else(|| "<corpus>".into());
+        return CheckResult {
+            name: "scip_indexed",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "SCIP graph DB present but 0 symbols ingested for {} corpus(es): {list}. \
+                 Call graph tools (callers/callees/blast) will return empty. \
+                 Likely cause: the language exporter (rust-analyzer / scip-typescript / \
+                 scip-python / scip-go) failed during the last rebuild — see daemon.err \
+                 for the stderr tail, then check `sovereign doctor` again for the \
+                 scip_exporters finding.",
+                empty.len(),
+            ),
+            repair: Repair::Executable(format!(
+                "sovereign project refresh --name {example} --local"
+            )),
+        };
+    }
     if !populated.is_empty() {
-        CheckResult {
+        return CheckResult {
             name: "scip_indexed",
             layer: Layer::Sovereign,
             status: CheckStatus::Passed,
             message: format!(
-                "SCIP graph DB present in {} corpus index(es): {}",
+                "SCIP graph populated for {} corpus index(es): {}",
                 populated.len(),
                 populated.join(", "),
             ),
             repair: Repair::None,
-        }
-    } else if empty > 0 {
-        CheckResult {
-            name: "scip_indexed",
-            layer: Layer::Sovereign,
-            status: CheckStatus::Warning,
-            message: format!("{empty} SCIP graph DB(s) found but empty — not yet indexed"),
-            repair: Repair::Executable("sovereign project refresh".into()),
-        }
-    } else {
-        CheckResult {
-            name: "scip_indexed",
-            layer: Layer::Sovereign,
-            status: CheckStatus::Failed,
-            message: "no SCIP graph DB found — call graph tools unavailable".into(),
-            repair: Repair::Executable("sovereign project init".into()),
-        }
+        };
+    }
+    CheckResult {
+        name: "scip_indexed",
+        layer: Layer::Sovereign,
+        status: CheckStatus::Failed,
+        message: "no SCIP graph DB found — call graph tools unavailable".into(),
+        repair: Repair::Executable("sovereign project init".into()),
     }
 }
 
@@ -942,6 +967,461 @@ fn check_scip_integrity() -> CheckResult {
     }
 }
 
+/// Per-project snapshot of "is a rebuild trying right now" pulled
+/// from `/v1/projects`. The freshness check uses this to tell apart
+/// two failure modes that look identical from disk state alone:
+///
+/// - **Wedged**: source-tree mtime is past `last_export_at`, AND no
+///   rebuild is running. The watcher fired nothing in response to
+///   recent edits.
+///
+/// - **Slow rebuild**: source-tree mtime is past `last_export_at`,
+///   AND a rebuild IS in flight. The watcher fired correctly — the
+///   exporter is the slow link (or stuck on the cargo target lock,
+///   or hung in rust-analyzer).
+///
+/// Without `rebuild_in_flight`, a single Failed message would fire
+/// every time you save during the debounce-plus-rebuild window
+/// (~2.5 min on this monorepo), which would make the check
+/// effectively useless.
+#[derive(Debug, Default)]
+struct ProjectLiveness {
+    rebuild_in_flight: bool,
+}
+
+async fn fetch_project_liveness() -> std::collections::HashMap<String, ProjectLiveness> {
+    let mut out = std::collections::HashMap::new();
+    let v = match http_get_json("http://127.0.0.1:9741/v1/projects").await {
+        Some(v) => v,
+        None => return out,
+    };
+    let projects = match v.get("projects").and_then(|p| p.as_array()) {
+        Some(arr) => arr,
+        None => return out,
+    };
+    for proj in projects {
+        let Some(id) = proj.get("corpus_id").and_then(|s| s.as_str()) else {
+            continue;
+        };
+        let rebuild_in_flight = proj
+            .get("rebuild_in_flight")
+            .and_then(|b| b.as_bool())
+            .unwrap_or(false);
+        out.insert(id.to_string(), ProjectLiveness { rebuild_in_flight });
+    }
+    out
+}
+
+/// Check that each registered project's SCIP graph reflects the
+/// current state of its source tree. Three independent signals:
+///
+/// 1. `last_indexed_head` vs `git rev-parse HEAD`: catches a
+///    watcher that's behind by one or more commits.
+///
+/// 2. `export_age_secs` vs the newest source-file mtime under the
+///    project root: catches a wedged watcher that hasn't picked up
+///    *uncommitted* edits. The newest mtime walk is bounded by the
+///    same exclusions the FS watcher applies (`target/`, `.git/`,
+///    `node_modules/`, the per-project `ignore_paths`).
+///
+/// 3. `rebuild_in_flight` from `/v1/projects`: when signals 1 or 2
+///    trip, this tells us *why*. A rebuild that's running (just
+///    slow) gets a Warning; no-rebuild-firing gets a Failed.
+///
+/// Pairs with `scip_indexed` (row count) and `scip_exporters`
+/// (toolchain). Together they answer the "is the SCIP graph
+/// honestly reflecting reality?" question that the byte-threshold
+/// version of `scip_indexed` was lying about.
+async fn check_watcher_freshness() -> CheckResult {
+    let registry = match sovereign_mesh::projects::Registry::load() {
+        Ok(r) => r,
+        Err(_) => {
+            return CheckResult {
+                name: "watcher_freshness",
+                layer: Layer::Sovereign,
+                status: CheckStatus::Skipped,
+                message: "project registry not loadable".into(),
+                repair: Repair::None,
+            };
+        }
+    };
+    let entries = registry.entries();
+    if entries.is_empty() {
+        return CheckResult {
+            name: "watcher_freshness",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "no projects registered".into(),
+            repair: Repair::None,
+        };
+    }
+
+    let indexes_dir = home_dir().join(".sovereign").join("indexes");
+    // Allow this many seconds between source mtime and export time
+    // before we flag. Covers normal debounce (2s) + worker latency +
+    // the export run itself. Anything past this is a real wedge.
+    const FRESHNESS_GRACE_SECS: u64 = 60;
+    // Hard cap on the source-tree walk so a misconfigured ignore list
+    // can't tip doctor into a multi-minute traversal of a model-checkpoint
+    // directory. 25k files is well above any realistic source corpus.
+    const WALK_FILE_BUDGET: usize = 25_000;
+
+    // Liveness from /v1/projects. Empty when the daemon isn't reachable;
+    // in that case we degrade gracefully — all source-newer-than-export
+    // findings render as Failed, since we can't tell apart "wedged" from
+    // "rebuild trying".
+    let liveness = fetch_project_liveness().await;
+
+    let mut behind_head: Vec<String> = Vec::new();
+    let mut wedged: Vec<String> = Vec::new();
+    let mut slow_rebuild: Vec<String> = Vec::new();
+    let mut healthy: Vec<String> = Vec::new();
+
+    for entry in entries {
+        let corpus_id = entry.corpus_id.clone();
+        let db = indexes_dir.join(&corpus_id).join("scip_graph.db");
+        if !db.exists() {
+            // `scip_indexed` already covers the missing-DB case; don't double-fail.
+            continue;
+        }
+        let graph = match corpus_engine::ScipGraph::open(&db, &corpus_id) {
+            Ok(g) => g,
+            Err(_) => continue,
+        };
+
+        // Signal 1: git-head drift. Surfaces a watcher that's a full
+        // commit behind. Skip silently when the project isn't a git
+        // repo (no HEAD to compare against).
+        let current_head = sovereign_mesh::reindexer::read_git_head(&entry.root);
+        let indexed_head = graph.last_indexed_head().await;
+        if let (Some(cur), Some(idx)) = (current_head.as_ref(), indexed_head.as_ref()) {
+            if cur != idx {
+                behind_head.push(format!(
+                    "{corpus_id}: indexed {short_idx}, HEAD {short_cur}",
+                    short_idx = &idx[..idx.len().min(8)],
+                    short_cur = &cur[..cur.len().min(8)],
+                ));
+                continue;
+            }
+        }
+
+        // Signal 2: source-tree mtime past last export. Walks the
+        // project root for the newest source-extension mtime, then
+        // compares it to last_export_at.
+        let export_age = match graph.export_age_secs().await {
+            Some(a) => a,
+            None => continue, // no export recorded — `scip_indexed` covers
+        };
+        let newest_source_age = newest_source_age_secs(
+            &entry.root,
+            &entry.watchers.ignore_paths,
+            WALK_FILE_BUDGET,
+        );
+        match newest_source_age {
+            Some(src_age) if src_age + FRESHNESS_GRACE_SECS < export_age => {
+                // Source is meaningfully newer than the last completed export.
+                // Now ask the daemon: is a rebuild trying right now? If yes,
+                // we're not wedged — just slow. If no, the watcher missed it.
+                let in_flight = liveness
+                    .get(&corpus_id)
+                    .map(|l| l.rebuild_in_flight)
+                    .unwrap_or(false);
+                if in_flight {
+                    slow_rebuild.push(format!(
+                        "{corpus_id}: rebuild in flight, last successful index {export_age}s ago, source edit {src_age}s ago"
+                    ));
+                } else {
+                    wedged.push(format!(
+                        "{corpus_id}: newest source edit {src_age}s ago, last index {export_age}s ago, no rebuild in flight"
+                    ));
+                }
+            }
+            _ => {
+                healthy.push(corpus_id);
+            }
+        }
+    }
+
+    // Status precedence: Failed (wedged or behind-HEAD) > Warning
+    // (slow rebuild) > Passed. A single CheckResult collapses
+    // multi-project state to the worst observed level, with all
+    // findings listed in the message so nothing's hidden.
+    if !behind_head.is_empty() {
+        return CheckResult {
+            name: "watcher_freshness",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "{} project(s) have a SCIP graph behind git HEAD: {}. \
+                 The watcher hasn't rebuilt since a recent commit — check daemon.err for \
+                 SCIP export failures or a stuck rebuild lock.",
+                behind_head.len(),
+                behind_head.join("; ")
+            ),
+            repair: Repair::MultiExecutable(
+                registry
+                    .entries()
+                    .iter()
+                    .map(|e| {
+                        format!("sovereign project refresh --name {} --local", e.corpus_id)
+                    })
+                    .collect(),
+            ),
+        };
+    }
+    if !wedged.is_empty() {
+        return CheckResult {
+            name: "watcher_freshness",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "{} project(s) have uncommitted source edits the watcher hasn't picked up: {}. \
+                 fs_change events may not be reaching the reindexer — check daemon.err for \
+                 `notify` errors or nudge with `sovereign project refresh`.",
+                wedged.len(),
+                wedged.join("; ")
+            ),
+            repair: Repair::Executable("sovereign project refresh".into()),
+        };
+    }
+    if !slow_rebuild.is_empty() {
+        return CheckResult {
+            name: "watcher_freshness",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Warning,
+            message: format!(
+                "{} project(s) have a SCIP rebuild in flight but the source has moved past \
+                 the last successful index: {}. The watcher is firing correctly — the exporter \
+                 is slow (rust-analyzer often blocks on the cargo target lock during a release \
+                 build, or stalls on macro-heavy crates). Wait it out, then re-run doctor.",
+                slow_rebuild.len(),
+                slow_rebuild.join("; ")
+            ),
+            repair: Repair::None,
+        };
+    }
+    if healthy.is_empty() {
+        return CheckResult {
+            name: "watcher_freshness",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "no projects had enough state to evaluate freshness".into(),
+            repair: Repair::None,
+        };
+    }
+    CheckResult {
+        name: "watcher_freshness",
+        layer: Layer::Sovereign,
+        status: CheckStatus::Passed,
+        message: format!(
+            "SCIP graph current for {}: {}",
+            healthy.len(),
+            healthy.join(", ")
+        ),
+        repair: Repair::None,
+    }
+}
+
+/// Walk the project root and return the seconds-since-last-modified
+/// of the newest source file. Mirrors the watcher's `is_source_event`
+/// + `IgnoreFilter` logic at directory granularity so the answer
+/// reflects what the watcher *would* have seen.
+///
+/// Bounded by `file_budget` to keep doctor latency predictable on
+/// any tree shape. Returns `None` when the root is unreadable, has
+/// no source files within the budget, or when system clock skew
+/// makes mtimes nonsensical.
+fn newest_source_age_secs(
+    root: &std::path::Path,
+    extra_ignores: &[String],
+    file_budget: usize,
+) -> Option<u64> {
+    use std::time::SystemTime;
+
+    const UNIVERSAL_IGNORES: &[&str] = &[
+        ".git",
+        "node_modules",
+        "target",
+        "dist",
+        "build",
+        ".cache",
+        ".next",
+        "__pycache__",
+        ".venv",
+        "venv",
+    ];
+    const SOURCE_EXTS: &[&str] = &[
+        "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "java",
+    ];
+
+    let now = SystemTime::now();
+    let mut newest: Option<u64> = None;
+    let mut visited = 0usize;
+    let mut stack: Vec<std::path::PathBuf> = vec![root.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        if visited >= file_budget {
+            break;
+        }
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            if visited >= file_budget {
+                break;
+            }
+            let path = entry.path();
+            let file_name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            if UNIVERSAL_IGNORES.contains(&file_name.as_str())
+                || extra_ignores.iter().any(|e| e == &file_name)
+            {
+                continue;
+            }
+            let file_type = match entry.file_type() {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            if file_type.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+            visited += 1;
+            let ext = path
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if !SOURCE_EXTS.contains(&ext.as_str()) {
+                continue;
+            }
+            let mtime = match entry.metadata().ok().and_then(|m| m.modified().ok()) {
+                Some(m) => m,
+                None => continue,
+            };
+            let age_secs = now.duration_since(mtime).ok()?.as_secs();
+            newest = Some(match newest {
+                Some(prev) => prev.min(age_secs),
+                None => age_secs,
+            });
+        }
+    }
+    newest
+}
+
+/// Verify that, for every registered project, the SCIP exporter
+/// binaries needed by the languages present in its workspace are
+/// reachable on PATH. Language-agnostic: it consults
+/// `corpus_engine::scip_export::check_exporters`, which iterates
+/// every registered exporter (rust-analyzer, scip-typescript,
+/// scip-python, scip-go, scip-java) and reports those that are
+/// needed but absent. Pairs with `scip_indexed` (row count): an
+/// empty graph plus a missing exporter localises the failure.
+fn check_scip_exporters() -> CheckResult {
+    let registry = match sovereign_mesh::projects::Registry::load() {
+        Ok(r) => r,
+        Err(_) => {
+            return CheckResult {
+                name: "scip_exporters",
+                layer: Layer::Sovereign,
+                status: CheckStatus::Skipped,
+                message: "project registry not loadable".into(),
+                repair: Repair::None,
+            };
+        }
+    };
+
+    let entries = registry.entries();
+    if entries.is_empty() {
+        return CheckResult {
+            name: "scip_exporters",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "no projects registered".into(),
+            repair: Repair::None,
+        };
+    }
+
+    // Aggregate workspace roots across every registered project so
+    // we ask `check_exporters` once. The function dedupes via its
+    // exporter loop; per-project ordering doesn't matter here.
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    for entry in entries {
+        let root = entry.root.clone();
+        if !root.exists() {
+            continue;
+        }
+        let detected = corpus_engine::scip_export::find_cargo_workspace_roots(&root);
+        if detected.is_empty() {
+            roots.push(root);
+        } else {
+            roots.extend(detected);
+        }
+    }
+    roots.sort();
+    roots.dedup();
+
+    if roots.is_empty() {
+        return CheckResult {
+            name: "scip_exporters",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "no reachable project roots".into(),
+            repair: Repair::None,
+        };
+    }
+
+    let check = corpus_engine::scip_export::check_exporters(&roots);
+    if !check.missing.is_empty() {
+        let summary = check
+            .missing
+            .iter()
+            .map(|m| format!("{} ({})", m.language_id, m.command))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let hints: Vec<String> = check
+            .missing
+            .iter()
+            .map(|m| format!("{}: {}", m.language_id, m.install_hint))
+            .collect();
+        return CheckResult {
+            name: "scip_exporters",
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "{} SCIP exporter(s) referenced by registered projects are not in PATH: {summary}. \
+                 Calling these is what populates the SCIP graph — when they fail silently the \
+                 graph stays empty and call-graph tools return nothing.",
+                check.missing.len(),
+            ),
+            repair: Repair::MultiExecutable(hints),
+        };
+    }
+    let available = check
+        .available
+        .iter()
+        .map(|e| e.language_id)
+        .collect::<Vec<_>>()
+        .join(", ");
+    CheckResult {
+        name: "scip_exporters",
+        layer: Layer::Sovereign,
+        status: CheckStatus::Passed,
+        message: if available.is_empty() {
+            "no language exporters needed for registered projects".into()
+        } else {
+            format!("SCIP exporters available for: {available}")
+        },
+        repair: Repair::None,
+    }
+}
+
 /// Scan registered project roots for legacy `SOVEREIGN_HOOK_V*`
 /// post-commit hooks. The daemon owns freshness now, so any
 /// surviving hook is a ticking footgun (stale binary path, silent
@@ -1005,7 +1485,9 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     // ── Sovereign layer ──────────────────────────────────────────
     results.push(check_server_running().await);
     results.push(check_server_tools().await);
-    results.push(check_scip_indexed());
+    results.push(check_scip_indexed().await);
+    results.push(check_scip_exporters());
+    results.push(check_watcher_freshness().await);
     results.push(check_code_indexed().await);
     results.push(check_project_indexed());
     results.push(check_notes_db());

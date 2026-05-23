@@ -695,6 +695,17 @@ impl ScipGraph {
     }
 
     async fn export_age_hours(&self) -> Option<u64> {
+        self.export_age_secs().await.map(|s| s / 3600)
+    }
+
+    /// Seconds since the last successful SCIP export, or `None` when
+    /// no export has been recorded yet. The minute-grain companion to
+    /// the (intentionally crude) hour bucket used by
+    /// [`Self::staleness_for`]. Doctor uses this to flag a watcher
+    /// whose source tree has moved past the indexed snapshot — at
+    /// hour granularity a 47-minute wedge would look identical to
+    /// "just indexed".
+    pub async fn export_age_secs(&self) -> Option<u64> {
         let conn = self.conn.lock().await;
         let ts_str = conn
             .query_row(
@@ -703,10 +714,9 @@ impl ScipGraph {
                 |row| row.get::<_, String>(0),
             )
             .ok()?;
-
         let export_time = chrono::DateTime::parse_from_rfc3339(&ts_str).ok()?;
         let age = chrono::Utc::now() - export_time.with_timezone(&chrono::Utc);
-        Some(age.num_hours().max(0) as u64)
+        Some(age.num_seconds().max(0) as u64)
     }
 
     /// Resolve a symbol name to its canonical form in the database.
