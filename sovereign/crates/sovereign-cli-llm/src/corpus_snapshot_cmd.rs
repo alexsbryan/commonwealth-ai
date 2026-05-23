@@ -82,6 +82,7 @@ const HELP_SNAPSHOT_PUBLISH: Help = Help {
             ("--rebuild", "Force a fresh tar even if a complete archive is already at the output path"),
             ("--upload-only", "Skip the build entirely; require an existing archive at the output path"),
             ("--dry-run", "Print the upload command instead of running it"),
+            ("--include-siblings <prefix>", "Bundle every installed corpus whose id starts with <prefix> (e.g. 'sep-') alongside the primary index. Used by per-article-corpus pipelines like SEP so one tarball carries the parent + all 1770 per-article atlases. Repeatable. Trailing '*' tolerated."),
         ]),
         HelpSection::Notes(
             "Resumable: an interrupted build leaves `<output>.part`; a complete build leaves\n\
@@ -143,6 +144,13 @@ struct PublishArgs {
     /// How many times to retry `hf upload` on failure, with
     /// exponential backoff between attempts.
     upload_max_attempts: u32,
+    /// Sibling-corpus prefix to bundle alongside the primary index.
+    /// E.g. `--include-siblings sep-` bundles every corpus whose id
+    /// starts with `sep-` (the 1770 per-article SEP atlases). Trailing
+    /// `*` is stripped. Each match tars under `indexes/<sibling_id>/`
+    /// and the id list is recorded in the manifest's
+    /// `bundled_corpora`.
+    include_siblings: Vec<String>,
 }
 
 fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, String> {
@@ -188,6 +196,20 @@ fn parse_publish_args(args: &[String]) -> std::result::Result<PublishArgs, Strin
             "--dry-run" => out.dry_run = true,
             "--rebuild" => out.rebuild = true,
             "--upload-only" => out.upload_only = true,
+            "--include-siblings" => {
+                let v = iter
+                    .next()
+                    .ok_or("--include-siblings requires a corpus-id prefix (e.g. 'sep-')")?;
+                // Tolerate `sep-*` and `sep-` interchangeably; both
+                // mean the same thing (we don't support full glob).
+                let prefix = v.trim_end_matches('*').to_string();
+                if prefix.is_empty() {
+                    return Err(
+                        "--include-siblings requires a non-empty prefix (e.g. 'sep-')".into(),
+                    );
+                }
+                out.include_siblings.push(prefix);
+            }
             "--upload-max-attempts" => {
                 let v = iter
                     .next()
@@ -352,6 +374,47 @@ async fn cmd_publish(args: &[String]) -> i32 {
         );
         println!("  this can take several minutes for multi-GB indexes");
 
+        // Resolve sibling prefixes (`--include-siblings sep-`) against
+        // installed indexes. The primary corpus is excluded so a
+        // self-matching prefix (e.g. publishing 'sep' with prefix
+        // 'sep') doesn't double-bundle it. Sibling list is stable-
+        // sorted by id for deterministic manifest output.
+        let mut sibling_index_dirs: Vec<(String, PathBuf)> = Vec::new();
+        if !parsed.include_siblings.is_empty() {
+            let indexes_root = home_dir().join(".sovereign/indexes");
+            let entries = match std::fs::read_dir(&indexes_root) {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln!("cannot read {}: {e}", indexes_root.display());
+                    return 1;
+                }
+            };
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let Some(id) = name.to_str() else { continue };
+                if id == corpus_id {
+                    continue;
+                }
+                if !parsed
+                    .include_siblings
+                    .iter()
+                    .any(|prefix| id.starts_with(prefix))
+                {
+                    continue;
+                }
+                let path = entry.path();
+                if path.is_dir() {
+                    sibling_index_dirs.push((id.to_string(), path));
+                }
+            }
+            sibling_index_dirs.sort_by(|a, b| a.0.cmp(&b.0));
+            println!(
+                "Bundling {} sibling corpus/corpora matching {:?}",
+                sibling_index_dirs.len(),
+                parsed.include_siblings
+            );
+        }
+
         let opts = PublishOptions {
             index_dir,
             enrichment_dir,
@@ -363,6 +426,7 @@ async fn cmd_publish(args: &[String]) -> i32 {
             source_recipe_sha256: None,
             producer_version: PRODUCER_VERSION.to_string(),
             zstd_level: parsed.zstd_level,
+            sibling_index_dirs,
         };
 
         match publish_snapshot(opts).await {
@@ -392,6 +456,14 @@ async fn cmd_publish(args: &[String]) -> i32 {
             "not included"
         }
     );
+    if !outcome.manifest.bundled_corpora.is_empty() {
+        println!(
+            "  siblings: {} bundled ({} … {})",
+            outcome.manifest.bundled_corpora.len(),
+            outcome.manifest.bundled_corpora.first().map(|s| s.as_str()).unwrap_or(""),
+            outcome.manifest.bundled_corpora.last().map(|s| s.as_str()).unwrap_or(""),
+        );
+    }
 
     if let Some(repo) = parsed.upload_repo.as_deref() {
         let filename = outcome
@@ -796,6 +868,33 @@ async fn cmd_restore(args: &[String]) -> i32 {
     println!("  index_dir:    {}", outcome.index_dir.display());
     if let Some(p) = outcome.enrichment_dir.as_ref() {
         println!("  enrichment:   {}", p.display());
+    }
+    if !outcome.manifest.bundled_corpora.is_empty() {
+        // Cheap sanity check: every advertised sibling should now exist
+        // on disk. Warn-on-miss rather than fail because the primary
+        // restore succeeded; the operator may want to recover the
+        // missing piece without redoing the multi-GB pull.
+        let siblings_root = sovereign_data_dir.join("indexes");
+        let mut missing: Vec<&String> = Vec::new();
+        for id in &outcome.manifest.bundled_corpora {
+            if !siblings_root.join(id).is_dir() {
+                missing.push(id);
+            }
+        }
+        if missing.is_empty() {
+            println!(
+                "  siblings:     {} corpus/corpora restored under {}/",
+                outcome.manifest.bundled_corpora.len(),
+                siblings_root.display()
+            );
+        } else {
+            eprintln!(
+                "  ⚠ {} of {} bundled siblings did not land on disk; first missing: {}",
+                missing.len(),
+                outcome.manifest.bundled_corpora.len(),
+                missing.first().map(|s| s.as_str()).unwrap_or("?")
+            );
+        }
     }
     println!("  bytes:        {} ({:.2} GB)", outcome.archive_size_bytes, outcome.archive_size_bytes as f64 / 1.073e9_f64);
     println!();

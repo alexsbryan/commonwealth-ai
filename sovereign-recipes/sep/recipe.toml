@@ -50,12 +50,18 @@ vector = true
 # Private repo (Stanford license forbids public redistribution of SEP
 # text — mesh_sharing = false above). Restorers must export HF_TOKEN
 # and be added as collaborators on the svrnmesh org for the GET to
-# succeed. The snapshot includes the philosophy_atlas enrichment
-# (1770 articles, 100% atlas coverage as of 2026-05-22).
+# succeed.
+#
+# Snapshot 2026-05-23 supersedes 2026-05-22 — content-hash atom ids
+# (Move 6 migration) AND bundles the 1770 sep-<slug> per-article
+# atlases as siblings. A single `sovereign corpus install sep`
+# restores the canonical chunks + every per-article atlas in one pull
+# (1771 corpora land under ~/.sovereign/indexes/), so query-time
+# multi-corpus retrieval works out of the box on a fresh box.
 [prebuilt]
 hf_repo = "svrnmesh/sep-index"
-hf_filename = "sep-qwen-embedding-0.6b-2026-05-22.tar.zst"
-sha256 = "919dfdb8ae6f73f1f53de0bc32ccfe36537a408df595a5742f1d612b0249d8e0"
+hf_filename = "sep-qwen-embedding-0.6b-2026-05-23.tar.zst"
+sha256 = "1c3ea652f79ae54ccd21a88301fc2556d7c25ad455e1b5d49114b23a6c475997"
 compatible_embedding_model = "qwen-embedding-0.6b"
 
 # ── Atlas enrichment (v2, per-article) ───────────────────────────────
