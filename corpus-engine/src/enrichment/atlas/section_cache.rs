@@ -13,7 +13,7 @@
 //!
 //! ## On-disk layout
 //!
-//! ```
+//! ```text
 //! <atlas_dir>/section_cache/<key>.json
 //! ```
 //!

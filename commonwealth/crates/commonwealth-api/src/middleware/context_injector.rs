@@ -574,7 +574,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_feature_id_is_noop() {
-        let inj = ContextInjector::new();
+        let inj = ContextInjector::empty();
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(None, std::env::temp_dir());
@@ -594,7 +594,7 @@ mod tests {
         )
         .unwrap();
 
-        let inj = ContextInjector::new();
+        let inj = ContextInjector::empty();
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
@@ -618,7 +618,28 @@ mod tests {
         std::fs::create_dir_all(&spec_dir).unwrap();
         std::fs::write(spec_dir.join("spec.md"), "# fx\n").unwrap();
 
-        let inj = ContextInjector::new();
+        // Phase 3.6 wires the catalog from the descriptors the owner
+        // passes to `ContextInjector::new`. Production daemons hand it
+        // `tool_registry.descriptors()`; the test fabricates a minimal
+        // descriptor for the canonical code-intel tool (`symbols`,
+        // Read · Persistent) so the grouping + id assertions exercise
+        // the rendering path without standing up a real ToolRegistry.
+        use sovereign_core::types::{
+            Effect, Idempotency, Latency, Scope, ToolDescriptor,
+        };
+        let descriptors = vec![ToolDescriptor {
+            id: "symbols".to_string(),
+            name: "symbols".to_string(),
+            description: "Look up a symbol definition by name.".to_string(),
+            parameters: serde_json::json!({}),
+            examples: Vec::new(),
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Persistent,
+            output_schema: None,
+        }];
+        let inj = ContextInjector::new(descriptors);
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
@@ -629,11 +650,11 @@ mod tests {
             content.contains("Available via `sovereign tools` CLI"),
             "CLI catalog header missing from preamble"
         );
-        // Sample tool from the manifest — regresses if the manifest
-        // integration stops pulling descriptors. Phase 2 of the CLI
-        // refactor renamed `symbol_lookup` → `symbols` at the
-        // descriptor layer, so the canonical id is what the
-        // catalog renders.
+        // Sample tool from the descriptors — regresses if the catalog
+        // rendering stops emitting per-tool entries. Phase 2 of the
+        // CLI refactor renamed `symbol_lookup` → `symbols` at the
+        // descriptor layer, so the canonical id is what the catalog
+        // renders.
         assert!(
             content.contains("symbols"),
             "expected a code-intel tool id in the catalog"
@@ -652,7 +673,7 @@ mod tests {
         std::fs::create_dir_all(&spec_dir).unwrap();
         std::fs::write(spec_dir.join("spec.md"), "# minimal spec\n").unwrap();
 
-        let inj = ContextInjector::new();
+        let inj = ContextInjector::empty();
         let mut req = minimal_request();
         req.messages.insert(0, ChatMessage::new("system", "Original system directive."));
         let mut session = MiddlewareSession::default();
@@ -671,7 +692,7 @@ mod tests {
         std::fs::create_dir_all(&spec_dir).unwrap();
         std::fs::write(spec_dir.join("spec.md"), "# spec\n").unwrap();
 
-        let inj = ContextInjector::new();
+        let inj = ContextInjector::empty();
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         session.pending_deviation_ack = true;
@@ -711,7 +732,7 @@ mod tests {
         std::fs::create_dir_all(&spec_dir).unwrap();
         std::fs::write(spec_dir.join("spec.md"), "# fx\n").unwrap();
 
-        let inj = ContextInjector::new();
+        let inj = ContextInjector::empty();
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         let mut delta = ArtifactDelta::default();
@@ -788,7 +809,7 @@ _(empty)_
     async fn charter_frame_injected_when_project_is_founded() {
         let tmp = tempfile::tempdir().unwrap();
         seed_founded_project(tmp.path(), CHARTER_SAMPLE);
-        let inj = ContextInjector::new();
+        let inj = ContextInjector::empty();
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
@@ -813,7 +834,7 @@ _(empty)_
         std::fs::create_dir_all(&feat_dir).unwrap();
         std::fs::write(feat_dir.join("spec.md"), "# fx\n").unwrap();
 
-        let inj = ContextInjector::new();
+        let inj = ContextInjector::empty();
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());
@@ -836,7 +857,7 @@ _(empty)_
         )
         .unwrap();
 
-        let inj = ContextInjector::new();
+        let inj = ContextInjector::empty();
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         let ctx = ctx_with(Some("fx"), tmp.path().to_path_buf());

@@ -21,8 +21,8 @@
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use corpus_engine::{ScipGraph};
 use corpus_engine_notes::{NoteStore};
+use corpus_engine_scip::ScipGraph;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::traits::Tool;
 use sovereign_tools::mcp_surface::{
