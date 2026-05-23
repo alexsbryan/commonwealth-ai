@@ -1,0 +1,43 @@
+[package]
+name = "corpus-engine-notes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "NoteStore + project_docs index + notes ↔ alignment-corpus sync. Carved out of corpus-engine for blast-radius control."
+
+# The NoteStore is the agent's working memory. Used by every agent
+# tool that writes a decision, an invariant, a todo, or a redteam
+# finding. Pre-carve-out (2026-05-23), it lived in corpus-engine
+# alongside the corpus pipeline; 11 workspace crates depended on
+# corpus-engine for it. Step 3 of the decomposition (see
+# corpus-engine/DECOMPOSITION.md) gives it its own home.
+#
+# notes.rs at 2781 lines was a §3.1 violation in corpus-engine; the
+# carve-out clears that listing. The file stays intact here — the
+# concern fits one crate, and breaking up the SQL schema management
+# is its own follow-up if/when needed.
+#
+# This crate depends on corpus-engine for `extractors::ExtractedDoc`
+# (consumed by `notes_sync`). One-way arrow — corpus-engine no
+# longer depends on the NoteStore.
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+sha2 = { workspace = true }
+rusqlite = { version = "0.35", features = ["bundled"] }
+
+# NB: NO dep on `corpus-engine`. notes_sync (which is the only
+# bridge between this crate and corpus-engine's ExtractedDoc) lives
+# back in corpus-engine to avoid a cyclic workspace dep — corpus-engine
+# itself depends on this crate for its three internal NoteStore users
+# (alignment_projector, alignment_workspace, update::project_index_watcher).
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3"

@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
-use corpus_engine::git_archaeology::{
+use corpus_engine_archaeology::git_archaeology::{
     batch_harvest_all_commits, compute_co_evolution, discover_repo_root, enrich_atom,
     source_to_repo_relative, AtomProvenance, GitArchaeologyReport, Staleness, StalenessSummary,
 };

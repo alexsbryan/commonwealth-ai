@@ -45,7 +45,7 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 
-use corpus_engine::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_tools::notes::response_mine;
 
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext, ResponseView};

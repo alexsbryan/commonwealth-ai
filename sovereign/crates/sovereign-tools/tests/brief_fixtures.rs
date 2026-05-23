@@ -143,9 +143,9 @@ fn write_atlas_fixture(
 
 // ── Notes fixture helper ─────────────────────────────────────
 
-async fn make_notes_with(rows: &[(&str, &str)]) -> (tempfile::TempDir, corpus_engine::NoteStore) {
+async fn make_notes_with(rows: &[(&str, &str)]) -> (tempfile::TempDir, corpus_engine_notes::NoteStore) {
     let tmp = tempfile::tempdir().unwrap();
-    let store = corpus_engine::NoteStore::open(&tmp.path().join("notes.db")).unwrap();
+    let store = corpus_engine_notes::NoteStore::open(&tmp.path().join("notes.db")).unwrap();
     for (kind, content) in rows {
         store
             .write_note_with_relation(
@@ -154,7 +154,7 @@ async fn make_notes_with(rows: &[(&str, &str)]) -> (tempfile::TempDir, corpus_en
                 vec![],
                 vec![],
                 "fixture-session",
-                corpus_engine::NoteScope::Global,
+                corpus_engine_notes::NoteScope::Global,
                 None,
                 None,
             )

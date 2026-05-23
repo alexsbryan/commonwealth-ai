@@ -50,7 +50,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::{NoteScope, NoteSource, NoteStore, ToolCallLogRow};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore, ToolCallLogRow};
 
 /// Observation window — how many recent log rows we scan when
 /// `observe()` runs. 8 is a deliberate trade-off:

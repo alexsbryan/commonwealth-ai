@@ -22,7 +22,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use corpus_engine::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -310,7 +310,7 @@ impl Tool for DecisionLogTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::FeatureStore;
+    use corpus_engine_atos::FeatureStore;
 
     async fn fresh_stores() -> (Arc<NoteStore>, Arc<FeatureStore>, tempfile::TempDir) {
         let dir = tempfile::tempdir().unwrap();
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(v["decision_kind"], "schema_choice");
         let id = v["decision_id"].as_str().unwrap().to_string();
 
-        let scope = corpus_engine::ScopeFilter {
+        let scope = corpus_engine_notes::ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(project.id.clone()),
         };
@@ -425,7 +425,7 @@ mod tests {
             .await
             .unwrap_or_else(|e| panic!("{kind}: {e}"));
         }
-        let scope = corpus_engine::ScopeFilter {
+        let scope = corpus_engine_notes::ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(project.id.clone()),
         };

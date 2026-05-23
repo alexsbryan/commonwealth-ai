@@ -1736,6 +1736,8 @@ dependencies = [
  "commonwealth-knowledge",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-atos",
+ "corpus-engine-notes",
  "dirs 5.0.1",
  "futures",
  "hex",
@@ -2059,6 +2061,7 @@ dependencies = [
  "blake3",
  "bzip2 0.5.2",
  "chrono",
+ "corpus-engine-notes",
  "corpus-engine-scip",
  "csv",
  "flate2",
@@ -2104,6 +2107,52 @@ dependencies = [
  "wiremock",
  "zip 2.4.2",
  "zstd",
+]
+
+[[package]]
+name = "corpus-engine-archaeology"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml 0.8.2",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
+name = "corpus-engine-atos"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "pulldown-cmark",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "corpus-engine-notes"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -9884,6 +9933,8 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-atos",
+ "corpus-engine-notes",
  "pulldown-cmark",
  "serde",
  "serde_json",
@@ -9906,6 +9957,8 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-archaeology",
+ "corpus-engine-notes",
  "dirs 5.0.1",
  "futures",
  "hex",
@@ -9943,6 +9996,7 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-notes",
  "corpus-engine-scip",
  "dirs 5.0.1",
  "futures",
@@ -9982,6 +10036,8 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-atos",
+ "corpus-engine-notes",
  "corpus-engine-scip",
  "dirs 5.0.1",
  "futures",
@@ -10022,6 +10078,9 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-archaeology",
+ "corpus-engine-atos",
+ "corpus-engine-notes",
  "dirs 5.0.1",
  "ed25519-dalek",
  "futures",
@@ -10073,6 +10132,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "corpus-engine",
+ "corpus-engine-notes",
  "dashmap",
  "dirs 5.0.1",
  "futures",
@@ -10103,6 +10163,8 @@ dependencies = [
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-atos",
+ "corpus-engine-notes",
  "corpus-engine-scip",
  "dirs 6.0.0",
  "futures",
@@ -10199,6 +10261,7 @@ dependencies = [
  "commonwealth-inference",
  "commonwealth-state",
  "corpus-engine",
+ "corpus-engine-notes",
  "corpus-engine-scip",
  "dirs 6.0.0",
  "ed25519-dalek",
@@ -10262,6 +10325,7 @@ dependencies = [
  "axum",
  "chrono",
  "corpus-engine",
+ "corpus-engine-notes",
  "corpus-engine-scip",
  "dirs 5.0.1",
  "futures",
@@ -10313,6 +10377,9 @@ dependencies = [
  "chrono",
  "commonwealth-core",
  "corpus-engine",
+ "corpus-engine-archaeology",
+ "corpus-engine-atos",
+ "corpus-engine-notes",
  "corpus-engine-scip",
  "dirs 5.0.1",
  "docx-lite",

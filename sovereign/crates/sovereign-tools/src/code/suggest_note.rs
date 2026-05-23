@@ -42,7 +42,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::{ApprovalChannel, Tool};
 use sovereign_core::types::*;
 
-use corpus_engine::{NoteScope, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteStore};
 
 /// Kinds the suggest_note tool may emit. Strict subset of the
 /// NoteStore's v5 kind set — the relational + strategic kinds only.

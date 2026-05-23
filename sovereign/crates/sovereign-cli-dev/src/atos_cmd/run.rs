@@ -20,7 +20,8 @@ use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use corpus_engine::{FeatureStore, NoteStore};
+use corpus_engine_notes::{NoteStore};
+use corpus_engine_atos::{FeatureStore};
 use serde::{Deserialize, Serialize};
 use sovereign_atos::{AtosOrchestrator, LocalAtosOrchestrator, RunMode};
 use sovereign_tools::code::atos_utils::{
@@ -1569,7 +1570,7 @@ fn open_orchestrator_for(workdir: &Path) -> Result<Arc<LocalAtosOrchestrator>, S
         .map_err(|e| format!("open notes.db: {e}"))?;
     let mut orc = LocalAtosOrchestrator::new(features, notes);
     if let Ok(store) =
-        corpus_engine::ProjectDocsStore::open(&sovereign_dir.join("project_docs.db"))
+        corpus_engine_notes::ProjectDocsStore::open(&sovereign_dir.join("project_docs.db"))
     {
         orc = orc.with_project_docs(Arc::new(store), workdir.to_path_buf());
     }

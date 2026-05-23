@@ -10,7 +10,7 @@
 //! - **`report`** renders a report section (milestone / red-team /
 //!   epistemic / all) to stdout or a file.
 
-use corpus_engine::NoteScope;
+use corpus_engine_notes::NoteScope;
 use sovereign_atos::AtosOrchestrator;
 
 use super::args::{get_flag, split_args};
@@ -204,8 +204,8 @@ pub(crate) async fn cmd_report(args: &[String]) -> i32 {
 /// log, coverage lives in the stop_condition result, and deviations
 /// appear as `attempt` notes.
 fn render_artifact_checklist(
-    feature: &corpus_engine::FeatureRow,
-    milestone: &corpus_engine::MilestoneRow,
+    feature: &corpus_engine_atos::FeatureRow,
+    milestone: &corpus_engine_atos::MilestoneRow,
     compliance_json: &str,
 ) {
     let parsed: serde_json::Value = match serde_json::from_str(compliance_json) {

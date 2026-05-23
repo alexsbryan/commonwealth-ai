@@ -23,7 +23,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::NoteStore;
+use corpus_engine_notes::NoteStore;
 use futures::StreamExt;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::types::{

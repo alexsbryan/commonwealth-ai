@@ -1149,7 +1149,7 @@ pub async fn submit_information_search(
     // is silently skipped. See `dossier::record_tool_outcome`.
     {
         let notes_guard = state.notes.read().await;
-        let notes_ref: Option<&corpus_engine::NoteStore> =
+        let notes_ref: Option<&corpus_engine_notes::NoteStore> =
             notes_guard.as_ref().map(|arc| arc.as_ref());
         sovereign_core::dossier::record_tool_outcome(
             notes_ref,

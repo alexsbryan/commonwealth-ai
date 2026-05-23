@@ -4250,7 +4250,7 @@ impl Runtime {
     /// wires this; CLI eval path leaves it `None`, in which case the
     /// commissive handler degrades to a clear "no notes store wired"
     /// reply rather than dropping the commitment silently.
-    pub fn with_note_store(mut self, store: Arc<corpus_engine::NoteStore>) -> Self {
+    pub fn with_note_store(mut self, store: Arc<corpus_engine_notes::NoteStore>) -> Self {
         self.note_store = Some(store);
         self
     }
@@ -7925,7 +7925,7 @@ impl Runtime {
             // `tool_decision` outcome note after refinement
             // resolves. Soft-fail when no NoteStore is wired
             // (test harnesses): `record_tool_outcome` no-ops.
-            let notes_for_outcome: Option<Arc<corpus_engine::NoteStore>> =
+            let notes_for_outcome: Option<Arc<corpus_engine_notes::NoteStore>> =
                 self.note_store.clone();
             // Cloned into the outer spawn so the post-stream gap-
             // check can emit narration chips that reach the desktop
@@ -11043,7 +11043,7 @@ impl Runtime {
                 Vec::new(),
                 Vec::new(),
                 conversation_id,
-                corpus_engine::NoteScope::Session,
+                corpus_engine_notes::NoteScope::Session,
                 None,
                 related_entity.as_deref(),
             )

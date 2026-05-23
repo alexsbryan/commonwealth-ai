@@ -16,9 +16,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use corpus_engine::{
-    AtosRunRow, FeatureRow, FeatureState, FeatureStore, MilestoneRow, NoteRow, NoteScope,
-    NoteStore, ScopeFilter,
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_atos::{
+    AtosRunRow, FeatureRow, FeatureState, FeatureStore, MilestoneRow,
 };
 
 use super::helpers;
@@ -45,7 +45,7 @@ pub struct LocalAtosOrchestrator {
     /// written report into FTS so `project_context` retrieval surfaces
     /// it alongside other markdown docs. None → reports stay on disk
     /// only (still the authoritative artifact).
-    project_docs: Option<Arc<corpus_engine::ProjectDocsStore>>,
+    project_docs: Option<Arc<corpus_engine_notes::ProjectDocsStore>>,
     /// Repo root for computing relative paths during indexing. Defaults
     /// to CWD when the orchestrator isn't told otherwise.
     repo_root: Option<std::path::PathBuf>,
@@ -79,7 +79,7 @@ impl LocalAtosOrchestrator {
     /// but paths will be absolute (still searchable, just noisier).
     pub fn with_project_docs(
         mut self,
-        docs: Arc<corpus_engine::ProjectDocsStore>,
+        docs: Arc<corpus_engine_notes::ProjectDocsStore>,
         repo_root: std::path::PathBuf,
     ) -> Self {
         self.project_docs = Some(docs);
@@ -411,7 +411,7 @@ impl LocalAtosOrchestrator {
     pub async fn teardown_candidates(
         &self,
         feature_id: &str,
-    ) -> Result<Vec<corpus_engine::NoteRow>> {
+    ) -> Result<Vec<corpus_engine_notes::NoteRow>> {
         let filter = ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(feature_id.to_string()),
@@ -445,7 +445,7 @@ impl LocalAtosOrchestrator {
             .collect();
         // The WriteRedteamFindingTool writes with session_id="redteam"
         // as a literal — exclude that too.
-        let mut filtered: Vec<corpus_engine::NoteRow> = notes
+        let mut filtered: Vec<corpus_engine_notes::NoteRow> = notes
             .into_iter()
             .filter(|n| n.session_id != "redteam")
             .filter(|n| !redteam_sessions.contains(&n.session_id))
@@ -925,7 +925,7 @@ Add a CLI test.
         let features = Arc::new(FeatureStore::open(&sovereign_dir.join("features.db")).unwrap());
         let notes = Arc::new(NoteStore::open(&sovereign_dir.join("notes.db")).unwrap());
         let docs = Arc::new(
-            corpus_engine::ProjectDocsStore::open(&sovereign_dir.join("project_docs.db"))
+            corpus_engine_notes::ProjectDocsStore::open(&sovereign_dir.join("project_docs.db"))
                 .unwrap(),
         );
         let orc = LocalAtosOrchestrator::new(features, notes)

@@ -56,9 +56,9 @@ use super::strategic::{format_strategic, StrategicGoal};
 #[cfg(feature = "treesitter")]
 use super::timeline::assemble_timelines_from_atlas;
 #[cfg(feature = "treesitter")]
-use corpus_engine::features::FeatureStore;
+use corpus_engine_atos::features::FeatureStore;
 #[cfg(feature = "treesitter")]
-use corpus_engine::notes::NoteStore;
+use corpus_engine_notes::notes::NoteStore;
 
 // ── Backwards-compatible string-id constants ────────────────────
 //

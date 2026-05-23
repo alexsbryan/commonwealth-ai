@@ -22,7 +22,7 @@
 //!
 //! Reference: ARCH_PRINCIPLES.md §3 (split a file by concern).
 
-use corpus_engine::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
 
 use crate::{Error, Result};
 

@@ -133,10 +133,10 @@ notify                 = { version = "8",    optional = true }
 # wikipedia_graph, lint/test results, plan_items, project_docs, notes_sync).
 # Scip's own rusqlite usage now lives in corpus-engine-scip.
 rusqlite               = { version = "0.35", features = ["bundled"], optional = true }
-# Markdown AST for DESIGN.md structural parsing (design_signals.rs).
-# Same version as sovereign-atos uses for charter parsing — one version
-# per workspace, per ARCH_PRINCIPLES.md §8.1. sha2 is already a
-# non-optional corpus-engine dep above; design_signals uses it too.
+# Markdown AST. Used by `extractors/markdown.rs` (and used to be used
+# by design_signals.rs, which moved to corpus-engine-atos 2026-05-23).
+# Same version sovereign-atos and corpus-engine-atos use — one version
+# per workspace, per ARCH_PRINCIPLES.md §8.1.
 pulldown-cmark         = { version = "0.12", default-features = false, features = ["simd"], optional = true }
 
 # SCIP call graph + exporter dispatch — moved to its own crate
@@ -146,6 +146,13 @@ pulldown-cmark         = { version = "0.12", default-features = false, features 
 # behind the same `treesitter` feature gate the scip modules used to
 # carry.
 corpus-engine-scip     = { workspace = true, optional = true }
+
+# NoteStore + project_docs + notes_sync — also carved out 2026-05-23.
+# corpus-engine still references the NoteStore from `alignment_projector`,
+# `extractors::alignment_workspace`, and `update::project_index_watcher`,
+# so pull it back in behind the `stores` feature (same gate the modules
+# used to carry).
+corpus-engine-notes    = { workspace = true, optional = true }
 
 [features]
 # `stores` is in the default set because every downstream sovereign +
@@ -162,7 +169,7 @@ markdown = ["dep:pulldown-cmark"]
 # FeatureStore, ProjectDocsStore, lint_results, test_results,
 # wikipedia_graph, plan_items, notes_sync). Cheap to enable —
 # rusqlite is bundled (no system dep) and SQLite itself is small.
-stores = ["dep:rusqlite", "dep:notify", "dep:walkdir"]
+stores = ["dep:rusqlite", "dep:notify", "dep:walkdir", "dep:corpus-engine-notes"]
 treesitter = [
     "stores",
     "dep:tree-sitter",

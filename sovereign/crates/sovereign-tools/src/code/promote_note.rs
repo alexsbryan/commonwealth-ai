@@ -18,7 +18,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::{NoteScope, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteStore};
 
 pub struct PromoteNoteTool {
     store: Arc<NoteStore>,

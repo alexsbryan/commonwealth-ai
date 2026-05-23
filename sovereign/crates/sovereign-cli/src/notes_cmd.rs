@@ -15,13 +15,13 @@
 //! existing atos handler.
 //!
 //! The Phase 7 multi-source audit (extracted/inferred/observed
-//! sources from `corpus_engine::NoteSource`) lights up here when the
+//! sources from `corpus_engine_notes::NoteSource`) lights up here when the
 //! audit assembly is rewritten — until then, this surface is a
 //! lossless rename + write entry point.
 
 use std::path::PathBuf;
 
-use corpus_engine::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 
 pub async fn run(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {

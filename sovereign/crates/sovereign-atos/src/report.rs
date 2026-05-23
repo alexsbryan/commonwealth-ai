@@ -24,9 +24,8 @@
 
 use std::collections::BTreeMap;
 
-use corpus_engine::{
-    AtosRunRow, FeatureRow, MilestoneRow, NoteRow, NoteScope, NoteStore, ScopeFilter,
-};
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_atos::{AtosRunRow, FeatureRow, MilestoneRow};
 
 use crate::{Error, ReportSection, Result};
 

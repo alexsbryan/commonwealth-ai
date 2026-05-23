@@ -17,7 +17,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use corpus_engine::{NoteSource, NoteStore};
+use corpus_engine_notes::{NoteSource, NoteStore};
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::types::{
     Effect, Idempotency, Latency, Scope, StepOutput, ToolContext, ToolDescriptor,

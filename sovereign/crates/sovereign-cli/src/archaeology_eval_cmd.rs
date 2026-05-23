@@ -17,11 +17,11 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine::archaeology_eval::{
+use corpus_engine_archaeology::archaeology_eval::{
     diff_against_baseline, parse_inquiry_toml, run_eval, BaselineDiff, EvalReport, Inquiry,
     Verdict, WitnessKind,
 };
-use corpus_engine::git_archaeology::GitArchaeologyReport;
+use corpus_engine_archaeology::git_archaeology::GitArchaeologyReport;
 
 pub async fn run(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
@@ -78,7 +78,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     };
     if let Some(dir) = &parsed.inquiries_dir {
-        match corpus_engine::archaeology_eval::load_inquiries_from_dir(dir) {
+        match corpus_engine_archaeology::archaeology_eval::load_inquiries_from_dir(dir) {
             Ok(mut from_dir) => {
                 println!(
                     "  · loaded {} inquiries from {}",

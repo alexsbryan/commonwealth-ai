@@ -36,7 +36,7 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine::ProjectDocsStore;
+use corpus_engine_notes::ProjectDocsStore;
 
 use crate::honesty::{FetchOutcome, Fetcher};
 

@@ -37,6 +37,9 @@ sovereign-cli-shared = { workspace = true, features = ["scip"] }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
+corpus-engine-archaeology = { workspace = true }
+corpus-engine-notes = { workspace = true }
+corpus-engine-atos = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
 futures = { workspace = true }

@@ -33,8 +33,8 @@ use std::sync::Arc;
 
 use corpus_engine::enrichment::atlas::atoms::AtomEnvelope;
 use corpus_engine::enrichment::atlas::writer::{read_atlas_atoms, ATLAS_DIRNAME};
-use corpus_engine::features::FeatureStore;
-use corpus_engine::notes::NoteStore;
+use corpus_engine_atos::features::FeatureStore;
+use corpus_engine_notes::notes::NoteStore;
 use rusqlite::{Connection, OpenFlags};
 use sha2::{Digest, Sha256};
 use sovereign_core::memory::EntityInventory;

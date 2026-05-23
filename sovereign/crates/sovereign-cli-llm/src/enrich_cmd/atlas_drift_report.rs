@@ -835,7 +835,7 @@ fn render_markdown(
 //
 // We re-deserialize the JSON sidecar that `sovereign rough-edges`
 // emits. Keeping a separate type here (rather than depending on
-// corpus_engine::rough_edges directly) decouples the renderer from
+// corpus_engine_archaeology::rough_edges directly) decouples the renderer from
 // the producer's internals — the JSON shape is the contract.
 
 #[derive(Debug, serde::Deserialize)]

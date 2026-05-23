@@ -51,7 +51,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use corpus_engine::{FeatureStore, NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_atos::{FeatureStore};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -425,7 +426,7 @@ fn io_err<P: AsRef<Path>>(op: &str, path: P, e: std::io::Error) -> Error {
     Error::InvalidInput(format!("{op} {}: {e}", path.as_ref().display()))
 }
 
-fn ce_err(e: corpus_engine::Error) -> Error {
+fn ce_err(e: corpus_engine_notes::Error) -> Error {
     Error::Storage(e.to_string())
 }
 
@@ -574,7 +575,7 @@ mod tests {
         assert_eq!(parsed.feature_id, project.feature_id());
 
         // Also a NoteStore note `kind = capability_request`.
-        let scope = corpus_engine::ScopeFilter {
+        let scope = corpus_engine_notes::ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(project.feature_id().to_string()),
         };

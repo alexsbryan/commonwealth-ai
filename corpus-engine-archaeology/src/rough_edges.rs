@@ -21,9 +21,9 @@
 //! "Internal" section without caring which detector found them.
 
 // `rough_edges` is a pure-text scanner: walkdir + regex over source
-// trees, no tree-sitter parsing. Gated by `stores` since that's the
-// feature carrying walkdir post-2026-05-22.
-#![cfg(feature = "stores")]
+// trees, no tree-sitter parsing. Gate dropped 2026-05-23 when the
+// module moved to corpus-engine-archaeology (no features there —
+// the whole crate compiles unconditionally).
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

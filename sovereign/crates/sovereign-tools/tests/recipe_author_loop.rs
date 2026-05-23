@@ -242,7 +242,8 @@ fn tool_descriptors_carry_recipe_authoring_permission() {
 async fn recipe_author_project_lifecycle_end_to_end() {
     use std::sync::Arc;
 
-    use corpus_engine::{FeatureStore, NoteScope, NoteStore, ScopeFilter};
+    use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_atos::{FeatureStore};
     use sovereign_tools::recipe_author::{
         capability_request::CapabilityRequest,
         checkpoint::{do_create as checkpoint_create, restore_checkpoint},

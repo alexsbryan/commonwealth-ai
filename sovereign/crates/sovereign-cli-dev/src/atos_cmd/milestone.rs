@@ -19,7 +19,7 @@
 
 use std::process::Stdio;
 
-use corpus_engine::NoteScope;
+use corpus_engine_notes::NoteScope;
 use sovereign_atos::{AtosOrchestrator, RunMode};
 
 use super::args::{get_flag, split_args};
@@ -253,7 +253,7 @@ pub(crate) async fn cmd_end_milestone(args: &[String]) -> i32 {
     // Gather feature-scoped notes for the compliance report. Until
     // M3.6 migrates rendering into the library, we keep a direct
     // NoteStore read here — orc.notes() exposes the same handle.
-    let filter = corpus_engine::ScopeFilter {
+    let filter = corpus_engine_notes::ScopeFilter {
         scopes: vec![NoteScope::Feature],
         feature_id: Some(id.clone()),
     };

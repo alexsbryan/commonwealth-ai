@@ -30,7 +30,7 @@
 //! ## What this module does NOT own
 //!
 //! - Writing DESIGN.md content (that's [`crate::design_onboarding`]).
-//! - Parsing DESIGN.md (that's [`corpus_engine::design_signals`]).
+//! - Parsing DESIGN.md (that's [`corpus_engine_atos::design_signals`]).
 //! - Composing OPEN_QUESTIONS.md or IMPLEMENTATION_PLAN.md (solo
 //!   mode does this inline today; step 5/6 registers the same
 //!   operations as MCP tools so the agent can call them too).
@@ -40,7 +40,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::design_onboarding::{self, OnboardOutcome};
-use corpus_engine::design_signals::{self, GapMarker, GapReason};
+use corpus_engine_atos::design_signals::{self, GapMarker, GapReason};
 
 // ─── Public surface ────────────────────────────────────────────────
 

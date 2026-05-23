@@ -54,7 +54,7 @@
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-use corpus_engine::design_signals::DesignSignals;
+use corpus_engine_atos::design_signals::DesignSignals;
 use crate::observation::{DepKind, DetectedDependency, ProjectObservation};
 
 // ─── Stage 1 data ────────────────────────────────────────────────────────────
@@ -324,7 +324,7 @@ pub fn render_decision_body(q: &Stage1Question, a: &Stage1Answer) -> String {
 /// Production recorder: writes into a `NoteStore` in Global scope
 /// with kind=`decision`.
 pub struct NoteStoreDecisionWriter<'a> {
-    pub store: &'a corpus_engine::NoteStore,
+    pub store: &'a corpus_engine_notes::NoteStore,
     pub session_id: &'a str,
     /// Collected ids of written notes, so the caller can surface
     /// them in the Stage-1 summary.
@@ -344,7 +344,7 @@ impl<'a> DecisionRecorder for NoteStoreDecisionWriter<'a> {
                 Vec::new(),
                 Vec::new(),
                 self.session_id,
-                corpus_engine::NoteScope::Global,
+                corpus_engine_notes::NoteScope::Global,
                 None,
             ))
         });
@@ -910,7 +910,7 @@ pub fn render_fault_line_open_body(fault: &FaultLine, note: &str) -> String {
 /// NoteStore. Resolved → decision; Open → uncertainty; Skipped →
 /// (no note, deliberately).
 pub struct NoteStoreFaultLineWriter<'a> {
-    pub store: &'a corpus_engine::NoteStore,
+    pub store: &'a corpus_engine_notes::NoteStore,
     pub session_id: &'a str,
     pub written: Vec<(String, String)>, // (kind, note_id)
     /// Retained (fault, outcome) pairs in presentation order. Stage
@@ -948,7 +948,7 @@ impl<'a> FaultLineRecorder for NoteStoreFaultLineWriter<'a> {
                         Vec::new(),
                         Vec::new(),
                         &session_id,
-                        corpus_engine::NoteScope::Global,
+                        corpus_engine_notes::NoteScope::Global,
                         None,
                     )
                     .await
@@ -1780,7 +1780,7 @@ mod tests {
         // committed. Skip it.
         let obs = obs_with_deps();
         let doc = "## Anchors\n\n- Primary persistence: sqlite, single-writer\n- Primary interface: HTTP\n- Language: Rust\n\n## Plan\n\nbody\n";
-        let sig = corpus_engine::design_signals::extract(doc);
+        let sig = corpus_engine_atos::design_signals::extract(doc);
         let qs = select_questions(&obs, true, Some(&sig));
         assert!(
             qs.iter()
@@ -1796,7 +1796,7 @@ mod tests {
         // without an Anchors line → still ask.
         let obs = obs_with_deps();
         let doc = "## Anchors\n\n- Primary interface: HTTP\n- Language: Rust\n- Runtime: one process\n\n## Plan\n\nWe persist some things to disk.\n";
-        let sig = corpus_engine::design_signals::extract(doc);
+        let sig = corpus_engine_atos::design_signals::extract(doc);
         let qs = select_questions(&obs, true, Some(&sig));
         assert!(
             qs.iter()
@@ -2066,7 +2066,7 @@ mod tests {
 
         // B: design signals flag time → FIRES.
         let design_md = "## Plan\n\nTick timestamps are stored in UTC.\n";
-        let sig = corpus_engine::design_signals::extract(design_md);
+        let sig = corpus_engine_atos::design_signals::extract(design_md);
         let faults_with_doc = select_fault_lines(&obs, &[], Some(&sig));
         assert!(
             faults_with_doc

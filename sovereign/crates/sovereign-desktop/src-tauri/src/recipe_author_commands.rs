@@ -23,9 +23,9 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use corpus_engine::{
-    FeatureRow, FeatureState, FeatureStore, NoteRow, NoteScope, NoteStore, Recipe, ScopeFilter,
-};
+use corpus_engine::{Recipe};
+use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_atos::{FeatureRow, FeatureState, FeatureStore};
 use sovereign_tools::recipe_author::{
     self, checkpoint::restore_checkpoint as do_restore_checkpoint, CheckpointMeta,
     ProjectSummary, RecipeProject,

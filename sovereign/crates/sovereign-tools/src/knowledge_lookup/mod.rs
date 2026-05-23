@@ -24,7 +24,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::NoteStore;
+use corpus_engine_notes::NoteStore;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::memory;

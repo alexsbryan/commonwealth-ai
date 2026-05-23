@@ -25,7 +25,7 @@ use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use corpus_engine::{NoteRow, NoteStore, ToolCallLogRow};
+use corpus_engine_notes::{NoteRow, NoteStore, ToolCallLogRow};
 
 /// Old top-level `sovereign reflect` entry point. Prints the
 /// deprecation banner and forwards to the canonical view handler.

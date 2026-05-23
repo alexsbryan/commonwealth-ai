@@ -45,7 +45,7 @@
 
 use std::path::Path;
 
-use corpus_engine::{NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 
 /// Maximum number of commits to harvest in a single poll. A `git
 /// pull` of 500 commits should NOT inject 500 notes into the

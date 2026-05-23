@@ -60,7 +60,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::{FeatureStore, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_atos::{FeatureStore};
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::{ConversationId, StepOutput, ToolContext};
 use sovereign_core::ToolRegistry;

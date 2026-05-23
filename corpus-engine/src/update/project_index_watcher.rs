@@ -12,7 +12,7 @@ use std::time::SystemTime;
 
 use async_trait::async_trait;
 
-use crate::project_docs::ProjectDocsStore;
+use corpus_engine_notes::project_docs::ProjectDocsStore;
 use crate::update::watcher_coordinator::{BackgroundWatcher, WatcherStatus};
 
 /// Watches `*.md` files and keeps the [`ProjectDocsStore`] in sync.

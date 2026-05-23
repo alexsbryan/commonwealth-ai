@@ -1,6 +1,6 @@
 //! `design_signals_extract` — structural parser over a DESIGN.md doc.
 //!
-//! Wraps `corpus_engine::design_signals::extract` as an MCP tool. The
+//! Wraps `corpus_engine_atos::design_signals::extract` as an MCP tool. The
 //! underlying parser is pure Rust (pulldown-cmark AST + a keyword
 //! scanner); this tool only adds IO (read-the-file) and a JSON
 //! rendering suitable for an agent to reason over.
@@ -181,7 +181,7 @@ impl Tool for DesignSignalsExtractTool {
             message: format!("could not read '{}': {e}", resolved.display()),
         })?;
 
-        let signals = corpus_engine::design_signals::extract(&text);
+        let signals = corpus_engine_atos::design_signals::extract(&text);
 
         Ok(StepOutput::Json(render_signals_json(&resolved, &signals)))
     }
@@ -204,7 +204,7 @@ fn resolve_design_path(path_str: &str, project_root: Option<&Path>) -> Option<Pa
 
 fn render_signals_json(
     path: &Path,
-    signals: &corpus_engine::design_signals::DesignSignals,
+    signals: &corpus_engine_atos::design_signals::DesignSignals,
 ) -> Value {
     let anchors: Vec<Value> = signals
         .anchors
@@ -258,8 +258,8 @@ fn render_signals_json(
     })
 }
 
-fn gap_reason_label(reason: &corpus_engine::design_signals::GapReason) -> &'static str {
-    use corpus_engine::design_signals::GapReason::*;
+fn gap_reason_label(reason: &corpus_engine_atos::design_signals::GapReason) -> &'static str {
+    use corpus_engine_atos::design_signals::GapReason::*;
     match reason {
         TbdMarker => "TbdMarker",
         EmptySection => "EmptySection",

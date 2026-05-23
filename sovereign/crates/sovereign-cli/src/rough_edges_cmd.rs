@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine::rough_edges::{
+use corpus_engine_archaeology::rough_edges::{
     scan_all, DocDriftKind, FindingKind, MarkerKind, RoughEdgeFinding, Severity, SmellKind,
 };
 

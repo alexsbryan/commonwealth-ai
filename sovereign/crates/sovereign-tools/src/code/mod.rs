@@ -147,7 +147,7 @@ pub mod atos_verify;
 #[cfg(feature = "treesitter")]
 pub mod write_redteam_finding;
 
-// DESIGN.md structural signals — wraps corpus_engine::design_signals
+// DESIGN.md structural signals — wraps corpus_engine_atos::design_signals
 // so the agent-collaborative design session (and any MCP client) can
 // audit a DESIGN.md's gaps and keywords without round-tripping through
 // the CLI.

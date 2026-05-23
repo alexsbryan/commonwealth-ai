@@ -239,7 +239,7 @@ pub(crate) async fn cmd_spec_accept(args: &[String]) -> i32 {
                     Vec::new(),
                     vec![prior.spec_path.clone()],
                     "atos-spec-accept",
-                    corpus_engine::NoteScope::Feature,
+                    corpus_engine_notes::NoteScope::Feature,
                     Some(&feature_id),
                 )
                 .await

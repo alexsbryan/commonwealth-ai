@@ -1459,7 +1459,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
             .map(|l| l.id);
 
     // Compose (pure).
-    let signals = corpus_engine::design_signals::extract(&design_md);
+    let signals = corpus_engine_atos::design_signals::extract(&design_md);
     let today = today_iso();
     let compose_inputs = crate::plan_composer::ComposeInputs {
         project_id: &project_id,
@@ -1515,7 +1515,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     // The store tolerates running before .sovereign/ exists (creates
     // parent dirs) but in practice init has already built the tree.
     let plan_db = repo_root.join(".sovereign").join("plan.db");
-    let store = match corpus_engine::plan_items::PlanStore::open(&plan_db) {
+    let store = match corpus_engine_atos::plan_items::PlanStore::open(&plan_db) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("  \u{2717} could not open plan.db: {e}");
@@ -1535,7 +1535,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     }
     for item in &composed.items {
         let depends_on = Vec::<String>::new();
-        let stored = corpus_engine::plan_items::PlanItem {
+        let stored = corpus_engine_atos::plan_items::PlanItem {
             id: item.id.clone(),
             phase: item.phase,
             title: item.title.clone(),
@@ -1543,7 +1543,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
             realizes: item.realizes.clone(),
             depends_on,
             stop_hint: item.stop_hint.clone(),
-            state: corpus_engine::plan_items::PlanItemState::Open,
+            state: corpus_engine_atos::plan_items::PlanItemState::Open,
             design_hash: composed.design_hash.clone(),
             created_at: now,
             updated_at: now,
@@ -1567,7 +1567,7 @@ pub(crate) async fn cmd_plan(args: &[String]) -> i32 {
     // abort; the markdown is the source of truth, the index is a
     // query acceleration.
     let docs_db_path = repo_root.join(".sovereign").join("project_docs.db");
-    match corpus_engine::ProjectDocsStore::open(&docs_db_path) {
+    match corpus_engine_notes::ProjectDocsStore::open(&docs_db_path) {
         Ok(docs) => {
             if let Err(e) = docs.index_file(&plan_md_path, &repo_root).await {
                 eprintln!("    \u{26a0} project_docs index failed: {e}");
@@ -1635,7 +1635,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
     };
 
     // Snapshot BEFORE opening the editor so we can diff after.
-    let old_signals = corpus_engine::design_signals::extract(&old_text);
+    let old_signals = corpus_engine_atos::design_signals::extract(&old_text);
     let old_hash = crate::found::hash_charter(&old_text);
 
     // Hand off to $EDITOR. `invoke_editor` returns the re-read file
@@ -1653,7 +1653,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
         return 0;
     }
 
-    let new_signals = corpus_engine::design_signals::extract(&new_text);
+    let new_signals = corpus_engine_atos::design_signals::extract(&new_text);
     let new_hash = crate::found::hash_charter(&new_text);
     let changed = crate::amend::changed_design_sections(&old_signals, &new_signals);
 
@@ -1700,7 +1700,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
 
     // Best-effort re-index.
     let docs_db = repo_root.join(".sovereign").join("project_docs.db");
-    match corpus_engine::ProjectDocsStore::open(&docs_db) {
+    match corpus_engine_notes::ProjectDocsStore::open(&docs_db) {
         Ok(docs) => {
             if let Err(e) = docs.index_file(&path, &repo_root).await {
                 eprintln!("    \u{26a0} project_docs index failed: {e}");
@@ -1819,7 +1819,7 @@ pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
     // surfaces charter content. Best-effort — the markdown is the
     // source of truth; the index is a query accelerator.
     let docs_db = sovereign_dir.join("project_docs.db");
-    match corpus_engine::ProjectDocsStore::open(&docs_db) {
+    match corpus_engine_notes::ProjectDocsStore::open(&docs_db) {
         Ok(docs) => {
             if let Err(e) = docs.index_file(&charter_path, &repo_root).await {
                 eprintln!("    \u{26a0} project_docs index failed: {e}");
@@ -2734,7 +2734,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // ── Notes store ─────────────────────────────────────────────
 
     let notes_db_path = sovereign_dir.join("notes.db");
-    let notes_store = match corpus_engine::NoteStore::open(&notes_db_path) {
+    let notes_store = match corpus_engine_notes::NoteStore::open(&notes_db_path) {
         Ok(s) => {
             eprintln!("  notes.db         ✓");
             // Write a pointer file so `sovereign reflect` can find this
@@ -2753,7 +2753,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("  warning: could not open notes DB: {e}");
             Arc::new(
-                corpus_engine::NoteStore::open(std::path::Path::new(":memory:"))
+                corpus_engine_notes::NoteStore::open(std::path::Path::new(":memory:"))
                     .expect("in-memory notes store"),
             )
         }
@@ -2761,7 +2761,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Feature store (ATOS charters + milestones) ─────────────
     let features_db_path = sovereign_dir.join("features.db");
-    let features_store = match corpus_engine::FeatureStore::open(&features_db_path) {
+    let features_store = match corpus_engine_atos::FeatureStore::open(&features_db_path) {
         Ok(s) => {
             eprintln!("  features.db      ✓");
             Arc::new(s)
@@ -2769,7 +2769,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         Err(e) => {
             eprintln!("  warning: could not open features DB: {e}");
             Arc::new(
-                corpus_engine::FeatureStore::open(std::path::Path::new(":memory:"))
+                corpus_engine_atos::FeatureStore::open(std::path::Path::new(":memory:"))
                     .expect("in-memory features store"),
             )
         }
@@ -2794,7 +2794,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
     // ── Project docs store ───────────────────────────────────────
 
-    let docs_store = match corpus_engine::ProjectDocsStore::open(
+    let docs_store = match corpus_engine_notes::ProjectDocsStore::open(
         &data_dir.join("project_docs.db"),
     ) {
         Ok(s) => {
@@ -2804,7 +2804,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
                 let s2 = Arc::clone(&store);
                 let root = repo_root.clone();
                 tokio::spawn(async move {
-                    let files = corpus_engine::find_markdown_files(&root);
+                    let files = corpus_engine_notes::find_markdown_files(&root);
                     let mut count = 0usize;
                     for f in &files {
                         count += s2.index_file(f, &root).await.unwrap_or(0);
@@ -3524,7 +3524,7 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
     // Durable decision note. Captures enough for `audit` to build
     // a rollup without re-parsing the phase artifact.
     let sovereign_dir = repo_root.join(".sovereign");
-    if let Ok(note_store) = corpus_engine::NoteStore::open(&sovereign_dir.join("notes.db")) {
+    if let Ok(note_store) = corpus_engine_notes::NoteStore::open(&sovereign_dir.join("notes.db")) {
         let verdict = if outcome.passed { "PASSED" } else { "FAILED" };
         let body = format!(
             "Phase {} · {}\n\nVerdict: {}\nVerification: {}\nDate: {}\nCommitter: {}\n\nStop condition:\n{}\n",
@@ -3553,7 +3553,7 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
                 Vec::new(),
                 Vec::new(),
                 &format!("phase-{}-pass", phase.ordinal),
-                corpus_engine::NoteScope::Global,
+                corpus_engine_notes::NoteScope::Global,
                 None,
             ))
         });
@@ -3692,7 +3692,7 @@ pub(crate) async fn cmd_audit(args: &[String]) -> i32 {
     // stdout isn't polluted.
     let notes_db = sov.join("notes.db");
     if notes_db.exists() {
-        if let Ok(store) = corpus_engine::NoteStore::open(&notes_db) {
+        if let Ok(store) = corpus_engine_notes::NoteStore::open(&notes_db) {
             let summary = crate::audit_extract::run_with_default_backend(
                 &repo_root, &store,
             )
@@ -3826,7 +3826,7 @@ async fn build_audit_report(
     //                        readers used to the old layout.
     let notes_db = sov.join("notes.db");
     let audit_notes: AuditNotes = if notes_db.exists() {
-        match corpus_engine::NoteStore::open(&notes_db) {
+        match corpus_engine_notes::NoteStore::open(&notes_db) {
             Ok(store) => gather_audit_notes(&store).await,
             Err(_) => AuditNotes::default(),
         }
@@ -4074,20 +4074,20 @@ struct AuditNotes {
     /// `kind=decision` or `kind=invariant`, sorted by
     /// (source priority desc, created_at desc). Reversal lines
     /// follow their originals — see [`render_decisions`].
-    decisions: Vec<corpus_engine::NoteRow>,
+    decisions: Vec<corpus_engine_notes::NoteRow>,
     /// `kind=deviation`. Source-tagged in the renderer.
-    deviations: Vec<corpus_engine::NoteRow>,
+    deviations: Vec<corpus_engine_notes::NoteRow>,
     /// `kind=uncertainty`. The renderer de-emphasises
     /// `source=inferred` rows since they're the lowest-confidence
     /// stream.
-    open_questions: Vec<corpus_engine::NoteRow>,
+    open_questions: Vec<corpus_engine_notes::NoteRow>,
     /// `source=observed` (any kind). These are the audit's
     /// "the agent did X but didn't say so" stream from the Phase
     /// 7.1 ToolPatternMatcher.
-    observed: Vec<corpus_engine::NoteRow>,
+    observed: Vec<corpus_engine_notes::NoteRow>,
     /// All notes, indexed by id. Used by the renderer to look up
     /// the row a `supersedes` link points at.
-    by_id: std::collections::HashMap<String, corpus_engine::NoteRow>,
+    by_id: std::collections::HashMap<String, corpus_engine_notes::NoteRow>,
     /// Total count per kind across all sources. Powers the
     /// legacy "Notes by kind" table.
     counts: std::collections::BTreeMap<String, u32>,
@@ -4098,11 +4098,11 @@ struct AuditNotes {
 /// (agent > committed > extracted > inferred > observed) then
 /// reverse chronological. Read-once, render-many — the renderers
 /// don't touch the DB.
-async fn gather_audit_notes(store: &corpus_engine::NoteStore) -> AuditNotes {
-    let filter = corpus_engine::ScopeFilter {
+async fn gather_audit_notes(store: &corpus_engine_notes::NoteStore) -> AuditNotes {
+    let filter = corpus_engine_notes::ScopeFilter {
         scopes: vec![
-            corpus_engine::NoteScope::Global,
-            corpus_engine::NoteScope::Feature,
+            corpus_engine_notes::NoteScope::Global,
+            corpus_engine_notes::NoteScope::Feature,
         ],
         feature_id: None,
     };
@@ -4129,7 +4129,7 @@ async fn gather_audit_notes(store: &corpus_engine::NoteStore) -> AuditNotes {
         if n.kind == "uncertainty" {
             open_questions.push(n.clone());
         }
-        if n.source == corpus_engine::NoteSource::Observed.as_str() {
+        if n.source == corpus_engine_notes::NoteSource::Observed.as_str() {
             observed.push(n.clone());
         }
         by_id.insert(n.id.clone(), n.clone());
@@ -4163,7 +4163,7 @@ async fn gather_audit_notes(store: &corpus_engine::NoteStore) -> AuditNotes {
 /// Unknown / pre-v6 strings are treated as lowest priority so a
 /// stale row never accidentally floats above the agent's own.
 fn source_priority(s: &str) -> u8 {
-    match corpus_engine::NoteSource::parse(s) {
+    match corpus_engine_notes::NoteSource::parse(s) {
         Some(src) => src.priority(),
         None => 0,
     }
@@ -4173,7 +4173,7 @@ fn source_priority(s: &str) -> u8 {
 /// bullet lists. First line of the body, truncated to a
 /// reasonable cap, with a `[<source>]` suffix the reviewer can
 /// scan to gauge confidence at a glance.
-fn render_audit_line(note: &corpus_engine::NoteRow) -> String {
+fn render_audit_line(note: &corpus_engine_notes::NoteRow) -> String {
     let first_line: String = note
         .content
         .lines()
@@ -4203,7 +4203,7 @@ fn render_decisions(notes: &AuditNotes) -> String {
         return out;
     }
     // Build the reverse map: original.id → list of supersedes rows.
-    let mut supers_of: std::collections::HashMap<String, Vec<&corpus_engine::NoteRow>> =
+    let mut supers_of: std::collections::HashMap<String, Vec<&corpus_engine_notes::NoteRow>> =
         std::collections::HashMap::new();
     for n in &notes.decisions {
         if let Some(orig_id) = n.supersedes.as_ref() {
@@ -4293,7 +4293,7 @@ fn render_open_questions(notes: &AuditNotes) -> String {
     out.push_str("## Open questions\n\n");
     for n in &notes.open_questions {
         let confidence_suffix =
-            if n.source == corpus_engine::NoteSource::Inferred.as_str() {
+            if n.source == corpus_engine_notes::NoteSource::Inferred.as_str() {
                 " _(low confidence)_"
             } else {
                 ""
@@ -4392,7 +4392,7 @@ async fn collect_feature_rows(sov: &Path) -> Vec<FeatureRow> {
     // spec.md was actually written).
     let features_db = sov.join("features.db");
     if features_db.exists() {
-        if let Ok(store) = corpus_engine::FeatureStore::open(&features_db) {
+        if let Ok(store) = corpus_engine_atos::FeatureStore::open(&features_db) {
             if let Ok(features) = store.list(true).await {
                 for f in features {
                     let spec_present = features_dir.join(&f.id).join("spec.md").is_file();
@@ -4645,7 +4645,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
             // `read_notes --kind decision` surfaces it without
             // parsing CHARTER.md.
             let notes_path = sovereign_dir.join("notes.db");
-            if let Ok(note_store) = corpus_engine::NoteStore::open(&notes_path) {
+            if let Ok(note_store) = corpus_engine_notes::NoteStore::open(&notes_path) {
                 let body = crate::amend::render_amendment_note_body(&entry);
                 let session_id = format!("amend-v{}", entry.version);
                 let rt = tokio::runtime::Handle::current();
@@ -4656,7 +4656,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
                         Vec::new(),
                         Vec::new(),
                         &session_id,
-                        corpus_engine::NoteScope::Global,
+                        corpus_engine_notes::NoteScope::Global,
                         None,
                     ))
                 });
@@ -6760,7 +6760,7 @@ fi
 
     // ─── Phase 7.3: multi-source audit assembly tests ─────────────
 
-    use corpus_engine::{NoteScope, NoteSource, NoteStore};
+    use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
 
     async fn write_note(
         store: &NoteStore,

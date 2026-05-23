@@ -27,9 +27,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
 
-use corpus_engine::{
-    FeatureStore, NoteScope, NoteSource, NoteStore, ScopeFilter,
-};
+use corpus_engine_notes::{NoteScope, NoteSource, NoteStore, ScopeFilter};
+use corpus_engine_atos::{FeatureStore};
 use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
@@ -286,8 +285,11 @@ fn io_err<P: AsRef<Path>>(op: &str, path: P, e: std::io::Error) -> Error {
     Error::InvalidInput(format!("{op} {}: {e}", path.as_ref().display()))
 }
 
-/// Bridge a `corpus_engine::Error` into a `sovereign_core::Error`.
-fn ce_err(e: corpus_engine::Error) -> Error {
+/// Bridge a `corpus_engine_notes::Error` (post-2026-05-23 carve-out of
+/// the NoteStore from corpus-engine) into a `sovereign_core::Error`.
+/// All four call sites in this file use the NoteStore via
+/// `project.notes()`.
+fn ce_err(e: corpus_engine_notes::Error) -> Error {
     Error::Storage(e.to_string())
 }
 
@@ -501,7 +503,7 @@ pub async fn restore_checkpoint(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use corpus_engine::FeatureStore;
+    use corpus_engine_atos::FeatureStore;
 
     /// Per-test-module HOME mutex. `HOME` is process-global, so two
     /// `fresh_project` callers running in parallel under `cargo test`

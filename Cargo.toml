@@ -11,6 +11,15 @@ members = [
     # corpus-engine 2026-05-23 to cut the rebuild blast radius for scip
     # changes from 20 crates to ~6.
     "corpus-engine-scip",
+    # ATOS state — FeatureStore + plan_items + DESIGN.md design_signals.
+    # Step 2 of the corpus-engine decomposition (see DECOMPOSITION.md).
+    "corpus-engine-atos",
+    # NoteStore + project_docs + notes_sync. Step 3 of the corpus-engine
+    # decomposition. notes.rs (2781 LOC) cleared from the §3.1 list.
+    "corpus-engine-notes",
+    # Git archaeology — commit-history mining, rough-edge surfacing,
+    # atom-provenance evaluation. Step 4 of the decomposition.
+    "corpus-engine-archaeology",
 
     # Sovereign — local agent runtime + CLI + desktop + server.
     "sovereign/crates/sovereign-core",
@@ -58,6 +67,9 @@ license = "Apache-2.0"
 oicp-types = { path = "oicp-types" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
+corpus-engine-atos = { path = "corpus-engine-atos" }
+corpus-engine-notes = { path = "corpus-engine-notes" }
+corpus-engine-archaeology = { path = "corpus-engine-archaeology" }
 sovereign-core = { path = "sovereign/crates/sovereign-core" }
 sovereign-inference = { path = "sovereign/crates/sovereign-inference" }
 sovereign-store = { path = "sovereign/crates/sovereign-store" }

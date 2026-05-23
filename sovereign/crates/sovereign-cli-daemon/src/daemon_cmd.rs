@@ -24,9 +24,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
-use corpus_engine::{
-    CorpusEngine, EmbedFn, LintResultStore, NoteStore, TestResultStore,
-};
+use corpus_engine::{CorpusEngine, EmbedFn, LintResultStore, TestResultStore};
+use corpus_engine_notes::{NoteStore};
 use sovereign_core::model_family::{
     EmbedModelInfo, ModelFamily, NormalizationStrategy, PoolingStrategy,
 };
@@ -1986,7 +1985,7 @@ async fn build_tool_registry(
     // Project context — served from `indexes/project_docs.db` if a
     // project has been init'd. Absent on a bare-setup daemon; that's
     // fine, just one fewer tool.
-    if let Ok(ds) = corpus_engine::ProjectDocsStore::open(
+    if let Ok(ds) = corpus_engine_notes::ProjectDocsStore::open(
         &indexes_dir.join("project_docs.db"),
     ) {
         tools.register(Box::new(sovereign_tools::ProjectContextTool::new(
