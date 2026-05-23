@@ -66,7 +66,7 @@ pub struct CodeWatcher {
     root: PathBuf,
     debounce: Duration,
     #[cfg(feature = "treesitter")]
-    scip_graph: Option<Arc<crate::scip_graph::ScipGraph>>,
+    scip_graph: Option<Arc<corpus_engine_scip::ScipGraph>>,
 }
 
 impl CodeWatcher {
@@ -92,7 +92,7 @@ impl CodeWatcher {
     /// when they're modified. Without this, the call graph has no
     /// per-file staleness tracking.
     #[cfg(feature = "treesitter")]
-    pub fn with_scip_graph(mut self, graph: Arc<crate::scip_graph::ScipGraph>) -> Self {
+    pub fn with_scip_graph(mut self, graph: Arc<corpus_engine_scip::ScipGraph>) -> Self {
         self.scip_graph = Some(graph);
         self
     }
@@ -169,7 +169,7 @@ async fn run_debouncer(
     root: PathBuf,
     debounce: Duration,
     #[cfg(feature = "treesitter")]
-    scip_graph: Option<Arc<crate::scip_graph::ScipGraph>>,
+    scip_graph: Option<Arc<corpus_engine_scip::ScipGraph>>,
 ) {
     // `pending` maps absolute path → (last_event_at, is_delete). We
     // track the last event time so we can flush only after idle; we
@@ -258,7 +258,7 @@ async fn flush_ready(
     root: &Path,
     debounce: Duration,
     #[cfg(feature = "treesitter")]
-    scip_graph: &Option<Arc<crate::scip_graph::ScipGraph>>,
+    scip_graph: &Option<Arc<corpus_engine_scip::ScipGraph>>,
 ) {
     let now = Instant::now();
     let ready: Vec<PathBuf> = pending

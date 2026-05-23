@@ -261,7 +261,7 @@ mod tests {
     use super::*;
     use crate::projects::ProjectState;
     use arc_swap::ArcSwap;
-    use corpus_engine::ScipGraph;
+    use corpus_engine_scip::ScipGraph;
     use std::net::SocketAddr;
 
     async fn spawn(reindexer: Arc<Reindexer>) -> String {

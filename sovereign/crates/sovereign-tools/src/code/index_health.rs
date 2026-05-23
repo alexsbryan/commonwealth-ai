@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tokio::sync::Mutex;
 
-use corpus_engine::scip_graph::ScipGraph;
+use corpus_engine_scip::scip_graph::ScipGraph;
 
 /// A hot-reloadable SCIP graph handle (mirrors the type in callees.rs).
 pub type ScipGraphHandle = Arc<arc_swap::ArcSwap<ScipGraph>>;
@@ -107,7 +107,7 @@ impl IndexHealthChecker {
 }
 
 fn classify(
-    stats: &corpus_engine::scip_graph::ScipGraphStats,
+    stats: &corpus_engine_scip::scip_graph::ScipGraphStats,
 ) -> (bool, StalenessLevel) {
     if stats.symbol_count == 0 && stats.export_age_hours.is_none() {
         return (false, StalenessLevel::Absent);
@@ -123,7 +123,7 @@ fn classify(
     (stats.symbol_count > 0, level)
 }
 
-fn make_hint(level: StalenessLevel, stats: &corpus_engine::scip_graph::ScipGraphStats) -> Option<String> {
+fn make_hint(level: StalenessLevel, stats: &corpus_engine_scip::scip_graph::ScipGraphStats) -> Option<String> {
     match level {
         StalenessLevel::Fresh => None,
         StalenessLevel::Aging => Some(format!(
@@ -156,7 +156,7 @@ fn make_hint(level: StalenessLevel, stats: &corpus_engine::scip_graph::ScipGraph
 mod tests {
     use super::*;
     use arc_swap::ArcSwap;
-    use corpus_engine::scip_graph::ScipGraph;
+    use corpus_engine_scip::scip_graph::ScipGraph;
 
     async fn make_checker(graph: ScipGraph) -> IndexHealthChecker {
         let handle: ScipGraphHandle = Arc::new(ArcSwap::from_pointee(graph));
@@ -186,7 +186,7 @@ mod tests {
         let _ = graph2;
 
         // Test classify() directly with a zero-symbol, no-export stats.
-        let stats_absent = corpus_engine::scip_graph::ScipGraphStats {
+        let stats_absent = corpus_engine_scip::scip_graph::ScipGraphStats {
             symbol_count: 0,
             ref_count: 0,
             stale_file_count: 0,
@@ -201,7 +201,7 @@ mod tests {
     #[tokio::test]
     async fn scip_fresh_no_hint() {
         // Fresh stats: recent export, no stale files, has symbols.
-        let stats = corpus_engine::scip_graph::ScipGraphStats {
+        let stats = corpus_engine_scip::scip_graph::ScipGraphStats {
             symbol_count: 100,
             ref_count: 50,
             stale_file_count: 0,

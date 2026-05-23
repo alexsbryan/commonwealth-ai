@@ -212,7 +212,7 @@ async fn check_scip_indexed() -> CheckResult {
                 Some(n) => n.to_string(),
                 None => continue,
             };
-            match corpus_engine::ScipGraph::open(&db, &name) {
+            match corpus_engine_scip::ScipGraph::open(&db, &name) {
                 Ok(graph) => {
                     if graph.symbol_count().await > 0 {
                         populated.push(name);
@@ -904,14 +904,14 @@ fn check_scip_integrity() -> CheckResult {
             .file_name()
             .to_string_lossy()
             .to_string();
-        match corpus_engine::ScipGraph::open_with_integrity(&db, &corpus) {
+        match corpus_engine_scip::ScipGraph::open_with_integrity(&db, &corpus) {
             Ok(_) => {
                 checked += 1;
             }
-            Err(corpus_engine::OpenError::Corrupt { .. }) => {
+            Err(corpus_engine_scip::OpenError::Corrupt { .. }) => {
                 corrupt.push(corpus);
             }
-            Err(corpus_engine::OpenError::SchemaMismatch { .. }) => {
+            Err(corpus_engine_scip::OpenError::SchemaMismatch { .. }) => {
                 stale_schema.push(corpus);
             }
             Err(_) => {
@@ -1084,7 +1084,7 @@ async fn check_watcher_freshness() -> CheckResult {
             // `scip_indexed` already covers the missing-DB case; don't double-fail.
             continue;
         }
-        let graph = match corpus_engine::ScipGraph::open(&db, &corpus_id) {
+        let graph = match corpus_engine_scip::ScipGraph::open(&db, &corpus_id) {
             Ok(g) => g,
             Err(_) => continue,
         };
@@ -1318,7 +1318,7 @@ fn newest_source_age_secs(
 /// Verify that, for every registered project, the SCIP exporter
 /// binaries needed by the languages present in its workspace are
 /// reachable on PATH. Language-agnostic: it consults
-/// `corpus_engine::scip_export::check_exporters`, which iterates
+/// `corpus_engine_scip::scip_export::check_exporters`, which iterates
 /// every registered exporter (rust-analyzer, scip-typescript,
 /// scip-python, scip-go, scip-java) and reports those that are
 /// needed but absent. Pairs with `scip_indexed` (row count): an
@@ -1357,7 +1357,7 @@ fn check_scip_exporters() -> CheckResult {
         if !root.exists() {
             continue;
         }
-        let detected = corpus_engine::scip_export::find_cargo_workspace_roots(&root);
+        let detected = corpus_engine_scip::scip_export::find_cargo_workspace_roots(&root);
         if detected.is_empty() {
             roots.push(root);
         } else {
@@ -1377,7 +1377,7 @@ fn check_scip_exporters() -> CheckResult {
         };
     }
 
-    let check = corpus_engine::scip_export::check_exporters(&roots);
+    let check = corpus_engine_scip::scip_export::check_exporters(&roots);
     if !check.missing.is_empty() {
         let summary = check
             .missing

@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use corpus_engine::ScipGraph;
+use corpus_engine_scip::ScipGraph;
 
 /// Summary returned by [`load_merged_graph`] — aggregated counts for
 /// the startup banner and structured logging.

@@ -1,0 +1,61 @@
+[package]
+name = "corpus-engine-scip"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SCIP call graph store + language-agnostic exporter dispatch. Carved out of corpus-engine for rebuild-radius control."
+
+# Why this crate is its own thing:
+#
+# Pre-2026-05: scip_graph.rs + scip_export.rs + scip_proto.rs lived in
+# corpus-engine (gated behind the `treesitter` feature). corpus-engine
+# is depended on by 17 workspace crates (20 transitive — 67% of the
+# workspace), so a single line edit in scip_graph.rs forced 20 crates
+# to revalidate. Few of those consumers actually use scip — most pull
+# in corpus-engine for `notes`, `enrichment`, or `index`.
+#
+# Carving scip into its own crate cuts the blast radius for scip
+# changes to its 6 direct consumers (sovereign-mesh, sovereign-tools,
+# sovereign-cli-daemon, sovereign-cli-dev, sovereign-server,
+# sovereign-desktop). Per ARCH_PRINCIPLES.md §3.1 / §3.3 this is also
+# a split of an over-sized concern: scip_graph.rs alone is 2485 lines.
+
+[dependencies]
+# Error handling — local, narrow `Error` (Io + Database). See `error.rs`.
+thiserror = { workspace = true }
+
+# Serde derives on the wire-shaped types (SymbolRow, BlastEntry, etc.)
+# that the MCP tool layer serializes. Workspace baseline is `derive`.
+serde = { workspace = true }
+
+# Async runtime. Workspace baseline carries `rt`, `sync`, `process`,
+# `time`, `macros`, `fs` — all of which scip uses.
+tokio = { workspace = true }
+
+# Tracing for the exporter-not-in-PATH warning and rebuild-lock notes.
+tracing = { workspace = true }
+
+# Timestamps for `last_export_at` (RFC-3339 strings round-tripped).
+chrono = { workspace = true }
+
+# SCIP graph storage. Bundled SQLite keeps build-host setup zero-friction.
+# Same version corpus-engine carried before the carve-out.
+rusqlite = { version = "0.35", features = ["bundled"] }
+
+# SCIP protobuf decoder — Sourcegraph's `.scip` wire format.
+prost = "0.13"
+
+# Cross-process file locking for the rebuild guard (`ScipGraph::try_rebuild_lock`).
+# Kernel releases on process death, so we can't leak a stale lock.
+fs4 = "0.12"
+
+# Exporter discovery: `which::which("rust-analyzer")`, glob walks for
+# detecting language presence in a workspace, and tempfile for the
+# rust-analyzer config-file argument.
+which = "7"
+glob = "0.3"
+tempfile = "3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3"

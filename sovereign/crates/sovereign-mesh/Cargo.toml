@@ -24,6 +24,9 @@ commonwealth-inference = { path = "../../../commonwealth/crates/commonwealth-inf
 # below. Default callers (sovereign-cli's mesh_cmd, mcp_router,
 # gossip, etc.) don't pull the 5 tree-sitter grammar crates.
 corpus-engine = { workspace = true }
+# SCIP call graph + exporter dispatch. Carved out of corpus-engine
+# 2026-05-23 — reindexer.rs uses ScipGraph + scip_export directly.
+corpus-engine-scip = { workspace = true }
 
 # Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }

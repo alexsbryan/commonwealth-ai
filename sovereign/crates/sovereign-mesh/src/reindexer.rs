@@ -13,7 +13,7 @@
 //! - [`ScipGraph::open_with_integrity`] — post-rebuild open on the
 //!   freshly-renamed DB; quarantines corruption and triggers the
 //!   next rebuild if the schema drifts.
-//! - [`corpus_engine::scip_export::export_all`] — the per-language
+//! - [`corpus_engine_scip::scip_export::export_all`] — the per-language
 //!   exporter dispatch that already exists.
 //!
 //! The rebuild itself writes to `scip_graph.db.new` then renames
@@ -28,7 +28,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
-use corpus_engine::ScipGraph;
+use corpus_engine_scip::ScipGraph;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use tokio::sync::{mpsc, watch, RwLock, Semaphore};
@@ -592,7 +592,7 @@ async fn run_one_rebuild(ctx: &RebuildCtx, req: RebuildRequest) {
 }
 
 /// A thin summary returned by [`execute_rebuild`]. Not the same as
-/// [`corpus_engine::scip_export::ExportSummary`] — we keep this
+/// [`corpus_engine_scip::scip_export::ExportSummary`] — we keep this
 /// lean so the worker doesn't depend on the exporter's schema
 /// during unit tests that stub the rebuild body.
 #[derive(Debug, Serialize)]
@@ -654,8 +654,8 @@ async fn execute_rebuild(
     // The exporter wants a `&dyn Fn(ScipProgress)`; use a plain
     // function (Send + Sync by default) rather than a closure, so
     // the containing async body stays Send.
-    fn silent_progress(_p: corpus_engine::scip_export::ScipProgress<'_>) {}
-    let summary = corpus_engine::scip_export::export_all(
+    fn silent_progress(_p: corpus_engine_scip::scip_export::ScipProgress<'_>) {}
+    let summary = corpus_engine_scip::scip_export::export_all(
         &ctx.entry.root,
         &export_out,
         &new_graph,

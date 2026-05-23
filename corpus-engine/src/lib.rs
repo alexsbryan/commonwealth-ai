@@ -43,17 +43,16 @@ pub mod types;
 pub mod update;
 pub mod yield_hook;
 
-// SCIP call graph + tree-sitter-driven scanning. Only modules that
-// actually depend on tree-sitter grammars or scip-proto live behind
-// the `treesitter` gate. The rusqlite-backed stores moved to
-// `stores` so callers that only need NoteStore/FeatureStore don't
-// drag in 5 grammar crates.
-#[cfg(feature = "treesitter")]
-pub mod scip_graph;
-#[cfg(feature = "treesitter")]
-pub mod scip_export;
-#[cfg(feature = "treesitter")]
-mod scip_proto;
+// SCIP call graph + per-language exporter dispatch live in their
+// own crate now (`corpus-engine-scip`, carved out 2026-05-23). The
+// `scip_graph` / `scip_export` paths under corpus-engine remain as
+// re-exports for backward compatibility during the consumer
+// migration — see the `pub use corpus_engine_scip` block below.
+//
+// Only modules that actually depend on tree-sitter grammars live
+// behind the `treesitter` gate now. The rusqlite-backed stores
+// moved to `stores` so callers that only need NoteStore/FeatureStore
+// don't drag in 5 grammar crates.
 
 // Wikipedia link graph (Atlas-style enrichment, Layer 0) — rusqlite,
 // no tree-sitter. Gated by `stores`.
@@ -145,11 +144,14 @@ pub use types::{
 };
 pub use yield_hook::YieldHook;
 
-#[cfg(feature = "treesitter")]
-pub use scip_graph::{
-    BlastEntry, BlastRadiusResult, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
-    ScipRefRecord, ScipSymbolRecord, SymbolRow, SCHEMA_VERSION,
-};
+// SCIP call graph + exporter dispatch live in `corpus-engine-scip`
+// (carved out 2026-05-23). corpus-engine itself still uses scip via
+// `update::watch::CodeWatcher` and
+// `enrichment::atlas::strategies::code_walk`, but external consumers
+// import directly from `corpus_engine_scip::*`. No re-export shim
+// from this crate — keeping the seam clean prevents the `oicp-types`
+// version-skew failure mode (§8.3) where re-exports invite two
+// crates to depend on different versions of the same logical type.
 
 #[cfg(feature = "stores")]
 pub use wikipedia_graph::{

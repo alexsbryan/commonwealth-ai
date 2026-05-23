@@ -71,3 +71,20 @@ pub enum Error {
     #[error("Ingest of '{0}' cancelled by user")]
     Cancelled(String),
 }
+
+/// Bridge the narrow `corpus-engine-scip::Error` into our wider Error.
+/// Scip only constructs `Io` and `Database` variants, so the mapping
+/// is total. Required for `?`-bubbling from scip-returning helpers
+/// inside `update::watch::CodeWatcher` and
+/// `enrichment::atlas::strategies::code_walk`, which return our local
+/// `Result<T>`. External sovereign-* consumers don't go through this
+/// — they generally `map_err` into their own error type.
+#[cfg(feature = "treesitter")]
+impl From<corpus_engine_scip::Error> for Error {
+    fn from(e: corpus_engine_scip::Error) -> Self {
+        match e {
+            corpus_engine_scip::Error::Io(io) => Error::Io(io),
+            corpus_engine_scip::Error::Database(s) => Error::Database(s),
+        }
+    }
+}

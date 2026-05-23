@@ -2022,8 +2022,8 @@ async fn build_tool_registry(
 /// runs under launchd/systemd.
 async fn build_merged_scip_graph(
     indexes_dir: &std::path::Path,
-) -> corpus_engine::ScipGraph {
-    let merged = corpus_engine::ScipGraph::open_in_memory("merged")
+) -> corpus_engine_scip::ScipGraph {
+    let merged = corpus_engine_scip::ScipGraph::open_in_memory("merged")
         .expect("in-memory ScipGraph");
     let Ok(entries) = std::fs::read_dir(indexes_dir) else {
         return merged;
