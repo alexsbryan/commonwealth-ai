@@ -21,6 +21,7 @@ pub mod pipeline;
 pub mod sep;
 pub mod skeleton;
 pub(crate) mod skeleton_parse;
+pub mod tiered;
 
 pub use atlas::{AtlasData, AtlasIngestion, AtlasIngestionConfig, AtlasIngestionRegistry};
 

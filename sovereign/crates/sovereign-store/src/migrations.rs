@@ -491,3 +491,77 @@ pub fn run_inner_work_memory_wall_migrations(conn: &Connection) -> rusqlite::Res
     );
     Ok(())
 }
+
+/// Conversation tiered-retrieval port (Phase B; spec
+/// `sovereign/docs/specs/CONV_TIERED_PORT.md`).
+///
+/// Mirrors the attached-doc `raptor_nodes` / `asset_motifs` shape but
+/// keys on `(corpus_id, conv_uuid)` so a single SQLite store can host
+/// tiered enrichment for every conversation corpus (claude.ai export,
+/// Sovereign-internal personal chats, future imports). No FK to
+/// `document_assets` — conversations live in Lance, not in
+/// `document_assets`.
+///
+/// The three tables together carry the per-conversation T2 + T3
+/// enrichment output:
+///
+/// - `conv_skeletons` — per-conv state machine + T2 partial skeleton
+///   (entity index, action atoms) + T3 overview + segments
+/// - `conv_raptor_nodes` — per-conv RAPTOR tree (flat node list,
+///   level + children + chunk membership + quote spans)
+/// - `conv_motifs` — TF-IDF motif index per conv
+pub fn run_conv_tiered_migration(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS conv_skeletons (
+            corpus_id      TEXT    NOT NULL,
+            conv_uuid      TEXT    NOT NULL,
+            state          TEXT    NOT NULL,    -- 'Pending'|'PartiallyReady'|'MultiHopReady'|'Ready'|'Failed'
+            skeleton_json  TEXT,                -- T2 partial: main_entities, entity_index, actions, structural_moments
+            overview       TEXT,                -- T3 overview (reused conv.title for opt-3 in v0)
+            segments_json  TEXT,                -- T3 TextTiling segments (NULL for short convs)
+            chunk_count    INTEGER NOT NULL DEFAULT 0,
+            updated_at     INTEGER NOT NULL,
+            PRIMARY KEY (corpus_id, conv_uuid)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conv_skeletons_state
+            ON conv_skeletons(corpus_id, state);
+
+        CREATE TABLE IF NOT EXISTS conv_raptor_nodes (
+            node_id                 TEXT    PRIMARY KEY,
+            corpus_id               TEXT    NOT NULL,
+            conv_uuid               TEXT    NOT NULL,
+            level                   INTEGER NOT NULL,
+            summary                 TEXT    NOT NULL,
+            -- Embeddings stored as raw little-endian f32 bytes
+            -- (mirrors raptor_nodes encoding in run_raptor_atlas_migration).
+            summary_embedding       BLOB    NOT NULL,
+            centroid_embedding      BLOB    NOT NULL,
+            children_node_ids       TEXT    NOT NULL,    -- JSON array
+            direct_member_chunk_ids TEXT,                -- JSON array of Lance chunk ids; NULL above level 0
+            evidence_chunk_ids      TEXT    NOT NULL,    -- JSON array
+            quote_spans             TEXT    NOT NULL,    -- JSON array of QuoteSpan
+            primary_entities        TEXT    NOT NULL,    -- JSON array of name strings
+            cluster_coherence       REAL    NOT NULL,
+            created_at              INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conv_raptor_nodes_conv_level
+            ON conv_raptor_nodes(corpus_id, conv_uuid, level);
+
+        CREATE TABLE IF NOT EXISTS conv_motifs (
+            corpus_id            TEXT    NOT NULL,
+            conv_uuid            TEXT    NOT NULL,
+            term                 TEXT    NOT NULL,
+            tf_idf_score         REAL    NOT NULL,
+            occurrence_chunk_ids TEXT    NOT NULL,    -- JSON array
+            is_distinctive       INTEGER NOT NULL,    -- 0 / 1
+            PRIMARY KEY (corpus_id, conv_uuid, term)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conv_motifs_distinctive
+            ON conv_motifs(corpus_id, conv_uuid, is_distinctive DESC, tf_idf_score DESC);
+        ",
+    )
+}

@@ -74,6 +74,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Inner-work memory wall migration failed: {e}")))?;
         migrations::run_antifragile_routing_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
+        migrations::run_conv_tiered_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Conv tiered migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -215,6 +217,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Inner-work memory wall migration failed: {e}")))?;
         migrations::run_antifragile_routing_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
+        migrations::run_conv_tiered_migration(&conn)
+            .map_err(|e| Error::Storage(format!("Conv tiered migration failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -2219,5 +2223,266 @@ fn row_to_document_session(row: &rusqlite::Row) -> DocumentSession {
         reduce_prompt: row.get(9).unwrap_or_default(),
         last_output: row.get(10).ok(),
         history,
+    }
+}
+
+// ── Conversation tiered-retrieval port (spec CONV_TIERED_PORT.md) ──
+//
+// Persistence surface for the per-conversation T2/T3 enrichment
+// output. The `TieredEnrichmentProvider` impl in `sovereign-tools`
+// holds an `Arc<SqliteStateStore>` and writes through these methods;
+// corpus-engine never touches the store directly (no dep on
+// sovereign-store).
+
+/// State variant for a single conversation's tiered enrichment
+/// progress. Mirrors `AssetState` but unblocks string-storage of the
+/// tag rather than full enum serialisation — the briefing layer only
+/// checks a handful of states, no need for serde dance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConvTieredState {
+    Pending,
+    PartiallyReady,
+    MultiHopReady,
+    Ready,
+    Failed,
+}
+
+impl ConvTieredState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ConvTieredState::Pending => "Pending",
+            ConvTieredState::PartiallyReady => "PartiallyReady",
+            ConvTieredState::MultiHopReady => "MultiHopReady",
+            ConvTieredState::Ready => "Ready",
+            ConvTieredState::Failed => "Failed",
+        }
+    }
+}
+
+/// One row from `conv_skeletons`. `skeleton_json` / `overview` /
+/// `segments_json` are populated incrementally as the per-tier
+/// enrichment passes complete.
+#[derive(Debug, Clone)]
+pub struct ConvSkeletonRow {
+    pub corpus_id: String,
+    pub conv_uuid: String,
+    pub state: String,
+    pub skeleton_json: Option<String>,
+    pub overview: Option<String>,
+    pub segments_json: Option<String>,
+    pub chunk_count: i64,
+    pub updated_at: i64,
+}
+
+/// One row from `conv_raptor_nodes`. Mirrors the attached-doc
+/// `RaptorNode` shape but corpus-namespaced; pre-serialized JSON
+/// blobs match the column types so callers don't need to know the
+/// schema's JSON-array convention.
+#[derive(Debug, Clone)]
+pub struct ConvRaptorNodeRow {
+    pub node_id: String,
+    pub corpus_id: String,
+    pub conv_uuid: String,
+    pub level: i64,
+    pub summary: String,
+    pub summary_embedding: Vec<f32>,
+    pub centroid_embedding: Vec<f32>,
+    pub children_node_ids_json: String,
+    pub direct_member_chunk_ids_json: Option<String>,
+    pub evidence_chunk_ids_json: String,
+    pub quote_spans_json: String,
+    pub primary_entities_json: String,
+    pub cluster_coherence: f64,
+    pub created_at: i64,
+}
+
+/// One row from `conv_motifs`. TF-IDF score is computed in-process
+/// from the chunk content; the LLM-classified `is_distinctive` flag
+/// is the gate that keeps fluff terms out of the briefing.
+#[derive(Debug, Clone)]
+pub struct ConvMotifRow {
+    pub corpus_id: String,
+    pub conv_uuid: String,
+    pub term: String,
+    pub tf_idf_score: f64,
+    pub occurrence_chunk_ids_json: String,
+    pub is_distinctive: bool,
+}
+
+impl SqliteStateStore {
+    /// Upsert the per-conv skeleton row. `state` is one of
+    /// `ConvTieredState::as_str()`; future-proofed to bare string so
+    /// the provider can write a custom error sub-state without a
+    /// schema change.
+    pub async fn save_conv_skeleton(&self, row: &ConvSkeletonRow) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT INTO conv_skeletons
+                (corpus_id, conv_uuid, state, skeleton_json, overview,
+                 segments_json, chunk_count, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(corpus_id, conv_uuid) DO UPDATE SET
+                state         = excluded.state,
+                skeleton_json = excluded.skeleton_json,
+                overview      = excluded.overview,
+                segments_json = excluded.segments_json,
+                chunk_count   = excluded.chunk_count,
+                updated_at    = excluded.updated_at",
+            rusqlite::params![
+                row.corpus_id,
+                row.conv_uuid,
+                row.state,
+                row.skeleton_json,
+                row.overview,
+                row.segments_json,
+                row.chunk_count,
+                row.updated_at,
+            ],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    /// Read the state row for one conversation. Returns `None` if the
+    /// tiered pass has never run for `(corpus_id, conv_uuid)`.
+    pub async fn get_conv_skeleton(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> Result<Option<ConvSkeletonRow>> {
+        let conn = self.conn.lock().await;
+        let row = conn
+            .query_row(
+                "SELECT corpus_id, conv_uuid, state, skeleton_json, overview,
+                        segments_json, chunk_count, updated_at
+                 FROM conv_skeletons
+                 WHERE corpus_id = ?1 AND conv_uuid = ?2",
+                rusqlite::params![corpus_id, conv_uuid],
+                |r| {
+                    Ok(ConvSkeletonRow {
+                        corpus_id: r.get(0)?,
+                        conv_uuid: r.get(1)?,
+                        state: r.get(2)?,
+                        skeleton_json: r.get(3)?,
+                        overview: r.get(4)?,
+                        segments_json: r.get(5)?,
+                        chunk_count: r.get(6)?,
+                        updated_at: r.get(7)?,
+                    })
+                },
+            )
+            .ok();
+        Ok(row)
+    }
+
+    /// Replace the RAPTOR node set for one conversation. Atomic
+    /// delete + insert in one transaction — mirrors the attached-doc
+    /// `save_raptor_nodes` semantics so a partial provider crash
+    /// doesn't leave a half-built tree on disk.
+    pub async fn save_conv_raptor_nodes(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        nodes: &[ConvRaptorNodeRow],
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM conv_raptor_nodes WHERE corpus_id = ?1 AND conv_uuid = ?2",
+            rusqlite::params![corpus_id, conv_uuid],
+        )
+        .map_err(map_db)?;
+        for node in nodes {
+            tx.execute(
+                "INSERT INTO conv_raptor_nodes
+                    (node_id, corpus_id, conv_uuid, level, summary,
+                     summary_embedding, centroid_embedding,
+                     children_node_ids, direct_member_chunk_ids,
+                     evidence_chunk_ids, quote_spans, primary_entities,
+                     cluster_coherence, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                rusqlite::params![
+                    node.node_id,
+                    node.corpus_id,
+                    node.conv_uuid,
+                    node.level,
+                    node.summary,
+                    encode_f32_vec(&node.summary_embedding),
+                    encode_f32_vec(&node.centroid_embedding),
+                    node.children_node_ids_json,
+                    node.direct_member_chunk_ids_json,
+                    node.evidence_chunk_ids_json,
+                    node.quote_spans_json,
+                    node.primary_entities_json,
+                    node.cluster_coherence,
+                    node.created_at,
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    /// Replace the motif set for one conversation. Same atomicity
+    /// rationale as `save_conv_raptor_nodes`.
+    pub async fn save_conv_motifs(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+        motifs: &[ConvMotifRow],
+    ) -> Result<()> {
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM conv_motifs WHERE corpus_id = ?1 AND conv_uuid = ?2",
+            rusqlite::params![corpus_id, conv_uuid],
+        )
+        .map_err(map_db)?;
+        for motif in motifs {
+            tx.execute(
+                "INSERT INTO conv_motifs
+                    (corpus_id, conv_uuid, term, tf_idf_score,
+                     occurrence_chunk_ids, is_distinctive)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    motif.corpus_id,
+                    motif.conv_uuid,
+                    motif.term,
+                    motif.tf_idf_score,
+                    motif.occurrence_chunk_ids_json,
+                    if motif.is_distinctive { 1i64 } else { 0i64 },
+                ],
+            )
+            .map_err(map_db)?;
+        }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    /// Inventory of conv states for a corpus — used by ops tools to
+    /// answer "how far has the tiered pass progressed across this
+    /// import?". Returns `(state, count)` pairs.
+    pub async fn count_conv_skeletons_by_state(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Vec<(String, i64)>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT state, COUNT(*) FROM conv_skeletons
+                 WHERE corpus_id = ?1 GROUP BY state ORDER BY state",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![corpus_id], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok(out)
     }
 }

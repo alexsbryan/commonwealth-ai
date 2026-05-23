@@ -1549,6 +1549,26 @@ impl CorpusEngine {
                             }
                         }
 
+                        // Tiered enrichment path (spec
+                        // `sovereign/docs/specs/CONV_TIERED_PORT.md`).
+                        // Replaces the legacy field-model atlas
+                        // pipeline for conversation corpora. The two
+                        // paths are mutually exclusive; tiered skips
+                        // the FieldModelEngine block via labeled
+                        // break and falls through to the same
+                        // IngestResult shape via the post-block
+                        // `index.info()` summary.
+                        'enrichment: {
+                        if enrichment_config.enrichment_type == "tiered" {
+                            crate::enrichment::tiered::run_tiered_enrichment(
+                                &recipe,
+                                index_path,
+                                self.tiered_provider(),
+                            )
+                            .await?;
+                            break 'enrichment;
+                        }
+
                         let field_engine =
                             crate::enrichment::field_engine::FieldModelEngine::from_recipe(
                                 &recipe,
@@ -1700,6 +1720,7 @@ impl CorpusEngine {
                             }
                         };
                         field_engine.enrich(&index, &progress_fn).await?;
+                        } // end 'enrichment: block (tiered vs legacy field-model)
                     }
                     None => {
                         tracing::warn!(

@@ -20,7 +20,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use arrow_array::{Array, Int64Array, RecordBatch, StringArray};
+use arrow_array::{
+    Array, FixedSizeListArray, Float32Array, Int64Array, ListArray, RecordBatch, StringArray,
+};
 use futures::TryStreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase, Select};
 
@@ -394,5 +396,181 @@ impl CorpusIndex {
             }
         }
         Ok((count, min_content))
+    }
+
+    /// Conv-tiered port (spec `CONV_TIERED_PORT.md`): fetch every
+    /// chunk for one `source_doc_id` (= conv_uuid) WITH its embedding
+    /// vector, ready to hand to `build_raptor_atlas`. Pairs each
+    /// returned row with its f32 embedding in lock-step order.
+    ///
+    /// Returns rows sorted by `id` ascending so callers building
+    /// position-anchored RAPTOR clusters see the chunks in source
+    /// order. Chunks with a missing/null embedding are dropped — they
+    /// shouldn't exist on a healthy T1-complete index, but the
+    /// fallback is "skip" rather than "fail the whole conv".
+    pub async fn chunks_for_source_doc_with_embeddings(
+        &self,
+        doc_id: &str,
+    ) -> Result<Vec<(EnrichmentChunkRow, Vec<f32>)>> {
+        let safe_id = doc_id.replace('\'', "''");
+        let predicate = format!("source_doc_id = '{safe_id}'");
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .only_if(predicate)
+            .select(Select::Columns(vec![
+                "id".to_string(),
+                "content".to_string(),
+                "title".to_string(),
+                "url".to_string(),
+                "metadata".to_string(),
+                "source_doc_id".to_string(),
+                "embedding".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| {
+                Error::Database(format!("chunks_for_source_doc_with_embeddings query: {e}"))
+            })?
+            .try_collect()
+            .await
+            .map_err(|e| {
+                Error::Database(format!("chunks_for_source_doc_with_embeddings collect: {e}"))
+            })?;
+
+        let mut out: Vec<(EnrichmentChunkRow, Vec<f32>)> = Vec::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let contents = batch
+                .column_by_name("content")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>())
+                .ok_or_else(|| Error::Serialization("missing content column".into()))?;
+            let titles = batch
+                .column_by_name("title")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let urls = batch
+                .column_by_name("url")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let metadatas = batch
+                .column_by_name("metadata")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let source_doc_ids = batch
+                .column_by_name("source_doc_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let embedding_col = batch
+                .column_by_name("embedding")
+                .ok_or_else(|| Error::Serialization("missing embedding column".into()))?;
+
+            // The embedding column ships as either a FixedSizeList
+            // (Lance default for fixed-dim vectors) or a List depending
+            // on the schema version this row was written under; handle
+            // both shapes.
+            let fixed = embedding_col.as_any().downcast_ref::<FixedSizeListArray>();
+            let variable = embedding_col.as_any().downcast_ref::<ListArray>();
+
+            for i in 0..batch.num_rows() {
+                let embedding_vec: Option<Vec<f32>> = if let Some(fixed) = fixed {
+                    if fixed.is_null(i) {
+                        None
+                    } else {
+                        let inner = fixed.value(i);
+                        inner
+                            .as_any()
+                            .downcast_ref::<Float32Array>()
+                            .map(|a| a.values().to_vec())
+                    }
+                } else if let Some(variable) = variable {
+                    if variable.is_null(i) {
+                        None
+                    } else {
+                        let inner = variable.value(i);
+                        inner
+                            .as_any()
+                            .downcast_ref::<Float32Array>()
+                            .map(|a| a.values().to_vec())
+                    }
+                } else {
+                    None
+                };
+                let Some(embedding) = embedding_vec else {
+                    // Skip chunks lacking an embedding — T1-complete
+                    // indexes shouldn't have these, but be defensive.
+                    continue;
+                };
+
+                let row = EnrichmentChunkRow {
+                    id: ids.value(i) as u64,
+                    content: contents.value(i).to_string(),
+                    title: titles.and_then(|t| {
+                        if t.is_null(i) { None } else { Some(t.value(i).to_string()) }
+                    }),
+                    url: urls.and_then(|u| {
+                        if u.is_null(i) { None } else { Some(u.value(i).to_string()) }
+                    }),
+                    metadata_raw: metadatas.and_then(|m| {
+                        if m.is_null(i) { None } else { Some(m.value(i).to_string()) }
+                    }),
+                    source_doc_id: source_doc_ids.and_then(|s| {
+                        if s.is_null(i) { None } else { Some(s.value(i).to_string()) }
+                    }),
+                };
+                out.push((row, embedding));
+            }
+        }
+        out.sort_by_key(|(r, _)| r.id);
+        Ok(out)
+    }
+
+    /// Conv-tiered port (spec `CONV_TIERED_PORT.md`): scan the entire
+    /// chunks index and return a `source_doc_id → chunk_id list` map.
+    ///
+    /// Used by `enrichment::tiered::run_tiered_enrichment` to partition
+    /// the corpus into per-conversation work units before dispatching
+    /// each conv through `build_raptor_atlas`. Rows with a NULL
+    /// `source_doc_id` are dropped — for the conversation corpora this
+    /// port targets, every row carries a `conv_uuid` in that column.
+    ///
+    /// Returns chunk ids in the order Lance returns them; callers that
+    /// need sorted output should sort post-hoc.
+    pub async fn group_chunks_by_source_doc(
+        &self,
+    ) -> Result<HashMap<String, Vec<u64>>> {
+        let batches: Vec<RecordBatch> = self
+            .table
+            .query()
+            .select(Select::Columns(vec![
+                "id".to_string(),
+                "source_doc_id".to_string(),
+            ]))
+            .execute()
+            .await
+            .map_err(|e| Error::Database(format!("group_chunks scan: {e}")))?
+            .try_collect()
+            .await
+            .map_err(|e| Error::Database(format!("group_chunks collect: {e}")))?;
+
+        let mut out: HashMap<String, Vec<u64>> = HashMap::new();
+        for batch in &batches {
+            let ids = batch
+                .column_by_name("id")
+                .and_then(|c| c.as_any().downcast_ref::<Int64Array>())
+                .ok_or_else(|| Error::Serialization("missing id column".into()))?;
+            let docs = batch
+                .column_by_name("source_doc_id")
+                .and_then(|c| c.as_any().downcast_ref::<StringArray>());
+            let Some(docs) = docs else { continue };
+            for i in 0..batch.num_rows() {
+                if docs.is_null(i) {
+                    continue;
+                }
+                let key = docs.value(i).to_string();
+                let chunk_id = ids.value(i) as u64;
+                out.entry(key).or_default().push(chunk_id);
+            }
+        }
+        Ok(out)
     }
 }
