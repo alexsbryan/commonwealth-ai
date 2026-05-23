@@ -34,11 +34,25 @@ impl InferenceProvider for DeterministicInference {
             // Must be checked BEFORE the "categories:" router pattern, since
             // detect_document_type prompts also contain "Categories:".
             "Argument".to_string()
-        } else if prompt_lower.contains("analyse these passages")
-            || prompt_lower.contains("analyze these passages")
-        {
-            // build_skeleton batch — minimal valid JSON array.
-            r#"[{"function": "Introduces", "key_entities": [{"name": "Test Entity", "kind": "Concept"}], "establishes": "Establishes the test concept.", "is_structural_moment": false, "moment_description": null}]"#.to_string()
+        } else if prompt_lower.contains("extract named entities mentioned in each of the") {
+            // build_skeleton batch — lean lines format (May 2026 rewrite).
+            // The grammar enforces N comma-separated capitalized names,
+            // one line per chunk in the batch. Repeat "Test Entity" so
+            // every chunk in the batch surfaces it; parser dedupes
+            // entity mentions across chunks.
+            let batch_size = if prompt_lower.contains("output exactly 4 lines") {
+                4
+            } else if prompt_lower.contains("output exactly 3 lines") {
+                3
+            } else if prompt_lower.contains("output exactly 2 lines") {
+                2
+            } else {
+                1
+            };
+            std::iter::repeat("Test Entity")
+                .take(batch_size)
+                .collect::<Vec<_>>()
+                .join("\n")
         } else if prompt_lower.contains("write a single paragraph") && prompt_lower.contains("overview") {
             // generate_overview — short deterministic paragraph.
             "This is a deterministic test overview covering the document's main concept.".to_string()
