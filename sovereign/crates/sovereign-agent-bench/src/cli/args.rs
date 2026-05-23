@@ -5,6 +5,7 @@
 
 use std::path::PathBuf;
 
+use commonwealth_agent_tools::{Role, RoleModelMap};
 use thiserror::Error;
 
 use crate::problem::Tier;
@@ -43,6 +44,12 @@ pub struct RunArgs {
     /// scaffolding capability separately from its algorithmic
     /// capability. None preserves each problem's declared tier.
     pub tier_override: Option<Tier>,
+    /// Per-role model overrides. Empty (default) → every role uses
+    /// `--model`, which is PR-2 behavior. Populated from
+    /// `--planner-model` / `--implementer-model` /
+    /// `--evaluator-model`. Honored only by role-aware runners
+    /// (`--agent native`); the monolithic and pi runners ignore it.
+    pub role_model_map: RoleModelMap,
 }
 
 #[derive(Debug, Error)]
@@ -74,6 +81,7 @@ impl RunArgs {
         let mut artifacts_dir: Option<PathBuf> = None;
         let mut trials: u8 = 1;
         let mut tier_override: Option<Tier> = None;
+        let mut role_model_map = RoleModelMap::new();
 
         let mut i = 0;
         while i < argv.len() {
@@ -149,6 +157,18 @@ impl RunArgs {
                     let v = require_value("--tier", argv, &mut i)?;
                     tier_override = Some(parse_tier(&v)?);
                 }
+                "--planner-model" => {
+                    let v = require_value("--planner-model", argv, &mut i)?;
+                    role_model_map.set(Role::Planner, Some(v));
+                }
+                "--implementer-model" => {
+                    let v = require_value("--implementer-model", argv, &mut i)?;
+                    role_model_map.set(Role::Implementer, Some(v));
+                }
+                "--evaluator-model" => {
+                    let v = require_value("--evaluator-model", argv, &mut i)?;
+                    role_model_map.set(Role::Evaluator, Some(v));
+                }
                 "-h" | "--help" => {
                     return Err(ArgsError::UnknownFlag("--help".into()));
                 }
@@ -174,6 +194,7 @@ impl RunArgs {
             artifacts_dir,
             trials,
             tier_override,
+            role_model_map,
         })
     }
 }
@@ -287,5 +308,54 @@ mod tests {
     fn parse_bad_number_errors() {
         let err = RunArgs::parse(&argv(&["--judge-trials", "many"])).unwrap_err();
         assert!(matches!(err, ArgsError::BadNumber(_, _)));
+    }
+
+    #[test]
+    fn parse_default_role_model_map_is_empty() {
+        let r = RunArgs::parse(&[]).unwrap();
+        assert!(r.role_model_map.is_empty());
+    }
+
+    #[test]
+    fn parse_single_role_override() {
+        let r = RunArgs::parse(&argv(&["--implementer-model", "commonwealth/primary"])).unwrap();
+        assert!(!r.role_model_map.is_empty());
+        assert_eq!(
+            r.role_model_map.get(Role::Implementer),
+            Some("commonwealth/primary")
+        );
+        assert_eq!(r.role_model_map.get(Role::Planner), None);
+        assert_eq!(r.role_model_map.get(Role::Evaluator), None);
+    }
+
+    #[test]
+    fn parse_three_role_overrides_heterogeneous() {
+        let r = RunArgs::parse(&argv(&[
+            "--planner-model",
+            "commonwealth/coder",
+            "--implementer-model",
+            "commonwealth/primary",
+            "--evaluator-model",
+            "commonwealth/coder",
+        ]))
+        .unwrap();
+        assert_eq!(
+            r.role_model_map.get(Role::Planner),
+            Some("commonwealth/coder")
+        );
+        assert_eq!(
+            r.role_model_map.get(Role::Implementer),
+            Some("commonwealth/primary")
+        );
+        assert_eq!(
+            r.role_model_map.get(Role::Evaluator),
+            Some("commonwealth/coder")
+        );
+    }
+
+    #[test]
+    fn parse_role_override_missing_value_errors() {
+        let err = RunArgs::parse(&argv(&["--planner-model"])).unwrap_err();
+        assert!(matches!(err, ArgsError::MissingValue(_)));
     }
 }

@@ -34,6 +34,28 @@ pub struct SamplingOverrides {
     pub max_tokens: Option<u32>,
 }
 
+/// The Evaluator's effective tool subset AFTER a passing smoke
+/// (gated by `RoleDossier::smoke_just_passed`). Shrinks the default
+/// `[Build, Smoke, HandoffToImplementer, AgentDone]` to
+/// `[AgentDone, HandoffToImplementer]` — Build and Smoke literally
+/// cannot be advertised to the model, so the OpenAI schema validator
+/// rejects any attempted re-emit.
+///
+/// This is the §B "grammar-constrained termination" move
+/// implemented at the tool-subset layer: structural impossibility,
+/// not prompt nag. Closes the build-loop-after-pass class observed
+/// on every 2.1 native role-aware trial (HANDOFF.md 2026-05-21
+/// night).
+///
+/// HandoffToImplementer stays in the set because a model that
+/// genuinely wants to polish (add docs, refactor) should still be
+/// able to. Only Build/Smoke are excluded — those are the loop
+/// pathology, not the legitimate post-pass moves.
+pub const EVALUATOR_TERMINATING_SUBSET: &[PrimitiveKind] = &[
+    PrimitiveKind::AgentDone,
+    PrimitiveKind::HandoffToImplementer,
+];
+
 /// Compiled-in default profile for a role. Used when no TOML
 /// override is present and as the test-stability anchor.
 pub fn default_profile_for(role: Role) -> RoleProfile {
@@ -161,5 +183,39 @@ mod tests {
         // Implementer turn closes the inspect-loop class structurally.
         let p = default_profile_for(Role::Implementer);
         assert_eq!(p.forced_first_tool, Some(PrimitiveKind::WriteFile));
+    }
+
+    #[test]
+    fn evaluator_terminating_subset_excludes_verifiers() {
+        // §B grammar-termination invariant: after smoke ok, Build
+        // and Smoke MUST be unreachable. If a future PR adds Build
+        // or Smoke to this subset, the build-loop-after-pass class
+        // re-opens.
+        assert!(!EVALUATOR_TERMINATING_SUBSET.contains(&PrimitiveKind::Build));
+        assert!(!EVALUATOR_TERMINATING_SUBSET.contains(&PrimitiveKind::Smoke));
+    }
+
+    #[test]
+    fn evaluator_terminating_subset_includes_done_and_handoff() {
+        // The two legitimate post-pass moves.
+        assert!(EVALUATOR_TERMINATING_SUBSET.contains(&PrimitiveKind::AgentDone));
+        assert!(EVALUATOR_TERMINATING_SUBSET.contains(&PrimitiveKind::HandoffToImplementer));
+    }
+
+    #[test]
+    fn evaluator_terminating_subset_is_strict_subset_of_default() {
+        // Pins that the restricted set is a SUBSET — every restricted
+        // primitive must already be in the default Evaluator profile.
+        // Catches an accidental introduction of a primitive in the
+        // restricted set that isn't otherwise legal for the role.
+        let default = default_profile_for(Role::Evaluator);
+        for p in EVALUATOR_TERMINATING_SUBSET {
+            assert!(
+                default.allowed_primitives.contains(p),
+                "restricted primitive {p:?} not in default Evaluator subset"
+            );
+        }
+        // And strict: the restricted set is smaller than the default.
+        assert!(EVALUATOR_TERMINATING_SUBSET.len() < default.allowed_primitives.len());
     }
 }

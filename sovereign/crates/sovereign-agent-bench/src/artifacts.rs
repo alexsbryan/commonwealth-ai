@@ -17,6 +17,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use commonwealth_agent_tools::RoleModelMap;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -54,6 +55,7 @@ impl ArtifactSink {
             stderr_tail: artifact.stderr_tail.clone(),
             final_assistant_text: artifact.final_assistant_text.clone(),
             raw_line_count: artifact.raw_stdout_lines.len(),
+            role_model_map_used: artifact.role_model_map_used.clone(),
         };
         let body = serde_json::to_vec_pretty(&summary).unwrap_or_default();
         fs::write(self.root.join("agent.json"), body)?;
@@ -142,6 +144,12 @@ struct AgentSummary {
     /// Useful sanity-check: empty `tool_calls` + non-zero
     /// `raw_line_count` says "agent emitted output we didn't parse."
     raw_line_count: usize,
+    /// Per-role model overrides used during the run. `None` for
+    /// single-model runs (PR-2 behavior); skipped on serialize so
+    /// agent.json from default runs is byte-stable across PR-2 →
+    /// PR-3.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role_model_map_used: Option<RoleModelMap>,
 }
 
 fn copy_filtered(src: &Path, dst: &Path) -> std::io::Result<()> {
@@ -218,6 +226,7 @@ mod tests {
                 r#"{"type":"some_event","payload":{}}"#.to_string(),
             ],
             request_records: Vec::new(),
+            role_model_map_used: None,
         }
     }
 
@@ -282,6 +291,44 @@ mod tests {
         let err_body = std::fs::read_to_string(err_path).unwrap();
         assert!(err_body.contains("\"ok\": false"));
         assert!(err_body.contains("connection refused"));
+    }
+
+    #[test]
+    fn persist_agent_run_omits_role_model_map_when_none() {
+        // Default single-model run (PR-2 behavior) — agent.json
+        // should NOT carry the role_model_map_used field. Pins
+        // byte-stable artifact for default runs.
+        let dst = tempfile::tempdir().unwrap();
+        let sink = ArtifactSink::new(dst.path().join("p")).unwrap();
+        let artifact = fake_artifact();
+        assert!(artifact.role_model_map_used.is_none());
+        sink.persist_agent_run(&artifact).unwrap();
+        let body = std::fs::read_to_string(sink.root().join("agent.json")).unwrap();
+        assert!(!body.contains("role_model_map_used"));
+    }
+
+    #[test]
+    fn persist_agent_run_writes_role_model_map_when_set() {
+        use commonwealth_agent_tools::{Role, RoleModelMap};
+        let dst = tempfile::tempdir().unwrap();
+        let sink = ArtifactSink::new(dst.path().join("p")).unwrap();
+        let mut map = RoleModelMap::new();
+        map.set(Role::Planner, Some("commonwealth/coder".into()));
+        map.set(Role::Implementer, Some("commonwealth/primary".into()));
+        let mut artifact = fake_artifact();
+        artifact.role_model_map_used = Some(map);
+        sink.persist_agent_run(&artifact).unwrap();
+        let body = std::fs::read_to_string(sink.root().join("agent.json")).unwrap();
+        assert!(body.contains("role_model_map_used"));
+        assert!(body.contains("commonwealth/coder"));
+        assert!(body.contains("commonwealth/primary"));
+        // Evaluator unset → field absent (RoleModelMap field-level
+        // skip_serializing_if).
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let m = &parsed["role_model_map_used"];
+        assert!(m.get("evaluator").is_none());
+        assert_eq!(m["planner"], "commonwealth/coder");
+        assert_eq!(m["implementer"], "commonwealth/primary");
     }
 
     #[test]

@@ -45,5 +45,5 @@ pub use primitive::{
 };
 pub use result::{ToolError, ToolResult};
 pub use registry::Registry;
-pub use role::{Role, RoleDossier, RoleProfile};
+pub use role::{Role, RoleDossier, RoleModelMap, RoleProfile};
 pub use role::dossier::summarize as summarize_for_dossier;

@@ -67,6 +67,16 @@ pub struct RoleDossier {
     /// Smoke). Used to label the rendered block.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_verification_kind: Option<PrimitiveKind>,
+    /// Whether `last_verification_output` came from a passing run.
+    /// Drives `smoke_just_passed()` and through it the §B
+    /// grammar-termination move: when the most recent verification
+    /// was a passing smoke AND no writes have happened since, the
+    /// Evaluator's effective tool subset shrinks to `[agent_done,
+    /// handoff_to_implementer]`. Build/smoke literally cannot be
+    /// re-emitted — closes the "Evaluator can't decide done" loop
+    /// class structurally.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_verification_ok: Option<bool>,
 }
 
 /// One row of `recent_outcomes` — a frozen one-line view of a
@@ -129,8 +139,15 @@ impl RoleDossier {
 
     /// Capture the full stdout_tail of a build/smoke call so the
     /// next Implementer turn (after `handoff_to_implementer`) sees
-    /// the compiler's line + caret + source context. Capped.
-    pub fn set_verification_output(&mut self, primitive: PrimitiveKind, output: &str) {
+    /// the compiler's line + caret + source context. The `ok` flag
+    /// drives `smoke_just_passed()` and the §B grammar-termination
+    /// path. Capped.
+    pub fn record_verification(
+        &mut self,
+        primitive: PrimitiveKind,
+        ok: bool,
+        output: &str,
+    ) {
         // Only meaningful for the verifier primitives.
         debug_assert!(matches!(
             primitive,
@@ -138,6 +155,25 @@ impl RoleDossier {
         ));
         self.last_verification_output = Some(cap_str(output, MAX_VERIFICATION_OUTPUT_LEN));
         self.last_verification_kind = Some(primitive);
+        self.last_verification_ok = Some(ok);
+    }
+
+    /// True iff the most recent verification was a PASSING smoke
+    /// AND no `write_file` has happened since (`writes_since_last_verify
+    /// == 0`). When true, the Evaluator's next request is structurally
+    /// restricted: the only legal next tools are `agent_done` and
+    /// `handoff_to_implementer`. Build/smoke are excluded from the
+    /// `tools` array entirely, so the OpenAI schema validator rejects
+    /// any attempt — the build-loop-after-pass class is closed by
+    /// construction, not by prompt or detector.
+    ///
+    /// Build ok alone does NOT trigger this: the model rightly
+    /// proceeds to smoke after a green build. Only a smoke that has
+    /// observed the binary execute cleanly counts as "we're done."
+    pub fn smoke_just_passed(&self) -> bool {
+        self.writes_since_last_verify == 0
+            && self.last_verification_ok == Some(true)
+            && self.last_verification_kind == Some(PrimitiveKind::Smoke)
     }
 
     /// Render the dossier as a context block for the next role's
@@ -437,8 +473,9 @@ mod tests {
         // Closes class: "Implementer cannot fix compiler errors
         // because structured stdout_tail is lost on role flip."
         let mut d = RoleDossier::new();
-        d.set_verification_output(
+        d.record_verification(
             PrimitiveKind::Build,
+            false,
             "error: unexpected closing delimiter: `}`\n  --> src/lib.rs:14:1",
         );
         let s = d.render(Role::Implementer);
@@ -453,7 +490,7 @@ mod tests {
         // Planner doesn't fix code. Rendering the block for them
         // would waste tokens.
         let mut d = RoleDossier::new();
-        d.set_verification_output(PrimitiveKind::Build, "error: ...");
+        d.record_verification(PrimitiveKind::Build, false, "error: ...");
         assert!(!d.render(Role::Evaluator).contains("Last build output"));
         assert!(!d.render(Role::Planner).contains("Last build output"));
     }
@@ -462,10 +499,83 @@ mod tests {
     fn verification_output_is_capped() {
         let mut d = RoleDossier::new();
         let huge = "X".repeat(10_000);
-        d.set_verification_output(PrimitiveKind::Smoke, &huge);
+        d.record_verification(PrimitiveKind::Smoke, true, &huge);
         assert!(
             d.last_verification_output.as_deref().unwrap().len()
                 <= MAX_VERIFICATION_OUTPUT_LEN + 80
         );
+    }
+
+    // ── §B smoke_just_passed truth table ─────────────────────────
+    //
+    // The four-way truth table any future refactor must preserve:
+    //
+    //   primitive | ok    | writes_since | smoke_just_passed()
+    //   ─────────────────────────────────────────────────────
+    //   Smoke     | true  | 0            | true   ← only this triggers
+    //   Smoke     | true  | >0           | false  (stale, code changed)
+    //   Smoke     | false | 0            | false  (tests failed)
+    //   Build     | true  | 0            | false  (need smoke too)
+    //   (none)    | —     | —            | false  (fresh dossier)
+    //
+    // The runner conditions Evaluator's tool subset on this. Any
+    // softening (returning true in a non-truth-table case) re-opens
+    // the build-loop-after-pass class.
+
+    #[test]
+    fn smoke_just_passed_true_only_for_smoke_ok_with_no_writes_since() {
+        let mut d = RoleDossier::new();
+        d.record_verification(PrimitiveKind::Smoke, true, "ok");
+        assert!(d.smoke_just_passed());
+    }
+
+    #[test]
+    fn smoke_just_passed_false_for_failing_smoke() {
+        let mut d = RoleDossier::new();
+        d.record_verification(PrimitiveKind::Smoke, false, "1 test failed");
+        assert!(!d.smoke_just_passed());
+    }
+
+    #[test]
+    fn smoke_just_passed_false_for_passing_build_alone() {
+        // Build ok ≠ "we're done." Model should proceed to smoke.
+        // If this returns true, the Evaluator would be locked out of
+        // calling smoke after a green build — measurement bug.
+        let mut d = RoleDossier::new();
+        d.record_verification(PrimitiveKind::Build, true, "");
+        assert!(!d.smoke_just_passed());
+    }
+
+    #[test]
+    fn smoke_just_passed_false_after_write_invalidates() {
+        // Implementer wrote after the passing smoke → result is now
+        // stale; Evaluator must re-verify before terminating.
+        let mut d = RoleDossier::new();
+        d.record_verification(PrimitiveKind::Smoke, true, "ok");
+        assert!(d.smoke_just_passed());
+        d.on_write();
+        assert!(!d.smoke_just_passed());
+    }
+
+    #[test]
+    fn smoke_just_passed_false_on_fresh_dossier() {
+        let d = RoleDossier::new();
+        assert!(!d.smoke_just_passed());
+    }
+
+    #[test]
+    fn smoke_just_passed_true_again_after_reverify() {
+        // Implementer wrote, Evaluator re-verified, smoke passed:
+        // the gate should re-engage. Pins that `on_verify` (which
+        // resets writes_since_last_verify) cooperates with the
+        // truth table — without it, post-write re-verification
+        // would never re-arm the gate.
+        let mut d = RoleDossier::new();
+        d.record_verification(PrimitiveKind::Smoke, true, "ok");
+        d.on_write();
+        assert!(!d.smoke_just_passed());
+        d.on_verify();
+        d.record_verification(PrimitiveKind::Smoke, true, "ok");
+        assert!(d.smoke_just_passed());
     }
 }

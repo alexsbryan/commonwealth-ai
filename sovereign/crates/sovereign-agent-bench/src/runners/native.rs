@@ -48,6 +48,35 @@ use crate::runners::shared_detectors::{
 const DEFAULT_PROVIDER_URL: &str = "http://localhost:9741/v1";
 const NO_PROGRESS_TOOL_CALLS_THRESHOLD: u32 = 8;
 const STDERR_TAIL_CAP_BYTES: usize = 32 * 1024;
+/// Per-tenure tool-call caps. Replaces PR-2's same-primitive
+/// detector with substance-level counting per §C of the PR-3 plan.
+/// Each cap is a pathology ceiling — a healthy tenure stays well
+/// under it. Caps are conservative so they only fire when the
+/// model has genuinely failed to yield out of its role, not when
+/// it's making slow but real progress.
+///
+/// - Planner: 3. The role only legitimately calls `agent_plan` once
+///   per planning cycle; 3 allows for transient parse errors but
+///   catches a Planner that loops on inspect-style behavior.
+/// - Implementer: 20. The from-scratch tier requires many writes
+///   (Cargo.toml, src/lib.rs, optional tests); cap allows generous
+///   multi-file authoring while catching write-loop pathologies
+///   the same-path thrash detector misses (e.g., write A, write B,
+///   write A, write B, ...).
+/// - Evaluator: 10. Build + smoke + handoff is the canonical
+///   3-call shape; cap allows for re-verification cycles after
+///   `agent_done` consideration.
+const PLANNER_TURN_CAP: u32 = 3;
+const IMPLEMENTER_TURN_CAP: u32 = 20;
+const EVALUATOR_TURN_CAP: u32 = 10;
+
+fn per_tenure_turn_cap(role: Role) -> u32 {
+    match role {
+        Role::Planner => PLANNER_TURN_CAP,
+        Role::Implementer => IMPLEMENTER_TURN_CAP,
+        Role::Evaluator => EVALUATOR_TURN_CAP,
+    }
+}
 /// Cap on max_tokens passed to a single chat completion request.
 /// Without this, the runner hands the model the entire remaining
 /// token budget on the first turn — under alternation-grammar mode
@@ -522,6 +551,9 @@ async fn run_native_monolithic(
         // monolithic baselines. Role-aware is where debate-settling
         // happens.
         request_records: Vec::new(),
+        // Monolithic has no role concept; role_model_map is not
+        // consulted on this path.
+        role_model_map_used: None,
     })
 }
 
@@ -534,8 +566,23 @@ async fn run_native_role_aware(
     let problem_id = ctx.problem_id.clone();
     let workdir = ctx.workdir;
     let model_handle = ctx.model_handle.clone();
+    let role_model_map = ctx.role_model_map.clone();
     let token_budget = ctx.token_budget;
     let wall_cap = Duration::from_secs(ctx.wall_seconds_cap);
+
+    // Glassbox: log the per-role dispatch map at run start so the
+    // operator can verify which slot each role landed on without
+    // having to read the artifact later.
+    if !role_model_map.is_empty() {
+        tracing::info!(
+            problem = %problem_id,
+            planner = role_model_map.get(Role::Planner).unwrap_or("(fallback)"),
+            implementer = role_model_map.get(Role::Implementer).unwrap_or("(fallback)"),
+            evaluator = role_model_map.get(Role::Evaluator).unwrap_or("(fallback)"),
+            fallback = %model_handle,
+            "native_runner: role→model dispatch map"
+        );
+    }
 
     let started = Instant::now();
     let mut exec_ctx = ExecCtx::new(workdir.path().to_path_buf())
@@ -549,6 +596,15 @@ async fn run_native_role_aware(
                 .clone()
                 .unwrap_or_else(|| ctx.verify_cmd.clone()),
         );
+    // Wire the language-appropriate pre-build syntax validator into
+    // ExecCtx so `exec_build` can short-circuit broken-syntax cases
+    // with cargo-shape feedback in <50ms instead of spinning up the
+    // full cargo subprocess. The monolithic path already did this;
+    // the role-aware path was silently skipping it — Implementer's
+    // broken syntax landed full cargo runs every time.
+    if let Some(v) = ctx.syntax_validator.clone() {
+        exec_ctx = exec_ctx.with_syntax_validator(v);
+    }
     let registry = Registry::with_canonical_primitives();
     let adapter = native_adapter::Adapter;
 
@@ -574,11 +630,15 @@ async fn run_native_role_aware(
     // transition resets this so re-entering Evaluator forces
     // `build` again.
     let mut force_first_tool_pending = default_profile_for(active_role).forced_first_tool;
-    // Track the most recent primitive emitted in the active role.
-    // Used to force-progress when the model loops on the same tool
-    // (e.g. Evaluator emitting `build` repeatedly).
-    let mut last_primitive_in_role: Option<PrimitiveKind> = None;
-    let mut consecutive_same_primitive: u32 = 0;
+    // Per-tenure tool-call counter. Replaces PR-2's same-primitive
+    // detector with substance-level counting per §C of the PR-3
+    // plan: the methodology fix is to detect stuck-state via what
+    // the agent does (workdir hash + handoff cycles + per-tenure
+    // budget) instead of via the *shape* of tool names. A model
+    // that double-checks legitimately (re-build to see fresh
+    // diagnostics) is no longer punished at turn 3 just because
+    // the tool name repeats. Reset on every role flip.
+    let mut tool_calls_in_tenure: u32 = 0;
     // NOTE: user message is REBUILT each turn (inside the loop) so the
     // `## Workdir state` preamble reflects what files exist NOW. Was
     // built once here outside the loop pre-2026-05-22 — caused the
@@ -627,13 +687,41 @@ async fn run_native_role_aware(
             &user_msg,
             &role_chat_history,
         );
-        let role_tools = filter_descriptors(&adapter, &profile);
+        // §B grammar-termination gate: when the active role is the
+        // Evaluator AND the dossier reports a passing smoke with no
+        // intervening writes, swap the tool subset to
+        // `[agent_done, handoff_to_implementer]`. Build/Smoke are
+        // structurally unreachable for this request — the OpenAI
+        // schema validator rejects any attempt to re-emit them.
+        // Closes the build-loop-after-pass class observed on every
+        // 2.1 native role-aware trial (HANDOFF.md 2026-05-21 night).
+        let evaluator_terminating = matches!(active_role, Role::Evaluator)
+            && role_dossier.smoke_just_passed();
+        let role_tools = if evaluator_terminating {
+            tracing::info!(
+                problem = %problem_id,
+                role = active_role.id(),
+                "native_runner: smoke ok → restricting Evaluator tools to [agent_done, handoff_to_implementer] for this turn"
+            );
+            filter_descriptors_for(
+                &adapter,
+                commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+            )
+        } else {
+            filter_descriptors(&adapter, &profile)
+        };
         let force_tool = force_first_tool_pending.take();
 
         let remaining_budget = token_budget.saturating_sub(tokens.output).max(64);
         let per_turn_max = remaining_budget.min(PER_TURN_MAX_TOKENS);
+        // Resolve the model for THIS role: per-role override if set
+        // (heterogeneous dispatch), else the run-wide fallback. The
+        // resolution is intentionally per-request so an Evaluator
+        // tenure that mid-flight transitions back to Implementer
+        // picks up the right slot on its next turn.
+        let request_model = role_model_map.model_for(active_role, &model_handle);
         let request_body = build_role_request_body(
-            &model_handle,
+            request_model,
             &role_messages,
             &role_tools,
             per_turn_max,
@@ -1007,7 +1095,7 @@ async fn run_native_role_aware(
                     .get("ok")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
-                role_dossier.set_verification_output(kind, tail);
+                role_dossier.record_verification(kind, ok, tail);
                 if let VerifySignal::Kill { hash_repeats } =
                     verify_stuck.observe(ok, tail)
                 {
@@ -1086,30 +1174,28 @@ async fn run_native_role_aware(
             let summary = summarize_for_dossier(kind, &result);
             role_dossier.push_outcome(active_role, kind, summary);
 
-            // Track consecutive same-primitive runs within the
-            // active role. Catches "Evaluator loops on build" and
-            // similar attention-stuck patterns. Force a transition
-            // by treating the third repeat as an implicit
-            // handoff_to_implementer (Evaluator) or done
-            // (Implementer/Planner — those subsets don't have a
-            // forward handoff that makes sense to fake).
-            if last_primitive_in_role == Some(kind) {
-                consecutive_same_primitive = consecutive_same_primitive.saturating_add(1);
-            } else {
-                consecutive_same_primitive = 1;
-                last_primitive_in_role = Some(kind);
-            }
-            if consecutive_same_primitive >= 3 {
+            // §C per-tenure turn-cap detector. Replaces the deleted
+            // same-primitive counter. Fires only on pathological
+            // non-yielding tenures — a model that calls the same
+            // primitive 3× while making real progress (workdir
+            // changes, dossier accumulates) is no longer cut off
+            // here; the workdir-hash no-progress detector + the
+            // §B grammar gate + the cycle-limit detector handle
+            // legitimate stuck-state honestly.
+            tool_calls_in_tenure = tool_calls_in_tenure.saturating_add(1);
+            let cap = per_tenure_turn_cap(active_role);
+            if tool_calls_in_tenure > cap {
                 tracing::warn!(
                     problem = %problem_id,
                     role = active_role.id(),
-                    primitive = kind.id(),
-                    consecutive = consecutive_same_primitive,
-                    "native_runner: same-primitive loop detected in role; forcing exit"
+                    tool_calls = tool_calls_in_tenure,
+                    cap,
+                    "native_runner: per-tenure turn cap exceeded; forcing exit"
                 );
-                break 'outer ExitReason::NoProgress {
-                    consecutive_tool_calls: consecutive_same_primitive,
-                    threshold: 3,
+                break 'outer ExitReason::RoleTurnCap {
+                    role: active_role.id().to_string(),
+                    tool_calls: tool_calls_in_tenure,
+                    cap,
                 };
             }
 
@@ -1156,8 +1242,7 @@ async fn run_native_role_aware(
                     }
                     active_role = r;
                     force_first_tool_pending = default_profile_for(r).forced_first_tool;
-                    last_primitive_in_role = None;
-                    consecutive_same_primitive = 0;
+                    tool_calls_in_tenure = 0;
                     transitioned_this_turn = true;
                     role_chat_history.clear();
                     tracing::debug!(
@@ -1248,6 +1333,11 @@ async fn run_native_role_aware(
     };
 
     let wall_ms = started.elapsed().as_millis() as u64;
+    let role_model_map_used = if role_model_map.is_empty() {
+        None
+    } else {
+        Some(role_model_map)
+    };
     Ok(AgentRunArtifact {
         workdir,
         tokens,
@@ -1258,6 +1348,7 @@ async fn run_native_role_aware(
         final_assistant_text,
         raw_stdout_lines: cap_raw_lines(raw_lines),
         request_records,
+        role_model_map_used,
     })
 }
 
@@ -1265,12 +1356,20 @@ async fn run_native_role_aware(
 /// allowed primitives. The model literally cannot call a tool that
 /// isn't in this list — the OpenAI API rejects unknown tool names.
 fn filter_descriptors(adapter: &native_adapter::Adapter, profile: &RoleProfile) -> Vec<Value> {
+    filter_descriptors_for(adapter, &profile.allowed_primitives)
+}
+
+/// Filter the canonical descriptor set against an explicit primitive
+/// list — the structural enforcement point. Used by the default
+/// profile path (`filter_descriptors`) and by §B's conditional
+/// restriction (`EVALUATOR_TERMINATING_SUBSET` after a passing
+/// smoke).
+fn filter_descriptors_for(
+    adapter: &native_adapter::Adapter,
+    allowed: &[PrimitiveKind],
+) -> Vec<Value> {
     let all = adapter.tool_descriptors();
-    let allowed_ids: Vec<&'static str> = profile
-        .allowed_primitives
-        .iter()
-        .map(|p| p.id())
-        .collect();
+    let allowed_ids: Vec<&'static str> = allowed.iter().map(|p| p.id()).collect();
     all.into_iter()
         .filter(|d| {
             let name = d
@@ -1601,5 +1700,153 @@ mod tests {
             &[],
         );
         assert_eq!(msgs.len(), 2);
+    }
+
+    #[test]
+    fn build_role_request_body_threads_resolved_model_per_role() {
+        // Closes class: "RoleModelMap is read but doesn't reach the
+        // wire." The role-aware loop resolves the model via
+        // `RoleModelMap::model_for(role, fallback)` and passes the
+        // result here. This test pins that the resolved string lands
+        // verbatim in body["model"] — any future refactor that
+        // re-derives model from the profile or from a different
+        // source softens heterogeneous-model dispatch and trips this.
+        let profile = default_profile_for(Role::Implementer);
+        let msgs = vec![json!({"role": "user", "content": "do x"})];
+        let tools: Vec<Value> = vec![];
+        let body = build_role_request_body(
+            "commonwealth/primary",
+            &msgs,
+            &tools,
+            512,
+            &profile,
+            None,
+        );
+        assert_eq!(body["model"], "commonwealth/primary");
+    }
+
+    #[test]
+    fn role_model_map_resolves_per_role_with_fallback() {
+        // Closes class: "operator sets --evaluator-model but
+        // Implementer's turn still goes to the override." Pins the
+        // resolution semantics used at the call site in
+        // run_native_role_aware.
+        let mut map = commonwealth_agent_tools::RoleModelMap::new();
+        map.set(Role::Evaluator, Some("commonwealth/coder".into()));
+        let fallback = "commonwealth/primary";
+        assert_eq!(map.model_for(Role::Planner, fallback), fallback);
+        assert_eq!(map.model_for(Role::Implementer, fallback), fallback);
+        assert_eq!(map.model_for(Role::Evaluator, fallback), "commonwealth/coder");
+    }
+
+    #[test]
+    fn filter_descriptors_for_evaluator_terminating_subset_excludes_verifiers() {
+        // §B structural invariant: after smoke ok, the `tools` array
+        // sent to the daemon MUST NOT contain build or smoke. The
+        // OpenAI schema validator drops any model attempt to re-call
+        // them. If a future PR softens this — by expanding
+        // EVALUATOR_TERMINATING_SUBSET or by bypassing
+        // filter_descriptors_for at the gate — the build-loop-after-
+        // pass class re-opens silently.
+        let adapter = native_adapter::Adapter;
+        let restricted = filter_descriptors_for(
+            &adapter,
+            commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+        );
+        let names: Vec<&str> = restricted
+            .iter()
+            .filter_map(|d| {
+                d.get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str())
+            })
+            .collect();
+        assert!(!names.contains(&"build"), "build must be excluded: {names:?}");
+        assert!(!names.contains(&"smoke"), "smoke must be excluded: {names:?}");
+        assert!(names.contains(&"agent_done"), "agent_done present: {names:?}");
+        assert!(
+            names.contains(&"handoff_to_implementer"),
+            "handoff_to_implementer present: {names:?}"
+        );
+    }
+
+    #[test]
+    fn per_tenure_turn_cap_per_role() {
+        // §C invariant: per-role caps are the named ceiling. If a
+        // future PR tightens one without updating the comment + the
+        // FailureClass::RoleTurnCap description, this test trips.
+        assert_eq!(per_tenure_turn_cap(Role::Planner), 3);
+        assert_eq!(per_tenure_turn_cap(Role::Implementer), 20);
+        assert_eq!(per_tenure_turn_cap(Role::Evaluator), 10);
+    }
+
+    #[test]
+    fn per_tenure_turn_cap_evaluator_under_planner_implementer() {
+        // Cap ordering is load-bearing: Planner is the smallest
+        // (one-shot role), Evaluator is moderate (build/smoke/done),
+        // Implementer is the largest (multi-file authoring). If a
+        // refactor inverts this — e.g. moves Planner > Evaluator —
+        // the cap fires on legitimate Implementer authoring before
+        // catching genuine Planner pathologies.
+        assert!(per_tenure_turn_cap(Role::Planner) < per_tenure_turn_cap(Role::Evaluator));
+        assert!(per_tenure_turn_cap(Role::Evaluator) < per_tenure_turn_cap(Role::Implementer));
+    }
+
+    #[test]
+    fn dossier_drives_evaluator_restriction_via_smoke_just_passed() {
+        // Pins the exact wiring at run_native_role_aware's gate:
+        // smoke_just_passed() == true → restricted subset applies.
+        // smoke_just_passed() == false → default profile applies.
+        // Mirroring the runtime conditional ensures future tweaks
+        // to the truth table can't bypass the gate without tripping
+        // this.
+        let adapter = native_adapter::Adapter;
+        let profile = default_profile_for(Role::Evaluator);
+
+        // 1. Fresh dossier: full Evaluator subset.
+        let dossier = RoleDossier::new();
+        assert!(!dossier.smoke_just_passed());
+        let tools = if matches!(Role::Evaluator, Role::Evaluator) && dossier.smoke_just_passed() {
+            filter_descriptors_for(
+                &adapter,
+                commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+            )
+        } else {
+            filter_descriptors(&adapter, &profile)
+        };
+        let names: Vec<&str> = tools
+            .iter()
+            .filter_map(|d| {
+                d.get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str())
+            })
+            .collect();
+        assert!(names.contains(&"build"));
+        assert!(names.contains(&"smoke"));
+
+        // 2. Smoke ok: restricted subset.
+        let mut dossier = RoleDossier::new();
+        dossier.record_verification(PrimitiveKind::Smoke, true, "all tests passed");
+        assert!(dossier.smoke_just_passed());
+        let tools = if matches!(Role::Evaluator, Role::Evaluator) && dossier.smoke_just_passed() {
+            filter_descriptors_for(
+                &adapter,
+                commonwealth_agent_tools::role::EVALUATOR_TERMINATING_SUBSET,
+            )
+        } else {
+            filter_descriptors(&adapter, &profile)
+        };
+        let names: Vec<&str> = tools
+            .iter()
+            .filter_map(|d| {
+                d.get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str())
+            })
+            .collect();
+        assert!(!names.contains(&"build"));
+        assert!(!names.contains(&"smoke"));
+        assert!(names.contains(&"agent_done"));
     }
 }

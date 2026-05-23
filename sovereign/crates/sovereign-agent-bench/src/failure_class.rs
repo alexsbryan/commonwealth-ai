@@ -84,6 +84,14 @@ pub enum FailureClass {
     /// (Implementer↔Evaluator round-trips without `agent_done`).
     /// Closes the L4/L7/L17 non-convergent alternation classes.
     CycleLimit,
+    /// Role-aware runner observed too many tool calls inside one
+    /// role tenure (Planner ≤ 3, Implementer ≤ 20, Evaluator ≤ 10).
+    /// Distinct from `LoopTrap` (workdir-hash unchanged) because a
+    /// pathological tenure may keep mutating the workdir while
+    /// failing to yield. Replaces PR-2's shape-level
+    /// `same-primitive` detector with substance-level per-tenure
+    /// counting — §C of the PR-3 plan.
+    RoleTurnCap,
 }
 
 impl FailureClass {
@@ -105,6 +113,7 @@ impl FailureClass {
             FailureClass::WriteThrash => "write_thrash",
             FailureClass::VerifyStuck => "verify_stuck",
             FailureClass::CycleLimit => "cycle_limit",
+            FailureClass::RoleTurnCap => "role_turn_cap",
         }
     }
 
@@ -127,6 +136,7 @@ impl FailureClass {
             FailureClass::WriteThrash => "agent wrote same path 2x without bash verify between",
             FailureClass::VerifyStuck => "build/smoke produced identical failing output 3x — agent could not fix",
             FailureClass::CycleLimit => "Implementer↔Evaluator alternated past cycle cap without converging",
+            FailureClass::RoleTurnCap => "role exceeded per-tenure tool-call cap (Planner=3, Implementer=20, Evaluator=10)",
         }
     }
 
@@ -234,6 +244,7 @@ pub fn classify(
         "write_thrash" => return FailureClass::WriteThrash,
         "verify_stuck" => return FailureClass::VerifyStuck,
         "cycle_limit" => return FailureClass::CycleLimit,
+        "role_turn_cap" => return FailureClass::RoleTurnCap,
         "tool_denied" => return FailureClass::ToolDenied,
         _ => {}
     }
@@ -364,6 +375,24 @@ mod tests {
         );
         let w = witness(0.0, 12);
         assert_eq!(classify(&agent, Some(&w)), FailureClass::LoopTrap);
+    }
+
+    #[test]
+    fn role_turn_cap_when_exit_role_turn_cap() {
+        // §C named class: per-tenure tool-call cap fires. The exit
+        // kind is the structural signal; we map straight to
+        // FailureClass::RoleTurnCap without consulting tool counts.
+        let agent = run(
+            vec![("build", ""), ("build", ""), ("build", "")],
+            500,
+            json!({
+                "kind": "role_turn_cap",
+                "detail": {"role": "evaluator", "tool_calls": 11, "cap": 10},
+            }),
+            "",
+        );
+        let w = witness(0.0, 12);
+        assert_eq!(classify(&agent, Some(&w)), FailureClass::RoleTurnCap);
     }
 
     #[test]
