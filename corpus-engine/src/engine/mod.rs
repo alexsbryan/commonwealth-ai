@@ -159,6 +159,12 @@ pub struct CorpusEngine {
     /// Optional fast inference function (e.g. Qwen3-1.7B).
     /// Used for claim extraction; falls back to `inference` when `None`.
     fast_inference: Option<crate::types::InferenceFn>,
+    /// Optional tiered-enrichment provider (conv corpora; spec
+    /// `CONV_TIERED_PORT.md`). Injected by `sovereign-tools` since
+    /// the heavy builders (`build_raptor_atlas` etc.) live there.
+    /// `None` means tiered recipes still log a dispatch plan but
+    /// skip per-conv enrichment.
+    tiered_provider: Option<crate::enrichment::tiered::TieredProviderHandle>,
     expected_embedding_model: String,
     /// Display-formatted identifier for this node, used as the partition
     /// suffix when ingesting into `<corpus>-partition-<self_node_id>`.
@@ -290,6 +296,7 @@ impl CorpusEngine {
             batch_embed: None,
             inference: None,
             fast_inference: None,
+            tiered_provider: None,
             // No default: the model is the source of truth for
             // its own name. Empty-string here is the "unset"
             // sentinel; `ingest()` refuses to run when it's still
@@ -506,6 +513,23 @@ impl CorpusEngine {
     pub fn with_fast_inference_fn(mut self, f: crate::types::InferenceFn) -> Self {
         self.fast_inference = Some(f);
         self
+    }
+
+    /// Provide a tiered-enrichment provider for conv corpora using
+    /// `[enrichment] type = "tiered"`. Without one, the tiered runner
+    /// logs the per-bucket dispatch plan and skips per-conv work.
+    pub fn with_tiered_provider(
+        mut self,
+        provider: crate::enrichment::tiered::TieredProviderHandle,
+    ) -> Self {
+        self.tiered_provider = Some(provider);
+        self
+    }
+
+    pub(crate) fn tiered_provider(
+        &self,
+    ) -> Option<&crate::enrichment::tiered::TieredProviderHandle> {
+        self.tiered_provider.as_ref()
     }
 
     /// Provide a batch embedding function for high-throughput corpus ingest.

@@ -30,18 +30,17 @@ type = "threaded_turns"
 fts = true
 vector = true
 
-# Atlas enrichment driven by the `conversational` domain
-# (`corpus-engine/src/enrichment/domains/conversational.rs`).
-# Required for `sovereign corpus scrub` to surface Person/Org
-# entities — only `personal` + `conversational` domains override
-# `entity_extraction_prompt`, which is the Phase 1b call that
-# writes typed Person/Organization/Initiative atoms to atlas/
-# atoms.json. The `conversational` domain also tunes clustering
-# for small-to-medium corpora (`min_cluster_size = 2`, vs the
-# default 50 that produced 0 clusters on a 180-chunk slice).
+# Tiered retrieval port (Phase B; spec
+# `sovereign/docs/specs/CONV_TIERED_PORT.md`). Replaces the legacy
+# atlas field-model pipeline that wedged in a Phase 1b parse-fail
+# loop on the 16k-chunk import (see project memory
+# `project_conv_anthropic_tiered_port_handoff`). The tiered runner
+# (`corpus-engine/src/enrichment/tiered.rs`) runs per-conversation
+# T2 entity-graph + T3 RAPTOR + motifs against the SQLite sidecar
+# tables `conv_skeletons` / `conv_raptor_nodes` / `conv_motifs`.
 [enrichment]
 enabled = true
-type = "atlas"
+type = "tiered"
 domain = "conversational"
 
 # Atlas View rail groups corpora sharing this category under one
