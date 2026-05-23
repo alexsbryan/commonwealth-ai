@@ -9,6 +9,7 @@ sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
 corpus-engine = { workspace = true, features = ["treesitter"] }
+corpus-engine-scip = { workspace = true }
 dirs = "5"
 tokio = { workspace = true }
 serde = { workspace = true }

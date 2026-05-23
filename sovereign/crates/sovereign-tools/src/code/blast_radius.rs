@@ -33,7 +33,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::scip_graph::{BlastEntry, ScipGraph, StalenessCaution};
+use corpus_engine_scip::scip_graph::{BlastEntry, ScipGraph, StalenessCaution};
 
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;

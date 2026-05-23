@@ -13,18 +13,20 @@ project's `ARCHITECTURE.md` / `IMPLEMENTATION_PLAN.md` / topical docs
 commonwealth-ai/
 ├── oicp-types/          # OICP wire types — no other deps
 ├── corpus-engine/       # Knowledge layer (LanceDB + Tantivy) — no other deps
+├── corpus-engine-scip/  # SCIP call graph + exporter dispatch (carved out 2026-05-23)
 ├── sovereign-recipes/   # Corpus recipe TOMLs + generated data (Wikipedia, SEP, …)
 ├── sovereign/           # Local AI assistant (CLI / desktop / server)
 └── commonwealth/        # Mesh coordination daemon
 ```
 
-| Project             | Role                                              | Depends on              |
-|---------------------|---------------------------------------------------|-------------------------|
-| `oicp-types`        | OICP v0.3 wire types + scoring helpers            | —                       |
-| `corpus-engine`     | Acquire → extract → filter → chunk → embed → index | `oicp-types`            |
-| `sovereign-recipes` | Pure data — recipe TOMLs + bundled assets         | —                       |
-| `sovereign`         | Local agent runtime                               | `corpus-engine`, `oicp-types` |
-| `commonwealth`      | Symmetric mesh daemon                             | `corpus-engine`, `oicp-types` |
+| Project              | Role                                              | Depends on              |
+|----------------------|---------------------------------------------------|-------------------------|
+| `oicp-types`         | OICP v0.3 wire types + scoring helpers            | —                       |
+| `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `corpus-engine-scip` (treesitter feature only) |
+| `corpus-engine-scip` | SCIP call graph store + per-language exporter dispatch | —                  |
+| `sovereign-recipes`  | Pure data — recipe TOMLs + bundled assets         | —                       |
+| `sovereign`          | Local agent runtime                               | `corpus-engine`, `corpus-engine-scip`, `oicp-types` |
+| `commonwealth`       | Symmetric mesh daemon                             | `corpus-engine`, `oicp-types` |
 
 Dependency direction is one-way. Sovereign optionally embeds Commonwealth
 in-process via `sovereign-mesh` — the only place the two upper projects meet.
@@ -95,7 +97,10 @@ src/
 ├── plan_items.rs             # ATOS implementation-plan rows
 ├── project_docs.rs           # SOVEREIGN.md indexer for project_context tool
 ├── lint_results.rs test_results.rs   # Persisted watcher output
-├── scip_graph.rs scip_export.rs scip_proto.rs  # SCIP call graph
+│   (scip_graph / scip_export / scip_proto live in corpus-engine-scip
+│   since the 2026-05-23 carve-out; the `treesitter` feature pulls
+│   that crate back in for corpus-engine's two internal users —
+│   `update/watch.rs` and `enrichment/atlas/strategies/code_walk.rs`.)
 ├── design_signals.rs         # Structural parser over DESIGN.md
 └── sovereign_config.rs       # .sovereign/sovereign.toml loader
 

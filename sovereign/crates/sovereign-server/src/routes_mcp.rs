@@ -427,7 +427,7 @@ mod tests {
     fn registry_with_code_tools() -> ToolRegistry {
         let engine = empty_engine();
         let graph: sovereign_tools::ScipGraphHandle = Arc::new(arc_swap::ArcSwap::from_pointee(
-            corpus_engine::ScipGraph::open_in_memory("test")
+            corpus_engine_scip::ScipGraph::open_in_memory("test")
                 .expect("in-memory ScipGraph"),
         ));
         let mut registry = ToolRegistry::new();

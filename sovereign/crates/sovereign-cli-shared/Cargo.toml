@@ -14,6 +14,7 @@ description = "Neutral filesystem + SCIP helpers shared between sovereign-cli bi
 
 [dependencies]
 corpus-engine = { workspace = true, optional = true }
+corpus-engine-scip = { workspace = true, optional = true }
 dirs = "5"
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -22,5 +23,5 @@ tracing-subscriber = { workspace = true }
 [features]
 default = []
 # Enables `sovereign_cli_shared::scip` (merged SCIP graph loader).
-# Pulls `corpus-engine` with `treesitter` for the `ScipGraph` type.
-scip = ["dep:corpus-engine", "corpus-engine/treesitter"]
+# Points at `corpus-engine-scip` directly post-carve-out (2026-05-23).
+scip = ["dep:corpus-engine-scip"]

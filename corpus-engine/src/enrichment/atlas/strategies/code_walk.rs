@@ -38,7 +38,7 @@ use crate::enrichment::atlas::ingestion::AtlasData;
 use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 use crate::error::{Error, Result};
 use crate::progress::{IngestProgress, ProgressCallback};
-use crate::scip_graph::ScipGraph;
+use corpus_engine_scip::ScipGraph;
 
 // ── Public config ───────────────────────────────────────────
 
@@ -934,7 +934,7 @@ async fn attach_qualified_names(
 ) -> Result<usize> {
     // Build a per-file cache so we hit SCIP once per file rather
     // than once per item (~10× fewer queries for typical files).
-    let mut file_cache: HashMap<String, Vec<crate::scip_graph::SymbolRow>> = HashMap::new();
+    let mut file_cache: HashMap<String, Vec<corpus_engine_scip::SymbolRow>> = HashMap::new();
     let mut attached = 0usize;
     for (key, item) in groups.by_item.iter_mut() {
         let rows = if let Some(cached) = file_cache.get(&item.file_path) {

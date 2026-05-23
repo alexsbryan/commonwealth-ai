@@ -14,7 +14,7 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
-use corpus_engine::scip_graph::{CallKind, ScipGraph};
+use corpus_engine_scip::scip_graph::{CallKind, ScipGraph};
 use corpus_engine::CorpusEngine;
 
 use super::index_health::IndexHealthChecker;

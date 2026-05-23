@@ -37,7 +37,7 @@ use axum::extract::{ConnectInfo, Request};
 use axum::middleware::Next;
 use axum::response::Response;
 use axum::Router;
-use corpus_engine::ScipGraph;
+use corpus_engine_scip::ScipGraph;
 
 use sovereign_mesh::admin_http::admin_router;
 use sovereign_mesh::corpus_watch_http::corpus_watch_router;

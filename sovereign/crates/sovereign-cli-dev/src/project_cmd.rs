@@ -550,7 +550,7 @@ pub(crate) async fn cmd_init(args: &[String]) -> i32 {
 
     let scip_workspace_roots: Vec<PathBuf> = if let Some(ref wr) = workspace_root_arg {
         let canonical_wr = wr.canonicalize().unwrap_or_else(|_| wr.clone());
-        let roots = corpus_engine::scip_export::find_cargo_workspace_roots(&canonical_wr);
+        let roots = corpus_engine_scip::scip_export::find_cargo_workspace_roots(&canonical_wr);
         if roots.is_empty() {
             vec![canonical_wr]
         } else {
@@ -840,7 +840,7 @@ vector = false
         println!("  Building call graph...");
 
         let exporter_check =
-            corpus_engine::scip_export::check_exporters(&scip_workspace_roots);
+            corpus_engine_scip::scip_export::check_exporters(&scip_workspace_roots);
 
         // Surface missing exporters with actionable install instructions.
         for m in &exporter_check.missing {
@@ -859,7 +859,7 @@ vector = false
                 println!("    Using {}", exporter.command);
             }
 
-            let graph = match corpus_engine::ScipGraph::open(&scip_graph_path, &corpus_id) {
+            let graph = match corpus_engine_scip::ScipGraph::open(&scip_graph_path, &corpus_id) {
                 Ok(g) => g,
                 Err(e) => {
                     eprintln!("    \u{2717} Cannot open SCIP graph: {e}");
@@ -867,11 +867,11 @@ vector = false
                 }
             };
 
-            let progress_fn = |p: corpus_engine::scip_export::ScipProgress<'_>| match p {
-                corpus_engine::scip_export::ScipProgress::Exporting { language } => {
+            let progress_fn = |p: corpus_engine_scip::scip_export::ScipProgress<'_>| match p {
+                corpus_engine_scip::scip_export::ScipProgress::Exporting { language } => {
                     eprint!("\r    Exporting {language}...      ");
                 }
-                corpus_engine::scip_export::ScipProgress::Ingested {
+                corpus_engine_scip::scip_export::ScipProgress::Ingested {
                     language,
                     symbols,
                     refs,
@@ -881,14 +881,14 @@ vector = false
                         symbols, refs
                     );
                 }
-                corpus_engine::scip_export::ScipProgress::Skipped { language, reason } => {
+                corpus_engine_scip::scip_export::ScipProgress::Skipped { language, reason } => {
                     eprintln!(
                         "\r    \u{26a0} {language}: skipped ({reason})    "
                     );
                 }
             };
 
-            match corpus_engine::scip_export::export_all(
+            match corpus_engine_scip::scip_export::export_all(
                 &abs_path,
                 &scip_output_dir,
                 &graph,
@@ -1920,7 +1920,7 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
     // Call graph
     let scip_graph_path = data_dir.join(&corpus_id).join("scip_graph.db");
     if scip_graph_path.exists() {
-        match corpus_engine::ScipGraph::open(&scip_graph_path, &corpus_id) {
+        match corpus_engine_scip::ScipGraph::open(&scip_graph_path, &corpus_id) {
             Ok(graph) => {
                 let sym_count = graph.symbol_count().await;
                 let ref_count = graph.ref_count().await;
@@ -2168,7 +2168,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
             .as_deref()
             .map(|r| r.to_vec())
             .unwrap_or_else(|| vec![abs_path.clone()]);
-        let check = corpus_engine::scip_export::check_exporters(&check_roots);
+        let check = corpus_engine_scip::scip_export::check_exporters(&check_roots);
         for m in &check.missing {
             if !quiet {
                 eprintln!(
@@ -2186,12 +2186,12 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     // wedging on `no such column: corpus_id` at index-creation time —
     // which is exactly what `sovereign doctor`'s `scip_integrity`
     // repair hint used to run into. Mirrors `Reindexer::register`.
-    let graph = match corpus_engine::ScipGraph::open_with_integrity(
+    let graph = match corpus_engine_scip::ScipGraph::open_with_integrity(
         &scip_graph_path,
         &corpus_id,
     ) {
         Ok(g) => g,
-        Err(corpus_engine::OpenError::Corrupt { moved_to }) => {
+        Err(corpus_engine_scip::OpenError::Corrupt { moved_to }) => {
             if !quiet {
                 eprintln!(
                     "  \u{26a0} SCIP DB was corrupt; quarantined to {}",
@@ -2199,7 +2199,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
                 );
                 eprintln!("    Rebuilding from scratch.");
             }
-            match corpus_engine::ScipGraph::open_with_integrity(
+            match corpus_engine_scip::ScipGraph::open_with_integrity(
                 &scip_graph_path,
                 &corpus_id,
             ) {
@@ -2212,7 +2212,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
                 }
             }
         }
-        Err(corpus_engine::OpenError::SchemaMismatch { found, expected }) => {
+        Err(corpus_engine_scip::OpenError::SchemaMismatch { found, expected }) => {
             if !quiet {
                 eprintln!(
                     "  \u{26a0} SCIP DB schema v{found} is stale (current: v{expected}); resetting."
@@ -2225,7 +2225,7 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
                 );
                 return 1;
             }
-            match corpus_engine::ScipGraph::open_with_integrity(
+            match corpus_engine_scip::ScipGraph::open_with_integrity(
                 &scip_graph_path,
                 &corpus_id,
             ) {
@@ -2258,15 +2258,15 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
     };
     let scip_output_dir = tempdir.join("scip");
 
-    let progress_fn = |p: corpus_engine::scip_export::ScipProgress<'_>| {
+    let progress_fn = |p: corpus_engine_scip::scip_export::ScipProgress<'_>| {
         if quiet {
             return;
         }
         match p {
-            corpus_engine::scip_export::ScipProgress::Exporting { language } => {
+            corpus_engine_scip::scip_export::ScipProgress::Exporting { language } => {
                 eprint!("\r    Exporting {language}...      ");
             }
-            corpus_engine::scip_export::ScipProgress::Ingested {
+            corpus_engine_scip::scip_export::ScipProgress::Ingested {
                 language,
                 symbols,
                 refs,
@@ -2276,14 +2276,14 @@ pub(crate) async fn cmd_refresh(args: &[String]) -> i32 {
                     symbols, refs
                 );
             }
-            corpus_engine::scip_export::ScipProgress::Skipped { language, reason } => {
+            corpus_engine_scip::scip_export::ScipProgress::Skipped { language, reason } => {
                 eprintln!("\r    \u{26a0} {language}: skipped ({reason})    ");
             }
         }
     };
 
     let start = std::time::Instant::now();
-    match corpus_engine::scip_export::export_all(
+    match corpus_engine_scip::scip_export::export_all(
         &abs_path,
         &scip_output_dir,
         &graph,

@@ -22,7 +22,7 @@
 
 use std::path::Path;
 
-use corpus_engine::scip_export;
+use corpus_engine_scip::scip_export;
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 

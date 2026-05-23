@@ -17,7 +17,7 @@
 //! The first three tools query LanceDB via tree-sitter-indexed code
 //! columns and work without a SCIP export. The call graph tools
 //! (`find_callees`, `find_callers`) require a SCIP export and query the
-//! [`ScipGraph`](corpus_engine::scip_graph::ScipGraph) SQLite database.
+//! [`ScipGraph`](corpus_engine_scip::scip_graph::ScipGraph) SQLite database.
 //!
 //! None of these tools return results when no code corpora are indexed.
 //! Non-code corpora (Wikipedia, SEP, etc.) are skipped explicitly by the

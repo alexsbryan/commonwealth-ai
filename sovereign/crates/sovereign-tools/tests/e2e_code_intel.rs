@@ -133,7 +133,7 @@ vector = false
         // results today.
         let scip_handle: sovereign_tools::ScipGraphHandle =
             Arc::new(arc_swap::ArcSwap::from_pointee(
-                corpus_engine::ScipGraph::open_in_memory("fixture")
+                corpus_engine_scip::ScipGraph::open_in_memory("fixture")
                     .expect("in-memory ScipGraph for fixture"),
             ));
         let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&scip_handle));
@@ -636,7 +636,7 @@ fn percentile(times: &[u128], p: usize) -> u128 {
 
 use arc_swap::ArcSwap;
 use sovereign_tools::{FindCalleesTool, FindCallersTool, ScipGraphHandle};
-use corpus_engine::scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord};
+use corpus_engine_scip::scip_graph::{ScipGraph, ScipSymbolRecord, ScipRefRecord};
 
 struct AuthFixture {
     #[allow(dead_code)]
@@ -1397,7 +1397,7 @@ embedding_dimensions = 8
     // ── Run the three tools. Each must succeed (no Lance error). ─
     let mixed_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(arc_swap::ArcSwap::from_pointee(
-            corpus_engine::ScipGraph::open_in_memory("mixed")
+            corpus_engine_scip::ScipGraph::open_in_memory("mixed")
                 .expect("in-memory ScipGraph for mixed-corpora test"),
         ));
     let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&mixed_graph));

@@ -16,6 +16,7 @@ sovereign-mesh = { workspace = true, features = ["treesitter"] }
 commonwealth-core = { path = "../../../../commonwealth/crates/commonwealth-core" }
 commonwealth-state = { path = "../../../../commonwealth/crates/commonwealth-state" }
 corpus-engine = { workspace = true, features = ["treesitter"] }
+corpus-engine-scip = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }

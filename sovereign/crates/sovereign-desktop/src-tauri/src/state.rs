@@ -1454,7 +1454,7 @@ pub async fn bootstrap_with_progress(
                 // `SymbolLookupTool` can share the same handle —
                 // exact-name lookup now reads from SCIP rather than
                 // the Lance chunk projection.
-                let initial_graph = corpus_engine::ScipGraph::open_in_memory("merged")
+                let initial_graph = corpus_engine_scip::ScipGraph::open_in_memory("merged")
                     .expect("in-memory ScipGraph for MCP call-graph tools");
                 if let Ok(rd) = std::fs::read_dir(&indexes_dir) {
                     for de in rd.flatten() {
@@ -1549,7 +1549,7 @@ pub async fn bootstrap_with_progress(
             .await;
 
         // 4. /v1/projects — project freshness pipeline.
-        let merged_for_indexer = corpus_engine::ScipGraph::open_in_memory("merged")
+        let merged_for_indexer = corpus_engine_scip::ScipGraph::open_in_memory("merged")
             .expect("in-memory ScipGraph for project pipeline");
         let merged_handle: sovereign_mesh::reindexer::ScipGraphHandle =
             Arc::new(arc_swap::ArcSwap::from_pointee(merged_for_indexer));
@@ -1755,7 +1755,7 @@ pub async fn bootstrap_with_progress(
     // to re-derive the path from `home` rather than reuse the binding.
     let indexes_dir_for_scip = home.join(".sovereign").join("indexes");
     let symbols_graph = {
-        let merged = corpus_engine::ScipGraph::open_in_memory("merged")
+        let merged = corpus_engine_scip::ScipGraph::open_in_memory("merged")
             .expect("in-memory ScipGraph for symbols lookup");
         if let Ok(rd) = std::fs::read_dir(&indexes_dir_for_scip) {
             for de in rd.flatten() {

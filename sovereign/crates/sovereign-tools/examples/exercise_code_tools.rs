@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // in-memory graph; lookups will report "not found" honestly.
     let graph: sovereign_tools::ScipGraphHandle = Arc::new(
         arc_swap::ArcSwap::from_pointee(
-            corpus_engine::ScipGraph::open_in_memory("example")
+            corpus_engine_scip::ScipGraph::open_in_memory("example")
                 .expect("in-memory ScipGraph"),
         ),
     );

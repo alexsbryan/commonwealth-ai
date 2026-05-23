@@ -20,6 +20,9 @@ sovereign-atos = { workspace = true }
 # not depend on sovereign-tools.
 sovereign-work-atlas = { workspace = true }
 corpus-engine = { workspace = true }
+# SCIP call graph types — carved out of corpus-engine 2026-05-23.
+# Used by code/{callers,callees,blast_radius,symbol_lookup,index_health}.
+corpus-engine-scip = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

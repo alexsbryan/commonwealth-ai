@@ -334,7 +334,7 @@ async fn main() {
     // can share the handle (exact-name lookup reads SCIP directly
     // since the SCIP-as-truth refactor).
     let scip_db_path = home.join(".sovereign").join("indexes").join("_scip_graph.db");
-    let scip_graph = corpus_engine::ScipGraph::open(&scip_db_path, "default")
+    let scip_graph = corpus_engine_scip::ScipGraph::open(&scip_db_path, "default")
         .expect("SCIP graph database");
     let scip_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(arc_swap::ArcSwap::from_pointee(scip_graph));
