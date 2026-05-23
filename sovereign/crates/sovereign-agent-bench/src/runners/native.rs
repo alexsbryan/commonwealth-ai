@@ -1550,9 +1550,166 @@ fn tool_result_message(tool_call_id: &str, content: &str) -> Value {
 fn format_initial_prompt(workdir: &Path, problem_prompt: &str) -> String {
     // Mirror pi runner's workdir-state preamble so the cross-agent
     // comparison is apples-to-apples: same problem, same factual
-    // statement of what files exist.
+    // statement of what files exist. The line-numbered anchor block
+    // (added 2026-05-23 after the 4.1 smoke showed patch_file
+    // failing because the model couldn't ground-truth line numbers
+    // from the byte-size listing alone) lives immediately after
+    // the file listing — sink-adjacent position so RoPE + softmax
+    // dilution doesn't bury the structural info the Implementer
+    // needs to author correct patches.
     let state = summarize_workdir(workdir);
-    format!("## Workdir state (factual, current state of `.`)\n{state}\n\n---\n\n{problem_prompt}")
+    let anchors = render_workdir_anchors(workdir);
+    format!(
+        "## Workdir state (factual, current state of `.`)\n{state}\n{anchors}\n---\n\n{problem_prompt}"
+    )
+}
+
+/// Maximum number of lines per source file to render inline. Files
+/// above this cap get a function-signature outline instead of full
+/// content. Tuned to keep the typical Python or Rust module
+/// (100-200 lines) fully visible while keeping a 500-line module
+/// from dominating the prompt.
+const MAX_FILE_LINES_INLINE: usize = 150;
+
+/// Hard cap on the total number of source-content lines rendered
+/// across all anchored files. Prevents many-file workdirs from
+/// blowing the prompt budget.
+const MAX_TOTAL_ANCHOR_LINES: usize = 500;
+
+/// Render line-numbered content for source files in the workdir so
+/// the Implementer can use `patch_file` against ground-truth line
+/// numbers (and so the Evaluator can quote specific lines in its
+/// diagnoses). Skips tests/, build output, vendored deps, and VCS
+/// metadata — the model's primary edit target is its own source
+/// files, not infrastructure it shouldn't touch.
+///
+/// Per-file rendering:
+/// - ≤ `MAX_FILE_LINES_INLINE` lines: full line-numbered content
+///   inside a fenced block.
+/// - > `MAX_FILE_LINES_INLINE` lines: function/class signatures
+///   only, each prefixed with its line number. Lets the model
+///   address regions by signature line without paying for every
+///   line of body.
+///
+/// Returns an empty string when no source files are present (e.g.
+/// FromScratch tier before the first write).
+fn render_workdir_anchors(workdir: &Path) -> String {
+    let mut files: Vec<(std::path::PathBuf, String)> = Vec::new();
+    collect_source_files(workdir, workdir, 0, &mut files);
+    if files.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("\n## Current source files (line-numbered, factual)\n");
+    let mut total_lines_rendered: usize = 0;
+    for (rel, content) in files {
+        if total_lines_rendered >= MAX_TOTAL_ANCHOR_LINES {
+            out.push_str(&format!(
+                "\n(further source files omitted — total anchor budget {} lines exceeded)\n",
+                MAX_TOTAL_ANCHOR_LINES
+            ));
+            break;
+        }
+        let lines: Vec<&str> = content.lines().collect();
+        out.push_str(&format!(
+            "\n### `{}` ({} lines)\n```\n",
+            rel.display(),
+            lines.len()
+        ));
+        if lines.len() <= MAX_FILE_LINES_INLINE {
+            let take = lines
+                .len()
+                .min(MAX_TOTAL_ANCHOR_LINES.saturating_sub(total_lines_rendered));
+            for (i, l) in lines.iter().take(take).enumerate() {
+                out.push_str(&format!("{:>4} | {}\n", i + 1, l));
+            }
+            total_lines_rendered = total_lines_rendered.saturating_add(take);
+        } else {
+            // Outline only — language-agnostic heuristic on common
+            // top-level constructs.
+            for (i, l) in lines.iter().enumerate() {
+                let s = l.trim_start();
+                let is_decl = s.starts_with("def ")
+                    || s.starts_with("async def ")
+                    || s.starts_with("class ")
+                    || s.starts_with("fn ")
+                    || s.starts_with("pub fn ")
+                    || s.starts_with("pub(crate) fn ")
+                    || s.starts_with("pub struct ")
+                    || s.starts_with("pub enum ")
+                    || s.starts_with("pub trait ")
+                    || s.starts_with("impl ")
+                    || s.starts_with("function ")
+                    || s.starts_with("export function ")
+                    || s.starts_with("export default function ")
+                    || s.starts_with("export class ")
+                    || s.starts_with("type ")
+                    || s.starts_with("interface ");
+                if is_decl {
+                    out.push_str(&format!("{:>4} | {}\n", i + 1, l));
+                    total_lines_rendered = total_lines_rendered.saturating_add(1);
+                }
+            }
+            out.push_str(&format!(
+                "(outline only — full file is {} lines; use patch_file with the line numbers above)\n",
+                lines.len()
+            ));
+        }
+        out.push_str("```\n");
+    }
+    out
+}
+
+const SOURCE_EXTENSIONS: &[&str] = &[".py", ".rs", ".go", ".ts", ".tsx"];
+const ANCHOR_SKIP_DIRS: &[&str] = &[
+    "target",
+    "node_modules",
+    ".git",
+    "__pycache__",
+    "vendor",
+    "tests",
+    "test",
+    "dist",
+    "build",
+];
+
+fn collect_source_files(
+    root: &Path,
+    dir: &Path,
+    depth: usize,
+    out: &mut Vec<(std::path::PathBuf, String)>,
+) {
+    if depth > 3 {
+        return;
+    }
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut items: Vec<_> = rd.flatten().collect();
+    items.sort_by_key(|e| e.file_name());
+    for entry in items {
+        let p = entry.path();
+        let Ok(meta) = entry.metadata() else { continue };
+        if meta.is_dir() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if ANCHOR_SKIP_DIRS.iter().any(|s| *s == name) {
+                continue;
+            }
+            collect_source_files(root, &p, depth + 1, out);
+            continue;
+        }
+        if !meta.is_file() {
+            continue;
+        }
+        let path_str = p.to_string_lossy();
+        if !SOURCE_EXTENSIONS.iter().any(|ext| path_str.ends_with(ext)) {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(&p) else {
+            continue;
+        };
+        let rel = p.strip_prefix(root).unwrap_or(&p).to_path_buf();
+        out.push((rel, content));
+    }
 }
 
 fn summarize_workdir(workdir: &Path) -> String {
@@ -1646,6 +1803,108 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let s = summarize_workdir(tmp.path());
         assert!(s.contains("empty"));
+    }
+
+    #[test]
+    fn anchors_render_inline_for_small_python_file() {
+        // Closes class: "Implementer can't ground-truth file line
+        // numbers for patch_file because workdir summary is
+        // byte-size only." The line-numbered content sits at
+        // position 0 of every Implementer turn — sink-adjacent so
+        // attention dilution can't bury it. If a future PR drops
+        // this anchor, the 4.1 patch-blind class re-opens.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("mod.py"),
+            "def foo():\n    return 1\n\ndef bar():\n    return 2\n",
+        )
+        .unwrap();
+        let s = render_workdir_anchors(tmp.path());
+        assert!(s.contains("Current source files"));
+        assert!(s.contains("`mod.py` (5 lines)"));
+        assert!(s.contains("   1 | def foo():"));
+        assert!(s.contains("   2 |     return 1"));
+        assert!(s.contains("   4 | def bar():"));
+    }
+
+    #[test]
+    fn anchors_render_outline_for_large_file() {
+        // Above the inline cap, render function/class signatures
+        // with line numbers only — the model can address regions
+        // by declaration line without paying for every body line.
+        let tmp = tempfile::tempdir().unwrap();
+        let mut content = String::new();
+        for i in 0..200 {
+            if i % 10 == 0 {
+                content.push_str(&format!("def fn_{i}():\n"));
+            } else {
+                content.push_str("    pass\n");
+            }
+        }
+        std::fs::write(tmp.path().join("big.py"), &content).unwrap();
+        let s = render_workdir_anchors(tmp.path());
+        assert!(s.contains("`big.py` (200 lines)"));
+        assert!(s.contains("outline only"));
+        assert!(s.contains("def fn_0()"));
+        assert!(s.contains("def fn_190()"));
+        // Body lines (`    pass`) must NOT appear in outline mode.
+        assert!(!s.contains("|     pass"));
+    }
+
+    #[test]
+    fn anchors_skip_tests_and_build_dirs() {
+        // tests/ contents are read-only for the model; build/target
+        // dirs are generated output. Neither should pollute the
+        // anchor block.
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("tests")).unwrap();
+        std::fs::create_dir_all(tmp.path().join("target/release")).unwrap();
+        std::fs::write(tmp.path().join("tests/test_x.py"), "def test_x(): pass\n").unwrap();
+        std::fs::write(tmp.path().join("target/release/lib.rs"), "pub fn x() {}\n").unwrap();
+        std::fs::write(tmp.path().join("mod.py"), "def real(): pass\n").unwrap();
+        let s = render_workdir_anchors(tmp.path());
+        assert!(s.contains("mod.py"));
+        assert!(!s.contains("test_x"), "tests/ leaked into anchors: {s}");
+        assert!(!s.contains("target/release"), "target/ leaked: {s}");
+    }
+
+    #[test]
+    fn anchors_empty_workdir_returns_empty_string() {
+        // FromScratch tier before any write: nothing to anchor.
+        let tmp = tempfile::tempdir().unwrap();
+        let s = render_workdir_anchors(tmp.path());
+        assert!(s.is_empty(), "empty workdir should yield no anchor: {s:?}");
+    }
+
+    #[test]
+    fn anchors_caps_total_lines_across_many_files() {
+        // Cap is load-bearing: a workdir with 50 small files would
+        // otherwise dump 50 fenced blocks into every prompt. The
+        // cap-exceeded marker should be emitted; later files are
+        // dropped.
+        let tmp = tempfile::tempdir().unwrap();
+        for i in 0..20 {
+            let body = "x = 1\n".repeat(50);
+            std::fs::write(tmp.path().join(format!("f{i:02}.py")), &body).unwrap();
+        }
+        let s = render_workdir_anchors(tmp.path());
+        assert!(
+            s.contains("further source files omitted")
+                || s.matches("###").count() <= 11,
+            "expected anchor cap to drop later files; got {} fenced blocks",
+            s.matches("###").count()
+        );
+    }
+
+    #[test]
+    fn format_initial_prompt_includes_anchor_when_source_present() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.py"), "def x(): pass\n").unwrap();
+        let p = format_initial_prompt(tmp.path(), "do the thing");
+        assert!(p.contains("## Workdir state"));
+        assert!(p.contains("## Current source files"));
+        assert!(p.contains("def x"));
+        assert!(p.contains("do the thing"));
     }
 
     #[test]
