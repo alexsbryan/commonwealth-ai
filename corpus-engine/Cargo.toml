@@ -146,9 +146,23 @@ pulldown-cmark         = { version = "0.12", default-features = false, features 
 fs4                    = { version = "0.12", optional = true }
 
 [features]
-default = ["markdown"]
+# `stores` is in the default set because every downstream sovereign +
+# commonwealth crate touches at least one rusqlite-backed module
+# (NoteStore / FeatureStore / ProjectDocsStore / lint_results /
+# test_results / wikipedia_graph). Pre-2026-05-22 these lived under
+# `treesitter` because rusqlite happened to be declared there — that
+# wart forced 5 tree-sitter grammar crates into every binary that
+# only needed a notes table. The two are split now: `stores` is the
+# SQLite layer, `treesitter` is grammars + SCIP.
+default = ["markdown", "stores"]
 markdown = ["dep:pulldown-cmark"]
+# `stores` unlocks every rusqlite-backed module (NoteStore,
+# FeatureStore, ProjectDocsStore, lint_results, test_results,
+# wikipedia_graph, plan_items, notes_sync). Cheap to enable —
+# rusqlite is bundled (no system dep) and SQLite itself is small.
+stores = ["dep:rusqlite", "dep:notify", "dep:walkdir"]
 treesitter = [
+    "stores",
     "dep:tree-sitter",
     "dep:tree-sitter-language",
     "dep:tree-sitter-rust",
@@ -157,9 +171,6 @@ treesitter = [
     "dep:tree-sitter-go",
     "dep:tree-sitter-python",
     "dep:streaming-iterator",
-    "dep:walkdir",
-    "dep:notify",
-    "dep:rusqlite",
     "dep:prost",
     "dep:which",
     "dep:fs4",

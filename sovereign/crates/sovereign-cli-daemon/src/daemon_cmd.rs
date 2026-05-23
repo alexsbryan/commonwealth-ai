@@ -728,7 +728,7 @@ async fn run_daemon(args: &[String]) -> i32 {
         // `declare_scope`, which errors on `repo_id_missing`.
         match sovereign_work_atlas::resolve_repo_id(ws) {
             Ok((repo_root, repo_id)) => {
-                let branch = crate::code_cmd::current_branch(&repo_root);
+                let branch = sovereign_cli_shared::repo::current_branch(&repo_root);
                 let observer = Arc::new(sovereign_work_atlas::AtlasObserver::new(
                     Arc::clone(&work_atlas_store),
                     work_atlas_cfg.clone(),
@@ -3301,4 +3301,5 @@ mod workspace_autodetect_tests {
         assert!(ascend_for_sovereign_workspace(&plain).is_none());
     }
 }
+
 

@@ -5,11 +5,10 @@
 //! graph, `.claude/settings.json`, `SOVEREIGN.md`, git hooks, and a
 //! filesystem watcher. Two minutes from first run to fully working tools.
 
-use std::collections::HashMap;
 use std::io::{self, BufRead as _, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use arc_swap::ArcSwap;
 use corpus_engine::{CorpusEngine, CorpusSpec, EmbedFn, IngestProgress};
@@ -3208,112 +3207,11 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
 
 // ─── SCIP graph loading & hot-reload ──────────────────────────
 
-/// Summary returned by [`load_merged_graph`] — aggregated counts for the
-/// startup banner and structured logging.
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct MergedGraphSummary {
-    #[allow(dead_code)]
-    graphs_found: usize,
-    #[allow(dead_code)]
-    total_symbols: usize,
-    #[allow(dead_code)]
-    total_refs: usize,
-}
-
-/// Walk `data_dir/*/scip_graph.db` and merge each into a fresh in-memory
-/// ScipGraph. If `verbose`, prints a per-graph line to stderr (used for
-/// the startup banner); reloads pass `false`.
-///
-/// `pub(crate)` so `tools_cmd::registry` can reuse it without
-/// duplicating the discovery / merge logic.
-pub(crate) async fn load_merged_graph(
-    data_dir: &Path,
-    verbose: bool,
-) -> (corpus_engine::ScipGraph, MergedGraphSummary) {
-    let merged = corpus_engine::ScipGraph::open_in_memory("merged")
-        .expect("in-memory ScipGraph");
-
-    let mut summary = MergedGraphSummary::default();
-
-    if let Ok(entries) = std::fs::read_dir(data_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            let scip_path = path.join("scip_graph.db");
-            if !scip_path.exists() {
-                continue;
-            }
-            let corpus_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("?");
-            match merged.import_from_path(&scip_path).await {
-                Ok((syms, refs)) => {
-                    if syms > 0 || refs > 0 {
-                        if verbose {
-                            eprintln!(
-                                "    \u{2713} {corpus_name}: {} symbols, {} edges",
-                                syms, refs
-                            );
-                        }
-                        summary.total_symbols += syms;
-                        summary.total_refs += refs;
-                        summary.graphs_found += 1;
-                    }
-                }
-                Err(e) => {
-                    if verbose {
-                        eprintln!("    \u{2717} {corpus_name}: {e}");
-                    } else {
-                        tracing::warn!(
-                            corpus = %corpus_name,
-                            error = %e,
-                            "scip reload: import_from_path failed"
-                        );
-                    }
-                }
-            }
-        }
-    }
-
-    if verbose {
-        if summary.graphs_found == 0 {
-            eprintln!("    (none — run `sovereign project init` with SCIP exporters)");
-        } else {
-            eprintln!(
-                "    Total: {} symbols, {} edges across {} projects",
-                summary.total_symbols, summary.total_refs, summary.graphs_found
-            );
-        }
-    }
-
-    (merged, summary)
-}
-
-/// Collect the current mtimes of every `scip_graph.db` file under `data_dir`.
-/// Missing files are simply not represented in the map. A reload is
-/// triggered whenever this map changes (a key appears, disappears, or its
-/// mtime advances).
-fn snapshot_graph_mtimes(data_dir: &Path) -> HashMap<PathBuf, SystemTime> {
-    let mut out = HashMap::new();
-    if let Ok(entries) = std::fs::read_dir(data_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            let scip_path = path.join("scip_graph.db");
-            if let Ok(md) = std::fs::metadata(&scip_path) {
-                if let Ok(mtime) = md.modified() {
-                    out.insert(scip_path, mtime);
-                }
-            }
-        }
-    }
-    out
-}
+// `MergedGraphSummary`, `load_merged_graph`, and `snapshot_graph_mtimes`
+// moved to `sovereign-cli-shared::scip` so the new `sovereign-cli-atos`
+// binary can share one implementation with `tools_cmd::registry`. The
+// re-exports below preserve the prior `crate::project_cmd::…` call sites.
+pub(crate) use sovereign_cli_shared::scip::{load_merged_graph, snapshot_graph_mtimes};
 
 /// Poll `data_dir` for SCIP graph file changes every 30 seconds. On any
 /// change, rebuild the merged graph out-of-band and atomically swap it
@@ -5144,35 +5042,9 @@ fn has_ext_inner(dir: &Path, ext: &str, depth: usize, max_depth: usize) -> bool 
 }
 
 // ─── Git helpers ─────────────────────────────────────────────
-
-/// Walk upward from `start` looking for the first directory that contains a
-/// `.sovereign/` subdirectory. Returns the `.sovereign/` path if found.
-pub(crate) fn find_sovereign_dir(start: &Path) -> Option<PathBuf> {
-    let mut current = start.to_path_buf();
-    loop {
-        let candidate = current.join(".sovereign");
-        if candidate.is_dir() {
-            return Some(candidate);
-        }
-        match current.parent() {
-            Some(p) => current = p.to_path_buf(),
-            None => return None,
-        }
-    }
-}
-
-pub(crate) fn find_repo_root() -> Option<PathBuf> {
-    let output = std::process::Command::new("git")
-        .args(["rev-parse", "--show-toplevel"])
-        .output()
-        .ok()?;
-    if output.status.success() {
-        let s = String::from_utf8_lossy(&output.stdout);
-        Some(PathBuf::from(s.trim()))
-    } else {
-        None
-    }
-}
+// Implementations moved to `sovereign-cli-shared::repo`; re-exported
+// for in-crate callers that reference `project_cmd::find_*`.
+pub(crate) use sovereign_cli_shared::repo::{find_repo_root, find_sovereign_dir};
 
 // ─── File generation ─────────────────────────────────────────
 
@@ -6595,15 +6467,9 @@ async fn check_mcp_server(url: &str) -> bool {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-pub(crate) fn default_data_dir() -> Option<PathBuf> {
-    // Thin wrapper around util::dirs::sovereign_indexes(), kept as an
-    // `Option<PathBuf>` so existing `.or_else(default_data_dir)` call
-    // sites don't need to change shape. Returns None only when the home
-    // directory can't be resolved — rare, and the callers already handle
-    // the fallback to `./sovereign-indexes`.
-    let p = crate::util::dirs::sovereign_indexes();
-    if p == PathBuf::from(".") { None } else { Some(p) }
-}
+// `default_data_dir` lives in `sovereign-cli-shared::dirs`; re-exported
+// for `crate::project_cmd::default_data_dir` callers.
+pub(crate) use sovereign_cli_shared::dirs::default_data_dir;
 
 fn tempfile_dir() -> std::io::Result<PathBuf> {
     let base = std::env::temp_dir();
@@ -7137,3 +7003,6 @@ fi
         assert_eq!(notes.by_id.get(&id).unwrap().content, "anchor");
     }
 }
+
+
+

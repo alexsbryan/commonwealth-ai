@@ -1,0 +1,60 @@
+[package]
+name = "sovereign-cli-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Long-running daemon + setup + service install binary."
+
+# Sibling binary that owns the daemon's lifecycle:
+#   sovereign daemon start/stop/status/...   — managed daemon
+#   sovereign setup                          — hardware + model planner
+#   sovereign install-service                — launchd / systemd register
+#   sovereign doctor                         — health check + integrity probe
+#
+# Lives apart from sovereign-cli-dev (workspace tooling) and
+# sovereign-cli-llm (model interaction) because the daemon binary
+# has a very different cadence: it's the long-running host process,
+# rarely-edited setup code, and a `doctor` that pokes the SCIP graph
+# integrity. Cracking these out keeps the workbench binary
+# (sovereign-cli-dev) free of the setup-planner + launchd glue and
+# means a daemon restart doesn't force a workbench rebuild.
+
+[[bin]]
+name = "sovereign-cli-daemon"
+path = "src/main.rs"
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-store = { workspace = true }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
+sovereign-atos = { workspace = true }
+sovereign-mesh = { workspace = true, features = ["treesitter"] }
+sovereign-pipeline = { workspace = true }
+sovereign-work-atlas = { workspace = true }
+sovereign-cli-shared = { workspace = true, features = ["scip"] }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+corpus-engine = { workspace = true, features = ["treesitter"] }
+async-trait = { workspace = true }
+axum = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest = { workspace = true }
+uuid = { workspace = true }
+arc-swap = { workspace = true }
+dirs = "5"
+chrono = { workspace = true }
+sha2 = { workspace = true }
+hostname = { workspace = true }
+which = "7"
+tempfile = "3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

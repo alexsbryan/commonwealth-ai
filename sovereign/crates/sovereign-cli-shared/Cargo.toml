@@ -1,0 +1,26 @@
+[package]
+name = "sovereign-cli-shared"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Neutral filesystem + SCIP helpers shared between sovereign-cli binaries."
+
+# Tiny lib crate hosting helpers used by every sibling binary. The
+# baseline (always-on) modules are filesystem + git + CLI plumbing —
+# nothing heavy. The `scip` module is gated behind the `scip` feature
+# so binaries that don't need the merged-graph loader (and therefore
+# don't need `corpus-engine`'s `treesitter` feature with its 5 grammar
+# crates) can skip the transitive cost.
+
+[dependencies]
+corpus-engine = { workspace = true, optional = true }
+dirs = "5"
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[features]
+default = []
+# Enables `sovereign_cli_shared::scip` (merged SCIP graph loader).
+# Pulls `corpus-engine` with `treesitter` for the `ScipGraph` type.
+scip = ["dep:corpus-engine", "corpus-engine/treesitter"]

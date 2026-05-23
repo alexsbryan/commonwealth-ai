@@ -3,65 +3,58 @@ name = "sovereign-cli"
 version.workspace = true
 edition.workspace = true
 
+# Slim dispatcher binary. After slices 1–5 (2026-05-22), the only
+# code that lives here is exec-dispatch (`atos_bin`, `llm_bin`),
+# pure-FS delegators (notes, status, drift, audit, ...), and a few
+# light commands (archaeology-eval, git-archaeology, rough-edges)
+# that touch SQLite + filesystem only. Every LLM-using surface
+# (bench, chat, eval, atlas, daemon, ...) moved to
+# `sovereign-cli-atos` or `sovereign-cli-llm` siblings.
+#
+# Dep surface shrank accordingly:
+#   removed: sovereign-inference (llama-cpp-2), sovereign-tools,
+#            sovereign-mesh, sovereign-pipeline, sovereign-work-atlas
+#   kept:    sovereign-core (light traits + types), sovereign-store
+#            (SqliteStateStore), sovereign-atos (approval helpers
+#            used by audit_cmd), sovereign-agent-bench (subprocess
+#            driver — light), corpus-engine (stores feature only).
+
 [dependencies]
 sovereign-core = { workspace = true }
-sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
-sovereign-tools = { workspace = true, features = ["treesitter"] }
-sovereign-mesh = { workspace = true }
 sovereign-atos = { workspace = true }
-sovereign-pipeline = { workspace = true }
-sovereign-work-atlas = { workspace = true }
 sovereign-agent-bench = { workspace = true }
+# `awareness_cmd` (dev-tools only) needs the heavy `knowledge_view`
+# surface from sovereign-tools. Default builds skip this.
+sovereign-tools = { workspace = true, optional = true }
+sovereign-cli-shared = { workspace = true }
 commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
 commonwealth-core  = { path = "../../../commonwealth/crates/commonwealth-core" }
-corpus-engine = { workspace = true, features = ["treesitter"] }
+corpus-engine = { workspace = true }
 async-trait = { workspace = true }
-axum = { workspace = true }
 futures = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
-tower-http = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 reqwest = { workspace = true }
 uuid = { workspace = true }
 arc-swap = { workspace = true }
 dirs = "5"
-# Ephemeral worker pods: the owner persists a single Ed25519 signing
-# key under ~/.sovereign/worker_owner_key.bin, generated on first use
-# via OS rng. See worker_pod_provider.rs.
-ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
-rand = "0.9"
-# `hex::encode` formats pod-pubkey thumbprints in the `pod up` output;
-# the same display format `pod down` will consume in a follow-up.
 hex = "0.4"
 hostname = { workspace = true }
-# `oicp-types` intentionally NOT a direct dep — the sovereign-core
-# re-export (`sovereign_core::oicp`) is the canonical consumer path
-# per SYSTEM_OVERVIEW.md §4.8. Adding a direct dep here creates a
-# second version seam that serde round-trip can't catch.
 tempfile = "3"
 which = "7"
 sha2 = { workspace = true }
 chrono = { workspace = true }
-# `eval_cmd::attribution` parses `### [ts] {user|assistant}` turn
-# headers in retrieved chunks to strip opposite-attribution spans
-# before scoring conversation-history bench questions.
 regex = "1"
 # Used by `awareness_cmd` (gated behind the `dev-tools` feature) for
-# direct SQLite reads — chunk-id → memory.body lookups for the
-# `awareness timeline --include-chunks` flag and selective row deletes
-# for `awareness reset --full`. Production CLI paths go through
-# StateStore; this dep is paid for only in dev-tools builds.
+# direct SQLite reads. Production CLI paths go through StateStore.
 rusqlite = { version = "0.35", features = ["bundled"] }
-# `libc` is used by `serve_cmd` to call `setsid()` in the spawned
-# child's `pre_exec` hook, fully detaching the background MCP server
-# from the parent's controlling terminal. Without setsid, closing the
-# launching terminal sends SIGHUP to the orphaned child and kills it.
-# Unix-only — gated below.
+# `libc` is used by `serve_cmd` for `kill -TERM` via /bin/kill and by
+# `stop_cmd` for `process_alive`. Unix-only.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
@@ -69,10 +62,6 @@ libc = "0.2"
 tempfile = "3"
 
 [features]
-# `dev-tools` gates the `sovereign awareness` development CLI — a
-# glassbox harness for inspecting the relational + strategic
-# awareness pipeline (entity extraction, timeline assembly, digest
-# rendering, decay simulation, golden-set scoring). Not a
-# user-facing surface; built only when explicitly requested with
-# `cargo build --features dev-tools`.
-dev-tools = []
+# `dev-tools` gates the `sovereign awareness` development CLI.
+# Pulls in `sovereign-tools` for its `knowledge_view` modules.
+dev-tools = ["dep:sovereign-tools"]

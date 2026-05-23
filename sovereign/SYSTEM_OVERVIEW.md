@@ -159,20 +159,45 @@ crates/
 │   └── tools/                #   MCP tools (declare_scope/release_scope/work_in_flight) + DeferredBroadcaster seam
 │   assets/work_atlas_default_config.toml
 │
-├── sovereign-cli/            # REPL + named subcommands (see §4.9)
+├── sovereign-cli/            # Dispatcher + light delegators (see §4.9)
 │   src/
-│   ├── main.rs setup_cmd.rs daemon_cmd.rs doctor_cmd.rs mesh_cmd.rs
+│   ├── main.rs               #   argv[1] → exec into sibling binary (atos_bin/daemon_bin/llm_bin)
+│   ├── dev_bin.rs daemon_bin.rs llm_bin.rs   # Sibling-discovery + exec helpers
+│   ├── notes_cmd.rs status_cmd.rs reflect_cmd.rs
+│   ├── drift_cmd.rs audit_cmd.rs milestone_cmd.rs
+│   ├── charter_cmd.rs amend_cmd.rs design_cmd.rs plan_cmd.rs
+│   ├── init.rs refresh_cmd.rs serve_cmd.rs stop_cmd.rs
+│   ├── rough_edges_cmd.rs archaeology_eval_cmd.rs git_archaeology_cmd.rs
+│   ├── awareness_cmd/        #   (dev-tools feature)
+│   └── util/                 #   re-exports from sovereign-cli-shared
+│
+├── sovereign-cli-shared/     # Tiny shared lib (no LLM, no tree-sitter)
+│   src/                      #   dirs, repo, help, prompts, deprecation, tracing_init, urls, scip
+│                             #   `scip` feature pulls corpus-engine[treesitter] for callers that need it
+│
+├── sovereign-cli-daemon/     # Long-running host + lifecycle (~241 MB binary)
+│   src/                      #   daemon_cmd, setup_cmd, setup_config, service_install,
+│                             #   install_service_cmd, doctor_cmd, log_rotation
+│
+├── sovereign-cli-dev/        # Workbench: ATOS workflow + project lifecycle + code intel + tools
+│   src/                      #   (~209 MB binary)
+│   ├── atos_cmd/             #   provision/milestone/spec/feature/teardown/doctor/plugin/ab/status
 │   ├── project_cmd.rs design_session.rs design_onboarding.rs
 │   ├── plan_composer.rs phases.rs found.rs amend.rs
-│   ├── atos_cmd/             #   provision/milestone/spec/feature/teardown/doctor/plugin/ab/status
-│   ├── enrich_cmd/           #   build/extract/cluster/seed/atlas-* + sep_ingest/cascade
 │   ├── tools_cmd/            #   `sovereign tools list/describe/call`
-│   ├── chat_cmd/ bench_cmd/  #   REPL + benchmarking
-│   ├── service_install.rs    #   launchd/systemd installation
-│   ├── code_cmd.rs mcp_cmd.rs recipe_cmd.rs reflect_cmd.rs
+│   ├── code_cmd.rs           #   Code-intelligence primitives
 │   ├── atos_plugin.rs        #   include_str! sovereign-atos.ts
-│   └── util/                 #   dirs, prompts, status, urls, log_rotation, tracing_init
+│   └── audit_extract/audit_recover/drift_cmd_orchestrator/...
 │   assets/sovereign-atos.ts  #   opencode plugin source (versioned)
+│
+├── sovereign-cli-llm/        # Model-interaction layer (~248 MB binary)
+│   src/                      #   bench_cmd/, chat_cmd/, eval_cmd/, voice_eval/, reading_diag_cmd,
+│                             #   knowledge_gym_cmd/, search_gym_cmd/, gym_judge/,
+│                             #   atlas_cmd/, meta_atlas_cmd, enrich_cmd/,
+│                             #   newsworthy_cmd, recipe_cmd, recipe_agent_cmd, recipe_agent_live_trial,
+│                             #   pipeline_cmd, mcp_cmd, alignment_cmd, mesh_cmd, claim_cmd,
+│                             #   corpus_catalog_cmd, corpus_scrub_cmd, corpus_snapshot_cmd, corpus_watch_cmd,
+│                             #   worker_pod_provider
 │
 ├── sovereign-server/         # Axum REST + WebSocket, multi-tenant + approvals
 │   └── src/{routes, ws, tenant, auth, approval, activity}.rs
@@ -702,7 +727,7 @@ surface that drives this; the conversation-imports landing is the
 first consumer.
 
 **Publish nudge**
-(`sovereign-cli/src/project_cmd.rs::compose_publish_recipe_nudge`)
+(`sovereign-cli-dev/src/project_cmd.rs::compose_publish_recipe_nudge`)
 
 `sovereign project audit` walks `~/.sovereign/indexes/*/investigation/
 pattern_findings.json` and emits a one-time markdown nudge per locally-authored
@@ -1116,19 +1141,23 @@ the local backend extracts tool calls post-generation.
 
 | Frontend            | Purpose                                                                  |
 |---------------------|--------------------------------------------------------------------------|
-| `sovereign-cli`     | Interactive REPL + named subcommands. Grouped by surface: **agent lifecycle** — `setup`, `chat`, `daemon` (long-running, owns :9741), `serve`, `stop`, `install-service`, `doctor`, `status`. **Project/ATOS authoring** — `project` (init/design/plan/charter/found/amend/phase/audit), `charter`, `design`, `plan`, `amend`, `audit`, `milestone`, `notes`, `nudge`. **ATOS execution** — `atos` (provision/start-milestone/end-milestone/spec/teardown/doctor/install-plugin/`run` — §4.13). **Knowledge management** — `mesh`, `alignment` (mesh-replicated workspace — §5.x), `corpus`, `newsworthy` (Wikipedia freshness — §4.14b), `recipe`, `recipe-agent`, `maintainer`, `awareness`. **Code intelligence** — `code`, `mcp`, `tools`. **Enrichment / atlases** — `enrich`, `atlas`, `reading-diag`. **Architectural correctness** — `drift`, `rough-edges`, `git-archaeology`, `archaeology-eval` (§4.16). **Quality gates** — `eval`, `bench`, `voice` (Tier-B voice-contract harness — §4.15), `reflect`. **Misc** — `refresh`, `init`. Full surface registered at `sovereign-cli/src/main.rs:381-619`. |
+| `sovereign-cli` and three siblings | Single user-facing CLI surface, split across four binaries since 2026-05-22. The user types `sovereign <verb>` and a thin dispatcher (`sovereign-cli`) execs into one of three siblings based on the verb. Same UX as one binary; faster builds because editing one binary's code doesn't recompile the others. Verbs by binary: **`sovereign-cli` (dispatcher + light delegators, no LLM dep)** — `notes`, `status`, `drift`, `audit`, `claim`, `charter`, `amend`, `design`, `plan`, `init`, `milestone`, `refresh`, `reflect`, `rough-edges`, `archaeology-eval`, `git-archaeology`, `agent-bench`, `nudge`, `serve`, `stop`. **`sovereign-cli-daemon` (long-running host + lifecycle)** — `daemon` (owns :9741), `setup`, `install-service`, `doctor`. **`sovereign-cli-dev` (workbench: project lifecycle + code intel + tools + ATOS workflow)** — `atos` (provision/start-milestone/end-milestone/spec/teardown/doctor/install-plugin/`run` — §4.13), `project` (init/design/plan/charter/found/amend/phase/audit), `code`, `tools`. **`sovereign-cli-llm` (model interaction + heavy retrieval)** — `chat`, `bench`, `eval`, `voice` (Tier-B voice-contract harness — §4.15), `reading-diag`, `atlas`, `meta-atlas`, `enrich`, `recipe`, `recipe-agent`, `maintainer`, `pipeline`, `mcp`, `alignment` (§5.x), `mesh`, `corpus`, `newsworthy` (§4.14b), `knowledge-gym`, `search-gym`, `awareness` (dev-tools). Discovery: each sibling is found at `current_exe()`'s parent dir; override with `SOVEREIGN_CLI_DAEMON_BIN` / `SOVEREIGN_CLI_DEV_BIN` / `SOVEREIGN_CLI_LLM_BIN`. On Unix the shim execs into the sibling (same PID); other platforms spawn-and-wait. |
 | `sovereign-server`  | Axum REST + WebSocket on configurable port; multi-tenant via `tenant.rs`; SSE + WS streaming; server-side `ApprovalChannel` w/ `/v1/tasks/{id}/approve` |
 | `sovereign-desktop` | Tauri 2 + Svelte 5; setup wizard, chat w/ streaming + provenance, knowledge management (`KnowledgeStatus`, `CorpusProgressBanner`), skill manager, mesh UI, `sovereign://` deep-link handler, system tray |
 
-CLI flags: `--model`, `--primary-model`, `--data-dir`, `--skills-dir`,
-`--router`, `--ingest`, `--brave-api-key`, `--tavily-api-key`,
-`--no-knowledge-view`. `project init` prompts for AI-assistant harness
-(Claude Code / opencode / both / skip) and writes `.opencode/config.json` +
-`AGENTS.md` for opencode and installs the ATOS opencode plugin.
+There is no interactive REPL. Bare `sovereign` prints usage and exits;
+the legacy REPL that used to live inline in `main.rs` (~380 lines of
+Runtime construction) was deleted in the 2026-05-22 split — use
+`sovereign chat` for the interactive shell, which streams through the
+daemon's `/v1/chat/completions` instead of loading models in-process.
 
-The daemon (`daemon_cmd.rs::run`) rotates its own logs at startup via
-`util::log_rotation` — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep
-loop; preserves the inode for launchd-held FDs.
+`project init` prompts for AI-assistant harness (Claude Code / opencode
+/ both / skip) and writes `.opencode/config.json` + `AGENTS.md` for
+opencode and installs the ATOS opencode plugin.
+
+The daemon (`sovereign-cli-daemon::daemon_cmd::run`) rotates its own
+logs at startup via `util::log_rotation` — copy-truncate, 10 MiB cap,
+5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.
 
 ### 4.10 Deep links
 
@@ -1363,7 +1392,7 @@ header. Injects `X-Feature-Id` (from current branch's feature dir) and
 **`atos run` — the runner loop.** `sovereign atos run` is the
 agent-driven execution surface that takes a feature spec and runs the
 opencode/Claude-Code sub-agent in a managed loop against MCP tools
-(`sovereign-cli/src/atos_cmd/run.rs`, ~4300 lines). Subprocess fan-out
+(`sovereign-cli-dev/src/atos_cmd/run.rs`, ~4700 lines). Subprocess fan-out
 to the sub-agent, MCP-tool brokerage, milestone advancement
 (start-milestone → reviewer loop → done-marker accept → end-milestone),
 deviation capture, and run-record persistence to `FeatureStore.runs`
@@ -1425,8 +1454,9 @@ Scheduler (per-corpus cadence)
           └─ persist state, emit SweepCompleted
 ```
 
-Daemon integration: `daemon_cmd.rs::run_daemon` constructs the
-`LocalCorpusManager` + `WatchedFolderRegistry`, auto-resumes every
+Daemon integration: `sovereign-cli-daemon/src/daemon_cmd.rs::run_daemon`
+constructs the `LocalCorpusManager` + `WatchedFolderRegistry`,
+auto-resumes every
 persisted `WatchedFolder` corpus from
 `{data_dir}/local-corpora/*.json`, then spawns
 `watched::Scheduler::spawn` and parks the manager + registry on
@@ -1513,7 +1543,7 @@ corpus configured for OCR on a daemon that can't honour it.
 - `sovereign-mesh::watched_folder_setup::WatchedSubsystem::install` —
   one call wires registry + auto-resume + scheduler + runtime
   singleton + HTTP router on an `EmbeddedDaemon`. Both
-  `daemon_cmd.rs::run_daemon` (CLI) and
+  `sovereign-cli-daemon/src/daemon_cmd.rs::run_daemon` (CLI) and
   `sovereign-desktop/src-tauri/src/state.rs` (Local mode embedded
   daemon) call it; the standalone CLI path and the desktop's
   embedded path expose identical surface area.
@@ -2488,16 +2518,22 @@ tests. Commonwealth's harness runs simulated meshes deterministically.
 # Sovereign desktop
 cd sovereign/crates/sovereign-desktop && npm install && cargo tauri dev
 
-# Sovereign CLI
-cd sovereign && cargo run --release -p sovereign-cli -- \
-  --model models/qwen3-1.7b.gguf --primary-model models/qwen3.5-9b.gguf
+# Sovereign CLI — the user-facing surface is `sovereign <verb>`,
+# which dispatches into one of four binaries. Build all four for
+# the full surface, or just the dispatcher for delegator-only edits.
+cargo build --release \
+  -p sovereign-cli -p sovereign-cli-daemon -p sovereign-cli-dev -p sovereign-cli-llm
+target/release/sovereign --help                # via the dispatcher
+target/release/sovereign-cli-daemon daemon run # the long-running host
 
 # Sovereign HTTP server
-cd sovereign && cargo run --release -p sovereign-server -- --config sovereign-server.toml
+cargo build --release -p sovereign-server
+target/release/sovereign-server --config sovereign/sovereign-server.toml
 
 # Commonwealth daemon
-cd commonwealth && cargo run --release -p commonwealth-daemon -- init --name "Co-op"
-cd commonwealth && cargo run --release -p commonwealth-daemon -- daemon start
+cargo build --release -p commonwealth-daemon
+target/release/commonwealth-daemon init --name "Co-op"
+target/release/commonwealth-daemon daemon start
 ```
 
 Default ports:
@@ -2529,14 +2565,14 @@ Default ports:
 | Render the per-turn situated-context block       | `sovereign-tools/src/recipe_author/situated_context.rs::render` (CLI splice for M1; runtime splice planned for M2) |
 | Add an `http_api` recipe (REST source)           | See §3.10; example shape in `corpus-engine/src/recipe.rs` round-trip tests |
 | Add an investigation recipe                      | Declare `enrichment.type = "investigation"` + `[[entity_types]]` + `[[relationship_types]]` + `[[patterns]]`; run via `sovereign enrich investigation build <id>` |
-| Surface findings in an audit                     | `sovereign-cli/src/project_cmd.rs::compose_publish_recipe_nudge` reads `<index>/investigation/pattern_findings.json` |
+| Surface findings in an audit                     | `sovereign-cli-dev/src/project_cmd.rs::compose_publish_recipe_nudge` reads `<index>/investigation/pattern_findings.json` |
 | Write a skill                                    | `sovereign/skills/<id>/skill.toml`                                  |
 | Tune model selection per hardware                | `sovereign/models.toml`                                             |
 | Understand the SCIP call graph                   | `corpus-engine/src/scip_graph.rs` (schema, staleness, queries)      |
 | Add a SCIP language exporter                     | `corpus-engine/src/scip_export.rs::all_exporters()`                 |
-| See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli/src/project_cmd.rs` (`cmd_serve`, inline `mcp_server`) |
+| See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd.rs` (`cmd_serve`, inline `mcp_server`) — the daemon's foreground body; managed-lifecycle variant lives at `sovereign-cli-daemon/src/daemon_cmd.rs::run_daemon` |
 | See the Sovereign HTTP MCP route                 | `sovereign/crates/sovereign-server/src/routes_mcp.rs`               |
-| Understand session reflections                   | `corpus-engine/src/notes.rs` (NoteStore, write_reflection, retire_by_tool) and `sovereign-cli/src/reflect_cmd.rs` |
+| Understand session reflections                   | `corpus-engine/src/notes.rs` (NoteStore, write_reflection, retire_by_tool); CLI entry at `sovereign-cli/src/reflect_cmd.rs` |
 | Trace a Commonwealth scheduling decision         | `commonwealth-inference/src/scheduler/plan_builder.rs`              |
 | Trace a Commonwealth shard plan                  | `commonwealth-inference/src/scheduler/layer_assignment.rs`          |
 | Trace process spawning                           | `commonwealth-inference/src/orchestrator/process.rs`                |
@@ -2556,10 +2592,10 @@ Default ports:
 | Understand KnowledgeView digest assembly         | `sovereign-tools/src/knowledge_view/manager.rs`, `digest.rs`, `cross_view.rs`, `recipes.rs` |
 | See where KnowledgeView is injected              | `sovereign-core/src/runtime.rs::splice_landscape_digests` + `traits.rs::LandscapeDigestProvider` |
 | Understand ATOS lifecycle                        | `sovereign-atos/src/local/orchestrator.rs`, `charter.rs`, `approval.rs` |
-| See the ATOS CLI surface                         | `sovereign-cli/src/atos_cmd/` + `project_cmd.rs` (`cmd_found`, `cmd_amend`, `cmd_phase`, `cmd_audit`) |
+| See the ATOS CLI surface                         | `sovereign-cli-dev/src/atos_cmd/` + `project_cmd.rs` (`cmd_found`, `cmd_amend`, `cmd_phase`, `cmd_audit`) |
 | Trace a sovereign-coder pipeline turn            | `commonwealth-api/src/middleware/` + `commonwealth-core/src/default_pipelines.toml` |
 | Install / upgrade the ATOS opencode plugin       | `sovereign-cli/assets/sovereign-atos.ts` + `sovereign-cli/src/atos_plugin.rs` (include_str! + version header) |
-| Run the long-running Sovereign daemon            | `sovereign-cli/src/daemon_cmd.rs::run` + `contrib/launchd` + `contrib/systemd` |
+| Run the long-running Sovereign daemon            | `sovereign-cli-daemon/src/daemon_cmd.rs::run` + `contrib/launchd` + `contrib/systemd` |
 | Rotate daemon logs                               | `sovereign-cli/src/util/log_rotation.rs` (copy-truncate; preserves inode for launchd-held FDs) |
 | Understand the loopback guard                    | `sovereign-mesh/src/loopback_guard.rs` + `admin_http::tests::loopback_guard_works_under_production_listener_shape` |
 | Understand local-corpus snapshot/rollback        | `sovereign-tools/src/local_corpus/writeback.rs` + `frontmatter.rs`  |
@@ -2607,11 +2643,12 @@ file or gap with an entry is sequenced work.
 | Item | Location | Why deferred |
 |------|----------|--------------|
 | `runtime.rs` split | `sovereign-core/src/runtime.rs` (~10800 lines) | The runtime hub mixes routing, planner integration, witness assembly, and channel plumbing. Concern boundaries are visible but the seam choice is load-bearing — the wrong split pessimises the dispatch hot path. |
-| `project_cmd.rs` split | `sovereign-cli/src/project_cmd.rs` (~7000 lines) | Subcommand-per-file is the obvious shape; gated on the post-found project lifecycle settling so we know which subcommands are genuinely sticky vs. exploratory. |
+| `project_cmd.rs` split | `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) | Subcommand-per-file is the obvious shape; gated on the post-found project lifecycle settling so we know which subcommands are genuinely sticky vs. exploratory. Moved out of `sovereign-cli` in the 2026-05-22 binary split (it lives in the workbench sibling now) — the file's in-file §3.2 split is still pending. |
 | `embedded.rs` split | `sovereign-inference/src/embedded.rs` (~5300 lines) | Embedded daemon glue — slot management, lifecycle, and HTTP handlers cohere today; split when an alternate embedding mode forces the seam. |
 | `commands.rs` (Tauri) split | `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) | Tauri's command-registration surface; splitting requires re-grouping by feature without breaking the IPC name registry. Coordination cost > current pain. |
-| `atos_cmd/run.rs` split | `sovereign-cli/src/atos_cmd/run.rs` (~4300 lines) | ATOS runner loop (§4.13). Subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, done-marker accept, run-record persistence all cohere as one state machine today. Split is one-file-per-stage when the stage boundaries stabilise. Landed 2026-05-06 in commits 032a0ad + 0229adb; the audit pass that produced this entry caught it. |
-| `mesh_cmd.rs` split | `sovereign-cli/src/mesh_cmd.rs` (~3000 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under mesh self-heal + cloud peering work. |
+| `atos_cmd/run.rs` split | `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) | ATOS runner loop (§4.13). Subprocess fan-out, MCP-tool brokerage, milestone advancement, reviewer loop, done-marker accept, run-record persistence all cohere as one state machine today. Split is one-file-per-stage when the stage boundaries stabilise. |
+| `daemon_cmd.rs` split | `sovereign-cli-daemon/src/daemon_cmd.rs` (~3300 lines) | Daemon Runtime construction + serve loop + watcher wiring. Cohesive while watcher subsystems keep settling. Lives in its own binary now (`sovereign-cli-daemon`), but the in-file split is still pending. |
+| `mesh_cmd.rs` split | `sovereign-cli-llm/src/mesh_cmd.rs` (~3000 lines) | Mesh CLI surface — peer ops, gossip introspection, partition tooling. Cohesive while peer-state semantics keep shifting under mesh self-heal + cloud peering work. |
 | `daemon.rs` split | `sovereign-mesh/src/daemon.rs` (~2600 lines) | `EmbeddedDaemon` is the in-process commonwealth+sovereign entry. Holds lifecycle state machine (try_resume / create / join / leave / shutdown), HTTP listener wiring (7-router merge), background-task spawning (gossip, auto-collaborate, auto-resume, storage-snapshot, newsworthy-watcher), AppState construction with an order-sensitive `CorpusEngine` injection invariant, config reload, and mDNS/relay-IP helpers. Free extractions of pure helpers landed: `mesh_discovery.rs` (relay/IP enumeration); the `start_daemon()` order invariant is pinned by `sovereign-mesh/tests/daemon_wiring.rs` and the port-config plumbing is pinned by `tests/port_config.rs`. The load-bearing splits (`start_daemon()` → `app_state_builder.rs` + `background_tasks.rs`) are unblocked but stay deferred until the `MemberRecord.client_port` wire-protocol work (below) lands and a real two-daemon integration test against `start_daemon` itself can be built. |
 | `inference_adapter.rs` split | `sovereign-mesh/src/inference_adapter.rs` (~2100 lines) | Adapts the local `InferenceProvider` to the `LocalInferenceService` shape that the mesh router calls, *and* synthesizes this node's OICP `CapabilityClaim`s for peer scoring. Pure helpers (`build_self_manifest`, `synthesize_slot_claims`) have been extracted to `oicp_synthesis.rs`. Remaining concerns — wire-shape translation, tool-call envelope parsing (grammar vs. legacy marker), tool-profile policy — are tightly coupled to the `LocalInferenceService` impl and stay in the file until the tool-call envelope migration settles. |
 | `peer_inference.rs` split | `sovereign-mesh/src/peer_inference.rs` (~1900 lines) | `MeshInferenceProvider` (the OICP-aware router) plus throughput observation, manifest caching, and quarantine policy. `ThroughputObservedStream` extracted to `throughput_tracking.rs`. Further split blocked on `select_peer` (~470 lines) — splitting it requires the OICP-cache key + peer-health weight semantics to stop moving; until then the routing logic reads more clearly as one method. |

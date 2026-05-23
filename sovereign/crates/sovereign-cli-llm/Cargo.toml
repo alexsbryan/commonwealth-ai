@@ -1,0 +1,67 @@
+[package]
+name = "sovereign-cli-llm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "LLM-heavy CLI surface (bench, chat, eval, atlas, enrich, mesh, corpus, pipeline) — sibling binary to sovereign."
+
+# Sibling binary that owns the LLM-touching subcommands. Lives apart
+# from `sovereign-cli` so the dispatcher (notes / status / drift /
+# audit / etc.) stays lean and fast to compile.
+#
+# Hosted verbs (parent `sovereign` shim execs into this binary):
+#   bench, chat, eval, voice, reading-diag, search-gym, knowledge-gym,
+#   atlas, meta-atlas, enrich, newsworthy, recipe, recipe-agent,
+#   maintainer, pipeline, mcp, alignment, mesh, corpus
+#
+# The REPL surface (`sovereign` with no subcommand) also lives here —
+# it constructs an EmbeddedLlamaCpp + Runtime, which is the heaviest
+# code path in the whole CLI and the original reason sovereign-cli
+# linked llama-cpp-2 in the first place.
+
+[[bin]]
+name = "sovereign-cli-llm"
+path = "src/main.rs"
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-store = { workspace = true }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
+sovereign-atos = { workspace = true }
+sovereign-mesh = { workspace = true, features = ["treesitter"] }
+sovereign-pipeline = { workspace = true }
+sovereign-work-atlas = { workspace = true }
+sovereign-agent-bench = { workspace = true }
+sovereign-cli-shared = { workspace = true, features = ["scip"] }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+corpus-engine = { workspace = true, features = ["treesitter"] }
+async-trait = { workspace = true }
+axum = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest = { workspace = true }
+uuid = { workspace = true }
+arc-swap = { workspace = true }
+dirs = "5"
+chrono = { workspace = true }
+sha2 = { workspace = true }
+regex = "1"
+tempfile = "3"
+which = "7"
+hostname = { workspace = true }
+hex = "0.4"
+ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
+rand = "0.9"
+# `awareness` is dev-tools only in sovereign-cli; the LLM sibling
+# doesn't carry that surface (rusqlite for awareness lives there).
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

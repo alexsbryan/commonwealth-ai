@@ -4,5 +4,5 @@
 //! Phase 1 delegates to the existing handler.
 
 pub async fn run(args: &[String]) -> i32 {
-    crate::project_cmd::cmd_amend(args).await
+    crate::dev_bin::exec("project-amend", args)
 }

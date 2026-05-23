@@ -13,36 +13,53 @@
 //! `write_note` that captures their conventions, they're not
 //! overridden.
 //!
-//! ## Manifest source of truth (D1)
+//! ## Source of truth (post-manifest split, 2026-05-22)
 //!
-//! The tool descriptors are pulled from
-//! [`sovereign_tools::manifest::atos_critical_descriptors`], which
-//! constructs every tool once with throwaway in-memory stores and
-//! calls `Tool::descriptor()`. That eliminates the hand-maintained
-//! parallel JSON-schema block this module used to carry — which had
-//! already drifted from the real parameter shapes by the time the
-//! Phase 3 refactor landed.
+//! Tool descriptors are now injected at construction time rather than
+//! pulled from a global static. The daemon assembling the pipeline
+//! passes the subset of its `ToolRegistry::descriptors()` it wants
+//! advertised (typically the note-handling tools); tests pass `vec![]`
+//! or a hand-built fixture set.
 //!
-//! Adding a new ATOS-critical tool: add its id to the `IDS` array in
-//! `sovereign_tools::manifest::atos_critical_descriptors`; the schema
-//! flows in automatically from the tool's actual descriptor().
+//! Before: `sovereign_tools::manifest::atos_critical_descriptors()`
+//! constructed every tool once with throwaway in-memory stores and
+//! filtered by id. That forced commonwealth-api to depend on
+//! `sovereign-tools[treesitter]` (the code-intel tools live behind
+//! that feature) and pulled five tree-sitter grammar crates into
+//! every binary downstream of commonwealth-api. The injected-descriptor
+//! shape removes that transitive cost AND eliminates the §1 doc-drift
+//! risk of having two parallel descriptor sources.
 
 use async_trait::async_trait;
+
+use sovereign_core::types::ToolDescriptor;
 
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
 use crate::openai_types::{ChatCompletionRequest, ToolDefinition, ToolFunction};
 
-pub struct ToolInjector;
+/// Descriptors the injector advertises on every pipeline request.
+///
+/// Empty is fine — the middleware becomes a no-op, which is what
+/// tests that don't care about tool advertisement want. Production
+/// daemons feed in the ATOS-critical subset of their `ToolRegistry`.
+pub struct ToolInjector {
+    descriptors: Vec<ToolDescriptor>,
+}
 
 impl ToolInjector {
-    pub fn new() -> Self {
-        Self
+    pub fn new(descriptors: Vec<ToolDescriptor>) -> Self {
+        Self { descriptors }
+    }
+
+    /// Convenience constructor for tests/stubs.
+    pub fn empty() -> Self {
+        Self::new(Vec::new())
     }
 }
 
 impl Default for ToolInjector {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }
 
@@ -58,7 +75,7 @@ impl Middleware for ToolInjector {
         _session: &mut MiddlewareSession,
         _ctx: &PipelineContext,
     ) -> Result<(), MiddlewareError> {
-        let atos_tools = atos_tool_descriptors();
+        let atos_tools = render_descriptors(&self.descriptors);
         let existing = request.tools.get_or_insert_with(Vec::new);
 
         // Collect existing names for dedup.
@@ -83,19 +100,16 @@ impl Middleware for ToolInjector {
     }
 }
 
-/// ATOS MCP tools advertised on every pipeline session. Pulled from
-/// the shared sovereign-tools manifest — the tool's real
-/// `descriptor()` is the schema, so there is no hand-maintained
-/// parameters JSON to drift.
+/// Render injected `ToolDescriptor`s into OpenAI-shaped `ToolDefinition`s.
 ///
-/// When the tool declares an `output_schema` we append a short hint
-/// to the description so the agent sees which keys it can reference
-/// in a follow-up tool call's params. OpenAI's function-calling
-/// schema has no native `output_schema` slot; description is the
-/// only channel that reaches the model.
-pub fn atos_tool_descriptors() -> Vec<ToolDefinition> {
-    sovereign_tools::manifest::atos_critical_descriptors()
-        .into_iter()
+/// When the source descriptor declares an `output_schema` we append a
+/// short hint to the description so the agent sees which keys it can
+/// reference in a follow-up tool call's params. OpenAI's
+/// function-calling schema has no native `output_schema` slot;
+/// description is the only channel that reaches the model.
+fn render_descriptors(descriptors: &[ToolDescriptor]) -> Vec<ToolDefinition> {
+    descriptors
+        .iter()
         .map(|d| {
             let description = match &d.output_schema {
                 Some(schema) => match schema
@@ -116,9 +130,9 @@ pub fn atos_tool_descriptors() -> Vec<ToolDefinition> {
             ToolDefinition {
                 kind: "function".into(),
                 function: ToolFunction {
-                    name: d.id,
+                    name: d.id.clone(),
                     description: Some(description),
-                    parameters: d.parameters,
+                    parameters: d.parameters.clone(),
                 },
             }
         })
@@ -169,14 +183,34 @@ mod tests {
         }
     }
 
+    /// Build a fixture descriptor with the given id. The injector
+    /// only reads `id`, `description`, `parameters`, and
+    /// `output_schema`; the rest are filled with neutral defaults.
+    fn descriptor(id: &str) -> ToolDescriptor {
+        ToolDescriptor {
+            id: id.into(),
+            name: id.into(),
+            description: format!("test descriptor for {id}"),
+            parameters: json!({"type": "object", "properties": {}}),
+            examples: Vec::new(),
+            effect: sovereign_core::types::Effect::Write,
+            idempotency: sovereign_core::types::Idempotency::Idempotent,
+            latency: sovereign_core::types::Latency::Fast,
+            scope: sovereign_core::types::Scope::Persistent,
+            output_schema: None,
+        }
+    }
+
+    fn critical_set() -> Vec<ToolDescriptor> {
+        ["notes", "note", "read_note_digest", "read_note_by_id", "write_redteam_finding"]
+            .iter()
+            .map(|id| descriptor(id))
+            .collect()
+    }
+
     #[tokio::test]
     async fn injects_all_atos_tools_when_absent() {
-        // Phase 2 of the CLI refactor renamed `read_notes` →
-        // `notes` and `write_note` → `note` at the descriptor
-        // layer. The injector pulls names from
-        // `sovereign_tools::manifest::atos_critical_descriptors`,
-        // so it advertises the canonical (renamed) ids.
-        let inj = ToolInjector::new();
+        let inj = ToolInjector::new(critical_set());
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         inj.process(&mut req, &mut session, &ctx()).await.unwrap();
@@ -190,11 +224,7 @@ mod tests {
 
     #[tokio::test]
     async fn client_registered_tool_wins_on_name_collision() {
-        // Probes the canonical id (`note`) since that's what the
-        // injector advertises post-rename. A client that pre-
-        // registered a tool with the same name keeps its
-        // description.
-        let inj = ToolInjector::new();
+        let inj = ToolInjector::new(critical_set());
         let mut req = minimal_request();
         req.tools = Some(vec![ToolDefinition {
             kind: "function".into(),
@@ -215,7 +245,7 @@ mod tests {
     async fn idempotent_across_repeated_calls() {
         // Opencode can hit the same handler twice on a streaming +
         // tool-roundtrip pair. Each call should net zero duplicates.
-        let inj = ToolInjector::new();
+        let inj = ToolInjector::new(critical_set());
         let mut req = minimal_request();
         let mut session = MiddlewareSession::default();
         inj.process(&mut req, &mut session, &ctx()).await.unwrap();
@@ -226,20 +256,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn descriptor_schemas_match_registry_source() {
-        // D1 drift-seal: every injected tool's `parameters` JSON
-        // schema is whatever the tool's real Tool::descriptor()
-        // returns. Any mismatch between this module's output and the
-        // registry is a compile failure (the field is cloned
-        // directly), so this test just verifies the pipeline is
-        // wired — if an id went missing, we'd see a shorter list.
-        let defs = atos_tool_descriptors();
-        assert_eq!(
-            defs.len(),
-            sovereign_tools::manifest::atos_critical_descriptors().len(),
-            "tool_injector output count must match the manifest; \
-             if you added an ATOS-critical tool, update the IDS list in \
-             sovereign_tools::manifest::atos_critical_descriptors"
-        );
+    async fn renders_one_definition_per_descriptor() {
+        // Source-of-truth seal: render_descriptors maps each input
+        // descriptor to exactly one ToolDefinition (no dedup at this
+        // layer; dedup happens against the request's existing tools).
+        let descriptors = critical_set();
+        let defs = render_descriptors(&descriptors);
+        assert_eq!(defs.len(), descriptors.len());
+        for (d, def) in descriptors.iter().zip(defs.iter()) {
+            assert_eq!(def.function.name, d.id);
+        }
     }
 }

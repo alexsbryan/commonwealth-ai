@@ -5,7 +5,12 @@ edition.workspace = true
 
 [dependencies]
 oicp-types = { path = "../../../oicp-types" }
-corpus-engine = { workspace = true, features = ["treesitter"] }
+# `treesitter` feature dropped 2026-05-22: sovereign-core's
+# corpus-engine usages (FeatureStore, NoteStore, EmbedFn, etc) are
+# not treesitter-gated. The only "ScipGraph" / "symbol_lookup"
+# strings here are tool-name literals in intent_policy + dossier;
+# no source-level dependency on the gated APIs.
+corpus-engine = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

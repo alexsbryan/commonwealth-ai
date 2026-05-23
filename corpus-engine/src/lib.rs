@@ -43,7 +43,11 @@ pub mod types;
 pub mod update;
 pub mod yield_hook;
 
-// SCIP call graph (gated on treesitter alongside the code intelligence stack).
+// SCIP call graph + tree-sitter-driven scanning. Only modules that
+// actually depend on tree-sitter grammars or scip-proto live behind
+// the `treesitter` gate. The rusqlite-backed stores moved to
+// `stores` so callers that only need NoteStore/FeatureStore don't
+// drag in 5 grammar crates.
 #[cfg(feature = "treesitter")]
 pub mod scip_graph;
 #[cfg(feature = "treesitter")]
@@ -51,41 +55,35 @@ pub mod scip_export;
 #[cfg(feature = "treesitter")]
 mod scip_proto;
 
-// Wikipedia link graph (Atlas-style enrichment, Layer 0). Shares the
-// `treesitter` feature gate because rusqlite is gated there; the
-// graph itself has nothing to do with treesitter.
-#[cfg(feature = "treesitter")]
+// Wikipedia link graph (Atlas-style enrichment, Layer 0) — rusqlite,
+// no tree-sitter. Gated by `stores`.
+#[cfg(feature = "stores")]
 pub mod wikipedia_graph;
 
-// Test / lint result stores (use rusqlite, gated alongside SCIP).
-#[cfg(feature = "treesitter")]
+// Test / lint result stores (rusqlite). Gated by `stores`.
+#[cfg(feature = "stores")]
 pub mod test_results;
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 pub mod lint_results;
 
-// Working notes and project documentation stores.
-#[cfg(feature = "treesitter")]
+// Working notes and project documentation stores (rusqlite).
+#[cfg(feature = "stores")]
 pub mod notes;
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 mod notes_schema;
-// NoteStore ↔ alignment-corpus sync. Lives behind the same gate as
-// `notes` since it talks to the same SQLite schema.
-#[cfg(feature = "treesitter")]
+// NoteStore ↔ alignment-corpus sync. Same schema as `notes`.
+#[cfg(feature = "stores")]
 pub mod notes_sync;
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 pub mod project_docs;
-// ATOS feature + milestone store.
-#[cfg(feature = "treesitter")]
+// ATOS feature + milestone store (rusqlite).
+#[cfg(feature = "stores")]
 pub mod features;
-// ATOS IMPLEMENTATION_PLAN.md index — see `plan_items.rs` for why
-// this is separate from `notes.rs` (different query shape,
-// different regeneration semantics).
-#[cfg(feature = "treesitter")]
+// ATOS IMPLEMENTATION_PLAN.md index (rusqlite).
+#[cfg(feature = "stores")]
 pub mod plan_items;
-// DESIGN.md structural parser — used by the agent (via the
-// `design_signals_extract` MCP tool in sovereign-tools), by
-// sovereign-cli's `project found`/`project plan` for signal-gated
-// question selection, and by solo-mode CLI prompts.
+// DESIGN.md structural parser — uses tree-sitter, so still gated by
+// `treesitter`.
 #[cfg(feature = "treesitter")]
 pub mod design_signals;
 
@@ -153,20 +151,24 @@ pub use scip_graph::{
     ScipRefRecord, ScipSymbolRecord, SymbolRow, SCHEMA_VERSION,
 };
 
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 pub use wikipedia_graph::{
     ArticleRecord as WikipediaArticleRecord, IngestSummary as WikipediaGraphIngestSummary,
     Neighbor as WikipediaNeighbor, StalenessCaution as WikipediaStaleness, WikipediaGraph,
 };
 
-#[cfg(feature = "treesitter")]
+// `watcher_coordinator` re-exports — gated on `stores` since the
+// coordinator depends only on `notify` (and notify lives in
+// `stores`). The actual watcher implementations (lint/test/project
+// index) are still treesitter-gated.
+#[cfg(feature = "stores")]
 pub use update::watcher_coordinator::{
     ActivityCallback, BackgroundWatcher, CoordinatorHandle, WatcherCoordinator, WatcherStatus,
 };
 
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 pub use test_results::TestResultStore;
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 pub use lint_results::LintResultStore;
 #[cfg(feature = "treesitter")]
 pub use update::test_watcher::TestWatcher;
@@ -175,11 +177,11 @@ pub use update::lint_watcher::LintWatcher;
 #[cfg(feature = "treesitter")]
 pub use update::project_index_watcher::ProjectIndexWatcher;
 
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 pub use notes::{NoteRow, NoteScope, NoteSource, NoteStore, ScopeFilter, ToolCallLogRow};
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 pub use project_docs::{DocResult, ProjectDocsStore, find_markdown_files};
-#[cfg(feature = "treesitter")]
+#[cfg(feature = "stores")]
 pub use features::{
     AtosRunRow, AtosToolEvent, FeatureRow, FeatureState, FeatureStore, MilestoneRow,
 };

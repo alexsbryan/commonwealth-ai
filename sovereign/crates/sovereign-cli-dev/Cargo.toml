@@ -1,0 +1,65 @@
+[package]
+name = "sovereign-cli-dev"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Local-dev workbench binary: project lifecycle + code intelligence + MCP tool runner + ATOS workflow."
+
+# Sibling binary to `sovereign-cli`. The workbench: project lifecycle
+# (`project init/status/...`), code-intelligence helpers (`code`),
+# the MCP tool surface (`tools`), and the ATOS workflow on top of it
+# all (`atos`). Renamed 2026-05-22 from `sovereign-cli-atos` to
+# reflect the actual bounded context — ATOS is one feature here, not
+# the binary's identity.
+#
+# Sibling carve-outs:
+#   - sovereign-cli-daemon: daemon lifecycle + setup + service install + doctor
+#   - sovereign-cli-llm: bench / chat / eval / atlas / enrich / mesh / corpus
+
+[[bin]]
+name = "sovereign-cli-dev"
+path = "src/main.rs"
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-inference = { workspace = true }
+sovereign-store = { workspace = true }
+sovereign-tools = { workspace = true, features = ["treesitter"] }
+sovereign-atos = { workspace = true }
+sovereign-mesh = { workspace = true, features = ["treesitter"] }
+sovereign-cli-shared = { workspace = true, features = ["scip"] }
+# `project_cmd::cmd_serve` registers work-atlas claim handlers when
+# the daemon comes up; pulled in directly here rather than via
+# sovereign-tools so the dep is visible in this crate's tree.
+sovereign-work-atlas = { workspace = true }
+commonwealth-state = { path = "../../../commonwealth/crates/commonwealth-state" }
+commonwealth-core = { path = "../../../commonwealth/crates/commonwealth-core" }
+corpus-engine = { workspace = true, features = ["treesitter"] }
+async-trait = { workspace = true }
+axum = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+reqwest = { workspace = true }
+uuid = { workspace = true }
+arc-swap = { workspace = true }
+dirs = "5"
+chrono = { workspace = true }
+sha2 = { workspace = true }
+regex = "1"
+tempfile = "3"
+which = "7"
+hostname = { workspace = true }
+# `atos_cmd::run` reads SQLite directly for one query (open-feature
+# replay extraction). Same dep as sovereign-cli's `awareness` path.
+rusqlite = { version = "0.35", features = ["bundled"] }
+
+# daemon_cmd uses libc::kill / setsid for unix process lifecycle.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+

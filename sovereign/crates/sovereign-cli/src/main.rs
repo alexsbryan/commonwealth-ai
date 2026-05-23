@@ -1,79 +1,52 @@
-mod amend;
+// What's in sovereign-cli now (2026-05-22 split — slices 1-5):
+//   * dev_bin / llm_bin — exec dispatchers into the two sibling
+//     binaries (`sovereign-cli-dev`, `sovereign-cli-llm`).
+//   * Pure delegators that translate the new flat CLI surface
+//     (`sovereign status`, `sovereign drift accept`, etc.) into the
+//     legacy `atos`/`project`/`code` handler arguments before exec'ing.
+//   * Light commands that touch only SQLite stores + filesystem
+//     (notes, claim, reflect, rough-edges, archaeology-eval,
+//     git-archaeology).
+//
+// Slice 1 → sovereign-cli-dev: atos_cmd, atos_plugin.
+// Slice 2 → sovereign-cli-dev: project_cmd, code_cmd, amend, phases,
+//   honesty, observation, project_toml, found, doc_fetcher,
+//   plan_composer, plan_enricher, design_session, design_onboarding,
+//   audit_extract, audit_recover, drift_cmd_orchestrator.
+// Slice 3 → sovereign-cli-dev: tools_cmd.
+// Slice 4 → sovereign-cli-dev: daemon_cmd, doctor_cmd,
+//   install_service_cmd, service_install, setup_cmd, setup_config.
+// Slice 5 → sovereign-cli-llm: bench_cmd, chat_cmd, eval_cmd,
+//   voice_eval, reading_diag_cmd, knowledge_gym_cmd, search_gym_cmd,
+//   gym_judge, atlas_cmd, meta_atlas_cmd, enrich_cmd, newsworthy_cmd,
+//   recipe_cmd, recipe_agent_cmd, recipe_agent_live_trial,
+//   pipeline_cmd, mcp_cmd, alignment_cmd, mesh_cmd,
+//   corpus_catalog_cmd, corpus_scrub_cmd, corpus_snapshot_cmd,
+//   corpus_watch_cmd, worker_pod_provider, REPL Runtime construction.
+
 mod amend_cmd;
-mod atlas_cmd;
-mod atos_cmd;
-mod atos_plugin;
+mod archaeology_eval_cmd;
 mod audit_cmd;
-mod audit_extract;
-mod audit_recover;
+mod daemon_bin;
+mod dev_bin;
 #[cfg(feature = "dev-tools")]
 mod awareness_cmd;
-mod bench_cmd;
 mod charter_cmd;
-mod chat_cmd;
-mod claim_cmd;
-mod code_cmd;
-mod daemon_cmd;
 mod design_cmd;
-mod design_onboarding;
-mod design_session;
-mod archaeology_eval_cmd;
 mod drift_cmd;
-mod drift_cmd_orchestrator;
 mod git_archaeology_cmd;
-mod enrich_cmd;
-mod eval_cmd;
-mod corpus_catalog_cmd;
-mod corpus_scrub_cmd;
-mod meta_atlas_cmd;
-mod corpus_snapshot_cmd;
-mod corpus_watch_cmd;
-mod doc_fetcher;
-mod alignment_cmd;
-mod doctor_cmd;
-mod found;
-mod honesty;
 mod init;
-mod install_service_cmd;
-mod mcp_cmd;
-mod mesh_cmd;
+mod llm_bin;
 mod milestone_cmd;
-mod newsworthy_cmd;
 mod notes_cmd;
-mod observation;
-mod phases;
 mod plan_cmd;
-mod plan_composer;
-mod plan_enricher;
-mod project_cmd;
-mod project_toml;
-mod reading_diag_cmd;
-mod recipe_agent_cmd;
-mod recipe_agent_live_trial;
-mod pipeline_cmd;
-// Ephemeral worker pods — Vast `WorkerProvider` impl + owner-key
-// persistence. See sovereign/docs/EPHEMERAL_WORKER_PODS.md.
-mod worker_pod_provider;
-mod recipe_cmd;
 mod refresh_cmd;
 mod reflect_cmd;
 mod rough_edges_cmd;
-// Shared gym-judge surface (FastInferenceJudge + Verdict +
-// calibration types). Extracted out of search_gym_cmd in the
-// Tool-Mastery framework Phase 4 so the knowledge-gym runner and
-// the wikipedia-learn per-thread judge can share one implementation.
-mod gym_judge;
-mod knowledge_gym_cmd;
-mod search_gym_cmd;
 mod serve_cmd;
-mod service_install;
-mod setup_cmd;
-mod setup_config;
 mod status_cmd;
 mod stop_cmd;
-mod tools_cmd;
 mod util;
-mod voice_eval;
 
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -82,16 +55,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::planner::LlmPlanner;
-use sovereign_core::router::LlmRouter;
-use sovereign_core::runtime::Runtime;
-use sovereign_core::stubs::PassthroughRouter;
 use sovereign_core::traits::{ApprovalChannel, StateStore};
 use sovereign_core::types::*;
-use sovereign_core::{SkillRegistry, ToolRegistry};
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
-use sovereign_store::sqlite::SqliteStateStore;
-use sovereign_tools::shell::ShellTool;
 
 // ─── CLI Approval Channel ──────────────────────────────────────
 
@@ -476,57 +441,19 @@ async fn async_main() {
 
     if let Some(first) = raw_args.first() {
         match first.as_str() {
-            "mesh" => {
-                // The mesh subcommand drives network I/O whose only
-                // user-visible signal is tracing output. Without a
-                // subscriber, `tracing::info!("handshake_sent …")`
-                // vanishes into the void and mesh failures look
-                // identical from outside. Honour RUST_LOG if set,
-                // otherwise show all mesh-layer info lines.
-                util::tracing_init::init_tracing(
-                    "sovereign_cli=info,\
-                     sovereign_mesh=info,\
-                     commonwealth_discovery=info,\
-                     commonwealth_api=info",
-                );
-                let code = mesh_cmd::run_mesh(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "alignment" => {
-                let code = alignment_cmd::run_alignment(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "corpus" => {
-                let code = mesh_cmd::run_corpus(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "meta-atlas" => {
-                let code = meta_atlas_cmd::run_meta_atlas(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "mcp" => {
-                let code = mcp_cmd::run_mcp(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "recipe" => {
-                let code = recipe_cmd::run_recipe(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "pipeline" => {
-                util::tracing_init::init_tracing("sovereign_cli=info,sovereign_pipeline=info");
-                let code = pipeline_cmd::run_pipeline(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "recipe-agent" => {
-                let code = recipe_agent_cmd::run_recipe_agent(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "maintainer" => {
-                let code = recipe_agent_cmd::run_maintainer(&raw_args[1..]).await;
+            // ── LLM / bench / corpus / mesh cluster → sovereign-cli-llm ──
+            // All these moved to the LLM sibling in slice 5. The shim
+            // execs into it without setting up a tracing subscriber —
+            // the sibling's main() installs the appropriate filter for
+            // each verb.
+            "mesh" | "alignment" | "corpus" | "meta-atlas" | "mcp" | "recipe"
+            | "pipeline" | "recipe-agent" | "maintainer" => {
+                let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
             "code" => {
-                let code = code_cmd::run_code(&raw_args[1..]).await;
+                // Moved to the sovereign-cli-dev sibling.
+                let code = dev_bin::exec("code", &raw_args[1..]);
                 std::process::exit(code);
             }
             "init" => {
@@ -574,7 +501,9 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "claim" => {
-                let code = claim_cmd::run(&raw_args[1..]).await;
+                // Moved to sovereign-cli-llm (uses sovereign-mesh +
+                // sovereign-work-atlas, both heavy).
+                let code = llm_bin::exec("claim", &raw_args[1..]);
                 std::process::exit(code);
             }
             "amend" => {
@@ -598,11 +527,9 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "install-service" => {
-                // Phase 4: explicit service registration. Pre-Phase-4
-                // this happened implicitly inside `sovereign setup`;
-                // splitting it lets users run the daemon foreground
-                // first and register only when they're ready.
-                let code = install_service_cmd::run(&raw_args[1..]).await;
+                // Lives in sovereign-cli-daemon alongside
+                // setup_cmd + service_install.
+                let code = daemon_bin::exec("install-service", &raw_args[1..]);
                 std::process::exit(code);
             }
             "refresh" => {
@@ -610,7 +537,8 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "project" => {
-                let code = project_cmd::run_project(&raw_args[1..]).await;
+                // Moved to the sovereign-cli-dev sibling.
+                let code = dev_bin::exec("project", &raw_args[1..]);
                 std::process::exit(code);
             }
             "reflect" => {
@@ -618,7 +546,10 @@ async fn async_main() {
                 std::process::exit(code);
             }
             "atos" => {
-                let code = atos_cmd::run_atos(&raw_args[1..]).await;
+                // Lives in the `sovereign-cli-dev` sibling binary now.
+                // exec() replaces the current process on Unix; child
+                // exit on other platforms.
+                let code = dev_bin::exec("atos", &raw_args[1..]);
                 std::process::exit(code);
             }
             "awareness" => {
@@ -640,504 +571,63 @@ async fn async_main() {
                 }
             }
             "tools" => {
-                let code = tools_cmd::run_tools(&raw_args[1..]).await;
+                // Moved to the sovereign-cli-dev sibling.
+                let code = dev_bin::exec("tools", &raw_args[1..]);
                 std::process::exit(code);
             }
-            "enrich" => {
-                // Phase 1 / atlas runs spend minutes inside one
-                // `/v1/chat/completions` call. Without a subscriber the
-                // inference client's heartbeat + per-request timing
-                // logs silently disappear and a stuck call looks
-                // identical to a slow one.
-                util::tracing_init::init_tracing(
-                    "sovereign_cli=info,\
-                     corpus_engine=info",
-                );
-                let code = enrich_cmd::run_enrich(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "atlas" => {
-                let code = atlas_cmd::run_atlas(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "eval" => {
-                let code = eval_cmd::run_eval(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "voice" => {
-                util::tracing_init::init_tracing("sovereign_cli=info");
-                let code = voice_eval::run_voice_eval(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "bench" => {
-                let code = bench_cmd::run_bench(&raw_args[1..]).await;
+            // ── LLM cluster (continued) → sovereign-cli-llm ──
+            "enrich" | "atlas" | "eval" | "voice" | "bench" | "search-gym"
+            | "knowledge-gym" | "chat" | "reading-diag" | "newsworthy" => {
+                let code = llm_bin::exec(first, &raw_args[1..]);
                 std::process::exit(code);
             }
             "agent-bench" => {
                 // Eight-problem coding battery; subprocess-driven
                 // pi / opencode / codex runners. See SYSTEM_OVERVIEW §11
                 // and `sovereign/crates/sovereign-agent-bench/`.
+                // Stays in sovereign-cli for now — light dep surface.
                 let code = sovereign_agent_bench::run_agent_bench(&raw_args[1..]).await;
                 std::process::exit(code as i32);
-            }
-            "search-gym" => {
-                util::tracing_init::init_tracing("sovereign_cli=info");
-                let code = search_gym_cmd::run_search_gym(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "knowledge-gym" => {
-                util::tracing_init::init_tracing("sovereign_cli=info");
-                let code = knowledge_gym_cmd::run_knowledge_gym(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "chat" => {
-                let code = chat_cmd::run_chat(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "reading-diag" => {
-                // No tracing init — reading-diag is meant to be
-                // pipeable (`--format json | jq ...`), so we keep
-                // stdout clean. Set RUST_LOG manually if you want
-                // corpus-engine internals on stderr.
-                let code = reading_diag_cmd::run(&raw_args[1..]).await;
-                std::process::exit(code);
             }
             "nudge" => {
                 let code = run_nudge(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "doctor" => {
-                let code = doctor_cmd::run_doctor(&raw_args[1..]).await;
-                std::process::exit(code);
-            }
-            "newsworthy" => {
-                let code = newsworthy_cmd::run(&raw_args[1..]).await;
+                // ScipGraph integrity probe + health check lives in
+                // sovereign-cli-daemon alongside the daemon it
+                // diagnoses.
+                let code = daemon_bin::exec("doctor", &raw_args[1..]);
                 std::process::exit(code);
             }
             "setup" => {
-                util::tracing_init::init_tracing("sovereign_cli=info");
-                let code = setup_cmd::run_setup(&raw_args[1..]).await;
+                // Hardware planner + model manifest live in
+                // sovereign-cli-daemon — same binary that hosts the
+                // daemon they configure.
+                let code = daemon_bin::exec("setup", &raw_args[1..]);
                 std::process::exit(code);
             }
             "daemon" => {
-                // The daemon run loop depends on tracing for visibility
-                // into model load, mesh resume, and gossip. Initialize a
-                // subscriber up front so launchd/systemd can tail it.
-                //
-                // `corpus_engine=info` is load-bearing for the
-                // wikipedia-newsworthy watcher specifically: its
-                // tick / portal-ingest / tracked-state events live in
-                // `corpus_engine::update::newsworthy_watcher`, and
-                // without this entry every `newsworthy.tick` /
-                // `newsworthy.portal_ingested` line was being dropped
-                // at the subscriber — masking whether the watcher was
-                // actually running.
-                util::tracing_init::init_tracing(
-                    "sovereign_cli=info,\
-                     sovereign_core=info,\
-                     sovereign_mesh=info,\
-                     sovereign_inference=info,\
-                     corpus_engine=info,\
-                     commonwealth_discovery=info,\
-                     commonwealth_api=info",
-                );
-                let code = daemon_cmd::run(&raw_args[1..]).await;
+                // Long-running host process. Its main() applies the
+                // structured-tracing filter for launchd / systemd
+                // before dispatch.
+                let code = daemon_bin::exec("daemon", &raw_args[1..]);
                 std::process::exit(code);
             }
             _ => {}
         }
     }
 
-    let args = match parse_args() {
-        Some(a) => a,
-        None => {
-            print_usage();
-            std::process::exit(1);
-        }
-    };
-
-    // Load inference.
-    eprintln!("Quick responder: {}", args.model.display());
-    if let Some(ref p) = args.primary_model {
-        eprintln!("Main responder:  {}", p.display());
-    }
-
-    let inference = match EmbeddedLlamaCpp::load_dual(
-        &args.model,
-        args.primary_model.as_deref(),
-        2048,
-        None,
-    ) {
-        Ok(p) => Arc::new(p),
-        Err(e) => {
-            eprintln!("Failed to load model: {e}");
-            std::process::exit(1);
-        }
-    };
-
-    if args.primary_model.is_some() {
-        inference.start_idle_monitor(60);
-    }
-
-    // Open database. Two handles: the concrete `Arc<SqliteStateStore>`
-    // used below to install the KnowledgeView manager as the store's
-    // observer, and the `Arc<dyn StateStore>` used by the runtime +
-    // tools. Both point at the same store.
-    let db_path = args.data_dir.join("sovereign.db");
-    eprintln!("Database: {}", db_path.display());
-    let store_concrete: Arc<SqliteStateStore> = match SqliteStateStore::open(&db_path) {
-        Ok(s) => Arc::new(s),
-        Err(e) => {
-            eprintln!("Failed to open database: {e}");
-            std::process::exit(1);
-        }
-    };
-    let store: Arc<dyn StateStore> = store_concrete.clone();
-
-    // Build components.
-    let inference_arc: Arc<dyn sovereign_core::traits::InferenceProvider> = inference;
-
-    // Load skills.
-    let mut skills = SkillRegistry::new();
-    let skills_dir = args.skills_dir.unwrap_or_else(|| {
-        dirs::home_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join(".sovereign")
-            .join("skills")
-    });
-    if skills_dir.exists() {
-        skills.load_and_register(&skills_dir);
-        skills.activate_all();
-        eprintln!("Skills: {} loaded from {}", skills.list().len(), skills_dir.display());
-    } else {
-        eprintln!("Skills: none ({})", skills_dir.display());
-    }
-    // Also check for bundled skills next to the binary.
-    let bundled_skills = std::env::current_dir()
-        .unwrap_or_default()
-        .join("skills");
-    if bundled_skills.exists() && bundled_skills != skills_dir {
-        skills.load_and_register(&bundled_skills);
-        skills.activate_all();
-        eprintln!("Skills: +{} bundled", skills.list().len());
-    }
-    let skills = Arc::new(skills);
-
-    let router: Box<dyn sovereign_core::traits::Router> = if args.use_router {
-        eprintln!("Router: LLM-based classification");
-        Box::new(LlmRouter::new(
-            Arc::clone(&inference_arc),
-            Arc::clone(&store),
-            Arc::clone(&skills),
-        ))
-    } else {
-        eprintln!("Router: passthrough");
-        Box::new(PassthroughRouter)
-    };
-
-    let planner = LlmPlanner::new(Arc::clone(&inference_arc), Arc::clone(&skills));
-
-    // Ingest documents if requested.
-    if let Some(ref ingest_path) = args.ingest {
-        eprintln!("Ingesting documents from: {}", ingest_path.display());
-        match sovereign_tools::rag::ingest::ingest_directory(
-            ingest_path,
-            store.as_ref(),
-            Some(inference_arc.as_ref()),
-        )
-        .await
-        {
-            Ok(result) => {
-                eprintln!(
-                    "Ingestion complete: {} files, {} chunks ({} skipped)",
-                    result.files_processed, result.chunks_created, result.files_skipped,
-                );
-            }
-            Err(e) => {
-                eprintln!("Ingestion failed: {e}");
-            }
-        }
-    }
-
-    // Construct a shared CorpusEngine for the epistemic tools.
-    // The recipes dir is where user-supplied recipes live; the index dir
-    // is the shared on-disk corpus directory used by both Sovereign and
-    // Commonwealth.
-    let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
-    let recipes_dir = home.join(".sovereign").join("recipes");
-    let indexes_dir = home.join(".sovereign").join("indexes");
-    let embed_fn = sovereign_tools::corpus::inference_to_embed_fn(Arc::clone(&inference_arc));
-    let inference_fn = sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&inference_arc));
-    // Derive the embed model stem from whatever the REPL loaded:
-    // prefer `SetupConfig.models.embed` (the daemon's canonical
-    // source), fall back to the `--model` path we were invoked
-    // with (which in the REPL context is the quick-responder
-    // slot — not technically the embed slot, but at least a stable
-    // label). A missing stem becomes `"unknown-embed"`; the engine
-    // will refuse to `ingest()` with an empty string so this path
-    // still surfaces the error rather than writing a bogus label.
-    let repl_embed_stem = sovereign_core::setup_config::SetupConfig::load()
-        .ok()
-        .and_then(|c| c.models.embed.file_stem().and_then(|s| s.to_str()).map(String::from))
-        .or_else(|| {
-            args.model
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .map(String::from)
-        })
-        .unwrap_or_else(|| "unknown-embed".to_string());
-    let corpus_engine = Arc::new(
-        corpus_engine::CorpusEngine::new(recipes_dir, indexes_dir, embed_fn)
-            .with_embedding_model(&repl_embed_stem)
-            .with_inference_fn(inference_fn.clone()),
-    );
-
-    // Register the "pdf" custom extractor so recipes declaring
-    // `extract = { type = "custom", kind = "pdf" }` can ingest PDF
-    // documents downloaded by `http_api + follow`. Implementation
-    // lives in sovereign-tools (uses pdf-extract) so corpus-engine
-    // stays free of the heavy PDF dep. Required by olc-opinions and
-    // scotus-opinions; harmless when no PDF recipe runs.
-    sovereign_tools::local_corpus::recipe_extractor::register_pdf_extractor(
-        corpus_engine.as_ref(),
-    );
-
-    // KnowledgeView: register the SQLite acquirer, construct the
-    // manager (excluding inner-work conversations from the
-    // conversational view), install it as the post-commit observer,
-    // and run initial ingest of empty views. See the server binary
-    // for the full rationale; this is the CLI mirror.
-    // Gated on `--no-knowledge-view` CLI flag (default enabled).
-    // Mirror of the desktop Settings toggle + server config section.
-    // When disabled, skip ingest, observer install, and the landscape-
-    // digest splice entirely.
-    let knowledge_view_manager = if args.knowledge_view_enabled {
-        let local_only_skill_ids = skills.local_only_skill_ids();
-        eprintln!(
-            "knowledge_view: enabled; {} local-only skill(s) excluded from conversational corpus",
-            local_only_skill_ids.len()
-        );
-        // Project-local ATOS store paths — `.sovereign/features.db`
-        // + `.sovereign/project.toml` at the current repo root.
-        // Mirrors `sovereign atos` subcommand layout. Used by the
-        // splice path to compose initiative entities with phase + drift
-        // annotations on the strategic digest.
-        let project_sov_dir = std::env::current_dir()
-            .unwrap_or_else(|_| PathBuf::from("."))
-            .join(".sovereign");
-        let features_db_path = project_sov_dir.join("features.db");
-        let project_toml_path = project_sov_dir.join("project.toml");
-        let mut mgr = sovereign_tools::knowledge_view::KnowledgeViewManager::new(
-            Arc::clone(&corpus_engine),
-            inference_fn.clone(),
-            db_path.clone(),
-            local_only_skill_ids,
-        )
-        .await;
-        if features_db_path.exists() {
-            mgr = mgr.with_features_db_path(features_db_path);
-        }
-        if project_toml_path.exists() {
-            mgr = mgr.with_project_toml_path(project_toml_path);
-        }
-        let mgr = Arc::new(mgr);
-        store_concrete.set_observer(
-            mgr.clone() as sovereign_core::observer::SharedStateStoreObserver,
-        );
-        // Background init — see the server binary for rationale.
-        let _init_handle = Arc::clone(&mgr).spawn_init();
-        Some(mgr)
-    } else {
-        eprintln!(
-            "knowledge_view: disabled via --no-knowledge-view; landscape digests skipped"
-        );
-        None
-    };
-
-    // Register tools.
-    let mut tools = ToolRegistry::new();
-    tools.register(Box::new(ShellTool));
-    tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference_arc),
-    )));
-    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(
-        Arc::clone(&corpus_engine),
-    )));
-    tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
-        Arc::clone(&corpus_engine),
-    )));
-    // Code Intelligence tools — active as soon as any code corpus is
-    // indexed via `sovereign code index`. They always register; with no
-    // code corpora they return "no results" honestly rather than failing.
-    // SymbolLookupTool now reads SCIP directly, so build an empty
-    // in-memory graph here — projects/daemon callers attach a real
-    // merged handle via the dedicated `project serve` / `daemon`
-    // entry points. The CLI's `chat` path is a thin shell, not a
-    // long-running daemon, so a stubbed graph is honest: callers
-    // that need real SCIP go through `sovereign chat` /
-    // `sovereign daemon`, which wire it up properly.
-    let symbols_graph: sovereign_tools::ScipGraphHandle = Arc::new(
-        arc_swap::ArcSwap::from_pointee(
-            corpus_engine::ScipGraph::open_in_memory("cli-stub")
-                .expect("in-memory ScipGraph for CLI"),
-        ),
-    );
-    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-        Arc::clone(&corpus_engine),
-        Arc::clone(&symbols_graph),
-    )));
-    tools.register(Box::new(
-        sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
-            .with_inference(Arc::clone(&inference_arc)),
-    ));
-    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-        Arc::clone(&corpus_engine),
-    )));
-    // Select search backend: Tavily > Brave > DuckDuckGo (free default).
-    let search_backend = if let Some(ref key) = args.tavily_api_key {
-        eprintln!("Search: Tavily");
-        sovereign_tools::web::search::SearchBackend::Tavily {
-            api_key: key.clone(),
-        }
-    } else if let Some(ref key) = args.brave_api_key {
-        eprintln!("Search: Brave");
-        sovereign_tools::web::search::SearchBackend::Brave {
-            api_key: key.clone(),
-        }
-    } else {
-        eprintln!("Search: DuckDuckGo (free)");
-        sovereign_tools::web::search::SearchBackend::DuckDuckGo
-    };
-    tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
-        Arc::clone(&store),
-        Arc::clone(&inference_arc),
-        search_backend,
-    )));
-    tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
-
-    // Recipe-authoring tools — let the chat LLM run the
-    // author → validate → test → publish loop documented in the
-    // recipe-authoring platform plan. All five tools are
-    // allowlisted to ~/.sovereign/recipes/ via Permission::RecipeAuthoring,
-    // so the operator approves "this agent can iterate on recipes"
-    // once instead of granting blanket FileWrite.
-    tools.register(Box::new(sovereign_tools::RecipeReadTool::new()));
-    tools.register(Box::new(sovereign_tools::RecipeWriteTool::new()));
-    tools.register(Box::new(sovereign_tools::RecipeWriteStructuredTool::new()));
-    tools.register(Box::new(sovereign_tools::RecipeValidateTool::new()));
-    tools.register(Box::new(sovereign_tools::RecipeTestTool::new()));
-    tools.register(Box::new(sovereign_tools::RegistryBrowseTool));
-
-    // Recipe-author project tools — DecisionLog / Checkpoint /
-    // CapabilityRequest. These funnel through NoteStore +
-    // FeatureStore for state, so we open both stores under
-    // ~/.sovereign/ and pass them into the tool constructors. Same
-    // permission gate (RecipeAuthoring) as the five above.
-    let recipe_notes_path = home.join(".sovereign").join("notes.db");
-    let recipe_features_path = home.join(".sovereign").join("features.db");
-    if let (Ok(rn), Ok(rf)) = (
-        corpus_engine::NoteStore::open(&recipe_notes_path),
-        corpus_engine::FeatureStore::open(&recipe_features_path),
-    ) {
-        let rn = Arc::new(rn);
-        let rf = Arc::new(rf);
-        tools.register(Box::new(sovereign_tools::DecisionLogTool::with_notes(
-            Arc::clone(&rn),
-        )));
-        tools.register(Box::new(sovereign_tools::CheckpointTool::with_stores(
-            Arc::clone(&rn),
-            Arc::clone(&rf),
-        )));
-        tools.register(Box::new(
-            sovereign_tools::CapabilityRequestTool::with_stores(
-                Arc::clone(&rn),
-                Arc::clone(&rf),
-            ),
-        ));
-    } else {
-        eprintln!(
-            "Recipe-author state stores unavailable; \
-             DecisionLog/Checkpoint/CapabilityRequest will not be registered."
-        );
-    }
-
-    eprintln!("Tools: {} registered", tools.count());
-
-    let approval = Arc::new(CliApprovalChannel::new(Arc::clone(&store)));
-
-    let mut runtime = Runtime::new(
-        inference_arc,
-        router,
-        Box::new(planner),
-        Arc::new(tools),
-        store.clone(),
-        skills,
-        approval,
-        sovereign_core::types::InferenceConfig::default(),
-    )
-    .with_corpus_engine(Arc::clone(&corpus_engine));
-    // Install the landscape-digest provider only when KnowledgeView
-    // is enabled. When disabled, Runtime.landscape_digests stays None
-    // and the splice path is a no-op — identical to pre-KnowledgeView
-    // behaviour.
-    if let Some(ref mgr) = knowledge_view_manager {
-        runtime = runtime.with_landscape_digests(
-            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>,
-        );
-    }
-
-    // Resume or start conversation.
-    let conversation_id = match store.list_conversations(1, 0).await {
-        Ok(convos) if !convos.is_empty() => {
-            eprintln!("Resuming conversation");
-            convos[0].id.clone()
-        }
-        _ => {
-            eprintln!("Starting new conversation");
-            uuid::Uuid::new_v4().to_string()
-        }
-    };
-
-    eprintln!("Ready. Type a message (or \"quit\" to exit).\n");
-
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-
-    loop {
-        print!("> ");
-        stdout.flush().unwrap();
-
-        let mut line = String::new();
-        if stdin.lock().read_line(&mut line).unwrap() == 0 {
-            break;
-        }
-
-        let input = line.trim();
-        if input.is_empty() {
-            continue;
-        }
-        if input == "quit" || input == "exit" {
-            eprintln!("Extracting memories...");
-            let _ = runtime.end_conversation(&conversation_id).await;
-            break;
-        }
-
-        match runtime.handle_message(input, &conversation_id).await {
-            Ok(response) => {
-                if let Some(ref task) = response.task {
-                    eprintln!(
-                        "\n[task] {} steps, status: {:?}",
-                        task.completed_steps.len(),
-                        task.status,
-                    );
-                }
-                println!("\n{}\n", response.message.content);
-            }
-            Err(e) => {
-                eprintln!("Error: {e}\n");
-            }
-        }
-    }
+    // No recognised subcommand. Pre-2026-05-22 sovereign-cli used to
+    // fall through here into a full REPL loop that constructed an
+    // EmbeddedLlamaCpp, the KnowledgeView manager, the tool registry,
+    // etc. — about 380 lines of Runtime construction. That path moved
+    // to `sovereign-cli-llm` (the `chat` subcommand) along with every
+    // other LLM-touching surface, so the dispatcher binary stops
+    // linking llama-cpp-2 + lance.
+    //
+    // Bare `sovereign` now prints usage and exits. Users who want the
+    // interactive shell type `sovereign chat`.
+    print_usage();
+    std::process::exit(1);
 }
-// trigger

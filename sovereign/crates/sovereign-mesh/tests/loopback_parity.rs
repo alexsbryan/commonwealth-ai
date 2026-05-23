@@ -1,4 +1,11 @@
+#![cfg(feature = "treesitter")]
 //! Cross-router loopback parity test.
+//!
+//! This test exercises both the mesh's loopback-only routers AND the
+//! `project_http` / `reindexer` SCIP-graph routers; the latter live
+//! behind the `treesitter` feature, so the entire test is gated to
+//! match. `cargo test -p sovereign-mesh --features treesitter` runs
+//! it; the default `cargo test -p sovereign-mesh` skips it.
 //!
 //! Every loopback-only router in this crate layers the same
 //! `loopback_guard::loopback_only` middleware AND a per-handler

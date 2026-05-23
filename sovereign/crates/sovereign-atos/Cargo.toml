@@ -7,8 +7,10 @@ license.workspace = true
 [lib]
 
 [dependencies]
-# Stores the orchestrator operates over.
-corpus-engine = { workspace = true, features = ["treesitter"] }
+# Stores the orchestrator operates over. `treesitter` dropped
+# 2026-05-22 — sovereign-atos uses NoteStore/FeatureStore/EmbedFn,
+# none of which are treesitter-gated.
+corpus-engine = { workspace = true }
 
 # Optional Fast-slot classification pass in teardown. The library
 # works without an InferenceProvider — the caller passes None.

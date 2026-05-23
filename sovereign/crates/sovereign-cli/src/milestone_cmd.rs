@@ -40,7 +40,7 @@ pub async fn run(args: &[String]) -> i32 {
             return 2;
         };
         let n_str = n.to_string();
-        return crate::project_cmd::cmd_phase_pass(&[n_str]).await;
+        return crate::dev_bin::exec("project-phase-pass", &[n_str]);
     }
 
     // Feature path: `sovereign milestone <feature-id> <N>`.
@@ -70,7 +70,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
     }
 
-    crate::atos_cmd::milestone::cmd_end_milestone(&forwarded).await
+    crate::dev_bin::exec("atos-milestone-end", &forwarded)
 }
 
 const HELP: crate::util::help::Help = crate::util::help::Help {

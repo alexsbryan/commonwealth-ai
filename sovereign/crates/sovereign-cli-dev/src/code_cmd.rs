@@ -641,18 +641,10 @@ fn resolve_cwd_repo_root() -> Result<PathBuf, String> {
     ))
 }
 
-pub(crate) fn current_branch(repo_root: &Path) -> Option<String> {
-    let out = std::process::Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "HEAD"])
-        .current_dir(repo_root)
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if s.is_empty() { None } else { Some(s) }
-}
+// Re-export from `sovereign-cli-shared::repo` so `daemon_cmd` and other
+// in-crate callers keep working through the existing `code_cmd::current_branch`
+// path. The new home is the canonical spot.
+pub(crate) use sovereign_cli_shared::repo::current_branch;
 
 fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))

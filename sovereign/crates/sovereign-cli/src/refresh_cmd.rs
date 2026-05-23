@@ -3,5 +3,5 @@
 //! Renamed from `sovereign project refresh` per the CLI refactor plan.
 
 pub async fn run(args: &[String]) -> i32 {
-    crate::project_cmd::cmd_refresh(args).await
+    crate::dev_bin::exec("project-refresh", args)
 }

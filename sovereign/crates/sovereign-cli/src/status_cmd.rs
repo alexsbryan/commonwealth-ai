@@ -10,5 +10,5 @@
 //! without surprises.
 
 pub async fn run(args: &[String]) -> i32 {
-    crate::project_cmd::cmd_status(args).await
+    crate::dev_bin::exec("project-status", args)
 }

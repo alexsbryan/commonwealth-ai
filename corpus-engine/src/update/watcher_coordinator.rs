@@ -31,7 +31,23 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::error::{Error, Result};
-use crate::extractors::code::is_source_file;
+
+/// True iff the path has an extension that maps to a tracked source-file
+/// language. Inlined here so `watcher_coordinator` (which lives in the
+/// `stores` feature) doesn't pull `extractors::code` — that module is
+/// the full tree-sitter extractor and stays under `treesitter`.
+///
+/// The extension list mirrors `extractors::code::all_languages()`'s
+/// `extensions` arrays; a test in that module pins the two in sync.
+fn is_source_file(path: &std::path::Path) -> bool {
+    const TRACKED_EXTS: &[&str] = &[
+        "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "go", "py",
+    ];
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| TRACKED_EXTS.contains(&e))
+        .unwrap_or(false)
+}
 
 // ─── Status ───────────────────────────────────────────────────────────────────
 

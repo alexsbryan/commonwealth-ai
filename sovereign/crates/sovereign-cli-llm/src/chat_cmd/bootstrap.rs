@@ -272,28 +272,11 @@ pub async fn build_session_with_skills(
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
-    // SymbolLookupTool now backs lookups via SCIP. The REPL doesn't
-    // attach a long-lived merged graph; stub one in-memory so the
-    // tool registers cleanly. Real SCIP-backed lookups go through
-    // `sovereign daemon`, which builds the merged graph from
-    // ~/.sovereign/indexes/*/scip_graph.db.
-    let symbols_graph: sovereign_tools::ScipGraphHandle = Arc::new(
-        arc_swap::ArcSwap::from_pointee(
-            corpus_engine::ScipGraph::open_in_memory("chat-stub")
-                .expect("in-memory ScipGraph for chat"),
-        ),
-    );
-    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-        Arc::clone(&corpus_engine),
-        Arc::clone(&symbols_graph),
-    )));
-    tools.register(Box::new(
-        sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
-            .with_inference(Arc::clone(&inference)),
-    ));
-    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-        Arc::clone(&corpus_engine),
-    )));
+    // Code-intelligence tools previously registered here against an
+    // in-memory stub ScipGraph. Dropped 2026-05-22 along with the
+    // REPL's treesitter dep — real SCIP queries go through
+    // `sovereign daemon` (sovereign-cli-atos), which builds the
+    // merged graph from ~/.sovereign/indexes/*/scip_graph.db.
     tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
         Arc::clone(&store),
         Arc::clone(&inference),

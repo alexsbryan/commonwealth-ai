@@ -18,8 +18,10 @@ pub mod capabilities;
 pub mod commit_harvest;
 pub mod daemon;
 pub mod loopback_guard;
+#[cfg(feature = "treesitter")]
 pub mod project_http;
 pub mod projects;
+#[cfg(feature = "treesitter")]
 pub mod reindexer;
 pub mod supervised_task;
 pub mod deep_link;

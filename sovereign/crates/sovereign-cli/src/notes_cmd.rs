@@ -31,7 +31,7 @@ pub async fn run(args: &[String]) -> i32 {
 
     match args.first().map(String::as_str) {
         Some("add") => cmd_add(&args[1..]).await,
-        Some("promote") => crate::atos_cmd::status::cmd_promote(&args[1..]).await,
+        Some("promote") => crate::dev_bin::exec("atos-status-promote", &args[1..]),
         _ => {
             // Default + filter flags: forward to the canonical
             // reflection view (without the deprecation banner —
@@ -223,3 +223,11 @@ const HELP: crate::util::help::Help = crate::util::help::Help {
         ),
     ],
 };
+
+
+
+
+
+
+
+

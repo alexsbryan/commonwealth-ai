@@ -19,7 +19,14 @@ sovereign-atos = { path = "../../../sovereign/crates/sovereign-atos" }
 # Shared tool manifest — the tool_injector middleware pulls the
 # canonical ATOS tool descriptors from here so schemas can't drift
 # from the tool implementations.
-sovereign-tools = { path = "../../../sovereign/crates/sovereign-tools", features = ["treesitter"] }
+# `treesitter` feature dropped 2026-05-22 (Option B refactor). The
+# previous reason — `sovereign_tools::manifest::atos_critical_descriptors`
+# constructs every tool including the treesitter-gated code-intel
+# tools — went away when tool_injector + context_injector moved to
+# constructor-injected descriptors. commonwealth-api's remaining
+# sovereign-tools usages (atlas_peer_advice, atlas_postinstall,
+# atlas_status, notes::response_mine) are not treesitter-gated.
+sovereign-tools = { path = "../../../sovereign/crates/sovereign-tools" }
 sovereign-core  = { path = "../../../sovereign/crates/sovereign-core" }
 axum = { workspace = true }
 tokio = { workspace = true }

@@ -23,9 +23,9 @@ pub async fn run(args: &[String]) -> i32 {
     //   narrative-vs-code drift orchestrator (this session's work).
     // Anything else routes to spec diff.
     match args.first().map(String::as_str) {
-        Some("accept") => crate::atos_cmd::spec::cmd_spec_accept(&args[1..]).await,
-        Some("detect") => crate::drift_cmd_orchestrator::cmd_detect(&args[1..]).await,
-        Some(_) => crate::atos_cmd::spec::cmd_spec_diff(args).await,
+        Some("accept") => crate::dev_bin::exec("atos-spec-accept", &args[1..]),
+        Some("detect") => crate::dev_bin::exec("drift-detect", &args[1..]),
+        Some(_) => crate::dev_bin::exec("atos-spec-diff", args),
         None => {
             // Phase 1: no-feature form is unimplemented — the
             // multi-feature walker lands in Phase 5 alongside the

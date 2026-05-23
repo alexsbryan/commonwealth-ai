@@ -20,7 +20,10 @@
 //! sidecar so the drift-report renderer can fold them into one
 //! "Internal" section without caring which detector found them.
 
-#![cfg(feature = "treesitter")]
+// `rough_edges` is a pure-text scanner: walkdir + regex over source
+// trees, no tree-sitter parsing. Gated by `stores` since that's the
+// feature carrying walkdir post-2026-05-22.
+#![cfg(feature = "stores")]
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -261,6 +264,11 @@ fn marker_severity(m: MarkerKind) -> Severity {
 /// every Rust source file. Reuses [`crate::extractors::code::CodeExtractor`]
 /// for the per-symbol parse so doc/signature/body slicing is
 /// already done.
+///
+/// Gated on `treesitter` because the CodeExtractor uses tree-sitter
+/// parsing. Callers without that feature should call `scan_all`,
+/// which conditionally skips the doc-drift tier.
+#[cfg(feature = "treesitter")]
 pub fn scan_doc_drift(source_root: &Path) -> Vec<RoughEdgeFinding> {
     use crate::extractors::code::CodeExtractor;
     let extractor = CodeExtractor::default();
@@ -362,7 +370,10 @@ pub fn scan_doc_drift(source_root: &Path) -> Vec<RoughEdgeFinding> {
 /// CLI both use this.
 pub fn scan_all(source_root: &Path) -> Vec<RoughEdgeFinding> {
     let mut all = scan_markers(source_root);
-    all.extend(scan_doc_drift(source_root));
+    #[cfg(feature = "treesitter")]
+    {
+        all.extend(scan_doc_drift(source_root));
+    }
     all.extend(scan_absolute_user_paths(source_root));
     all.extend(scan_zero_tracing(source_root));
     all.sort_by(|a, b| {

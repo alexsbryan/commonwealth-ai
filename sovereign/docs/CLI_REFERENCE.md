@@ -1,6 +1,6 @@
 # CLI Reference
 
-Full flag and subcommand reference for `sovereign-cli`. For a walk-through of the three-command workflow (`setup` / `project init` / `mesh create`), see the [README](../README.md). Every subcommand also accepts `--help` for per-command detail.
+Full flag and subcommand reference for the `sovereign` CLI. For a walk-through of the three-command workflow (`setup` / `project init` / `mesh create`), see the [README](../README.md). Every subcommand also accepts `--help` for per-command detail.
 
 ← [back to README](../README.md)
 
@@ -8,28 +8,22 @@ Full flag and subcommand reference for `sovereign-cli`. For a walk-through of th
 
 ```sh
 sovereign <subcommand> [flags]
-sovereign --model <path.gguf> [options]   # legacy interactive REPL
 ```
 
-Run `sovereign --help` for the live list of subcommands.
+Run `sovereign --help` for the live list of subcommands. There is no interactive REPL — bare `sovereign` prints usage and exits; use `sovereign chat` for an interactive shell.
 
-## REPL-mode flags
+## Binary layout (2026-05-22)
 
-When invoked without a subcommand, `sovereign` starts an interactive terminal REPL. Every flag is optional except `--model`:
+The user types `sovereign <verb>` and a thin dispatcher routes into one of four binaries based on the verb. Same UX as before; faster builds because editing one binary's code doesn't recompile the others.
 
-| Flag | Default | Description |
+| Binary | Hosts | Why split |
 |---|---|---|
-| `--model <path>` | *required* | Fast/default GGUF model |
-| `--primary-model <path>` | same as `--model` | Larger model for deep reasoning |
-| `--data-dir <path>` | `data` | Database and downloads directory |
-| `--skills-dir <path>` | `~/.sovereign/skills` | User skills directory |
-| `--router` | off | Enable LLM-based intent routing |
-| `--ingest <path>` | — | Ingest documents from a directory before REPL |
-| `--brave-api-key <key>` | — | Use Brave Search |
-| `--tavily-api-key <key>` | — | Use Tavily Search |
-| `--no-knowledge-view` | enabled | Disable KnowledgeView landscape digests |
+| `sovereign-cli` | Dispatcher + light delegators: `notes`, `status`, `drift`, `audit`, `claim`, `charter`, `amend`, `design`, `plan`, `init`, `milestone`, `refresh`, `reflect`, `rough-edges`, `archaeology-eval`, `git-archaeology`, `agent-bench`, `nudge`, `serve`, `stop` | Pure-FS + SQLite. No LLM dep, no tree-sitter, no lance. Fast leaf edits (~9s release). |
+| `sovereign-cli-daemon` | `daemon`, `setup`, `install-service`, `doctor` | Long-running host process + lifecycle setup. Rarely changes; isolating it means an `atos`/`project` edit doesn't force a daemon binary rebuild. |
+| `sovereign-cli-dev` | `atos`, `project`, `code`, `tools` (workbench) | Local-dev workbench: project lifecycle, code intelligence, MCP tool runner, ATOS workflow. |
+| `sovereign-cli-llm` | `bench`, `chat`, `eval`, `voice`, `reading-diag`, `atlas`, `meta-atlas`, `enrich`, `recipe`, `recipe-agent`, `maintainer`, `pipeline`, `mcp`, `alignment`, `mesh`, `corpus`, `knowledge-gym`, `search-gym`, `newsworthy` | Model-interaction layer: anything that holds a chat connection or runs a bench loop. Heaviest crate (llama-cpp-2, lance, every grammar). |
 
-Without `--router`, every message gets a direct response. With it, Sovereign classifies intent — simple questions use the fast model, complex requests trigger multi-step planning.
+Discovery: each sibling is located at `current_exe()`'s parent dir; override with `SOVEREIGN_CLI_DAEMON_BIN` / `SOVEREIGN_CLI_DEV_BIN` / `SOVEREIGN_CLI_LLM_BIN`. On Unix the shim execs into the sibling (same PID, no shell interposition); other platforms spawn-and-wait.
 
 ## Subcommand reference
 
@@ -402,13 +396,14 @@ Related project-layer commands (under `sovereign project`) for the charter-level
 
 ### `sovereign daemon`
 
-Internal long-running service, managed by launchd (macOS) or systemd (Linux). You don't normally invoke this directly — `sovereign setup` registers it.
+Long-running service, managed by launchd (macOS) or systemd (Linux). Lives in the `sovereign-cli-daemon` sibling binary; `sovereign setup` registers it with the OS service manager. You don't normally invoke this directly.
 
 | Subcommand | Description |
 |---|---|
 | `run` | Run in the foreground; exits on SIGINT/SIGTERM |
+| `start` / `stop` / `status` / `restart` | Lifecycle management against the installed service |
 
-Logs: `~/.sovereign/logs/daemon.log`.
+Logs: `~/.sovereign/logs/daemon.log`. Rotated in-process — copy-truncate, 10 MiB cap, 5 backups, 30-min sweep loop; preserves the inode for launchd-held FDs.
 
 ## HTTP endpoints
 
