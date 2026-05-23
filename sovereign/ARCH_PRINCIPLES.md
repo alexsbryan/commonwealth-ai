@@ -181,7 +181,6 @@ The pattern:
 
 Current outliers (all > 5000 lines):
 
-- `sovereign-core/src/runtime.rs` (~10800 lines) — the runtime hub.
 - `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) — the project subcommand surface. Moved out of `sovereign-cli` in the 2026-05-22 binary split; still wants an in-file §3.2 split.
 - `sovereign-cli-daemon/src/daemon_cmd.rs` (~3300 lines) — the daemon Runtime construction. Same story — moved binaries, still wants an in-file split.
 - `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) — ATOS lifecycle dispatcher.
@@ -192,9 +191,13 @@ All are listed in `SYSTEM_OVERVIEW.md` §10 Architecture Roadmap with
 their deferral rationale. Big files without a roadmap entry are
 *bugs*. Big files with one are work that's intentionally sequenced.
 
-History: `atos_cmd.rs` (2673 lines) and `local.rs` (1183 lines) were
-split into folders in the spring 2026 refactor pass — they were the
-prior occupants of this list.
+History: `runtime.rs` (15,024 lines) was decomposed in the 2026-05-23
+refactor pass into `runtime/` (13 helper modules + 10 per-intent
+handler modules); the residual `runtime.rs` is ~3,060 lines holding
+the `Runtime` struct, builders, lifecycle, and top-level dispatch.
+`atos_cmd.rs` (2673 lines) and `local.rs` (1183 lines) were split into
+folders in the spring 2026 refactor pass — they were the prior
+occupants of this list.
 
 ---
 

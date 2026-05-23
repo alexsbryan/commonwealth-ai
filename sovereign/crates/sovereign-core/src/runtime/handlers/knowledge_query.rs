@@ -1,0 +1,1318 @@
+//! KnowledgeQuery dispatch + its retrieval-miss diversion path.
+//!
+//! `prepare_knowledge_query_plan` is the load-bearing setup that
+//! both the non-streaming `handle_knowledge_query` and the streaming
+//! KQ branch in `handle_message_stream_with_classification` consume
+//! — single source of truth for retrieval, expansion, and routing.
+//!
+//! The `handle_retrieval_miss_*` trio fires when retrieval came back
+//! dispersed; it suppresses synthesis and surfaces a clarification
+//! card instead of letting the model fabricate against noise.
+
+use std::collections::HashMap;
+use std::pin::Pin;
+use std::sync::Arc;
+
+use futures::Stream;
+
+use crate::error::Result;
+use crate::traits::*;
+use crate::types::*;
+
+use super::super::*;
+
+impl Runtime {
+    /// PR5 — post-retrieval Ask diversion. Fires when retrieval ran
+    /// successfully but produced dispersed noise (see
+    /// `EvidenceShape::is_off_target`). Classification was high
+    /// enough to commit, but synthesis against off-target evidence
+    /// is exactly the shape that produces confident fabrication —
+    /// so we suppress synthesis and show the user their options
+    /// instead: answer from general knowledge (explicit opt-in),
+    /// search the web (if tool available), or rephrase.
+    ///
+    /// Returns a closed stream with a placeholder message carrying
+    /// a `clarification` metadata field — same shape the regular
+    /// Ask path uses, so the existing `ClarificationCard` renders
+    /// it without any UI-layer changes.
+    pub(crate) async fn handle_retrieval_miss_stream(
+        &self,
+        original_message: &str,
+        conversation_id: &str,
+        session_id: &str,
+        shape: &EvidenceShape,
+        tool_descriptors: &[ToolDescriptor],
+    ) -> Result<StreamHandle> {
+        let message_id = uuid::Uuid::new_v4().to_string();
+
+        // Build options aimed at the miss: let the user opt in to
+        // parametric synthesis, web-search if available, or
+        // rephrase. Three options max — the ClarificationCard also
+        // offers a free-text fallback, so adding more options would
+        // just be clutter.
+        let mut options: Vec<ClarificationOption> = Vec::new();
+        options.push(ClarificationOption {
+            label: "Answer from general knowledge (may be inaccurate)".to_string(),
+            follow_up: original_message.to_string(),
+            intent_hint: "simple_query".to_string(),
+        });
+        if let Some(web_tool) = tool_descriptors
+            .iter()
+            .find(|t| t.name.contains("web_search") || t.name == "search")
+        {
+            options.push(ClarificationOption {
+                label: "Search the web".to_string(),
+                follow_up: original_message.to_string(),
+                intent_hint: format!("simple_action:{}", web_tool.id),
+            });
+        }
+        options.push(ClarificationOption {
+            label: "Rephrase — I'll try again".to_string(),
+            // Empty follow_up signals "wait for user input" — the UI
+            // surfaces the clarification card's free-text box.
+            follow_up: original_message.to_string(),
+            intent_hint: "deep_query".to_string(),
+        });
+
+        let question = format!(
+            "I searched {} sources but nothing looked relevant to \"{}\". \
+             How would you like me to proceed?",
+            shape.distinct_sources,
+            truncate_with_ellipsis(original_message, 80),
+        );
+
+        let clarification_payload = ClarificationRequest {
+            session_id: session_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            question: question.clone(),
+            options: options.clone(),
+        };
+
+        let placeholder_body = format!(
+            "I didn't find anything relevant in your installed knowledge bases \
+             for that question. Rather than guess, I'd like to check how you'd \
+             like me to proceed."
+        );
+        let metadata = serde_json::json!({
+            "move_kind": "ask",
+            "retrieval_missed": true,
+            "documents_found": shape.count,
+            "distinct_sources": shape.distinct_sources,
+            "clarification": {
+                "session_id": session_id,
+                "question": question,
+                "options": options,
+            },
+        });
+        let assistant_msg = Message {
+            id: message_id.clone(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: placeholder_body.clone(),
+            created_at: now(),
+            metadata: Some(metadata),
+            version: 0,
+        };
+        self.store.save_message(&assistant_msg).await?;
+
+        self.routing_events
+            .emit_clarification_request(clarification_payload)
+            .await;
+
+        tracing::info!(
+            session_id,
+            conversation_id,
+            distinct_sources = shape.distinct_sources,
+            retrieval_count = shape.count,
+            "routing:retrieval_miss — synthesis suppressed, clarification requested"
+        );
+
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(1);
+        let _ = tx.send(Ok(placeholder_body)).await;
+        drop(tx);
+
+        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        Ok(StreamHandle {
+            message_id,
+            stream: Box::pin(stream),
+        })
+    }
+    /// Test-only entry point that directly invokes
+    /// `handle_retrieval_miss_stream`. Integration tests can't
+    /// easily drive the full KnowledgeQuery pipeline (no corpora in
+    /// the harness), so this exposes the diversion method for
+    /// isolated verification.
+    pub async fn invoke_retrieval_miss_stream_for_test(
+        &self,
+        original_message: &str,
+        conversation_id: &str,
+        session_id: &str,
+        shape: &EvidenceShape,
+        tool_descriptors: &[ToolDescriptor],
+    ) -> Result<StreamHandle> {
+        self.handle_retrieval_miss_stream(
+            original_message,
+            conversation_id,
+            session_id,
+            shape,
+            tool_descriptors,
+        )
+        .await
+    }
+    /// PR5 — non-streaming sibling of `handle_retrieval_miss_stream`.
+    /// Same suppression + clarification semantics; returns a
+    /// Response carrying the placeholder body + metadata so CLI /
+    /// server callers get a consistent behavior.
+    pub(crate) async fn handle_retrieval_miss_response(
+        &self,
+        original_message: &str,
+        conversation_id: &str,
+        session_id: &str,
+        shape: &EvidenceShape,
+        tool_descriptors: &[ToolDescriptor],
+    ) -> Result<Response> {
+        let message_id = uuid::Uuid::new_v4().to_string();
+
+        let mut options: Vec<ClarificationOption> = Vec::new();
+        options.push(ClarificationOption {
+            label: "Answer from general knowledge (may be inaccurate)".to_string(),
+            follow_up: original_message.to_string(),
+            intent_hint: "simple_query".to_string(),
+        });
+        if let Some(web_tool) = tool_descriptors
+            .iter()
+            .find(|t| t.name.contains("web_search") || t.name == "search")
+        {
+            options.push(ClarificationOption {
+                label: "Search the web".to_string(),
+                follow_up: original_message.to_string(),
+                intent_hint: format!("simple_action:{}", web_tool.id),
+            });
+        }
+        options.push(ClarificationOption {
+            label: "Rephrase — I'll try again".to_string(),
+            follow_up: original_message.to_string(),
+            intent_hint: "deep_query".to_string(),
+        });
+
+        let question = format!(
+            "I searched {} sources but nothing looked relevant to \"{}\". \
+             How would you like me to proceed?",
+            shape.distinct_sources,
+            truncate_with_ellipsis(original_message, 80),
+        );
+
+        let clarification_payload = ClarificationRequest {
+            session_id: session_id.to_string(),
+            conversation_id: conversation_id.to_string(),
+            question: question.clone(),
+            options: options.clone(),
+        };
+
+        let placeholder_body =
+            "I didn't find anything relevant in your installed knowledge bases \
+             for that question. Rather than guess, I'd like to check how you'd \
+             like me to proceed."
+                .to_string();
+        let metadata = serde_json::json!({
+            "move_kind": "ask",
+            "retrieval_missed": true,
+            "documents_found": shape.count,
+            "distinct_sources": shape.distinct_sources,
+            "clarification": {
+                "session_id": session_id,
+                "question": question,
+                "options": options,
+            },
+        });
+        let assistant_msg = Message {
+            id: message_id,
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: placeholder_body,
+            created_at: now(),
+            metadata: Some(metadata),
+            version: 0,
+        };
+        self.store.save_message(&assistant_msg).await?;
+        let response_msg = assistant_msg.clone();
+
+        self.routing_events
+            .emit_clarification_request(clarification_payload)
+            .await;
+
+        tracing::info!(
+            session_id,
+            conversation_id,
+            distinct_sources = shape.distinct_sources,
+            retrieval_count = shape.count,
+            "routing:retrieval_miss — synthesis suppressed (non-streaming)"
+        );
+
+        Ok(Response {
+            message: response_msg,
+            task: None,
+            metrics: None,
+        })
+    }
+
+    /// Build the complete synthesis plan for a KnowledgeQuery turn:
+    /// retrieval + evidence-shape routing + source-cohesion expansion +
+    /// request construction + metadata for the UI (retrieved_chunks
+    /// summaries, source_map, result_quality).
+    ///
+    /// Shared between [`Self::handle_knowledge_query`] (non-streaming)
+    /// and the streaming KQ branch in
+    /// [`Self::handle_message_stream`] so both paths cannot diverge
+    /// in how they search, expand, or build the request.
+    pub(crate) async fn prepare_knowledge_query_plan(
+        &self,
+        message: &str,
+        context: &ConversationContext,
+        intent: &Intent,
+        scope: Option<&str>,
+    ) -> KnowledgeQueryPlan {
+        tracing::info!(message_chars = message.len(), "handle_knowledge_query: begin");
+
+        // 1. Embed the query using the query-side function (applies
+        //    instruction prefix for asymmetric models like Qwen3-Embedding).
+        //
+        //    Follow-up turns get the prior-user-turn topic anchor
+        //    folded in via `build_retrieval_query` so the embedded
+        //    text isn't just "What did he publish in 1905?" — which
+        //    matches no Einstein chunk. BM25 leg below still sees
+        //    the bare message. See sovereign/bench/wikipedia_learn.
+        let t_search = std::time::Instant::now();
+        let retrieval_query = build_retrieval_query(message, context);
+        if retrieval_query != message {
+            tracing::debug!(
+                bare_chars = message.len(),
+                expanded_chars = retrieval_query.len(),
+                "retrieval: expanded follow-up query with prior user turns"
+            );
+        }
+        // Captured for retrieval_audit turn_summary at end of fn.
+        let topic_for_audit: Option<String> = context
+            .topic_context
+            .as_ref()
+            .and_then(|tc| tc.topic.clone());
+        let prior_messages_for_audit = context.conversation.messages.len();
+        let query_preview_for_audit =
+            truncate_with_ellipsis(message, 120).to_string();
+        let retrieval_query_preview_for_audit =
+            truncate_with_ellipsis(&retrieval_query, 160).to_string();
+        let embedding = self
+            .inference
+            .embed_query(&retrieval_query)
+            .await
+            .unwrap_or_default();
+
+        // 2. Search corpus-engine LanceDB indexes.
+        //
+        // Per-corpus limit `KQ_PER_CORPUS_LIMIT = 20`: at the previous
+        // value of 5, a single off-domain corpus with one false-positive
+        // vector match could edge the canonical article out of the
+        // merged top-K. With 20 we get real headroom — the canonical
+        // article almost always survives merge even when an unrelated
+        // corpus also contributes hits. Lance vector search is sub-
+        // 200ms at this K on a 1.85M-chunk index; the prompt budget
+        // (`MAX_KNOWLEDGE_CHARS`) downstream still bounds what the
+        // model sees, so the larger merge set only buys us a sharper
+        // evidence-shape signal, not a longer prompt.
+        // Hot-corpora pre-merge K boost. Builds per-corpus K
+        // overrides from the conversation's prior chunk histogram;
+        // corpora the user has been learning from get a wider pool
+        // so the cross-corpus merge filter doesn't drop their top
+        // results when many other corpora are competing. See
+        // `build_per_corpus_k_overrides` for the formula and
+        // `HOT_CORPUS_K_RANGE` for the magnitude.
+        let hot_corpora = collect_hot_corpora(&context.conversation.messages);
+        let per_corpus_overrides =
+            build_per_corpus_k_overrides(&hot_corpora, KQ_PER_CORPUS_LIMIT);
+        let mut chunks = self
+            .search_corpus_indexes_with_overrides(
+                &embedding,
+                message,
+                KQ_PER_CORPUS_LIMIT,
+                "KnowledgeQuery",
+                per_corpus_overrides.as_ref(),
+            )
+            .await;
+
+        // 2a'. Scope-driven retrieval filter. When the router classifies
+        //      the query as `scope = "personal"` (matched against
+        //      conversation-history / personal-vault exemplars in
+        //      sovereign/router/exemplars.toml), restrict the retrieval
+        //      pool to user-owned corpora (mesh_sharing=false). Without
+        //      this filter, conversations-personal lance hits get
+        //      crowded out by wikipedia / SEP chunks that semantically
+        //      match the QUERY SHAPE ("books", "chats", "discussions")
+        //      better than the actual conversation chunks do — even
+        //      though the user is asking ABOUT their own conversations
+        //      and wikipedia is irrelevant. Diagnostic trace
+        //      `post-apply_atlas_grounding` showed 17-23 conv chunks
+        //      in the bag pre-truncate, all dropped because their
+        //      vector_distance against abstract meta-questions was
+        //      higher than wikipedia's. (ARCH §0.1 — visible decision.)
+        if scope == Some("personal") {
+            // Sharp signal needed here: `mesh_sharing=false` covers
+            // many corpora the user marked private (wikipedia, SEP,
+            // codebase indexes) and so doesn't actually discriminate
+            // "the user's personal chat corpus" from "any private
+            // knowledge corpus". Diagnostic trace on the 2026-05-17
+            // synth run showed `kept=229 dropped=60` after the
+            // mesh_sharing filter — wikipedia and sep both survived
+            // because they were mesh_sharing=false in this install.
+            // TODO: replace with an explicit recipe-level annotation
+            // (`[corpus] scope = "personal"`) once schema lands. Today
+            // we match the corpus_id pattern so the scope plumbing is
+            // demonstrably end-to-end and the bench loop can close on
+            // real data. (ARCH §0.1 — visible decision, named TODO.)
+            const PERSONAL_CORPUS_PREFIXES: &[&str] =
+                &["conversations-", "personal-", "journal-", "inner-work-"];
+            let before = chunks.len();
+            chunks.retain(|c| {
+                PERSONAL_CORPUS_PREFIXES
+                    .iter()
+                    .any(|p| c.corpus_id.starts_with(p))
+            });
+            if before != chunks.len() {
+                tracing::info!(
+                    kept = chunks.len(),
+                    dropped = before - chunks.len(),
+                    scope = "personal",
+                    "KnowledgeQuery: scope-filtered retrieval to personal-corpus prefixes"
+                );
+            }
+        }
+
+        // 2b. Entity boost — fetch articles named in the question via
+        //     focused per-entity searches. See `prepare_knowledge_context`
+        //     for the rationale (the embedded query lands on topic-
+        //     central articles, not entity-biographical ones).
+        //
+        //     For ComparisonQuery we (a) use a comparison-aware
+        //     extractor that catches lowercase contrast entities
+        //     ("special relativity vs general relativity") which the
+        //     proper-noun heuristic skips by design, and (b) raise
+        //     the per-entity chunk limit so each side of the contrast
+        //     has enough candidates before per-entity merge reservation
+        //     kicks in below.
+        let is_comparison = matches!(intent, Intent::ComparisonQuery);
+        let entities = if is_comparison {
+            extract_comparison_entities(message)
+        } else {
+            extract_question_entities(message)
+        };
+        let entity_query_limit = if is_comparison {
+            COMPARISON_ENTITY_QUERY_LIMIT
+        } else {
+            ENTITY_QUERY_LIMIT
+        };
+        if !entities.is_empty() {
+            let initial_count = chunks.len();
+            let mut entity_added = 0usize;
+            for entity in entities.iter().take(MAX_ENTITY_QUERIES) {
+                let entity_emb = self
+                    .inference
+                    .embed_query(entity)
+                    .await
+                    .unwrap_or_default();
+                let entity_chunks = self
+                    .search_corpus_indexes(
+                        &entity_emb,
+                        entity,
+                        entity_query_limit,
+                        "EntityBoost",
+                    )
+                    .await;
+                entity_added += entity_chunks.len();
+                chunks.extend(entity_chunks);
+            }
+            tracing::info!(
+                entities = ?entities.iter().take(MAX_ENTITY_QUERIES).collect::<Vec<_>>(),
+                initial_count,
+                entity_added,
+                is_comparison,
+                "KnowledgeQuery: entity-boost retrieval"
+            );
+        }
+
+        // 2b''. Canonical-entity boost (Move 4). For every question
+        //       entity that resolves through the cross-corpus canonical
+        //       registry, fetch focused chunks from the entity's
+        //       primary + alternative corpora and inject them with a
+        //       score lift that survives `KQ_MERGED_LIMIT` truncation.
+        //       The registry maps surface forms (`Einstein`,
+        //       `albert-einstein`) to primary-corpus anchors so the
+        //       canonical overview cannot be edged out by a higher-
+        //       cosine focused article on cross-corpus comparison
+        //       questions. `None` registry / empty matches = no-op.
+        let meta_atlas_hits = self
+            .meta_atlas_boost(&mut chunks, &entities)
+            .await;
+        if !meta_atlas_hits.is_empty() {
+            let total_added: usize =
+                meta_atlas_hits.iter().map(|r| r.chunks_added).sum();
+            tracing::info!(
+                hits = meta_atlas_hits.len(),
+                chunks_added = total_added,
+                "KnowledgeQuery: meta-atlas boost"
+            );
+        }
+
+        // 2b'. Optional question decomposition (gated by env flag).
+        //      Catches concept axes that proper-noun extraction misses
+        //      and gives each side of a comparison its own focused pass.
+        if let Some(sub_queries) = self.decompose_question(message, intent) {
+            let added = self
+                .fan_out_decomposed_queries(&sub_queries, &mut chunks, "QueryDecomp")
+                .await;
+            tracing::info!(
+                sub_queries = sub_queries.len(),
+                chunks_added = added,
+                "KnowledgeQuery: query-decomp retrieval"
+            );
+        }
+
+        // 2b'''. Optional title expansion (gated by SOVEREIGN_TITLE_EXPAND=1).
+        //        Targets the abstract-question failure mode that
+        //        entity boost + comparison decomp don't reach:
+        //        questions with zero extractable entities whose
+        //        answer lives in a Wikipedia article keyed by a
+        //        single concrete noun the question never says.
+        //        Marathon T4/T7/T9 are the canonical instances —
+        //        bench expects `Transistor` / `Von Neumann
+        //        architecture` / `ENIAC` titles that the abstract
+        //        question framings never embed close to.
+        // Capture into outer-scope var so the merge phase below can
+        // reserve shelf space for the title-expand chunks — without
+        // this, v21b audit showed `expand_from_dominant_source`
+        // displacing the title-expand articles when an unrelated
+        // article (`wikipedia::Computer` for T0; `watched-959...::""`
+        // for T3; `sep::turing-machine` for T8) became the
+        // auto-detected dominant source on the merged top-K.
+        let title_expand_titles: Option<Vec<String>> =
+            self.expand_question_to_titles(message, context).await;
+        if let Some(titles) = &title_expand_titles {
+            // v22 design — hybrid search per bare title. v30 attempted
+            // "{title}: {message}" composite queries to bias toward
+            // section-deep chunks; net-negative on 13-thread bench
+            // (-0.045 fact, -0.059 judge vs v28) because the message
+            // sometimes overrides the title in the embedding, pulling
+            // off-article chunks. Reverted.
+            let added = self
+                .fan_out_decomposed_queries(titles, &mut chunks, "TitleExpand")
+                .await;
+            tracing::info!(
+                titles = ?titles,
+                chunks_added = added,
+                "KnowledgeQuery: title-expand retrieval"
+            );
+        }
+        audit_pipeline_stage(&chunks, "after_title_expand", message);
+
+        // 2c. Noise floor — drop chunks with zero query-token overlap
+        //     in title or content. These are pure-RRF noise that fills
+        //     prompt budget without contributing signal. See
+        //     `drop_no_overlap_chunks` for the v33 / v36 design
+        //     history (both attempts at protecting title-expand
+        //     chunks at this stage regressed the cross-thread bench).
+        let pre_floor = chunks.len();
+        let mut chunks = drop_no_overlap_chunks(chunks, message);
+        if chunks.len() < pre_floor {
+            tracing::info!(
+                pre_floor,
+                post_floor = chunks.len(),
+                "KnowledgeQuery: noise floor dropped no-overlap chunks"
+            );
+        }
+        audit_pipeline_stage(&chunks, "after_noise_floor", message);
+
+        // 2d. Atlas grounding — graph-walk navigation when the
+        //     provider exposes the graph layer; bag-of-atoms top-K
+        //     fallback otherwise. See `apply_atlas_grounding` for
+        //     the full design rationale (cosine seeds → BFS expand
+        //     over typed edges → FTS-fetch source chunks via atom
+        //     evidence previews).
+        self.apply_atlas_grounding(message, &embedding, &mut chunks, "KnowledgeQuery", scope)
+            .await;
+        // Per-corpus snapshot RIGHT AFTER apply_atlas_grounding returns.
+        // Paired with the graph-walk trace inside apply (which shows
+        // what was pushed) and the post-truncate trace below — if
+        // counts here match the push trace but diverge from post-
+        // truncate, the drop is in sort+cap+truncate. (ARCH §0.1)
+        let post_atlas_per_corpus: std::collections::BTreeMap<String, usize> = {
+            let mut m: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for c in &chunks {
+                *m.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            m
+        };
+        tracing::info!(
+            n_chunks = chunks.len(),
+            per_corpus = ?post_atlas_per_corpus,
+            "handle_knowledge_query: post-apply_atlas_grounding (per-corpus)"
+        );
+
+        // 3. Reweight by query relevance (mirrors prepare_knowledge_context),
+        //    then sort by score, cap chunks-per-article for breadth, and
+        //    keep top `KQ_MERGED_LIMIT`. For ComparisonQuery, reserve
+        //    per-entity slots before truncate so neither side of the
+        //    contrast can be out-ranked out of the merge — the v20
+        //    `compare_einstein_newton_gravity` regression was Newton-
+        //    side chunks losing to Einstein-side at this exact step.
+        reweight_by_query_relevance(&mut chunks, message);
+        chunks.sort_by(cross_corpus_sort_cmp);
+
+        // 3b. Optional structural-graph expansion (env-gated). The
+        //     axis-aware variant works on comparisons too — co-
+        //     citation between two named entities is exactly the
+        //     bridge-concept signal a comparative answer needs.
+        if let Some(neighbors) = self
+            .expand_via_wikipedia_graph(&chunks, message)
+            .await
+        {
+            if !neighbors.is_empty() {
+                let added = neighbors.len();
+                chunks.extend(neighbors);
+                reweight_by_query_relevance(&mut chunks, message);
+                chunks.sort_by(cross_corpus_sort_cmp);
+                tracing::info!(
+                    added,
+                    total = chunks.len(),
+                    "KnowledgeQuery: graph expansion"
+                );
+            }
+        }
+
+        let mut chunks = cap_chunks_per_article(chunks, MAX_CHUNKS_PER_ARTICLE_AT_MERGE);
+        if is_comparison {
+            chunks = reserve_chunks_per_entity(
+                chunks,
+                &entities,
+                COMPARISON_PER_ENTITY_RESERVE,
+            );
+        }
+        // Title-expand reservation. When the title-expand primitive
+        // named explicit Wikipedia titles for this turn, pin chunks
+        // from those titles before the KQ_MERGED_LIMIT truncate. The
+        // motivation is the same as the comparison reservation: the
+        // upstream step (here `expand_question_to_titles`) made an
+        // intentional source selection that the cross-corpus sort
+        // shouldn't be allowed to silently demote. v21b audit
+        // showed T0/T3/T8 regressions where title-expand had pulled
+        // the right Wikipedia articles into the pool but they were
+        // out-scored at sort time by chunks from articles the
+        // dominant-source expander then flooded with.
+        if let Some(titles) = &title_expand_titles {
+            if !titles.is_empty() {
+                chunks = reserve_chunks_per_entity(
+                    chunks,
+                    titles,
+                    COMPARISON_PER_ENTITY_RESERVE,
+                );
+            }
+        }
+        audit_pipeline_stage(&chunks, "after_cap_and_reserve", message);
+        chunks.truncate(KQ_MERGED_LIMIT);
+        audit_pipeline_stage(&chunks, "after_truncate", message);
+
+        // Naturalistic audit — post-merge composition. Answers "after
+        // cap + truncate, which corpus and which article actually has
+        // shelf space in the prompt?" Separates merge-layer starvation
+        // (wikipedia chunks were never in the pool) from cap-layer
+        // starvation (wikipedia was capped down to 1 chunk while a
+        // single non-wiki article occupies 10 slots).
+        {
+            use std::collections::HashMap;
+            let mut by_corpus: HashMap<String, usize> = HashMap::new();
+            let mut by_article: HashMap<(String, String), usize> = HashMap::new();
+            for c in &chunks {
+                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+                *by_article
+                    .entry((
+                        c.corpus_id.clone(),
+                        c.title.clone().unwrap_or_default(),
+                    ))
+                    .or_insert(0) += 1;
+            }
+            let mut corpus_pairs: Vec<(String, usize)> =
+                by_corpus.into_iter().collect();
+            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let mut article_pairs: Vec<((String, String), usize)> =
+                by_article.into_iter().collect();
+            article_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let article_top: Vec<(String, String, usize)> = article_pairs
+                .into_iter()
+                .take(5)
+                .map(|((cid, t), n)| (cid, t, n))
+                .collect();
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "post_merge",
+                total = chunks.len(),
+                by_corpus = ?corpus_pairs,
+                top5_articles = ?article_top,
+                "retrieval_audit: post_merge"
+            );
+        }
+
+        let search_ms = t_search.elapsed().as_millis() as u64;
+        // Per-corpus breakdown at this checkpoint — paired with the
+        // graph-walk trace upstream so any drop between the two is
+        // visible (ARCH §0.1 glassbox).
+        let post_truncate_per_corpus: std::collections::BTreeMap<String, usize> = {
+            let mut m: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for c in &chunks {
+                *m.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            m
+        };
+        tracing::info!(
+            chunks_found = chunks.len(),
+            search_ms,
+            per_corpus = ?post_truncate_per_corpus,
+            "handle_knowledge_query: corpus search done (per-corpus survivors)"
+        );
+
+        // 4a. Empty results path — answer from parametric knowledge.
+        //
+        // v29 attempted to gate this on (entities non-empty +
+        // meta_atlas empty) to emit refusal prose for fabricated-
+        // entity questions. The behavior change is correct (don't
+        // hallucinate biographies of made-up people) but the bench
+        // can't measure it — the model's refusal vocab ("not
+        // certain", "no record") doesn't always align with the
+        // bench's expected_facts list ("no information", "couldn't
+        // find"). Reverted to the simpler general-knowledge prompt
+        // until bench fixtures are updated to a broader refusal-
+        // vocabulary expected set.
+        if chunks.is_empty() {
+            tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
+            let corpora = context.installed_corpora_display();
+            let prompt = format!(
+                "The user asked: \"{message}\"\n\n\
+                 You searched these installed knowledge sources: {corpora}\n\
+                 The search returned no relevant results.\n\n\
+                 Answer the question from your general knowledge. \
+                 Note briefly that no corpus results were found, but do not refuse \
+                 to answer or dwell on the absence of sources. \
+                 If you are confident about the topic, answer directly and substantively. \
+                 If you are genuinely uncertain, say so and suggest web search or \
+                 installing an additional corpus."
+            );
+            let request = CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Fast,
+                max_tokens: Some(300),
+                temperature: Some(0.3),
+                think_budget: Some(0),
+                structured_output: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+                tools: None,
+                tool_choice: None,
+                            model_id: None,
+                            enable_thinking: None,
+            sampling_mode: None,
+            assistant_prefix: None,
+            cmd_prefix: None,
+            url_allowlist: None,
+            evidence_id_allowlist: None,
+            lark_grammar: None,
+            };
+            return KnowledgeQueryPlan {
+                request,
+                chunks: Vec::new(),
+                doc_context: String::new(),
+                shape: compute_evidence_shape(&[], message),
+                route: SynthesisRoute::FastFocused,
+                // Empty retrieval is the strongest case for asking the
+                // user to supply something — keep the gap check on.
+                gap_check_enabled: true,
+                search_ms,
+                retrieved_chunks: Vec::new(),
+                source_map: HashMap::new(),
+                result_quality: "empty",
+                folder_meta: std::collections::HashMap::new(),
+                meta_atlas_hits,
+            };
+        }
+
+        // 4b. Evidence-shape routing.
+        let shape = compute_evidence_shape(&chunks, message);
+        // ComparisonQuery is a bounded contrast — pin to FastFocused
+        // regardless of evidence shape. The whole point of the split
+        // is to keep these off the primary slot; letting the evidence
+        // shape escalate to PrimarySynthesis would defeat that.
+        //
+        // v32 attempted "junk-retrieval escalation": shape.is_off_target()
+        // + entities non-empty → force PrimarySynthesis + parametric-
+        // authorization system message. Net negative on marathon
+        // variance test because the marathon T3 question ("What did
+        // she contribute that was genuinely new?") has no extracted
+        // proper-noun entity, so the escalation didn't fire on the
+        // canonical failure case. The real variance lever is upstream
+        // (why don't title-expand'd Lovelace chunks survive merge?),
+        // not in synth routing. Reverted.
+        let route = if matches!(intent, Intent::ComparisonQuery) {
+            SynthesisRoute::FastFocused
+        } else {
+            route_from_evidence(&shape)
+        };
+        tracing::info!(
+            count = shape.count,
+            top1 = shape.top1_score,
+            median = shape.median_score,
+            median_ratio = shape.median_ratio,
+            top_source_repeat = shape.top_source_repeat_count,
+            distinct_sources = shape.distinct_sources,
+            title_match = shape.title_match,
+            top_source = %shape.top_source_label,
+            route = ?route,
+            "KnowledgeQuery: evidence-shape routing decision"
+        );
+
+        // 4c. Cohesion expansion. Two flavors based on retrieval shape:
+        //
+        //   - **Single-source dominance** (FastFocused route + ≥2
+        //     top-source repeats): the question landed clearly on one
+        //     document. Pull all chunks from that document by title;
+        //     keep 2 grounding chunks for breadth. (`expand_from_dominant_source`)
+        //   - **Multi-article synthesis** (PrimarySynthesis route, ≥2
+        //     distinct titled sources): the question requires combining
+        //     evidence from several articles. Pull
+        //     `EXPANSION_MULTI_PER_SOURCE` chunks from each of the top
+        //     `EXPANSION_MULTI_SOURCE_GROUPS` source documents. This
+        //     directly addresses the chunks_fact_score gap where
+        //     retrieval lands on the right articles but only contributes
+        //     1-2 chunks per source — synthesis ends up sparse.
+        //     (`expand_from_top_sources`)
+        //
+        // Either expansion path uses the `EXPANDED_KNOWLEDGE_CHARS`
+        // budget; the formatter trims to fit if the expanded set is
+        // larger than 8000 chars.
+        // v23 attempted "title-expand authoritative — skip all
+        // expansion". v24 then tried fetch-by-title to compensate.
+        // Both regressed fact_recall because auto-expansion was
+        // providing useful depth coverage from non-title-expand
+        // articles. Restored to v22 behavior: title-expand chunks
+        // get reserved (see reserve_chunks_per_entity above), and
+        // downstream expanders still fire normally to deepen
+        // coverage of the dominant article. The cost is occasional
+        // displacement of title-expand chunks (T2/T7/T8 v22) but
+        // the net is +19pt fact, +22pt src vs baseline.
+        let single_source_expansion = matches!(route, SynthesisRoute::FastFocused)
+            && shape.top_source_repeat_count >= EVIDENCE_MIN_TOP_SOURCE_REPEAT;
+        let expansion_kind: &'static str;
+        let (mut chunks, knowledge_char_budget, expansion_fired) = if single_source_expansion {
+            expansion_kind = "dominant_source";
+            let (expanded, _from_source, _grounding, _dropped) =
+                self.expand_from_dominant_source(chunks, &shape).await;
+            (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
+        } else if matches!(route, SynthesisRoute::PrimarySynthesis) && shape.distinct_sources >= 2 {
+            let (expanded, sources_expanded, _total) =
+                self.expand_from_top_sources(chunks).await;
+            // Only count as "fired" when the expander actually pulled
+            // from ≥ 2 sources — otherwise we're back to the initial
+            // chunk set and the prompt budget should reflect that.
+            if sources_expanded >= 2 {
+                expansion_kind = "top_sources";
+                (expanded, EXPANDED_KNOWLEDGE_CHARS, true)
+            } else {
+                expansion_kind = "top_sources_noop";
+                (expanded, MAX_KNOWLEDGE_CHARS, false)
+            }
+        } else {
+            expansion_kind = "none";
+            (chunks, MAX_KNOWLEDGE_CHARS, false)
+        };
+
+        // Naturalistic audit — post-expansion composition. After the
+        // dominant-source or top-sources expander has had its say,
+        // what's actually in the prompt? T11 (marathon) showed 12
+        // Atanasoff-Berry chunks at this layer despite a 10-cap at
+        // merge — that's `expand_from_dominant_source` honestly doing
+        // its job after a *wrong* article won evidence-shape dominance.
+        // The fix lives in shape signals, not the expander, so this
+        // log lets us see exactly when the wrong dominant survives.
+        // (Glassbox: paired with graph-walk + post-truncate traces
+        // upstream per ARCH §0.1; drops inside the expander surface
+        // here as a delta against the merge-cap total.)
+        {
+            use std::collections::HashMap;
+            let mut by_corpus: HashMap<String, usize> = HashMap::new();
+            let mut by_article: HashMap<(String, String), usize> = HashMap::new();
+            for c in &chunks {
+                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+                *by_article
+                    .entry((
+                        c.corpus_id.clone(),
+                        c.title.clone().unwrap_or_default(),
+                    ))
+                    .or_insert(0) += 1;
+            }
+            let mut corpus_pairs: Vec<(String, usize)> =
+                by_corpus.into_iter().collect();
+            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let mut article_pairs: Vec<((String, String), usize)> =
+                by_article.into_iter().collect();
+            article_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let article_top: Vec<(String, String, usize)> = article_pairs
+                .into_iter()
+                .take(5)
+                .map(|((cid, t), n)| (cid, t, n))
+                .collect();
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "post_expansion",
+                kind = expansion_kind,
+                fired = expansion_fired,
+                single_source_expansion,
+                total = chunks.len(),
+                by_corpus = ?corpus_pairs,
+                top5_articles = ?article_top,
+                "retrieval_audit: post_expansion"
+            );
+        }
+
+        // 4d. Build prompt. Retrieved content first, question last —
+        // keeps the model from reasoning purely from training weights
+        // during its <think> phase (when Primary path is taken).
+        //
+        // Build a `corpus_id → CorpusKind` map so catalog hits route
+        // into a separate evidence tier — the synthesis prompt
+        // (`KNOWLEDGE_SYNTHESIS_SYSTEM`) has dedicated guidance for
+        // them. Best-effort: if `installed_indexes()` errors we fall
+        // back to no-kinds formatting (pre-catalog behaviour).
+        let (kinds, display_categories): (
+            std::collections::HashMap<String, corpus_engine::CorpusKind>,
+            std::collections::HashMap<String, String>,
+        ) = if let Some(engine) = &self.corpus_engine {
+            let mut kinds_map = std::collections::HashMap::new();
+            let mut display_map = std::collections::HashMap::new();
+            for info in engine.installed_indexes().await.unwrap_or_default() {
+                if let Some(d) = &info.display {
+                    if let Some(cat) = &d.category {
+                        display_map.insert(info.corpus_id.clone(), cat.clone());
+                    }
+                }
+                kinds_map.insert(info.corpus_id, info.kind);
+            }
+            (kinds_map, display_map)
+        } else {
+            Default::default()
+        };
+        // Surface Wikipedia editors' POV/controversy flags as
+        // `(contested)` markers on the source label. Best-effort:
+        // graph absent → empty set → no markers, behaviour
+        // unchanged.
+        let contested_titles: std::collections::HashSet<String> =
+            self.contested_titles_for_chunks(&chunks).await;
+        let folder_meta = self.folder_metadata_snapshot().await;
+        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories)
+            .await;
+        let conv_briefing = self
+            .build_conv_briefing_block(&chunks, &display_categories)
+            .await;
+        let doc_context = format_scored_chunks_with_kinds(
+            &chunks,
+            knowledge_char_budget,
+            Some(&kinds),
+            if contested_titles.is_empty() {
+                None
+            } else {
+                Some(&contested_titles)
+            },
+            if folder_meta.is_empty() {
+                None
+            } else {
+                Some(&folder_meta)
+            },
+            if display_categories.is_empty() {
+                None
+            } else {
+                Some(&display_categories)
+            },
+        );
+        let knowledge_block = if conv_briefing.is_empty() {
+            doc_context.clone()
+        } else {
+            format!("{conv_briefing}\n{doc_context}")
+        };
+        let corpus_display = context.installed_corpora_display();
+        let prompt = format!(
+            "RETRIEVED FROM {corpus_display}:\n\n{knowledge_block}\n\n\
+             ════════════════════════════════════\n\n\
+             Question: {message}"
+        );
+
+        // 4e. Request shape varies by route.
+        // Folder-ingest v1 §6.3: a "what I don't have" note appended
+        // to the synthesis system message when matched folder
+        // corpora carry non-zero failed/skipped counts. Empty
+        // string when there's nothing to disclose, so the prompt
+        // overhead is zero in the common case.
+        let gap_note = build_coverage_gaps_note(&chunks, &folder_meta);
+        let request = match route {
+            SynthesisRoute::FastFocused => {
+                // Comparison-shape contrast — append the directive that
+                // pins the model to a bounded axes structure rather
+                // than the open-ended essay shape.
+                let base = if matches!(intent, Intent::ComparisonQuery) {
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{COMPARISON_DIRECTIVE}")
+                } else {
+                    KNOWLEDGE_SYNTHESIS_SYSTEM.to_string()
+                };
+                let base = if gap_note.is_empty() {
+                    base
+                } else {
+                    format!("{base}\n\n{gap_note}")
+                };
+                let system = self.build_system_message(&base, context);
+                CompletionRequest {
+                    prompt,
+                    system_message: Some(system),
+                    preferred_speed: Speed::Fast,
+                    max_tokens: Some(FAST_KNOWLEDGE_MAX_TOKENS as usize),
+                    temperature: Some(self.inference_config.temperature),
+                    think_budget: Some(0),
+                    structured_output: None,
+                    top_k: self.inference_config.top_k,
+                    top_p: None,
+                    // oicp=None lets the wire layer auto-derive
+                    // latency_class=Fast from preferred_speed (per the
+                    // OICP-native fast-slot routing landed in v19).
+                    oicp: None,
+                    tools: None,
+                    tool_choice: None,
+                                    model_id: None,
+                                    enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
+                }
+            }
+            SynthesisRoute::PrimarySynthesis => {
+                let base = if gap_note.is_empty() {
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{THINKING_DIRECTIVE}")
+                } else {
+                    format!("{KNOWLEDGE_SYNTHESIS_SYSTEM}\n\n{gap_note}\n\n{THINKING_DIRECTIVE}")
+                };
+                let system = self.build_primary_system_message(&base, context);
+                CompletionRequest {
+                    prompt,
+                    system_message: Some(system),
+                    preferred_speed: Speed::Slow,
+                    max_tokens: Some(self.inference_config.max_tokens),
+                    temperature: Some(self.inference_config.temperature),
+                    think_budget: Some(self.inference_config.think_budget),
+                    structured_output: None,
+                    top_k: self.inference_config.top_k,
+                    top_p: None,
+                    oicp: self.build_oicp(&Intent::KnowledgeQuery),
+                    tools: None,
+                    tool_choice: None,
+                                    model_id: None,
+                                    enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
+                }
+            }
+        };
+
+        // 4f. Build retrieved_chunks summaries for the UI citation
+        // expander. Same shape `prepare_knowledge_context` produces so
+        // the frontend renders both paths identically.
+        let retrieved_chunks: Vec<serde_json::Value> = chunks
+            .iter()
+            .map(|c| {
+                let snippet = truncate_with_ellipsis(&c.content, 200);
+                serde_json::json!({
+                    "title": c.title.as_deref().unwrap_or(""),
+                    "corpus_id": c.corpus_id,
+                    "url": c.url,
+                    "snippet": snippet,
+                    "score": c.score,
+                    "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
+                    "chunk_id": c.chunk_id,
+                    "source_doc_id": c.source_doc_id,
+                })
+            })
+            .collect();
+
+        let mut source_map: HashMap<String, usize> = HashMap::new();
+        for c in &chunks {
+            *source_map.entry(c.corpus_id.clone()).or_insert(0) += 1;
+        }
+
+        // Gap check ALWAYS fires on the KnowledgeQuery path.
+        //
+        // Humility principle: the corpus is the source of truth and
+        // we have to query it before deciding whether external
+        // lookup is warranted — but we also have to honestly check
+        // whether the answer we synthesised actually addresses the
+        // question. Retrieval shape (FastFocused vs PrimarySynthesis)
+        // is a SYNTHESIS-routing decision, not an answer-quality
+        // signal. The 2026-05-19 M5-Mac-Studio failure pinned this:
+        // 12 chunks clustered tightly on `wikipedia::Mac (computer)`
+        // because of title overlap with "Mac Studio", route was
+        // FastFocused, gap check was skipped — and the model
+        // produced "no reliable info" with no INFORMATION REQUEST
+        // surfaced. The gap check is the LLM-based judge of "is
+        // this answer grounded in the evidence?"; it has to run
+        // regardless of how concentrated the evidence looked.
+        //
+        // Cost: one small-LLM call (~1s) per FastFocused turn,
+        // post-stream so user-visible latency is unaffected.
+        let gap_check_enabled = true;
+
+        let result_quality = if expansion_fired {
+            "focused"
+        } else if matches!(route, SynthesisRoute::PrimarySynthesis) {
+            "synthesis"
+        } else {
+            "routed"
+        };
+
+        let _ = expansion_fired; // logged by expand_from_dominant_source already
+
+        let folder_meta = self.folder_metadata_snapshot().await;
+
+        // Naturalistic audit — turn_summary. One structured line per
+        // synthesis turn so a grep on `retrieval_audit` reconstructs
+        // the full story: query, topic anchor, hot-corpora histogram,
+        // entities extracted, evidence-shape decision, expansion kind,
+        // and the final per-corpus + per-article composition that the
+        // synthesizer will see. Pairs with the `corpus_results`,
+        // `post_merge`, and `post_expansion` events emitted earlier
+        // for the same turn — match by query preview or by event order.
+        {
+            use std::collections::HashMap;
+            let mut by_corpus: HashMap<String, usize> = HashMap::new();
+            for c in &chunks {
+                *by_corpus.entry(c.corpus_id.clone()).or_insert(0) += 1;
+            }
+            let mut corpus_pairs: Vec<(String, usize)> =
+                by_corpus.into_iter().collect();
+            corpus_pairs.sort_by(|a, b| b.1.cmp(&a.1));
+            let hot_pairs: Vec<(String, usize)> = {
+                let mut v: Vec<(String, usize)> = hot_corpora
+                    .iter()
+                    .map(|(k, v)| (k.clone(), *v))
+                    .collect();
+                v.sort_by(|a, b| b.1.cmp(&a.1));
+                v
+            };
+            tracing::info!(
+                target: "retrieval_audit",
+                event = "turn_summary",
+                intent = ?intent,
+                route = ?route,
+                query = %query_preview_for_audit,
+                expanded_query = %retrieval_query_preview_for_audit,
+                topic = ?topic_for_audit,
+                prior_messages = prior_messages_for_audit,
+                hot_corpora = ?hot_pairs,
+                entities = ?entities,
+                meta_atlas_hits = meta_atlas_hits.len(),
+                expansion_kind,
+                expansion_fired,
+                final_chunks = chunks.len(),
+                final_by_corpus = ?corpus_pairs,
+                top_source = %shape.top_source_label,
+                top_source_repeat = shape.top_source_repeat_count,
+                distinct_sources = shape.distinct_sources,
+                title_match = shape.title_match,
+                top1 = shape.top1_score,
+                median = shape.median_score,
+                "retrieval_audit: turn_summary"
+            );
+        }
+
+        KnowledgeQueryPlan {
+            request,
+            chunks,
+            doc_context,
+            shape,
+            route,
+            gap_check_enabled,
+            search_ms,
+            retrieved_chunks,
+            source_map,
+            result_quality,
+            folder_meta,
+            meta_atlas_hits,
+        }
+    }
+
+
+    /// Handle KnowledgeQuery (and ComparisonQuery): search corpus-engine
+    /// LanceDB indexes → inject into prompt → synthesize. The intent
+    /// pins the plan's synthesis route — ComparisonQuery always rides
+    /// FastFocused regardless of evidence shape.
+    pub(crate) async fn handle_knowledge_query(
+        &self,
+        message: &str,
+        conversation_id: &str,
+        context: &ConversationContext,
+        intent: &Intent,
+        coarse_intent: Option<String>,
+        self_assessment: Option<String>,
+        routing_trigger: Option<String>,
+    ) -> Result<Response> {
+        let plan = self.prepare_knowledge_query_plan(message, context, intent, None).await;
+
+        // PR5 — non-streaming retrieval-miss diversion. Mirrors the
+        // streaming path: dispersed noise → suppress synthesis +
+        // surface clarification instead of confabulating.
+        if plan.shape.is_off_target() {
+            let session_id = self
+                .sessions
+                .latest_for_conversation(conversation_id)
+                .map(|s| s.id)
+                .unwrap_or_default();
+            // Post-classification site: intent IS in hand here, so
+            // we apply full intent-keyed narrowing. The
+            // retrieval-miss handler renders an INFORMATION
+            // REQUEST card; surfacing the intent-appropriate tool
+            // catalog lets the model offer accurate "next-step"
+            // affordances to the user.
+            let tool_descriptors = self.narrow_tools_for_intent(intent);
+            tracing::info!(
+                distinct_sources = plan.shape.distinct_sources,
+                retrieval_count = plan.shape.count,
+                "routing:retrieval_miss — non-streaming diversion"
+            );
+            return self
+                .handle_retrieval_miss_response(
+                    message,
+                    conversation_id,
+                    &session_id,
+                    &plan.shape,
+                    &tool_descriptors,
+                )
+                .await;
+        }
+
+        let completion = self.inference.complete(&plan.request).await?;
+
+        let final_content = if plan.gap_check_enabled {
+            // Humility principle: always run the gap check on KQ
+            // paths. The retrieval-shape route is a synthesis-
+            // routing decision, not an answer-quality signal. See
+            // the matching block in the streaming KQ path + the
+            // long-form note at `prepare_knowledge_query_plan`.
+            tracing::debug!(
+                route = ?plan.route,
+                top_source = %plan.shape.top_source_label,
+                "KnowledgeQuery: running gap check"
+            );
+            self.maybe_collaborate(
+                conversation_id,
+                message,
+                &completion.text,
+                &plan.doc_context,
+            )
+            .await
+        } else {
+            completion.text.clone()
+        };
+
+        let (sources_for_prov, coverage_for_prov) = build_provenance_components(
+            &plan.source_map,
+            &std::collections::HashMap::new(),
+            &plan.folder_meta,
+            // KnowledgeQueryPlan doesn't yet carry a display-category
+            // lookup. See the matching note in the streaming path
+            // above — DeepQuery is where the conversation-label
+            // rename fires for v1.
+            None,
+        );
+        let provenance = ResponseProvenance {
+            intent: "KnowledgeQuery".to_string(),
+            search_method: Some("CorpusEngine".to_string()),
+            sources: sources_for_prov,
+            inference_backend: completion.model_id.clone(),
+            oicp_match: completion
+                .oicp_meta
+                .as_ref()
+                .and_then(|m| m.match_quality.as_ref())
+                .map(|q| format!("{q:?}")),
+            total_latency_ms: completion.latency_ms,
+            tokens_used: completion.tokens_used,
+            coarse_intent,
+            self_assessment,
+            routing_trigger,
+            coverage: coverage_for_prov,
+        };
+
+        // PR3 — grounded next-step offers. Look up the most recent
+        // session for this conversation (handle_turn created one
+        // right before dispatching here); fall back to a synthetic
+        // id when the session isn't present (e.g. legacy test
+        // harnesses that don't wire the session store).
+        let session_id = self
+            .sessions
+            .latest_for_conversation(conversation_id)
+            .map(|s| s.id)
+            .unwrap_or_default();
+        let had_dominant_source = plan.shape.top_source_repeat_count >= 2;
+        let retrieval_missed = plan.shape.is_off_target();
+        let top_source_title = if plan.shape.top_source_key.1.is_empty() {
+            None
+        } else {
+            Some(plan.shape.top_source_key.1.clone())
+        };
+        let offers = build_next_step_offers(&OfferContext {
+            user_message: message,
+            top_source_title: top_source_title.as_deref(),
+            had_dominant_source,
+            retrieved_chunks: &plan.retrieved_chunks,
+            session_id: &session_id,
+            retrieval_missed,
+        });
+        let offers_json = serde_json::to_value(&offers).unwrap_or_default();
+
+        let assistant_msg = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            conversation_id: conversation_id.to_string(),
+            role: Role::Assistant,
+            content: final_content,
+            created_at: now(),
+            metadata: Some(serde_json::json!({
+                "model": completion.model_id,
+                "tokens": completion.tokens_used,
+                "latency_ms": completion.latency_ms,
+                "intent": "knowledge_query",
+                "documents_found": plan.chunks.len(),
+                "search_ms": plan.search_ms,
+                "result_quality": plan.result_quality,
+                "provenance": provenance,
+                "retrieved_chunks": plan.retrieved_chunks,
+                "next_steps": offers_json,
+            })),
+            version: now(),
+        };
+        self.store.save_message(&assistant_msg).await?;
+        self.spawn_auto_title(conversation_id);
+
+        Ok(Response {
+            message: assistant_msg,
+            task: None,
+            metrics: None,
+        })
+    }
+}
