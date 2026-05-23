@@ -310,6 +310,73 @@ If the user later adjusts the conv recipe (e.g., changes `domain` from `conversa
 - **No retry of failed entity extraction parses.** The legacy parse-fail loop is gone because the path is gone. Tiered's lean entity extraction uses lark-grammar-enforced output (the same fix memo references via `invariant_balanced_envelope_needs_grammar_gate` and the in-flight llguidance work). Don't re-introduce free-form JSON parsing in any conv-port code.
 - **No `personal` domain merge.** `conversations-personal` (Sovereign-internal chats) stays on its existing recipe + atlas path until it has a reason to migrate. Two-impl phase isolates the conv port to one recipe.
 
+## Retrieval surface — next session's trait
+
+The retrieval-side surface landed 2026-05-22 (steps 6-equivalent in spec impl order). The two extension points that future RAPTOR-shaped stores will need are already named in the conv-specific impl:
+
+- **`ConvTieredReader`** (`sovereign-core/src/conv_tiered.rs`) — async trait with `list_conv_skeletons_for_corpus(corpus_id, &[conv_uuid])` and `list_conv_raptor_nodes(corpus_id, conv_uuid)`.
+- **`build_conv_tiered_briefings`** (`sovereign-core/src/conv_briefing.rs`) — async function taking `Arc<dyn ConvTieredReader>` + `&[ScoredChunk]` + `display_categories`, returning a `ConvBriefingPayload` ready to inject into the prompt.
+
+This is **Option C** from the architectural-shape menu in the spec history — a read-side composer that knows about the conv-tiered tables specifically. The shape implied by the public functions is the future generic trait:
+
+```rust
+// Sketch, NOT yet defined. Will land when the second port (vault or
+// SEP) gives us two real consumers to ground the trait against,
+// rather than guessing the abstraction from one impl.
+#[async_trait]
+pub trait TieredRetrievalSurface {
+    /// Per-source briefing — e.g. for conv: one per conv_uuid.
+    /// For vault: one per note. For SEP: one per article.
+    async fn briefing_for_source(
+        &self,
+        corpus_id: &str,
+        source_doc_id: &str,
+    ) -> Option<TieredBriefing>;
+
+    /// Leaf cluster a chunk belongs to (for the cluster-score blend
+    /// at retrieval time). Same shape as attached-doc's existing
+    /// `SOVEREIGN_DOC_CLUSTER_WEIGHT` path.
+    async fn leaf_cluster_for_chunk(
+        &self,
+        corpus_id: &str,
+        chunk_id: u64,
+    ) -> Option<LeafCluster>;
+
+    /// Given a hit set, decide which briefings to fetch. Default
+    /// impl can call the conv-style top-K-by-hit-count with adaptive
+    /// concentration check; overridable for stores that benefit from
+    /// a different selection heuristic.
+    async fn select_anchors(
+        &self,
+        hits: &[ScoredChunk],
+    ) -> Vec<(String, String)> {
+        select_anchors_default_top_k_with_concentration(hits, 0.70, 3, 8)
+    }
+}
+```
+
+**Why the trait extraction is deferred:** the spec history flagged the "extract trait early vs late" trade-off (TIERED_RETRIEVAL.md §"Generic enrichment trait?"). Today we have one consumer — naming the trait now would be guessing. When vault or SEP land their tiered impl, the second consumer will reveal which method signatures genuinely generalise and which were conv-specific accidents. Extract then.
+
+**Adaptive briefing policy (landed 2026-05-22):** the conv-briefing builder uses a two-mode adaptive policy that the future trait's `select_anchors` default would mirror:
+
+- **Deep mode** (top-3 convs, full RAPTOR signposts) — fires when top-3 ≥ 70% of total hit mass. Reader intuition: "user is asking about a focused set of conversations, render those in depth."
+- **Shallow mode** (top-8 convs, overview-only) — default fallback. Reader intuition: "broad query, render breadth not depth."
+
+The 70% threshold + (3,8) caps are empirically chosen; revisit when bench data lands.
+
+**Cluster-score blend (deferred):** the spec's "Cluster-score blend" pattern (attached doc's `SOVEREIGN_DOC_CLUSTER_WEIGHT` from `CLUSTER_SCORE_BLEND.md`) hasn't been ported to conv corpora yet. Planned default for conv-tiered: weight=0.25 with NO env var (the spec history settled this — be bolder on new corpora without entrenched baselines). The retrieval-side hookup lands in `runtime::search_corpus_indexes` once T2 entity-graph T2-recall validation gives us a stable baseline to bench the blend against. Current state: briefing-side surfacing lands ahead of blend-side ranking.
+
+## What still belongs to "Phase B v2"
+
+After today's session, the spec's remaining v0 must-land items are:
+
+- **Opt-1 Fast slot routing** for ≤30-chunk convs (provider-side; ~80 LOC InferenceProvider wrapper).
+- **T2 entity-graph extraction** per conv → `conv_skeletons.skeleton_json`. Will surface inside the briefing layer as primary-entities-per-cluster (already a field in `ConvRaptorNodeRow` from RAPTOR; T2 augments with cross-cluster entity index for PPR).
+- **T3 motif index** → `conv_motifs` table. Briefing layer will pick top distinctive motifs per conv to surface in Deep mode.
+- **TextTiling segments** for ≥20-chunk convs → `conv_skeletons.segments_json`. Briefing surfaces these as "this conversation has N phases" markers.
+- **Cluster-score blend at retrieval** — see "Retrieval surface" above.
+- **`sovereign corpus reenrich --corpus <id>` CLI** for re-runs after recipe change.
+
 ## References
 
 - Phase A architecture: `sovereign/docs/TIERED_RETRIEVAL.md`

@@ -158,6 +158,12 @@
       // (atlas-virtual, web-fetch) chunks.
       chunk_id?: number | null;
       source_doc_id?: string | null;
+      // PPR provenance (A3-lite, spec CONV_TIERED_PORT.md). Carries
+      // `ppr_seed` (entity that diffused mass to this chunk) and
+      // `ppr_mass_norm` (normalised blended mass in [0,1]) when the
+      // conv-tiered PPR rerank touched this chunk. Other metadata
+      // keys may appear in the future — keep the shape open.
+      metadata?: Record<string, string>;
     }>,
   );
 
@@ -435,7 +441,7 @@
     </div>
   {/if}
 
-  <SourceAttribution {content} />
+  <SourceAttribution {content} {retrievedChunks} />
 
   {#if showNextSteps}
     <NextStepButtons

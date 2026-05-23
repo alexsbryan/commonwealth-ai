@@ -2228,86 +2228,41 @@ fn row_to_document_session(row: &rusqlite::Row) -> DocumentSession {
 
 // ── Conversation tiered-retrieval port (spec CONV_TIERED_PORT.md) ──
 //
+// Row structs + reader trait live in `sovereign-core::conv_tiered` to
+// avoid a sovereign-core → sovereign-store cycle (sovereign-store
+// already depends on sovereign-core for `StateStore`/`Error`). Impl
+// of the reader trait on `SqliteStateStore` lives below; the row
+// re-exports below let existing call sites keep their import paths.
+
+pub use sovereign_core::conv_tiered::{
+    ConvMotifRow, ConvRaptorNodeRow, ConvSkeletonRow, ConvTieredReader, ConvTieredState,
+};
+
+#[async_trait::async_trait]
+impl ConvTieredReader for SqliteStateStore {
+    async fn list_conv_skeletons_for_corpus(
+        &self,
+        corpus_id: &str,
+        conv_uuids: &[String],
+    ) -> sovereign_core::error::Result<Vec<ConvSkeletonRow>> {
+        SqliteStateStore::list_conv_skeletons_for_corpus(self, corpus_id, conv_uuids).await
+    }
+
+    async fn list_conv_raptor_nodes(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> sovereign_core::error::Result<Vec<ConvRaptorNodeRow>> {
+        SqliteStateStore::list_conv_raptor_nodes(self, corpus_id, conv_uuid).await
+    }
+}
+
+//
 // Persistence surface for the per-conversation T2/T3 enrichment
 // output. The `TieredEnrichmentProvider` impl in `sovereign-tools`
 // holds an `Arc<SqliteStateStore>` and writes through these methods;
 // corpus-engine never touches the store directly (no dep on
 // sovereign-store).
-
-/// State variant for a single conversation's tiered enrichment
-/// progress. Mirrors `AssetState` but unblocks string-storage of the
-/// tag rather than full enum serialisation — the briefing layer only
-/// checks a handful of states, no need for serde dance.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConvTieredState {
-    Pending,
-    PartiallyReady,
-    MultiHopReady,
-    Ready,
-    Failed,
-}
-
-impl ConvTieredState {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ConvTieredState::Pending => "Pending",
-            ConvTieredState::PartiallyReady => "PartiallyReady",
-            ConvTieredState::MultiHopReady => "MultiHopReady",
-            ConvTieredState::Ready => "Ready",
-            ConvTieredState::Failed => "Failed",
-        }
-    }
-}
-
-/// One row from `conv_skeletons`. `skeleton_json` / `overview` /
-/// `segments_json` are populated incrementally as the per-tier
-/// enrichment passes complete.
-#[derive(Debug, Clone)]
-pub struct ConvSkeletonRow {
-    pub corpus_id: String,
-    pub conv_uuid: String,
-    pub state: String,
-    pub skeleton_json: Option<String>,
-    pub overview: Option<String>,
-    pub segments_json: Option<String>,
-    pub chunk_count: i64,
-    pub updated_at: i64,
-}
-
-/// One row from `conv_raptor_nodes`. Mirrors the attached-doc
-/// `RaptorNode` shape but corpus-namespaced; pre-serialized JSON
-/// blobs match the column types so callers don't need to know the
-/// schema's JSON-array convention.
-#[derive(Debug, Clone)]
-pub struct ConvRaptorNodeRow {
-    pub node_id: String,
-    pub corpus_id: String,
-    pub conv_uuid: String,
-    pub level: i64,
-    pub summary: String,
-    pub summary_embedding: Vec<f32>,
-    pub centroid_embedding: Vec<f32>,
-    pub children_node_ids_json: String,
-    pub direct_member_chunk_ids_json: Option<String>,
-    pub evidence_chunk_ids_json: String,
-    pub quote_spans_json: String,
-    pub primary_entities_json: String,
-    pub cluster_coherence: f64,
-    pub created_at: i64,
-}
-
-/// One row from `conv_motifs`. TF-IDF score is computed in-process
-/// from the chunk content; the LLM-classified `is_distinctive` flag
-/// is the gate that keeps fluff terms out of the briefing.
-#[derive(Debug, Clone)]
-pub struct ConvMotifRow {
-    pub corpus_id: String,
-    pub conv_uuid: String,
-    pub term: String,
-    pub tf_idf_score: f64,
-    pub occurrence_chunk_ids_json: String,
-    pub is_distinctive: bool,
-}
 
 impl SqliteStateStore {
     /// Upsert the per-conv skeleton row. `state` is one of
@@ -2458,6 +2413,238 @@ impl SqliteStateStore {
         }
         tx.commit().map_err(map_db)?;
         Ok(())
+    }
+
+    /// Read every RAPTOR node for one conversation, ordered by level
+    /// descending then by `node_id` so the briefing layer sees root
+    /// summaries first (the top-of-tree paraphrase that anchors
+    /// reading order) and leaf clusters last. Level-0 leaves carry
+    /// `direct_member_chunk_ids`; higher levels carry only
+    /// `evidence_chunk_ids` (the transitive subtree union).
+    pub async fn list_conv_raptor_nodes(
+        &self,
+        corpus_id: &str,
+        conv_uuid: &str,
+    ) -> Result<Vec<ConvRaptorNodeRow>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT node_id, corpus_id, conv_uuid, level, summary,
+                        summary_embedding, centroid_embedding,
+                        children_node_ids, direct_member_chunk_ids,
+                        evidence_chunk_ids, quote_spans, primary_entities,
+                        cluster_coherence, created_at
+                 FROM conv_raptor_nodes
+                 WHERE corpus_id = ?1 AND conv_uuid = ?2
+                 ORDER BY level DESC, node_id ASC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map(rusqlite::params![corpus_id, conv_uuid], |r| {
+                Ok(ConvRaptorNodeRow {
+                    node_id: r.get(0)?,
+                    corpus_id: r.get(1)?,
+                    conv_uuid: r.get(2)?,
+                    level: r.get(3)?,
+                    summary: r.get(4)?,
+                    summary_embedding: decode_f32_vec(r.get::<_, Vec<u8>>(5)?.as_slice()),
+                    centroid_embedding: decode_f32_vec(r.get::<_, Vec<u8>>(6)?.as_slice()),
+                    children_node_ids_json: r.get(7)?,
+                    direct_member_chunk_ids_json: r.get(8)?,
+                    evidence_chunk_ids_json: r.get(9)?,
+                    quote_spans_json: r.get(10)?,
+                    primary_entities_json: r.get(11)?,
+                    cluster_coherence: r.get(12)?,
+                    created_at: r.get(13)?,
+                })
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok(out)
+    }
+
+    /// Bulk read for `(state, overview, chunk_count)` triples across
+    /// many conversations. Avoids a per-conv round-trip when the
+    /// briefing builder is selecting which convs to surface. Drops
+    /// conv_uuids that have no row (briefing layer treats those as
+    /// "no tiered enrichment yet").
+    pub async fn list_conv_skeletons_for_corpus(
+        &self,
+        corpus_id: &str,
+        conv_uuids: &[String],
+    ) -> Result<Vec<ConvSkeletonRow>> {
+        if conv_uuids.is_empty() {
+            return Ok(Vec::new());
+        }
+        // SQLite has a default 999 parameter limit; cap the IN-list
+        // size to stay well under. Briefing layer caps at top-8 anyway,
+        // so this floor is purely defensive.
+        let max_in_list = conv_uuids.len().min(500);
+        let placeholders: Vec<&str> = (0..max_in_list).map(|_| "?").collect();
+        let mut placeholder_list = String::from("?,");
+        placeholder_list.push_str(&placeholders.join(","));
+        let sql = format!(
+            "SELECT corpus_id, conv_uuid, state, skeleton_json, overview,
+                    segments_json, chunk_count, updated_at
+             FROM conv_skeletons
+             WHERE corpus_id = ?1 AND conv_uuid IN ({})",
+            placeholders.join(",")
+        );
+        let conn = self.conn.lock().await;
+        let mut stmt = conn.prepare(&sql).map_err(map_db)?;
+        let mut params: Vec<&dyn rusqlite::ToSql> =
+            Vec::with_capacity(max_in_list + 1);
+        params.push(&corpus_id);
+        for uuid in conv_uuids.iter().take(max_in_list) {
+            params.push(uuid);
+        }
+        let rows = stmt
+            .query_map(params.as_slice(), |r| {
+                Ok(ConvSkeletonRow {
+                    corpus_id: r.get(0)?,
+                    conv_uuid: r.get(1)?,
+                    state: r.get(2)?,
+                    skeleton_json: r.get(3)?,
+                    overview: r.get(4)?,
+                    segments_json: r.get(5)?,
+                    chunk_count: r.get(6)?,
+                    updated_at: r.get(7)?,
+                })
+            })
+            .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok(out)
+    }
+
+    /// Enumerate every conv corpus that has at least one row in
+    /// `conv_skeletons`, together with per-state counts + max
+    /// `updated_at`. Used by the desktop Atlas index
+    /// (`atlas_list_conv_corpora`) to render the "Conversations"
+    /// group alongside atoms.json-backed corpora.
+    ///
+    /// Returns one tuple per corpus_id: `(corpus_id, total,
+    /// max_updated_at, per_state)`. Empty when no tiered enrichment
+    /// has ever run.
+    pub async fn list_conv_corpora_with_state_buckets(
+        &self,
+    ) -> Result<Vec<(String, u64, i64, Vec<(String, u64)>)>> {
+        let conn = self.conn.lock().await;
+        let mut stmt = conn
+            .prepare(
+                "SELECT corpus_id, state, COUNT(*) as n, MAX(updated_at) as max_ts
+                 FROM conv_skeletons
+                 GROUP BY corpus_id, state
+                 ORDER BY corpus_id ASC, state ASC",
+            )
+            .map_err(map_db)?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, i64>(3)?,
+                ))
+            })
+            .map_err(map_db)?;
+        let mut by_corpus: std::collections::BTreeMap<String, (Vec<(String, u64)>, i64)> =
+            std::collections::BTreeMap::new();
+        for row in rows {
+            let (corpus_id, state, n, ts) = row.map_err(map_db)?;
+            let entry = by_corpus.entry(corpus_id).or_default();
+            entry.0.push((state, n as u64));
+            entry.1 = entry.1.max(ts);
+        }
+        Ok(by_corpus
+            .into_iter()
+            .map(|(corpus_id, (per_state, max_ts))| {
+                let total: u64 = per_state.iter().map(|(_, n)| *n).sum();
+                (corpus_id, total, max_ts, per_state)
+            })
+            .collect())
+    }
+
+    /// Paginated list of conversations in one corpus, optionally
+    /// filtered by case-insensitive substring on `overview`. Returns
+    /// the page slice + total matching count.
+    pub async fn list_conversations_paginated(
+        &self,
+        corpus_id: &str,
+        filter: Option<&str>,
+        offset: u64,
+        limit: u64,
+    ) -> Result<(Vec<ConvSkeletonRow>, u64)> {
+        let conn = self.conn.lock().await;
+        let filter_clause = if filter.is_some() {
+            "AND COALESCE(overview, '') LIKE ?2"
+        } else {
+            ""
+        };
+        // Total count first.
+        let count_sql = format!(
+            "SELECT COUNT(*) FROM conv_skeletons WHERE corpus_id = ?1 {filter_clause}"
+        );
+        let total: i64 = if let Some(f) = filter {
+            let needle = format!("%{}%", f.replace('%', "\\%").replace('_', "\\_"));
+            conn.query_row(&count_sql, rusqlite::params![corpus_id, needle], |r| r.get(0))
+                .map_err(map_db)?
+        } else {
+            conn.query_row(&count_sql, rusqlite::params![corpus_id], |r| r.get(0))
+                .map_err(map_db)?
+        };
+
+        // Page itself, ordered by updated_at DESC then conv_uuid for
+        // stable pagination. SQLite supports OFFSET on indexed sorts,
+        // but for very large corpora a keyset cursor (last-seen
+        // updated_at, conv_uuid) would be preferable; deferred until
+        // anyone hits a 100k+ conv corpus.
+        let page_sql = format!(
+            "SELECT corpus_id, conv_uuid, state, skeleton_json, overview,
+                    segments_json, chunk_count, updated_at
+             FROM conv_skeletons
+             WHERE corpus_id = ?1 {filter_clause}
+             ORDER BY updated_at DESC, conv_uuid ASC
+             LIMIT ?{} OFFSET ?{}",
+            if filter.is_some() { 3 } else { 2 },
+            if filter.is_some() { 4 } else { 3 },
+        );
+        let mut stmt = conn.prepare(&page_sql).map_err(map_db)?;
+        let map_row = |r: &rusqlite::Row<'_>| {
+            Ok(ConvSkeletonRow {
+                corpus_id: r.get(0)?,
+                conv_uuid: r.get(1)?,
+                state: r.get(2)?,
+                skeleton_json: r.get(3)?,
+                overview: r.get(4)?,
+                segments_json: r.get(5)?,
+                chunk_count: r.get(6)?,
+                updated_at: r.get(7)?,
+            })
+        };
+        let rows_result = if let Some(f) = filter {
+            let needle = format!("%{}%", f.replace('%', "\\%").replace('_', "\\_"));
+            stmt.query_map(
+                rusqlite::params![corpus_id, needle, limit as i64, offset as i64],
+                map_row,
+            )
+        } else {
+            stmt.query_map(
+                rusqlite::params![corpus_id, limit as i64, offset as i64],
+                map_row,
+            )
+        }
+        .map_err(map_db)?;
+        let mut out = Vec::new();
+        for row in rows_result {
+            out.push(row.map_err(map_db)?);
+        }
+        Ok((out, total as u64))
     }
 
     /// Inventory of conv states for a corpus — used by ops tools to

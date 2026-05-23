@@ -1855,6 +1855,16 @@ pub async fn bootstrap_with_progress(
     if let Some(ns) = state.notes.read().await.as_ref() {
         runtime = runtime.with_note_store(Arc::clone(ns));
     }
+    // Conv-tiered briefing reader (spec CONV_TIERED_PORT.md). The
+    // concrete SqliteStateStore stashed at bootstrap also impls
+    // ConvTieredReader; pass the same Arc so retrieval prompts can
+    // surface per-conversation RAPTOR signposts beside raw chunks.
+    if let Some(ss) = state.sqlite_store.read().await.as_ref() {
+        runtime = runtime.with_conv_tiered_reader(
+            Arc::clone(ss)
+                as Arc<dyn sovereign_store::sqlite::ConvTieredReader>,
+        );
+    }
     // Landscape-digest provider wiring. Three branches:
     //
     // 1. **Local mode + KnowledgeView enabled** — install the local

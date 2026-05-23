@@ -1718,6 +1718,91 @@ export interface PageCursor {
   limit: number;
 }
 
+// ─── Conversation tiered-retrieval Atlas surface ────────────────
+// Spec: sovereign/docs/specs/CONV_TIERED_PORT.md §"Retrieval
+// surface — A1/A2". Conv corpora don't write atoms.json; their
+// tiered enrichment lives in the conv_skeletons / conv_raptor_nodes
+// / conv_motifs SQLite sidecar tables. AtlasIndex calls BOTH
+// atlasListCorpora and atlasListConvCorpora and merges the results.
+
+/** One row in the desktop Atlas index for a conv corpus.
+ *  Parallel to AtlasCorpusSummary but counts conversations and
+ *  tracks per-state enrichment progress instead of atom-type
+ *  buckets. */
+export interface ConvCorpusSummary {
+  corpus_id: string;
+  display_name: string;
+  /** Total conversations with at least one conv_skeletons row. */
+  conv_count: number;
+  /** State-bucketed counts. Keys are the ConvTieredState string
+   *  variants: "Pending", "PartiallyReady", "MultiHopReady",
+   *  "Ready", "Failed". Absent keys = zero. */
+  state_counts: Partial<Record<string, number>>;
+  last_updated_unix?: number;
+  display_category?: string;
+  display_icon?: string;
+}
+
+/** One row in AtlasConvCorpusView — a conversation as the
+ *  atlas-level unit. */
+export interface ConvSummary {
+  conv_uuid: string;
+  title: string;
+  /** Verbatim from conv_skeletons.state. */
+  state: string;
+  chunk_count: number;
+  /** Top entities across the conv's RAPTOR nodes by salience. Empty
+   *  for Tiny synthetic convs. */
+  top_entities: string[];
+  updated_at: number;
+  /** Tiny opt-2 path: single synthetic node with empty entities.
+   *  UI suppresses entity affordances when true. */
+  is_tiny: boolean;
+}
+
+export interface ConvListPage {
+  conversations: ConvSummary[];
+  total_matching: number;
+  next_offset?: number;
+}
+
+/** One node in a conv's RAPTOR tree. */
+export interface ConvRaptorNodeView {
+  node_id: string;
+  level: number;
+  summary: string;
+  primary_entities: string[];
+  direct_member_chunk_ids: number[];
+  evidence_chunk_count: number;
+  cluster_coherence: number;
+  /** Synthetic Tiny placeholder — UI suppresses entity row + shows
+   *  a "no clusters extracted" affordance instead. */
+  is_synthetic_tiny: boolean;
+}
+
+/** Full conv detail — title + state + full RAPTOR tree. The frontend
+ *  picks flat (≤2 levels) or hierarchical (>2) rendering based on
+ *  max_level. */
+export interface ConvDetailView {
+  corpus_id: string;
+  conv_uuid: string;
+  title: string;
+  state: string;
+  chunk_count: number;
+  updated_at: number;
+  raptor_nodes: ConvRaptorNodeView[];
+  max_level: number;
+}
+
+/** One entity chip for the conversation chunk renderer (A2). */
+export interface ConvEntityChip {
+  name: string;
+  /** Sum of cluster_coherence across nodes containing the entity. */
+  salience: number;
+  /** Number of distinct RAPTOR nodes mentioning the entity. */
+  occurrence_count: number;
+}
+
 export type CurationStatus = "generated";
 
 /** Compact per-atom record returned by `atlas_list_atoms`. The full

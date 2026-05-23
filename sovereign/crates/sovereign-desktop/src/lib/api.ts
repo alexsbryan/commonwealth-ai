@@ -32,6 +32,10 @@ import type {
   AtomListPage,
   PageCursor,
   AtomDetail,
+  ConvCorpusSummary,
+  ConvDetailView,
+  ConvEntityChip,
+  ConvListPage,
 } from "./types";
 
 export async function sendMessage(
@@ -1351,6 +1355,48 @@ export async function atlasGetAtomDetail(
   atomId: string,
 ): Promise<AtomDetail | null> {
   return invoke("atlas_get_atom_detail", { corpusId, atomId });
+}
+
+// ─── Conversation tiered-retrieval Atlas (A1 + A2) ────────────
+
+/** List every conv corpus with at least one row in conv_skeletons.
+ *  Parallel to atlasListCorpora but for the SQLite-backed conv
+ *  enrichment surface. AtlasIndex calls both and merges. */
+export async function atlasListConvCorpora(): Promise<ConvCorpusSummary[]> {
+  return invoke("atlas_list_conv_corpora");
+}
+
+/** Paginated list of conversations in one corpus, filterable by
+ *  case-insensitive substring on conversation overview/title. */
+export async function atlasListConversations(
+  corpusId: string,
+  filter?: string,
+  offset?: number,
+): Promise<ConvListPage> {
+  return invoke("atlas_list_conversations", {
+    corpusId,
+    filter,
+    offset,
+  });
+}
+
+/** Full conv detail (RAPTOR tree + state + chunk count). Returns
+ *  `null` when no conv_skeletons row exists for the (corpus, conv)
+ *  pair (i.e., the conv hasn't been enriched yet). */
+export async function atlasGetConvDetail(
+  corpusId: string,
+  convUuid: string,
+): Promise<ConvDetailView | null> {
+  return invoke("atlas_get_conv_detail", { corpusId, convUuid });
+}
+
+/** Top-N entity chips for one conversation. Drives the chip row
+ *  above ConversationChunkRenderer message bubbles. */
+export async function atlasGetConvEntities(
+  corpusId: string,
+  convUuid: string,
+): Promise<ConvEntityChip[]> {
+  return invoke("atlas_get_conv_entities", { corpusId, convUuid });
 }
 
 // ─── Contribution controls (W2/W3) ───────────────────────────

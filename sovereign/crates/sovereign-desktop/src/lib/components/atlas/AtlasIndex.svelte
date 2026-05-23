@@ -7,22 +7,40 @@
   // `AtlasCorpusView` for that corpus.
 
   import { onMount } from "svelte";
-  import { atlasListCorpora } from "../../api";
-  import type { AtlasCorpusSummary, AtomType } from "../../types";
+  import { atlasListCorpora, atlasListConvCorpora } from "../../api";
+  import type {
+    AtlasCorpusSummary,
+    AtomType,
+    ConvCorpusSummary,
+  } from "../../types";
+
+  // Distinguish the two row shapes the index renders. Atom corpora
+  // (atoms.json-backed) show per-atom-type counts; conv corpora
+  // (SQLite-backed tiered enrichment) show per-state counts. Both
+  // live under the same `display_category` heading when the recipe
+  // tags them the same way (e.g. "conversation").
+  type IndexRow =
+    | { kind: "atom"; data: AtlasCorpusSummary }
+    | { kind: "conv"; data: ConvCorpusSummary };
 
   interface Props {
     /** Optional click handler. When set, rows become buttons that
-     *  call this with the corpus id. When omitted, rows render
-     *  read-only (useful for the standalone index view in early
-     *  Phase 1). */
-    onSelect?: (corpusId: string) => void;
+     *  call this with the corpus id + kind. Kind = "atom" routes to
+     *  the legacy AtlasCorpusView; "conv" routes to
+     *  AtlasConvCorpusView (conv_skeletons / conv_raptor_nodes
+     *  backed). When omitted, rows render read-only. */
+    onSelect?: (corpusId: string, kind: "atom" | "conv") => void;
   }
 
   let { onSelect }: Props = $props();
 
   let summaries: AtlasCorpusSummary[] = $state([]);
+  let convSummaries: ConvCorpusSummary[] = $state([]);
   let loading = $state(true);
   let error: string | null = $state(null);
+  /** Refresh interval id when any conv is still being enriched
+   *  (not all Ready). Cleared when all conversations settle. */
+  let convPollIntervalId: ReturnType<typeof setInterval> | null = null;
 
   const ATOM_TYPE_ORDER: AtomType[] = [
     "Entity",
@@ -50,13 +68,61 @@
 
   onMount(async () => {
     try {
-      summaries = await atlasListCorpora();
+      const [atoms, convs] = await Promise.all([
+        atlasListCorpora(),
+        atlasListConvCorpora(),
+      ]);
+      summaries = atoms;
+      convSummaries = convs;
+      maybeStartConvPoll();
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
     } finally {
       loading = false;
     }
+    return () => {
+      if (convPollIntervalId !== null) {
+        clearInterval(convPollIntervalId);
+      }
+    };
   });
+
+  /** Convs still mid-enrichment? Per-state counts where any state
+   *  other than "Ready" or "Failed" is non-zero. */
+  function hasPendingConvs(rows: ConvCorpusSummary[]): boolean {
+    for (const c of rows) {
+      for (const [state, n] of Object.entries(c.state_counts ?? {})) {
+        if ((n ?? 0) > 0 && state !== "Ready" && state !== "Failed") {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function maybeStartConvPoll() {
+    if (convPollIntervalId !== null) {
+      return;
+    }
+    if (!hasPendingConvs(convSummaries)) {
+      return;
+    }
+    // Glassbox: re-fetch every 5s while convs are still being enriched
+    // so the user sees real-time progress without a manual refresh.
+    convPollIntervalId = setInterval(async () => {
+      try {
+        const refreshed = await atlasListConvCorpora();
+        convSummaries = refreshed;
+        if (!hasPendingConvs(refreshed) && convPollIntervalId !== null) {
+          clearInterval(convPollIntervalId);
+          convPollIntervalId = null;
+        }
+      } catch {
+        // Swallow poll errors; the initial load already set the
+        // error state if there's a systemic problem.
+      }
+    }, 5000);
+  }
 
   function formatTimestamp(unix: number | undefined): string {
     if (!unix) return "";
@@ -101,15 +167,25 @@
   // then Other last so legacy / untagged corpora don't crowd the top.
   const KNOWN_CATEGORY_ORDER = Object.keys(CATEGORY_TITLE);
 
+  function convCategoryKey(s: ConvCorpusSummary): string {
+    return s.display_category ?? OTHER_GROUP;
+  }
+
   let grouped = $derived.by(() => {
-    const buckets = new Map<string, AtlasCorpusSummary[]>();
+    const buckets = new Map<string, IndexRow[]>();
     for (const s of summaries) {
       const key = categoryKey(s);
       const list = buckets.get(key) ?? [];
-      list.push(s);
+      list.push({ kind: "atom", data: s });
       buckets.set(key, list);
     }
-    const ordered: Array<{ key: string; title: string; rows: AtlasCorpusSummary[] }> = [];
+    for (const s of convSummaries) {
+      const key = convCategoryKey(s);
+      const list = buckets.get(key) ?? [];
+      list.push({ kind: "conv", data: s });
+      buckets.set(key, list);
+    }
+    const ordered: Array<{ key: string; title: string; rows: IndexRow[] }> = [];
     for (const k of KNOWN_CATEGORY_ORDER) {
       const rows = buckets.get(k);
       if (rows && rows.length > 0) {
@@ -130,6 +206,20 @@
     }
     return ordered;
   });
+
+  /** Per-state badge label + count for a conv corpus, suppressing
+   *  zero counts so the row stays scannable. */
+  function convStateBadges(c: ConvCorpusSummary): Array<[string, number]> {
+    const order = ["Ready", "MultiHopReady", "PartiallyReady", "Pending", "Failed"];
+    return order.flatMap<[string, number]>((state) => {
+      const n = c.state_counts[state] ?? 0;
+      return n > 0 ? [[state, n]] : [];
+    });
+  }
+
+  function totalConvRows(): boolean {
+    return summaries.length > 0 || convSummaries.length > 0;
+  }
 </script>
 
 <div class="atlas-index">
@@ -147,7 +237,7 @@
     <div class="status error" role="alert">
       Failed to load atlases: {error}
     </div>
-  {:else if summaries.length === 0}
+  {:else if !totalConvRows()}
     <div class="status empty">
       <p>No atlases on disk yet.</p>
       <p class="hint">
@@ -162,34 +252,70 @@
         <section class="category-section" data-testid="atlas-category-section" data-category={group.key}>
           <h2 class="category-heading">{group.title}</h2>
           <ul class="corpus-list">
-            {#each group.rows as s (s.corpus_id)}
-              <li class="corpus-row" data-testid="atlas-corpus-row">
-                <button
-                  class="row-button"
-                  type="button"
-                  disabled={!onSelect}
-                  onclick={() => onSelect?.(s.corpus_id)}
-                  aria-label={`Open ${s.display_name}`}
-                >
-                  <div class="row-header">
-                    <span class="corpus-id">{s.display_name}</span>
-                    <span class="total">{s.total_atoms.toLocaleString()} atoms</span>
-                  </div>
-                  <div class="counts">
-                    {#each nonZeroCounts(s) as [t, n] (t)}
-                      <span class="count-chip" title={t}>
-                        <span class="count-label">{ATOM_TYPE_LABEL[t]}</span>
-                        <span class="count-n">{n.toLocaleString()}</span>
-                      </span>
-                    {/each}
-                  </div>
-                  {#if s.last_extracted_unix}
-                    <div class="meta">
-                      Last extracted: {formatTimestamp(s.last_extracted_unix)}
+            {#each group.rows as row (row.kind + ":" + row.data.corpus_id)}
+              {#if row.kind === "atom"}
+                <li class="corpus-row" data-testid="atlas-corpus-row">
+                  <button
+                    class="row-button"
+                    type="button"
+                    disabled={!onSelect}
+                    onclick={() => onSelect?.(row.data.corpus_id, "atom")}
+                    aria-label={`Open ${row.data.display_name}`}
+                  >
+                    <div class="row-header">
+                      <span class="corpus-id">{row.data.display_name}</span>
+                      <span class="total">{row.data.total_atoms.toLocaleString()} atoms</span>
                     </div>
-                  {/if}
-                </button>
-              </li>
+                    <div class="counts">
+                      {#each nonZeroCounts(row.data) as [t, n] (t)}
+                        <span class="count-chip" title={t}>
+                          <span class="count-label">{ATOM_TYPE_LABEL[t]}</span>
+                          <span class="count-n">{n.toLocaleString()}</span>
+                        </span>
+                      {/each}
+                    </div>
+                    {#if row.data.last_extracted_unix}
+                      <div class="meta">
+                        Last extracted: {formatTimestamp(row.data.last_extracted_unix)}
+                      </div>
+                    {/if}
+                  </button>
+                </li>
+              {:else}
+                <li class="corpus-row" data-testid="atlas-corpus-row" data-row-kind="conv">
+                  <button
+                    class="row-button"
+                    type="button"
+                    disabled={!onSelect}
+                    onclick={() => onSelect?.(row.data.corpus_id, "conv")}
+                    aria-label={`Open ${row.data.display_name}`}
+                  >
+                    <div class="row-header">
+                      <span class="corpus-id">{row.data.display_name}</span>
+                      <span class="total">
+                        {row.data.conv_count.toLocaleString()} conversation{row.data.conv_count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                    <div class="counts">
+                      {#each convStateBadges(row.data) as [state, n] (state)}
+                        <span
+                          class="count-chip"
+                          data-state={state.toLowerCase()}
+                          title={state}
+                        >
+                          <span class="count-label">{state}</span>
+                          <span class="count-n">{n.toLocaleString()}</span>
+                        </span>
+                      {/each}
+                    </div>
+                    {#if row.data.last_updated_unix}
+                      <div class="meta">
+                        Last updated: {formatTimestamp(row.data.last_updated_unix)}
+                      </div>
+                    {/if}
+                  </button>
+                </li>
+              {/if}
             {/each}
           </ul>
         </section>

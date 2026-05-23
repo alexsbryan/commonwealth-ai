@@ -915,13 +915,49 @@ async fn run_daemon(args: &[String]) -> i32 {
         // batch_embed above.
         let inference_fn =
             sovereign_tools::corpus::inference_to_inference_fn(Arc::clone(&provider));
-        Arc::new(
-            CorpusEngine::new(recipes_dir, indexes_dir, embed)
-                .with_embedding_model(&embed_model_name)
-                .with_batch_embed_fn(batch_embed)
-                .with_inference_fn(inference_fn)
-                .with_self_node_id(self_node_id.to_string()),
-        )
+        // Conv-tiered enrichment provider — spec
+        // `sovereign/docs/specs/CONV_TIERED_PORT.md`. Opens the
+        // canonical state store at `~/.sovereign/sovereign.db` so the
+        // provider can write `conv_raptor_nodes` / `conv_skeletons` /
+        // `conv_motifs` rows during corp-anthropic ingest. Failing to
+        // open is non-fatal: the tiered runner falls back to its
+        // dispatch-plan-only mode when no provider is injected, which
+        // is still useful diagnostic output.
+        let tiered_provider: Option<
+            std::sync::Arc<
+                dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider,
+            >,
+        > = {
+            let db_path = data_dir.join("sovereign.db");
+            match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
+                Ok(store) => {
+                    let store_arc = Arc::new(store);
+                    let prov =
+                        sovereign_tools::conv_tiered_provider::ConvTieredProvider::new(
+                            store_arc,
+                            Arc::clone(&provider),
+                        );
+                    Some(std::sync::Arc::new(prov))
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        db_path = %db_path.display(),
+                        error = %e,
+                        "conv-tiered: cannot open state store — tiered enrichment will run dispatch-plan-only mode"
+                    );
+                    None
+                }
+            }
+        };
+        let mut engine_builder = CorpusEngine::new(recipes_dir, indexes_dir, embed)
+            .with_embedding_model(&embed_model_name)
+            .with_batch_embed_fn(batch_embed)
+            .with_inference_fn(inference_fn)
+            .with_self_node_id(self_node_id.to_string());
+        if let Some(provider) = tiered_provider {
+            engine_builder = engine_builder.with_tiered_provider(provider);
+        }
+        Arc::new(engine_builder)
     };
 
     // ── Tool registry (code intelligence + notes) ─────────────────
