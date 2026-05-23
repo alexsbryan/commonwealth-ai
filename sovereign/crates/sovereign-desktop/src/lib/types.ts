@@ -1812,9 +1812,50 @@ export interface GlinerModelStatus {
   size_estimate_mb: number;
 }
 
+/** One label's mention count inside an `EntityAggregateRow`.
+ *  Splits the surface-form collapse (Person:"Swift" vs
+ *  Organization:"SWIFT") so the drawer can show typed breakdown
+ *  without merging homonyms. */
+export interface EntityLabelCount {
+  label: string;
+  count: number;
+}
+
+/** One conversation that mentioned the queried entity. */
+export interface EntityConvHit {
+  conv_uuid: string;
+  mention_count: number;
+}
+
+/** One entity co-appearing with the seed entity in the same chunks. */
+export interface CoOccurringEntity {
+  text: string;
+  label: string;
+  shared_chunk_count: number;
+}
+
+/** Aggregate view of one entity's footprint inside a corpus. Returned
+ *  by `atlas_get_entity_aggregate`; powers the Atlas-view entity
+ *  drawer. */
+export interface EntityAggregateRow {
+  corpus_id: string;
+  /** Canonical display form (most-common surface variant in corpus). */
+  text: string;
+  labels: EntityLabelCount[];
+  mention_count: number;
+  conv_count: number;
+  chunk_count: number;
+  top_convs: EntityConvHit[];
+  co_occurring: CoOccurringEntity[];
+}
+
 /** Per-corpus chunk-entity extraction progress. Mirrors the
  *  `chunk_entity_progress` SQLite row. State: "running" | "complete"
- *  | "failed" | "paused". */
+ *  | "incremental" | "failed" | "paused". The "incremental" state
+ *  is the Phase B steady-state for live corpora (spec
+ *  `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §B) — Phase A
+ *  finishes "complete", then the daemon's post-ingest hook flips it
+ *  to "incremental" once the first delta-extract lands. */
 export interface ChunkEntityProgressRow {
   corpus_id: string;
   chunks_processed: number;

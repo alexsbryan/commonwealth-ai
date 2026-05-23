@@ -118,6 +118,11 @@
 
   function anyExtractionRunning(): boolean {
     for (const p of Object.values(extractionProgress)) {
+      // Poll while the snapshot Phase A is still running. The
+      // Phase B "incremental" steady-state doesn't need 5s polling
+      // — its updates only land on chat-history rebuilds, not
+      // tick-by-tick — so we drop out of polling once Phase A
+      // graduates.
       if (p && p.state === "running") return true;
     }
     return false;
@@ -408,6 +413,13 @@
                               ({prog.mentions_extracted.toLocaleString()} names &amp; topics found across your chats)
                             </span>
                           </span>
+                        {:else if prog.state === "incremental"}
+                          <span class="extraction-pill incremental">
+                            ✓ Smart highlights — auto-updating
+                            <span class="extraction-detail">
+                              ({prog.mentions_extracted.toLocaleString()} names &amp; topics · new chats analysed in the background)
+                            </span>
+                          </span>
                         {:else if prog.state === "failed"}
                           <span class="extraction-pill failed">
                             Couldn't analyse highlights — re-run from Settings
@@ -607,6 +619,11 @@
   .extraction-pill.complete {
     background: rgba(78, 192, 107, 0.16);
     color: #6dd58a;
+  }
+  .extraction-pill.incremental {
+    background: rgba(78, 192, 107, 0.12);
+    color: #6dd58a;
+    border: 1px dashed rgba(78, 192, 107, 0.4);
   }
   .extraction-pill.failed {
     background: rgba(216, 76, 76, 0.18);

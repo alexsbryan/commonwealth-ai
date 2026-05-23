@@ -748,3 +748,218 @@ async fn sqlite_asset_motif_roundtrip() {
     let after_delete = store.list_asset_motifs(asset_id).await.unwrap();
     assert!(after_delete.is_empty());
 }
+
+// ─── Phase B incremental chunk-entity tests ──────────────────────────
+//
+// `list_extracted_chunk_ids_for_corpus` is the membership lookup the
+// Phase B incremental hook uses to compute the delta between Lance
+// chunks and `chunk_entities` rows. Spec:
+// `sovereign/docs/specs/PROGRESSIVE_ENRICHMENT.md` §B.
+
+fn mk_entity_row(corpus_id: &str, chunk_id: u64, text: &str) -> sovereign_core::conv_tiered::ChunkEntityRow {
+    sovereign_core::conv_tiered::ChunkEntityRow {
+        corpus_id: corpus_id.to_string(),
+        chunk_id,
+        text: text.to_string(),
+        label: "Person".to_string(),
+        char_start: 0,
+        char_end: text.len() as i64,
+        score: 0.85,
+        conv_uuid: Some("conv-x".to_string()),
+        extracted_at: 42,
+    }
+}
+
+#[tokio::test]
+async fn list_extracted_chunk_ids_empty_for_unseen_corpus() {
+    let store = sqlite_store();
+    let ids = store
+        .list_extracted_chunk_ids_for_corpus("never-seen")
+        .await
+        .unwrap();
+    assert!(ids.is_empty());
+}
+
+#[tokio::test]
+async fn list_extracted_chunk_ids_unions_for_and_non_grouped_writes() {
+    let store = sqlite_store();
+    // Path 1 — conv-grouped write (the path Phase A backfill uses).
+    store
+        .save_chunk_entities_for_conv(
+            "corpus-a",
+            "conv-x",
+            &[mk_entity_row("corpus-a", 10, "Borges"), mk_entity_row("corpus-a", 11, "Bach")],
+        )
+        .await
+        .unwrap();
+    // Path 2 — non-destructive append (the path Phase B incremental uses).
+    store
+        .save_chunk_entities(&[mk_entity_row("corpus-a", 12, "Italo Calvino")])
+        .await
+        .unwrap();
+    // Sibling corpus — must not appear in the corpus-a result set.
+    store
+        .save_chunk_entities(&[mk_entity_row("corpus-b", 99, "Other")])
+        .await
+        .unwrap();
+
+    let ids = store
+        .list_extracted_chunk_ids_for_corpus("corpus-a")
+        .await
+        .unwrap();
+    assert_eq!(ids.len(), 3);
+    assert!(ids.contains(&10));
+    assert!(ids.contains(&11));
+    assert!(ids.contains(&12));
+    assert!(!ids.contains(&99));
+}
+
+fn mk_entity_row_labeled(
+    corpus_id: &str,
+    chunk_id: u64,
+    text: &str,
+    label: &str,
+    conv_uuid: Option<&str>,
+) -> sovereign_core::conv_tiered::ChunkEntityRow {
+    sovereign_core::conv_tiered::ChunkEntityRow {
+        corpus_id: corpus_id.to_string(),
+        chunk_id,
+        text: text.to_string(),
+        label: label.to_string(),
+        char_start: 0,
+        char_end: text.len() as i64,
+        score: 0.85,
+        conv_uuid: conv_uuid.map(|s| s.to_string()),
+        extracted_at: 42,
+    }
+}
+
+#[tokio::test]
+async fn aggregate_entity_case_insensitive_with_label_breakdown() {
+    // Atlas-view drawer pivot: case-fold + per-label split. Live
+    // case 2026-05-23 — "Borges" + "borges" + "BORGES" should fold
+    // to one row; "Swift" Person + "SWIFT" Organization should
+    // surface as two label buckets in the same row.
+    let store = sqlite_store();
+    store
+        .save_chunk_entities(&[
+            mk_entity_row_labeled("c", 10, "Borges", "Person", Some("conv-1")),
+            mk_entity_row_labeled("c", 11, "borges", "Person", Some("conv-1")),
+            mk_entity_row_labeled("c", 12, "BORGES", "Person", Some("conv-2")),
+            // Homonym pair on different rows — same surface form, different label.
+            mk_entity_row_labeled("c", 20, "Swift", "Person", Some("conv-3")),
+            mk_entity_row_labeled("c", 21, "SWIFT", "Organization", Some("conv-4")),
+            // Sibling corpus must not bleed in.
+            mk_entity_row_labeled("other", 99, "Borges", "Person", Some("conv-x")),
+        ])
+        .await
+        .unwrap();
+
+    let agg = store.aggregate_entity("c", "borges", 10, 10).await.unwrap();
+    assert_eq!(agg.mention_count, 3);
+    assert_eq!(agg.conv_count, 2);
+    assert_eq!(agg.chunk_count, 3);
+    assert_eq!(agg.labels.len(), 1);
+    assert_eq!(agg.labels[0].label, "Person");
+    assert_eq!(agg.labels[0].count, 3);
+    // Canonical text comes from the most-common variant. All three
+    // appear once apiece; tie broken by alphabetical so "BORGES" wins
+    // ("B" < "b" in ASCII, but query is COLLATE NOCASE; alphabetical
+    // here is binary-sorted text. Don't assert the exact winner — just
+    // that it's one of the three case variants.)
+    assert!(["Borges", "borges", "BORGES"].contains(&agg.text.as_str()));
+
+    let homonym = store.aggregate_entity("c", "swift", 10, 10).await.unwrap();
+    assert_eq!(homonym.mention_count, 2);
+    assert_eq!(homonym.labels.len(), 2);
+    let labels: std::collections::HashSet<&str> =
+        homonym.labels.iter().map(|l| l.label.as_str()).collect();
+    assert!(labels.contains("Person"));
+    assert!(labels.contains("Organization"));
+}
+
+#[tokio::test]
+async fn aggregate_entity_co_occurrence_intra_chunk_only() {
+    // Co-occurrence is intra-chunk, not intra-conv. Two entities
+    // in the same chunk count; two entities in the same conv but
+    // different chunks do not. Guards against an accidental
+    // GROUP BY conv_uuid join refactor.
+    let store = sqlite_store();
+    store
+        .save_chunk_entities(&[
+            // Chunk 10: Borges + Bach (shared chunk).
+            mk_entity_row_labeled("c", 10, "Borges", "Person", Some("conv-1")),
+            mk_entity_row_labeled("c", 10, "Bach", "Person", Some("conv-1")),
+            // Chunk 11 (same conv): Borges only. Calvino is separate chunk.
+            mk_entity_row_labeled("c", 11, "Borges", "Person", Some("conv-1")),
+            mk_entity_row_labeled("c", 12, "Calvino", "Person", Some("conv-1")),
+            // Chunk 20 (different conv): Borges + Bach again.
+            mk_entity_row_labeled("c", 20, "Borges", "Person", Some("conv-2")),
+            mk_entity_row_labeled("c", 20, "Bach", "Person", Some("conv-2")),
+        ])
+        .await
+        .unwrap();
+
+    let agg = store.aggregate_entity("c", "Borges", 10, 10).await.unwrap();
+    // Bach shares chunks 10 + 20 with Borges (2). Calvino shares
+    // zero chunks (same conv, different chunk). Calvino must NOT
+    // appear in the co_occurring list.
+    let bach = agg
+        .co_occurring
+        .iter()
+        .find(|c| c.text == "Bach")
+        .expect("Bach should appear");
+    assert_eq!(bach.shared_chunk_count, 2);
+    assert!(
+        agg.co_occurring.iter().all(|c| c.text != "Calvino"),
+        "Calvino shares no chunk with Borges; should not co-occur"
+    );
+}
+
+#[tokio::test]
+async fn aggregate_entity_unknown_returns_zero() {
+    // Drawer must handle "no mentions" without crashing — surface a
+    // zero-row aggregate so the UI can render its empty-state hint.
+    let store = sqlite_store();
+    let agg = store
+        .aggregate_entity("c", "never-seen-entity", 10, 10)
+        .await
+        .unwrap();
+    assert_eq!(agg.mention_count, 0);
+    assert_eq!(agg.conv_count, 0);
+    assert_eq!(agg.chunk_count, 0);
+    assert!(agg.labels.is_empty());
+    assert!(agg.top_convs.is_empty());
+    assert!(agg.co_occurring.is_empty());
+    // Canonical text falls back to the query when no rows exist.
+    assert_eq!(agg.text, "never-seen-entity");
+}
+
+#[tokio::test]
+async fn save_chunk_entities_preserves_prior_rows_non_destructive() {
+    // The non-destructive append is load-bearing for Phase B — a
+    // delta pass writes only the new chunks; prior conv data must
+    // survive. Regression guard for an accidental DELETE-then-INSERT
+    // refactor.
+    let store = sqlite_store();
+    store
+        .save_chunk_entities_for_conv(
+            "corpus-a",
+            "conv-x",
+            &[mk_entity_row("corpus-a", 10, "Borges")],
+        )
+        .await
+        .unwrap();
+    store
+        .save_chunk_entities(&[mk_entity_row("corpus-a", 11, "Bach")])
+        .await
+        .unwrap();
+
+    let ids = store
+        .list_extracted_chunk_ids_for_corpus("corpus-a")
+        .await
+        .unwrap();
+    assert_eq!(ids.len(), 2);
+    assert!(ids.contains(&10));
+    assert!(ids.contains(&11));
+}

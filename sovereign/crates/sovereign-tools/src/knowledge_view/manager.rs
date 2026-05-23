@@ -865,7 +865,10 @@ impl KnowledgeViewManager {
         let result = self.engine.ingest(&spec, None).await.map(|_| ());
         // Ingest can change the index (and eventually the skeleton
         // via downstream enrich) — invalidate digest entries for
-        // this view so the next splice re-reads.
+        // this view so the next splice re-reads. The Phase B
+        // incremental NER hook (PROGRESSIVE_ENRICHMENT.md §B) fires
+        // inside `engine.ingest` itself when the recipe declares
+        // `display.category = "conversation"` — no fan-out here.
         self.invalidate_digest_cache(view_id).await;
         result
     }

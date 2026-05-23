@@ -404,6 +404,7 @@ fn main() -> ExitCode {
             atlas_commands::atlas_check_gliner_model,
             atlas_commands::atlas_download_gliner_model,
             atlas_commands::atlas_get_chunk_entity_progress,
+            atlas_commands::atlas_get_entity_aggregate,
             commands::recipe_validate,
             commands::recipe_test,
             recipe_commands::corpus_import_recipe,

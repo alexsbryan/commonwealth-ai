@@ -37,6 +37,7 @@ import type {
   ConvDetailView,
   ConvEntityChip,
   ConvListPage,
+  EntityAggregateRow,
   GlinerModelStatus,
 } from "./types";
 
@@ -1415,6 +1416,17 @@ export async function atlasDownloadGlinerModel(
   modelId?: string,
 ): Promise<void> {
   return invoke("atlas_download_gliner_model", { modelId });
+}
+
+/** Aggregate one entity's footprint inside a corpus. Powers the
+ *  Atlas-view entity drawer (click an `entity-chip`). Returns
+ *  mention/conv counts, label breakdown, top convs, and co-occurring
+ *  entities. Matches `text` case-insensitively. */
+export async function atlasGetEntityAggregate(
+  corpusId: string,
+  text: string,
+): Promise<EntityAggregateRow> {
+  return invoke("atlas_get_entity_aggregate", { corpusId, text });
 }
 
 /** Per-corpus chunk-entity extraction progress. Returns `null` when
