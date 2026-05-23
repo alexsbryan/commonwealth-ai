@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use futures::{Stream, StreamExt};
 
@@ -44,9 +43,6 @@ struct ContradictionCheck {
 /// expansion path's `EXPANDED_KNOWLEDGE_CHARS` is now coincident
 /// with this default, since both serve roughly 12-15 chunks.
 const MAX_KNOWLEDGE_CHARS: usize = 8000;
-
-/// Truncate per-chunk content to produce a budget for the total knowledge context.
-const MAX_CHUNK_CHARS: usize = 600;
 
 /// Hard ceiling on the size of a single user turn's message.
 ///
@@ -623,94 +619,12 @@ the answer compact: a short paragraph or three bullet points, not \
 an essay. Use exact source terminology for technical terms, dates, \
 and proper nouns — paraphrase only the connective prose.";
 
-fn now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
+pub(crate) use self::text_utils::{
+    audit_pipeline_stage, format_conversation_history, now, today_anchor_block, truncate_chars,
+    truncate_chunk_content, truncate_with_ellipsis, MAX_CHUNK_CHARS,
+};
 
-/// UTF-8-safe truncate by character count. Used by the atlas-navigate
-/// dedupe key in `prepare_knowledge_query_plan` — slicing by byte
-/// offset can panic mid-codepoint on prose containing curly quotes /
-/// dashes / accented chars (real SEP content is full of them).
-fn truncate_chars(s: &str, max_chars: usize) -> String {
-    s.chars().take(max_chars).collect()
-}
-
-/// Truncate `content` to at most `max_bytes`, breaking on a word
-/// boundary when possible and appending `"..."`.
-///
-/// Byte index `max_bytes` may land inside a multi-byte UTF-8 scalar
-/// (em-dash `—` is 3 bytes, smart quotes 3 bytes, emoji 4). A naive
-/// `&content[..max_bytes]` panics `"byte index N is not a char
-/// boundary"`. When that panic fires inside the spawned streaming
-/// task the mpsc channel drops with zero tokens emitted and the
-/// desktop UI sits inert — exactly the failure mode observed on the
-/// Joan Robinson turn after source-expansion started pulling chunks
-/// containing em-dashes. Walk backward to the nearest char boundary
-/// before slicing; if we also find a word boundary within the
-/// remaining content, prefer that for readability.
-/// Emit a `retrieval_audit::pipeline_stage` event listing the top-40
-/// (title, corpus_id, score) tuples plus total count at the named
-/// stage. Forensic instrument for tracing chunk attrition across
-/// the noise floor / cap / reservation / truncate pipeline — see
-/// marathon T3 trace (2026-05-18) for the use-case that motivated it.
-///
-/// Gated behind `SOVEREIGN_FORENSIC=1` so production runs pay no
-/// cost. Set the env var on the eval CLI (or daemon, depending on
-/// which Runtime instance you want to instrument) to surface the
-/// events.
-fn audit_pipeline_stage(
-    chunks: &[corpus_engine::ScoredChunk],
-    stage: &'static str,
-    query: &str,
-) {
-    if std::env::var("SOVEREIGN_FORENSIC").ok().as_deref() != Some("1") {
-        return;
-    }
-    let comp: Vec<(String, String, f32)> = chunks
-        .iter()
-        .take(40)
-        .map(|c| {
-            (
-                c.corpus_id.clone(),
-                c.title.clone().unwrap_or_default(),
-                c.score,
-            )
-        })
-        .collect();
-    tracing::info!(
-        target: "retrieval_audit",
-        event = "pipeline_stage",
-        stage,
-        total = chunks.len(),
-        query = %truncate_with_ellipsis(query, 120),
-        top40 = ?comp,
-        "retrieval_audit: pipeline_stage"
-    );
-}
-
-fn truncate_with_ellipsis(content: &str, max_bytes: usize) -> String {
-    if content.len() > max_bytes {
-        let mut cut = max_bytes;
-        while cut > 0 && !content.is_char_boundary(cut) {
-            cut -= 1;
-        }
-        let truncated = &content[..cut];
-        match truncated.rfind(' ') {
-            Some(pos) => format!("{}...", &truncated[..pos]),
-            None => format!("{truncated}..."),
-        }
-    } else {
-        content.to_string()
-    }
-}
-
-/// Shorthand for the prompt-context truncation budget.
-fn truncate_chunk_content(content: &str) -> String {
-    truncate_with_ellipsis(content, MAX_CHUNK_CHARS)
-}
+mod text_utils;
 
 /// How many trailing turns (mixed user + assistant) to include when
 /// rendering conversation history into the synthesis system prompt.
@@ -917,99 +831,6 @@ fn build_retrieval_query(message: &str, context: &ConversationContext) -> String
 /// span is already at risk; below that the cost-benefit doesn't
 /// justify the extra ~1s latency.
 const CONV_HISTORY_COMPACT_MIN_DROPPED: usize = 2;
-
-/// Render the trailing turns of a conversation into a compact block
-/// the synthesis prompt can read.  Returns `None` when there is no
-/// prior turn (i.e. this is the first user message in the
-/// conversation — single-shot case, no history to render).
-///
-/// The block excludes the most recent user message (which is already
-/// the LLM prompt) and any in-flight assistant placeholders. Each
-/// rendered message is truncated to `chars_per_msg` so a single
-/// verbose answer can't swamp the block.
-///
-/// History is emitted as plain text (USER:/ASSISTANT: labels) rather
-/// than passed as separate chat-template messages because
-/// `CompletionRequest` carries one `prompt` + one `system_message`.
-/// Wiring proper multi-turn chat templating into the inference
-/// adapter is the right long-term fix; this is the minimal change
-/// that resolves coreference and topic continuity today. See
-/// `sovereign/bench/wikipedia_learn/README.md` for the motivating
-/// bench.
-/// Today's-date anchor + recency-reasoning discipline for the system
-/// message. Without this the model has no "now" to compare
-/// retrieved-source dates against — it trusts a 2025 article's
-/// prediction of an early-2026 event as if it were future-looking even
-/// when today is May 2026. Surfaced 2026-05-19 M5-Mac-Studio session:
-/// model presented 2024-era rumors as current forecasts because the
-/// prompt never told it what year it was.
-///
-/// Discipline is SHAPE-level per `feedback_no_teaching_to_test.md` —
-/// no bank-derived examples, just general date-reasoning guidance:
-/// compare source dates to today, flag stale predictions, don't
-/// present them as still future-looking.
-///
-/// Split out as a free function so it can be unit-tested without
-/// constructing a full `Runtime` (which needs InferenceProvider +
-/// StateStore + half the dependency graph).
-fn today_anchor_block(today_iso: &str) -> String {
-    format!(
-        "Current date: {today_iso}. When evaluating retrieved or \
-         user-provided sources, compare their publication date or \
-         context to today's date. If a source predicts an event for a \
-         date that has already passed, do NOT present that prediction \
-         as still future-looking — either the event happened (look \
-         for more recent confirming sources before asserting it) or \
-         the prediction was wrong (say so)."
-    )
-}
-
-fn format_conversation_history(
-    messages: &[Message],
-    max_turns: usize,
-    chars_per_msg: usize,
-    compacted_preamble: Option<&str>,
-) -> Option<String> {
-    if messages.len() < 2 && compacted_preamble.is_none() {
-        return None;
-    }
-    // Drop the trailing in-flight user message (`handle_message_stream`
-    // pushes it onto `context.conversation.messages` before calling
-    // synthesis). If the tail isn't a user message we keep everything.
-    let cap = if matches!(messages.last(), Some(m) if m.role == Role::User) {
-        messages.len().saturating_sub(1)
-    } else {
-        messages.len()
-    };
-    let start = cap.saturating_sub(max_turns);
-    let slice = if cap == 0 { &[][..] } else { &messages[start..cap] };
-
-    let mut sections: Vec<String> = Vec::new();
-    if let Some(preamble) = compacted_preamble.map(str::trim).filter(|s| !s.is_empty()) {
-        sections.push(format!("Earlier in the conversation:\n{preamble}"));
-    }
-    let mut lines = vec!["Prior conversation (most recent last):".to_string()];
-    for m in slice {
-        let label = match m.role {
-            Role::User => "USER",
-            Role::Assistant => "ASSISTANT",
-            Role::System => "SYSTEM",
-        };
-        let body = m.content.trim();
-        if body.is_empty() {
-            continue;
-        }
-        let trimmed = truncate_with_ellipsis(body, chars_per_msg);
-        lines.push(format!("{label}: {trimmed}"));
-    }
-    if lines.len() > 1 {
-        sections.push(lines.join("\n"));
-    }
-    if sections.is_empty() {
-        return None;
-    }
-    Some(sections.join("\n\n"))
-}
 
 /// Reweight every chunk's `score` by how much of the query it
 /// actually matches in its title + body, then leave the result on
@@ -2159,7 +1980,7 @@ impl EvidenceShape {
 
 /// Which synthesis path to take given the evidence shape.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SynthesisRoute {
+pub(crate) enum SynthesisRoute {
     /// Fast slot (9B/1.7B), small max_tokens, no thinking. For concentrated
     /// entity-lookup / single-source summarise cases.
     FastFocused,
@@ -3054,182 +2875,13 @@ pub(crate) async fn run_post_stream_refinement(
     Some(refined)
 }
 
-/// Pre-computed knowledge context shared between streaming and non-streaming
-/// response paths. Produced by [`Runtime::prepare_knowledge_context`] so the
-/// two paths cannot diverge in how they search, build prompts, or report
-/// provenance.
-struct KnowledgeContext {
-    chunks: Vec<corpus_engine::ScoredChunk>,
-    prompt: String,
-    system: String,
-    speed: Speed,
-    search_method: Option<String>,
-    sources: Vec<SourceSummary>,
-    /// Summaries of retrieved chunks for frontend source linking.
-    retrieved_chunks: Vec<serde_json::Value>,
-    /// Folder-ingest v1 §6.3: per-turn coverage assessment over the
-    /// user's watched-folder corpora. `None` when no folder corpus
-    /// contributed retrieval; `Some(thin)` when at least one folder
-    /// came back below the chunk-count threshold. Threaded through to
-    /// `ResponseProvenance.coverage` so the streaming and
-    /// non-streaming paths surface the same chip data.
-    coverage: Option<crate::types::CoverageNote>,
-}
+pub(crate) use self::types::{KnowledgeContext, KnowledgeQueryPlan};
+pub use self::types::{
+    ContradictionProv, HistoryEntryProv, HistorySummaryProv, MetaAtlasHitRecord,
+    RecalledMemoryProv, StreamHandle, TurnProvenance,
+};
 
-/// One meta-atlas anchor injection. The chat path logs a
-/// `Vec<MetaAtlasHitRecord>` per question for observability; the
-/// bench surface mirrors it into `EvalResult.meta_atlas_hits` so the
-/// per-question JSON carries which entities the meta-atlas recognised
-/// and which stream the anchor served.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct MetaAtlasHitRecord {
-    /// Display name from the meta-atlas — what the operator reads
-    /// ("Albert Einstein", not "albert einstein").
-    pub entity: String,
-    /// Corpus the injected chunks came from.
-    pub corpus_id: String,
-    /// `"inventory" | "argument" | "trace"` — the dominant
-    /// articulation axis of the anchor that was picked.
-    pub articulation: String,
-    /// `"frozen" | "versioned" | "rolling" | null` — the per-corpus
-    /// write contract. `null` when the corpus has no stream block
-    /// (legacy / atlas-only sibling).
-    pub stability: Option<String>,
-    /// How many chunks the targeted search returned and were
-    /// injected. Zero means the meta-atlas surfaced an anchor but
-    /// the per-corpus search yielded nothing useful — diagnostic
-    /// when title-coverage stays flat despite meta-atlas hits.
-    pub chunks_added: usize,
-}
-
-/// Everything `handle_knowledge_query` and the streaming KQ branch need
-/// to issue a synthesis request. Produced by
-/// [`Runtime::prepare_knowledge_query_plan`] so the two paths cannot
-/// diverge in retrieval, expansion, or routing behaviour.
-///
-/// On the empty-retrieval path, `chunks` / `doc_context` /
-/// `retrieved_chunks` / `source_map` are all empty and `result_quality`
-/// is `"empty"`. The `request` is a parametric-knowledge prompt rather
-/// than a retrieval-grounded one.
-struct KnowledgeQueryPlan {
-    request: CompletionRequest,
-    chunks: Vec<corpus_engine::ScoredChunk>,
-    /// Formatted chunk text used as evidence for the gap check.
-    /// Empty string on the parametric path.
-    doc_context: String,
-    shape: EvidenceShape,
-    route: SynthesisRoute,
-    gap_check_enabled: bool,
-    search_ms: u64,
-    retrieved_chunks: Vec<serde_json::Value>,
-    source_map: HashMap<String, usize>,
-    /// `"empty"` | `"focused"` | `"synthesis"` | `"routed"` —
-    /// surfaced in message metadata for the UI to label the turn.
-    result_quality: &'static str,
-    /// Snapshot of the folder-metadata oracle taken when the plan
-    /// was built. Carried through to the streaming spawn so the
-    /// final assistant message's `ResponseProvenance` can include
-    /// folder display names and the coverage chip without a second
-    /// oracle round-trip. Empty map = no folder corpora known
-    /// (CLI / test harness fallback) → coverage chip suppressed,
-    /// `display_name` falls back to `corpus_id`.
-    folder_meta: std::collections::HashMap<String, crate::traits::FolderMetadata>,
-    /// Meta-atlas hit records (Move 5). One per injected anchor
-    /// (max 3 per matched meta-atom — one per articulation axis with
-    /// a dominant anchor). Surfaced in synth metadata so the bench's
-    /// per-question JSON can carry "which canonical entities did the
-    /// meta-atlas recognise and which stream did each anchor
-    /// serve" — the fourth legibility lens.
-    meta_atlas_hits: Vec<MetaAtlasHitRecord>,
-}
-
-/// Streaming handle returned by [`Runtime::handle_message_stream`].
-///
-/// Holds the assistant message id (assigned up-front so callers can correlate
-/// chunks) and a stream of text chunks. The runtime persists the full message
-/// to the store after the stream is exhausted.
-pub struct StreamHandle {
-    pub message_id: String,
-    pub stream: Pin<Box<dyn Stream<Item = Result<String>> + Send>>,
-}
-
-/// Glassbox snapshot of what the witness path actually sent to the
-/// model on a given turn. Captured at dispatch time inside
-/// [`Runtime::handle_expressive_query_stream`] and stashed in
-/// [`Runtime::turn_provenance`] so the desktop's inner-work surface
-/// can pull it back via Cmd+? without instrumenting the live stream.
-///
-/// The shape is meant to be readable by a human investigating a bad
-/// witness response: full assembled system prompt, the recalled
-/// memories the witness drew on, the conversation history slice
-/// actually passed to the inference call (today: empty — the
-/// streaming witness path sends only the current user message), the
-/// model id + token budget, and Pass A timing. When a response feels
-/// untethered, the provenance answers "did the model see what we
-/// thought it saw?" without anyone having to re-run the turn.
-///
-/// History note: the streaming path's `prompt: message` field puts
-/// only the latest user message in front of the model; there is no
-/// list of prior turns. `history_summary.sent_to_model` is therefore
-/// empty in current capture sites — that emptiness is itself a
-/// diagnostic. When history-injection is wired (a likely outcome of
-/// the very investigations this struct exists to enable) the field
-/// populates without a schema change.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct TurnProvenance {
-    pub conversation_id: String,
-    pub message_id: String,
-    /// Epoch seconds. Matches the `i64` shape the rest of the runtime
-    /// uses (see `fn now()`); the desktop side reads it as a JS number.
-    pub captured_at: i64,
-    pub register: String,
-    pub user_message: String,
-    pub system_prompt: String,
-    pub system_prompt_chars: usize,
-    pub recalled_memories: Vec<RecalledMemoryProv>,
-    pub history_summary: HistorySummaryProv,
-    pub temporal_tensions: Vec<String>,
-    pub contradiction: Option<ContradictionProv>,
-    pub current_goal: Option<String>,
-    pub recent_topic: Option<String>,
-    pub last_assistant_excerpt: Option<String>,
-    pub model_id: Option<String>,
-    pub max_tokens: Option<usize>,
-    pub enable_thinking: Option<bool>,
-    pub pass_a_ms: Option<u64>,
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct RecalledMemoryProv {
-    pub id: String,
-    pub content: String,
-    pub created_at: i64,
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct HistorySummaryProv {
-    /// Total messages on the conversation when the turn was dispatched.
-    pub total_messages: usize,
-    pub user_count: usize,
-    pub assistant_count: usize,
-    /// The slice that was actually passed to the inference call. The
-    /// streaming witness path sends only the current user message
-    /// today, so this is empty even when `total_messages` is large.
-    pub sent_to_model: Vec<HistoryEntryProv>,
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct HistoryEntryProv {
-    pub role: String,
-    pub content_preview: String,
-    pub full_chars: usize,
-}
-
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-pub struct ContradictionProv {
-    pub prior_evidence: String,
-    pub current_claim: String,
-}
+mod types;
 
 /// Force the witness/relational dispatch path when a relational
 /// skill is the active primary, regardless of how the LLM Pass 1
@@ -3264,183 +2916,13 @@ pub struct ContradictionProv {
 // sites can't forget to call it. Pinned tests in the test mod
 // below now exercise the new home directly.
 
-/// Intent-implied OICP defaults (v0.3). The classified intent
-/// carries a latency signal — "DeepQuery" wants extended thinking
-/// budget, "ComplexTask" and "KnowledgeQuery" want solid normal
-/// latency — which the scheduler consumes as `latency_class`.
-/// `capability_hint` defaults to `general`; code/prose/etc. are left
-/// to skill-level overrides since the intent vocabulary doesn't
-/// carry a specialization distinction.
-///
-/// Returns `None` for small-model intents (SimpleQuery, Continuation,
-/// SimpleAction) where cross-network latency wouldn't be worth
-/// trading for a marginal quality bump — no OICP envelope means
-/// the local Fast slot serves without invoking the scheduler.
-fn default_oicp_for_intent(intent: &Intent) -> Option<crate::oicp::InferenceRequirements> {
-    use crate::oicp::{CapabilityHint, InferenceRequirements, LatencyClass};
-    let (hint, latency_class) = match intent {
-        Intent::DeepQuery => {
-            // Reasoning-heavy: extended class tolerates higher TTFT
-            // in exchange for deeper thinking budgets.
-            (CapabilityHint::general(), LatencyClass::Extended)
-        }
-        Intent::ComplexTask => {
-            // Tool-using plans want solid normal-latency responses;
-            // extended would add round-trip overhead per tool step.
-            (CapabilityHint::general(), LatencyClass::Normal)
-        }
-        Intent::KnowledgeQuery => {
-            // Retrieval-driven synthesis over a bounded chunk set.
-            (CapabilityHint::general(), LatencyClass::Normal)
-        }
-        Intent::ComparisonQuery => {
-            // Bounded two-entity contrast — Fast slot, no reasoning
-            // budget. Retrieval over a small chunk set, constrained
-            // synthesis prompt, sub-second TTFT target.
-            (CapabilityHint::general(), LatencyClass::Fast)
-        }
-        Intent::MetalingualQuery => {
-            // Codebase lookup + brief synthesis — same shape as
-            // KnowledgeQuery's FastFocused path but against code
-            // corpora. Fast slot is enough; no reasoning budget.
-            (CapabilityHint::code(), LatencyClass::Fast)
-        }
-        Intent::ConationQuery => {
-            // Operates on the prior turn — no new retrieval, no
-            // reclassification. The OICP envelope of the rebound
-            // classification is what actually matters; this default
-            // just covers the rare case where conation is dispatched
-            // without rebind context.
-            (CapabilityHint::general(), LatencyClass::Fast)
-        }
-        Intent::CommissiveQuery => {
-            // Persistence-only path — no LLM synthesis required for
-            // the storage step; a brief Fast-slot acknowledgment
-            // citing the situated anchor is all we need.
-            (CapabilityHint::general(), LatencyClass::Fast)
-        }
-        Intent::ExpressiveQuery => {
-            // Acknowledge + situated help-offer. Fast slot synthesis
-            // grounded in working_memory + last assistant turn; no
-            // retrieval against the world corpus.
-            (CapabilityHint::general(), LatencyClass::Fast)
-        }
-        Intent::SimpleQuery
-        | Intent::SimpleAction { .. }
-        | Intent::Continuation { .. } => {
-            return None;
-        }
-    };
-    Some(
-        InferenceRequirements::new()
-            .with_hint(hint)
-            .with_latency_class(latency_class),
-    )
-}
+pub(crate) use self::intent_helpers::{
+    build_clarification_question, default_oicp_for_intent, format_interpretation, intent_hint,
+    label_for_intent, parse_intent_hint,
+};
 
-/// Produce a short human-readable banner for `interpretation-proposed`.
-/// Runs without a model call — we'd like the banner to appear before
-/// the first token, so an extra Fast-slot turn for phrasing would
-/// defeat the "under 2s immediate engagement" requirement.
-fn format_interpretation(
-    _message: &str,
-    primary: &Intent,
-    rationale: Option<&str>,
-) -> String {
-    let intent_phrase = match primary {
-        Intent::SimpleQuery => "a quick factual answer",
-        Intent::DeepQuery => "a deeper explanation",
-        Intent::KnowledgeQuery => "a look in your installed knowledge",
-        Intent::ComparisonQuery => "a comparison between two things",
-        Intent::MetalingualQuery => "a lookup in your codebase",
-        Intent::ConationQuery => "a tweak to my last reply",
-        Intent::CommissiveQuery => "a commitment to save",
-        Intent::ExpressiveQuery => "an acknowledgment + help offer",
-        Intent::SimpleAction { .. } => "a tool call",
-        Intent::ComplexTask => "a multi-step task",
-        Intent::Continuation { .. } => "a follow-up to earlier work",
-    };
-    if let Some(r) = rationale {
-        format!("I'm reading this as {intent_phrase} ({r}). If that's off, redirect below.")
-    } else {
-        format!("I'm reading this as {intent_phrase}. If that's off, redirect below.")
-    }
-}
+mod intent_helpers;
 
-/// Human label for a redirect chip on the banner.
-fn label_for_intent(intent: &Intent) -> String {
-    match intent {
-        Intent::SimpleQuery => "Give me a quick answer".into(),
-        Intent::DeepQuery => "Walk me through it in depth".into(),
-        Intent::KnowledgeQuery => "Check my knowledge base".into(),
-        Intent::ComparisonQuery => "Compare them side by side".into(),
-        Intent::MetalingualQuery => "Look it up in this codebase".into(),
-        Intent::ConationQuery => "Adjust the last reply".into(),
-        Intent::CommissiveQuery => "Save this as a commitment".into(),
-        Intent::ExpressiveQuery => "Hear me out and help".into(),
-        Intent::SimpleAction { tool } => format!("Use the {tool} tool"),
-        Intent::ComplexTask => "Plan a multi-step task".into(),
-        Intent::Continuation { .. } => "Continue prior task".into(),
-    }
-}
-
-/// Wire-form `Intent` hint used by the desktop → runtime redirect
-/// payload. Converting at this boundary keeps
-/// [`InterpretationProposed`] and [`ClarificationOption`] trivially
-/// serializable — the full `Intent` enum carries a `ToolId` for
-/// `SimpleAction`, which is ergonomic in Rust but awkward in JSON.
-fn intent_hint(intent: &Intent) -> String {
-    match intent {
-        Intent::SimpleQuery => "simple_query".into(),
-        Intent::DeepQuery => "deep_query".into(),
-        Intent::KnowledgeQuery => "knowledge_query".into(),
-        Intent::ComparisonQuery => "comparison_query".into(),
-        Intent::MetalingualQuery => "metalingual_query".into(),
-        Intent::ConationQuery => "conation_query".into(),
-        Intent::CommissiveQuery => "commissive_query".into(),
-        Intent::ExpressiveQuery => "expressive_query".into(),
-        Intent::SimpleAction { tool } => format!("simple_action:{tool}"),
-        Intent::ComplexTask => "complex_task".into(),
-        Intent::Continuation { task_id } => format!("continuation:{task_id}"),
-    }
-}
-
-/// Inverse of [`intent_hint`] — decode a wire-form hint back into
-/// an `Intent`. Unknown variants fall back to `SimpleQuery` so the
-/// continuation path never hard-fails; the caller logs the case.
-fn parse_intent_hint(hint: &str) -> Intent {
-    match hint {
-        "simple_query" => Intent::SimpleQuery,
-        "deep_query" => Intent::DeepQuery,
-        "knowledge_query" => Intent::KnowledgeQuery,
-        "comparison_query" => Intent::ComparisonQuery,
-        "metalingual_query" => Intent::MetalingualQuery,
-        "conation_query" => Intent::ConationQuery,
-        "commissive_query" => Intent::CommissiveQuery,
-        "expressive_query" => Intent::ExpressiveQuery,
-        "complex_task" => Intent::ComplexTask,
-        _ if hint.starts_with("simple_action:") => {
-            let tool = hint.trim_start_matches("simple_action:").to_string();
-            Intent::SimpleAction {
-                tool: ToolId::from(tool),
-            }
-        }
-        _ if hint.starts_with("continuation:") => {
-            let task_id = hint.trim_start_matches("continuation:").to_string();
-            Intent::Continuation {
-                task_id: TaskId::from(task_id),
-            }
-        }
-        _ => {
-            tracing::warn!(hint, "parse_intent_hint: unknown hint, falling back to SimpleQuery");
-            Intent::SimpleQuery
-        }
-    }
-}
-
-/// Build a one-sentence clarifying question for the `Ask` move.
-/// Kept short and neutral — the alternatives themselves do most of
-/// the disambiguation work; the question just frames the choice.
 /// Emit a "system is deliberating, about to ask" narration chip
 /// before the clarification card lands. Bypasses
 /// `try_emit_narration` because the Ask path runs in milliseconds
@@ -3482,26 +2964,6 @@ async fn emit_ask_deliberation_chip(
         .await;
 }
 
-fn build_clarification_question(_message: &str, primary: &Intent) -> String {
-    let read_as = match primary {
-        Intent::SimpleQuery => "a quick factual answer",
-        Intent::DeepQuery => "a deeper explanation",
-        Intent::KnowledgeQuery => "a corpus lookup",
-        Intent::ComparisonQuery => "a side-by-side comparison",
-        Intent::MetalingualQuery => "a vocabulary lookup in our system",
-        Intent::ConationQuery => "an adjustment to my last reply",
-        Intent::CommissiveQuery => "a commitment to save",
-        Intent::ExpressiveQuery => "an acknowledgment + targeted help",
-        Intent::SimpleAction { .. } => "an action",
-        Intent::ComplexTask => "a multi-step task",
-        Intent::Continuation { .. } => "a continuation",
-    };
-    format!(
-        "I could approach this a few ways — my best read is {read_as}, \
-         but could you pick what you'd like most?"
-    )
-}
-
 pub struct Runtime {
     pub inference: Arc<dyn InferenceProvider>,
     pub router: Box<dyn Router>,
@@ -3527,7 +2989,7 @@ pub struct Runtime {
     /// Consumed by `handle_commissive_query` to write `kind="commitment"`
     /// and `kind="todo"` notes anchored to `working_memory.current_goal`
     /// (or honestly anchorless when no situated goal is loaded).
-    pub note_store: Option<Arc<corpus_engine::NoteStore>>,
+    pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
     /// Read-side handle for conversation tiered-retrieval enrichment
     /// (`conv_skeletons` / `conv_raptor_nodes` / `conv_motifs`). Spec
     /// `sovereign/docs/specs/CONV_TIERED_PORT.md`. When present, the
@@ -14238,57 +13700,6 @@ mod grounding_filter_tests {
         assert!(!is_grounding_candidate(&chunk("folder-xyz", Some(""))));
         assert!(!is_grounding_candidate(&chunk("folder-xyz", Some("   "))));
         assert!(!is_grounding_candidate(&chunk("folder-xyz", None)));
-    }
-}
-
-#[cfg(test)]
-mod truncate_chunk_tests {
-    use super::{truncate_chunk_content, MAX_CHUNK_CHARS};
-
-    /// Em-dash (U+2014, 3 bytes as UTF-8) placed so its first byte
-    /// lands inside the truncation window and the char straddles the
-    /// `MAX_CHUNK_CHARS` boundary. Naive `&content[..MAX_CHUNK_CHARS]`
-    /// panics with "byte index N is not a char boundary"; the fixed
-    /// helper must walk back to the last char boundary.
-    #[test]
-    fn truncate_does_not_panic_inside_multibyte_char() {
-        let a_block = "a".repeat(MAX_CHUNK_CHARS - 1); // byte 0..=598
-        // Inject em-dash at byte 598..601 so byte 600 lands inside it.
-        let content = format!("{a_block}—tail");
-        let out = truncate_chunk_content(&content);
-        assert!(out.ends_with("..."), "should have truncation marker");
-        // The slice must have stopped at or before byte 598 (start of
-        // the em-dash), so the em-dash itself is excluded.
-        assert!(
-            !out.contains('—'),
-            "em-dash straddling boundary must be dropped, not split"
-        );
-    }
-
-    /// Smart double-quote (U+201C/U+201D, 3 bytes) at the boundary:
-    /// same class of failure as em-dash. Belt-and-suspenders test.
-    #[test]
-    fn truncate_handles_smart_quote_at_boundary() {
-        let a_block = "a".repeat(MAX_CHUNK_CHARS - 2);
-        let content = format!("{a_block}“word”tail");
-        let out = truncate_chunk_content(&content);
-        assert!(out.ends_with("..."));
-    }
-
-    /// Content shorter than the limit: returned verbatim, no marker.
-    #[test]
-    fn truncate_passthrough_when_short() {
-        let content = "Joan Robinson was an economist.";
-        assert_eq!(truncate_chunk_content(content), content);
-    }
-
-    /// ASCII-only content at the exact boundary length: no truncation.
-    #[test]
-    fn truncate_at_exact_boundary_no_marker() {
-        let content = "a".repeat(MAX_CHUNK_CHARS);
-        let out = truncate_chunk_content(&content);
-        assert_eq!(out.len(), MAX_CHUNK_CHARS);
-        assert!(!out.ends_with("..."));
     }
 }
 
