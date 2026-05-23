@@ -531,6 +531,9 @@ impl AgentRunner for PiRunner {
             // require parsing pi's internal HTTP traffic. Out of
             // scope; replay supports the native runner only.
             request_records: Vec::new(),
+            // Pi has no role concept; role_model_map is ignored on
+            // this path.
+            role_model_map_used: None,
         })
     }
 }

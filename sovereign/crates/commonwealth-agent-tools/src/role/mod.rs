@@ -24,13 +24,15 @@
 //! Plans live in `~/.claude/plans/role-layer-multilang.md`.
 
 pub mod dossier;
+pub mod model_map;
 pub mod profile;
 pub mod transition;
 
 use serde::{Deserialize, Serialize};
 
 pub use dossier::{RoleDossier, RoleDossierOutcome};
-pub use profile::{RoleProfile, SamplingOverrides};
+pub use model_map::RoleModelMap;
+pub use profile::{RoleProfile, SamplingOverrides, EVALUATOR_TERMINATING_SUBSET};
 pub use transition::{transition_after, TransitionTrigger};
 
 /// Closed enum of agent roles. Adding a variant requires touching:

@@ -85,6 +85,7 @@ impl AgentRunner for MockAgentRunner {
             final_assistant_text: self.script.final_assistant_text.clone(),
             raw_stdout_lines: vec![],
             request_records: Vec::new(),
+            role_model_map_used: None,
         })
     }
 }
@@ -133,6 +134,7 @@ mod tests {
             build_cmd: "cargo build".into(),
             verify_cmd: "cargo test".into(),
             syntax_validator: None,
+            role_model_map: commonwealth_agent_tools::RoleModelMap::default(),
         };
         let artifact = runner.run(ctx).await.unwrap();
         assert_eq!(artifact.tokens.output, 80);

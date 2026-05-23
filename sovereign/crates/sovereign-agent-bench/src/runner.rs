@@ -6,6 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
+use commonwealth_agent_tools::RoleModelMap;
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -60,6 +61,21 @@ pub enum ExitReason {
     /// `handoff_to_implementer`) without an `agent_done`. Hard
     /// ceiling on non-convergent alternation (L4 / L7 / L17).
     CycleLimit { cycles: u32, cap: u32 },
+    /// Role-aware native runner observed `tool_calls` tool emissions
+    /// inside a single role tenure (no role flip in between) above
+    /// the role's per-tenure cap. Distinct from `NoProgress` (which
+    /// requires workdir-hash invariance) because a pathological
+    /// in-tenure run might keep writing different files or making
+    /// non-write calls that don't touch the workdir hash in the same
+    /// way. Per-role cap: Planner=3, Implementer=20, Evaluator=10.
+    /// Captures the "model never yields out of its role" pathology
+    /// that the deleted same-primitive counter used to catch as a
+    /// shape-level proxy — §C of the PR-3 plan.
+    RoleTurnCap {
+        role: String,
+        tool_calls: u32,
+        cap: u32,
+    },
 }
 
 impl Default for ExitReason {
@@ -80,6 +96,7 @@ impl ExitReason {
             ExitReason::WriteThrash { .. } => "write_thrash",
             ExitReason::VerifyStuck { .. } => "verify_stuck",
             ExitReason::CycleLimit { .. } => "cycle_limit",
+            ExitReason::RoleTurnCap { .. } => "role_turn_cap",
         }
     }
 
@@ -176,6 +193,15 @@ pub struct AgentRunContext {
     /// `exec_build` can short-circuit on broken syntax with cargo-
     /// shape feedback in <50ms instead of the full subprocess.
     pub syntax_validator: Option<commonwealth_agent_tools::syntax::DynSyntaxValidator>,
+    /// Per-role model overrides. Empty (default) → every role uses
+    /// `model_handle`, which is PR-2 behavior. Populated by the CLI
+    /// from `--planner-model` / `--implementer-model` /
+    /// `--evaluator-model`. Consulted by `run_native_role_aware`
+    /// before each request; the monolithic and pi runners ignore it
+    /// (they have no role concept). Captured into the run artifact
+    /// (`role_model_map_used`) when non-empty so replay reproduces
+    /// the per-role dispatch.
+    pub role_model_map: RoleModelMap,
 }
 
 impl AgentRunContext {
@@ -211,6 +237,12 @@ pub struct AgentRunArtifact {
     /// `replay` subcommand can pick any turn and re-send it with
     /// overrides.
     pub request_records: Vec<ChatRequestRecord>,
+    /// Effective per-role model overrides used during the run.
+    /// `None` when the context's map was empty (PR-2 single-model
+    /// behavior); `Some(map)` when one or more roles were routed to
+    /// a non-fallback slot. Persisted into `agent.json` so the
+    /// replay subcommand can reproduce per-role dispatch.
+    pub role_model_map_used: Option<RoleModelMap>,
 }
 
 impl AgentRunArtifact {
@@ -260,6 +292,7 @@ pub fn context_for(
     model_handle: String,
     token_budget_override: Option<u64>,
     wall_seconds_override: Option<u64>,
+    role_model_map: RoleModelMap,
 ) -> AgentRunContext {
     use commonwealth_agent_tools::syntax::{DynSyntaxValidator, RustSyntaxValidator};
     use std::sync::Arc;
@@ -284,6 +317,7 @@ pub fn context_for(
         build_cmd: problem.witness.resolved_build_cmd(),
         verify_cmd: problem.witness.verify_cmd.clone(),
         syntax_validator,
+        role_model_map,
     }
 }
 
@@ -355,9 +389,11 @@ mod tests {
             "commonwealth/coder".to_string(),
             None,
             None,
+            RoleModelMap::default(),
         );
         assert_eq!(ctx.token_budget, 100);
         assert_eq!(ctx.wall_seconds_cap, 30);
+        assert!(ctx.role_model_map.is_empty());
     }
 
     #[test]
@@ -370,9 +406,40 @@ mod tests {
             "commonwealth/coder".to_string(),
             Some(8_000),
             Some(120),
+            RoleModelMap::default(),
         );
         assert_eq!(ctx.token_budget, 8_000);
         assert_eq!(ctx.wall_seconds_cap, 120);
+    }
+
+    #[test]
+    fn context_for_threads_role_model_map() {
+        use commonwealth_agent_tools::Role;
+        let workdir = tempfile::tempdir().unwrap();
+        let mut map = RoleModelMap::new();
+        map.set(Role::Planner, Some("commonwealth/coder".into()));
+        map.set(Role::Implementer, Some("commonwealth/primary".into()));
+        let ctx = context_for(
+            &fake_problem(),
+            workdir,
+            &["read"],
+            "commonwealth/primary".to_string(),
+            None,
+            None,
+            map,
+        );
+        assert_eq!(
+            ctx.role_model_map.model_for(Role::Planner, "fb"),
+            "commonwealth/coder"
+        );
+        assert_eq!(
+            ctx.role_model_map.model_for(Role::Implementer, "fb"),
+            "commonwealth/primary"
+        );
+        // Unset role falls back to the explicit fallback arg, not
+        // the context's model_handle (the runner is responsible for
+        // wiring model_handle in as the fallback).
+        assert_eq!(ctx.role_model_map.model_for(Role::Evaluator, "fb"), "fb");
     }
 
     #[test]
@@ -388,5 +455,16 @@ mod tests {
         );
         assert!(ExitReason::Completed.is_completed());
         assert!(!ExitReason::Timeout { cap_seconds: 1 }.is_completed());
+    }
+
+    #[test]
+    fn role_turn_cap_id() {
+        let r = ExitReason::RoleTurnCap {
+            role: "evaluator".into(),
+            tool_calls: 11,
+            cap: 10,
+        };
+        assert_eq!(r.id(), "role_turn_cap");
+        assert!(!r.is_completed());
     }
 }

@@ -332,6 +332,7 @@ pub async fn run_one_problem(
         args.model.clone(),
         args.token_cap_override,
         args.wall_seconds_override,
+        args.role_model_map.clone(),
     );
 
     // 2. Run the agent.
