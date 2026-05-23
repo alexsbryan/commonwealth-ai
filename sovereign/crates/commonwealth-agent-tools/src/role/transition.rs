@@ -43,8 +43,13 @@ pub fn transition_after(
             NextRole::Stay
         }
 
-        // Implementer: write_file or explicit handoff → Evaluator.
+        // Implementer: write_file, patch_file, or explicit handoff
+        // → Evaluator. patch_file is symmetric with write_file: both
+        // mutate the workdir and both yield to the verifier.
         (Role::Implementer, TransitionTrigger::Primitive(PrimitiveKind::WriteFile)) => {
+            NextRole::Flip(Role::Evaluator)
+        }
+        (Role::Implementer, TransitionTrigger::Primitive(PrimitiveKind::PatchFile)) => {
             NextRole::Flip(Role::Evaluator)
         }
         (
@@ -117,6 +122,20 @@ mod tests {
         let next = transition_after(
             Role::Implementer,
             TransitionTrigger::Primitive(PrimitiveKind::WriteFile),
+        );
+        assert_eq!(next, NextRole::Flip(Role::Evaluator));
+    }
+
+    #[test]
+    fn implementer_patch_file_flips_to_evaluator() {
+        // patch_file must be symmetric with write_file at the
+        // transition layer: both yield the workdir to the verifier.
+        // If a future PR makes patch stay-in-Implementer, the
+        // Implementer can patch repeatedly without verification —
+        // re-opens the write-thrash class on a different primitive.
+        let next = transition_after(
+            Role::Implementer,
+            TransitionTrigger::Primitive(PrimitiveKind::PatchFile),
         );
         assert_eq!(next, NextRole::Flip(Role::Evaluator));
     }

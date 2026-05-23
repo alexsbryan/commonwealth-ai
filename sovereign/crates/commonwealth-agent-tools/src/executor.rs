@@ -16,7 +16,7 @@ use tracing::info;
 
 use crate::primitive::{
     AgentDoneArgs, AgentPlanArgs, HandoffToEvaluatorArgs, HandoffToImplementerArgs,
-    InspectIntent, Primitive, SmokeArgs, WriteFileArgs,
+    InspectIntent, PatchFileArgs, Primitive, SmokeArgs, WriteFileArgs,
 };
 use crate::result::{ToolError, ToolResult};
 use crate::syntax::DynSyntaxValidator;
@@ -106,6 +106,7 @@ pub async fn execute(ctx: &ExecCtx, prim: &Primitive) -> Result<ToolResult, Tool
     let result = match prim {
         Primitive::InspectWorkdir(intent) => exec_inspect(ctx, intent).await,
         Primitive::WriteFile(args) => exec_write_file(ctx, args).await,
+        Primitive::PatchFile(args) => exec_patch_file(ctx, args).await,
         Primitive::Build => exec_build(ctx).await,
         Primitive::Smoke(args) => exec_smoke(ctx, args).await,
         Primitive::AgentDone(args) => exec_agent_done(args).await,
@@ -272,6 +273,50 @@ fn walk_grep_contents(
 
 async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResult, ToolError> {
     let abs = resolve_workdir_path(&ctx.workdir, &args.path)?;
+
+    // Pre-write syntax check. When a SyntaxValidator is bound and the
+    // target path's extension is one the validator handles, parse
+    // `args.content` BEFORE the write lands on disk. Rejects the
+    // observed-on-3.2-lights-out-python (2026-05-23) class of
+    // "prose-in-source / token-level typos / drifting indentation"
+    // at the write boundary so the Implementer can re-emit
+    // immediately — the broken bytes never reach disk, so the next
+    // Evaluator build cycle doesn't waste a round-trip discovering
+    // them.
+    //
+    // Symmetric with exec_build's existing post-write validator
+    // call: both use the same `SyntaxValidator` instance; the pre-
+    // write check operates on the candidate content string while
+    // the pre-build check walks the workdir. Together they form a
+    // belt-and-suspenders gate against syntactically-invalid
+    // workdir state.
+    if let Some(validator) = ctx.syntax_validator.as_ref() {
+        let path_str = args.path.as_str();
+        let handled = validator
+            .language_extensions()
+            .iter()
+            .any(|ext| path_str.ends_with(ext));
+        if handled {
+            let errors =
+                validator.check_file(std::path::Path::new(&args.path), &args.content);
+            if !errors.is_empty() {
+                let rendered = validator.render_errors(&errors);
+                let language = validator.language_id();
+                tracing::info!(
+                    path = %args.path,
+                    language,
+                    error_count = errors.len(),
+                    "commonwealth_agent_tools::executor: pre-write syntax check rejected write_file"
+                );
+                return Err(ToolError::SyntaxRejected {
+                    primitive: "write_file",
+                    language: language.to_string(),
+                    rendered_errors: rendered,
+                });
+            }
+        }
+    }
+
     if let Some(parent) = abs.parent() {
         let _ = tokio::fs::create_dir_all(parent).await;
     }
@@ -285,6 +330,112 @@ async fn exec_write_file(ctx: &ExecCtx, args: &WriteFileArgs) -> Result<ToolResu
     Ok(ToolResult::ok(json!({
         "wrote": args.path,
         "bytes": bytes.len(),
+    })))
+}
+
+// ── patch_file ────────────────────────────────────────────────────
+
+async fn exec_patch_file(ctx: &ExecCtx, args: &PatchFileArgs) -> Result<ToolResult, ToolError> {
+    let abs = resolve_workdir_path(&ctx.workdir, &args.path)?;
+    let existing = tokio::fs::read_to_string(&abs)
+        .await
+        .map_err(|e| ToolError::Filesystem {
+            primitive: "patch_file",
+            reason: format!("read {}: {e}", args.path),
+        })?;
+
+    let lines: Vec<&str> = existing.lines().collect();
+    let total = lines.len() as u32;
+    if args.start_line < 1 || args.start_line > total {
+        return Err(ToolError::InvalidArguments {
+            primitive: "patch_file",
+            reason: format!(
+                "start_line {} out of range [1, {}] (file has {} lines)",
+                args.start_line, total, total
+            ),
+        });
+    }
+    if args.end_line < args.start_line || args.end_line > total {
+        return Err(ToolError::InvalidArguments {
+            primitive: "patch_file",
+            reason: format!(
+                "end_line {} must be in [start_line={}, {}]",
+                args.end_line, args.start_line, total
+            ),
+        });
+    }
+
+    // Assemble: prefix [0, start-1) + replacement + suffix [end, total).
+    let trailing_newline = existing.ends_with('\n');
+    let prefix = &lines[..(args.start_line as usize - 1)];
+    let suffix = &lines[args.end_line as usize..];
+    let mut out_lines: Vec<&str> = Vec::with_capacity(prefix.len() + 64 + suffix.len());
+    out_lines.extend_from_slice(prefix);
+    // Empty new_content means pure deletion. A trailing \n in
+    // new_content produces a trailing empty entry from split, which
+    // we drop to avoid double-blank lines.
+    let new_lines: Vec<&str> = if args.new_content.is_empty() {
+        Vec::new()
+    } else {
+        let mut v: Vec<&str> = args.new_content.split('\n').collect();
+        if let Some(last) = v.last() {
+            if last.is_empty() {
+                v.pop();
+            }
+        }
+        v
+    };
+    out_lines.extend(new_lines.iter().copied());
+    out_lines.extend_from_slice(suffix);
+
+    let mut result = out_lines.join("\n");
+    if trailing_newline {
+        result.push('\n');
+    }
+
+    // Pre-write syntax check on the FULL post-patch content. Symmetric
+    // with exec_write_file: broken content never lands on disk.
+    if let Some(validator) = ctx.syntax_validator.as_ref() {
+        let path_str = args.path.as_str();
+        let handled = validator
+            .language_extensions()
+            .iter()
+            .any(|ext| path_str.ends_with(ext));
+        if handled {
+            let errors =
+                validator.check_file(std::path::Path::new(&args.path), &result);
+            if !errors.is_empty() {
+                let rendered = validator.render_errors(&errors);
+                let language = validator.language_id();
+                tracing::info!(
+                    path = %args.path,
+                    language,
+                    error_count = errors.len(),
+                    "commonwealth_agent_tools::executor: pre-write syntax check rejected patch_file"
+                );
+                return Err(ToolError::SyntaxRejected {
+                    primitive: "patch_file",
+                    language: language.to_string(),
+                    rendered_errors: rendered,
+                });
+            }
+        }
+    }
+
+    tokio::fs::write(&abs, result.as_bytes())
+        .await
+        .map_err(|e| ToolError::Filesystem {
+            primitive: "patch_file",
+            reason: format!("write {}: {e}", args.path),
+        })?;
+
+    let lines_replaced = args.end_line - args.start_line + 1;
+    let lines_inserted = new_lines.len() as u32;
+    Ok(ToolResult::ok(json!({
+        "patched": args.path,
+        "lines_replaced": lines_replaced,
+        "lines_inserted": lines_inserted,
+        "bytes": result.len(),
     })))
 }
 
@@ -662,5 +813,161 @@ mod tests {
             Some("all green")
         );
         assert_eq!(r.payload.get("done").and_then(|v| v.as_bool()), Some(true));
+    }
+
+    #[tokio::test]
+    async fn write_file_pre_check_accepts_valid_rust() {
+        // Pre-write check accepts well-formed code and writes to disk.
+        use crate::syntax::RustSyntaxValidator;
+        use std::sync::Arc;
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf())
+            .with_syntax_validator(Arc::new(RustSyntaxValidator::new()));
+        let write = Primitive::WriteFile(WriteFileArgs {
+            path: "src/lib.rs".into(),
+            content: "pub fn x() -> u8 { 1 }\n".into(),
+        });
+        let r = execute(&ctx, &write).await.unwrap();
+        assert!(r.ok);
+        assert!(tmp.path().join("src/lib.rs").is_file());
+    }
+
+    #[tokio::test]
+    async fn write_file_pre_check_rejects_broken_rust_without_disk_touch() {
+        // The §-pre-write invariant: broken content must NOT land on
+        // disk. If a future PR softens this (e.g. writes the file
+        // anyway "in case the next turn cleans it up"), the build
+        // cycle is back to discovering syntax defects via cargo and
+        // the prose-in-source class re-opens.
+        use crate::syntax::RustSyntaxValidator;
+        use std::sync::Arc;
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf())
+            .with_syntax_validator(Arc::new(RustSyntaxValidator::new()));
+        let write = Primitive::WriteFile(WriteFileArgs {
+            path: "src/lib.rs".into(),
+            // Missing closing brace — syn rejects.
+            content: "pub fn x() -> u8 { 1 ".into(),
+        });
+        let err = execute(&ctx, &write).await.unwrap_err();
+        assert!(matches!(err, ToolError::SyntaxRejected { .. }));
+        // Disk must be untouched.
+        assert!(!tmp.path().join("src/lib.rs").exists());
+    }
+
+    #[tokio::test]
+    async fn patch_file_replaces_line_range() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        let path = tmp.path().join("a.txt");
+        std::fs::write(&path, "alpha\nbeta\ngamma\ndelta\n").unwrap();
+        let patch = Primitive::PatchFile(PatchFileArgs {
+            path: "a.txt".into(),
+            start_line: 2,
+            end_line: 3,
+            new_content: "BETA\nGAMMA".into(),
+        });
+        let r = execute(&ctx, &patch).await.unwrap();
+        assert!(r.ok);
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(after, "alpha\nBETA\nGAMMA\ndelta\n");
+        assert_eq!(
+            r.payload.get("lines_replaced").and_then(|v| v.as_u64()),
+            Some(2)
+        );
+        assert_eq!(
+            r.payload.get("lines_inserted").and_then(|v| v.as_u64()),
+            Some(2)
+        );
+    }
+
+    #[tokio::test]
+    async fn patch_file_empty_new_content_deletes_range() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        let path = tmp.path().join("a.txt");
+        std::fs::write(&path, "alpha\nbeta\ngamma\ndelta\n").unwrap();
+        let patch = Primitive::PatchFile(PatchFileArgs {
+            path: "a.txt".into(),
+            start_line: 2,
+            end_line: 3,
+            new_content: String::new(),
+        });
+        let r = execute(&ctx, &patch).await.unwrap();
+        assert!(r.ok);
+        let after = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(after, "alpha\ndelta\n");
+    }
+
+    #[tokio::test]
+    async fn patch_file_out_of_range_rejects() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf());
+        let path = tmp.path().join("a.txt");
+        std::fs::write(&path, "alpha\nbeta\n").unwrap();
+        // file has 2 lines; patching at line 10 is invalid.
+        let patch = Primitive::PatchFile(PatchFileArgs {
+            path: "a.txt".into(),
+            start_line: 10,
+            end_line: 10,
+            new_content: "X".into(),
+        });
+        let err = execute(&ctx, &patch).await.unwrap_err();
+        assert!(matches!(err, ToolError::InvalidArguments { .. }));
+        // file unchanged.
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "alpha\nbeta\n");
+    }
+
+    #[tokio::test]
+    async fn patch_file_pre_check_rejects_broken_result() {
+        // Replace a body line with English prose — full post-patch
+        // content should fail Python's parser and the write must not
+        // land. Symmetric with write_file's pre-write check.
+        use crate::syntax::PythonSyntaxValidator;
+        use std::sync::Arc;
+        // Skip when python3 absent.
+        if std::process::Command::new("python3")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| !s.success())
+            .unwrap_or(true)
+        {
+            return;
+        }
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf())
+            .with_syntax_validator(Arc::new(PythonSyntaxValidator::new()));
+        let path = tmp.path().join("a.py");
+        let original = "def solve():\n    return 0\n";
+        std::fs::write(&path, original).unwrap();
+        let patch = Primitive::PatchFile(PatchFileArgs {
+            path: "a.py".into(),
+            start_line: 2,
+            end_line: 2,
+            new_content: "    let me redo Gaussian elimination more carefully.".into(),
+        });
+        let err = execute(&ctx, &patch).await.unwrap_err();
+        assert!(matches!(err, ToolError::SyntaxRejected { .. }));
+        // Original file must be intact.
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+    }
+
+    #[tokio::test]
+    async fn write_file_pre_check_skips_unhandled_extensions() {
+        // Validator handles `.rs`; a `.md` write must pass through.
+        use crate::syntax::RustSyntaxValidator;
+        use std::sync::Arc;
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ExecCtx::new(tmp.path().to_path_buf())
+            .with_syntax_validator(Arc::new(RustSyntaxValidator::new()));
+        let write = Primitive::WriteFile(WriteFileArgs {
+            path: "README.md".into(),
+            content: "# Title\n\nIntentionally not valid Rust { ( ;".into(),
+        });
+        let r = execute(&ctx, &write).await.unwrap();
+        assert!(r.ok);
+        assert!(tmp.path().join("README.md").is_file());
     }
 }

@@ -997,35 +997,15 @@ async fn run_native_role_aware(
             };
             let kind = canonical_kind.unwrap();
 
-            // Track thrash + write/verify counters (only meaningful
-            // in Implementer/Evaluator).
-            if matches!(kind, PrimitiveKind::WriteFile) {
-                let path = match &canonical {
-                    commonwealth_agent_tools::Primitive::WriteFile(args) => {
-                        Some(args.path.as_str())
-                    }
-                    _ => None,
-                };
-                let signal = thrash.observe_write(path);
-                role_dossier.on_write();
-                if let ThrashSignal::Kill { same_path_writes } = signal {
-                    tracing::warn!(
-                        problem = %problem_id,
-                        role = active_role.id(),
-                        same_path_writes,
-                        threshold = SAME_PATH_WRITE_THRESHOLD,
-                        "native_runner: write_thrash kill"
-                    );
-                    break 'outer ExitReason::WriteThrash {
-                        consecutive_writes: same_path_writes,
-                        threshold: SAME_PATH_WRITE_THRESHOLD,
-                    };
-                }
-            }
-            if matches!(kind, PrimitiveKind::Build | PrimitiveKind::Smoke) {
-                thrash.observe_verify();
-                role_dossier.on_verify();
-            }
+            // NOTE: write/verify counters used to live HERE (before
+            // dispatch). That double-counted writes the pre-write
+            // syntax check would later reject — a model retrying
+            // bad content 3× hit write_thrash even though zero
+            // bytes had landed on disk. Tracking now happens AFTER
+            // dispatch, gated on `Ok` from the executor — see below.
+            //
+            // AgentDone still short-circuits here: it doesn't
+            // dispatch (no work to do, just terminates the run).
 
             if matches!(kind, PrimitiveKind::AgentDone) {
                 tracing::info!(
@@ -1078,6 +1058,47 @@ async fn run_native_role_aware(
             // the dossier's 200-char summary.
             let result_body = serde_json::to_string(&result.payload).unwrap_or_default();
             this_turn_tool_results.push(tool_result_message(&id, &result_body));
+
+            // Track thrash + writes-since-verify ONLY for writes
+            // that actually landed on disk (Ok from the executor).
+            // Pre-write syntax check rejections take the Err branch
+            // above and never reach here — so a model retrying bad
+            // content N× doesn't trip the write-thrash detector,
+            // because no bytes hit disk. PatchFile is symmetric
+            // with WriteFile here: a successful patch is the same
+            // class of workdir mutation, and repeated patches to
+            // the same file without verification are the same kind
+            // of thrash.
+            if matches!(kind, PrimitiveKind::WriteFile | PrimitiveKind::PatchFile) {
+                let path = match &canonical {
+                    commonwealth_agent_tools::Primitive::WriteFile(args) => {
+                        Some(args.path.as_str())
+                    }
+                    commonwealth_agent_tools::Primitive::PatchFile(args) => {
+                        Some(args.path.as_str())
+                    }
+                    _ => None,
+                };
+                let signal = thrash.observe_write(path);
+                role_dossier.on_write();
+                if let ThrashSignal::Kill { same_path_writes } = signal {
+                    tracing::warn!(
+                        problem = %problem_id,
+                        role = active_role.id(),
+                        same_path_writes,
+                        threshold = SAME_PATH_WRITE_THRESHOLD,
+                        "native_runner: write_thrash kill"
+                    );
+                    break 'outer ExitReason::WriteThrash {
+                        consecutive_writes: same_path_writes,
+                        threshold: SAME_PATH_WRITE_THRESHOLD,
+                    };
+                }
+            }
+            if matches!(kind, PrimitiveKind::Build | PrimitiveKind::Smoke) {
+                thrash.observe_verify();
+                role_dossier.on_verify();
+            }
 
             // For Build/Smoke: also stash the stdout_tail in the
             // dossier so the next Implementer (after a

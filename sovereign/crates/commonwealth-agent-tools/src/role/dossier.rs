@@ -282,6 +282,24 @@ pub fn summarize(primitive: PrimitiveKind, result: &ToolResult) -> String {
                 _ => format!("inspect_workdir {intent}"),
             }
         }
+        PrimitiveKind::PatchFile => {
+            let path = result
+                .payload
+                .get("patched")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let replaced = result
+                .payload
+                .get("lines_replaced")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let inserted = result
+                .payload
+                .get("lines_inserted")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            format!("patched {path} (-{replaced}/+{inserted} lines)")
+        }
         PrimitiveKind::WriteFile => {
             let path = result
                 .payload

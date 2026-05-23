@@ -14,6 +14,16 @@ use serde::{Deserialize, Serialize};
 pub enum PrimitiveKind {
     InspectWorkdir,
     WriteFile,
+    /// Replace a contiguous range of lines in an existing file.
+    /// Smaller than WriteFile (less JSON-escape pressure on the
+    /// `content` field) and bounded in scope — added 2026-05-23
+    /// after the python 3.2 sweep showed full-file rewrites
+    /// occasionally letting prose-in-source leak through the
+    /// JSON-string emit boundary. The pre-write syntax check runs
+    /// on the FULL post-patch content, so syntactically-broken
+    /// patches are rejected at the write boundary same as
+    /// write_file.
+    PatchFile,
     /// Language-agnostic build step. The command is bound at
     /// `ExecCtx.build_cmd` per problem — Rust uses
     /// `cargo build 2>&1`, Go uses `go build ./...`, Python is a
@@ -45,6 +55,7 @@ impl PrimitiveKind {
         match self {
             PrimitiveKind::InspectWorkdir => "inspect_workdir",
             PrimitiveKind::WriteFile => "write_file",
+            PrimitiveKind::PatchFile => "patch_file",
             PrimitiveKind::Build => "build",
             PrimitiveKind::Smoke => "smoke",
             PrimitiveKind::AgentDone => "agent_done",
@@ -61,6 +72,7 @@ impl PrimitiveKind {
         match id {
             "inspect_workdir" => Some(PrimitiveKind::InspectWorkdir),
             "write_file" => Some(PrimitiveKind::WriteFile),
+            "patch_file" => Some(PrimitiveKind::PatchFile),
             "build" => Some(PrimitiveKind::Build),
             "smoke" => Some(PrimitiveKind::Smoke),
             "agent_done" => Some(PrimitiveKind::AgentDone),
@@ -77,6 +89,7 @@ impl PrimitiveKind {
         &[
             PrimitiveKind::InspectWorkdir,
             PrimitiveKind::WriteFile,
+            PrimitiveKind::PatchFile,
             PrimitiveKind::Build,
             PrimitiveKind::Smoke,
             PrimitiveKind::AgentDone,
@@ -95,6 +108,7 @@ impl PrimitiveKind {
 pub enum Primitive {
     InspectWorkdir(InspectIntent),
     WriteFile(WriteFileArgs),
+    PatchFile(PatchFileArgs),
     Build,
     Smoke(SmokeArgs),
     AgentDone(AgentDoneArgs),
@@ -108,6 +122,7 @@ impl Primitive {
         match self {
             Primitive::InspectWorkdir(_) => PrimitiveKind::InspectWorkdir,
             Primitive::WriteFile(_) => PrimitiveKind::WriteFile,
+            Primitive::PatchFile(_) => PrimitiveKind::PatchFile,
             Primitive::Build => PrimitiveKind::Build,
             Primitive::Smoke(_) => PrimitiveKind::Smoke,
             Primitive::AgentDone(_) => PrimitiveKind::AgentDone,
@@ -141,6 +156,26 @@ pub enum InspectIntent {
 pub struct WriteFileArgs {
     pub path: String,
     pub content: String,
+}
+
+/// Arguments for `patch_file`: replace a contiguous range of lines
+/// in an existing file with `new_content`.
+///
+/// Lines are 1-indexed and inclusive: `start_line=5, end_line=7`
+/// replaces lines 5, 6, 7. `start_line == end_line` replaces a
+/// single line. `new_content` may be multi-line (split on `\n`) or
+/// empty (deletes the range). The post-patch full content is
+/// syntax-checked at the write boundary just like write_file.
+///
+/// Out of scope for v1: no insert-without-replace (use write_file
+/// for net-new files; for in-place insertion replace the
+/// neighboring line and include it verbatim in new_content).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatchFileArgs {
+    pub path: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub new_content: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -213,6 +248,12 @@ mod tests {
                 PrimitiveKind::WriteFile => Primitive::WriteFile(WriteFileArgs {
                     path: "x".into(),
                     content: String::new(),
+                }),
+                PrimitiveKind::PatchFile => Primitive::PatchFile(PatchFileArgs {
+                    path: "x".into(),
+                    start_line: 1,
+                    end_line: 1,
+                    new_content: String::new(),
                 }),
                 PrimitiveKind::Build => Primitive::Build,
                 PrimitiveKind::Smoke => Primitive::Smoke(SmokeArgs::default()),

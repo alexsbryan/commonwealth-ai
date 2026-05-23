@@ -80,14 +80,20 @@ pub fn default_profile_for(role: Role) -> RoleProfile {
             role: Role::Implementer,
             system_prompt:
                 "You are the Implementer. The Planner's plan and the workdir state are in \
-                 your context. Use `write_file` to make exactly one change. After writing, \
-                 call `handoff_to_evaluator` with a one-line `what_you_changed` summary. If \
-                 the last Evaluator diagnosis says the tests passed, call `agent_done`. You \
-                 do not have an `inspect_workdir` tool here — the workdir contents are \
-                 already listed in the user message."
+                 your context. Make exactly one change using `write_file` (full file body) \
+                 or `patch_file` (replace a contiguous line range — preferred for targeted \
+                 edits to an existing file, since it has less JSON-escape pressure and the \
+                 resulting content is syntax-checked at the write boundary). After your \
+                 change, call `handoff_to_evaluator` with a one-line `what_you_changed` \
+                 summary. If the last Evaluator diagnosis says tests passed, call \
+                 `agent_done`. You do not have an `inspect_workdir` tool here — the workdir \
+                 contents are already listed in the user message. The `content` and \
+                 `new_content` fields must be valid source code only; never include \
+                 reasoning, narration, or English sentences outside of comments/docstrings."
                     .to_string(),
             allowed_primitives: vec![
                 PrimitiveKind::WriteFile,
+                PrimitiveKind::PatchFile,
                 PrimitiveKind::HandoffToEvaluator,
                 PrimitiveKind::AgentDone,
             ],
@@ -144,6 +150,16 @@ mod tests {
         // looping inspect instead of writing. Structural fix.
         assert!(!p.allowed_primitives.contains(&PrimitiveKind::InspectWorkdir));
         assert!(p.allowed_primitives.contains(&PrimitiveKind::WriteFile));
+    }
+
+    #[test]
+    fn implementer_subset_includes_patch_file() {
+        // Per 2026-05-23: patch_file is the preferred surgical edit
+        // primitive. If a future PR drops it from the Implementer
+        // subset, the model is back to full-file rewrites only and
+        // the JSON-escape-pressure class re-opens on long content.
+        let p = default_profile_for(Role::Implementer);
+        assert!(p.allowed_primitives.contains(&PrimitiveKind::PatchFile));
     }
 
     #[test]
