@@ -165,6 +165,14 @@ pub struct CorpusEngine {
     /// `None` means tiered recipes still log a dispatch plan but
     /// skip per-conv enrichment.
     tiered_provider: Option<crate::enrichment::tiered::TieredProviderHandle>,
+    /// Optional per-chunk NER extractor (GliNER via `gline-rs` in
+    /// sovereign-tools). Fires ahead of the tiered provider so
+    /// chunk_entities populates even if LLM-side enrichment fails.
+    /// `None` means tiered ingest runs RAPTOR-only — the
+    /// conv-entity-graph builder still works against
+    /// `primary_entities` per the Option-A path.
+    chunk_entity_extractor:
+        Option<crate::enrichment::tiered::ChunkEntityExtractorHandle>,
     expected_embedding_model: String,
     /// Display-formatted identifier for this node, used as the partition
     /// suffix when ingesting into `<corpus>-partition-<self_node_id>`.
@@ -297,6 +305,7 @@ impl CorpusEngine {
             inference: None,
             fast_inference: None,
             tiered_provider: None,
+            chunk_entity_extractor: None,
             // No default: the model is the source of truth for
             // its own name. Empty-string here is the "unset"
             // sentinel; `ingest()` refuses to run when it's still
@@ -530,6 +539,25 @@ impl CorpusEngine {
         &self,
     ) -> Option<&crate::enrichment::tiered::TieredProviderHandle> {
         self.tiered_provider.as_ref()
+    }
+
+    /// Provide a per-chunk NER extractor (GliNER today). Without
+    /// one, tiered ingest runs RAPTOR-only and the conv-entity-graph
+    /// retrieval blend falls back to RAPTOR-derived
+    /// `primary_entities` (Option A path, no LLM cost; lower
+    /// coverage than GliNER's ~10x density lift).
+    pub fn with_chunk_entity_extractor(
+        mut self,
+        extractor: crate::enrichment::tiered::ChunkEntityExtractorHandle,
+    ) -> Self {
+        self.chunk_entity_extractor = Some(extractor);
+        self
+    }
+
+    pub(crate) fn chunk_entity_extractor(
+        &self,
+    ) -> Option<&crate::enrichment::tiered::ChunkEntityExtractorHandle> {
+        self.chunk_entity_extractor.as_ref()
     }
 
     /// Provide a batch embedding function for high-throughput corpus ingest.

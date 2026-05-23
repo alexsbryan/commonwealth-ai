@@ -129,11 +129,31 @@ ignore = "0.4"
 # surface. Production dep, not test-only — promoted from
 # `[dev-dependencies]` 2026-05-22 when `CONV_TIERED_PORT.md` shipped.
 sovereign-store = { workspace = true }
+# Pure-Rust GLiNER inference for the per-chunk entity-extraction
+# surface (spec CONV_TIERED_PORT.md Phase 1 — chunk_entities). Uses
+# `ort` under the hood for ONNX execution; tokenizer + label-prompt
+# pipeline implemented in Rust. Gated behind `gliner-ner` so
+# headless daemon builds that don't need NER can skip the ~10MB ort
+# binary delta. Validated 2026-05-23 against the corpus's RAPTOR
+# primary_entities — ~10x denser coverage, eliminates the
+# 151-Tiny-conv empty-entity gap.
+gline-rs = { version = "1", optional = true }
+# gline-rs re-exports `orp` (its ONNX runtime params layer) through
+# `gliner::*` for most uses but the public `RuntimeParameters` type
+# is in `orp::params`. Direct dep pinned to keep the path
+# importable; gated behind the same feature.
+orp = { version = "0.9", optional = true }
+# Regex strips conv role markers (`### [date] user`, etc) before
+# feeding chunk text to GliNER — otherwise "assistant" gets tagged
+# as a Person in every chunk. Production dep regardless of feature
+# because `regex` is small and probably needed elsewhere soon.
+regex = "1"
 
 [features]
 default = []
 email = ["lettre"]
 treesitter = ["corpus-engine/treesitter"]
+gliner-ner = ["dep:gline-rs", "dep:orp"]
 
 [dev-dependencies]
 # Zip writer for hand-building minimal DOCX fixtures in

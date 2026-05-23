@@ -565,3 +565,79 @@ pub fn run_conv_tiered_migration(conn: &Connection) -> rusqlite::Result<()> {
         ",
     )
 }
+
+/// GliNER-extracted per-chunk entities (spec
+/// `sovereign/docs/specs/CONV_TIERED_PORT.md` §"Phase 1 — GliNER
+/// per-chunk entities"). Distinct from the LLM-extracted entities
+/// that live inside `conv_raptor_nodes.primary_entities` (cluster-
+/// scope) or atlas `atoms.json` (corpus-scope) — this is the
+/// per-chunk NER surface that produces ~10x denser entity coverage,
+/// gives previously-empty Tiny convs an entity set, and enables a
+/// `ConvEntityGraph::from_chunk_entities` builder layered alongside
+/// the existing RAPTOR-entities builder.
+///
+/// Idempotent extraction: the table is keyed on
+/// `(corpus_id, chunk_id, text, label)` so re-running the extractor
+/// on a chunk replaces its prior mentions without growing
+/// duplicate rows.
+pub fn run_chunk_entities_migration(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS chunk_entities (
+            corpus_id   TEXT    NOT NULL,
+            chunk_id    INTEGER NOT NULL,
+            text        TEXT    NOT NULL,
+            label       TEXT    NOT NULL,
+            -- Character offsets into the chunk content (NOT the
+            -- original conv source) for highlight rendering. Stored
+            -- as i64 because rusqlite's u64 binding is fussy with
+            -- some columns; values fit in i32 in practice.
+            char_start  INTEGER NOT NULL,
+            char_end    INTEGER NOT NULL,
+            -- GliNER softmax score in [0, 1]. Production threshold
+            -- is 0.6 (see scripts/extract_entities.py); persisted
+            -- so future re-bench passes can re-threshold without
+            -- re-running NER.
+            score       REAL    NOT NULL,
+            -- Conv_uuid carried as denormalised join key so the
+            -- conv-entity-graph builder can fetch
+            -- `WHERE corpus_id = ? AND conv_uuid = ?` without
+            -- hitting Lance for the chunk lookup. NULL for
+            -- non-conv corpora (atoms-style corpora may also
+            -- populate this table in future).
+            conv_uuid   TEXT,
+            extracted_at INTEGER NOT NULL,
+            PRIMARY KEY (corpus_id, chunk_id, text, label)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_chunk_entities_corpus_conv
+            ON chunk_entities(corpus_id, conv_uuid, label);
+
+        CREATE INDEX IF NOT EXISTS idx_chunk_entities_text
+            ON chunk_entities(corpus_id, text);
+
+        -- Per-corpus extraction-progress sidecar so the CLI can
+        -- report '15234 / 16404 chunks extracted' without scanning
+        -- the full chunk_entities table on every progress poll.
+        CREATE TABLE IF NOT EXISTS chunk_entity_progress (
+            corpus_id           TEXT    PRIMARY KEY,
+            chunks_processed    INTEGER NOT NULL DEFAULT 0,
+            chunks_total        INTEGER NOT NULL DEFAULT 0,
+            mentions_extracted  INTEGER NOT NULL DEFAULT 0,
+            last_chunk_id       INTEGER,
+            started_at          INTEGER NOT NULL,
+            updated_at          INTEGER NOT NULL,
+            finished_at         INTEGER,
+            -- 'running' | 'complete' | 'failed' | 'paused'
+            state               TEXT    NOT NULL DEFAULT 'running',
+            -- GliNER model id + threshold + label set, recorded for
+            -- provenance. Re-extracting with different settings
+            -- bumps these.
+            model_id            TEXT,
+            threshold           REAL,
+            labels_json         TEXT,
+            error_msg           TEXT
+        );
+        ",
+    )
+}

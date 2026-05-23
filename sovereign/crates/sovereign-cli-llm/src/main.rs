@@ -13,6 +13,7 @@ mod bench_cmd;
 mod chat_cmd;
 mod claim_cmd;
 mod corpus_catalog_cmd;
+mod corpus_extract_entities_cmd;
 mod corpus_scrub_cmd;
 mod corpus_snapshot_cmd;
 mod corpus_watch_cmd;

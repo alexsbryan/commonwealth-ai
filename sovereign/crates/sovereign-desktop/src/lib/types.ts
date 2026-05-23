@@ -1803,6 +1803,34 @@ export interface ConvEntityChip {
   occurrence_count: number;
 }
 
+/** GliNER model availability + path. Drives the Settings → Imports
+ *  download UI + AtlasIndex's "model not installed" warning. */
+export interface GlinerModelStatus {
+  installed: boolean;
+  model_id: string;
+  expected_path: string;
+  size_estimate_mb: number;
+}
+
+/** Per-corpus chunk-entity extraction progress. Mirrors the
+ *  `chunk_entity_progress` SQLite row. State: "running" | "complete"
+ *  | "failed" | "paused". */
+export interface ChunkEntityProgressRow {
+  corpus_id: string;
+  chunks_processed: number;
+  chunks_total: number;
+  mentions_extracted: number;
+  last_chunk_id?: number | null;
+  started_at: number;
+  updated_at: number;
+  finished_at?: number | null;
+  state: string;
+  model_id?: string | null;
+  threshold?: number | null;
+  labels_json?: string | null;
+  error_msg?: string | null;
+}
+
 export type CurationStatus = "generated";
 
 /** Compact per-atom record returned by `atlas_list_atoms`. The full

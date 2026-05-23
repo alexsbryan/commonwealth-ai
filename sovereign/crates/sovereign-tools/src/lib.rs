@@ -1,6 +1,8 @@
 pub mod atlas_context_manager;
 pub mod atlas_peer_advice;
 pub mod conv_tiered_provider;
+#[cfg(feature = "gliner-ner")]
+pub mod gliner_ner;
 pub mod raptor_atlas;
 pub mod entity_graph;
 pub mod atlas_postinstall;
