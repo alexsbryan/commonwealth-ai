@@ -256,6 +256,38 @@
 
     if (!target.classList.contains("source-citation")) return;
 
+    // Numeric-citation fallback. The prompt forbids `[N]` (see
+    // KNOWLEDGE_SYNTHESIS_SYSTEM in runtime.rs) but smaller models
+    // sometimes emit it anyway. The chip lets the reader still get
+    // *somewhere* useful: map N to retrievedChunks[N-1] when in
+    // range, otherwise surface the "unresolved" toast so the
+    // failure is legible instead of silently picking the wrong
+    // chunk.
+    const numericIdxAttr = target.getAttribute("data-citation-index");
+    if (numericIdxAttr) {
+      const idx = parseInt(numericIdxAttr, 10);
+      const numChunk =
+        Number.isFinite(idx) && idx >= 1 && idx <= retrievedChunks.length
+          ? retrievedChunks[idx - 1]
+          : null;
+      if (!numChunk) {
+        showUnresolved(`[${idx}]`);
+        return;
+      }
+      if (numChunk.chunk_id != null && numChunk.corpus_id) {
+        void readingSession.openCitation(
+          numChunk.corpus_id,
+          numChunk.chunk_id,
+          originLabel,
+        );
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      popoverAnchor = { x: rect.left, y: rect.bottom };
+      popoverChunk = numChunk;
+      return;
+    }
+
     const sourceName = target.getAttribute("data-source");
     if (!sourceName) return;
 

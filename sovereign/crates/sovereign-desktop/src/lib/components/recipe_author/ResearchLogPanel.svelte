@@ -62,7 +62,7 @@
     gap: 0.55rem;
   }
   li {
-    border-left: 2px solid rgba(140, 220, 200, 0.4);
+    border-left: 2px solid color-mix(in srgb, var(--growth) 45%, transparent);
     padding: 0.1rem 0 0.1rem 0.55rem;
   }
   .row-head {
@@ -76,19 +76,19 @@
     letter-spacing: 0.04em;
     padding: 1px 7px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-elevated);
   }
   .auth.authoritative {
-    background: rgba(120, 220, 160, 0.18);
-    color: #b9f0c9;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .auth.secondary {
-    background: rgba(120, 200, 240, 0.15);
-    color: #c0e0f0;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
   }
   .auth.unverified {
-    background: rgba(240, 180, 100, 0.18);
-    color: #f0c98c;
+    background: var(--accent-dim);
+    color: var(--accent-light);
   }
   .when {
     margin-left: auto;

@@ -30,6 +30,36 @@ use super::ocr::{OcrCtx, PageProgress, PageProgressCallback};
 use super::pre_scanner::{PreScanResult, PreScanner};
 use super::progress::{ExcerptChunk, LocalCorpusProgress, RuntimeFailure};
 
+/// Predicate gating the auto-rebuild watchdog (Move 8 — folder-ingest
+/// v1 §3.6). Returns `true` only when the corpus has a finished
+/// tiered build sitting on disk: a fresh rebuild then makes sense
+/// because new chunks from the just-completed sweep are not yet
+/// reflected in `chunk_entities` / RAPTOR / motifs.
+///
+/// Returns `false` for every other shape:
+///
+/// - `None` — no live status; enrichment never ran for this corpus.
+/// - `Off` — user disabled enrichment; do not silently re-enable.
+/// - `Building*` / `Tiered { Pending | Indexing | BuildingSkeleton |
+///    PartiallyReady | Failed }` — a build is in flight or has not
+///    yet reached usable state; preempting it with a fresh sweep
+///    would discard partial work.
+/// - `Complete` / `Failed` (legacy) — pre-tiered status; the legacy
+///    subprocess path is not auto-rebuild safe.
+pub(crate) fn should_fire_auto_rebuild(
+    status: Option<&super::watched::state::EnrichmentRuntimeStatus>,
+) -> bool {
+    use super::watched::state::EnrichmentRuntimeStatus;
+    use sovereign_core::types::AssetState;
+    matches!(
+        status,
+        Some(EnrichmentRuntimeStatus::Tiered {
+            state: AssetState::Ready | AssetState::MultiHopReady,
+            ..
+        })
+    )
+}
+
 // ─── Public result types ─────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,6 +163,33 @@ pub struct LocalCorpusManager {
     /// blocking lock in those paths.
     enrichment_progress:
         Arc<std::sync::RwLock<HashMap<String, super::watched::state::EnrichmentRuntimeStatus>>>,
+    /// Folder-ingest v1 §3.6 — debounced auto-rebuild watchdog.
+    ///
+    /// The watched-folder worker emits `SweepCompleted` after every
+    /// reconciliation pass. When the pass actually changed something
+    /// (added/modified/removed > 0), the tiered enrichment built off
+    /// the prior snapshot has gone stale — new chunks lack
+    /// `chunk_entities` / RAPTOR cluster membership / motif coverage
+    /// and PPR rerank under-weights them until the next manual
+    /// rebuild.
+    ///
+    /// Rather than rebuild after every sweep (folders with bursty
+    /// edits would thrash the GliNER + RAPTOR pipeline), we debounce
+    /// per corpus: each qualifying `SweepCompleted` resets a sleep
+    /// task. When the sleep expires without a fresh sweep, the
+    /// watchdog fires `rebuild_enrichment` — but only when the
+    /// corpus's enrichment status is `Tiered { state: Ready |
+    /// MultiHopReady }`, so we never preempt an in-flight build.
+    ///
+    /// The map keys on `corpus_id` → handle of the pending sleep
+    /// task. Replacing a key aborts the prior task before storing
+    /// the new one (effective debounce reset).
+    auto_rebuild_tasks: Arc<tokio::sync::Mutex<HashMap<String, tokio::task::JoinHandle<()>>>>,
+    /// Debounce delay for `on_sweep_event`. Defaults to 5 minutes per
+    /// the plan; tests override via `set_auto_rebuild_debounce` to
+    /// keep them fast.
+    auto_rebuild_debounce:
+        Arc<std::sync::RwLock<std::time::Duration>>,
 }
 
 impl LocalCorpusManager {
@@ -202,6 +259,10 @@ impl LocalCorpusManager {
             ocr_ctx: RwLock::new(None),
             enrichment_driver: Arc::new(super::watched::enrich::EnrichmentDriver::new()),
             enrichment_progress: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            auto_rebuild_tasks: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            auto_rebuild_debounce: Arc::new(std::sync::RwLock::new(
+                std::time::Duration::from_secs(300),
+            )),
         })
     }
 
@@ -222,6 +283,126 @@ impl LocalCorpusManager {
         defaults: super::watched::enrich::EnrichmentDefaults,
     ) {
         self.enrichment_driver.set_defaults(defaults).await;
+    }
+
+    /// Install in-process tiered-enrichment deps (FolderTieredProvider
+    /// + optional GliNER extractor). Once set, `enable_enrichment`
+    /// routes through `start_tiered_build` instead of the legacy
+    /// subprocess. Idempotent.
+    pub async fn set_tiered_deps(
+        &self,
+        deps: super::watched::enrich::TieredDeps,
+    ) {
+        self.enrichment_driver.set_tiered_deps(deps).await;
+    }
+
+    /// Override the debounce window used by `on_sweep_event`. Production
+    /// default is 5 minutes (set in `init_with_recipes_dir`); tests
+    /// shorten this so they don't have to wait. No-op on a poisoned
+    /// lock — debounce timing is a best-effort heuristic, not a
+    /// correctness lever.
+    pub fn set_auto_rebuild_debounce(&self, dur: std::time::Duration) {
+        if let Ok(mut guard) = self.auto_rebuild_debounce.write() {
+            *guard = dur;
+        }
+    }
+
+    /// Folder-ingest v1 §3.6 — handle one worker event for the
+    /// auto-rebuild watchdog. Called by the daemon's event sink for
+    /// every `WatchedFolderEvent`. Only `SweepCompleted` with a non-
+    /// empty diff drives behaviour; every other variant short-circuits
+    /// so the sink stays cheap.
+    ///
+    /// Behaviour on a qualifying `SweepCompleted`:
+    ///
+    /// 1. Cancel + drop any prior pending rebuild task for this
+    ///    corpus (debounce reset — bursty edits collapse into one
+    ///    rebuild at the tail of the burst).
+    /// 2. Spawn a new tokio task that sleeps `auto_rebuild_debounce`.
+    /// 3. On expiry, gate-check the corpus's enrichment status:
+    ///    `Tiered { Ready | MultiHopReady }` → fire
+    ///    `rebuild_enrichment`. Any other state (Off, in-flight
+    ///    Building / PartiallyReady, Failed, legacy Complete /
+    ///    Building) → skip silently. Rationale: rebuilding requires
+    ///    enrichment to be configured *and* finished; we never
+    ///    preempt an in-flight build.
+    ///
+    /// Errors during `rebuild_enrichment` are logged at `warn!` and
+    /// dropped — the user can manually rebuild from the UI if a
+    /// transient daemon condition (no inference, paused corpus)
+    /// blocked the auto-pass. Calls are best-effort by design.
+    pub async fn on_sweep_event(
+        self: &Arc<Self>,
+        event: &super::watched::events::WatchedFolderEvent,
+    ) {
+        use super::watched::events::WatchedFolderEvent;
+        let (corpus_id, applied) = match event {
+            WatchedFolderEvent::SweepCompleted {
+                corpus_id, applied, ..
+            } => (corpus_id.clone(), applied.clone()),
+            _ => return,
+        };
+        let changed = applied.added + applied.modified + applied.removed;
+        if changed == 0 {
+            return;
+        }
+        let debounce = self
+            .auto_rebuild_debounce
+            .read()
+            .map(|g| *g)
+            .unwrap_or_else(|_| std::time::Duration::from_secs(300));
+        let me = Arc::clone(self);
+        let corpus_for_task = corpus_id.clone();
+        let mut tasks = self.auto_rebuild_tasks.lock().await;
+        if let Some(prior) = tasks.remove(&corpus_id) {
+            prior.abort();
+        }
+        let handle = tokio::spawn(async move {
+            tokio::time::sleep(debounce).await;
+            me.fire_auto_rebuild(&corpus_for_task).await;
+        });
+        tasks.insert(corpus_id, handle);
+    }
+
+    /// Inner: debounce expired — gate-check status, fire rebuild if
+    /// safe. Extracted so the gate logic is unit-testable without
+    /// driving real time.
+    async fn fire_auto_rebuild(self: &Arc<Self>, corpus_id: &str) {
+        let status = self.enrichment_progress(corpus_id);
+        let should_fire = should_fire_auto_rebuild(status.as_ref());
+        if !should_fire {
+            tracing::debug!(
+                corpus_id = %corpus_id,
+                ?status,
+                "auto_rebuild:skipped — status not Ready/MultiHopReady"
+            );
+            // Clear the slot so a later sweep can re-arm.
+            let mut tasks = self.auto_rebuild_tasks.lock().await;
+            tasks.remove(corpus_id);
+            return;
+        }
+        tracing::info!(
+            corpus_id = %corpus_id,
+            "auto_rebuild:firing"
+        );
+        match self.rebuild_enrichment(corpus_id).await {
+            Ok(job_id) => {
+                tracing::info!(
+                    corpus_id = %corpus_id,
+                    job_id = %job_id,
+                    "auto_rebuild:dispatched"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    corpus_id = %corpus_id,
+                    error = %e,
+                    "auto_rebuild:failed — user can retry via manual rebuild"
+                );
+            }
+        }
+        let mut tasks = self.auto_rebuild_tasks.lock().await;
+        tasks.remove(corpus_id);
     }
 
     /// Snapshot of the live enrichment progress for one corpus.
@@ -298,6 +479,35 @@ impl LocalCorpusManager {
             persist_config(&config_dir(&self.data_dir), entry)?;
         }
 
+        // Stamp display.category = "watched_folder" on the index's
+        // _corpus_meta.json so the runtime retrieval gates
+        // (`is_tiered_category` in conv_briefing) route this corpus
+        // through the tiered (RAPTOR + chunk_entities + PPR) path.
+        // Best-effort: a stamp failure logs + continues — the build
+        // still produces useful enrichment data and the user can
+        // re-trigger the stamp later by re-enabling.
+        match self.engine.open_index_for_corpus(corpus_id).await {
+            Ok(index) => {
+                let display = corpus_engine::recipe::DisplayMeta {
+                    category: Some("watched_folder".to_string()),
+                    icon: None,
+                };
+                if let Err(e) = index.set_display(Some(display)) {
+                    tracing::warn!(
+                        corpus_id = %corpus_id,
+                        "enable_enrichment: set_display(watched_folder) failed: {e}"
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    corpus_id = %corpus_id,
+                    "enable_enrichment: open_index_for_corpus failed; \
+                     display category not stamped: {e}"
+                );
+            }
+        }
+
         // Stamp Building into both the live progress map and the
         // on-disk state mirror so the UI immediately shows the
         // running state. The progress callback below will keep
@@ -313,6 +523,96 @@ impl LocalCorpusManager {
             },
         )?;
 
+        // Tiered fork: when the in-process tiered driver is wired,
+        // route through it instead of the subprocess. The legacy
+        // path stays as a fallback for daemons without tiered deps
+        // installed (e.g. the gliner-ner feature off, or
+        // FolderTieredProvider not constructed). pipeline_id is
+        // accepted by the validator above but unused in the tiered
+        // path — tiered enrichment is universal across recipe
+        // variants.
+        if self.enrichment_driver.is_tiered_ready().await {
+            let progress_map = Arc::clone(&self.enrichment_progress);
+            let corpus_id_for_cb = corpus_id.to_string();
+            let state_dir = self.engine_index_dir().join(corpus_id);
+            let on_state: Arc<dyn Fn(sovereign_core::types::AssetState) + Send + Sync> =
+                Arc::new(move |state| {
+                    use super::watched::state::EnrichmentRuntimeStatus;
+                    use sovereign_core::types::AssetState;
+                    // Tiered variant carries the AssetState directly
+                    // so the UI renders the same T1 / T2 / T3
+                    // milestones as attached-doc ingest. Ready stamps
+                    // `built_at_unix`; Failed bubbles through Failed
+                    // variant separately so callers that key off
+                    // "did this fail?" stay simple.
+                    let status = match &state {
+                        AssetState::Failed { reason } => {
+                            EnrichmentRuntimeStatus::Failed {
+                                failed_at_unix: now_unix(),
+                                reason: reason.clone(),
+                            }
+                        }
+                        AssetState::Ready => EnrichmentRuntimeStatus::Tiered {
+                            state: state.clone(),
+                            started_at_unix,
+                            built_at_unix: Some(now_unix()),
+                            doc_count: 0,
+                        },
+                        _ => EnrichmentRuntimeStatus::Tiered {
+                            state: state.clone(),
+                            started_at_unix,
+                            built_at_unix: None,
+                            doc_count: 0,
+                        },
+                    };
+                    if let Ok(mut guard) = progress_map.write() {
+                        guard.insert(corpus_id_for_cb.clone(), status.clone());
+                    }
+                    // Best-effort persist to the state.json mirror so
+                    // a UI fetch after the daemon restarts mid-build
+                    // can read the last known phase.
+                    let state_dir = state_dir.clone();
+                    let corpus_id = corpus_id_for_cb.clone();
+                    tokio::spawn(async move {
+                        use super::watched::state::WatchedFolderState;
+                        match WatchedFolderState::load(&state_dir) {
+                            Ok(Some(mut s)) => {
+                                s.enrichment_status = status;
+                                s.last_updated_unix = now_unix();
+                                if let Err(e) = s.save(&state_dir) {
+                                    tracing::warn!(
+                                        corpus_id = %corpus_id,
+                                        "tiered_state_persist: save failed: {e}"
+                                    );
+                                }
+                            }
+                            Ok(None) => {
+                                tracing::warn!(
+                                    corpus_id = %corpus_id,
+                                    "tiered_state_persist: state file missing — skipping persist"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    corpus_id = %corpus_id,
+                                    "tiered_state_persist: load failed: {e}"
+                                );
+                            }
+                        }
+                    });
+                });
+
+            // Lance index lives at `<engine_index_dir>/<corpus_id>`.
+            let index_path = self.engine_index_dir().join(corpus_id);
+            return self
+                .enrichment_driver
+                .start_tiered_build(corpus_id, &index_path, on_state)
+                .await;
+        }
+
+        // Legacy subprocess path. Stays in place until the tiered
+        // path has been validated across watched-folder + obsidian-
+        // vault corpora end-to-end.
         let progress_map = Arc::clone(&self.enrichment_progress);
         let corpus_id_for_cb = corpus_id.to_string();
         let progress_cb: crate::enrich::EnrichProgressFn = Arc::new(move |evt| {
@@ -356,6 +656,33 @@ impl LocalCorpusManager {
                 corpus_id = %corpus_id,
                 "disable_enrichment: atlas_teardown failed: {e}"
             );
+        }
+
+        // Tiered teardown — purge the SQLite-side rows the in-process
+        // tiered driver wrote: conv_raptor_nodes, conv_motifs,
+        // conv_skeletons, chunk_entities, chunk_entity_progress. The
+        // legacy subprocess path doesn't write these (it writes to the
+        // atlas dir torn down above) so this is a no-op for legacy-
+        // only corpora. Best-effort: a failure here leaves stale rows
+        // that the next enable will overwrite, never a correctness
+        // issue.
+        let db_path = self.data_dir.join("sovereign.db");
+        match sovereign_store::sqlite::SqliteStateStore::open(&db_path) {
+            Ok(store) => {
+                if let Err(e) = store.delete_tiered_for_corpus(corpus_id).await {
+                    tracing::warn!(
+                        corpus_id = %corpus_id,
+                        "disable_enrichment: tiered teardown failed: {e}"
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    db_path = %db_path.display(),
+                    corpus_id = %corpus_id,
+                    "disable_enrichment: cannot open state store for tiered teardown: {e}"
+                );
+            }
         }
 
         // Persist Off on the config side.
@@ -1793,5 +2120,84 @@ mod tests {
         // is a flat join + ".toml" suffix.
         let p = recipe_path_for(Path::new("/tmp/data/recipes"), "folder-abc123");
         assert_eq!(p, PathBuf::from("/tmp/data/recipes/folder-abc123.toml"));
+    }
+
+    // ── auto-rebuild watchdog gate (Move 8) ─────────────────────────
+
+    #[test]
+    fn auto_rebuild_skips_when_no_status() {
+        assert!(!should_fire_auto_rebuild(None));
+    }
+
+    #[test]
+    fn auto_rebuild_skips_when_off() {
+        use super::super::watched::state::EnrichmentRuntimeStatus;
+        assert!(!should_fire_auto_rebuild(Some(&EnrichmentRuntimeStatus::Off)));
+    }
+
+    #[test]
+    fn auto_rebuild_skips_when_building_in_flight() {
+        use super::super::watched::state::EnrichmentRuntimeStatus;
+        use sovereign_core::types::AssetState;
+        let status = EnrichmentRuntimeStatus::Tiered {
+            state: AssetState::PartiallyReady,
+            started_at_unix: 0,
+            built_at_unix: None,
+            doc_count: 0,
+        };
+        assert!(!should_fire_auto_rebuild(Some(&status)));
+    }
+
+    #[test]
+    fn auto_rebuild_skips_when_failed() {
+        use super::super::watched::state::EnrichmentRuntimeStatus;
+        let status = EnrichmentRuntimeStatus::Failed {
+            failed_at_unix: 0,
+            reason: "test".into(),
+        };
+        assert!(!should_fire_auto_rebuild(Some(&status)));
+    }
+
+    #[test]
+    fn auto_rebuild_skips_when_legacy_complete() {
+        // Legacy `Complete` is the subprocess-path terminal state;
+        // it lacks tiered artifacts so an auto-rebuild here would
+        // route through the wrong code path.
+        use super::super::watched::state::EnrichmentRuntimeStatus;
+        let status = EnrichmentRuntimeStatus::Complete {
+            built_at_unix: 0,
+            doc_count: 5,
+        };
+        assert!(!should_fire_auto_rebuild(Some(&status)));
+    }
+
+    #[test]
+    fn auto_rebuild_fires_when_tiered_ready() {
+        use super::super::watched::state::EnrichmentRuntimeStatus;
+        use sovereign_core::types::AssetState;
+        let status = EnrichmentRuntimeStatus::Tiered {
+            state: AssetState::Ready,
+            started_at_unix: 0,
+            built_at_unix: Some(100),
+            doc_count: 12,
+        };
+        assert!(should_fire_auto_rebuild(Some(&status)));
+    }
+
+    #[test]
+    fn auto_rebuild_fires_when_tiered_multi_hop_ready() {
+        // MultiHopReady = T2 done, T3 in flight. A sweep landing
+        // here still benefits from a fresh rebuild because the T2
+        // entity index does not yet cover the new chunks. T3 will
+        // re-run as part of the rebuild — accepted cost.
+        use super::super::watched::state::EnrichmentRuntimeStatus;
+        use sovereign_core::types::AssetState;
+        let status = EnrichmentRuntimeStatus::Tiered {
+            state: AssetState::MultiHopReady,
+            started_at_unix: 0,
+            built_at_unix: None,
+            doc_count: 12,
+        };
+        assert!(should_fire_auto_rebuild(Some(&status)));
     }
 }

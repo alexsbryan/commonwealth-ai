@@ -36,6 +36,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use sovereign_core::error::{Error, Result};
+use sovereign_core::types::AssetState;
 use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
 use tokio::task::JoinHandle;
 
@@ -245,6 +246,25 @@ struct JobHandle {
     _permit: Arc<OwnedSemaphorePermit>,
 }
 
+/// Tiered-path dependencies installed at daemon boot. Until set,
+/// `start_tiered_build` returns an error and `enable_enrichment`
+/// falls back to the legacy `start_build` (subprocess) path.
+///
+/// `tiered_provider` is shared with `CorpusEngine::with_tiered_provider`
+/// for conversation corpora; folder corpora reuse the same shape
+/// (`FolderTieredProvider` in `conv_tiered_provider.rs`) so a single
+/// daemon-side instance can serve both paths. The driver doesn't
+/// distinguish — it routes `corpus_id` + `index_path` into
+/// `run_folder_tiered_enrichment` which calls into the provider
+/// with `conv_uuid = corpus_id`.
+#[derive(Clone)]
+pub struct TieredDeps {
+    pub tiered_provider:
+        Arc<dyn corpus_engine::enrichment::tiered::TieredEnrichmentProvider>,
+    pub gliner_extractor:
+        Option<Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>>,
+}
+
 /// Folder-ingest v1 §3.3 driver. One per daemon instance. Holds
 /// the per-corpus job table + the global concurrency cap. The
 /// `LocalCorpusManager` owns one `Arc<EnrichmentDriver>` and
@@ -260,6 +280,10 @@ pub struct EnrichmentDriver {
     /// enrichment runs are GPU-bound; concurrent runs would thrash
     /// the daemon's chat slot.
     permits: Arc<Semaphore>,
+    /// Tiered-enrichment dependencies. Installed by the daemon at
+    /// boot via `set_tiered_deps`. `None` = the driver only knows the
+    /// legacy subprocess path.
+    tiered_deps: RwLock<Option<TieredDeps>>,
 }
 
 impl EnrichmentDriver {
@@ -268,7 +292,23 @@ impl EnrichmentDriver {
             defaults: RwLock::new(None),
             in_flight: Mutex::new(HashMap::new()),
             permits: Arc::new(Semaphore::new(1)),
+            tiered_deps: RwLock::new(None),
         }
+    }
+
+    /// Install tiered-path deps. Called once at daemon boot after
+    /// the tiered provider + GliNER extractor are constructed.
+    /// Idempotent — calling again replaces the prior install.
+    pub async fn set_tiered_deps(&self, deps: TieredDeps) {
+        *self.tiered_deps.write().await = Some(deps);
+    }
+
+    /// True if the tiered path is wired and `start_tiered_build`
+    /// will succeed. Used by `LocalCorpusManager::enable_enrichment`
+    /// to decide whether to route through the in-process tiered
+    /// driver or fall back to the legacy subprocess.
+    pub async fn is_tiered_ready(&self) -> bool {
+        self.tiered_deps.read().await.is_some()
     }
 
     /// Install daemon defaults. The daemon calls this once at boot
@@ -403,6 +443,148 @@ impl EnrichmentDriver {
                     tracing::error!(
                         corpus_id = %corpus_id_owned,
                         "enrichment_driver:build_io_error: {e}"
+                    );
+                }
+            }
+        });
+
+        self.in_flight.lock().await.insert(
+            corpus_id.to_string(),
+            JobHandle {
+                job_id: job_id.clone(),
+                cancel,
+                task,
+                _permit: permit,
+            },
+        );
+        Ok(job_id)
+    }
+
+    /// In-process tiered build. Runs T2 (GliNER chunk_entities) +
+    /// T3 (RAPTOR atlas + motif index) inside the daemon, streaming
+    /// `AssetState` transitions through `on_state` so the manager
+    /// can update the live `EnrichmentRuntimeStatus` mirror visible
+    /// to the UI.
+    ///
+    /// Assumes T1 is already complete (embeddings live in the
+    /// corpus's Lance index from prior sweeps). First transition is
+    /// to `PartiallyReady`; final is `Ready` on success or
+    /// `Failed { reason }` on RAPTOR-build failure. GliNER failure
+    /// is best-effort and does NOT fail the build — the corpus
+    /// still gets a RAPTOR-only tier.
+    ///
+    /// Errors at the synchronous entry point (before the spawn):
+    /// - Tiered deps not installed yet (`set_tiered_deps` missing).
+    /// - A build is already in flight for `corpus_id`.
+    /// - Global semaphore closed (driver shutdown).
+    pub async fn start_tiered_build(
+        &self,
+        corpus_id: &str,
+        index_path: &Path,
+        on_state: Arc<dyn Fn(AssetState) + Send + Sync>,
+    ) -> Result<String> {
+        let deps = {
+            let guard = self.tiered_deps.read().await;
+            guard.as_ref().cloned().ok_or_else(|| {
+                Error::Execution(
+                    "tiered enrichment deps not installed yet — \
+                     daemon boot incomplete or feature disabled"
+                        .into(),
+                )
+            })?
+        };
+
+        if self.is_running(corpus_id).await {
+            return Err(Error::Execution(format!(
+                "enrichment build already in flight for corpus '{corpus_id}' \
+                 — cancel it first if you want to retry"
+            )));
+        }
+
+        let permit = self
+            .permits
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| Error::Execution("enrichment driver shutting down".into()))?;
+        let permit = Arc::new(permit);
+
+        let job_id = uuid::Uuid::new_v4().to_string();
+        // Cancellation flag is allocated so `cancel(corpus_id)` keeps
+        // working uniformly across legacy + tiered jobs. The tiered
+        // path doesn't honour mid-run cancellation today (the
+        // run_folder_tiered_enrichment helper has no cancel hook);
+        // this is a known v1 limitation surfaced as a no-op.
+        let cancel = new_cancellation_flag();
+        let corpus_id_owned = corpus_id.to_string();
+        let index_path_owned = index_path.to_path_buf();
+        let task_permit = permit.clone();
+
+        let task = tokio::spawn(async move {
+            let _permit = task_permit;
+            tracing::info!(
+                corpus_id = %corpus_id_owned,
+                index = %index_path_owned.display(),
+                "tiered_driver: build starting"
+            );
+
+            // T1 is already on disk (corpus-engine ingest stamps
+            // embeddings into Lance). The first explicit tier
+            // marker is PartiallyReady — UI shifts from
+            // "Building" to "T1 ready, T2 in flight".
+            on_state(AssetState::PartiallyReady);
+
+            // T2: GliNER chunk_entities delta. Best-effort —
+            // failure logs + the build proceeds with RAPTOR-only
+            // entities (the conv_entity_graph builder degrades
+            // gracefully when chunk_entities is empty).
+            if let Some(extractor) = deps.gliner_extractor.as_ref() {
+                match extractor
+                    .extract_delta_for_corpus(&corpus_id_owned, &index_path_owned)
+                    .await
+                {
+                    Ok(n) => tracing::info!(
+                        corpus_id = %corpus_id_owned,
+                        mentions = n,
+                        "tiered_driver: GliNER delta complete"
+                    ),
+                    Err(e) => tracing::warn!(
+                        corpus_id = %corpus_id_owned,
+                        error = %e,
+                        "tiered_driver: GliNER delta failed; continuing with RAPTOR-only entities"
+                    ),
+                }
+            }
+            on_state(AssetState::MultiHopReady);
+
+            // T3: RAPTOR tree + motif index. Persistence happens
+            // inside the provider's enrich_conversation; the runner
+            // collapses all chunks into one bag and calls the
+            // provider once with conv_uuid = corpus_id. Pass
+            // `None` for the entity_extractor because we already
+            // ran the delta above.
+            match corpus_engine::enrichment::tiered::run_folder_tiered_enrichment(
+                &corpus_id_owned,
+                &index_path_owned,
+                Some(&deps.tiered_provider),
+                None,
+            )
+            .await
+            {
+                Ok(_plan) => {
+                    on_state(AssetState::Ready);
+                    tracing::info!(
+                        corpus_id = %corpus_id_owned,
+                        "tiered_driver: build complete"
+                    );
+                }
+                Err(e) => {
+                    let reason = format!("{e}");
+                    on_state(AssetState::Failed { reason: reason.clone() });
+                    tracing::warn!(
+                        corpus_id = %corpus_id_owned,
+                        error = %reason,
+                        "tiered_driver: run_folder_tiered_enrichment failed"
                     );
                 }
             }

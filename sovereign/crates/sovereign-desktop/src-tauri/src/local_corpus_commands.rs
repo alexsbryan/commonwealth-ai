@@ -223,7 +223,48 @@ fn resolve_tesseract_path(app: &AppHandle) -> Option<PathBuf> {
             probes.push(parent.join("tesseract.exe"));
         }
     }
-    probes.into_iter().find(|p| p.exists())
+    if let Some(p) = probes.into_iter().find(|p| p.exists()) {
+        return Some(p);
+    }
+    // $PATH fallback — covers Homebrew (`/opt/homebrew/bin/tesseract`)
+    // on Apple Silicon, `/usr/local/bin/tesseract` on Intel macOS,
+    // distro packages on Linux, and any operator who installed
+    // tesseract themselves. Without this, dev builds with no
+    // `binaries/tesseract` symlink silently report "OCR not available"
+    // even though the system can clearly run it.
+    //
+    // Tauri's launchd-spawned env has a minimal `PATH` (typically
+    // `/usr/bin:/bin:/usr/sbin:/sbin`), so we splice in the standard
+    // Homebrew + Linux locations before searching. The env var still
+    // takes precedence — operators with a hand-rolled `PATH` win.
+    let mut path_dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    for extra in [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/usr/local/sbin",
+        "/opt/local/bin",
+    ] {
+        let pb = PathBuf::from(extra);
+        if !path_dirs.contains(&pb) {
+            path_dirs.push(pb);
+        }
+    }
+    for dir in path_dirs {
+        for name in ["tesseract", "tesseract.exe"] {
+            let candidate = dir.join(name);
+            if candidate.is_file() {
+                tracing::info!(
+                    path = %candidate.display(),
+                    "OCR: tesseract located via PATH fallback"
+                );
+                return Some(candidate);
+            }
+        }
+    }
+    None
 }
 
 fn resolve_tessdata_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBuf> {
@@ -238,6 +279,21 @@ fn resolve_tessdata_dir(resource_dir: Option<&std::path::Path>) -> Option<PathBu
     // Dev fallback — same compile-time-baked binaries dir.
     let dev_bins = PathBuf::from(DEV_BINARIES_DIR);
     probes.push(dev_bins.join("tessdata"));
+    // System-install fallback. Tesseract's tessdata ships next to its
+    // binary on Homebrew + most Linux distros at predictable paths.
+    // Without these, a system-installed tesseract from the PATH probe
+    // above would be found but tessdata would still come up empty.
+    for p in [
+        "/opt/homebrew/share/tessdata",            // Homebrew Apple Silicon
+        "/usr/local/share/tessdata",               // Homebrew Intel
+        "/opt/local/share/tessdata",               // MacPorts
+        "/usr/share/tessdata",                     // Debian/Ubuntu
+        "/usr/share/tesseract-ocr/4.00/tessdata",  // Older Debian
+        "/usr/share/tesseract-ocr/5/tessdata",     // Newer Debian
+        "/usr/share/tesseract/tessdata",           // RHEL/Fedora
+    ] {
+        probes.push(PathBuf::from(p));
+    }
     probes
         .into_iter()
         .find(|p| p.join("eng.traineddata").exists())

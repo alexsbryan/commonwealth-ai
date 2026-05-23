@@ -40,7 +40,6 @@
     | "knowledge"
     | "imports"
     | "enrichment"
-    | "local-knowledge"
     | "mesh"
     | "sharing"
     | "tools"
@@ -211,7 +210,8 @@
     activeTab === "models"
       || activeTab === "paths"
       || activeTab === "knowledge"
-      || activeTab === "tools",
+      || activeTab === "tools"
+      || activeTab === "recipes",
   );
 
   // ── Semantic preset detection ──────────────────────────────────
@@ -331,16 +331,15 @@
 
   const ALL_TABS: { id: Tab; label: string; keywords: string[] }[] = [
     { id: "models",          label: "Models",          keywords: ["model", "creativity", "reasoning", "length", "context", "temperature", "token", "gguf"] },
-    { id: "knowledge",       label: "Knowledge",        keywords: ["knowledge", "corpus", "storage", "budget", "ingest", "throttle", "disk", "knowledgeview"] },
+    { id: "knowledge",       label: "Knowledge",        keywords: ["knowledge", "corpus", "storage", "budget", "ingest", "throttle", "disk", "knowledgeview", "local", "folder", "obsidian", "document", "file", "vault"] },
     { id: "imports",         label: "Imports",          keywords: ["import", "claude", "anthropic", "chatgpt", "gemini", "conversation", "export", "zip"] },
     { id: "enrichment",      label: "Enrichment",       keywords: ["atlas", "enrich", "graph", "entity", "knowledge graph"] },
-    { id: "local-knowledge", label: "Local Knowledge",  keywords: ["local", "folder", "obsidian", "document", "file", "vault"] },
     { id: "mesh",            label: "Mesh",             keywords: ["mesh", "peer", "network", "share", "node", "collaborative"] },
     { id: "sharing",         label: "Sharing",          keywords: ["share", "ceiling", "pause", "contribution", "peer", "gpu", "mesh", "yield"] },
     { id: "tools",           label: "Web Search",       keywords: ["tool", "search", "web", "duck", "brave", "tavily"] },
     { id: "connect",         label: "Connect",          keywords: ["codex", "openai", "api", "external", "connect", "claude", "endpoint"] },
     { id: "paths",           label: "Paths",            keywords: ["path", "directory", "folder", "data dir", "skills dir"] },
-    { id: "recipes",         label: "Recipes",          keywords: ["recipe", "corpus", "acquire", "pipeline", "toml"] },
+    { id: "recipes",         label: "Recipes",          keywords: ["recipe", "corpus", "acquire", "pipeline", "toml", "author", "workspace", "authoring"] },
   ];
 
   let visibleTabs = $derived.by(() => {
@@ -713,11 +712,37 @@
       {#if activeTab === "knowledge"}
         <section class="doc-section">
           <h2 class="doc-h2">Knowledge</h2>
-          <p class="doc-intro">Everything Sovereign can search is installed locally. Nothing leaves this machine when you query it.</p>
+          <p class="doc-intro">Everything Sovereign can search lives on this machine. Catalog corpora share infrastructure across users; local folders and vaults are your own layer on top.</p>
 
-          <!-- Corpora first — this is what the user came to see -->
-          <h3 class="doc-h3">Installed corpora</h3>
+          <!-- Catalog corpora first — Wikipedia, SEP, etc. The wider
+               reference universe sits above personal local sources
+               so the user sees what's available before what they've
+               added. -->
+          <h3 class="doc-h3">Catalog corpora</h3>
+          <p class="doc-body">
+            Curated reference bodies you can install in one click —
+            Wikipedia, Stanford Encyclopedia of Philosophy, Stack
+            Exchange. Stored at <code class="path-inline">~/.sovereign/indexes/</code>.
+          </p>
           <KnowledgeStatus />
+
+          <div class="doc-divider"></div>
+
+          <!-- Your folders & vaults — local content embedded from
+               the former "Local Knowledge" tab. The embedded
+               component carries its own `_theme.css` that maps onto
+               the same Lavender Court tokens as doc-section, so
+               colours align; this wrapper smooths the typographic
+               rhythm. The inner component drops its own h1/lede
+               when `embedded` is set so headings don't stack. -->
+          <h3 class="doc-h3">Your folders &amp; vaults</h3>
+          <p class="doc-body">
+            Point Sovereign at a folder of documents or an Obsidian
+            vault. Files stay on your computer. Nothing is uploaded.
+          </p>
+          <div class="lk-embed">
+            <LocalKnowledgeSection embedded {onOpenChatWithSeed} {onDropToChat} />
+          </div>
 
           <!-- Storage budget — directly related to what's installed -->
           <div class="doc-divider"></div>
@@ -887,29 +912,6 @@
             {#if ingestStatusMessage}
               <p class="cfg-error">{ingestStatusMessage}</p>
             {/if}
-
-            <!-- Recipe Author — developer feature, last -->
-            <div class="doc-divider"></div>
-            <h3 class="doc-h3">Recipe Author</h3>
-            <p class="doc-body">
-              Workspace for building corpus recipes by conversation. Off by default.
-            </p>
-
-            <div class="cfg-entry cfg-entry--toggle">
-              <label class="cfg-toggle-row">
-                <input
-                  type="checkbox"
-                  bind:checked={config.enable_recipe_authoring}
-                  onchange={() => markDirty('recipe_authoring')}
-                  class="cfg-checkbox"
-                  data-testid="settings-recipe-author-toggle"
-                />
-                <span class="cfg-toggle-body">
-                  <span class="cfg-toggle-label">Enable Recipe Author workspace</span>
-                  <span class="cfg-toggle-sub">Adds a "Recipe Author →" entry to the sidebar. Closing Settings refreshes the sidebar.</span>
-                </span>
-              </label>
-            </div>
           {/if}
 
         </section>
@@ -930,15 +932,6 @@
           <h2 class="doc-h2">Enrichment</h2>
           <p class="doc-intro">Atlas enrichment produces a typed knowledge graph from a corpus — entities, events, states, relations, claims, questions, configurations. Run one article or book at a time; errors surface with remediation commands you can copy-paste.</p>
           <EnrichmentPanel />
-        </section>
-      {/if}
-
-      <!-- ──────────── LOCAL KNOWLEDGE ──────────── -->
-      {#if activeTab === "local-knowledge"}
-        <section class="doc-section">
-          <h2 class="doc-h2">Local Knowledge</h2>
-          <p class="doc-intro">Point Sovereign at a folder of documents or an Obsidian vault. Files stay on your computer. Nothing is uploaded.</p>
-          <LocalKnowledgeSection {onOpenChatWithSeed} {onDropToChat} />
         </section>
       {/if}
 
@@ -1092,6 +1085,46 @@
           <h2 class="doc-h2">Recipes</h2>
           <p class="doc-intro">Validate and test corpus recipe files before submitting them. Testing downloads a small sample and runs the full extraction pipeline locally.</p>
           <RecipeTestingPanel />
+
+          {#if config}
+            <!-- Recipe Author — conversation-driven recipe authoring.
+                 Moved here from the Knowledge tab where it didn't
+                 belong; this is the natural home (Recipes tab covers
+                 recipe testing + authoring). Toggle persists
+                 immediately on change so the sidebar refresh on
+                 Settings-close picks up the new state without the
+                 user needing to hit Save first. -->
+            <div class="doc-divider"></div>
+            <h3 class="doc-h3">Recipe Author workspace</h3>
+            <p class="doc-body">
+              Conversation-driven workspace for building corpus
+              recipes interactively. Off by default — opt in when
+              you're authoring or iterating on a recipe.
+            </p>
+
+            <div class="cfg-entry cfg-entry--toggle">
+              <label class="cfg-toggle-row">
+                <input
+                  type="checkbox"
+                  bind:checked={config.enable_recipe_authoring}
+                  onchange={async () => {
+                    markDirty('recipe_authoring');
+                    // Persist immediately so the sidebar reflects
+                    // the new state on close. Save bar still appears
+                    // for parity with other settings, but the bit is
+                    // already on disk.
+                    await handleSave();
+                  }}
+                  class="cfg-checkbox"
+                  data-testid="settings-recipe-author-toggle"
+                />
+                <span class="cfg-toggle-body">
+                  <span class="cfg-toggle-label">Enable Recipe Author workspace</span>
+                  <span class="cfg-toggle-sub">Adds a Recipe Author entry to the left nav rail (next to Atlas and Settings). Saves on toggle; close Settings to see the rail update.</span>
+                </span>
+              </label>
+            </div>
+          {/if}
         </section>
       {/if}
 
@@ -1359,6 +1392,47 @@
     height: 1px;
     background: var(--border);
     margin: 22px 0 4px;
+  }
+
+  /* Inline file-path code style — matches the doc-body voice without
+     pulling in monospace's heavier weight. Used for the
+     `~/.sovereign/indexes/` reference in the Catalog corpora lede. */
+  .path-inline {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--bg-elevated);
+    color: var(--text-secondary);
+  }
+
+  /* Bridge wrapper for the embedded LocalKnowledgeSection. The inner
+     component carries its own `_theme.css` (lk-* tokens map onto the
+     same app palette, so colours align), but its outer chrome and
+     spacing scale don't match the doc-section rhythm. This wrapper
+     pulls the section flush to the doc rhythm: kills the inner
+     hero-sized header padding, normalises plate margins, and lets
+     the embedded list inherit the surrounding 22px gutter. */
+  .lk-embed {
+    margin: 8px 0 0;
+  }
+  .lk-embed :global(.lk-section) {
+    padding: 0;
+  }
+  .lk-embed :global(.lk-section .head) {
+    display: none;
+  }
+  .lk-embed :global(.lk-section .plate) {
+    margin-top: 18px;
+    animation: none;
+  }
+  .lk-embed :global(.lk-section .plate:first-of-type) {
+    margin-top: 0;
+  }
+  .lk-embed :global(.lk-section .plate-head) {
+    border-bottom-color: var(--border);
+    padding-bottom: 6px;
+    margin-bottom: 10px;
   }
 
   .doc-loading {

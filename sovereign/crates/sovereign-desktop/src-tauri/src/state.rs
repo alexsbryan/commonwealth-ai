@@ -1785,6 +1785,72 @@ pub async fn bootstrap_with_progress(
     tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
         Arc::clone(&corpus_engine),
     )));
+
+    // ── Recipe Author workspace tools ────────────────────────────
+    //
+    // The recipe-author chat dispatch (sovereign-core
+    // runtime::handlers::recipe_author) runs an agent loop that
+    // expects these tools registered on the per-process runtime's
+    // ToolRegistry. Without them, every tool call falls back to
+    // `unknown tool` and the agent burns iterations without
+    // progress.
+    //
+    // The non-store-backed tools (browse / read / write / validate /
+    // test / probe_url) register unconditionally; the store-backed
+    // tools (decision_log / checkpoint / capability_request /
+    // research_finding) skip when their handle didn't open earlier
+    // in bootstrap, so the rest of the chat surface stays healthy
+    // even when notes.db / features.db are unavailable.
+    {
+        use sovereign_tools::recipe_author::{
+            maintainer_inbox_dir, CapabilityRequestTool, CheckpointTool, DecisionLogTool,
+            ProbeUrlTool, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
+            RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool,
+            ResearchFindingTool,
+        };
+        tools.register(Box::new(RegistryBrowseTool));
+        tools.register(Box::new(RecipeReadTool::new()));
+        tools.register(Box::new(RecipeWriteTool::new()));
+        tools.register(Box::new(RecipeWriteStructuredTool::new()));
+        tools.register(Box::new(RecipeValidateTool::new()));
+        tools.register(Box::new(RecipeTestTool::new()));
+        tools.register(Box::new(ProbeUrlTool::new()));
+
+        let notes_handle = state.notes.read().await.as_ref().map(Arc::clone);
+        let features_handle = state.features.read().await.as_ref().map(Arc::clone);
+
+        if let Some(ns) = notes_handle.clone() {
+            tools.register(Box::new(DecisionLogTool::with_notes(Arc::clone(&ns))));
+            tools.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(&ns))));
+        } else {
+            tracing::warn!(
+                "recipe-author: NoteStore unavailable; decision_log / research_finding \
+                 tools are not registered and recipe-author turns that call them will \
+                 see `unknown tool`."
+            );
+        }
+
+        if let (Some(ns), Some(fs)) = (notes_handle.as_ref(), features_handle.as_ref()) {
+            tools.register(Box::new(CheckpointTool::with_stores(
+                Arc::clone(ns),
+                Arc::clone(fs),
+            )));
+            let mut cap_tool =
+                CapabilityRequestTool::with_stores(Arc::clone(ns), Arc::clone(fs));
+            // Wire the inbox directory so submitted capability requests
+            // land where `sovereign maintainer inbox` reads them — same
+            // path the live-trial harness uses.
+            if let Ok(dir) = maintainer_inbox_dir() {
+                cap_tool = cap_tool.with_inbox_dir(dir);
+            }
+            tools.register(Box::new(cap_tool));
+        } else {
+            tracing::warn!(
+                "recipe-author: NoteStore / FeatureStore not both available; checkpoint \
+                 and capability_request tools are not registered."
+            );
+        }
+    }
     tracing::info!("Tools: {} registered", tools.count());
 
     let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =

@@ -149,14 +149,14 @@
     font-size: 0.85rem;
   }
   .exit-btn:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--bg-elevated);
   }
   .error-banner {
-    background: rgba(220, 80, 80, 0.12);
-    color: #f4b3b3;
+    background: color-mix(in srgb, var(--error) 18%, transparent);
+    color: var(--coral);
     padding: 0.5rem 1rem;
     font-size: 0.85rem;
-    border-bottom: 1px solid rgba(220, 80, 80, 0.25);
+    border-bottom: 1px solid color-mix(in srgb, var(--error) 35%, transparent);
   }
   .panes {
     display: grid;
@@ -178,7 +178,7 @@
     border-left: 1px solid var(--border, #2a2c33);
     overflow-y: auto;
     padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.015);
+    background: transparent;
   }
   .empty-state,
   .loading-card,

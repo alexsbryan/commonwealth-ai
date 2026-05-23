@@ -189,8 +189,17 @@ struct Args {
     /// re-sending. Reasoning models like Qwen3 emit these and they
     /// crowd the trial log; the daemon strips them on the next turn
     /// anyway, but stripping client-side keeps the printed transcript
-    /// readable.
+    /// missing values fall back to skipping the network-side fetch
+    /// entirely. Useful when running the trial against rate-limited
+    /// upstream APIs (CourtListener etc.) for plumbing-only smoke
+    /// tests where the agent loop + validation matter but a real
+    /// pull does not.
     strip_think: bool,
+    /// Skip the post-trial fetch (the `RecipeTestTool` call that
+    /// happens AFTER all script turns drain). When `true`, the
+    /// harness reports the in-script outcomes and exits without
+    /// hitting the recipe's upstream API.
+    no_fetch: bool,
 }
 
 fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
@@ -204,6 +213,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
     let mut chat_model: Option<String> = None;
     let mut max_tool_iters: usize = 20;
     let mut strip_think = true;
+    let mut no_fetch = false;
     let mut params: Vec<(String, String)> = Vec::new();
 
     let mut iter = argv.iter();
@@ -233,6 +243,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
                     .ok_or_else(|| "--max-tool-iters requires an integer".to_string())?;
             }
             "--keep-think" => strip_think = false,
+            "--no-fetch" => no_fetch = true,
             "--param" => {
                 let kv = iter
                     .next()
@@ -279,6 +290,7 @@ fn parse_args(argv: &[String]) -> std::result::Result<Args, String> {
         chat_model,
         max_tool_iters,
         strip_think,
+        no_fetch,
         params,
     })
 }
@@ -1467,6 +1479,16 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
             }
         }
 
+        if args.no_fetch {
+            eprintln!(
+                "\nSkipping post-trial fetch — --no-fetch is set. \
+                 (recipe validated; upstream API was not contacted)"
+            );
+            // Skip the recipe_test invocation entirely so rate-limited
+            // upstreams (CourtListener etc.) don't get hit during
+            // wiring smoke tests. Falls through to the trial-summary
+            // block below.
+        } else {
         eprintln!(
             "\nFetching initial sample (sample_size={}, params={}) …",
             args.sample_size,
@@ -1532,6 +1554,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
                 overall_pass = false;
             }
         }
+        } // end --no-fetch else
     } else {
         eprintln!("\n(no recipe drafted — agent didn't reach recipe_write)");
         overall_pass = false;

@@ -25,7 +25,6 @@ import {
   recipeAuthorListProjects,
   recipeAuthorNewProject,
   recipeAuthorRestoreCheckpoint,
-  recipeAuthorSetWorkspaceActive,
 } from "../api";
 import type {
   RecipeAuthorDashboardState,
@@ -42,7 +41,6 @@ let _lastError: string | null = $state(null);
 let _loading = $state(false);
 
 let _pollHandle: ReturnType<typeof setInterval> | null = null;
-let _activatedWorkspace = false;
 
 async function refreshProjects(): Promise<void> {
   try {
@@ -111,22 +109,17 @@ export const recipeProjectStore = {
 
   /** Mount entry point: refreshes the project list and (if a
    *  project is selected) kicks off polling. Idempotent — safe to
-   *  call repeatedly on workspace re-mounts. */
+   *  call repeatedly on workspace re-mounts.
+   *
+   *  Pre-2026-05-24 this also toggled the recipe-author skill on
+   *  via `recipeAuthorSetWorkspaceActive` (which triggered a
+   *  ~15s `rebuild_runtime` pass). Routing is now driven by the
+   *  conversation's surface tag set at create-time
+   *  (`RecipeChatSurface.SURFACE_SKILL_ID`), so the workspace mount
+   *  no longer touches global skill state. */
   async activate(): Promise<void> {
     _loading = true;
     try {
-      if (!_activatedWorkspace) {
-        try {
-          await recipeAuthorSetWorkspaceActive(true);
-          _activatedWorkspace = true;
-        } catch (e) {
-          // Skill activation failing shouldn't block the workspace
-          // from rendering — surface it via lastError so the user
-          // sees the banner but can still browse / read.
-          _lastError = `Could not activate recipe-author skill: ${e}`;
-          console.warn("recipeProject: skill activate failed:", e);
-        }
-      }
       await refreshProjects();
       await refreshDashboard();
       if (_selectedFeatureId) startPolling();
@@ -135,19 +128,10 @@ export const recipeProjectStore = {
     }
   },
 
-  /** Tear-down. Stops polling and toggles the recipe-author skill
-   *  back off so the user's main chat experience returns to normal
-   *  routing. */
+  /** Tear-down. Stops polling. Skill toggle removed (see
+   *  `activate`). */
   async deactivate(): Promise<void> {
     stopPolling();
-    if (_activatedWorkspace) {
-      try {
-        await recipeAuthorSetWorkspaceActive(false);
-      } catch (e) {
-        console.warn("recipeProject: skill deactivate failed:", e);
-      }
-      _activatedWorkspace = false;
-    }
   },
 
   /** Switch which project is open. Triggers an immediate dashboard

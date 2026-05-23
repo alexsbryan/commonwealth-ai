@@ -2088,6 +2088,54 @@ async fn extract_segments(
 /// Errors are logged and swallowed: the T2 skeleton is the durable
 /// retrieval surface, RAPTOR is additive. A RAPTOR build failure
 /// degrades briefing quality at Ready but never breaks attach.
+/// Pure corpus-free RAPTOR + motif builder. Takes pre-fetched chunks
+/// + embeddings and returns the artifacts the persistent variants
+/// (attached-doc `build_and_persist_raptor_atlas`, folder
+/// `FolderTieredProvider`) write into their respective tables.
+///
+/// Returns `Ok((nodes, motifs))` on success. `Err` is reserved for
+/// RAPTOR-tree-build failures — motif extraction + classification is
+/// best-effort (returns empty motif vec on classifier failure rather
+/// than failing the whole call) because the briefing layer renders
+/// motifs as additive: a missing motif index degrades signposts but
+/// doesn't break retrieval.
+///
+/// `chunks` and `embeddings` MUST be the same length and in matching
+/// order; the caller is responsible for filtering out chunks with
+/// no embedding.
+pub(crate) async fn build_atlas_artifacts(
+    inference: &Arc<dyn InferenceProvider>,
+    chunks: &[ChunkInput],
+    embeddings: &[Vec<f32>],
+    doc_type: DocumentTypeTag,
+) -> Result<(Vec<RaptorNode>, Vec<AssetMotif>)> {
+    if chunks.is_empty() {
+        return Ok((Vec::new(), Vec::new()));
+    }
+
+    // RAPTOR tree — the long sub-phase. Errors propagate so callers
+    // can transition state to Failed.
+    let nodes = build_raptor_atlas(inference, chunks, embeddings, doc_type.clone())
+        .await
+        .map_err(|e| Error::Execution(format!("build_raptor_atlas: {e}")))?;
+
+    // Motif index — best-effort. Convert ChunkInput → TextChunk for
+    // the existing motif extractor.
+    let text_chunks: Vec<TextChunk> = chunks
+        .iter()
+        .map(|c| TextChunk {
+            content: c.content.clone(),
+            index: c.chunk_id as usize,
+        })
+        .collect();
+    // Wider candidate pool (was 100) since the df>=1 floor lets
+    // rare-but-distinctive scene markers reach the LLM classifier.
+    let candidates = extract_motif_candidates(&text_chunks, 200);
+    let motifs = classify_motifs(inference, candidates, doc_type).await;
+
+    Ok((nodes, motifs))
+}
+
 async fn build_and_persist_raptor_atlas(
     inference: &Arc<dyn InferenceProvider>,
     store: &Arc<dyn StateStore>,
@@ -2155,44 +2203,37 @@ async fn build_and_persist_raptor_atlas(
         return;
     }
 
-    // ── RAPTOR tree ─────────────────────────────────────────
-    let nodes = match build_raptor_atlas(inference, &raptor_chunks, &embeddings, doc_type.clone())
-        .await
+    // Build artifacts via the corpus-free helper. Errors here are
+    // RAPTOR-tree-build failures (the only Err path); motif extraction
+    // is best-effort inside the helper and returns an empty vec on
+    // classifier failure.
+    let (nodes, motifs) = match build_atlas_artifacts(
+        inference,
+        &raptor_chunks,
+        &embeddings,
+        doc_type,
+    )
+    .await
     {
-        Ok(n) => n,
+        Ok(pair) => pair,
         Err(e) => {
-            tracing::warn!(asset_id, error = %e, "raptor_atlas: build_raptor_atlas failed");
+            tracing::warn!(asset_id, error = %e, "raptor_atlas: build_atlas_artifacts failed");
             return;
         }
     };
     let node_count = nodes.len();
-    // RAPTOR tree built — this is the longest single sub-phase of T3
-    // (~4 min on Conrad). Mark ~75% complete so the UI bar visibly
-    // jumped through the longest opaque wait.
+    let motif_count = motifs.len();
+    let distinctive_count = motifs.iter().filter(|m| m.is_distinctive).count();
+    // RAPTOR + motif build complete — mark ~75% so the bar moved
+    // through the longest opaque wait.
     emit(0.75);
+
     if let Err(e) = store.save_raptor_nodes(asset_id, &nodes).await {
         tracing::warn!(asset_id, error = %e, "raptor_atlas: save_raptor_nodes failed");
         return;
     }
     emit(0.80);
 
-    // ── Motif index ─────────────────────────────────────────
-    let text_chunks: Vec<TextChunk> = raptor_chunks
-        .iter()
-        .map(|c| TextChunk {
-            content: c.content.clone(),
-            index: c.chunk_id as usize,
-        })
-        .collect();
-    // Wider candidate pool (was 100) since the df>=1 floor lets
-    // rare-but-distinctive scene markers reach the LLM classifier.
-    // Most of the extra 100 will be filtered out as noise; that's
-    // the classifier's job. Cost: one extra Slow call with a
-    // marginally longer prompt — bounded.
-    let candidates = extract_motif_candidates(&text_chunks, 200);
-    let motif_count = candidates.len();
-    let motifs = classify_motifs(inference, candidates, doc_type).await;
-    let distinctive_count = motifs.iter().filter(|m| m.is_distinctive).count();
     if let Err(e) = store.save_asset_motifs(asset_id, &motifs).await {
         tracing::warn!(asset_id, error = %e, "raptor_atlas: save_asset_motifs failed");
         return;

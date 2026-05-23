@@ -1075,9 +1075,9 @@
   }
 
   .alert.error {
-    background: rgba(220, 60, 60, 0.08);
+    background: color-mix(in srgb, var(--error) 10%, transparent);
     color: var(--error);
-    border: 1px solid rgba(220, 60, 60, 0.25);
+    border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
   }
 
   .empty {
@@ -1361,7 +1361,7 @@
   .relay-list .badge {
     margin-left: 6px;
     padding: 1px 6px;
-    background: rgba(80, 200, 120, 0.15);
+    background: var(--growth-dim);
     color: var(--success);
     border-radius: 8px;
     font-size: 0.7rem;
@@ -1511,11 +1511,11 @@
   }
 
   .dot.busy {
-    background: #d4a017;
+    background: var(--accent);
   }
 
   .dot.away {
-    background: #888;
+    background: var(--text-muted);
   }
 
   .dot.offline {
@@ -1589,9 +1589,9 @@
     font-weight: 500;
     padding: 2px 8px;
     border-radius: 999px;
-    background: rgba(220, 160, 60, 0.15);
+    background: var(--accent-dim);
     color: var(--text-secondary);
-    border: 1px solid rgba(220, 160, 60, 0.35);
+    border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
     white-space: nowrap;
   }
 
@@ -1672,9 +1672,9 @@
     letter-spacing: 0.05em;
     padding: 1px 6px;
     border-radius: 4px;
-    background: rgba(220, 60, 60, 0.10);
+    background: color-mix(in srgb, var(--error) 12%, transparent);
     color: var(--error);
-    border: 1px solid rgba(220, 60, 60, 0.25);
+    border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
   }
 
   /* ── Per-peer affinity multiplier control ───────── */

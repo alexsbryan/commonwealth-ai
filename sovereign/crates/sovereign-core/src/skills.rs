@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -11,6 +11,30 @@ use crate::types::{Intent, TrustLevel, compute_trust_level};
 
 // ─── Skill Definition ──────────────────────────────────────────
 
+/// What kind of activation surface a skill represents. Drives the
+/// precedence rule in `primary_skill_id_for_conversation` when more
+/// than one skill is simultaneously active.
+///
+/// `Workspace` skills are surfaces the user explicitly navigates
+/// into (Recipe Author workspace, Inner Work). Among multiple
+/// active workspace skills the most-recently-activated wins (the
+/// user's most recent surface intent).
+///
+/// `Background` skills are passive registers that contribute to
+/// every conversation when active but never own it (a future
+/// auto-attached `code-review`, a memory-extraction pass). Lose
+/// to any active Workspace skill.
+///
+/// Defaults to `Background` so skills that don't declare
+/// `activation_kind` keep the pre-2026-05-23 behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ActivationKind {
+    Workspace,
+    #[default]
+    Background,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skill {
     pub id: String,
@@ -18,6 +42,10 @@ pub struct Skill {
     pub version: String,
     #[serde(default)]
     pub description: String,
+    /// Activation surface kind. Workspace skills win over Background
+    /// skills when both are simultaneously active. See [`ActivationKind`].
+    #[serde(default)]
+    pub activation_kind: ActivationKind,
     /// Plan templates the planner injects as a hint when this skill
     /// is active and the user's goal matches a template's trigger.
     /// Consumed by `planner.rs::plan` for ComplexTask flows.
@@ -190,6 +218,12 @@ struct SkillMeta {
     version: String,
     #[serde(default)]
     description: String,
+    /// `[skill] activation_kind = "workspace" | "background"`.
+    /// Optional. Defaults to "background" — only explicit workspace
+    /// skills (recipe-author, inner-work) declare it. Drives the
+    /// precedence rule in `primary_skill_id_for_conversation`.
+    #[serde(default)]
+    activation_kind: ActivationKind,
     #[serde(default)]
     signature: Option<String>,
     #[serde(default)]
@@ -278,6 +312,7 @@ impl SkillToml {
             name: self.skill.name,
             version: self.skill.version,
             description: self.skill.description,
+            activation_kind: self.skill.activation_kind,
             planner_templates: self
                 .planner
                 .templates
@@ -384,14 +419,23 @@ pub fn load_from_directory(dir: &Path) -> Vec<Skill> {
 
 pub struct SkillRegistry {
     skills: Vec<Skill>,
-    active: HashSet<String>,
+    /// Activated skill ids in **activation order** (oldest first,
+    /// most-recent last). Was `HashSet<String>` pre-2026-05-23 —
+    /// the unordered set ate the user's surface-recency signal and
+    /// `primary_skill_id_for_conversation` had to pick by skill-load
+    /// order from disk (inner-work-loaded-first beat
+    /// recipe-author-activated-later). With ordered insertion the
+    /// recency tie-break is structural: most-recently-activated
+    /// workspace skill wins. Lookups are O(n) but n is the count
+    /// of active skills (≤ a handful), not registered skills.
+    active: Vec<String>,
 }
 
 impl SkillRegistry {
     pub fn new() -> Self {
         Self {
             skills: Vec::new(),
-            active: HashSet::new(),
+            active: Vec::new(),
         }
     }
 
@@ -422,28 +466,63 @@ impl SkillRegistry {
         }
     }
 
+    /// Mark a skill active. Idempotent for membership; **re-activating
+    /// an already-active skill moves it to the end of activation
+    /// order** so it becomes the "most recent" workspace surface for
+    /// the precedence rule. That matches user intent: tapping the
+    /// Recipe Author rail entry from inside the Inner Work view
+    /// should make Recipe Author win even if it was already enabled
+    /// from a prior session.
     pub fn activate(&mut self, skill_id: &str) {
-        self.active.insert(skill_id.to_string());
+        self.active.retain(|id| id != skill_id);
+        self.active.push(skill_id.to_string());
     }
 
+    /// Activate every registered **background** skill. Skips skills
+    /// declared `activation_kind = "workspace"` — those are
+    /// user-chosen surfaces (Recipe Author, Inner Work) and the
+    /// activation_kind precedence rule requires that they only
+    /// become active when the user explicitly navigates into them.
+    ///
+    /// Diagnosed 2026-05-23: pre-fix, this auto-activated every
+    /// skill at boot when `DesktopConfig.active_skills` was empty
+    /// (fresh-install default). That made both workspace skills
+    /// "active" simultaneously and the precedence rule's recency
+    /// tie-break picked whichever loaded last from disk — typically
+    /// Inner Work — even though the user hadn't opened that
+    /// surface. Recipe Author chats then routed through
+    /// `MODE_INNER_WORK` policy (no tools, witness handler), the
+    /// regression the activation_kind redesign was meant to
+    /// prevent. Restricting auto-activation to Background skills
+    /// makes the rule structural: with no surface intent, no
+    /// workspace owns the conversation.
     pub fn activate_all(&mut self) {
         for skill in &self.skills {
-            self.active.insert(skill.id.clone());
+            if skill.activation_kind == ActivationKind::Workspace {
+                continue;
+            }
+            if !self.active.iter().any(|id| id == &skill.id) {
+                self.active.push(skill.id.clone());
+            }
         }
     }
 
     pub fn deactivate(&mut self, skill_id: &str) {
-        self.active.remove(skill_id);
+        self.active.retain(|id| id != skill_id);
     }
 
     pub fn list(&self) -> &[Skill] {
         &self.skills
     }
 
+    /// Active skills in **activation order** (oldest first,
+    /// most-recent last). Callers that need recency semantics
+    /// (e.g. `primary_skill_id_for_conversation`) iterate in
+    /// reverse.
     pub fn active_skills(&self) -> Vec<&Skill> {
-        self.skills
+        self.active
             .iter()
-            .filter(|s| self.active.contains(&s.id))
+            .filter_map(|id| self.skills.iter().find(|s| &s.id == id))
             .collect()
     }
 
@@ -466,19 +545,50 @@ impl SkillRegistry {
     }
 
     /// Resolve the active skill whose identity should tag a
-    /// newly-started conversation. When multiple skills are active,
-    /// the most privacy-restrictive one wins (`LocalOnly` >
-    /// `MeshAllowed`) so that a conversation started under
-    /// `inner-work` + a background skill is still tagged as
-    /// `inner-work` and therefore filtered out of the
-    /// conversational KnowledgeView. Returns `None` when no skill
-    /// is active.
+    /// newly-started conversation. Two-stage rule:
+    ///
+    /// 1. **Workspace precedence.** Any active skill that declared
+    ///    `activation_kind = "workspace"` (the user-chosen surface
+    ///    skills: `recipe-author`, `inner-work`) outranks every
+    ///    background skill. Among multiple active workspace skills,
+    ///    the most recently activated wins — matching user intent
+    ///    ("tapping the Recipe Author rail just now should override
+    ///    the Inner Work register I left active from earlier").
+    ///    Recency is captured by activation order in `self.active`
+    ///    (last push = most recent); the iteration walks reverse so
+    ///    the most recent workspace skill is found first.
+    ///
+    /// 2. **Background fall-back.** With no workspace skill active,
+    ///    pick the most privacy-restrictive background skill
+    ///    (`LocalOnly` > `MeshAllowed`) so a conversation started
+    ///    under a local-only background skill is still tagged
+    ///    locally and gets filtered out of the conversational
+    ///    KnowledgeView correctly. Defers to first active when no
+    ///    LocalOnly is present.
+    ///
+    /// Returns `None` when no skill is active.
+    ///
+    /// Diagnosed 2026-05-23: pre-fix, this method picked the first
+    /// LocalOnly skill in `self.skills` order (disk-load order) —
+    /// inner-work loaded before recipe-author, so the Recipe Author
+    /// workspace could never own a chat turn even when the user was
+    /// explicitly inside it. Switching `active` to an order-preserving
+    /// `Vec<String>` plus declaring `activation_kind` on each skill
+    /// makes the rule structural rather than incidental.
     pub fn primary_skill_id_for_conversation(&self) -> Option<String> {
         let active = self.active_skills();
         if active.is_empty() {
             return None;
         }
-        // Prefer LocalOnly skills; fall back to the first active skill.
+        // Workspace precedence — most-recent first.
+        if let Some(s) = active
+            .iter()
+            .rev()
+            .find(|s| s.activation_kind == ActivationKind::Workspace)
+        {
+            return Some(s.id.clone());
+        }
+        // Background fall-back: prefer LocalOnly, else first active.
         active
             .iter()
             .find(|s| matches!(s.inference.privacy, ShardingPrivacy::LocalOnly))
@@ -825,6 +935,125 @@ privacy = "{}"
         );
     }
 
+    /// Pin the regression diagnosed 2026-05-23: when both
+    /// `inner-work` (workspace, activated first) and `recipe-author`
+    /// (workspace, activated second) are active, the most-recently
+    /// activated workspace skill wins. Pre-fix the answer was
+    /// `inner-work` (disk-load order beat activation order), which
+    /// silently broke the Recipe Author workspace.
+    #[test]
+    fn primary_skill_id_for_conversation_workspace_recency_tie_break() {
+        let mut reg = SkillRegistry::new();
+        reg.register(workspace_skill("inner-work", ShardingPrivacy::LocalOnly));
+        reg.register(workspace_skill("recipe-author", ShardingPrivacy::LocalOnly));
+        reg.activate("inner-work");
+        reg.activate("recipe-author");
+
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("recipe-author"),
+            "most-recently-activated workspace skill must win"
+        );
+
+        // Reactivating an already-active skill moves it to the end
+        // of activation order — the user tapping back to Inner Work
+        // makes Inner Work the new foreground workspace.
+        reg.activate("inner-work");
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("inner-work"),
+            "re-activating moves a skill to the end of recency order"
+        );
+    }
+
+    /// Pin: a workspace skill outranks a LocalOnly background skill
+    /// regardless of activation order. The opposite policy was the
+    /// pre-fix behavior — LocalOnly Background ("inner-work" before
+    /// it declared workspace kind) beat any other privacy class.
+    /// Now that activation_kind drives precedence, a background
+    /// LocalOnly cannot steal the surface from an active workspace.
+    #[test]
+    fn primary_skill_id_for_conversation_workspace_beats_background_local_only() {
+        let mut reg = SkillRegistry::new();
+        // Background LocalOnly — privacy-strict but passive.
+        reg.register(skill_with_privacy(
+            "auto-memory",
+            ShardingPrivacy::LocalOnly,
+        ));
+        // Workspace MeshAllowed — less privacy-strict but the user
+        // is explicitly in this surface right now.
+        reg.register(workspace_skill(
+            "recipe-author",
+            ShardingPrivacy::MeshAllowed,
+        ));
+        // Activate the background FIRST (older surface intent),
+        // then the workspace.
+        reg.activate("auto-memory");
+        reg.activate("recipe-author");
+
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("recipe-author"),
+            "workspace skill must outrank any background skill"
+        );
+    }
+
+    /// Pin: with only background skills active, the legacy
+    /// LocalOnly-preference fall-back still applies. The
+    /// new precedence rule is additive — it doesn't change
+    /// the background-only path.
+    #[test]
+    fn primary_skill_id_for_conversation_background_only_keeps_local_only_pref() {
+        let mut reg = SkillRegistry::new();
+        reg.register(skill_with_privacy(
+            "research-analyst",
+            ShardingPrivacy::MeshAllowed,
+        ));
+        reg.register(skill_with_privacy("journal", ShardingPrivacy::LocalOnly));
+        reg.activate("research-analyst");
+        reg.activate("journal");
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("journal"),
+            "without a workspace skill, LocalOnly background still wins"
+        );
+    }
+
+    fn workspace_skill(id: &str, privacy: ShardingPrivacy) -> Skill {
+        let mut s = skill_with_privacy(id, privacy);
+        s.activation_kind = ActivationKind::Workspace;
+        s
+    }
+
+    /// Pin: `activate_all()` must skip Workspace skills. Pre-fix it
+    /// auto-activated everything at boot when the desktop config had
+    /// no explicit `active_skills`, which made both workspace skills
+    /// equally active and the recency tie-break picked whichever
+    /// loaded last from disk — the regression diagnosed via daemon
+    /// logs that broke Recipe Author chat dispatch.
+    #[test]
+    fn activate_all_skips_workspace_skills() {
+        let mut reg = SkillRegistry::new();
+        reg.register(workspace_skill("recipe-author", ShardingPrivacy::LocalOnly));
+        reg.register(workspace_skill("inner-work", ShardingPrivacy::LocalOnly));
+        reg.register(skill_with_privacy("auto-memory", ShardingPrivacy::LocalOnly));
+
+        reg.activate_all();
+
+        // Workspaces stay inactive; background activates.
+        let active_ids: Vec<&str> =
+            reg.active_skills().iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(active_ids, vec!["auto-memory"]);
+
+        // primary_skill_id_for_conversation falls through to the
+        // background LocalOnly fallback — no workspace owns the
+        // chat because the user hasn't navigated into one.
+        assert_eq!(
+            reg.primary_skill_id_for_conversation().as_deref(),
+            Some("auto-memory")
+        );
+    }
+
     #[test]
     fn parse_missing_required_fields_returns_none() {
         // Missing [skill] section entirely.
@@ -971,7 +1200,7 @@ register = "relational"
         assert_eq!(recipe_author.id, "recipe-author");
         // Spot-check the must-have recipe tools (matches the
         // intent_policy::recipe_author_tools() table).
-        let required: HashSet<&str> =
+        let required: std::collections::HashSet<&str> =
             recipe_author.tool_config.required.iter().map(String::as_str).collect();
         for needed in ["recipe_validate", "recipe_test", "decision_log"] {
             assert!(

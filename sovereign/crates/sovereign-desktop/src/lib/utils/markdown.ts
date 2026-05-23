@@ -96,17 +96,36 @@ function encodeCodePayload(text: string): string {
  *
  * - Headings, bold, italic, lists, code, horizontal rules all render
  * - `[Source: name]` is converted to a clickable citation chip
+ * - `[1]`, `[2]`, … numeric refs are converted to fallback chips that
+ *   resolve against `retrievedChunks[N-1]` in AssistantMessage. The
+ *   prompt forbids this shape (see KNOWLEDGE_SYNTHESIS_SYSTEM in
+ *   runtime.rs) but smaller / newer models drift to it; the chip
+ *   keeps the glass-box reading surface clickable instead of leaving
+ *   plain-text refs the reader can't follow.
  * - `$x^2$` and `$$\int$$` render as KaTeX math
  * - Fenced code blocks are syntax-highlighted with a copy button
  * - Raw HTML tags from model output are escaped
  */
 export function renderMarkdown(text: string): string {
-  const withCitations = text.replace(
+  let withCitations = text.replace(
     /\[Source:\s*([^\]]+)\]/g,
     (_match, name: string) => {
       const trimmed = name.trim();
       const escaped = escapeAttr(trimmed);
       return `<span class="source-citation" data-source="${escaped}" title="Retrieved from: ${escaped}">${escapeHtml(trimmed)}</span>`;
+    },
+  );
+
+  // Numeric fallback: `[N]` where N is 1–99 and the bracket is NOT
+  // preceded by an alphanumeric character (so `arr[0]`, `foo[1]` in
+  // code-adjacent prose don't get chipped). The capturing group is
+  // bare digits — `[Source: …]` shape was already replaced above and
+  // can't match here.
+  withCitations = withCitations.replace(
+    /(^|[^A-Za-z0-9_\]])\[(\d{1,2})\]/g,
+    (_match, lead: string, digits: string) => {
+      const idx = parseInt(digits, 10);
+      return `${lead}<span class="source-citation citation-numeric" data-citation-index="${idx}" title="Numeric citation [${idx}] — click to resolve">[${idx}]</span>`;
     },
   );
 

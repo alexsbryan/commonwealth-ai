@@ -113,13 +113,23 @@ impl WatchedSubsystem {
             );
         }
 
-        let sink: EventSink = Arc::new(|_event| {
-            // Worker emits structured tracing events alongside sink
-            // calls. The sink itself is a no-op; HTTP /watch/status
-            // reads state from the per-corpus state file when the
-            // user asks. A future Tauri-event bridge would install a
-            // sink here to fan events onto the desktop progress
-            // drawer.
+        // Sink fans every worker event into the manager so the
+        // auto-rebuild watchdog can debounce tiered rebuilds against
+        // `SweepCompleted` events (Move 8 — folder-ingest v1 §3.6).
+        // The watchdog short-circuits non-`SweepCompleted` variants,
+        // so this is cheap on the dispatcher hot path.
+        //
+        // HTTP /watch/status still reads from the per-corpus state
+        // file when the user asks; a future Tauri-event bridge can
+        // chain a second sink in front of this one to fan events
+        // onto the desktop progress drawer without disturbing the
+        // watchdog wiring.
+        let sink_manager = Arc::clone(&manager);
+        let sink: EventSink = Arc::new(move |event| {
+            let m = Arc::clone(&sink_manager);
+            tokio::spawn(async move {
+                m.on_sweep_event(&event).await;
+            });
         });
 
         let worker = Arc::new(Worker::new(

@@ -94,7 +94,7 @@
     gap: 0.55rem;
   }
   li {
-    border-left: 2px solid rgba(255, 255, 255, 0.1);
+    border-left: 2px solid var(--border-mid);
     padding: 0.1rem 0 0.1rem 0.55rem;
   }
   .row-head {
@@ -117,7 +117,7 @@
     cursor: pointer;
   }
   .restore:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--bg-elevated);
   }
   .restore:disabled {
     opacity: 0.4;
@@ -136,7 +136,7 @@
     letter-spacing: 0.04em;
   }
   .restored {
-    color: rgba(120, 200, 240, 0.85);
+    color: var(--lavender-light);
   }
   .summary {
     margin: 0.25rem 0 0;
@@ -145,7 +145,7 @@
   }
   .error {
     margin-top: 0.4rem;
-    color: #f4b3b3;
+    color: var(--coral);
     font-size: 0.78rem;
   }
 </style>

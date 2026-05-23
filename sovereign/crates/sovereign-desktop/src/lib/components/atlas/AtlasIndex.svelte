@@ -613,24 +613,24 @@
     font-variant-numeric: tabular-nums;
   }
   .extraction-pill.running {
-    background: rgba(96, 132, 232, 0.16);
-    color: #92ade8;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
   }
   .extraction-pill.complete {
-    background: rgba(78, 192, 107, 0.16);
-    color: #6dd58a;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .extraction-pill.incremental {
-    background: rgba(78, 192, 107, 0.12);
-    color: #6dd58a;
-    border: 1px dashed rgba(78, 192, 107, 0.4);
+    background: var(--growth-glow);
+    color: var(--growth);
+    border: 1px dashed var(--growth);
   }
   .extraction-pill.failed {
-    background: rgba(216, 76, 76, 0.18);
-    color: #e25555;
+    background: var(--coral-dim);
+    color: var(--coral);
   }
   .extraction-detail {
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     font-size: 0.7rem;
     font-weight: normal;
   }

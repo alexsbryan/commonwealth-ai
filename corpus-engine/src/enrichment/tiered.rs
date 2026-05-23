@@ -351,6 +351,145 @@ pub async fn run_tiered_enrichment(
     Ok(plan)
 }
 
+/// Run tiered enrichment over a corpus's Lance index, treating the
+/// whole corpus as ONE bag (no per-source_doc grouping). Used by
+/// watched-folder corpora where the folder is the unit of context —
+/// individual files don't carry meaningful entity-co-occurrence
+/// boundaries, so collapsing the index into one bucket gives PPR
+/// graph density and a single RAPTOR tree spanning the folder.
+///
+/// Calls `provider.enrich_conversation(corpus_id, corpus_id, ...)`
+/// once with `conv_uuid = corpus_id`. The bucket classification
+/// scales naturally with folder size — small folders (<8 chunks)
+/// take the Tiny synthetic path; large folders take the LongTail
+/// RAPTOR path.
+pub async fn run_folder_tiered_enrichment(
+    corpus_id: &str,
+    index_path: &Path,
+    provider: Option<&TieredProviderHandle>,
+    entity_extractor: Option<&ChunkEntityExtractorHandle>,
+) -> Result<TieredDispatchPlan> {
+    let corpus_id = corpus_id.to_string();
+    tracing::info!(
+        corpus = %corpus_id,
+        index = %index_path.display(),
+        has_provider = provider.is_some(),
+        has_entity_extractor = entity_extractor.is_some(),
+        "tiered enrichment (folder): scanning chunks index for whole-corpus bag"
+    );
+
+    let index = CorpusIndex::open(index_path).await?;
+
+    // Cheap CPU-only NER pass first — populates `chunk_entities`
+    // even if the heavy provider call below fails. Uses the
+    // delta-extraction trait method so re-runs only NER the new
+    // chunks. Optional — None skips NER entirely.
+    if let Some(extractor) = entity_extractor {
+        match extractor
+            .extract_delta_for_corpus(&corpus_id, index_path)
+            .await
+        {
+            Ok(n) => tracing::debug!(
+                corpus = %corpus_id,
+                mentions = n,
+                "tiered enrichment (folder): per-chunk NER delta persisted"
+            ),
+            Err(e) => tracing::warn!(
+                corpus = %corpus_id,
+                error = %e,
+                "tiered enrichment (folder): per-chunk NER failed; continuing with RAPTOR-only entities"
+            ),
+        }
+    }
+
+    // Collect ALL chunks + embeddings across every source_doc_id.
+    // The folder is the unit; per-file boundaries do not matter for
+    // the RAPTOR tree or motif index.
+    let groups = index.group_chunks_by_source_doc().await?;
+    let mut all_chunks: Vec<EnrichmentChunkRow> = Vec::new();
+    let mut all_embeddings: Vec<Vec<f32>> = Vec::new();
+    for doc_id in groups.keys() {
+        let rows = match index
+            .chunks_for_source_doc_with_embeddings(doc_id)
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!(
+                    corpus = %corpus_id,
+                    doc = %doc_id,
+                    error = %e,
+                    "tiered enrichment (folder): chunk fetch failed for source_doc; skipping"
+                );
+                continue;
+            }
+        };
+        for (row, emb) in rows {
+            all_chunks.push(row);
+            all_embeddings.push(emb);
+        }
+    }
+    let total_chunks = all_chunks.len();
+    let bucket = ConvBucket::classify(total_chunks);
+
+    let mut plan = TieredDispatchPlan {
+        corpus_id: corpus_id.clone(),
+        total_conversations: 1,
+        total_chunks,
+        per_bucket: BTreeMap::new(),
+    };
+    plan.per_bucket.insert(
+        bucket,
+        BucketSummary {
+            conversations: 1,
+            chunks: total_chunks,
+            max_chunks_in_conv: total_chunks,
+        },
+    );
+
+    tracing::info!(
+        corpus = %corpus_id,
+        bucket = bucket.label(),
+        chunks = total_chunks,
+        "tiered enrichment (folder): bucket summary"
+    );
+
+    let Some(provider) = provider else {
+        tracing::warn!(
+            corpus = %corpus_id,
+            "tiered enrichment (folder): no TieredEnrichmentProvider injected — emitting dispatch plan only"
+        );
+        return Ok(plan);
+    };
+
+    if all_chunks.is_empty() {
+        tracing::warn!(
+            corpus = %corpus_id,
+            "tiered enrichment (folder): corpus has no embedded chunks; nothing to enrich"
+        );
+        return Ok(plan);
+    }
+
+    // conv_uuid = corpus_id — single bag for the whole folder.
+    if let Err(e) = provider
+        .enrich_conversation(
+            &corpus_id,
+            &corpus_id,
+            all_chunks,
+            all_embeddings,
+            bucket,
+        )
+        .await
+    {
+        tracing::warn!(
+            corpus = %corpus_id,
+            error = %e,
+            "tiered enrichment (folder): provider failed for corpus"
+        );
+    }
+    Ok(plan)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

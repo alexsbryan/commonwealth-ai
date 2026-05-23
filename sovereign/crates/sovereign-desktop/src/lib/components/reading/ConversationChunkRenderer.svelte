@@ -391,25 +391,26 @@
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     margin-right: 0.3rem;
   }
   .entity-chip {
-    background: rgba(96, 132, 232, 0.16);
-    color: #92ade8;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
     border: none;
-    border-radius: 0.5rem;
+    border-radius: var(--radius);
     padding: 0.15rem 0.6rem;
     font-size: 0.78rem;
     cursor: pointer;
-    transition: background 120ms ease;
+    transition: background 120ms ease, color 120ms ease;
   }
   .entity-chip:hover {
-    background: rgba(96, 132, 232, 0.28);
+    background: var(--lavender-glow);
+    color: var(--text-primary);
   }
   .entity-chip.copied {
-    background: rgba(78, 192, 107, 0.22);
-    color: #4ec06b;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .scope-toggle {
     margin-left: auto;
@@ -417,7 +418,7 @@
     align-items: center;
     gap: 0.3rem;
     font-size: 0.72rem;
-    color: var(--text-muted, #888);
+    color: var(--text-muted);
     cursor: pointer;
   }
   .scope-toggle input {

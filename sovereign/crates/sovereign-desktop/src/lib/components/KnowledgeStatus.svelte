@@ -828,10 +828,10 @@
     flex: 0 0 auto;
   }
   .layer-chip.installed .layer-dot {
-    background: #78dc8c;
+    background: var(--growth);
   }
   .layer-chip.installing .layer-dot {
-    background: #ffc850;
+    background: var(--accent);
     animation: layer-pulse 1.4s ease-in-out infinite;
   }
   @keyframes layer-pulse {

@@ -90,15 +90,15 @@
     font-size: 0.68rem;
     padding: 1px 8px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--bg-elevated);
     margin-right: 0.3rem;
   }
   .status.pass {
-    background: rgba(120, 220, 160, 0.18);
-    color: #b9f0c9;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .status.fail {
-    background: rgba(240, 130, 130, 0.18);
-    color: #f6c0c0;
+    background: var(--coral-dim);
+    color: var(--coral);
   }
 </style>

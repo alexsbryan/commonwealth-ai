@@ -287,98 +287,122 @@
 {/if}
 
 <style>
+  /* Atlas conv detail — sibling palette to AtlasConvCorpusView.
+   * Lavender Court tokens throughout. Shared entities = lavender
+   * wash; distinctive entities = gold accent (signal: "this is
+   * what makes this cluster stand apart from its siblings").
+   * Level badges use border-bright to read as system metadata
+   * rather than competing with content colour. */
   .conv-detail {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    padding: 1.5rem 2rem;
-    max-width: 60rem;
+    gap: 18px;
+    padding: 28px 32px 44px;
+    max-width: 64rem;
     margin: 0 auto;
+    font-family: var(--font-sans);
+    color: var(--text-primary);
   }
   .view-header {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 16px;
   }
   .back-button {
     background: transparent;
-    border: 1px solid var(--border, #444);
-    border-radius: 0.4rem;
-    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius);
+    padding: 6px 12px;
     cursor: pointer;
-    color: inherit;
-    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    font-family: inherit;
+    letter-spacing: 0.01em;
+    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
   }
   .back-button:hover {
-    background: var(--surface-2, #2a2a2a);
+    background: var(--bg-elevated);
+    border-color: var(--border-bright);
+    color: var(--text-primary);
   }
   .header-card {
-    background: var(--surface, #1a1a1a);
-    border: 1px solid var(--border, #333);
-    border-radius: 0.5rem;
-    padding: 1rem 1.25rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 20px;
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: 10px;
   }
   .title-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 0.8rem;
+    gap: 12px;
   }
   .title-row h1 {
     margin: 0;
-    font-size: 1.3rem;
+    font-size: 1.35rem;
+    font-weight: 600;
     line-height: 1.3;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
   }
   .meta-row {
     display: flex;
-    gap: 1.2rem;
-    font-size: 0.82rem;
-    color: var(--text-muted, #888);
+    gap: 18px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
     flex-wrap: wrap;
   }
   .state-pill {
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0.18rem 0.55rem;
-    border-radius: 0.7rem;
-    background: var(--surface-2, #333);
-    color: var(--text-muted, #aaa);
+    letter-spacing: 0.08em;
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-weight: 500;
   }
   .state-ready {
-    background: rgba(46, 160, 67, 0.18);
-    color: #4ec06b;
+    background: var(--growth-dim);
+    color: var(--growth);
   }
   .state-multihopready {
-    background: rgba(212, 167, 44, 0.18);
-    color: #d4a72c;
+    background: var(--accent-dim);
+    color: var(--accent-light);
   }
   .state-partiallyready {
-    background: rgba(212, 167, 44, 0.12);
-    color: #c39530;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
   }
   .state-pending {
-    background: rgba(150, 150, 150, 0.18);
-    color: #999;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
   }
   .state-failed {
-    background: rgba(216, 76, 76, 0.18);
-    color: #e25555;
+    background: var(--coral-dim);
+    color: var(--coral);
+  }
+  .tier-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
   .tier-section h2 {
-    font-size: 0.95rem;
+    font-size: 0.78rem;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text-muted, #888);
-    margin: 0 0 0.6rem;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin: 0 0 4px;
   }
   .tiny-note {
-    color: var(--text-muted, #888);
-    font-size: 0.9rem;
-    padding: 0.5rem 0;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    padding: 6px 0;
+    line-height: 1.5;
   }
   .node-list {
     list-style: none;
@@ -386,76 +410,113 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 8px;
   }
   .raptor-node {
-    background: var(--surface, #1a1a1a);
-    border: 1px solid var(--border, #333);
-    border-radius: 0.5rem;
-    padding: 0.8rem 1rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 6px;
+  }
+  /* Deeper levels get a subtler card — visual depth follows tree
+   * depth. Level 0 (leaves) read brightest; intermediates step
+   * down; root tints toward bg-secondary. */
+  .raptor-node[data-level="1"] {
+    background: var(--bg-elevated);
+  }
+  .raptor-node[data-level="2"],
+  .raptor-node[data-level="3"] {
+    background: var(--bg-elevated);
+    border-color: var(--border-mid);
   }
   .node-header {
     display: flex;
-    gap: 0.7rem;
-    font-size: 0.76rem;
-    color: var(--text-muted, #888);
+    gap: 10px;
+    font-size: 0.74rem;
+    color: var(--text-muted);
     align-items: center;
+    flex-wrap: wrap;
   }
   .level-badge {
     font-weight: 600;
-    color: var(--text-muted, #aaa);
-    background: var(--surface-2, #333);
-    padding: 0.08rem 0.45rem;
-    border-radius: 0.6rem;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-mid);
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .coherence,
+  .evidence {
+    font-size: 0.74rem;
+    color: var(--text-muted);
   }
   .summary {
     margin: 0;
     font-size: 0.92rem;
-    line-height: 1.45;
+    line-height: 1.55;
+    color: var(--text-primary);
   }
   .entity-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.3rem;
+    gap: 5px;
+    margin-top: 2px;
   }
+  /* Entity chip — lavender wash, matches AtlasConvCorpusView. */
   .entity-chip {
-    background: rgba(96, 132, 232, 0.16);
-    color: #92ade8;
-    border-radius: 0.5rem;
-    padding: 0.1rem 0.55rem;
-    font-size: 0.75rem;
+    background: var(--lavender-dim);
+    color: var(--lavender-light);
+    border-radius: var(--radius);
+    padding: 2px 9px;
+    font-size: 0.74rem;
     border: 1px solid transparent;
     font-family: inherit;
     cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
   }
   .entity-chip:hover {
-    background: rgba(96, 132, 232, 0.28);
-    border-color: rgba(96, 132, 232, 0.55);
+    background: var(--lavender-glow);
+    border-color: var(--lavender);
+    color: var(--text-primary);
   }
   .entity-chip:focus-visible {
-    outline: 2px solid rgba(96, 132, 232, 0.7);
+    outline: 2px solid var(--lavender);
     outline-offset: 1px;
   }
-  /* Distinctive chip — entity unique to this leaf among the conv's
-     level-0 siblings. Brighter accent + outline so the diff
-     reads at-a-glance against the plain shared entities. */
+  /* Distinctive chip — entity unique to this leaf among its
+   * level-0 siblings. Gold wash + outlined accent signals "this
+   * cluster owns this entity"; reads at a glance against the
+   * baseline lavender. */
   .entity-chip-distinctive {
-    background: rgba(78, 192, 107, 0.18);
-    color: #6dd58a;
-    border: 1px solid rgba(78, 192, 107, 0.45);
+    background: var(--accent-dim);
+    color: var(--accent-light);
+    border: 1px solid var(--accent);
     font-weight: 500;
   }
+  .entity-chip-distinctive:hover {
+    background: var(--accent-glow);
+    color: var(--text-primary);
+  }
+  .entity-chip-distinctive:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
   .status {
-    padding: 1rem;
-    color: var(--text-muted, #888);
+    padding: 18px 4px;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
   }
   .status.error {
-    color: var(--error, #d44);
+    color: var(--error);
   }
   .status.empty {
     text-align: center;
+    padding: 32px 4px;
   }
 </style>

@@ -105,6 +105,15 @@ Notice how every claim drawn from the passages earns a [Source: X] \
 tag, while the parametric claim (Girton) carries none. That's the \
 target pattern — apply it to your answer.\n\
 \n\
+CITATION SHAPE IS MANDATORY — the ONLY accepted citation form is \
+`[Source: title]` where `title` matches a `[Source: …]` header from \
+the retrieved passages above. NEVER use numeric references like \
+`[1]`, `[2]`, `[3]`, `[4]`, `[5]`, footnote markers, or any other \
+shape. Numeric refs are unclickable in the reader and break the \
+glass-box reading surface. If you cannot recall the exact title, \
+omit the citation rather than substitute a number — an honest \
+unsourced claim is better than a broken citation.\n\
+\n\
 PRESERVE SOURCE TERMINOLOGY — when the passages use a specific \
 named concept, technical term, date, place name, or proper noun \
 that bears on what the question asks, reproduce that exact phrase \
@@ -605,6 +614,40 @@ pub struct Runtime {
 }
 
 impl Runtime {
+    /// Resolve the active-mode skill id for a conversation.
+    ///
+    /// Single source of truth post-2026-05-24 architecture redesign:
+    /// the conversation's `skill_id` column (set at create-time by
+    /// the surface that owns it) drives routing. Registry state is
+    /// no longer consulted for workspace skills — that was the
+    /// brittle lifecycle-glue path where every surface enter/leave
+    /// triggered `rebuild_runtime` (~15s) plus a race-prone
+    /// activate/deactivate dance across mount/destroy hooks.
+    ///
+    /// Validation: the tag is silently dropped when (a) the skill
+    /// id isn't registered (skill removed since the conversation
+    /// was tagged), or (b) the skill exists but is `Background`
+    /// kind (frontend bug — backgrounds aren't surface skills).
+    /// Both fall through to default-chat routing rather than
+    /// crashing.
+    ///
+    /// Returns `None` for untagged conversations (default chat).
+    pub(crate) async fn resolve_active_mode(&self, conversation_id: &str) -> Option<String> {
+        let conv = self.store.get_conversation(conversation_id).await.ok()?;
+        let tag = conv.skill_id?;
+        let skill = self.skills.skill_by_id(&tag)?;
+        if skill.activation_kind != crate::skills::ActivationKind::Workspace {
+            tracing::debug!(
+                conversation_id,
+                skill_id = %tag,
+                "resolve_active_mode: conversation tagged with non-workspace \
+                 skill; falling through to default routing"
+            );
+            return None;
+        }
+        Some(tag)
+    }
+
     pub fn new(
         inference: Arc<dyn InferenceProvider>,
         router: Box<dyn Router>,
@@ -1263,7 +1306,19 @@ impl Runtime {
         // isn't artificially constrained by an as-yet-unknown
         // intent. Handlers downstream can re-narrow via
         // `narrow_tools_for_intent` once the intent is in hand.
-        let tool_descriptors = self.narrow_tools_pre_classification();
+        //
+        // Resolve `active_mode` from the conversation tag BEFORE the
+        // narrow so workspace-tagged conversations (recipe-author
+        // being the load-bearing case) see their narrowed catalog
+        // at classification time. The registry-side lookup inside
+        // the plain `narrow_tools_pre_classification` misses the
+        // conv-tag path; calling `_for_mode` with the resolved tag
+        // is what prevents the router from picking generic tools
+        // (e.g. `shell`) on a recipe-author turn. See decision note
+        // 2026-05-23 for the silent-misroute history.
+        let early_active_mode = self.resolve_active_mode(conversation_id).await;
+        let tool_descriptors = self
+            .narrow_tools_pre_classification_for_mode(early_active_mode.as_deref());
         let classification = if let Some(preset) = preset {
             preset
         } else {
@@ -1315,8 +1370,16 @@ impl Runtime {
         // `intent_policy::policy_for`; the effective intent we
         // dispatch on is `policy.effective_intent`.
         let raw_intent = classification.primary.intent.clone();
-        let active_mode = self.skills.primary_skill_id_for_conversation();
-        let declared_register = self.skills.primary_skill_register();
+        // Conversation-driven active mode was resolved early (above)
+        // so the pre-classification narrow could consult it. Re-use
+        // that resolution here rather than paying the
+        // store.get_conversation round-trip a second time.
+        let active_mode = early_active_mode.clone();
+        let declared_register = active_mode
+            .as_deref()
+            .and_then(|id| self.skills.skill_by_id(id))
+            .map(|s| s.inference.register)
+            .unwrap_or_default();
         let intent_policy = crate::intent_policy::policy_for(
             &raw_intent,
             declared_register,
@@ -1335,9 +1398,37 @@ impl Runtime {
             intent = ?intent,
             coarse = ?coarse_intent,
             self_assessment = ?self_assessment,
+            active_mode = ?active_mode,
             tier = ?policy.tier,
             "runtime: stream routed"
         );
+
+        // Recipe-author workspace dispatch. When the conversation is
+        // tagged with `recipe-author`, every meaningful turn is a
+        // long-lived tool-using loop (draft → validate → test →
+        // checkpoint) — wrong shape for the generic ComplexTask
+        // planner that follows below, and the streaming ComplexTask
+        // path was returning NotImplemented anyway (desktop sat in
+        // loading state forever). Route to the agent-loop handler
+        // here, BEFORE the ComplexTask bailout. The narrowed
+        // `tool_descriptors` (from the pre-classification narrow
+        // above with `early_active_mode`) already carries the
+        // recipe-author tool catalog. See handlers/recipe_author.rs
+        // for the loop shape and the 2026-05-23 history note.
+        if active_mode.as_deref() == Some(crate::intent_policy::MODE_RECIPE_AUTHOR) {
+            tracing::info!(
+                intent = ?intent,
+                "runtime: dispatching recipe-author workspace turn to agent loop"
+            );
+            return self
+                .handle_recipe_author_turn_stream(
+                    message,
+                    conversation_id,
+                    &context,
+                    &tool_descriptors,
+                )
+                .await;
+        }
 
         // PR2 — Ask move. Suppress synthesis entirely, emit a
         // `clarification-request` event, save a placeholder assistant
@@ -1517,7 +1608,10 @@ impl Runtime {
         // `privacy = "local_only"` (e.g. `inner-work` should not see
         // the conversational-history digest at all).
         if let Some(provider) = &self.landscape_digests {
-            let active_skill = self.skills.primary_skill_id_for_conversation();
+            // Conversation-tag-driven active skill (2026-05-24
+            // redesign): the digest suppression should follow the
+            // surface that owns the conversation, not registry state.
+            let active_skill = self.resolve_active_mode(conversation_id).await;
             provider
                 .splice_landscape_digests(&mut context, active_skill.as_deref())
                 .await;
@@ -2590,8 +2684,13 @@ impl Runtime {
         // streaming-path comment for rationale; this keeps the two
         // dispatch surfaces symmetric so a turn classified the same
         // way sees the same tool catalog regardless of the
-        // streaming/non-streaming distinction.
-        let tool_descriptors = self.narrow_tools_pre_classification();
+        // streaming/non-streaming distinction. Resolve the conv-tag
+        // mode here so the narrow picks up the recipe-author catalog
+        // (registry-side lookup misses workspace tags stored only on
+        // the conversation row).
+        let early_active_mode = self.resolve_active_mode(conversation_id).await;
+        let tool_descriptors = self
+            .narrow_tools_pre_classification_for_mode(early_active_mode.as_deref());
         let routing_start = std::time::Instant::now();
         let classification = self
             .router
@@ -2630,8 +2729,14 @@ impl Runtime {
         // turn classified the same way sees the same policy on
         // either dispatch surface.
         let raw_intent = classification.primary.intent.clone();
-        let active_mode = self.skills.primary_skill_id_for_conversation();
-        let declared_register = self.skills.primary_skill_register();
+        // Reuse the early resolution from the pre-classification
+        // narrow site above — same conversation, same answer.
+        let active_mode = early_active_mode.clone();
+        let declared_register = active_mode
+            .as_deref()
+            .and_then(|id| self.skills.skill_by_id(id))
+            .map(|s| s.inference.register)
+            .unwrap_or_default();
         let intent_policy = crate::intent_policy::policy_for(
             &raw_intent,
             declared_register,
@@ -2651,9 +2756,28 @@ impl Runtime {
             coarse = ?coarse_intent,
             self_assessment = ?self_assessment,
             scope = ?scope,
+            active_mode = ?active_mode,
             tier = ?policy.tier,
             "runtime: routed"
         );
+
+        // Recipe-author workspace dispatch on the non-streaming path
+        // (mesh peer, OICP caller, CLI). Symmetric with the streaming
+        // dispatch above — same handler, drained into a Response.
+        if active_mode.as_deref() == Some(crate::intent_policy::MODE_RECIPE_AUTHOR) {
+            tracing::info!(
+                intent = ?intent,
+                "runtime: dispatching recipe-author workspace turn to agent loop (non-stream)"
+            );
+            return self
+                .handle_recipe_author_turn(
+                    message,
+                    conversation_id,
+                    &context,
+                    &tool_descriptors,
+                )
+                .await;
+        }
 
         // PR2 — Ask on the non-streaming path. Same semantics as
         // `handle_ask_move_stream`: save a placeholder assistant
@@ -2699,7 +2823,10 @@ impl Runtime {
         // `Runtime::with_landscape_digests` wasn't called at build
         // time. See the streaming path for rationale on `active_skill`.
         if let Some(provider) = &self.landscape_digests {
-            let active_skill = self.skills.primary_skill_id_for_conversation();
+            // Conversation-tag-driven active skill (2026-05-24
+            // redesign): the digest suppression should follow the
+            // surface that owns the conversation, not registry state.
+            let active_skill = self.resolve_active_mode(conversation_id).await;
             provider
                 .splice_landscape_digests(&mut context, active_skill.as_deref())
                 .await;

@@ -238,14 +238,40 @@ impl Runtime {
     /// Post-classification sites should use
     /// [`Self::narrow_tools_for_intent`] instead — that picks up the
     /// intent-derived narrowing too.
-    pub(crate) fn narrow_tools_pre_classification(&self) -> Vec<ToolDescriptor> {
-        // Policy-builder site — read register directly from the
-        // mode declaration since context's `intent_policy` field
-        // isn't populated yet (pre-classification, the policy IS
-        // what we're building).
+    /// Pre-classification tool narrow with an explicit `active_mode`
+    /// override. Dispatch sites resolve the workspace tag from the
+    /// conversation row (via [`Runtime::resolve_active_mode`]) and
+    /// pass it here so the router sees the right catalog at
+    /// classification time.
+    ///
+    /// History: a prior `narrow_tools_pre_classification` consulted
+    /// `SkillRegistry::primary_skill_id_for_conversation` only — the
+    /// in-process registry's notion of "active workspace skill". For
+    /// surfaces that store the workspace tag on the conversation row
+    /// (the desktop recipe-author workspace is the load-bearing case),
+    /// the registry side returns `None`. The narrow then fell back to
+    /// `Unrestricted` and the router classified "[Project state]…"
+    /// turns as `SimpleAction { tool: "shell" }` — the 2026-05-23
+    /// silent-misroute repro. Explicit `active_mode` plumbing closes
+    /// that gap; default-chat callers pass `None` and fall back to
+    /// the registry-side lookup, preserving prior behaviour.
+    pub(crate) fn narrow_tools_pre_classification_for_mode(
+        &self,
+        active_mode: Option<&str>,
+    ) -> Vec<ToolDescriptor> {
+        let registry_mode = self.skills.primary_skill_id_for_conversation();
+        let effective_mode_owned: Option<String> = match active_mode {
+            Some(m) => Some(m.to_string()),
+            None => registry_mode,
+        };
+        let register = effective_mode_owned
+            .as_deref()
+            .and_then(|id| self.skills.skill_by_id(id))
+            .map(|s| s.inference.register)
+            .unwrap_or_else(|| self.skills.primary_skill_register());
         let policy = crate::intent_policy::policy_for_mode_only(
-            self.skills.primary_skill_register(),
-            self.skills.primary_skill_id_for_conversation().as_deref(),
+            register,
+            effective_mode_owned.as_deref(),
         );
         crate::intent_policy::narrow_tools(&self.tools.descriptors(), &policy)
     }

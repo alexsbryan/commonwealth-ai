@@ -1,0 +1,10 @@
+# Single-turn smoke for the agent loop. One turn, minimal tool calls,
+# no network. Pair with --no-fetch.
+
+Draft the recipe TOML for this project — but DO NOT call probe_url,
+web_fetch, web_search, or recipe_test. Assume the CourtListener REST
+v4 API lives at https://www.courtlistener.com/api/rest/v4/opinions/
+with `Authorization: Token {api_token}` and offset pagination via
+`page=` (page_size 20). Declare `api_token`, `court`, and `start_date`
+as parameters. Call recipe_write_structured ONCE, then recipe_validate
+ONCE. Summarize in two sentences. Stop after that.

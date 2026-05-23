@@ -283,11 +283,31 @@ impl SlotContext {
     }
 }
 
-/// Build a target `LlamaContext<'static>` for a slot given the
-/// rebuild params captured at construction. Used both at initial
-/// load AND by `demote_to_single_token` to replace a target whose
-/// `set_embeddings_pre_norm` hook is poisoned after a failed
-/// speculative upgrade.
+/// Build a target `LlamaContext<'static>` for a SingleToken slot
+/// given the rebuild params captured at construction. Used by:
+///   - the MTP-probe-failure fallback at initial slot load
+///     (`ModelSlot::load`'s `Err((bad_target, ...))` arm), AND
+///   - mid-life `demote_to_single_token` after an MTP runtime fault.
+///
+/// Both call sites target SingleToken mode — the speculative draft
+/// path is the only consumer of MTP-specific context state. As such
+/// this function **deliberately strips `n_rs_seq`** before building.
+///
+/// **Diagnosed 2026-05-23.** Pre-fix: `MtpRebuildParams.n_rs_seq` was
+/// applied here unconditionally for MTP-candidate models, and the
+/// initial target ctx (line 762+ in `ModelSlot::load`) was likewise
+/// built with `with_n_rs_seq(mtp_n_rs_seq)` from `build_ctx_params`.
+/// That config provisions recurrent-state sequence slots that ONLY
+/// the MTP draft-process drives. When the speculative upgrade probe
+/// failed on a candidate slot — observed on the Qwen3.6-35B-A3B
+/// Compact slot whose draft ctx build returned "null reference from
+/// llama.cpp" — the rebuild propagated `n_rs_seq=4` into a SingleToken
+/// ctx that would never feed those slots. Every subsequent
+/// `ctx.decode(batch)` on the rebuilt target returned
+/// `Decode Error -3: unknown`, regardless of prompt size (the user
+/// saw it on Recipe Author with prompts as small as 338 tokens, KV
+/// cache empty, on every retry). Stripping `n_rs_seq` here gives the
+/// fallback a vanilla single-token ctx that decodes normally.
 ///
 /// SAFETY: the returned context borrows from `model` via a transmute
 /// to `'static`. The caller MUST keep `model` alive (in practice via
@@ -297,16 +317,18 @@ fn build_target_ctx_for_slot(
     model: &Arc<LlamaModel>,
     params: &MtpRebuildParams,
 ) -> Result<crate::llama::cpp::context::LlamaContext<'static>> {
-    let mut ctx_params = LlamaContextParams::default()
+    let ctx_params = LlamaContextParams::default()
         .with_n_ctx(NonZeroU32::new(params.context_size))
         .with_n_batch(params.n_batch)
         .with_n_ubatch(params.n_ubatch)
         .with_n_threads(params.n_threads)
         .with_n_threads_batch(params.n_threads)
         .with_offload_kqv(params.used_gpu);
-    if let Some(n_rs_seq) = params.n_rs_seq {
-        ctx_params = ctx_params.with_n_rs_seq(n_rs_seq);
-    }
+    // n_rs_seq intentionally NOT applied — see fn doc above.
+    // params.n_rs_seq retained on the struct so callers can observe
+    // whether the slot was originally an MTP candidate, but it is
+    // never propagated into a fallback SingleToken ctx.
+    let _ = params.n_rs_seq;
     unsafe {
         let model_ref: &'static LlamaModel =
             &*(Arc::as_ptr(model) as *const LlamaModel);

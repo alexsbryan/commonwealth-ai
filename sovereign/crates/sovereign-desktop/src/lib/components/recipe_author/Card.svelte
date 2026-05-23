@@ -29,7 +29,7 @@
 
 <style>
   .card {
-    background: rgba(255, 255, 255, 0.025);
+    background: var(--bg-elevated);
     border: 1px solid var(--border, #2a2c33);
     border-radius: 6px;
     overflow: hidden;
@@ -39,7 +39,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0.4rem 0.7rem;
-    background: rgba(255, 255, 255, 0.025);
+    background: var(--bg-elevated);
     border-bottom: 1px solid var(--border, #2a2c33);
   }
   h3 {
@@ -52,7 +52,7 @@
   }
   .counter {
     font-size: 0.72rem;
-    background: rgba(255, 255, 255, 0.07);
+    background: var(--bg-elevated);
     color: inherit;
     padding: 1px 8px;
     border-radius: 999px;

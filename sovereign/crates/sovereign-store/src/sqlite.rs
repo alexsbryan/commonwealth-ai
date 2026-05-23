@@ -78,6 +78,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Conv tiered migration failed: {e}")))?;
         migrations::run_chunk_entities_migration(&conn)
             .map_err(|e| Error::Storage(format!("Chunk entities migration failed: {e}")))?;
+        migrations::run_surface_skill_backfill(&conn)
+            .map_err(|e| Error::Storage(format!("Surface-skill backfill failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -89,6 +91,105 @@ impl SqliteStateStore {
     /// Used by `SqliteInsightStore` to share the same database connection.
     pub fn connection(&self) -> Arc<Mutex<Connection>> {
         Arc::clone(&self.conn)
+    }
+
+    /// Create an empty conversation row with an optional surface
+    /// skill tag. Called by the desktop `create_conversation` Tauri
+    /// command so the routing layer knows which workspace surface
+    /// created the conversation BEFORE any messages are sent.
+    ///
+    /// `surface_skill_id` semantics:
+    ///   - `Some("inner-work")` / `Some("recipe-author")` — conversation
+    ///     belongs to that workspace surface. Routing reads this tag
+    ///     at every turn and applies the workspace's intent policy.
+    ///   - `None` — default chat conversation. Routing follows
+    ///     intent-derived policy without a workspace override.
+    ///
+    /// Idempotent via `INSERT OR IGNORE` — calling twice with the
+    /// same id is a no-op (the second create_conversation in a
+    /// flaky-network retry won't blow up).
+    pub async fn insert_empty_conversation(
+        &self,
+        id: &str,
+        created_at: i64,
+        surface_skill_id: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "INSERT OR IGNORE INTO conversations \
+                (id, title, created_at, updated_at, skill_id) \
+             VALUES (?1, NULL, ?2, ?2, ?3)",
+            rusqlite::params![id, created_at, surface_skill_id],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    /// List conversations filtered by their surface tag. Drives the
+    /// cross-surface visibility restriction: the default chat
+    /// sidebar passes `None` (untagged conversations only); the
+    /// Inner Work history drawer passes `Some("inner-work")`;
+    /// Recipe Author passes `Some("recipe-author")`.
+    ///
+    /// The filter is exact-match: `None` returns conversations
+    /// where `skill_id IS NULL`; `Some(id)` returns conversations
+    /// where `skill_id = id`. There is no "all conversations"
+    /// affordance — that would defeat the visibility restriction
+    /// the surfaces are meant to enforce.
+    pub async fn list_conversations_for_surface(
+        &self,
+        surface_skill_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<Conversation>> {
+        let conn = self.conn.lock().await;
+        let limit_i = limit as i64;
+        let offset_i = offset as i64;
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Conversation> {
+            Ok(Conversation {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                messages: Vec::new(),
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+                version: 0,
+                deleted_at: None,
+                skill_id: row.get(4)?,
+            })
+        };
+        let rows: Vec<Conversation> = match surface_skill_id {
+            Some(id) => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, title, created_at, updated_at, skill_id \
+                         FROM conversations \
+                         WHERE skill_id = ?1 AND deleted_at IS NULL \
+                         ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
+                    )
+                    .map_err(map_db)?;
+                let iter = stmt
+                    .query_map(rusqlite::params![id, limit_i, offset_i], map_row)
+                    .map_err(map_db)?;
+                let collected: std::result::Result<Vec<_>, _> = iter.collect();
+                collected.map_err(map_db)?
+            }
+            None => {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT id, title, created_at, updated_at, skill_id \
+                         FROM conversations \
+                         WHERE skill_id IS NULL AND deleted_at IS NULL \
+                         ORDER BY updated_at DESC LIMIT ?1 OFFSET ?2",
+                    )
+                    .map_err(map_db)?;
+                let iter = stmt
+                    .query_map(rusqlite::params![limit_i, offset_i], map_row)
+                    .map_err(map_db)?;
+                let collected: std::result::Result<Vec<_>, _> = iter.collect();
+                collected.map_err(map_db)?
+            }
+        };
+        Ok(rows)
     }
 
     /// Read the (was_redirected, redirect_to) fields for the most
@@ -223,6 +324,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("Conv tiered migration failed: {e}")))?;
         migrations::run_chunk_entities_migration(&conn)
             .map_err(|e| Error::Storage(format!("Chunk entities migration failed: {e}")))?;
+        migrations::run_surface_skill_backfill(&conn)
+            .map_err(|e| Error::Storage(format!("Surface-skill backfill failed: {e}")))?;
 
         Ok(Self {
             conn: Arc::new(Mutex::new(conn)),
@@ -2705,6 +2808,46 @@ impl SqliteStateStore {
             )
             .map_err(map_db)?;
         }
+        tx.commit().map_err(map_db)?;
+        Ok(())
+    }
+
+    /// Tear down all tiered-enrichment rows for one corpus. Used by
+    /// `LocalCorpusManager::disable_enrichment` to clean up
+    /// `conv_raptor_nodes` / `conv_motifs` / `conv_skeletons` /
+    /// `chunk_entities` / `chunk_entity_progress` so re-enabling on
+    /// the same corpus starts from a clean slate.
+    ///
+    /// One transaction so partial teardown isn't possible — either
+    /// the corpus has tiered data or it doesn't.
+    pub async fn delete_tiered_for_corpus(&self, corpus_id: &str) -> Result<()> {
+        let mut conn = self.conn.lock().await;
+        let tx = conn.transaction().map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM conv_raptor_nodes WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+        )
+        .map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM conv_motifs WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+        )
+        .map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM conv_skeletons WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+        )
+        .map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM chunk_entities WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+        )
+        .map_err(map_db)?;
+        tx.execute(
+            "DELETE FROM chunk_entity_progress WHERE corpus_id = ?1",
+            rusqlite::params![corpus_id],
+        )
+        .map_err(map_db)?;
         tx.commit().map_err(map_db)?;
         Ok(())
     }

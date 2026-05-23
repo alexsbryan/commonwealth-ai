@@ -882,10 +882,46 @@ pub async fn resume_session(
 }
 
 #[tauri::command]
-pub async fn create_conversation() -> Result<CreateConversationResponse, String> {
+pub async fn create_conversation(
+    state: State<'_, Arc<AppState>>,
+    surface_skill_id: Option<String>,
+) -> Result<CreateConversationResponse, String> {
+    let id = uuid::Uuid::new_v4().to_string();
+    let created_at = now_epoch();
+
+    // Persist the conversation row with its surface tag NOW so the
+    // first chat dispatch already knows which surface created this
+    // conversation. Pre-2026-05-24 this was a lazy create — the row
+    // appeared only when the first message was saved, and the
+    // runtime auto-tagged with whatever was in
+    // `SkillRegistry::primary_skill_id_for_conversation()` at dispatch
+    // time. That coupled routing to global mutable registry state +
+    // required every workspace surface to toggle skills via
+    // `rebuild_runtime` on mount/destroy (15s × N rebuilds). With
+    // the surface declaring its skill at create-time, routing
+    // becomes a stateless per-turn lookup and the lifecycle glue
+    // disappears.
+    //
+    // `surface_skill_id == None` is the default-chat case: no
+    // workspace tag, routing follows intent-derived policy.
+    if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
+        sqlite
+            .insert_empty_conversation(&id, created_at, surface_skill_id.as_deref())
+            .await
+            .map_err(|e| format!("create_conversation insert: {e}"))?;
+    } else {
+        // Sqlite store unavailable (early boot, IO error). Fall
+        // through: the conversation row still gets created lazily
+        // on first message save and runtime's older auto-tag path
+        // handles attribution best-effort.
+        tracing::warn!(
+            "create_conversation: sqlite store unavailable, deferring insert"
+        );
+    }
+
     Ok(CreateConversationResponse {
-        id: uuid::Uuid::new_v4().to_string(),
-        created_at: now_epoch(),
+        id,
+        created_at,
     })
 }
 
@@ -894,15 +930,28 @@ pub async fn list_conversations(
     state: State<'_, Arc<AppState>>,
     limit: Option<usize>,
     offset: Option<usize>,
+    surface_skill_id: Option<String>,
 ) -> Result<Vec<ConversationEntry>, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-
-    let convos = runtime
-        .store
-        .list_conversations(limit.unwrap_or(50), offset.unwrap_or(0))
-        .await
-        .map_err(|e| e.to_string())?;
+    let _guard = require_runtime!(state);
+    // Surface-scoped listing: each surface only sees its own
+    // conversations. The default-chat sidebar passes `None` and
+    // gets back only conversations with `skill_id IS NULL`; the
+    // Inner Work history drawer passes `Some("inner-work")`;
+    // Recipe Author passes `Some("recipe-author")`. No "all
+    // conversations" mode — cross-surface visibility is structurally
+    // restricted (2026-05-24 architecture redesign).
+    let convos = if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
+        sqlite
+            .list_conversations_for_surface(
+                surface_skill_id.as_deref(),
+                limit.unwrap_or(50),
+                offset.unwrap_or(0),
+            )
+            .await
+            .map_err(|e| e.to_string())?
+    } else {
+        return Err("list_conversations: sqlite store unavailable".to_string());
+    };
 
     Ok(convos
         .into_iter()
@@ -1407,20 +1456,48 @@ pub async fn toggle_skill(
     skill_id: String,
     active: bool,
 ) -> Result<(), String> {
-    // Update the config's active_skills list and rebuild Runtime.
+    toggle_skill_impl(&state, skill_id, active).await
+}
+
+/// Shared body for the `toggle_skill` Tauri command. Single
+/// implementation guarantees uniform idempotency + rebuild
+/// behavior. (Pre-2026-05-24 also served per-workspace wrappers
+/// like `recipe_author_set_workspace_active`; those were removed
+/// when routing moved to conversation-tag-driven primary skill
+/// selection.)
+///
+/// Idempotent: if the requested state already matches the stored
+/// `config.active_skills`, returns early without `config.save()`
+/// or `rebuild_runtime`. Diagnosed 2026-05-23: the InnerWork
+/// surface and a parallel App.svelte view-effect both called the
+/// older non-idempotent `toggle_skill` on view-enter, kicking off
+/// two ~15s `rebuild_runtime` passes that locked the UI for ~30s.
+/// Even after removing the redundant caller, no-op short-circuit
+/// is the right shape for a toggle — callers shouldn't have to
+/// track local state to avoid thrashing the registry.
+pub async fn toggle_skill_impl(
+    state: &Arc<AppState>,
+    skill_id: String,
+    active: bool,
+) -> Result<(), String> {
     {
         let mut config = state.config.write().await;
+        let already = config.active_skills.contains(&skill_id);
+        if active && already {
+            return Ok(());
+        }
+        if !active && !already {
+            return Ok(());
+        }
         if active {
-            if !config.active_skills.contains(&skill_id) {
-                config.active_skills.push(skill_id);
-            }
+            config.active_skills.push(skill_id);
         } else {
             config.active_skills.retain(|id| *id != skill_id);
         }
         config.save()?;
     }
 
-    state::rebuild_runtime(&state).await
+    state::rebuild_runtime(state).await
 }
 
 #[tauri::command]
