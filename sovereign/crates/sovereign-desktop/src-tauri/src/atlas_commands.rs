@@ -16,7 +16,8 @@
 use std::sync::Arc;
 
 use sovereign_tools::atlas_view::{
-    AtlasCorpusSummary, AtomDetail, AtomFilter, AtomListPage, FileAtlasReader, PageCursor,
+    AtlasCorpusSummary, AtomDetail, AtomFilter, AtomListPage, ConvCorpusSummary, ConvDetailView,
+    ConvEntityChip, ConvListPage, ConvRaptorNodeView, ConvSummary, FileAtlasReader, PageCursor,
 };
 use tauri::State;
 
@@ -149,6 +150,273 @@ pub async fn atlas_get_atom_detail(
         }
     }
     Ok(Some(detail))
+}
+
+// ── Conversation tiered-retrieval commands (spec CONV_TIERED_PORT.md
+//    §"Retrieval surface — A1/A2") ──────────────────────────────────
+//
+// Conv corpora never wrote atoms.json — their tiered enrichment lives
+// in the `conv_skeletons` / `conv_raptor_nodes` / `conv_motifs` SQLite
+// sidecar tables. These commands read via the
+// `Arc<SqliteStateStore>` stashed at desktop bootstrap. AtlasIndex
+// calls BOTH atlas_list_corpora (atoms.json) and
+// atlas_list_conv_corpora (these), then merges client-side.
+
+/// Display-name + icon lookup for a conv corpus_id. Best-effort —
+/// pulls from the corpus registry when reachable, falls back to the
+/// corpus_id itself. Doesn't fail if recipe registry isn't loaded
+/// (some test paths skip the engine bootstrap).
+async fn conv_display_metadata(
+    state: &State<'_, Arc<AppState>>,
+    corpus_id: &str,
+) -> (String, Option<String>, Option<String>) {
+    let mut display_name = corpus_id.to_string();
+    let mut category: Option<String> = None;
+    let mut icon: Option<String> = None;
+    if let Some(engine) = state.corpus_engine.read().await.as_ref() {
+        if let Ok(infos) = engine.installed_indexes().await {
+            if let Some(info) = infos.iter().find(|i| i.corpus_id == corpus_id) {
+                if !info.corpus_name.is_empty() {
+                    display_name = info.corpus_name.clone();
+                }
+                if let Some(d) = &info.display {
+                    category = d.category.clone();
+                    icon = d.icon.clone();
+                }
+            }
+        }
+    }
+    (display_name, category, icon)
+}
+
+/// List every conv corpus with at least one row in `conv_skeletons`,
+/// plus its state-bucket counts. Drives the desktop Atlas index
+/// "Conversations" group.
+#[tauri::command]
+pub async fn atlas_list_conv_corpora(
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<ConvCorpusSummary>, String> {
+    let store = match state.sqlite_store.read().await.as_ref() {
+        Some(s) => Arc::clone(s),
+        None => return Err("Sqlite store not initialised".into()),
+    };
+    let buckets = store
+        .list_conv_corpora_with_state_buckets()
+        .await
+        .map_err(|e| format!("atlas_list_conv_corpora: {e}"))?;
+    let mut out = Vec::with_capacity(buckets.len());
+    for (corpus_id, total, max_ts, per_state) in buckets {
+        let (display_name, category, icon) = conv_display_metadata(&state, &corpus_id).await;
+        let mut state_counts = std::collections::BTreeMap::new();
+        for (state_name, n) in per_state {
+            state_counts.insert(state_name, n);
+        }
+        out.push(ConvCorpusSummary {
+            corpus_id,
+            display_name,
+            conv_count: total,
+            state_counts,
+            last_updated_unix: if max_ts > 0 { Some(max_ts) } else { None },
+            display_category: category,
+            display_icon: icon,
+        });
+    }
+    Ok(out)
+}
+
+/// Paginated list of conversations in one corpus, filterable by
+/// substring on `overview`. Page size capped at 200 to match the
+/// existing atoms-list pagination.
+#[tauri::command]
+pub async fn atlas_list_conversations(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    filter: Option<String>,
+    offset: Option<u64>,
+) -> Result<ConvListPage, String> {
+    let store = match state.sqlite_store.read().await.as_ref() {
+        Some(s) => Arc::clone(s),
+        None => return Err("Sqlite store not initialised".into()),
+    };
+    let limit: u64 = 200;
+    let offset = offset.unwrap_or(0);
+    let filter_str = filter.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let (rows, total) = store
+        .list_conversations_paginated(&corpus_id, filter_str, offset, limit)
+        .await
+        .map_err(|e| format!("atlas_list_conversations: {e}"))?;
+    let mut conversations = Vec::with_capacity(rows.len());
+    for row in rows {
+        let raptor = store
+            .list_conv_raptor_nodes(&corpus_id, &row.conv_uuid)
+            .await
+            .unwrap_or_default();
+        let chunk_count = row.chunk_count;
+        let (top_entities, is_tiny) = summarize_entities(&raptor, 6);
+        conversations.push(ConvSummary {
+            conv_uuid: row.conv_uuid,
+            title: row
+                .overview
+                .clone()
+                .unwrap_or_else(|| "(untitled conversation)".to_string()),
+            state: row.state,
+            chunk_count,
+            top_entities,
+            updated_at: row.updated_at,
+            is_tiny,
+        });
+    }
+    let next_offset = if (offset + conversations.len() as u64) < total {
+        Some(offset + conversations.len() as u64)
+    } else {
+        None
+    };
+    Ok(ConvListPage {
+        conversations,
+        total_matching: total,
+        next_offset,
+    })
+}
+
+/// Full conversation detail: skeleton + RAPTOR tree. Drives the
+/// ConvDetail.svelte component (tree view).
+#[tauri::command]
+pub async fn atlas_get_conv_detail(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    conv_uuid: String,
+) -> Result<Option<ConvDetailView>, String> {
+    let store = match state.sqlite_store.read().await.as_ref() {
+        Some(s) => Arc::clone(s),
+        None => return Err("Sqlite store not initialised".into()),
+    };
+    let skeleton = match store
+        .get_conv_skeleton(&corpus_id, &conv_uuid)
+        .await
+        .map_err(|e| format!("atlas_get_conv_detail.skeleton: {e}"))?
+    {
+        Some(s) => s,
+        None => return Ok(None),
+    };
+    let nodes = store
+        .list_conv_raptor_nodes(&corpus_id, &conv_uuid)
+        .await
+        .map_err(|e| format!("atlas_get_conv_detail.nodes: {e}"))?;
+    let max_level = nodes.iter().map(|n| n.level as u8).max().unwrap_or(0);
+    let raptor_nodes: Vec<ConvRaptorNodeView> = nodes
+        .into_iter()
+        .map(|n| {
+            let primary_entities: Vec<String> =
+                serde_json::from_str(&n.primary_entities_json).unwrap_or_default();
+            let direct_member_chunk_ids: Vec<u64> = n
+                .direct_member_chunk_ids_json
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or_default();
+            let evidence_chunk_ids: Vec<u64> =
+                serde_json::from_str(&n.evidence_chunk_ids_json).unwrap_or_default();
+            let is_synthetic_tiny =
+                primary_entities.is_empty() && (n.cluster_coherence - 1.0).abs() < 1e-6;
+            ConvRaptorNodeView {
+                node_id: n.node_id,
+                level: n.level as u8,
+                summary: n.summary,
+                primary_entities,
+                direct_member_chunk_ids,
+                evidence_chunk_count: evidence_chunk_ids.len(),
+                cluster_coherence: n.cluster_coherence,
+                is_synthetic_tiny,
+            }
+        })
+        .collect();
+    Ok(Some(ConvDetailView {
+        corpus_id,
+        conv_uuid,
+        title: skeleton
+            .overview
+            .clone()
+            .unwrap_or_else(|| "(untitled conversation)".to_string()),
+        state: skeleton.state,
+        chunk_count: skeleton.chunk_count,
+        updated_at: skeleton.updated_at,
+        raptor_nodes,
+        max_level,
+    }))
+}
+
+/// Top-N entity chips for one conversation (A2). Drives the entity
+/// chip row above `ConversationChunkRenderer`'s message bubbles.
+/// Tiny convs return an empty list — the UI suppresses the chip row.
+#[tauri::command]
+pub async fn atlas_get_conv_entities(
+    state: State<'_, Arc<AppState>>,
+    corpus_id: String,
+    conv_uuid: String,
+) -> Result<Vec<ConvEntityChip>, String> {
+    let store = match state.sqlite_store.read().await.as_ref() {
+        Some(s) => Arc::clone(s),
+        None => return Err("Sqlite store not initialised".into()),
+    };
+    let nodes = store
+        .list_conv_raptor_nodes(&corpus_id, &conv_uuid)
+        .await
+        .map_err(|e| format!("atlas_get_conv_entities: {e}"))?;
+    Ok(rank_entity_chips(&nodes, 12))
+}
+
+/// Salience-rank entities for both A1's `top_entities` and A2's
+/// chip row. Returns the top-N entities sorted by salience desc,
+/// salience = sum of `cluster_coherence` over nodes containing the
+/// entity. Also returns whether the conv is "Tiny" (single
+/// synthetic node, no LLM-extracted entities).
+fn summarize_entities(
+    nodes: &[sovereign_store::sqlite::ConvRaptorNodeRow],
+    top_n: usize,
+) -> (Vec<String>, bool) {
+    let chips = rank_entity_chips(nodes, top_n);
+    let is_tiny = nodes.len() == 1
+        && (nodes[0].cluster_coherence - 1.0).abs() < 1e-6
+        && nodes[0].primary_entities_json.trim() == "[]";
+    (chips.into_iter().map(|c| c.name).collect(), is_tiny)
+}
+
+fn rank_entity_chips(
+    nodes: &[sovereign_store::sqlite::ConvRaptorNodeRow],
+    top_n: usize,
+) -> Vec<ConvEntityChip> {
+    use std::collections::HashMap;
+    let mut acc: HashMap<String, (f32, u32)> = HashMap::new();
+    for node in nodes {
+        let entities: Vec<String> =
+            serde_json::from_str(&node.primary_entities_json).unwrap_or_default();
+        for ent in entities {
+            let trimmed = ent.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let entry = acc.entry(trimmed.to_string()).or_insert((0.0, 0));
+            entry.0 += node.cluster_coherence as f32;
+            entry.1 += 1;
+        }
+    }
+    let mut ranked: Vec<(String, f32, u32)> = acc
+        .into_iter()
+        .map(|(name, (sal, occ))| (name, sal, occ))
+        .collect();
+    ranked.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    ranked
+        .into_iter()
+        .take(top_n)
+        .map(|(name, salience, occurrence_count)| ConvEntityChip {
+            name,
+            salience,
+            occurrence_count,
+        })
+        .collect()
 }
 
 #[cfg(test)]

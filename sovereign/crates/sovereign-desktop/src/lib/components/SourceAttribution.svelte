@@ -15,16 +15,45 @@
 </script>
 
 <script lang="ts">
-  interface Props {
-    content: string;
+  /** Conv-tiered PPR provenance gate (A3-lite, spec
+   *  CONV_TIERED_PORT.md). Sources whose matching retrieved chunk
+   *  carries a `ppr_mass_norm > PPR_BADGE_THRESHOLD` get an
+   *  "↗ surfaced via entity bridge: <seed>" subtitle. Threshold
+   *  picked so only well-boosted chunks render the badge — chunks
+   *  that barely cleared cosine baseline don't add noise. */
+  const PPR_BADGE_THRESHOLD = 0.5;
+
+  interface RetrievedChunk {
+    title: string;
+    corpus_id: string;
+    url?: string;
+    snippet: string;
+    chunk_id?: number | null;
+    source_doc_id?: string | null;
+    metadata?: Record<string, string>;
   }
 
-  let { content }: Props = $props();
+  interface Props {
+    content: string;
+    /** When provided, the source list cross-references each parsed
+     *  citation line against the retrieved-chunks payload to surface
+     *  PPR-bridge provenance subtitles. Match is by title (fuzzy:
+     *  case-insensitive, with trim). Missing matches degrade
+     *  gracefully to the original source line. */
+    retrievedChunks?: RetrievedChunk[];
+  }
+
+  let { content, retrievedChunks }: Props = $props();
+
+  interface ParsedSource {
+    raw: string;
+    title: string;
+  }
 
   interface SourceGroup {
     label: string;
     count: number;
-    sources: string[];
+    sources: ParsedSource[];
   }
 
   let groups: SourceGroup[] = $derived.by(() => {
@@ -32,6 +61,25 @@
   });
 
   let expanded = $state(false);
+
+  /** Per-source PPR-bridge attribution. Returns the bridge seed
+   *  entity name when the retrieved chunk matching this source line
+   *  has `metadata.ppr_mass_norm > threshold` and a `ppr_seed`. */
+  function pprBridgeFor(source: ParsedSource): string | null {
+    if (!retrievedChunks || retrievedChunks.length === 0) return null;
+    const titleNorm = source.title.toLowerCase().trim();
+    if (titleNorm === "") return null;
+    const match =
+      retrievedChunks.find((c) => c.title === source.title) ??
+      retrievedChunks.find((c) => c.title.toLowerCase().trim() === titleNorm);
+    if (!match || !match.metadata) return null;
+    const massRaw = match.metadata.ppr_mass_norm;
+    const seed = match.metadata.ppr_seed;
+    if (!seed || !massRaw) return null;
+    const mass = parseFloat(massRaw);
+    if (!Number.isFinite(mass) || mass <= PPR_BADGE_THRESHOLD) return null;
+    return seed;
+  }
 
   function parseSources(text: string): SourceGroup[] {
     // Find "Sources:" section.
@@ -48,23 +96,27 @@
 
     // Parse lines like "[1] corpus: article" or "[1] title -- url"
     const lines = sourcesText.split("\n").filter((l) => l.trim().startsWith("["));
-    const groupMap = new Map<string, string[]>();
+    const groupMap = new Map<string, ParsedSource[]>();
 
     for (const line of lines) {
       const cleaned = line.replace(/^\[\d+\]\s*/, "").trim();
       // Try to extract corpus name from "corpus: article" format.
       const colonIdx = cleaned.indexOf(": ");
       let label: string;
+      let title: string;
       if (colonIdx > 0 && colonIdx < 30) {
         label = cleaned.slice(0, colonIdx);
+        title = cleaned.slice(colonIdx + 2);
       } else if (cleaned.includes(" \u2014 ")) {
-        // "title -- url" format
+        // "title \u2014 url" format (em-dash separator)
         label = "Web";
+        title = cleaned.split(" \u2014 ")[0];
       } else {
         label = "Source";
+        title = cleaned;
       }
       const existing = groupMap.get(label) ?? [];
-      existing.push(cleaned);
+      existing.push({ raw: cleaned, title });
       groupMap.set(label, existing);
     }
 
@@ -87,7 +139,16 @@
       <div class="source-list">
         {#each groups as group}
           {#each group.sources as source}
-            <div class="source-item">{source}</div>
+            {@const bridge = pprBridgeFor(source)}
+            <div class="source-item">
+              <div class="source-line">{source.raw}</div>
+              {#if bridge}
+                <div class="ppr-bridge" title="Conv-tiered entity-graph PPR boost (A3-lite)">
+                  ↗ surfaced via entity bridge:
+                  <span class="bridge-seed">{bridge}</span>
+                </div>
+              {/if}
+            </div>
           {/each}
         {/each}
       </div>
@@ -128,5 +189,20 @@
     color: var(--text-secondary);
     padding: 2px 0;
     line-height: 1.4;
+  }
+  .source-line {
+    /* Same visual weight as the previous flat rendering. */
+  }
+  .ppr-bridge {
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: var(--text-muted, #888);
+    font-style: italic;
+    padding-left: 1.2em;
+  }
+  .bridge-seed {
+    color: #92ade8;
+    font-style: normal;
+    font-weight: 500;
   }
 </style>

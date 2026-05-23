@@ -118,6 +118,11 @@ notify = "8"
 # file (spec §5.4 layer 2). Same version as sovereign-mesh so the
 # workspace resolves a single `ignore` across both crates.
 ignore = "0.4"
+# Conv-tiered provider (`conv_tiered_provider`) needs SqliteStateStore
+# for the conv_skeletons / conv_raptor_nodes / conv_motifs persistence
+# surface. Production dep, not test-only — promoted from
+# `[dev-dependencies]` 2026-05-22 when `CONV_TIERED_PORT.md` shipped.
+sovereign-store = { workspace = true }
 
 [features]
 default = []
@@ -131,7 +136,6 @@ treesitter = ["corpus-engine/treesitter"]
 # breaks corpus-engine's `Attribute::unescape_value()` call via
 # workspace feature unification.
 zip = { version = "2", default-features = false, features = ["deflate"] }
-sovereign-store = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 tempfile = "3"

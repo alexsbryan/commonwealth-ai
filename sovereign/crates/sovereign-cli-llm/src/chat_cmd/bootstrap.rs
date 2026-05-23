@@ -447,6 +447,13 @@ pub async fn build_session_with_skills(
     if let Some(ns) = notes_store.as_ref() {
         runtime = runtime.with_note_store(Arc::clone(ns));
     }
+    // Conv-tiered briefing reader — same SqliteStateStore handle
+    // already opened above also impls ConvTieredReader. Spec
+    // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
+    runtime = runtime.with_conv_tiered_reader(
+        Arc::clone(&store_concrete)
+            as Arc<dyn sovereign_store::sqlite::ConvTieredReader>,
+    );
     if let Some(m) = mesh_knowledge {
         runtime = runtime.with_mesh_knowledge(m);
     }

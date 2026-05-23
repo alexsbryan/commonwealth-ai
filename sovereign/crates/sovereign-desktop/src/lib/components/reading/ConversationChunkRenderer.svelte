@@ -6,9 +6,14 @@
   the reading-card header, and exposes a "View conversation" button
   that bounces back to the live chat.
 
-  No atom layer here in v1: conversation atlases aren't built yet, so
-  every conversation chunk's `atom_spans` is empty. When that ships
-  the entity/state pills can be inlined inside `<ConversationBubble>`
+  Conv-tiered enrichment (spec CONV_TIERED_PORT.md §A2) populates a
+  top-N entity chip row above the bubbles. Chips come from the
+  conv's RAPTOR primary_entities via the
+  `atlas_get_conv_entities` Tauri command. Tiny synthetic convs
+  return an empty chip list and the row simply collapses.
+
+  No atom-span layer yet (per-message span tagging). When that
+  ships, entity/state pills can inline inside `<ConversationBubble>`
   the same way `ChunkRenderer` overlays them on prose.
 -->
 <script lang="ts">
@@ -18,6 +23,8 @@
     type ConversationChunkMeta,
     type ConversationSegment,
   } from "../../stores/readingSession.svelte";
+  import { atlasGetConvEntities } from "../../api";
+  import type { ConvEntityChip } from "../../types";
 
   interface Props {
     prev: ChunkRecord[];
@@ -53,6 +60,69 @@
   }
 
   let updatedLabel = $derived(formatUpdatedAt(conv.updated_at));
+
+  // Conv-tiered entity chips (A2). Fetched async on mount; empty
+  // until the response lands so first paint isn't blocked. Tiny
+  // synthetic convs return an empty list, collapsing the chip row.
+  let entityChips: ConvEntityChip[] = $state([]);
+  /** "Just my chats" toggle for chip clicks. When true, chip search
+   *  scopes to conv corpora; otherwise cross-corpus default. */
+  let scopeToChats = $state(false);
+  $effect(() => {
+    const corpusId = center.corpus_id;
+    const convUuid = conv.conversation_id;
+    if (!corpusId || !convUuid) {
+      entityChips = [];
+      return;
+    }
+    let cancelled = false;
+    atlasGetConvEntities(corpusId, convUuid)
+      .then((chips) => {
+        if (!cancelled) {
+          entityChips = chips;
+        }
+      })
+      .catch(() => {
+        // Conv corpus may not have tiered enrichment yet (e.g.
+        // legacy conversation-history); silently render no chips.
+        if (!cancelled) {
+          entityChips = [];
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  /** Click feedback state — shows a 1.2s "copied" pulse on the
+   *  clicked chip so the user knows something happened. */
+  let copiedChip = $state<string | null>(null);
+
+  function handleChipClick(name: string) {
+    // Until the chat surface exposes a "search with scope" hook, the
+    // most useful affordance is clipboard-copy of the (optionally
+    // scoped) query string so the user can paste it into a new chat
+    // without retyping. Honest about the wiring being v1; full
+    // search-store integration tracked in CONV_TIERED_PORT.md.
+    const prefix = scopeToChats ? "in:conversations " : "";
+    const text = prefix + name;
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      void navigator.clipboard
+        .writeText(text)
+        .then(() => {
+          copiedChip = name;
+          setTimeout(() => {
+            if (copiedChip === name) {
+              copiedChip = null;
+            }
+          }, 1200);
+        })
+        .catch(() => {
+          // Clipboard access can fail under non-secure contexts /
+          // permission denial — swallow rather than alert.
+        });
+    }
+  }
 
   /// Robust segment extraction: prefer the backend-parsed segments,
   /// but fall back to a single user-bubble carrying the raw chunk
@@ -121,6 +191,27 @@
       View conversation →
     </button>
   </div>
+
+  {#if entityChips.length > 0}
+    <div class="conv-entity-row" data-testid="conv-entity-chips">
+      <span class="entity-row-label">this conversation:</span>
+      {#each entityChips as chip (chip.name)}
+        <button
+          type="button"
+          class="entity-chip"
+          class:copied={copiedChip === chip.name}
+          onclick={() => handleChipClick(chip.name)}
+          title={`salience ${chip.salience.toFixed(2)} · ${chip.occurrence_count} cluster${chip.occurrence_count === 1 ? "" : "s"} · click to copy`}
+        >
+          {copiedChip === chip.name ? "copied!" : chip.name}
+        </button>
+      {/each}
+      <label class="scope-toggle" title="Restrict chip search to conversation corpora">
+        <input type="checkbox" bind:checked={scopeToChats} />
+        <span>just my chats</span>
+      </label>
+    </div>
+  {/if}
 
   {#each prev as chunk (chunk.chunk_id)}
     <div class="conv-block faded" data-chunk-id={chunk.chunk_id}>
@@ -284,5 +375,52 @@
 
   .bubble .content {
     color: var(--text-primary);
+  }
+
+  /* A2 conv-tiered entity chip row */
+  .conv-entity-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+    padding: 0.5rem 0.2rem 0.6rem;
+    border-bottom: 1px dashed var(--border, #333);
+    margin-bottom: 0.4rem;
+  }
+  .entity-row-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted, #888);
+    margin-right: 0.3rem;
+  }
+  .entity-chip {
+    background: rgba(96, 132, 232, 0.16);
+    color: #92ade8;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.15rem 0.6rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  .entity-chip:hover {
+    background: rgba(96, 132, 232, 0.28);
+  }
+  .entity-chip.copied {
+    background: rgba(78, 192, 107, 0.22);
+    color: #4ec06b;
+  }
+  .scope-toggle {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    color: var(--text-muted, #888);
+    cursor: pointer;
+  }
+  .scope-toggle input {
+    margin: 0;
   }
 </style>

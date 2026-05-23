@@ -28,6 +28,7 @@
 
 pub mod atom_browse;
 pub mod atom_detail;
+pub mod conv;
 pub mod reader;
 pub mod stable_key;
 
@@ -36,6 +37,10 @@ pub use atom_browse::{
 };
 pub use atom_detail::{
     AtomDetail, AtomDetailError, CrossCorpusLink, EvidenceExcerpt, ReferencedAtom, RelatedAtom,
+};
+pub use conv::{
+    ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
+    ConvSummary,
 };
 pub use reader::{AtlasCorpusSummary, AtlasViewError, CurationStatus, FileAtlasReader};
 pub use stable_key::{compute_stable_key, StableAtomKey};
