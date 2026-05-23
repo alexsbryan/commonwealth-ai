@@ -1,0 +1,82 @@
+[meta]
+id = "4.1-config-applier-python"
+title = "Config applier — multi-bug fix (Python, attention-tier)"
+category = "CodeTest"
+tier = "Scaffolded"
+version = "v0"
+notes = """
+4.x problems are attention-tier: capability-light, attention-heavy.
+Each feature is small and well-specified (no algorithmic depth);
+the difficulty is in tracking specific test-failure signals across
+multiple iteration cycles without regressing already-fixed bugs.
+
+This problem ships a working-shaped `config_applier.py` with FOUR
+independent feature functions (deep_merge, expand_env,
+validate_schema, normalize_paths) and ONE subtle bug per function
+(4 bugs total). 12 tests (3 per feature) verify expected behavior;
+fixing each bug makes 3 tests turn green. The naive failure mode is
+"model fixes one bug, accidentally touches a sibling function, and
+regresses 3 previously-passing tests."
+
+Why this tests attention (per the 2026-05-23 advisor analysis):
+- 4+ iteration cycles required to converge → smoke outputs
+  accumulate in chat history
+- Each cycle's smoke is a verbose pytest report (failing test
+  names, assertion diffs)
+- The model must attend to the CURRENT failing test's spec (which
+  lives in prompt.md at position 0) while not losing track of
+  WHICH bugs it's already fixed (mid-context history)
+- patch_file is the right primitive for the surgical edits this
+  problem rewards; the Implementer profile hints at it but does
+  not coach.
+
+Bug summary:
+  1. deep_merge: list values concatenate instead of replace
+  2. expand_env: ${VAR} substitution does not recurse
+  3. validate_schema: missing-required-key not detected (only
+     type-mismatch is checked)
+  4. normalize_paths: all string values prepended with root, not
+     only path-shaped ones
+
+Tier=Scaffolded: harness pre-installs the buggy
+`config_applier.py` + `tests/test_integration.py` smoke. Agent's
+job is fix-not-author.
+"""
+
+[prompt]
+file = "prompt.md"
+
+[witness]
+kind = "Hybrid"
+language = "Python"
+fixture_subdir = "fixtures"
+scaffold_subdir = "scaffold"
+# pytest auto-discovers tests/test_*.py. No-op build (interpreted).
+verify_cmd = "python3 -m pytest -q tests/test_integration.py 2>&1"
+score_buckets = [
+  [0.0,  0.25,  0],
+  [0.25, 0.6,   1],
+  [0.6,  0.85,  2],
+  [0.85, 1.001, 3],
+]
+
+[budget]
+# Higher than 3.2-python to give attention failure room to surface.
+# At 6 iteration cycles × ~3K tokens/cycle the model has headroom
+# to recover from a regression without hitting tokens_exceeded.
+token_cap = 20000
+wall_seconds_cap = 1200
+
+[scoring.dim_a]
+name = "Correctness"
+mode = "AutoTestPassFraction"
+
+[scoring.dim_b]
+name = "Diagnosis discipline"
+mode = "JudgeRubric"
+rubric_id = "dim_b"
+
+[scoring.dim_c]
+name = "Surgical edits"
+mode = "HybridAutoFloor"
+rubric_id = "dim_c"
