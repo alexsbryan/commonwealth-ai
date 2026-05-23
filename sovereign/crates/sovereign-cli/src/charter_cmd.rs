@@ -5,5 +5,5 @@
 //! the alias shim added in Phase 1F.
 
 pub async fn run(args: &[String]) -> i32 {
-    crate::project_cmd::cmd_charter(args).await
+    crate::dev_bin::exec("project-charter", args)
 }

@@ -41,7 +41,8 @@ pub async fn run(args: &[String]) -> i32 {
 
     let (mode, forwarded) = parse_mode(args);
     match mode {
-        Mode::Foreground => crate::project_cmd::cmd_serve(&forwarded).await,
+        // `project-serve` lives in the sovereign-cli-dev sibling now.
+        Mode::Foreground => crate::dev_bin::exec("project-serve", &forwarded),
         Mode::Background => match spawn_background(&forwarded).await {
             Ok(()) => 0,
             Err(e) => {
@@ -81,7 +82,7 @@ fn parse_mode(args: &[String]) -> (Mode, Vec<String>) {
 async fn spawn_background(forwarded: &[String]) -> Result<(), String> {
     use std::process::{Command, Stdio};
 
-    if crate::project_cmd::daemon_is_running().await {
+    if daemon_is_running_via_dev_bin() {
         eprintln!("  daemon is already serving :9741 — no standalone serve needed.");
         return Ok(());
     }
@@ -90,8 +91,8 @@ async fn spawn_background(forwarded: &[String]) -> Result<(), String> {
     // does so the project pid file lands next to project.toml /
     // notes.db / features.db.
     let cwd = std::env::current_dir().map_err(|e| format!("cwd: {e}"))?;
-    let sovereign_dir = crate::project_cmd::find_sovereign_dir(&cwd)
-        .or_else(|| crate::project_cmd::find_repo_root().map(|r| r.join(".sovereign")))
+    let sovereign_dir = sovereign_cli_shared::repo::find_sovereign_dir(&cwd)
+        .or_else(|| sovereign_cli_shared::repo::find_repo_root().map(|r| r.join(".sovereign")))
         .unwrap_or_else(|| cwd.join(".sovereign"));
     std::fs::create_dir_all(&sovereign_dir)
         .map_err(|e| format!("create {}: {e}", sovereign_dir.display()))?;
@@ -129,15 +130,14 @@ async fn spawn_background(forwarded: &[String]) -> Result<(), String> {
         .try_clone()
         .map_err(|e| format!("clone log fd: {e}"))?;
 
-    let exe = std::env::current_exe()
-        .map_err(|e| format!("current_exe: {e}"))?;
+    // Spawn the sovereign-cli-dev sibling directly with
+    // `project-serve` rather than re-execing through sovereign-cli.
+    // Saves one exec hop and one process layer in the pgrep tree.
+    let dev_bin = locate_dev_bin_for_spawn()
+        .ok_or_else(|| "sovereign-cli-dev sibling binary not found".to_string())?;
 
-    // Build child argv: `<exe> serve <forwarded...>`. Notably no
-    // `--background` — the child runs cmd_serve in the foreground
-    // for its entire life, which is fine because by that point it's
-    // been detached into its own session.
-    let mut cmd = Command::new(&exe);
-    cmd.arg("serve");
+    let mut cmd = Command::new(&dev_bin);
+    cmd.arg("project-serve");
     for a in forwarded {
         cmd.arg(a);
     }
@@ -155,7 +155,7 @@ async fn spawn_background(forwarded: &[String]) -> Result<(), String> {
 
     let child = cmd
         .spawn()
-        .map_err(|e| format!("spawn `{}`: {e}", exe.display()))?;
+        .map_err(|e| format!("spawn `{}`: {e}", dev_bin.display()))?;
     let pid = child.id() as i32;
 
     // Don't `wait()` on the handle — that would block until the
@@ -291,6 +291,43 @@ fn process_alive(pid: i32) -> bool {
 #[cfg(not(unix))]
 fn process_alive(_pid: i32) -> bool {
     false
+}
+
+/// Locate the `sovereign-cli-dev` sibling for the background spawn.
+/// Same lookup shape as `crate::dev_bin::exec` but returns the
+/// `PathBuf` rather than execing.
+fn locate_dev_bin_for_spawn() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("SOVEREIGN_CLI_DEV_BIN") {
+        let path = PathBuf::from(p);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Ok(real) = std::fs::canonicalize(&exe) {
+            if let Some(dir) = real.parent() {
+                let cand = dir.join("sovereign-cli-dev");
+                if cand.is_file() {
+                    return Some(cand);
+                }
+            }
+        }
+    }
+    which::which("sovereign-cli-dev").ok()
+}
+
+/// Bool wrapper over `crate::dev_bin::exec("project-daemon-is-running",
+/// &[])`. The sibling returns 0 if a daemon is serving :9741, 1 if not.
+/// We spawn (not exec) to keep the parent alive.
+fn daemon_is_running_via_dev_bin() -> bool {
+    let Some(bin) = locate_dev_bin_for_spawn() else {
+        return false;
+    };
+    std::process::Command::new(&bin)
+        .arg("project-daemon-is-running")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 async fn reachable(url: &str) -> bool {

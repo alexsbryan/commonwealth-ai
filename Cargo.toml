@@ -17,6 +17,10 @@ members = [
     "sovereign/crates/sovereign-server",
     "sovereign/crates/sovereign-desktop/src-tauri",
     "sovereign/crates/sovereign-cli",
+    "sovereign/crates/sovereign-cli-shared",
+    "sovereign/crates/sovereign-cli-dev",
+    "sovereign/crates/sovereign-cli-daemon",
+    "sovereign/crates/sovereign-cli-llm",
     "sovereign/crates/sovereign-atos",
     "sovereign/crates/sovereign-eval",
     "sovereign/crates/sovereign-pipeline",
@@ -55,6 +59,7 @@ sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-mesh = { path = "sovereign/crates/sovereign-mesh" }
 sovereign-atos = { path = "sovereign/crates/sovereign-atos" }
+sovereign-cli-shared = { path = "sovereign/crates/sovereign-cli-shared" }
 sovereign-pipeline = { path = "sovereign/crates/sovereign-pipeline" }
 sovereign-work-atlas = { path = "sovereign/crates/sovereign-work-atlas" }
 sovereign-agent-bench = { path = "sovereign/crates/sovereign-agent-bench" }

@@ -15,7 +15,7 @@ use std::path::Path;
 pub async fn run(args: &[String]) -> i32 {
     match args.first().map(String::as_str) {
         Some("validate") => cmd_validate(&args[1..]).await,
-        _ => crate::project_cmd::cmd_plan(args).await,
+        _ => crate::dev_bin::exec("project-plan", args),
     }
 }
 

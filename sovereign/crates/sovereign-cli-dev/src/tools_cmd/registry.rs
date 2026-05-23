@@ -27,15 +27,11 @@
 //! `project_cmd::cmd_serve`. Both paths build the same
 //! `ToolRegistry` shape; if either grows new tools without the
 //! other, descriptors drift. Extracting that into a shared
-//! `sovereign-tools::registry_builder` is tracked as a follow-up
-//! — it requires moving the path-resolution helpers
-//! (`find_sovereign_dir` / `default_data_dir`) and the SCIP
-//! merged-graph loader into a neutral module first.
-// TODO(post-phase-2): extract the per-tool registration calls
-// below into `sovereign-tools::registry_builder::register_canonical_tools(deps)`
-// and have both `cmd_serve` and this module call it with their
-// own opened stores. Blocked on moving `load_merged_graph` /
-// `find_sovereign_dir` to a neutral location.
+//! `sovereign-tools::registry_builder` is tracked as a follow-up.
+//! The path-resolution helpers / SCIP loader prerequisite landed
+//! with the `sovereign-cli-shared` crate split — `load_merged_graph`,
+//! `find_sovereign_dir`, and `default_data_dir` now live there and
+//! are imported below.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -45,6 +41,11 @@ use arc_swap::ArcSwap;
 use corpus_engine::{
     CorpusEngine, EmbedFn, FeatureStore, LintResultStore, NoteStore, ProjectDocsStore,
     TestResultStore,
+};
+use sovereign_cli_shared::{
+    dirs::default_data_dir,
+    repo::find_sovereign_dir,
+    scip::load_merged_graph,
 };
 use sovereign_core::registry::ToolRegistry;
 
@@ -118,8 +119,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
 
     // SCIP call graph — empty default if no graph files exist yet.
     // Tools like find_callers gracefully report empty when unmerged.
-    let (initial_graph, _summary) =
-        crate::project_cmd::load_merged_graph(&data_dir, false).await;
+    let (initial_graph, _summary) = load_merged_graph(&data_dir, false).await;
     let merged_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(ArcSwap::from_pointee(initial_graph));
     let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(
@@ -327,18 +327,6 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
 
 // ─── Path resolution helpers (duplicated from project_cmd) ──────────
 
-fn find_sovereign_dir(start: &std::path::Path) -> Option<PathBuf> {
-    let mut cur = Some(start);
-    while let Some(dir) = cur {
-        let candidate = dir.join(".sovereign");
-        if candidate.is_dir() {
-            return Some(candidate);
-        }
-        cur = dir.parent();
-    }
-    None
-}
-
 fn find_git_root(start: &std::path::Path) -> Option<PathBuf> {
     let out = std::process::Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
@@ -351,10 +339,6 @@ fn find_git_root(start: &std::path::Path) -> Option<PathBuf> {
     Some(PathBuf::from(
         String::from_utf8_lossy(&out.stdout).trim(),
     ))
-}
-
-fn default_data_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join(".sovereign").join("indexes"))
 }
 
 /// Resolve the current branch for `repo_root`, or `None` if not a git

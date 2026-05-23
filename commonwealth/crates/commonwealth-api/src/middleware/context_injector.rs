@@ -41,17 +41,27 @@ use crate::openai_types::{ChatCompletionRequest, ChatMessage};
 /// binary carries a copy and there is no runtime file dependency.
 const ATOS_INSTRUCTIONS: &str = include_str!("../../assets/atos_instructions.md");
 
-pub struct ContextInjector;
+/// Tool catalog the agent preamble renders. Empty is fine — the
+/// `## Available via sovereign tools CLI` section just doesn't appear.
+/// Production daemons pass `tool_registry.descriptors()`; tests can
+/// pass `vec![]` when they don't care about the catalog.
+pub struct ContextInjector {
+    tool_descriptors: Vec<sovereign_core::types::ToolDescriptor>,
+}
 
 impl ContextInjector {
-    pub fn new() -> Self {
-        Self
+    pub fn new(tool_descriptors: Vec<sovereign_core::types::ToolDescriptor>) -> Self {
+        Self { tool_descriptors }
+    }
+
+    pub fn empty() -> Self {
+        Self::new(Vec::new())
     }
 }
 
 impl Default for ContextInjector {
     fn default() -> Self {
-        Self::new()
+        Self::empty()
     }
 }
 
@@ -82,7 +92,7 @@ impl Middleware for ContextInjector {
         // the native MCP calls because they're faster and structured,
         // but we want opencode to KNOW the CLI exists so it can use
         // it when MCP isn't available.
-        preamble.push_str(&compose_cli_tools_catalog());
+        preamble.push_str(&compose_cli_tools_catalog(&self.tool_descriptors));
 
         // "Since last turn" block — populated by ArtifactSurface's
         // post_process on the PREVIOUS turn. Popped on render so it
@@ -149,22 +159,22 @@ impl Middleware for ContextInjector {
 // ─── Composition helpers ─────────────────────────────────────────────────────
 
 /// Phase 3.6: live catalog of `sovereign tools` CLI commands,
-/// grouped by effect + scope. Pulled from
-/// `sovereign_tools::manifest::all_descriptors` (cached via
-/// `OnceLock`), so adding a tool auto-surfaces in the agent
-/// preamble.
+/// grouped by effect + scope. Pulled from the descriptor list
+/// injected into `ContextInjector::new` (typically the daemon's
+/// `ToolRegistry::descriptors()`), so adding a tool to the
+/// registry auto-surfaces in the agent preamble.
+///
+/// Pre-2026-05-22 this read from `sovereign_tools::manifest::all_descriptors`,
+/// a global static that pulled the code-intel tools into every binary
+/// downstream of commonwealth-api (treesitter-gated). The injected
+/// shape removes that transitive cost.
 ///
 /// Rendered as a compact markdown block — one line per tool, effect
-/// tag up front, one-sentence description. The agent uses this to
-/// know a CLI alternative exists when MCP isn't available; it
-/// doesn't replace the MCP tool list the agent sees via the
-/// client-side `tools/list` handshake.
-fn compose_cli_tools_catalog() -> String {
+/// tag up front, one-sentence description.
+fn compose_cli_tools_catalog(descriptors: &[sovereign_core::types::ToolDescriptor]) -> String {
     use sovereign_core::types::{Effect, Scope, ToolDescriptor};
     use std::collections::BTreeMap;
 
-    let descriptors: Vec<ToolDescriptor> =
-        sovereign_tools::manifest::all_descriptors().to_vec();
     if descriptors.is_empty() {
         return String::new();
     }
@@ -184,7 +194,7 @@ fn compose_cli_tools_catalog() -> String {
         (Effect::ReadWrite, Scope::External, "ReadWrite · External"),
     ];
     let mut grouped: BTreeMap<(u8, u8), Vec<&ToolDescriptor>> = BTreeMap::new();
-    for d in &descriptors {
+    for d in descriptors {
         let e = match d.effect {
             Effect::Read => 0,
             Effect::Write => 1,

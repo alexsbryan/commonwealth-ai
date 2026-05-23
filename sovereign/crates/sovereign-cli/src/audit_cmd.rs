@@ -32,7 +32,7 @@ pub async fn run(args: &[String]) -> i32 {
     // SIGKILL'd before the in-process pattern matcher's
     // tokio::spawn finished writing.
     if args.iter().any(|a| a == "--recover") {
-        return crate::audit_recover::cmd_audit_recover().await;
+        return crate::dev_bin::exec("audit-recover", &[]);
     }
 
     // Detect the `--archive` flag anywhere in args. Strip it before
@@ -52,13 +52,14 @@ pub async fn run(args: &[String]) -> i32 {
     match (feature_id, archive_requested) {
         (Some(_), true) => {
             // `sovereign audit <id> --archive` → teardown the feature.
-            crate::atos_cmd::teardown::cmd_teardown(&forwarded).await
+            // Handler lives in the sovereign-cli-atos sibling binary.
+            crate::dev_bin::exec("atos-teardown", &forwarded)
         }
         (Some(_), false) => {
             // `sovereign audit <id>` → per-feature report. The atos
             // report handler accepts the feature id as the first
             // positional arg, matching this surface.
-            crate::atos_cmd::status::cmd_report(&forwarded).await
+            crate::dev_bin::exec("atos-status-report", &forwarded)
         }
         (None, true) => {
             // `sovereign audit --archive` with no id is a user error
@@ -76,7 +77,7 @@ pub async fn run(args: &[String]) -> i32 {
         }
         (None, false) => {
             // `sovereign audit` (no args) → project-wide rollup.
-            crate::project_cmd::cmd_audit(&forwarded).await
+            crate::dev_bin::exec("project-audit", &forwarded)
         }
     }
 }

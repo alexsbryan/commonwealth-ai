@@ -17,7 +17,20 @@
 //! a pure no-op on top of the original handler.
 
 pub async fn run(args: &[String]) -> i32 {
-    let exit = crate::project_cmd::cmd_init(args).await;
+    // `project-init` lives in the sovereign-cli-dev sibling binary.
+    // We spawn (not exec) so we can chain into `serve --background`
+    // after a successful init.
+    let exit = match std::process::Command::new(locate_dev_bin())
+        .arg("project-init")
+        .args(args)
+        .status()
+    {
+        Ok(s) => s.code().unwrap_or(1),
+        Err(e) => {
+            eprintln!("sovereign init: spawn sovereign-cli-dev: {e}");
+            return 126;
+        }
+    };
     if exit != 0 {
         // Indexing failed — don't paper over it by lighting up a
         // server with no corpus to serve.
@@ -38,6 +51,26 @@ pub async fn run(args: &[String]) -> i32 {
 
     let _ = crate::serve_cmd::run(&bg_args).await;
     0
+}
+
+/// Find the `sovereign-cli-dev` sibling. Mirrors the lookup in
+/// `crate::dev_bin` but kept inline because `init` needs a
+/// spawn-and-wait, not `exec`.
+fn locate_dev_bin() -> std::path::PathBuf {
+    if let Some(p) = std::env::var_os("SOVEREIGN_CLI_DEV_BIN") {
+        return std::path::PathBuf::from(p);
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Ok(real) = std::fs::canonicalize(&exe) {
+            if let Some(dir) = real.parent() {
+                let cand = dir.join("sovereign-cli-dev");
+                if cand.is_file() {
+                    return cand;
+                }
+            }
+        }
+    }
+    std::path::PathBuf::from("sovereign-cli-dev")
 }
 
 /// Two ways to suppress the auto-spawn:

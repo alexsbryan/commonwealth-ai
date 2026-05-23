@@ -5,7 +5,12 @@ pub mod newsworthy_watcher;
 #[cfg(feature = "treesitter")]
 pub mod watch;
 
-#[cfg(feature = "treesitter")]
+// `watcher_coordinator` only needs `notify` (lives in `stores`).
+// The watcher *implementations* (test/lint/project_index) still
+// require treesitter, but the BackgroundWatcher trait + coordinator
+// types are available to anyone with `stores` so external observers
+// (work-atlas) can implement the trait without dragging tree-sitter.
+#[cfg(feature = "stores")]
 pub mod watcher_coordinator;
 
 #[cfg(feature = "treesitter")]

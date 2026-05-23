@@ -26,8 +26,10 @@ pub mod knowledge;
 pub mod knowledge_lookup;
 pub mod knowledge_view;
 pub mod local_corpus;
-#[cfg(feature = "treesitter")]
-pub mod manifest;
+// `manifest` module retired 2026-05-22 — commonwealth-api now
+// injects tool descriptors at construction time rather than pulling
+// from a global static. See `commonwealth-api::middleware::tool_injector`
+// and `context_injector` for the new shape.
 pub mod mcp;
 pub mod mcp_surface;
 pub mod notes;

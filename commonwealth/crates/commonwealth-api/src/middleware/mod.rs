@@ -508,8 +508,8 @@ mod tests {
         // `commonwealth-api::state::AppState`.
         let mut registry = MiddlewareRegistry::new();
         registry.register(Arc::new(ApprovalGate::new()));
-        registry.register(Arc::new(ContextInjector::new()));
-        registry.register(Arc::new(ToolInjector::new()));
+        registry.register(Arc::new(ContextInjector::empty()));
+        registry.register(Arc::new(ToolInjector::empty()));
         registry.register(Arc::new(ArtifactSurface::new()));
         registry.register(Arc::new(SessionBriefing::new()));
         registry.register(Arc::new(DecisionExtractor::new()));

@@ -18,11 +18,12 @@ commonwealth-app = { path = "../../../commonwealth/crates/commonwealth-app" }
 # re-exported via commonwealth-inference::oicp — we POST/parse those
 # bodies from the mesh knowledge client.
 commonwealth-inference = { path = "../../../commonwealth/crates/commonwealth-inference" }
-# treesitter feature is needed for corpus_engine::NoteStore, which the
-# mcp_router module uses to log tool-call outcomes. Pulls in tree-sitter
-# transitively — acceptable cost since the embedded daemon already ingests
-# from corpus-engine for /v1/knowledge/search.
-corpus-engine = { workspace = true, features = ["treesitter"] }
+# `treesitter` feature dropped from the unconditional dep 2026-05-22:
+# only `reindexer` + `project_http` (the SCIP-graph modules) need it,
+# and those are now feature-gated by this crate's `treesitter` feature
+# below. Default callers (sovereign-cli's mesh_cmd, mcp_router,
+# gossip, etc.) don't pull the 5 tree-sitter grammar crates.
+corpus-engine = { workspace = true }
 
 # Sovereign core (for InferenceProvider + MeshKnowledgeSource traits)
 sovereign-core = { workspace = true }
@@ -138,6 +139,16 @@ tempfile = "3"
 # Wrapping Vec<u8> for MeshStore::set in MeshNewsworthyHost. One call
 # site; explicit dep keeps the host's API surface honest.
 bytes = "1"
+
+[features]
+default = []
+# Enables `reindexer` + `project_http` — the SCIP-graph-hosting
+# modules. Off by default so binaries that only use the mesh
+# primitives (deep_link, EmbeddedDaemon, persist, model_fetch) don't
+# drag in `corpus-engine`'s `treesitter` feature with its 5 grammar
+# crates. The CLI dispatcher (sovereign-cli) skips this; the daemon
+# host (sovereign-cli-atos) and desktop both enable it.
+treesitter = ["corpus-engine/treesitter"]
 
 [dev-dependencies]
 tempfile = "3"

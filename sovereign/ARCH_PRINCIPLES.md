@@ -182,7 +182,9 @@ The pattern:
 Current outliers (all > 5000 lines):
 
 - `sovereign-core/src/runtime.rs` (~10800 lines) — the runtime hub.
-- `sovereign-cli/src/project_cmd.rs` (~7000 lines) — the project subcommand surface.
+- `sovereign-cli-dev/src/project_cmd.rs` (~7000 lines) — the project subcommand surface. Moved out of `sovereign-cli` in the 2026-05-22 binary split; still wants an in-file §3.2 split.
+- `sovereign-cli-daemon/src/daemon_cmd.rs` (~3300 lines) — the daemon Runtime construction. Same story — moved binaries, still wants an in-file split.
+- `sovereign-cli-dev/src/atos_cmd/run.rs` (~4700 lines) — ATOS lifecycle dispatcher.
 - `sovereign-inference/src/embedded.rs` (~5300 lines) — embedded daemon glue.
 - `sovereign-desktop/src-tauri/src/commands.rs` (~5100 lines) — Tauri command surface.
 

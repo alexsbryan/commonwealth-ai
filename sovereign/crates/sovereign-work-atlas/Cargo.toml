@@ -15,7 +15,9 @@ commonwealth-core  = { workspace = true }
 sovereign-core = { workspace = true }
 
 # repo_root discovery (reused from corpus-engine — ARCH §11.1).
-corpus-engine = { workspace = true, features = ["treesitter"] }
+# `treesitter` dropped 2026-05-22 — work-atlas only uses the
+# corpus_engine Error type + repo helpers, no SCIP.
+corpus-engine = { workspace = true }
 
 # Origin URL → repo_id hash.
 sha2 = { workspace = true }

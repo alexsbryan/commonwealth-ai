@@ -40,13 +40,11 @@ pub async fn run(args: &[String]) -> i32 {
     }
 
     // Fallback: maybe the daemon owns :9741 instead of a standalone
-    // serve. Forward to `daemon stop` with the original args.
-    crate::daemon_cmd::run(&{
-        let mut v = vec!["stop".to_string()];
-        v.extend(args.iter().cloned());
-        v
-    })
-    .await
+    // serve. Forward to `daemon stop` in the sovereign-cli-daemon
+    // sibling, with the original args.
+    let mut forwarded = vec!["stop".to_string()];
+    forwarded.extend(args.iter().cloned());
+    crate::daemon_bin::exec("daemon", &forwarded)
 }
 
 /// Ordered list of pid-file paths to try. The cwd walk-up is checked

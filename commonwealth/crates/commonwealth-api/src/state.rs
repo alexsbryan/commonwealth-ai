@@ -501,8 +501,18 @@ impl AppState {
         // bare daemon can build a minimal registry themselves.
         let mut middleware_registry = crate::middleware::MiddlewareRegistry::new();
         middleware_registry.register(Arc::new(crate::middleware::ApprovalGate::new()));
-        middleware_registry.register(Arc::new(crate::middleware::ContextInjector::new()));
-        middleware_registry.register(Arc::new(crate::middleware::ToolInjector::new()));
+        // 2026-05-22: ContextInjector + ToolInjector descriptor lists
+        // were previously pulled from `sovereign_tools::manifest`, a
+        // global static that forced commonwealth-api to drag the
+        // tree-sitter grammar crates through every downstream binary.
+        // They're now injected at construction time. AppState
+        // constructs them with `Vec::new()` because the registry of
+        // available tools lives in the daemon host (sovereign-cli-atos,
+        // sovereign-desktop, sovereign-server) — those wire the real
+        // descriptors via the `with_tool_descriptors` shim below the
+        // platform constructors.
+        middleware_registry.register(Arc::new(crate::middleware::ContextInjector::empty()));
+        middleware_registry.register(Arc::new(crate::middleware::ToolInjector::empty()));
         middleware_registry.register(Arc::new(crate::middleware::ArtifactSurface::new()));
         middleware_registry.register(Arc::new(crate::middleware::SessionBriefing::new()));
         // Phase 7.2: per-turn DecisionExtractor mines assistant
