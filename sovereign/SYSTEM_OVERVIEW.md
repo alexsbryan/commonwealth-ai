@@ -2005,6 +2005,56 @@ which is why per-phase metric machinery disappeared.
 claim. The HTTP route is callable today; Pi integration is one
 TypeScript package away.
 
+**Language-agnostic structural templates (Phase A, 2026-05-24).**
+`tasks::split_file` dispatches via `tasks::framework::detect_framework`
+and `tasks::structural::max_file_size::render` so the generated
+structural test is in the project's actual framework — pytest's
+`tests/test_max_file_size.py`, cargo's `tests/max_file_size.rs`,
+vitest/jest's `tests/max_file_size.test.ts`, or go-test's
+`max_file_size_test.go`. The `tasks::structural::` module is the
+home for future structural goals (max-function-length, no-circular-
+imports, etc); each lives in one file with per-framework templates.
+`Language::source_extensions()` exposes the per-language extension
+list for any walker that needs it.
+
+**BDD synthesis layer (Phase B, 2026-05-24).** `tasks::bdd_cycle`
+composes two trials into a natural-language-to-passing-tests flow:
+
+1. Synthesis stage — `tasks::write_failing_test` runs `run_trial`
+   under `Polarity::GenerateOneFailing`. The model writes ONE test
+   that fails on baseline. The prompt mandates `write_file` with
+   the explicit `path` field so the test lands at the resolved
+   path rather than clobbering the production source. Returns
+   when the failing test is in the workdir.
+
+2. Green stage — `tasks::make_failing_tests_pass` runs `run_trial`
+   under `Polarity::MaximizePassing`. The model drives the
+   implementation until both the new test and all existing tests
+   pass.
+
+`ReviewMode::PauseAfterSynthesis` lets the caller stop between
+stages to review the synthesized test before driving green.
+Validated 2026-05-24 against Darwin-36B on the calc-evaluator
+intent: 29 seconds end-to-end, model wrote a full shunting-yard
+parser to satisfy the synthesized test for operator precedence.
+
+**Anti-failure mechanisms (shipped 2026-05-24).** Four loop-level
+changes earned their keep across the 16-trial lights-out sweep,
+collapsing mean from 4.33 → 8.33 (+92%) and σ from 2.87 → 0.47:
+
+| Mechanism | Failure mode addressed |
+|---|---|
+| Anti-plateau restart slot | Loop stuck at local optimum on partial-fit |
+| Syntax validator wiring | Model writes invalid code that test runner can't import |
+| Error feedback to next round | Validator rejects but model can't see why → repeats |
+| Polarity-aware acceptance | Different fitness contracts in one loop |
+
+**Transport surface (Phase D, 2026-05-24).** HTTP routes
+`POST /v1/solve` (unified) and `POST /v1/cycle/bdd` (composed) in
+`sovereign-server::routes_tdd`. MCP tools `tdd_solve` and
+`tdd_bdd_cycle` exposed at the same daemon's `/mcp/message` with
+localhost-only enforcement.
+
 ---
 
 ## 5. Commonwealth — The Coordination Daemon

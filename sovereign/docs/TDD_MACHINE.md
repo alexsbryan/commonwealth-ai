@@ -1,164 +1,167 @@
 # TDD Machine
 
-A backend that automates the **red-green-refactor** discipline for any
-harness that calls it. Three solvers, one registry, two transports
-(HTTP + MCP). Validated 2026-05-24 across all three phases.
+A backend that drives the **red-green-refactor** discipline for any
+harness that calls it. **One solver loop, two polarities, composable
+task wrappers.** Validated end-to-end against Darwin-36B on
+2026-05-24 — lights-out at 8.33/9 mean (σ 0.47) across N=3,
+language-agnostic structural templates wired, BDD intent → working
+implementation in 29 seconds.
 
 ## What it does
 
-| Phase | Tool | Trigger | Fitness function |
-|---|---|---|---|
-| **Red** | `tdd_red` | "I have a new behavior to add" | Generated test FAILS on baseline (discriminating) |
-| **Green** | `tdd_green` | "At least one test is failing" | More tests passing each round |
-| **Refactor** | `tdd_refactor` | "Tests pass, code quality should improve" | Tests stay green AND structural metric improves |
+| Polarity | Trigger | Fitness signal |
+|---|---|---|
+| `MaximizePassing` | Bug fix / refactor / multi-file split | Strict increase in passing-test count |
+| `GenerateOneFailing` | Write a test for a new behavior | Exactly one new failing test, no regressions |
 
-Each phase runs a **parallel-candidate search** loop: K candidates at
-varied temperatures, monotonic improvement gating, no defensive
-parsing. The model is treated as a stochastic search process;
-variance is the resource, tests are the only honest judge.
+Both polarities run the same `run_trial` loop: parallel K
+candidates at varied temperatures, monotonic improvement gating,
+stall detection. The model is treated as a stochastic search
+process; variance is the resource, tests are the only honest judge.
+
+## Convenience task wrappers
+
+Most callers won't build a `Trial` by hand — they use one of the
+preset task wrappers in `commonwealth_tdd::tasks`:
+
+| Task | What it does | Polarity |
+|---|---|---|
+| [`make_failing_tests_pass`] | Drive currently-failing tests to passing | MaximizePassing |
+| [`write_failing_test`] | Generate ONE failing test for a behavior | GenerateOneFailing |
+| [`split_file`] | Generate a structural `max_file_size` test, then drive it | MaximizePassing |
+| [`bdd_cycle`] | Natural-language intent → synthesized test → driven implementation | Both (composed) |
+
+Tasks are 20–50 line files in `crates/commonwealth-tdd/src/tasks/`.
+Adding a new task = adding one file. No new core machinery.
 
 ## Where it lives
 
-- **`commonwealth-tdd` crate** — the loops themselves. Workdir gate,
-  ChatBackend trait, SolverRegistry, three solvers (`RedSolver`,
-  `GreenSolver`, `RefactorSolver`), shared primitives (`EditAction`,
-  apply, snapshot, test_runner, source discovery, output parsers).
-- **`sovereign-server`** — HTTP route `POST /v1/solve/{tdd_red |
-  tdd_green | tdd_refactor}` and MCP tools `tdd_red`, `tdd_green`,
-  `tdd_refactor` (both transports share the same registry).
-- **`sovereign-agent-bench`** — `search` runner is now a thin adapter
-  over `commonwealth_tdd::SolverRegistry`.
-
-Design doc: `sovereign/docs/TDD_MACHINE_DESIGN.md`.
+- **`commonwealth-tdd` crate** — the loop (`trial.rs`), the
+  `ChatBackend` trait + `Workdir` gate, the shared primitives
+  (`EditAction`, `apply_edit`, `snapshot_dir`, `run_tests`), and
+  the `tasks/` directory of convenience wrappers.
+- **`sovereign-server`** — HTTP at `POST /v1/solve` and
+  `POST /v1/cycle/bdd`; MCP tools `tdd_solve` and `tdd_bdd_cycle`.
+- **`sovereign-agent-bench`** — `search` runner is a thin adapter
+  over `commonwealth_tdd::run_trial`.
 
 ## Workdir safety
 
 Every solver takes a typed `Workdir` token that's only constructible
-via `Workdir::check_safe(path, force)`. Three classes refused:
+via `Workdir::check_safe(path, force)`. Refuses three classes:
 
-- **`SystemPath`** — `/`, `/etc`, `/usr`, `/var`, `/bin`, `/sbin`,
-  `/lib`, `/boot`, `/root`, `$HOME`. Never bypassable.
-- **`NotAGitRepo`** — the loop assumes `git restore` as the safety
-  net. Never bypassable.
+- **`SystemPath`** — `/`, `/etc`, `/usr`, `/var`, `$HOME`, etc. Never bypassable.
+- **`NotAGitRepo`** — the loop needs `git restore` for rollback. Never bypassable.
 - **`UncommittedChanges`** — bypassable with `force=true` when the
   operator has consciously staged unrelated work.
 
 A miswired call can't compile against an unvetted path — ARCH §7.1.
 
+## Language support
+
+The structural-test templates and framework auto-detection support
+five frameworks out of the box:
+
+| Framework | Detection signal | Default test command |
+|---|---|---|
+| pytest | `pyproject.toml` / `pytest.ini` / `conftest.py` / `tests/test_*.py` | `pytest -q` |
+| cargo | `Cargo.toml` | `cargo test --quiet` |
+| vitest | `package.json` with `"vitest"` | `npx vitest run` |
+| jest | `package.json` with `"jest"` | `npx jest` |
+| go test | `go.mod` | `go test -json ./...` |
+
+`tasks::split_file` emits the structural-test file in the project's
+actual framework (pytest's `test_max_file_size.py`, cargo's
+`tests/max_file_size.rs`, etc).
+
 ## HTTP
 
 ```bash
-# Red — write a failing test
-curl -X POST http://localhost:9741/v1/solve/tdd_red \
+# Unified solver — power-user surface. Pick your own polarity.
+curl -X POST http://localhost:9741/v1/solve \
   -H 'content-type: application/json' \
   -d '{
     "workdir": "/path/to/project",
     "model": "commonwealth/primary",
-    "params": {
-      "phase": "red",
-      "behavior": "cache evicts on size limit",
-      "test_command": "pytest -q"
-    }
+    "prompt": "make the failing tests pass",
+    "test_command": "pytest -q",
+    "polarity": { "kind": "maximize_passing" }
   }'
 
-# Green — drive an implementation
-curl -X POST http://localhost:9741/v1/solve/tdd_green \
+# BDD cycle — natural-language intent. The system synthesizes the
+# test then drives the implementation green.
+curl -X POST http://localhost:9741/v1/cycle/bdd \
   -d '{
     "workdir": "/path/to/project",
     "model": "commonwealth/primary",
-    "params": {
-      "phase": "green",
-      "test_command": "pytest -q"
-    }
-  }'
-
-# Refactor — rename a symbol while keeping tests green
-curl -X POST http://localhost:9741/v1/solve/tdd_refactor \
-  -d '{
-    "workdir": "/path/to/project",
-    "model": "commonwealth/primary",
-    "params": {
-      "phase": "refactor",
-      "test_command": "cargo test",
-      "target": {
-        "kind": "rename_symbol",
-        "old": "legacy_name",
-        "new": "fresh_name"
-      }
-    }
+    "intent": "the cache evicts items when size limit is reached",
+    "test_file_hint": "tests/test_cache_eviction.py",
+    "test_command": "pytest -q",
+    "review_mode": "auto"
   }'
 ```
 
 Status codes:
-
-- `200 OK` — solver ran; payload carries the structured
-  `RedResult` / `GreenResult` / `RefactorResult`.
-- `400 Bad Request` — unknown `solver_id`, or path/body phase
-  mismatch (e.g. `/v1/solve/tdd_red` with Green params).
-- `422 Unprocessable Entity` — workdir refused by the safety gate
-  (response body carries `kind: "system_path" | "uncommitted_changes"
-  | "not_a_git_repo"`).
+- `200 OK` — solver ran; payload carries the structured `TrialResult`.
+- `400 Bad Request` — unknown `review_mode`, etc.
+- `422 Unprocessable Entity` — workdir refused by the safety gate.
 
 ## MCP
 
-The same three solvers are registered as MCP tools at the daemon's
-`/mcp/message` endpoint:
+Same two tools at the daemon's `/mcp/message` endpoint:
 
 ```json
 {
   "method": "tools/call",
   "params": {
-    "name": "tdd_red",
+    "name": "tdd_bdd_cycle",
     "arguments": {
       "workdir": "/path/to/project",
       "model": "commonwealth/primary",
-      "behavior": "cache evicts on size limit"
+      "intent": "the cache evicts items when size limit is reached"
     }
   }
 }
 ```
 
-MCP localhost-only enforcement applies (same as the Code Intelligence
+Localhost-only enforcement applies (same as the Code Intelligence
 tools).
 
-## v1 Refactor targets
+## Anti-failure mechanisms
 
-All single-file. Multi-file (`SplitFile`, cross-file rename,
-`RemoveDuplication`) is deferred to v2's multi-turn loop, per the
-design's 2026-05-24 probe findings (model under-emits in single-
-emission multi-file refactor — 5% per-candidate, 20% best-of-K=4).
+Four mechanisms work together to make the loop robust:
 
-| Target | What it does | Metric ("lower is better") |
-|---|---|---|
-| `extract_function { name, into_path }` | Pull `name`'s body into `into_path`; rewrite original site to call it | LOC of file containing `name` |
-| `inline_function { name }` | Replace every call with the function's body; remove the definition | count of `def NAME(` / `fn NAME(` across source |
-| `rename_symbol { old, new }` | Replace word-bounded `old` with `new` | count of `\bold\b` in source |
-| `reorder_top_levels { path }` | Sort top-level declarations by convention | `1` if file unchanged, `0` if reordered |
+1. **Anti-plateau restart slot.** When the loop stalls for ≥1
+   round, candidate 0 of the next round snapshots from the pristine
+   baseline (not the carried-forward winner) and is prompted to try
+   a different architectural approach. Eliminated plateau-stall as
+   a failure mode in the 2026-05-24 N=5 probe.
+
+2. **Syntax validator wiring.** When the bench passes a syntax
+   validator, the executor rejects malformed code at apply time
+   with cargo-shape error messages instead of writing it and
+   failing opaquely at test collection.
+
+3. **Error feedback to next round.** Bucketed errors from the
+   previous round (parse / apply / backend / snapshot) surface in
+   the next round's prompt as `## What failed last round` with
+   full `render_for_agent()` text. The model sees specifically
+   what went wrong and what to avoid. Largest contributor to the
+   lights-out variance collapse (σ 3.56 → 0.47).
+
+4. **Polarity-aware acceptance.** The `is_strict_improvement`
+   predicate flips with polarity: `MaximizePassing` accepts when
+   `passed` strictly increases; `GenerateOneFailing` accepts only
+   when exactly one new failing test appeared without regressing
+   any passing test. Same loop, two contracts.
 
 ## Validation status
 
-- **Red** — 92% PASS_AS_RED across N=25 (2026-05-24 prototype).
-  Unit-tested in `commonwealth-tdd/tests/red_loop.rs`: accept on
-  discriminating failure, reject on tautology, reject on structural
-  error, refuse empty behavior.
-- **Green** — median 20/20 on 4.2-mini-evaluator (5-bug cascading)
-  vs role-loop's 0-3/9. Unit-tested in
-  `commonwealth-tdd/tests/green_loop.rs`: all-passed short-circuit,
-  stall on no-improvement, strict-improvement promotion, no-baseline
-  backend short-circuit.
-- **Refactor** — unit-tested in
-  `commonwealth-tdd/tests/refactor_loop.rs`: NoTestCoverage refusal,
-  Improved on metric+test win, Stalled on candidates that break
-  tests.
-
-## When to use which transport
-
-- **HTTP** — programmatic callers (Pi extension, CI hooks, scripts).
-  Always available.
-- **MCP** — interactive coding agents (Claude Code, Cursor, Cline).
-  Localhost-only.
-- **Bench** — the `search` runner uses `commonwealth-tdd` internally;
-  invoke via `sovereign-agent-bench --agent search`.
+| Probe | Mean | σ | Best | Notes |
+|---|---|---|---|---|
+| Lights-out (post-collapse, all fixes) | 8.33/9 | 0.47 | 9/9 | 100% completions, N=3 |
+| BDD cycle on calc.evaluate intent | — | — | 29s | synth + green end-to-end, real model |
+| Multi-file split_file probe | 78 lines max | — | 97 → 78 | language-agnostic dispatch validated |
 
 ## Configuration
 
@@ -169,5 +172,5 @@ SOVEREIGN_TDD_PROVIDER_URL=http://localhost:9741 sovereign serve
 ```
 
 Defaults to the server's own bind address. Per-request tuning
-(candidates_per_round, rounds_per_trial, temp_ladder, …) goes in the
-request body's `config` field.
+(candidates_per_round, rounds_per_trial, temp_ladder, …) goes in
+the request body's `config` field.

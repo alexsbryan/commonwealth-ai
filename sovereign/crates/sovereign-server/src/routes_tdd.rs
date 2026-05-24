@@ -20,9 +20,11 @@ use axum::routing::post;
 use axum::Router;
 use serde::Deserialize;
 
+use commonwealth_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
 use commonwealth_tdd::{
-    run_trial, ChatBackend, DirtyWorkdir, Polarity, Trial, TrialConfig, Workdir,
+    run_trial, ChatBackend, DirtyWorkdir, Polarity, Trial, TrialConfig, TrialResult, Workdir,
 };
+use serde::Serialize;
 
 /// Extension state inserted by `main.rs`. Just the backend; the
 /// loop is a free function so there's no per-request state to
@@ -31,7 +33,9 @@ use commonwealth_tdd::{
 pub struct TddState(pub Arc<dyn ChatBackend>);
 
 pub fn tdd_router() -> Router {
-    Router::new().route("/v1/solve", post(solve))
+    Router::new()
+        .route("/v1/solve", post(solve))
+        .route("/v1/cycle/bdd", post(cycle_bdd))
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,9 +125,101 @@ async fn solve(
         test_command: req.test_command,
         polarity: req.polarity.into(),
         config: build_config(req.config),
+        syntax_validator: None,
     };
     let result = run_trial(trial, Arc::clone(&state.0)).await;
     (StatusCode::OK, Json(result)).into_response()
+}
+
+// ── BDD cycle endpoint ──────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct BddCycleWire {
+    pub workdir: PathBuf,
+    #[serde(default)]
+    pub force: bool,
+    pub model: String,
+    /// Natural-language description of the behavior the model
+    /// should generate a failing test for, then drive to passing.
+    pub intent: String,
+    #[serde(default)]
+    pub test_file_hint: Option<String>,
+    #[serde(default)]
+    pub task_hint: Option<String>,
+    #[serde(default)]
+    pub test_command: Option<String>,
+    #[serde(default)]
+    pub config: Option<ConfigWire>,
+    /// "auto" (default) or "pause_after_synthesis".
+    #[serde(default)]
+    pub review_mode: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BddCycleResponseWire {
+    pub synthesis: TrialResult,
+    /// Set when the green stage ran (auto mode + synthesis Reached).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub green: Option<TrialResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_test_path: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generated_test_content: Option<String>,
+}
+
+async fn cycle_bdd(
+    Extension(state): Extension<TddState>,
+    Json(req): Json<BddCycleWire>,
+) -> impl IntoResponse {
+    let workdir = match Workdir::check_safe(req.workdir.clone(), req.force) {
+        Ok(w) => w,
+        Err(e) => {
+            let (kind, path) = dirty_payload(&e);
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({
+                    "error": "dirty_workdir",
+                    "kind": kind,
+                    "path": path,
+                    "message": e.to_string(),
+                })),
+            )
+                .into_response();
+        }
+    };
+    let review_mode = match req.review_mode.as_deref() {
+        Some("pause_after_synthesis") => ReviewMode::PauseAfterSynthesis,
+        Some("auto") | None => ReviewMode::Auto,
+        Some(other) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "unknown_review_mode",
+                    "value": other,
+                    "valid": ["auto", "pause_after_synthesis"],
+                })),
+            )
+                .into_response();
+        }
+    };
+    let args = BddCycleArgs {
+        workdir,
+        model: req.model,
+        intent: req.intent,
+        test_file_hint: req.test_file_hint,
+        task_hint: req.task_hint,
+        test_command: req.test_command,
+        config: Some(build_config(req.config)),
+        review_mode,
+    };
+    let r = bdd_cycle(args, Arc::clone(&state.0)).await;
+    let wire = BddCycleResponseWire {
+        synthesis: r.synthesis,
+        green: r.green,
+        generated_test_path: r.generated_test_path,
+        generated_test_content: r.generated_test_content,
+    };
+    (StatusCode::OK, Json(wire)).into_response()
 }
 
 fn dirty_payload(e: &DirtyWorkdir) -> (&'static str, PathBuf) {
@@ -210,6 +306,55 @@ mod tests {
         assert!(v.get("status").is_some(), "missing status field: {v}");
         assert!(v.get("tests_before").is_some());
         assert!(v.get("rounds").is_some());
+    }
+
+    #[tokio::test]
+    async fn cycle_bdd_returns_synthesis_envelope() {
+        let app = build_app();
+        let tmp = fresh_repo();
+        let body = serde_json::json!({
+            "workdir": tmp.path(),
+            "model": "test",
+            "intent": "the cache evicts on size limit",
+            "test_command": "pytest -q",
+            "review_mode": "pause_after_synthesis"
+        });
+        let req = Request::builder()
+            .uri("/v1/cycle/bdd")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(resp.into_body(), 1024 * 64).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        // BddCycleResponseWire shape: synthesis is always present;
+        // green is optional (None when synthesis didn't Reach or pause mode).
+        assert!(v.get("synthesis").is_some(), "missing synthesis field: {v}");
+        // PauseAfterSynthesis → green absent.
+        assert!(v.get("green").is_none(), "pause mode must not run green");
+    }
+
+    #[tokio::test]
+    async fn cycle_bdd_rejects_unknown_review_mode() {
+        let app = build_app();
+        let tmp = fresh_repo();
+        let body = serde_json::json!({
+            "workdir": tmp.path(),
+            "model": "test",
+            "intent": "x",
+            "test_command": "pytest -q",
+            "review_mode": "frobnicate"
+        });
+        let req = Request::builder()
+            .uri("/v1/cycle/bdd")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

@@ -412,29 +412,53 @@ fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
 // convenience tools (split_file etc.) can land as thin wrappers in
 // a follow-up — they all dispatch to the same `run_trial`.
 
-const TDD_TOOL_NAMES: &[&str] = &["tdd_solve"];
+const TDD_TOOL_NAMES: &[&str] = &["tdd_solve", "tdd_bdd_cycle"];
 
 fn tdd_tool_descriptors() -> Vec<Value> {
-    vec![serde_json::json!({
-        "name": "tdd_solve",
-        "description": "Run a TDD solver trial. Parallel-candidate search with monotonic improvement gating, validated 2026-05-24 (median 20/20 on 4.2-mini-evaluator, 92% PASS_AS_RED, multi-file 97→78 lines). One tool, two polarities: `maximize_passing` for any goal where 'more tests pass' is the gradient (bug fix, refactor, multi-file split via a structural test); `generate_one_failing` for the Red phase. Requires a clean git workdir (set force=true to override the uncommitted-changes check).",
-        "inputSchema": {
-            "type": "object",
-            "required": ["workdir", "model", "prompt", "test_command", "polarity"],
-            "properties": {
-                "workdir": {"type": "string", "description": "Absolute path to the project root."},
-                "force": {"type": "boolean", "description": "Bypass the uncommitted-changes check (system-path refusal stays in effect)."},
-                "model": {"type": "string", "description": "Daemon model id, e.g. commonwealth/primary."},
-                "prompt": {"type": "string", "description": "User-facing intent + move-shape guidance. The model sees this verbatim each round."},
-                "test_command": {"type": "string", "description": "Shell command that runs the project's tests. Defines the fitness signal."},
-                "polarity": {
-                    "type": "object",
-                    "description": "Fitness predicate. {kind: 'maximize_passing'} for the default; {kind: 'generate_one_failing', test_name_hint?: string} for Red.",
-                    "required": ["kind"]
+    vec![
+        serde_json::json!({
+            "name": "tdd_solve",
+            "description": "Run a TDD solver trial. Parallel-candidate search with monotonic improvement gating, validated 2026-05-24 (median 20/20 on 4.2-mini-evaluator, 92% PASS_AS_RED, multi-file 97→78 lines). One tool, two polarities: `maximize_passing` for any goal where 'more tests pass' is the gradient (bug fix, refactor, multi-file split via a structural test); `generate_one_failing` for the Red phase. Requires a clean git workdir (set force=true to override the uncommitted-changes check).",
+            "inputSchema": {
+                "type": "object",
+                "required": ["workdir", "model", "prompt", "test_command", "polarity"],
+                "properties": {
+                    "workdir": {"type": "string", "description": "Absolute path to the project root."},
+                    "force": {"type": "boolean", "description": "Bypass the uncommitted-changes check (system-path refusal stays in effect)."},
+                    "model": {"type": "string", "description": "Daemon model id, e.g. commonwealth/primary."},
+                    "prompt": {"type": "string", "description": "User-facing intent + move-shape guidance. The model sees this verbatim each round."},
+                    "test_command": {"type": "string", "description": "Shell command that runs the project's tests. Defines the fitness signal."},
+                    "polarity": {
+                        "type": "object",
+                        "description": "Fitness predicate. {kind: 'maximize_passing'} for the default; {kind: 'generate_one_failing', test_name_hint?: string} for Red.",
+                        "required": ["kind"]
+                    }
                 }
             }
-        }
-    })]
+        }),
+        serde_json::json!({
+            "name": "tdd_bdd_cycle",
+            "description": "Behavior-driven TDD cycle: natural-language intent → synthesized failing test → driven implementation. Composes two trials underneath — synthesis (GenerateOneFailing) then green (MaximizePassing). Validated 2026-05-24: 29-second end-to-end on a calc-evaluator intent against Darwin-36B, producing a full operator-precedence parser. Use this when the user describes a behavior in English instead of writing tests by hand.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["workdir", "model", "intent"],
+                "properties": {
+                    "workdir": {"type": "string", "description": "Absolute path to the project root."},
+                    "force": {"type": "boolean"},
+                    "model": {"type": "string"},
+                    "intent": {"type": "string", "description": "Natural-language description of the behavior the test should capture."},
+                    "test_file_hint": {"type": "string", "description": "Optional path where the synthesized test should land. When absent the framework adapter picks a convention."},
+                    "task_hint": {"type": "string", "description": "Optional prompt prefix for the green stage. When absent, defaults to 'make failing tests pass'."},
+                    "test_command": {"type": "string", "description": "Optional override; auto-detected from framework markers when absent."},
+                    "review_mode": {
+                        "type": "string",
+                        "enum": ["auto", "pause_after_synthesis"],
+                        "description": "Auto runs synthesis + green back-to-back; pause_after_synthesis returns the synthesized test for review before green runs."
+                    }
+                }
+            }
+        }),
+    ]
 }
 
 fn handle_tools_list_with_tdd(registry: &ToolRegistry, id: Value) -> JsonRpcResponse {
@@ -479,16 +503,21 @@ async fn dispatch_tdd_tool(
     params: Option<Value>,
     id: Value,
 ) -> JsonRpcResponse {
+    use commonwealth_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
     use commonwealth_tdd::{run_trial, Polarity, Trial, TrialConfig, Workdir};
     use std::sync::Arc;
-
-    debug_assert_eq!(name, "tdd_solve", "only tdd_solve routes here today");
 
     let arguments = params
         .as_ref()
         .and_then(|p| p.get("arguments"))
         .cloned()
         .unwrap_or(Value::Object(Default::default()));
+
+    // BDD cycle has a different argument shape; dispatch early.
+    if name == "tdd_bdd_cycle" {
+        return dispatch_bdd_cycle(tdd, arguments, id).await;
+    }
+    debug_assert_eq!(name, "tdd_solve", "only tdd_solve and tdd_bdd_cycle route here");
 
     let workdir_str = match arguments.get("workdir").and_then(|v| v.as_str()) {
         Some(s) => s.to_string(),
@@ -554,9 +583,89 @@ async fn dispatch_tdd_tool(
         test_command,
         polarity,
         config: TrialConfig::default(),
+        syntax_validator: None,
     };
     let result = run_trial(trial, Arc::clone(&tdd.0)).await;
     let text = serde_json::to_string_pretty(&result).unwrap_or_default();
+    JsonRpcResponse::result(id, call_tool_text(text, false))
+}
+
+async fn dispatch_bdd_cycle(
+    tdd: &crate::routes_tdd::TddState,
+    arguments: Value,
+    id: Value,
+) -> JsonRpcResponse {
+    use commonwealth_tdd::tasks::bdd::{bdd_cycle, BddCycleArgs, ReviewMode};
+    use commonwealth_tdd::Workdir;
+    use std::sync::Arc;
+
+    let workdir_str = match arguments.get("workdir").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            return JsonRpcResponse::result(
+                id,
+                call_tool_text("missing required field: workdir", true),
+            );
+        }
+    };
+    let force = arguments.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+    let model = arguments
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("commonwealth/primary")
+        .to_string();
+    let intent = match arguments.get("intent").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            return JsonRpcResponse::result(
+                id,
+                call_tool_text("missing required field: intent", true),
+            );
+        }
+    };
+    let review_mode = match arguments.get("review_mode").and_then(|v| v.as_str()) {
+        Some("pause_after_synthesis") => ReviewMode::PauseAfterSynthesis,
+        Some("auto") | None => ReviewMode::Auto,
+        Some(other) => {
+            return JsonRpcResponse::result(
+                id,
+                call_tool_text(
+                    format!("unknown review_mode `{other}`; valid: auto, pause_after_synthesis"),
+                    true,
+                ),
+            );
+        }
+    };
+
+    let workdir = match Workdir::check_safe(workdir_str.into(), force) {
+        Ok(w) => w,
+        Err(e) => {
+            return JsonRpcResponse::result(
+                id,
+                call_tool_text(format!("workdir refused: {e}"), true),
+            );
+        }
+    };
+    let args = BddCycleArgs {
+        workdir,
+        model,
+        intent,
+        test_file_hint: arguments.get("test_file_hint").and_then(|v| v.as_str()).map(String::from),
+        task_hint: arguments.get("task_hint").and_then(|v| v.as_str()).map(String::from),
+        test_command: arguments.get("test_command").and_then(|v| v.as_str()).map(String::from),
+        config: None,
+        review_mode,
+    };
+    let r = bdd_cycle(args, Arc::clone(&tdd.0)).await;
+    // The MCP envelope is text-only — render a JSON dump of the
+    // BddCycleResult so the agent can parse it back if needed.
+    let payload = serde_json::json!({
+        "synthesis": r.synthesis,
+        "green": r.green,
+        "generated_test_path": r.generated_test_path,
+        "generated_test_content": r.generated_test_content,
+    });
+    let text = serde_json::to_string_pretty(&payload).unwrap_or_default();
     JsonRpcResponse::result(id, call_tool_text(text, false))
 }
 

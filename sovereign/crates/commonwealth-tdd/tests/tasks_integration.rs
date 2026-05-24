@@ -13,9 +13,8 @@ use commonwealth_tdd::{
     DeterministicChatBackend, TrialConfig, TrialStatus, Workdir,
 };
 use commonwealth_tdd::tasks::make_passing::MakePassingArgs;
-use commonwealth_tdd::tasks::split_file::{
-    cleanup_structural_test, SplitFileArgs, STRUCTURAL_TEST_FILENAME,
-};
+use commonwealth_tdd::tasks::framework::Framework;
+use commonwealth_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
 use commonwealth_tdd::tasks::write_failing_test::WriteFailingTestArgs;
 
 fn init_git(path: &Path) {
@@ -119,7 +118,7 @@ async fn split_file_generates_structural_test_in_tests_dir() {
 
     // Side effect of split_file: tests/test_max_file_size.py exists
     // and asserts the structural goal.
-    let test_path = tmp.path().join("tests").join(STRUCTURAL_TEST_FILENAME);
+    let test_path = tmp.path().join("tests/test_max_file_size.py");
     assert!(test_path.exists(), "structural test must be generated");
     let body = std::fs::read_to_string(&test_path).unwrap();
     assert!(body.contains("test_max_file_size"));
@@ -155,8 +154,8 @@ async fn cleanup_structural_test_removes_generated_file() {
         test_command: None,
         config: Some(tight_config()),
     });
-    let test_path = tmp.path().join("tests").join(STRUCTURAL_TEST_FILENAME);
+    let test_path = tmp.path().join("tests/test_max_file_size.py");
     assert!(test_path.exists());
-    cleanup_structural_test(tmp.path());
+    cleanup_structural_test(tmp.path(), Framework::Pytest);
     assert!(!test_path.exists());
 }

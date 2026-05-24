@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use commonwealth_tdd::tasks::framework::{detect_framework, Framework};
 use commonwealth_tdd::tasks::split_file::{cleanup_structural_test, SplitFileArgs};
 use commonwealth_tdd::{
     run_trial, tasks::split_file, ReqwestChatBackend, TrialConfig, Workdir,
@@ -132,7 +133,12 @@ async fn main() {
     }
 
     if args.cleanup {
-        cleanup_structural_test(&workdir_path);
+        let framework = detect_framework(&workdir_path);
+        cleanup_structural_test(&workdir_path, framework);
         println!("\nCleaned up generated structural test.");
+        // The Framework import is held live via this path even when
+        // the user doesn't pass --cleanup, so the symbol resolves
+        // for the side-import.
+        let _ = Framework::Pytest;
     }
 }
