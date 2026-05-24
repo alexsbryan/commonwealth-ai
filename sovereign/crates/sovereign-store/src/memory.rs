@@ -177,6 +177,7 @@ impl MemoryStore for InMemoryStateStore {
 
         let mut scored: Vec<(f64, Memory)> = mems
             .iter()
+            .filter(|m| m.superseded_by.is_none())
             .filter(|m| m.content.to_lowercase().contains(&context_lower))
             .filter_map(|m| {
                 let months = (current_time - m.last_used) as f64 / (30.0 * 86400.0);
@@ -195,7 +196,14 @@ impl MemoryStore for InMemoryStateStore {
     }
 
     async fn get_all_memories(&self) -> Result<Vec<Memory>> {
-        Ok(self.memories.read().await.clone())
+        Ok(self
+            .memories
+            .read()
+            .await
+            .iter()
+            .filter(|m| m.superseded_by.is_none())
+            .cloned()
+            .collect())
     }
 
     async fn delete_memory(&self, id: &str) -> Result<()> {
@@ -215,6 +223,35 @@ impl MemoryStore for InMemoryStateStore {
         let mut mems = self.memories.write().await;
         if let Some(m) = mems.iter_mut().find(|m| m.id == id) {
             m.last_used = timestamp;
+        }
+        Ok(())
+    }
+
+    async fn list_memories_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<Memory>> {
+        let mems = self.memories.read().await;
+        let mut out: Vec<Memory> = mems
+            .iter()
+            .filter(|m| {
+                m.source_conversation_id.as_deref() == Some(conversation_id)
+                    && m.superseded_by.is_none()
+            })
+            .cloned()
+            .collect();
+        out.sort_by_key(|m| m.created_at);
+        Ok(out)
+    }
+
+    async fn mark_superseded(
+        &self,
+        memory_id: &str,
+        summary_id: &str,
+    ) -> Result<()> {
+        let mut mems = self.memories.write().await;
+        if let Some(m) = mems.iter_mut().find(|m| m.id == memory_id) {
+            m.superseded_by = Some(summary_id.to_string());
         }
         Ok(())
     }

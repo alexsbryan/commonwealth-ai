@@ -1425,6 +1425,17 @@ pub async fn bootstrap_with_progress(
         ) => Some((Arc::clone(mesh), cfg.clone())),
         _ => None,
     };
+    // Snapshot the compaction config out of the CliSetup wiring so
+    // the Runtime construction below can spawn a worker even though
+    // `cli_cfg` only survives inside the `if let` arm. CliSetup is
+    // the only mode where this state.rs codepath builds a Runtime
+    // with a load-bearing memory store; attach-mode leaves the
+    // worker `None` (the daemon at the other end runs its own).
+    let compaction_config_for_runtime: sovereign_core::memory_compaction::CompactionConfig =
+        cli_setup_wiring
+            .as_ref()
+            .map(|(_, cfg)| cfg.memory.compaction.clone())
+            .unwrap_or_default();
     if let Some((daemon_arc, cli_cfg)) = cli_setup_wiring {
         let data_dir = cli_cfg.data.dir.clone();
         let indexes_dir = data_dir.join("indexes");
@@ -1922,6 +1933,22 @@ pub async fn bootstrap_with_progress(
     // sqlite handle (WAL-friendly).
     if let Some(ns) = state.notes.read().await.as_ref() {
         runtime = runtime.with_note_store(Arc::clone(ns));
+    }
+    // Rolling-summary compaction worker. Spawn one per Runtime so
+    // the save-time hook in `end_conversation` can fire-and-forget
+    // a compaction pass without blocking the writer's turn. The
+    // worker holds its own Arc<MemoryStore> + Arc<InferenceProvider>
+    // and serialises passes across conversations via a single mpsc
+    // consumer. Pre-2026-05-23 behaviour is preserved when the
+    // operator sets `[memory.compaction] mode = "disabled"`.
+    {
+        let worker = sovereign_core::memory_compaction::CompactionWorker::spawn(
+            Arc::clone(&store)
+                as Arc<dyn sovereign_core::traits::MemoryStore>,
+            Arc::clone(&runtime.inference),
+            compaction_config_for_runtime.clone(),
+        );
+        runtime = runtime.with_compaction(worker);
     }
     // Conv-tiered briefing reader (spec CONV_TIERED_PORT.md). The
     // concrete SqliteStateStore stashed at bootstrap also impls

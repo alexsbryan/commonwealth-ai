@@ -1,0 +1,192 @@
+# Inner-work rolling-summary memory compaction — behavioural bench.
+#
+# Pairs with the mechanical smoke at
+# `sovereign/crates/sovereign-core/tests/memory_compaction_smoke.rs`.
+# That smoke proves the worker FOLDS correctly with an in-memory
+# store + scripted inference. This bench proves the system PRESERVES
+# witness quality across a session that crosses the K=6 threshold —
+# the user-facing question the smoke can't answer.
+#
+# Spec: [[witness-memory-rolling-compaction]] plan, §"Verification".
+#
+# Pass criteria (asserted at runtime by the to-be-written
+# inner_work_bench_runner — currently a placeholder; for now this
+# file documents the fixture the runner will consume):
+#
+#   1. Zero `Prompt too long` errors across all 12 turns.
+#   2. `prompt_token_count` per turn stays below 8000 across all 12
+#      turns. (Pre-compaction baseline: hit 16816 by turn 7.)
+#   3. Witness quality on turns 1-5 within noise of the
+#      `mode = "disabled"` baseline (same fixture, same seed). Pre-
+#      compaction reads the same 3 memories on every early turn, so
+#      these turns should be bit-identical pre/post-compaction.
+#   4. Witness quality on turns 8-12 (the post-threshold turns) is
+#      MEANINGFULLY better than the pre-compaction control — the
+#      control overflows; the post-compaction run produces real
+#      replies.
+#
+# Author the fixture so the topic stays narrow — that's what forces
+# memory accumulation per turn. A wandering session crosses the
+# threshold slower because memories cover different themes and
+# retrieval doesn't dredge them all back. Narrow + sustained is the
+# worst-case for the prompt-growth problem we're solving.
+
+[fixture]
+id = "compaction-narrow-topic"
+skill = "inner-work"
+description = """
+Twelve-turn session on one sustained topic (career re-orientation).
+Each turn is 2-4 sentences of inner-work prose — what the writer
+would actually type. Late turns ASSUME context from early turns.
+Pre-compaction the early turns get folded; with compaction working
+the witness should treat the summary as still load-bearing context.
+"""
+
+[fixture.config]
+# Match the rolling-summary defaults so the bench exercises what
+# operators actually run. A bench-only override would mask drift.
+threshold = 6
+batch = 3
+max_summary_chars = 800
+
+# ── Turns ─────────────────────────────────────────────────────────
+# `expected_substring` is the deterministic check: did the witness
+# pick up the most-load-bearing detail from the surrounding context?
+# `must_not_include` catches the known failure modes (over-survey,
+# wisdom-voice tail, generic empathy).
+
+[[fixture.turns]]
+index = 1
+user = """
+I keep telling myself I'm going to leave consulting, but every time
+the moment to actually quit comes around I find another reason to
+stay. It's been six months of this.
+"""
+expected_substring = "six months"
+must_not_include = ["I hear you saying", "perhaps the question isn't"]
+
+[[fixture.turns]]
+index = 2
+user = """
+The latest excuse was my Q3 bonus. I told myself I should wait for
+it to land before resigning. It landed two weeks ago. I'm still here.
+"""
+expected_substring = "Q3 bonus"
+must_not_include = ["What a beautiful", "thoughtful share"]
+
+[[fixture.turns]]
+index = 3
+user = """
+My partner asked me last night what I would actually do if I left.
+I didn't have an answer. That made me defensive and we ended up
+arguing about something else entirely.
+"""
+expected_substring = "partner"
+must_not_include = ["I hear you saying"]
+
+[[fixture.turns]]
+index = 4
+user = """
+The thing is I do know what I want to do — I want to teach. I just
+keep not saying it out loud because the pay cut is real and we have
+a mortgage.
+"""
+expected_substring = "teach"
+must_not_include = ["there's no right answer"]
+
+[[fixture.turns]]
+index = 5
+user = """
+I think the partner argument scared me more than I want to admit.
+Not the argument itself — the speed at which I jumped into defending
+something I don't actually believe in.
+"""
+expected_substring = "defending"
+
+# Turns 6+ cross the threshold. The compaction worker should fold
+# turns 1-3 into a summary at this boundary. Quality on 6-12 tests
+# whether the witness still gets the recurring concerns (six months
+# / Q3 bonus / partner / teach) via the summary.
+
+[[fixture.turns]]
+index = 6
+user = """
+I keep wondering if part of me is waiting for the company to lay me
+off so I don't have to make the decision. That would be a really
+cowardly thing to be waiting for.
+"""
+expected_substring = "lay"
+# Tests: does the witness still surface the "you said you want to
+# teach" thread even though that memory may now be inside a summary?
+
+[[fixture.turns]]
+index = 7
+user = """
+A friend who left her job last year just messaged me. She asked how
+I was doing. I drafted three different responses, didn't send any
+of them, and then went to bed.
+"""
+expected_substring = "didn't send"
+
+[[fixture.turns]]
+index = 8
+user = """
+I think part of what's frozen is that I haven't told my parents I'm
+even considering this. They're proud of the consulting career in a
+way that would feel ungrateful to walk away from.
+"""
+expected_substring = "parents"
+
+[[fixture.turns]]
+index = 9
+user = """
+The argument with my partner has been hanging between us. We talked
+about something neutral over coffee this morning. Neither of us
+brought it up. That somehow felt worse than the argument did.
+"""
+expected_substring = "neither"
+
+[[fixture.turns]]
+index = 10
+user = """
+I drafted a resignation letter today. Just to see how it would feel
+to type the words. I closed the document without saving. But I did
+write it. That has to count for something.
+"""
+expected_substring = "resignation"
+
+[[fixture.turns]]
+index = 11
+user = """
+There's a teaching fellowship application due in three weeks. I've
+known about it for a month and I keep not opening the application
+form. I'm going to open it tonight.
+"""
+expected_substring = "fellowship"
+
+[[fixture.turns]]
+index = 12
+user = """
+What I notice writing this is that every concrete step I've taken in
+the last six months has been a step I almost didn't take. Maybe
+that's the pattern I should be paying attention to.
+"""
+expected_substring = "pattern"
+# The summary should preserve "six months" + "teach" + "partner" so
+# this final turn's witness can name the through-line. Pre-compaction
+# the prompt has overflowed by now; post-compaction it should still
+# render a coherent reply.
+
+# ── Run modes ─────────────────────────────────────────────────────
+# The bench runner is expected to support both:
+#
+#   * `mode = "disabled"` baseline — reproduces the pre-2026-05-23
+#     behaviour. Pass criteria 1+2 will FAIL here (this is the
+#     control); criteria 3+4 are computed against this baseline.
+#   * `mode = "async"` (default) — the production shape.
+#
+# A third comparison mode `mode = "sync"` exists for determinism
+# in CI runs; production stays async.
+
+[fixture.runs]
+modes = ["disabled", "async"]

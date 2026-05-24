@@ -1574,6 +1574,7 @@ async fn mirror_to_setup_config(
         daemon: DaemonSection::default(),
         data: DataSection { dir: desktop.data_dir.clone() },
         watched_folders: Default::default(),
+        memory: Default::default(),
     });
 
     let cli_primary_before = cli.models.primary.clone();

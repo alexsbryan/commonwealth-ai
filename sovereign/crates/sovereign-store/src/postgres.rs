@@ -194,6 +194,19 @@ impl PostgresStateStore {
             -- of run_inner_work_memory_wall_migrations on SQLite.
             ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_skill_id TEXT;
 
+            -- Rolling-summary memory compaction (2026-05-23). Mirror
+            -- of run_memory_compaction_migrations on SQLite. All three
+            -- columns are nullable/defaulted so existing rows surface
+            -- as Raw + empty source_memory_ids + non-superseded.
+            ALTER TABLE memories ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'raw';
+            ALTER TABLE memories ADD COLUMN IF NOT EXISTS source_memory_ids TEXT NOT NULL DEFAULT '[]';
+            ALTER TABLE memories ADD COLUMN IF NOT EXISTS superseded_by TEXT;
+            CREATE INDEX IF NOT EXISTS idx_memories_superseded_by
+                ON memories(superseded_by);
+            CREATE INDEX IF NOT EXISTS idx_memories_conv_active
+                ON memories(source_conversation_id)
+                WHERE superseded_by IS NULL;
+
             -- Antifragile-routing signal columns (PR4). Mirror of
             -- migrations::run_antifragile_routing_migrations on the
             -- SQLite side. Captured when the user redirects away
@@ -463,12 +476,31 @@ impl MemoryStore for PostgresStateStore {
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
         {
             let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+            let kind_str = match memory.kind {
+                sovereign_core::types::MemoryKind::Raw => "raw",
+                sovereign_core::types::MemoryKind::Summary => "summary",
+            };
+            let source_memory_ids_json = serde_json::to_string(&memory.source_memory_ids)
+                .unwrap_or_else(|_| "[]".into());
             client
                 .execute(
-                    "INSERT INTO memories (id, content, source, confidence, created_at, last_used) \
-                     VALUES ($1, $2, $3, $4, $5, $5) \
-                     ON CONFLICT (id) DO UPDATE SET content = $2, confidence = $4",
-                    &[&memory.id, &memory.content, &memory.source, &memory.confidence, &memory.created_at],
+                    "INSERT INTO memories \
+                       (id, content, source, confidence, created_at, last_used, \
+                        kind, source_memory_ids, superseded_by) \
+                     VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8) \
+                     ON CONFLICT (id) DO UPDATE SET \
+                       content = $2, confidence = $4, \
+                       kind = $6, source_memory_ids = $7, superseded_by = $8",
+                    &[
+                        &memory.id,
+                        &memory.content,
+                        &memory.source,
+                        &memory.confidence,
+                        &memory.created_at,
+                        &kind_str,
+                        &source_memory_ids_json,
+                        &memory.superseded_by,
+                    ],
                 )
                 .await
                 .map_err(|e| Error::Storage(e.to_string()))?;
@@ -482,47 +514,36 @@ impl MemoryStore for PostgresStateStore {
         let pattern = format!("%{context}%");
         let rows = client
             .query(
-                "SELECT id, content, source, confidence, created_at, last_used \
-                 FROM memories WHERE content ILIKE $1 AND confidence > 0.1 \
+                "SELECT id, content, source, confidence, created_at, last_used, \
+                        kind, source_memory_ids, superseded_by \
+                 FROM memories \
+                 WHERE content ILIKE $1 \
+                   AND confidence > 0.1 \
+                   AND superseded_by IS NULL \
                  ORDER BY confidence DESC, last_used DESC LIMIT $2",
                 &[&pattern, &(limit as i64)],
             )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        Ok(rows.iter().map(|r| Memory {
-            id: r.get("id"),
-            content: r.get("content"),
-            source: r.get("source"),
-            confidence: r.get("confidence"),
-            created_at: r.get("created_at"),
-            last_used: r.get("last_used"),
-            version: 0,
-            deleted_at: None,
-            source_conversation_id: None,
-            source_skill_id: None,
-        }).collect())
+        Ok(rows.iter().map(pg_row_to_memory).collect())
     }
 
     async fn get_all_memories(&self) -> Result<Vec<Memory>> {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         let rows = client
-            .query("SELECT id, content, source, confidence, created_at FROM memories ORDER BY created_at DESC", &[])
+            .query(
+                "SELECT id, content, source, confidence, created_at, last_used, \
+                        kind, source_memory_ids, superseded_by \
+                 FROM memories \
+                 WHERE superseded_by IS NULL \
+                 ORDER BY created_at DESC",
+                &[],
+            )
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        Ok(rows.iter().map(|r| Memory {
-            id: r.get("id"),
-            content: r.get("content"),
-            source: r.get("source"),
-            confidence: r.get("confidence"),
-            created_at: r.get("created_at"),
-            last_used: r.get("last_used"),
-            version: 0,
-            deleted_at: None,
-            source_conversation_id: None,
-            source_skill_id: None,
-        }).collect())
+        Ok(rows.iter().map(pg_row_to_memory).collect())
     }
 
     async fn delete_memory(&self, id: &str) -> Result<()> {
@@ -541,6 +562,71 @@ impl MemoryStore for PostgresStateStore {
         let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
         client.execute("UPDATE memories SET last_used = $1 WHERE id = $2", &[&timestamp, &id]).await.map_err(|e| Error::Storage(e.to_string()))?;
         Ok(())
+    }
+
+    async fn list_memories_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<Memory>> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        let rows = client
+            .query(
+                "SELECT id, content, source, confidence, created_at, last_used, \
+                        kind, source_memory_ids, superseded_by \
+                 FROM memories \
+                 WHERE source_conversation_id = $1 \
+                   AND superseded_by IS NULL \
+                 ORDER BY created_at ASC",
+                &[&conversation_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(rows.iter().map(pg_row_to_memory).collect())
+    }
+
+    async fn mark_superseded(
+        &self,
+        memory_id: &str,
+        summary_id: &str,
+    ) -> Result<()> {
+        let client = self.pool.get().await.map_err(|e| Error::Storage(e.to_string()))?;
+        client
+            .execute(
+                "UPDATE memories SET superseded_by = $1 WHERE id = $2",
+                &[&summary_id, &memory_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
+    }
+}
+
+fn pg_row_to_memory(r: &tokio_postgres::Row) -> Memory {
+    let kind_str: Option<String> = r.try_get("kind").ok();
+    let kind = match kind_str.as_deref() {
+        Some("summary") => sovereign_core::types::MemoryKind::Summary,
+        _ => sovereign_core::types::MemoryKind::Raw,
+    };
+    let source_memory_ids_json: Option<String> = r.try_get("source_memory_ids").ok();
+    let source_memory_ids: Vec<String> = source_memory_ids_json
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    let superseded_by: Option<String> = r.try_get("superseded_by").ok().flatten();
+    Memory {
+        id: r.get("id"),
+        content: r.get("content"),
+        source: r.get("source"),
+        confidence: r.get("confidence"),
+        created_at: r.get("created_at"),
+        last_used: r.get("last_used"),
+        version: 0,
+        deleted_at: None,
+        source_conversation_id: None,
+        source_skill_id: None,
+        kind,
+        source_memory_ids,
+        superseded_by,
     }
 }
 

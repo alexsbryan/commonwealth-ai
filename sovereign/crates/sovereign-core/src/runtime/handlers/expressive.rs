@@ -509,6 +509,14 @@ impl Runtime {
                     id: m.id.clone(),
                     content: m.content.clone(),
                     created_at: m.created_at,
+                    kind: Some(
+                        match m.kind {
+                            crate::types::MemoryKind::Raw => "raw",
+                            crate::types::MemoryKind::Summary => "summary",
+                        }
+                        .to_string(),
+                    ),
+                    source_memory_ids: m.source_memory_ids.clone(),
                 })
                 .collect();
 

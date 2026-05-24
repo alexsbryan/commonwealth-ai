@@ -82,6 +82,7 @@ fn mem(
         deleted_at: None,
         source_conversation_id: source_conv.map(|s| s.to_string()),
         source_skill_id: None,
+        ..Default::default()
     }
 }
 

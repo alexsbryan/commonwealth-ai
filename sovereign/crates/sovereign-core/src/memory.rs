@@ -415,6 +415,7 @@ fn parse_extracted_memories(text: &str) -> Result<Vec<Memory>> {
             deleted_at: None,
             source_conversation_id: None,
             source_skill_id: None,
+            ..Default::default()
         })
         .collect())
 }
@@ -515,8 +516,15 @@ fn render_band(memories: &[&Memory]) -> Vec<String> {
                 .and_then(|_| format_unix_date(m.created_at))
                 .map(|d| format!("[{d}] "))
                 .unwrap_or_default();
+            let summary_prefix = match m.kind {
+                MemoryKind::Summary => format!(
+                    "[summary of {n} entries] ",
+                    n = m.source_memory_ids.len().max(1)
+                ),
+                MemoryKind::Raw => String::new(),
+            };
             format!(
-                "- {date_prefix}{}   (confidence {:.2})",
+                "- {summary_prefix}{date_prefix}{}   (confidence {:.2})",
                 m.content, m.confidence
             )
         })
@@ -1218,6 +1226,7 @@ mod tests {
             deleted_at: None,
             source_conversation_id: None,
             source_skill_id: None,
+            ..Default::default()
         }
     }
 
@@ -1326,6 +1335,7 @@ mod tests {
             deleted_at: None,
             source_conversation_id: None,
             source_skill_id: None,
+            ..Default::default()
         };
         let six_months = 6 * 30 * 86400;
         let decayed = apply_confidence_decay(&mem, six_months);
@@ -1345,6 +1355,7 @@ mod tests {
             deleted_at: None,
             source_conversation_id: None,
             source_skill_id: None,
+            ..Default::default()
         };
         let two_years = 24 * 30 * 86400;
         let decayed = apply_confidence_decay(&mem, two_years);
@@ -1371,6 +1382,7 @@ mod tests {
                 deleted_at: None,
                 source_conversation_id: None,
                 source_skill_id: None,
+                ..Default::default()
             },
             Memory {
                 id: "2".to_string(),
@@ -1383,6 +1395,7 @@ mod tests {
                 deleted_at: None,
                 source_conversation_id: None,
                 source_skill_id: None,
+                ..Default::default()
             },
         ];
         let result =
@@ -1413,6 +1426,7 @@ mod tests {
             deleted_at: None,
             source_conversation_id: source_conv.map(|s| s.to_string()),
             source_skill_id: None,
+            ..Default::default()
         }
     }
 
@@ -1632,6 +1646,7 @@ mod tests {
             deleted_at: None,
             source_conversation_id: source_conv.map(|s| s.to_string()),
             source_skill_id: None,
+            ..Default::default()
         }
     }
 

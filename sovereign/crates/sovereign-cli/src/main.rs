@@ -37,6 +37,7 @@ mod drift_cmd;
 mod git_archaeology_cmd;
 mod init;
 mod llm_bin;
+mod memory_cmd;
 mod milestone_cmd;
 mod notes_cmd;
 mod plan_cmd;
@@ -550,6 +551,11 @@ async fn async_main() {
                 // exec() replaces the current process on Unix; child
                 // exit on other platforms.
                 let code = dev_bin::exec("atos", &raw_args[1..]);
+                std::process::exit(code);
+            }
+            "memory" => {
+                util::tracing_init::init_tracing("sovereign_cli=info,sovereign_store=info");
+                let code = memory_cmd::run_memory(&raw_args[1..]).await;
                 std::process::exit(code);
             }
             "awareness" => {

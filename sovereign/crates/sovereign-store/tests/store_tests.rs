@@ -163,6 +163,7 @@ async fn test_memory_save_and_retrieve(store: &dyn StateStore) {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     };
     let mem2 = Memory {
         id: "mem2".to_string(),
@@ -175,6 +176,7 @@ async fn test_memory_save_and_retrieve(store: &dyn StateStore) {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     };
     store.save_memory(&mem1).await.unwrap();
     store.save_memory(&mem2).await.unwrap();
@@ -195,6 +197,7 @@ async fn test_memory_delete(store: &dyn StateStore) {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     };
     store.save_memory(&mem).await.unwrap();
     assert_eq!(store.get_all_memories().await.unwrap().len(), 1);
@@ -215,6 +218,7 @@ async fn test_memory_confidence_update(store: &dyn StateStore) {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     };
     store.save_memory(&mem).await.unwrap();
     store.update_memory_confidence("conf1", 0.5).await.unwrap();
@@ -422,6 +426,7 @@ async fn sqlite_memory_fts5_retrieval() {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     };
     let mem2 = Memory {
         id: "fts2".to_string(),
@@ -434,6 +439,7 @@ async fn sqlite_memory_fts5_retrieval() {
         deleted_at: None,
         source_conversation_id: None,
         source_skill_id: None,
+        ..Default::default()
     };
     store.save_memory(&mem1).await.unwrap();
     store.save_memory(&mem2).await.unwrap();

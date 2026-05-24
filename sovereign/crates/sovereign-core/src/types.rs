@@ -1293,7 +1293,31 @@ pub enum TaskStatus {
 
 // ─── Memory Types ──────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// What kind of memory a row is. The default (`Raw`) is what every
+/// memory written before the rolling-compaction work (2026-05-23) was
+/// implicitly. `Summary` rows are mechanically produced by the
+/// compaction worker — they distill `source_memory_ids.len()` Raw
+/// rows into a single bounded-length entry so a witness session that
+/// stays on one topic doesn't grow its system prompt unboundedly.
+///
+/// Rendering treats both kinds identically except for a
+/// `[summary of N entries, YYYY-MM-DD → YYYY-MM-DD]` prefix on
+/// Summary rows so the model (and the writer, via ProvenancePanel)
+/// can see when a recall is mechanical distillation vs verbatim.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryKind {
+    Raw,
+    Summary,
+}
+
+impl Default for MemoryKind {
+    fn default() -> Self {
+        Self::Raw
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Memory {
     pub id: String,
     pub content: String,
@@ -1326,6 +1350,30 @@ pub struct Memory {
     /// `run_inner_work_memory_wall_migrations`.
     #[serde(default)]
     pub source_skill_id: Option<String>,
+    /// Whether this row was written by the extraction path (`Raw`)
+    /// or synthesized by the compaction worker (`Summary`).
+    /// Backfilled as `Raw` for all pre-2026-05-23 rows.
+    #[serde(default)]
+    pub kind: MemoryKind,
+    /// For `Summary` rows: the ids of the `Raw` (or earlier `Summary`)
+    /// memories this row distills. Empty for `Raw`. The relationship
+    /// is mechanical and rebuildable — `sovereign memory
+    /// rebuild-summaries` drops and re-derives summaries for a
+    /// conversation after a synthesis-prompt edit.
+    #[serde(default)]
+    pub source_memory_ids: Vec<String>,
+    /// Set on a `Raw` (or earlier `Summary`) row that has been folded
+    /// into a newer `Summary`. The value is the new summary's id.
+    /// Retrieval filters `superseded_by IS NULL` so a superseded row
+    /// stops surfacing in recall — but the body is preserved for
+    /// provenance (`sovereign memory expand <summary-id>` walks the
+    /// chain).
+    ///
+    /// Distinct from `deleted_at`: `deleted_at` is a user-initiated
+    /// revocation; `superseded_by` is mechanical compaction. The two
+    /// are independent — a memory can be both superseded and deleted.
+    #[serde(default)]
+    pub superseded_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

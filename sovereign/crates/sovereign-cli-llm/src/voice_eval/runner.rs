@@ -349,6 +349,7 @@ async fn seed_memories(
             deleted_at: None,
             source_conversation_id: seed.source_conversation_id.clone(),
             source_skill_id: None,
+            ..Default::default()
         };
         store.save_memory(&memory).await?;
     }

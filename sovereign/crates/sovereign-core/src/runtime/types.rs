@@ -169,6 +169,16 @@ pub struct RecalledMemoryProv {
     pub id: String,
     pub content: String,
     pub created_at: i64,
+    /// `"raw"` for an extraction; `"summary"` for a row written by
+    /// the compaction worker. Optional in the JSON shape for
+    /// backward-compat with provenance frames persisted before the
+    /// compaction-fields wiring (2026-05-23).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// For summaries: the ids of the source `Raw` memories this row
+    /// folded. Empty (or absent) on raw memories.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_memory_ids: Vec<String>,
 }
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]

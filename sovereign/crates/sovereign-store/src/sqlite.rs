@@ -72,6 +72,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
         migrations::run_inner_work_memory_wall_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Inner-work memory wall migration failed: {e}")))?;
+        migrations::run_memory_compaction_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Memory compaction migration failed: {e}")))?;
         migrations::run_antifragile_routing_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
         migrations::run_conv_tiered_migration(&conn)
@@ -318,6 +320,8 @@ impl SqliteStateStore {
             .map_err(|e| Error::Storage(format!("KnowledgeView migration failed: {e}")))?;
         migrations::run_inner_work_memory_wall_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Inner-work memory wall migration failed: {e}")))?;
+        migrations::run_memory_compaction_migrations(&conn)
+            .map_err(|e| Error::Storage(format!("Memory compaction migration failed: {e}")))?;
         migrations::run_antifragile_routing_migrations(&conn)
             .map_err(|e| Error::Storage(format!("Antifragile routing migration failed: {e}")))?;
         migrations::run_conv_tiered_migration(&conn)
@@ -340,6 +344,50 @@ fn map_db(e: rusqlite::Error) -> Error {
 
 fn map_json(e: serde_json::Error) -> Error {
     Error::Storage(format!("JSON error: {e}"))
+}
+
+/// Column list used by every `memories` SELECT that needs the full
+/// Memory shape (including compaction fields). Kept as a constant so
+/// the row-reading helper and the SQL strings stay in lockstep — if
+/// you add a column to the projection, update [`row_to_memory_full`]
+/// in the same edit.
+const MEMORY_FULL_COLUMNS: &str =
+    "id, content, source, confidence, created_at, last_used, \
+     source_conversation_id, source_skill_id, \
+     kind, source_memory_ids, superseded_by";
+
+/// Read a row produced by a SELECT whose projection matches
+/// [`MEMORY_FULL_COLUMNS`] (11 columns) into a `Memory`. Honors the
+/// compaction-fields defaults (Raw / empty / None) when the row
+/// predates the compaction migration — sqlite returns NULL for those
+/// columns on unmigrated rows; `Option::get` collapses NULL to None
+/// and we coerce to the documented defaults below.
+fn row_to_memory_full(row: &rusqlite::Row<'_>) -> rusqlite::Result<Memory> {
+    let kind_str: Option<String> = row.get(8)?;
+    let kind = match kind_str.as_deref() {
+        Some("summary") => sovereign_core::types::MemoryKind::Summary,
+        _ => sovereign_core::types::MemoryKind::Raw,
+    };
+    let source_memory_ids_json: Option<String> = row.get(9)?;
+    let source_memory_ids: Vec<String> = source_memory_ids_json
+        .as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+    Ok(Memory {
+        id: row.get(0)?,
+        content: row.get(1)?,
+        source: row.get(2)?,
+        confidence: row.get(3)?,
+        created_at: row.get(4)?,
+        last_used: row.get(5)?,
+        version: 0,
+        deleted_at: None,
+        source_conversation_id: row.get(6)?,
+        source_skill_id: row.get(7)?,
+        kind,
+        source_memory_ids,
+        superseded_by: row.get(10)?,
+    })
 }
 
 /// Extract a human-readable message from a panic payload. Used by
@@ -676,11 +724,18 @@ impl MemoryStore for SqliteStateStore {
     async fn save_memory(&self, memory: &Memory) -> Result<()> {
         {
             let conn = self.conn.lock().await;
+            let kind_str = match memory.kind {
+                sovereign_core::types::MemoryKind::Raw => "raw",
+                sovereign_core::types::MemoryKind::Summary => "summary",
+            };
+            let source_memory_ids_json = serde_json::to_string(&memory.source_memory_ids)
+                .unwrap_or_else(|_| "[]".into());
             conn.execute(
                 "INSERT OR REPLACE INTO memories
                    (id, content, source, confidence, created_at, last_used,
-                    source_conversation_id, source_skill_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    source_conversation_id, source_skill_id,
+                    kind, source_memory_ids, superseded_by)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 rusqlite::params![
                     memory.id,
                     memory.content,
@@ -690,6 +745,9 @@ impl MemoryStore for SqliteStateStore {
                     memory.last_used,
                     memory.source_conversation_id,
                     memory.source_skill_id,
+                    kind_str,
+                    source_memory_ids_json,
+                    memory.superseded_by,
                 ],
             )
             .map_err(map_db)?;
@@ -718,32 +776,24 @@ impl MemoryStore for SqliteStateStore {
             "memory:fts_match query"
         );
 
-        let mut stmt = conn
-            .prepare(
-                "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used,
-                        m.source_conversation_id, m.source_skill_id
-                 FROM memories m
-                 JOIN memories_fts fts ON m.rowid = fts.rowid
-                 WHERE memories_fts MATCH ?1 AND m.deleted_at IS NULL
-                 LIMIT ?2",
-            )
-            .map_err(map_db)?;
+        let sql = format!(
+            "SELECT {cols} \
+             FROM memories m \
+             JOIN memories_fts fts ON m.rowid = fts.rowid \
+             WHERE memories_fts MATCH ?1 \
+               AND m.deleted_at IS NULL \
+               AND m.superseded_by IS NULL \
+             LIMIT ?2",
+            cols = MEMORY_FULL_COLUMNS
+                .split(", ")
+                .map(|c| format!("m.{c}"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
+        let mut stmt = conn.prepare(&sql).map_err(map_db)?;
 
         let memories: Vec<Memory> = stmt
-            .query_map(rusqlite::params![fts_context, (limit * 3) as i64], |row| {
-                Ok(Memory {
-                    id: row.get(0)?,
-                    content: row.get(1)?,
-                    source: row.get(2)?,
-                    confidence: row.get(3)?,
-                    created_at: row.get(4)?,
-                    last_used: row.get(5)?,
-                    version: 0,
-                    deleted_at: None,
-                    source_conversation_id: row.get(6)?,
-                    source_skill_id: row.get(7)?,
-                })
-            })
+            .query_map(rusqlite::params![fts_context, (limit * 3) as i64], row_to_memory_full)
             .map_err(map_db)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .unwrap_or_default();
@@ -788,41 +838,30 @@ impl MemoryStore for SqliteStateStore {
         // bytes when serving a general query.
         let (where_clause, scope_param): (&str, Option<String>) = match scope {
             sovereign_core::MemoryScope::General => (
-                "WHERE deleted_at IS NULL AND source_skill_id IS NULL",
+                "WHERE deleted_at IS NULL \
+                   AND superseded_by IS NULL \
+                   AND source_skill_id IS NULL",
                 None,
             ),
             sovereign_core::MemoryScope::Scoped(id) => (
-                "WHERE deleted_at IS NULL AND source_skill_id = ?1",
+                "WHERE deleted_at IS NULL \
+                   AND superseded_by IS NULL \
+                   AND source_skill_id = ?1",
                 Some(id.clone()),
             ),
         };
         let sql = format!(
-            "SELECT id, content, source, confidence, created_at, last_used,
-                    source_conversation_id, source_skill_id
-             FROM memories {where_clause}"
+            "SELECT {cols} FROM memories {where_clause}",
+            cols = MEMORY_FULL_COLUMNS,
         );
         let mut stmt = conn.prepare(&sql).map_err(map_db)?;
-        let row_to_mem = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Memory> {
-            Ok(Memory {
-                id: row.get(0)?,
-                content: row.get(1)?,
-                source: row.get(2)?,
-                confidence: row.get(3)?,
-                created_at: row.get(4)?,
-                last_used: row.get(5)?,
-                version: 0,
-                deleted_at: None,
-                source_conversation_id: row.get(6)?,
-                source_skill_id: row.get(7)?,
-            })
-        };
         let memories: Vec<Memory> = if let Some(id) = scope_param {
-            stmt.query_map(rusqlite::params![id], row_to_mem)
+            stmt.query_map(rusqlite::params![id], row_to_memory_full)
                 .map_err(map_db)?
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(map_db)?
         } else {
-            stmt.query_map([], row_to_mem)
+            stmt.query_map([], row_to_memory_full)
                 .map_err(map_db)?
                 .collect::<std::result::Result<Vec<_>, _>>()
                 .map_err(map_db)?
@@ -859,33 +898,26 @@ impl MemoryStore for SqliteStateStore {
                 Some(id.clone()),
             ),
         };
+        let cols = MEMORY_FULL_COLUMNS
+            .split(", ")
+            .map(|c| format!("m.{c}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let sql = format!(
-            "SELECT m.id, m.content, m.source, m.confidence, m.created_at, m.last_used,
-                    m.source_conversation_id, m.source_skill_id
-             FROM memories m
-             JOIN memories_fts fts ON m.rowid = fts.rowid
-             WHERE memories_fts MATCH ?1 AND m.deleted_at IS NULL {scope_clause}
+            "SELECT {cols} \
+             FROM memories m \
+             JOIN memories_fts fts ON m.rowid = fts.rowid \
+             WHERE memories_fts MATCH ?1 \
+               AND m.deleted_at IS NULL \
+               AND m.superseded_by IS NULL \
+               {scope_clause} \
              LIMIT ?2"
         );
         let mut stmt = conn.prepare(&sql).map_err(map_db)?;
-        let row_to_mem = |row: &rusqlite::Row<'_>| -> rusqlite::Result<Memory> {
-            Ok(Memory {
-                id: row.get(0)?,
-                content: row.get(1)?,
-                source: row.get(2)?,
-                confidence: row.get(3)?,
-                created_at: row.get(4)?,
-                last_used: row.get(5)?,
-                version: 0,
-                deleted_at: None,
-                source_conversation_id: row.get(6)?,
-                source_skill_id: row.get(7)?,
-            })
-        };
         let raw: Vec<Memory> = if let Some(id) = scope_param {
             stmt.query_map(
                 rusqlite::params![fts_context, (limit * 3) as i64, id],
-                row_to_mem,
+                row_to_memory_full,
             )
             .map_err(map_db)?
             .collect::<std::result::Result<Vec<_>, _>>()
@@ -893,7 +925,7 @@ impl MemoryStore for SqliteStateStore {
         } else {
             stmt.query_map(
                 rusqlite::params![fts_context, (limit * 3) as i64],
-                row_to_mem,
+                row_to_memory_full,
             )
             .map_err(map_db)?
             .collect::<std::result::Result<Vec<_>, _>>()
@@ -927,29 +959,16 @@ impl MemoryStore for SqliteStateStore {
 
     async fn get_all_memories(&self) -> Result<Vec<Memory>> {
         let conn = self.conn.lock().await;
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, content, source, confidence, created_at, last_used,
-                        source_conversation_id, source_skill_id
-                 FROM memories WHERE deleted_at IS NULL",
-            )
-            .map_err(map_db)?;
+        let sql = format!(
+            "SELECT {cols} \
+             FROM memories \
+             WHERE deleted_at IS NULL AND superseded_by IS NULL",
+            cols = MEMORY_FULL_COLUMNS,
+        );
+        let mut stmt = conn.prepare(&sql).map_err(map_db)?;
 
         let memories: Vec<Memory> = stmt
-            .query_map([], |row| {
-                Ok(Memory {
-                    id: row.get(0)?,
-                    content: row.get(1)?,
-                    source: row.get(2)?,
-                    confidence: row.get(3)?,
-                    created_at: row.get(4)?,
-                    last_used: row.get(5)?,
-                    version: 0,
-                    deleted_at: None,
-                    source_conversation_id: row.get(6)?,
-                    source_skill_id: row.get(7)?,
-                })
-            })
+            .query_map([], row_to_memory_full)
             .map_err(map_db)?
             .collect::<std::result::Result<Vec<_>, _>>()
             .map_err(map_db)?;
@@ -983,6 +1002,43 @@ impl MemoryStore for SqliteStateStore {
         conn.execute(
             "UPDATE memories SET last_used = ?2 WHERE id = ?1",
             rusqlite::params![id, timestamp],
+        )
+        .map_err(map_db)?;
+        Ok(())
+    }
+
+    async fn list_memories_for_conversation(
+        &self,
+        conversation_id: &str,
+    ) -> Result<Vec<Memory>> {
+        let conn = self.conn.lock().await;
+        let sql = format!(
+            "SELECT {cols} \
+             FROM memories \
+             WHERE source_conversation_id = ?1 \
+               AND deleted_at IS NULL \
+               AND superseded_by IS NULL \
+             ORDER BY created_at ASC",
+            cols = MEMORY_FULL_COLUMNS,
+        );
+        let mut stmt = conn.prepare(&sql).map_err(map_db)?;
+        let memories: Vec<Memory> = stmt
+            .query_map(rusqlite::params![conversation_id], row_to_memory_full)
+            .map_err(map_db)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(map_db)?;
+        Ok(memories)
+    }
+
+    async fn mark_superseded(
+        &self,
+        memory_id: &str,
+        summary_id: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().await;
+        conn.execute(
+            "UPDATE memories SET superseded_by = ?2 WHERE id = ?1",
+            rusqlite::params![memory_id, summary_id],
         )
         .map_err(map_db)?;
         Ok(())
