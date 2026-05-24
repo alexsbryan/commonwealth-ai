@@ -2424,6 +2424,122 @@ pub struct TypeExtensionResolveOutput {
     pub failures: Vec<crate::enrichment::pipeline::types::PhaseFailure>,
 }
 
+/// Bundle of next-free atom-id indices for [`resolve_type_extensions`]
+/// and [`resolve_typed_extension_section`]. The original
+/// resolve_type_extensions signature takes five separate `next_*_idx`
+/// `usize` parameters which is easy to mis-order at call sites;
+/// callers preferring a named-field shape construct this bundle.
+///
+/// Direct `usize` calls into `resolve_type_extensions` stay supported
+/// — this bundle is additive sugar, not a replacement.
+#[derive(Debug, Clone, Copy)]
+pub struct NextIdxBundle {
+    pub entity: usize,
+    pub claim: usize,
+    pub position: usize,
+    pub opposition: usize,
+    pub edge: usize,
+}
+
+impl Default for NextIdxBundle {
+    /// All indices start at 1 (id format is `<kind>-0001`). The
+    /// resolver tolerates collisions only with its own output; when
+    /// projecting onto an empty atlas (typed_extension's case) this
+    /// default is the right starting point.
+    fn default() -> Self {
+        Self {
+            entity: 1,
+            claim: 1,
+            position: 1,
+            opposition: 1,
+            edge: 1,
+        }
+    }
+}
+
+/// Project a single typed extension through the resolver.
+///
+/// Helper that lets orchestrators producing one typed extension per
+/// LLM call (the shape `sovereign_tools::typed_extension` uses)
+/// avoid the synthetic-`SectionExtraction` ceremony at every call
+/// site. Wraps `ext` in a one-extension `SectionExtraction` with
+/// `section_id` + `enrichment_depth` and delegates to
+/// [`resolve_type_extensions`].
+///
+/// Pass an empty `next_idx` bundle when projecting onto an empty
+/// atlas (the typed-extension case — Pass A + Pass B output collects
+/// into one fresh atlas). Production atlas pipelines should pass the
+/// real next-index values so ids don't collide with their existing
+/// atoms.
+pub fn resolve_typed_extension_section(
+    ext: crate::enrichment::pipeline::atlas::TypeExtension,
+    section_id: String,
+    enrichment_depth: crate::enrichment::pipeline::atlas::EnrichmentDepth,
+    next_idx: NextIdxBundle,
+) -> TypeExtensionResolveOutput {
+    let section = SectionExtraction {
+        section_id,
+        enrichment_depth,
+        type_extensions: vec![ext],
+        ..Default::default()
+    };
+    resolve_type_extensions(
+        &[section],
+        &[],
+        &[],
+        &[],
+        next_idx.entity,
+        next_idx.claim,
+        next_idx.position,
+        next_idx.opposition,
+        next_idx.edge,
+    )
+}
+
+/// Walk a [`TypeExtensionResolveOutput`] and apply
+/// [`super::citation::apply_citation`] to every `ChunkRef` it
+/// carries — across `new_entities.first_appearance`,
+/// `new_positions.first_appearance`,
+/// `new_oppositions.first_appearance`,
+/// `new_claims.evidence[..]`, and `new_edges.evidence[..]`.
+///
+/// The resolver itself emits `ChunkRef::new(section_id, None)` for
+/// every atom + edge endpoint — this walk replaces the `(None)`
+/// preview with the verbatim source sentence the orchestrator
+/// attached via the `citations` map. After this call every atom in
+/// the resolved bundle dereferences to a real source chunk + a
+/// verbatim sentence (when the originating section had an excerpt
+/// available; otherwise the preview stays `None` and the atom
+/// degrades to chunk-level grounding).
+///
+/// This is the load-bearing glassbox surface — every atlas-producing
+/// pipeline that wants source recovery wires its citations through
+/// this single helper rather than re-implementing the walk.
+pub fn apply_citations_to_resolved(
+    resolved: &mut TypeExtensionResolveOutput,
+    citations: &std::collections::HashMap<String, super::citation::SourceCitation>,
+) {
+    for entity in resolved.new_entities.iter_mut() {
+        super::citation::apply_citation(&mut entity.first_appearance, citations);
+    }
+    for position in resolved.new_positions.iter_mut() {
+        super::citation::apply_citation(&mut position.first_appearance, citations);
+    }
+    for opposition in resolved.new_oppositions.iter_mut() {
+        super::citation::apply_citation(&mut opposition.first_appearance, citations);
+    }
+    for claim in resolved.new_claims.iter_mut() {
+        for evidence_ref in claim.evidence.iter_mut() {
+            super::citation::apply_citation(evidence_ref, citations);
+        }
+    }
+    for edge in resolved.new_edges.iter_mut() {
+        for evidence_ref in edge.evidence.iter_mut() {
+            super::citation::apply_citation(evidence_ref, citations);
+        }
+    }
+}
+
 /// Project every section's `type_extensions` into resolved atoms +
 /// edges. Runs after Phase 3a + 3b so it can fuzzy-merge mechanism
 /// sketches against already-resolved Concept Entity atoms.
@@ -4910,5 +5026,142 @@ mod tests {
             ..mk("Frankfurter")
         };
         assert!(!typo_dedup_match(&person, &concept));
+    }
+
+    // ── resolve_typed_extension_section + apply_citations_to_resolved ──
+
+    use crate::enrichment::pipeline::atlas::{
+        ArgumentativeExtension, MechanismSketch, OppositionSketch, PositionSketch, TypeExtension,
+    };
+
+    fn argumentative_with_mechanism_and_opposition() -> TypeExtension {
+        TypeExtension::Argumentative(ArgumentativeExtension {
+            positions: vec![PositionSketch {
+                name: "rent concentration thesis".into(),
+                content: "Deepest rents pool at uncopyable chokepoints.".into(),
+                proponent: "".into(),
+                stance: "endorse".into(),
+                anchor: "rent concentration".into(),
+            }],
+            mechanisms: vec![MechanismSketch {
+                name: "spread pricing".into(),
+                description: "PBMs charge payers more than they reimburse.".into(),
+                domain: "economics".into(),
+                anchor: "spread pricing".into(),
+            }],
+            evidence_invocations: vec![],
+            oppositions: vec![OppositionSketch {
+                left: "markets".into(),
+                right: "regulation".into(),
+                axis: "governance".into(),
+                framing: "".into(),
+                anchor: "markets vs regulation".into(),
+            }],
+            concessions: vec![],
+        })
+    }
+
+    #[test]
+    fn resolve_typed_extension_section_wraps_and_projects() {
+        let resolved = resolve_typed_extension_section(
+            argumentative_with_mechanism_and_opposition(),
+            "chunk:42".into(),
+            EnrichmentDepth::Extracted,
+            NextIdxBundle::default(),
+        );
+        assert_eq!(
+            resolved.new_entities.len(),
+            1,
+            "mechanism projects to one Concept Entity atom"
+        );
+        assert_eq!(resolved.new_positions.len(), 1);
+        assert_eq!(resolved.new_oppositions.len(), 1);
+        // ChunkRefs all carry the section_id this helper threaded
+        // through — the chunk_id is exactly what the caller provided.
+        assert_eq!(
+            resolved.new_entities[0].first_appearance.chunk_id,
+            "chunk:42"
+        );
+        assert_eq!(
+            resolved.new_positions[0].first_appearance.chunk_id,
+            "chunk:42"
+        );
+        assert_eq!(
+            resolved.new_oppositions[0].first_appearance.chunk_id,
+            "chunk:42"
+        );
+    }
+
+    #[test]
+    fn apply_citations_to_resolved_populates_previews_across_collections() {
+        let mut resolved = resolve_typed_extension_section(
+            argumentative_with_mechanism_and_opposition(),
+            "chunk:7".into(),
+            EnrichmentDepth::Extracted,
+            NextIdxBundle::default(),
+        );
+        let mut citations = std::collections::HashMap::new();
+        citations.insert(
+            "chunk:7".into(),
+            super::super::citation::SourceCitation {
+                section_id: "chunk:7".into(),
+                passage_preview: Some(
+                    "Verbatim source sentence about spread pricing.".into(),
+                ),
+            },
+        );
+
+        apply_citations_to_resolved(&mut resolved, &citations);
+
+        assert_eq!(
+            resolved.new_entities[0]
+                .first_appearance
+                .passage_preview
+                .as_deref(),
+            Some("Verbatim source sentence about spread pricing.")
+        );
+        assert_eq!(
+            resolved.new_positions[0]
+                .first_appearance
+                .passage_preview
+                .as_deref(),
+            Some("Verbatim source sentence about spread pricing.")
+        );
+        assert_eq!(
+            resolved.new_oppositions[0]
+                .first_appearance
+                .passage_preview
+                .as_deref(),
+            Some("Verbatim source sentence about spread pricing.")
+        );
+    }
+
+    #[test]
+    fn apply_citations_to_resolved_is_noop_without_matching_section_id() {
+        let mut resolved = resolve_typed_extension_section(
+            argumentative_with_mechanism_and_opposition(),
+            "chunk:7".into(),
+            EnrichmentDepth::Extracted,
+            NextIdxBundle::default(),
+        );
+        // Citations map keyed on a DIFFERENT section_id — no preview
+        // should land on any atom.
+        let mut citations = std::collections::HashMap::new();
+        citations.insert(
+            "chunk:999".into(),
+            super::super::citation::SourceCitation {
+                section_id: "chunk:999".into(),
+                passage_preview: Some("Should not appear anywhere.".into()),
+            },
+        );
+
+        apply_citations_to_resolved(&mut resolved, &citations);
+
+        for ent in &resolved.new_entities {
+            assert!(ent.first_appearance.passage_preview.is_none());
+        }
+        for pos in &resolved.new_positions {
+            assert!(pos.first_appearance.passage_preview.is_none());
+        }
     }
 }

@@ -25,3 +25,8 @@ pub mod modulators;
 pub mod narrative;
 pub mod procedural;
 pub mod reflective;
+pub mod source_recovery;
+
+pub use source_recovery::{
+    render_source_recovery_block, SOURCE_RECOVERY_DISCIPLINE, SOURCE_RECOVERY_QUOTE_CHAR_CAP,
+};

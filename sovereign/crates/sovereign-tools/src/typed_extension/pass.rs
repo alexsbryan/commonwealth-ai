@@ -17,26 +17,21 @@
 
 use std::sync::Arc;
 
+use corpus_engine::enrichment::atlas::SourceCitation;
 use corpus_engine::enrichment::pipeline::atlas::{
     ArgumentativeExtension, SectionExtraction, TypeExtension,
 };
 use corpus_engine::enrichment::pipeline::typed_schemas::argumentative::{
     parse_phase1_argumentative, phase1_argumentative_schema, PHASE1_ARGUMENTATIVE_SYSTEM,
 };
+use corpus_engine::enrichment::pipeline::typed_schemas::render_source_recovery_block;
 use serde::Deserialize;
 use sovereign_core::conv_tiered::{ConvRaptorNodeRow, VaultThemeRow};
 use sovereign_core::traits::InferenceProvider;
-use sovereign_core::types::{CompletionRequest, Speed};
+
+use crate::typed_call::{TypedCallError, TypedLlmCall};
 
 use super::synth_section;
-
-/// Initial decode budget. Mirrors `enrich extract-typed`'s
-/// `TYPED_BUDGET_INITIAL` — tight enough to keep wall-clock low on
-/// the typical case, generous enough to close the envelope on the
-/// rare long output. Retry policy matches: one retry at `TYPED_BUDGET_RETRY`
-/// on parse failure, then give up.
-const TYPED_BUDGET_INITIAL: usize = 4096;
-const TYPED_BUDGET_RETRY: usize = 8192;
 
 /// Minimum summary length for a leaf to be eligible for Pass A.
 /// Tiny-bucket nodes (synthetic single-node RAPTOR) carry the chunk
@@ -50,12 +45,6 @@ const MIN_LEAF_SUMMARY_LEN: usize = 40;
 /// model's atom-naming pass sees every distinctive source phrasing
 /// the summariser stripped.
 const PASS_A_MAX_QUOTES: usize = 5;
-
-/// Maximum chars of any one verbatim excerpt forwarded into the
-/// prompt. RAPTOR caps spans around full sentences; this is a
-/// belt-and-braces truncation in case a future summariser change
-/// emits multi-sentence spans.
-const PASS_A_QUOTE_CHAR_CAP: usize = 320;
 
 /// Per-vault-theme cap on member-leaf excerpts surfaced into the
 /// Pass B body. Pass B operates on the theme summary alone per spec,
@@ -107,7 +96,7 @@ pub(super) async fn pass_a_one_leaf(
         );
         return Ok(None);
     }
-    let citation = SourceCitation::from_primary_quote(&leaf.node_id, &quote_spans);
+    let citation = citation_from_quote_spans(&leaf.node_id, &quote_spans);
     let section_id = citation.section_id.clone();
     let section = synth_section(section_id, TypeExtension::Argumentative(extension));
     Ok(Some((section, citation)))
@@ -155,7 +144,7 @@ pub(super) async fn pass_b_one_theme_with_excerpts(
         );
         return Ok(None);
     }
-    let citation = SourceCitation::from_primary_quote(
+    let citation = citation_from_quote_spans(
         &format!("theme:{}", theme.theme_id),
         member_quotes,
     );
@@ -164,72 +153,36 @@ pub(super) async fn pass_b_one_theme_with_excerpts(
     Ok(Some((section, citation)))
 }
 
-/// Drive the LLM call with the initial budget; on parse failure retry
-/// once at the doubled budget. A second parse failure is surfaced as
-/// an `Err` for soft-failure accounting.
+/// Drive the LLM call with the shared `TypedLlmCall` helper. Returns
+/// the parsed extension OR a string error suitable for the
+/// orchestrator's `soft_failures` list. The helper handles budget
+/// retry + parse-or-retry + chat-error short-circuit per the typed-
+/// call invariant; this wrapper just collapses the structured
+/// `TypedCallError<P>` shape into the string the orchestrator wants.
 async fn call_argumentative(
     system: &str,
     user: &str,
     inference: &Arc<dyn InferenceProvider>,
     trace_subject: Option<String>,
 ) -> Result<ArgumentativeExtension, String> {
-    let schema = phase1_argumentative_schema();
-    let budgets = [TYPED_BUDGET_INITIAL, TYPED_BUDGET_RETRY];
-    let mut last_err: Option<String> = None;
-    for (attempt, budget) in budgets.iter().enumerate() {
-        let req = CompletionRequest {
-            prompt: user.to_string(),
-            system_message: Some(system.to_string()),
-            preferred_speed: Speed::Slow,
-            max_tokens: Some(*budget),
-            temperature: Some(0.2),
-            structured_output: Some(schema.clone()),
-            think_budget: Some(0),
-            top_k: None,
-            top_p: None,
-            oicp: None,
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-        };
-        let response = match inference.complete(&req).await {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = format!("chat error (attempt {}): {e}", attempt + 1);
-                if let Some(subj) = trace_subject.as_ref() {
-                    tracing::warn!(subject = %subj, error = %e, "typed_extension: chat call failed");
-                }
-                return Err(msg);
-            }
-        };
-        match parse_phase1_argumentative(&response.text) {
-            Ok(ext) => {
-                if attempt > 0 {
-                    if let Some(subj) = trace_subject.as_ref() {
-                        tracing::debug!(
-                            subject = %subj,
-                            attempts = attempt + 1,
-                            "typed_extension: parse succeeded on retry"
-                        );
-                    }
-                }
-                return Ok(ext);
-            }
-            Err(e) => {
-                last_err = Some(format!("parse error (attempt {}): {e}", attempt + 1));
-                // Loop continues to retry with doubled budget.
-            }
+    let user_owned = user.to_string();
+    let mut call = TypedLlmCall::new(system, phase1_argumentative_schema());
+    call.trace_subject = trace_subject;
+    call.run(
+        inference,
+        |_budget| async { user_owned.clone() },
+        |response_text| parse_phase1_argumentative(response_text).map_err(|e| format!("{e}")),
+    )
+    .await
+    .map(|report| report.value)
+    .map_err(|e| match e {
+        TypedCallError::Chat { attempt, message } => {
+            format!("chat error (attempt {attempt}): {message}")
         }
-    }
-    Err(last_err
-        .unwrap_or_else(|| "typed_extension: both attempts failed with no recorded error".into()))
+        TypedCallError::ParseExhausted { attempts, last } => {
+            format!("parse error (attempt {attempts}): {last}")
+        }
+    })
 }
 
 fn build_pass_a_user_body(
@@ -253,19 +206,13 @@ fn build_pass_a_user_body(
         body.push('\n');
     }
 
-    if !quote_spans.is_empty() {
-        body.push_str(
-            "**Verbatim source excerpts (sentences pulled from the source chunks underneath this cluster):**\n\n",
-        );
-        for (i, span) in quote_spans.iter().take(PASS_A_MAX_QUOTES).enumerate() {
-            let trimmed = truncate_quote(span);
-            body.push_str(&format!("> [{i}] {trimmed}\n"));
-        }
-        body.push('\n');
-    }
-
     body.push_str("---\n\n");
-    body.push_str(SOURCE_RECOVERY_NAMING_DISCIPLINE);
+    let trimmed: Vec<&str> = quote_spans
+        .iter()
+        .take(PASS_A_MAX_QUOTES)
+        .map(String::as_str)
+        .collect();
+    body.push_str(&render_source_recovery_block(&trimmed));
     body.push_str("\n\n");
     body.push_str(
         "Return a single JSON object with the typed-extension collections per the \
@@ -284,19 +231,13 @@ fn build_pass_b_user_body(summary: &str, member_excerpts: &[String]) -> String {
     body.push_str(summary.trim());
     body.push_str("\n\n");
 
-    if !member_excerpts.is_empty() {
-        body.push_str(
-            "**Verbatim source excerpts (sentences pulled from the member notes underneath this theme):**\n\n",
-        );
-        for (i, span) in member_excerpts.iter().take(PASS_B_MAX_MEMBER_EXCERPTS).enumerate() {
-            let trimmed = truncate_quote(span);
-            body.push_str(&format!("> [{i}] {trimmed}\n"));
-        }
-        body.push('\n');
-    }
-
     body.push_str("---\n\n");
-    body.push_str(SOURCE_RECOVERY_NAMING_DISCIPLINE);
+    let trimmed: Vec<&str> = member_excerpts
+        .iter()
+        .take(PASS_B_MAX_MEMBER_EXCERPTS)
+        .map(String::as_str)
+        .collect();
+    body.push_str(&render_source_recovery_block(&trimmed));
     body.push_str("\n\n");
     body.push_str(
         "Return a single JSON object with the typed-extension collections per the \
@@ -309,79 +250,6 @@ fn build_pass_b_user_body(summary: &str, member_excerpts: &[String]) -> String {
          code-fence markers.",
     );
     body
-}
-
-/// Source-recovery atom-naming discipline appended to every Pass A
-/// and Pass B user body. Kept out of `PHASE1_ARGUMENTATIVE_SYSTEM`
-/// (which is shared with `sovereign enrich extract-typed`, where the
-/// model already sees raw section text and doesn't need this push).
-///
-/// The discipline targets the empirical failure mode observed on
-/// 2026-05-24 obsidian-vault bench: 222 typed atoms produced, but
-/// the model paraphrased distinctive vault vocabulary ("spread
-/// pricing", "tragedy of the commons", "markets vs governments")
-/// into idiosyncratic prose ("PBM administrative fee expansion",
-/// "buyer-seller matching", "US hyperscaler dominance vs
-/// decentralized sovereign infrastructure"). Atoms were technically
-/// valid extractions of the paraphrased RAPTOR summary but not
-/// resolvable against the source vocabulary — making source
-/// recovery and glassbox auditing impossible.
-///
-/// Modeled on the book_report bench tuning: when atom names are
-/// supposed to ground in source phrasing, the prompt must explicitly
-/// privilege verbatim excerpts over paraphrase, and must give the
-/// model the verbatim excerpts to choose from.
-const SOURCE_RECOVERY_NAMING_DISCIPLINE: &str = "**Atom-naming discipline (load-bearing for source recovery):**
-
-1. **Prefer verbatim phrasings from the source excerpts above** when naming
-   atoms. The cluster/theme summary is a paraphrase produced by the RAPTOR
-   summariser — it strips distinctive vocabulary (e.g. \"spread pricing\"
-   may show up only as \"buying drugs cheap and billing payers more\" in the
-   summary). The source excerpts hold the verbatim phrasings the
-   summariser dropped. When an excerpt names a mechanism, a position, a
-   piece of evidence, or an opposition with a distinctive multi-word
-   phrase, USE THAT EXACT PHRASE in the atom's name/label.
-
-2. **Do NOT invent prose names.** Names like \"PBM administrative fee
-   expansion\" or \"buyer-seller matching\" are paraphrase that lose the
-   audit trail. Names like \"spread pricing\", \"tragedy of the commons\",
-   \"EUV monopoly\", \"$1.4B FTC PBM spread\" preserve it — a downstream
-   reader can grep them against the source. The reader must be able to
-   recover what the source said from the atom name alone.
-
-3. **Opposition labels are SHORT.** Two to four words per side. \"markets
-   vs regulation\" — NOT \"US hyperscaler dominance vs decentralized
-   sovereign infrastructure\". Long verbose labels fail to resolve to the
-   source's named contrasts.
-
-4. **Evidence labels lead with the distinctive token** — a dollar figure
-   (\"$1.4B FTC PBM spread\"), a named study (\"Ostrom 1990 commons\"), a
-   case name (\"Pruitt-Igoe\"), a percentage (\"58% Micron net margin\").
-   If the excerpts contain a numeric or proper-noun anchor, that anchor
-   becomes the label.
-
-5. **The primary_entities list above carries vault-canonical names —
-   prefer them as atom names when the entity is also a mechanism or a
-   position the source argues with.** Example: if \"Spread Pricing\" is
-   in primary_entities AND the source excerpts use that exact phrase,
-   the mechanism atom's name is \"spread pricing\" — not a coinage that
-   restates what spread pricing does.
-
-This discipline matters because the bench's atom scorer matches by
-name. An atom that captured the right argumentative move but renamed
-it doesn't surface as a hit — it surfaces as a miss plus a
-fabrication. The system's glassbox premise is that an operator can
-trace every atom back to source words; paraphrased names break that
-contract structurally.";
-
-fn truncate_quote(span: &str) -> String {
-    let trimmed = span.trim();
-    if trimmed.chars().count() <= PASS_A_QUOTE_CHAR_CAP {
-        return trimmed.to_string();
-    }
-    let mut out: String = trimmed.chars().take(PASS_A_QUOTE_CHAR_CAP).collect();
-    out.push('…');
-    out
 }
 
 /// `primary_entities_json` is a JSON array of strings. Tolerate
@@ -423,57 +291,21 @@ pub(super) fn parse_quote_spans(json_blob: &str) -> Vec<ParsedQuoteSpan> {
         .unwrap_or_default()
 }
 
-/// Primary-source handle attached to every section the typed-
-/// extension pass produces. Threads through `resolve_type_extensions`
-/// (which currently encodes only a section_id as the chunk_id on
-/// every atom's `ChunkRef`) and gets used by the orchestrator's
-/// post-processing pass to populate `ChunkRef.passage_preview` with
-/// the verbatim source sentence.
+/// Convenience: build a `SourceCitation` from a slice of parsed
+/// quote spans. RAPTOR builds spans in cosine-to-centroid order; the
+/// first one is the most representative of the cluster, so it makes
+/// the right primary source handle for every atom the section
+/// produces.
 ///
-/// This is the load-bearing structure for glassbox source recovery:
-/// an atom's `first_appearance.chunk_id` resolves to a real chunk in
-/// the corpus's chunks.lance, and its `passage_preview` carries the
-/// verbatim sentence the model used to ground the atom.
-#[derive(Debug, Clone)]
-pub(super) struct SourceCitation {
-    /// The `section_id` we put on the synthetic `SectionExtraction`.
-    /// `resolve_type_extensions` copies this verbatim into every
-    /// atom's `first_appearance.chunk_id` + every edge-emission
-    /// `ChunkRef`. Shape: `chunk:<u32>` when a quote_span is
-    /// available; falls back to `raptor:<node_id>` or
-    /// `theme:<theme_id>` when not (still useful for tracing, just
-    /// at coarser grain).
-    pub section_id: String,
-    /// The verbatim sentence the resolver-emitted ChunkRefs should
-    /// carry as their `passage_preview`. `None` when no quote_span
-    /// was available — the resolver's `ChunkRef.passage_preview`
-    /// stays `None` and the atom degrades to chunk-level grounding
-    /// only.
-    pub passage_preview: Option<String>,
-}
-
-impl SourceCitation {
-    /// Build a citation from a leaf's (or theme's member-leaves')
-    /// quote_spans. RAPTOR builds the spans in cosine-to-centroid
-    /// order; the first one is the most representative of the
-    /// cluster, so it makes the right primary source handle for
-    /// every atom this section produces.
-    pub(super) fn from_primary_quote(
-        fallback_id: &str,
-        quotes: &[ParsedQuoteSpan],
-    ) -> Self {
-        if let Some(primary) = quotes.first() {
-            Self {
-                section_id: format!("chunk:{}", primary.chunk_id),
-                passage_preview: Some(primary.text.clone()),
-            }
-        } else {
-            Self {
-                section_id: fallback_id.to_string(),
-                passage_preview: None,
-            }
-        }
-    }
+/// Thin local wrapper around [`SourceCitation::from_primary`] that
+/// projects this module's `ParsedQuoteSpan` shape into the
+/// `(chunk_id, &str)` pair the corpus-engine constructor accepts.
+pub(super) fn citation_from_quote_spans(
+    fallback_id: &str,
+    quotes: &[ParsedQuoteSpan],
+) -> SourceCitation {
+    let primary = quotes.first().map(|q| (q.chunk_id, q.text.as_str()));
+    SourceCitation::from_primary(fallback_id, primary)
 }
 
 #[cfg(test)]
@@ -547,7 +379,8 @@ mod tests {
 
     #[test]
     fn pass_a_user_body_truncates_overly_long_quotes() {
-        let long = "a".repeat(PASS_A_QUOTE_CHAR_CAP + 50);
+        use corpus_engine::enrichment::pipeline::typed_schemas::SOURCE_RECOVERY_QUOTE_CHAR_CAP;
+        let long = "a".repeat(SOURCE_RECOVERY_QUOTE_CHAR_CAP + 50);
         let body = build_pass_a_user_body("summary text here is long enough", &[], &[long]);
         // Body carries an ellipsis token confirming truncation engaged.
         assert!(body.contains('…'));
@@ -628,7 +461,7 @@ mod tests {
                 text: "second quote".to_string(),
             },
         ];
-        let citation = SourceCitation::from_primary_quote("raptor:fallback-id", &quotes);
+        let citation = citation_from_quote_spans("raptor:fallback-id", &quotes);
         assert_eq!(citation.section_id, "chunk:42");
         assert_eq!(
             citation.passage_preview.as_deref(),
@@ -638,7 +471,7 @@ mod tests {
 
     #[test]
     fn citation_without_quotes_falls_back_to_fallback_id() {
-        let citation = SourceCitation::from_primary_quote("raptor:n-leaf-1", &[]);
+        let citation = citation_from_quote_spans("raptor:n-leaf-1", &[]);
         assert_eq!(citation.section_id, "raptor:n-leaf-1");
         assert!(citation.passage_preview.is_none());
     }

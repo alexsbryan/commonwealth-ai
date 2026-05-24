@@ -53,6 +53,10 @@ use corpus_engine::enrichment::pipeline::types::{
 };
 use corpus_engine::enrichment::pipeline::PipelinePhase;
 use corpus_engine::enrichment::pipeline::{PhaseCache, RunOutputWriter};
+use sovereign_tools::typed_call::{
+    TYPED_BUDGET_INITIAL as TYPED_CALL_BUDGET_INITIAL,
+    TYPED_BUDGET_RETRY as TYPED_CALL_BUDGET_RETRY,
+};
 
 use super::config::EnrichConfig;
 use super::corpus_io::rebuild_corpus_state;
@@ -161,20 +165,17 @@ fn load_classifications(path: &PathBuf) -> Result<SectionClassificationsFile, St
 }
 
 /// Tight default `max_output_tokens` budget for the typed-extension
-/// chat call. Most sections produce 5–15 typed atoms across the
-/// active mode's collections; 3072 tokens covers that comfortably
-/// while keeping decode latency in the 8–15s band per call instead
-/// of the 25–35s a full 8192-budget call costs. On parse failure
-/// (the failure mode budget-truncation produces — JSON trails off
-/// mid-collection) the dispatcher retries once with
-/// [`TYPED_BUDGET_RETRY`].
-pub const TYPED_BUDGET_INITIAL: u32 = 4096;
+/// chat call. Re-exports the canonical constant from
+/// [`sovereign_tools::typed_call`] so this CLI and the
+/// `typed_extension` orchestrator stay in lockstep — a bench-driven
+/// tuning move on the helper propagates here automatically.
+pub const TYPED_BUDGET_INITIAL: u32 = TYPED_CALL_BUDGET_INITIAL as u32;
 
 /// Retry budget when the tight initial call returned a parse-drift
-/// response. Doubles the budget so the model has room to close the
-/// JSON envelope. A second parse failure at this budget is a real
-/// content miss, not a budget issue, and gets surfaced as an error.
-pub const TYPED_BUDGET_RETRY: u32 = 8192;
+/// response. Re-export from [`sovereign_tools::typed_call`]. A
+/// second parse failure at this budget is a real content miss, not
+/// a budget issue, and gets surfaced as an error.
+pub const TYPED_BUDGET_RETRY: u32 = TYPED_CALL_BUDGET_RETRY as u32;
 
 /// Compose the typed-extension prompt for one section under one
 /// discourse mode. The user body is the same shape across every
