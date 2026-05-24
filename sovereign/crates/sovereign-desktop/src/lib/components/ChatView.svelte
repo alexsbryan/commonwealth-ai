@@ -76,11 +76,15 @@
 
   // ── Starter questions for the empty state ────────────────────
   //
-  // Mined from every enriched corpus on disk. Round-robins across
-  // corpora so a user with `folder-abc` + `obsidian-def` sees a mix,
-  // not five from whichever one indexed first. Refetched whenever an
-  // enrichment job transitions to `complete` so a freshly-built atlas
-  // flows into the empty state without a refresh.
+  // Mined from every enriched corpus on disk. Two surfaced at a time
+  // (any more felt like cognitive load and went stale fast); a small
+  // "spin again" affordance below cycles the pool in pairs so the
+  // user can flick through the menu without committing to any one.
+  // The pool is round-robined across corpora so a user with
+  // `folder-abc` + `obsidian-def` sees a mix, not five from whichever
+  // one indexed first. Refetched whenever an enrichment job
+  // transitions to `complete` so a freshly-built atlas flows in
+  // without a manual refresh.
   // Each starter carries its source corpus_id so the StarterChips
   // each-block can key by `${corpus_id}:${atom_id}` — atom_ids
   // (`question-0001`, …) restart at 1 inside every atlas, so a
@@ -90,38 +94,102 @@
   // making conversation switches feel "stuck".
   type StarterWithCorpus = StarterQuestion & { corpus_id: string };
 
-  let starters: StarterWithCorpus[] = $state([]);
+  // Larger pool that the cycle button advances through two at a time.
+  // 12 keeps fetches cheap (each enrich_get_starter_questions call is
+  // a small SQLite read) while still giving the user ~6 distinct
+  // pairs before we loop or re-fetch.
+  const STARTER_POOL_TARGET = 12;
+  const STARTERS_VISIBLE = 2;
+
+  let starterPool: StarterWithCorpus[] = $state([]);
+  let starterCursor = $state(0);
+  // Drives a tiny 360° rotate on the cycle button. The flag self-
+  // clears via setTimeout so the animation doesn't restart while the
+  // pointer still hovers.
+  let starterSpinning = $state(false);
   let buildingCorporaCount = $state(0);
+
+  let starters = $derived.by(() => {
+    if (starterPool.length === 0) return [] as StarterWithCorpus[];
+    const out: StarterWithCorpus[] = [];
+    for (let i = 0; i < STARTERS_VISIBLE; i++) {
+      out.push(starterPool[(starterCursor + i) % starterPool.length]);
+    }
+    return out;
+  });
+
+  // Used to suppress the cycle button when the pool is too small to
+  // produce a fresh second pair on click (avoids the user mashing it
+  // and getting the same two back).
+  let canCycleStarters = $derived(
+    starterPool.length > STARTERS_VISIBLE,
+  );
 
   async function refreshStarters() {
     try {
       const corpora = await enrichListCorpora();
       if (corpora.length === 0) {
-        starters = [];
+        starterPool = [];
+        starterCursor = 0;
         return;
       }
+      // Pull ~enough per corpus to fill the pool even when only one
+      // corpus is enriched. Per-corpus fetch is cheap; the daemon
+      // caches by atlas signature.
+      const perCorpusTarget = Math.max(
+        4,
+        Math.ceil(STARTER_POOL_TARGET / corpora.length),
+      );
       const perCorpus: StarterWithCorpus[][] = await Promise.all(
         corpora.map(async (c) => {
-          const list = await enrichGetStarterQuestions(c.corpus_id, 3).catch(
-            () => [],
-          );
+          const list = await enrichGetStarterQuestions(
+            c.corpus_id,
+            perCorpusTarget,
+          ).catch(() => []);
           return list.map((q) => ({ ...q, corpus_id: c.corpus_id }));
         }),
       );
-      // Round-robin interleave up to 5.
-      const picked: StarterWithCorpus[] = [];
+      // Round-robin interleave to keep the cycle order corpus-fair.
+      const interleaved: StarterWithCorpus[] = [];
       let idx = 0;
-      while (picked.length < 5 && perCorpus.some((p) => p.length > idx)) {
+      while (
+        interleaved.length < STARTER_POOL_TARGET &&
+        perCorpus.some((p) => p.length > idx)
+      ) {
         for (const row of perCorpus) {
-          if (idx < row.length && picked.length < 5) picked.push(row[idx]);
+          if (idx < row.length && interleaved.length < STARTER_POOL_TARGET) {
+            interleaved.push(row[idx]);
+          }
         }
         idx += 1;
       }
-      starters = picked;
+      starterPool = interleaved;
+      starterCursor = 0;
     } catch (e) {
       console.warn("refreshStarters failed:", e);
-      starters = [];
+      starterPool = [];
+      starterCursor = 0;
     }
+  }
+
+  async function cycleStarters() {
+    if (starterPool.length === 0) return;
+    starterSpinning = true;
+    // Advance two at a time so the visible pair fully turns over.
+    // If we'd wrap on the next advance, refresh in the background so
+    // the third loop pulls fresh atoms rather than recycling.
+    const next = starterCursor + STARTERS_VISIBLE;
+    if (next >= starterPool.length) {
+      starterCursor = 0;
+      void refreshStarters();
+    } else {
+      starterCursor = next;
+    }
+    // Match the CSS transition (320ms) so the icon settles after the
+    // chip-swap rather than mid-flight.
+    window.setTimeout(() => {
+      starterSpinning = false;
+    }, 320);
   }
 
   async function pickStarter(q: StarterQuestion) {
@@ -1001,12 +1069,39 @@
 
         {#if starters.length > 0}
           <div class="empty-starters">
-            <StarterChips
-              questions={starters}
-              onPick={pickStarter}
-              heading="Try asking"
-              subheading="Mined from your enriched knowledge"
-            />
+            <div class="starters-header">
+              <span class="starters-label">Try asking</span>
+              {#if canCycleStarters}
+                <button
+                  type="button"
+                  class="starters-cycle"
+                  class:spinning={starterSpinning}
+                  onclick={cycleStarters}
+                  title="Shuffle suggestions"
+                  aria-label="Shuffle suggestions"
+                >
+                  <!-- Inline so the rotation animates the icon itself,
+                       not a child element. 14×14 keeps the affordance
+                       subtle alongside the heading. -->
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M12.5 4.5A5.5 5.5 0 1 0 14 8"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                    />
+                    <path
+                      d="M13 2v3h-3"
+                      stroke="currentColor"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              {/if}
+            </div>
+            <StarterChips questions={starters} onPick={pickStarter} />
           </div>
         {/if}
         {#if buildingCorporaCount > 0}
@@ -1321,6 +1416,52 @@
     max-width: 640px;
     text-align: left;
     position: relative;
+  }
+  .starters-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .starters-label {
+    font-size: 0.82em;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary, var(--text-primary));
+  }
+  /* Tiny shuffle affordance. Default state stays out of the way
+     (muted text color, no background); hover and active surface the
+     gold accent the rest of the app uses. The icon itself rotates
+     360° on click — the wrapper button stays static so focus rings
+     and click targets don't whirl with it. */
+  .starters-cycle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+  }
+  .starters-cycle:hover,
+  .starters-cycle:focus-visible {
+    color: var(--accent-light);
+    background: var(--accent-dim);
+    outline: none;
+  }
+  .starters-cycle:active {
+    transform: scale(0.92);
+  }
+  .starters-cycle svg {
+    transition: transform 320ms cubic-bezier(0.4, 1.4, 0.5, 1);
+  }
+  .starters-cycle.spinning svg {
+    transform: rotate(360deg);
   }
   .empty-building {
     margin-top: 16px;
